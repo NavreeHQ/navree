@@ -346,6 +346,44 @@ export function performanceFaq(input: PerformanceFaqInput): FaqSet {
   };
 }
 
+/** What the ecosystem questions are computed from: the list of packages and tools, which owns the counts. */
+export type EcosystemFaqInput = {
+  /** Every first-party package and tool. */
+  total: number;
+};
+
+/** The ecosystem page (`/ecosystem/`): cost, hosting, what a new app has, and the licence. */
+export function ecosystemFaq({ total }: EcosystemFaqInput): FaqSet {
+  return {
+    path: "/ecosystem/",
+    heading: "Questions about the ecosystem",
+    items: [
+      {
+        question: "Are there paid add-ons?",
+        answer: `No. All ${total} first-party packages and tools are open source under ${license}, with no paid tiers, no seats and no hosted plan. The tools (Lighthouse, Fleet, Helm, Logbook, Harbor, Dock and Navigator) ship in the same repository, at the same version as the framework, so there is nothing to subscribe to and nothing to renew.`,
+        link: { href: site.repoUrl, label: "See the repository" },
+      },
+      {
+        question: "Can I self-host the tools?",
+        answer:
+          "Yes, and that is the only way they run. Lighthouse, Fleet, Helm and Logbook are modules inside your own app, served at `/_lighthouse`, `/_fleet`, `/admin` and `/_logbook`, and the data stays on your servers. Harbor deploys to any Ubuntu server you own over SSH, and `navree dock up` starts the local services in Docker or Podman.",
+        link: { href: "/docs/tools/harbor/", label: "Read about Harbor" },
+      },
+      {
+        question: "Which tools does a new app have?",
+        answer:
+          "Every app made with `navree new` registers Lighthouse for monitoring, and Logbook for a debugging timeline while you develop. The others are a module or a command away: Fleet for queues, Helm for an admin panel, Harbor for deploys, Dock for local services and Navigator for your coding agent. The SaaS starter kit adds sign-in, workspaces, billing, settings and an admin panel.",
+        link: { href: "/docs/getting-started/starter-kits/", label: "Read about the starter kits" },
+      },
+      {
+        question: "Which licence do the packages and tools use?",
+        answer: `Everything first-party is under ${license}: you choose either licence. That covers the framework, the packages, the tools and Navree UI. You can use, change and ship them in a commercial product without asking and without paying. The dependencies keep their own licences, and the repository's \`deny.toml\` lists the ones it accepts.`,
+        link: { href: site.repoUrl, label: "Read the licences" },
+      },
+    ],
+  };
+}
+
 /** The set drawn at the end of a docs page (`prologue/introduction`), or null. */
 export function docFaq(slug: string): FaqSet | null {
   return slug === "prologue/introduction" ? introductionFaq : null;

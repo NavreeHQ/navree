@@ -32,6 +32,7 @@ import { LogbookMock } from "@/components/ecosystem/logbook-mock";
 import { Manifest } from "@/components/ecosystem/manifest";
 import { NavigatorMock } from "@/components/ecosystem/navigator-mock";
 import { ToolBlock } from "@/components/ecosystem/tool-block";
+import { Faq } from "@/components/faq";
 import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 import { GridPattern } from "@/components/magicui/grid-pattern";
 import { CopyButton } from "@/components/mdx/copy-button";
@@ -286,6 +287,7 @@ export default function EcosystemPage() {
           <CategorySection key={c.id} index={i} id={c.id} />
         ))}
       </div>
+      <Faq name="ecosystem" />
       <Closing />
       <PageSchema path="/ecosystem/" metadata={metadata} />
     </>

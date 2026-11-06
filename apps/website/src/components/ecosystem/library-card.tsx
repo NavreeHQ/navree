@@ -14,7 +14,10 @@ import { SpotlightCard } from "./spotlight-card";
 /**
  * A package's card: its name, what it does, the one line of code that shows
  * its API, and a link to its docs. The whole card is the link. `children`
- * adds a small visual between the words and the code.
+ * adds a small visual between the words and the code. On phones the card is a
+ * row: the name, one line and an arrow, with the longer description, the
+ * picture and the code left to wider screens (the description stays in the
+ * page, and is still the card's accessible description).
  */
 export function LibraryCard({ entry, children, className }: { entry: EcosystemEntry; children?: ReactNode; className?: string }) {
   const planned = site.showPlannedBadges && entry.status === "planned";
@@ -24,7 +27,7 @@ export function LibraryCard({ entry, children, className }: { entry: EcosystemEn
       <Link
         href={entry.href}
         prefetch={false}
-        className="group flex h-full flex-col rounded-2xl p-5 focus-visible:outline-offset-[-2px] sm:p-6"
+        className="group flex h-full flex-col rounded-2xl p-4 focus-visible:outline-offset-[-2px] sm:p-6"
         aria-labelledby={`${entry.slug}-card-title`}
         aria-describedby={`${entry.slug}-card-desc`}
       >
@@ -33,12 +36,16 @@ export function LibraryCard({ entry, children, className }: { entry: EcosystemEn
           <h3 id={`${entry.slug}-card-title`} className="min-w-0 flex-1 font-sans text-[1.0625rem] leading-snug font-semibold tracking-[-0.01em] text-fg">{entry.name}</h3>
           {planned ? <PlannedBadge /> : null}
           <span className="hidden shrink-0 rounded-md border border-line px-1.5 font-mono text-xs leading-5 text-fg-3 sm:inline">{entry.crate}</span>
+          <ArrowRightIcon aria-hidden className="mt-1 size-4 shrink-0 text-fg-3 transition-colors group-hover:text-accent sm:hidden" />
         </div>
-        <p id={`${entry.slug}-card-desc`} className="mt-3 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
+        <p className="mt-1.5 text-[0.9375rem] leading-snug text-pretty text-fg-2 sm:hidden" aria-hidden>
+          {entry.tagline}.
+        </p>
+        <p id={`${entry.slug}-card-desc`} className="mt-3 text-[0.9375rem] leading-relaxed text-pretty text-fg-2 max-sm:hidden">
           {entry.summary}
         </p>
-        {children ? <div className="mt-5">{children}</div> : null}
-        <div className="mt-auto pt-5">
+        {children ? <div className="mt-5 max-sm:hidden">{children}</div> : null}
+        <div className="mt-auto pt-5 max-sm:hidden">
           {entry.signature ? (
             <div className="overflow-hidden rounded-lg border border-line bg-ink-0/60 px-3 py-1.5">
               <CodeLine code={entry.signature} className="block truncate" />

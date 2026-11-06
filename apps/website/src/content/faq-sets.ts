@@ -1,11 +1,12 @@
 import { groups } from "@/components/ui-docs/data";
-import { aboutFaq, aiFaq, architectureFaq, homeFaq, introductionFaq, performanceFaq, uiFaq, type FaqSet } from "@/content/faq";
+import { aboutFaq, aiFaq, architectureFaq, ecosystemFaq, homeFaq, introductionFaq, performanceFaq, uiFaq, type FaqSet } from "@/content/faq";
+import { ecosystem } from "@/content/ecosystem";
 import { measuredOn, perf } from "@/lib/bench";
 import { screenTables } from "@/lib/screens";
 import { uiRoadmap } from "@/lib/ui-page-data";
 import { appCards } from "@/app/ui/showcases";
 
-export type FaqName = "home" | "ui" | "ai" | "introduction" | "about" | "architecture" | "performance";
+export type FaqName = "home" | "ui" | "ai" | "introduction" | "about" | "architecture" | "performance" | "ecosystem";
 
 /**
  * Every set of questions, by name, for the pages that draw them. The Navree
@@ -22,6 +23,7 @@ export function faqSets(): Record<FaqName, FaqSet> {
     about: aboutFaq,
     architecture: architectureFaq,
     performance: performanceFaq(performanceInput()),
+    ecosystem: ecosystemFaq({ total: ecosystem.length }),
   };
 }
 

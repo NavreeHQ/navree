@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { site } from "@site";
 
 import { ProductMark } from "./marks";
+import { MockDisclosure } from "./mock-disclosure";
 
 /** The words of a tool block: mark, name, what it is, what it does and where to read more. */
 function ToolCopy({ entry, wide = false }: { entry: EcosystemEntry; wide?: boolean }) {
@@ -86,7 +87,9 @@ function ToolCopy({ entry, wide = false }: { entry: EcosystemEntry; wide?: boole
 /**
  * A tool's feature block: its words and a working mock of its UI.
  * `wide` puts the mock full width under the words; otherwise words and mock
- * sit side by side, mock on the right unless `reverse`.
+ * sit side by side, mock on the right unless `reverse`. On phones the mock is
+ * behind a button (`MockDisclosure`), so the page is a list of tools and a
+ * tap opens the one you want to see.
  */
 export function ToolBlock({
   entry,
@@ -104,14 +107,18 @@ export function ToolBlock({
       {layout === "wide" ? (
         <>
           <ToolCopy entry={entry} wide />
-          <div className="mt-10 lg:mt-14">{mock}</div>
+          <div className="mt-8 lg:mt-14">
+            <MockDisclosure name={entry.name}>{mock}</MockDisclosure>
+          </div>
         </>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+        <div className="grid grid-cols-1 items-start gap-8 sm:gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-16">
           <div className={cn("min-w-0 lg:sticky lg:top-[calc(var(--header-h)+5.5rem)] lg:col-span-5 xl:col-span-4", reverse && "lg:order-2")}>
             <ToolCopy entry={entry} />
           </div>
-          <div className={cn("min-w-0 lg:col-span-7 xl:col-span-8", reverse && "lg:order-1")}>{mock}</div>
+          <div className={cn("min-w-0 lg:col-span-7 xl:col-span-8", reverse && "lg:order-1")}>
+            <MockDisclosure name={entry.name}>{mock}</MockDisclosure>
+          </div>
         </div>
       )}
     </article>
