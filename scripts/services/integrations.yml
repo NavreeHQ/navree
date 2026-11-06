@@ -69,3 +69,15 @@ services:
       SERVICES: ses,sesv2
       LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
       DEBUG: "0"
+
+  # GreenMail: SMTP, IMAP and POP3 in one JVM. It makes a mailbox for every
+  # address it receives mail for and accepts any password.
+  greenmail:
+    image: ${GREENMAIL_IMAGE:-greenmail/standalone:2.1.9}
+    container_name: navree-int-greenmail
+    ports:
+      - "127.0.0.1:13025:3025"
+      - "127.0.0.1:13110:3110"
+      - "127.0.0.1:13143:3143"
+    environment:
+      GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"

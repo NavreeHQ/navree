@@ -86,6 +86,9 @@ jobs:
       - name: SES against LocalStack
         run: cargo test --locked -p navree-mail --test mail localstack -- --ignored --nocapture
 
+      - name: Inbound mail from IMAP and POP3 (GreenMail)
+        run: cargo test --locked -p navree-mail --test mail greenmail -- --ignored --nocapture
+
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}
         run: |
