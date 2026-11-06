@@ -55,7 +55,7 @@ pub use graph::{CommandInfo, GraphReport, ModuleReport, ProviderReport};
 pub use key::{ModuleId, ProviderKey, Scope};
 pub use lazy::Lazy;
 pub use lifecycle::Lifecycle;
-pub use module::{ConfiguredModule, Injectable, IntoModules, Module};
+pub use module::{CodeConfigured, ConfiguredModule, Injectable, IntoModules, Module};
 pub use resolver::Resolver;
 
 /// A boxed error that can cross module and task boundaries.

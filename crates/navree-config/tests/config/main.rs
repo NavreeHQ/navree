@@ -9,6 +9,7 @@ mod environment;
 mod environments;
 mod fixes;
 mod fixtures;
+mod for_root;
 mod framework_sections;
 mod hardening;
 mod json_files;

@@ -110,7 +110,28 @@ impl<M: 'static, O: Clone + Send + Sync + 'static> Module for ConfiguredModule<M
     }
 
     fn register(&self, m: &mut ModuleBuilder) {
+        if self.options.is_some() {
+            m.contribute(CodeConfigured {
+                module: ModuleId::of::<M>().name(),
+            });
+        }
         (self.register)(m, self.options.clone());
+    }
+}
+
+/// Contributed by a module that was given its options in code
+/// (`for_root(options)`), so tools can tell that the section of the
+/// configuration it would otherwise read is not read. navree-config warns
+/// when the configuration has such a section.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CodeConfigured {
+    module: &'static str,
+}
+
+impl CodeConfigured {
+    /// The short name of the module (`CacheModule`).
+    pub fn module(&self) -> &'static str {
+        self.module
     }
 }
 

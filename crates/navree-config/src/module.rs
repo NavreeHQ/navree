@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CodeConfigured, ConfiguredModule, Factory, Lifecycle, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use serde::de::DeserializeOwned;
 
@@ -40,6 +40,9 @@ use crate::{AppOptions, Config, ConfigSources, commands};
 ///   ([`Config::unused`]);
 /// - lists the problems of every registered section when the boot fails on
 ///   one of them;
+/// - warns about a section that is in the configuration when its module was
+///   given its options in code (`for_root(options)` replaces the section; only
+///   `from_config()` reads it);
 /// - registers the offline commands `config:show`, `config:check`,
 ///   `config:schema` and `config:publish`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -134,7 +137,7 @@ struct ConfigDiagnostics {
 }
 
 impl Lifecycle for ConfigDiagnostics {
-    fn on_bootstrap(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+    fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
             let strict = self.config.app().is_ok_and(|app| app.strict_config);
             let mut problems: Vec<String> = Vec::new();
@@ -158,6 +161,25 @@ impl Lifecycle for ConfigDiagnostics {
                     unused.message()
                 );
                 problems.push(unused.message());
+            }
+            // A module given its options in code does not read its section.
+            let keys = self.config.keys();
+            for configured in ctx.contributions::<CodeConfigured>() {
+                let module = configured.value.module();
+                let Some(section) = section_of(module) else {
+                    continue;
+                };
+                let nested = format!("{section}.");
+                if keys
+                    .iter()
+                    .any(|key| *key == section || key.starts_with(&nested))
+                {
+                    let message = format!(
+                        "`{section}` is set in the configuration, but {module} was given its options in code (`for_root`), so the section is not read. Remove one of the two."
+                    );
+                    tracing::warn!(target: "navree::config", section = %section, "{message}");
+                    problems.push(message);
+                }
             }
             if self.config.behaves_like_production() {
                 for finding in crate::check::production_profile(&self.config)
@@ -184,6 +206,30 @@ impl Lifecycle for ConfigDiagnostics {
             Ok(())
         })
     }
+}
+
+/// The section a module is named after: `HttpClientModule` reads
+/// `http_client`, `OAuthModule` reads `oauth`. `None` for a name that does not
+/// end in `Module`.
+fn section_of(module: &str) -> Option<String> {
+    let name = module
+        .strip_suffix("Module")
+        .filter(|name| !name.is_empty())?;
+    let mut key = String::with_capacity(name.len() + 2);
+    let mut after_lower = false;
+    for c in name.chars() {
+        if c.is_ascii_uppercase() {
+            if after_lower {
+                key.push('_');
+            }
+            key.push(c.to_ascii_lowercase());
+            after_lower = false;
+        } else {
+            key.push(c);
+            after_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+        }
+    }
+    Some(key)
 }
 
 /// A typed configuration section, registered with
@@ -353,5 +399,23 @@ impl ModuleBuilderConfigExt for ModuleBuilder {
     fn config_claim(&mut self, key: &str) -> &mut Self {
         self.contribute(ConfigClaim::new(key));
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::section_of;
+
+    #[test]
+    fn a_module_is_named_after_its_section() {
+        assert_eq!(section_of("CacheModule").as_deref(), Some("cache"));
+        assert_eq!(
+            section_of("HttpClientModule").as_deref(),
+            Some("http_client")
+        );
+        assert_eq!(section_of("OAuthModule").as_deref(), Some("oauth"));
+        assert_eq!(section_of("I18nModule").as_deref(), Some("i18n"));
+        assert_eq!(section_of("Module"), None);
+        assert_eq!(section_of("Cache"), None);
     }
 }
