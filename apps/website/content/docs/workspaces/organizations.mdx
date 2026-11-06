@@ -116,7 +116,7 @@ workspace_role = "auditor"
 use navree::workspace::{OrgMembers, OrgRole, WorkspaceSelector};
 
 // Gauri runs every workspace of the organization.
-org_members.add(&uow, agra.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
+org_members.add(&uow, agra.id, gauri, OrgRole::Admin, WorkspaceSelector::All).await?;
 // Laksh works in the UK workspace only.
 org_members
     .add(&uow, agra.id, laksh, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
@@ -247,7 +247,7 @@ let request = access_requests
 
 // Ken joins as a member of the workspace he asked for.
 let approved = access_requests
-    .approve(&uow, agra.id, request.id, Some(grace), Approval::default())
+    .approve(&uow, agra.id, request.id, Some(gauri), Approval::default())
     .await?;
 assert_eq!(approved.member.user_id, ken);
 ```

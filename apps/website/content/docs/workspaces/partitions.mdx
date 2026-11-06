@@ -43,7 +43,7 @@ assert_eq!(uk.slug, "agra-co-uk");
 let de = partitions.create(&uow, workspace.id, NewPartition::named("agra.de").slug("de")).await?;
 
 // Gauri works with the UK partition only.
-partitions.grant(&uow, workspace.id, grace, PartitionSelector::only([uk.id])).await?;
+partitions.grant(&uow, workspace.id, gauri, PartitionSelector::only([uk.id])).await?;
 ```
 
 | Method | Does |
@@ -200,7 +200,7 @@ With `workspace.routes` and `workspace.partitions.enabled` on, the workspace rou
 Partitions run on SQLite. Create two partitions, limit a member to one and check both reads and writes:
 
 ```rust
-let limited = app.acting_as(principal(grace)); // granted Only the UK partition
+let limited = app.acting_as(principal(gauri)); // granted Only the UK partition
 
 limited
     .get("/api/v1/contacts")
