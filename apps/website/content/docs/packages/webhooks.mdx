@@ -383,9 +383,9 @@ What each one says about a request:
 | `Vonage` | The token's `jti` | The body's `status`, else its `message_type` | The token's `iat` |
 | `Meta` | The body's SHA-256 | The body's `object` (`whatsapp_business_account`) | None |
 
-GitHub, Twilio, Postmark, Graph and Meta sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for a while, so its `Timestamp` is checked only against the source's own `tolerance_secs`, when you set one.
+GitHub, Twilio, Postmark, Graph and Meta sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for up to an hour with the same timestamp and signature, so its `Timestamp` is checked against the source's own `tolerance_secs`, or an hour when you set none: an older SNS message is a replay and is refused before any certificate is fetched.
 
-The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them. [Billing](/docs/packages/billing/) verifies its own Stripe and Paddle webhooks and doesn't need this module.
+The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them. [Billing](/docs/packages/billing/) checks its Stripe and Paddle webhooks with these same `Stripe` and `Paddle` verifiers on its own route, so it doesn't need `WebhooksModule`.
 
 A source table (`[webhooks.incoming.<source>]`) with an empty secret fails the boot, naming the key, unless it sets `topics` or `service_account`. A request for a source that lacks its secret or required setting, including one with no table at all, is answered with 500, and the error log names the missing key.
 
@@ -752,6 +752,7 @@ For SNS, serve a test certificate at the message's `SigningCertURL` and sign `me
 | `webhooks.incoming.<source>.url` | rebuilt from the request | The public URL of the route (Twilio, and the default audience of Google Pub/Sub); the request's query string is appended |
 | `webhooks.incoming.aws_sns.topics` | none | The topic ARNs accepted; required |
 | `webhooks.incoming.aws_sns.auto_confirm` | `true` | Confirm subscriptions without the handler |
+| `webhooks.incoming.aws_sns.tolerance_secs` | `3600` | Accepted age of an SNS message's `Timestamp` |
 | `webhooks.incoming.google_pubsub.service_account` | none | The service account email of the push subscription; required |
 | `webhooks.incoming.google_pubsub.audience` | the public URL | The token's expected `aud` |
 | `webhooks.incoming.meta.verify_token` | none | The token Meta sends in its `GET` handshake |

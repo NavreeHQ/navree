@@ -1,28 +1,23 @@
 //! The Amazon SNS messages of the SES routes (`POST /mail/webhooks/ses` and
 //! `POST /mail/inbound/ses`), checked before any event or mail in them is
-//! trusted. The check is navree-webhooks' `AwsSns` one, through the same
+//! trusted. The checks are navree-webhooks' `AwsSns` ones, from the same
 //! `navree_crypto::sns`: a known message type, one of the route's topics, a
-//! signing certificate on an SNS host, a recent timestamp and a valid
-//! signature. The URL token of the routes is checked on top of it.
+//! signing certificate on an SNS host, a recent timestamp
+//! ([`SnsMessage::check_envelope`]), then a valid signature with the key of
+//! a certificate fetched over HTTPS and cached a day
+//! ([`CertificateCache`]). The URL token of the routes is checked on top of
+//! it.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard, PoisonError};
-
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, Utc};
 use navree_crypto::jose::VerifyingKey;
-use navree_crypto::sns::{SnsMessage, is_signing_cert_url};
+use navree_crypto::sns::{CertificateCache, SnsEnvelopeError, SnsMessage};
 use navree_http_client::HttpClient;
 use serde::de::IgnoredAny;
 
 /// How old (or how far ahead) a message may be by default, in seconds: SNS
 /// retries an HTTPS delivery for at most an hour, keeping the message's
 /// timestamp and signature.
-pub(crate) const DEFAULT_TOLERANCE_SECS: u64 = 3_600;
-
-/// How long a fetched signing certificate is kept.
-const CERTIFICATE_TTL: TimeDelta = TimeDelta::hours(24);
-/// The most certificates kept; the oldest goes first.
-const MAX_CERTIFICATES: usize = 32;
+pub(crate) const DEFAULT_TOLERANCE_SECS: u64 = navree_crypto::sns::DEFAULT_TOLERANCE_SECS;
 
 /// Why an SNS message is refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,13 +35,7 @@ pub(crate) enum SnsRefusal {
 /// Checks SNS messages, fetching each signing certificate once a day.
 pub(crate) struct SnsVerifier {
     client: Option<HttpClient>,
-    certificates: Mutex<HashMap<String, Cached>>,
-}
-
-/// A certificate's key and when it was fetched.
-struct Cached {
-    key: VerifyingKey,
-    fetched_at: DateTime<Utc>,
+    certificates: CertificateCache,
 }
 
 impl SnsVerifier {
@@ -55,7 +44,7 @@ impl SnsVerifier {
     pub(crate) fn new(client: Option<HttpClient>) -> Self {
         Self {
             client,
-            certificates: Mutex::new(HashMap::new()),
+            certificates: CertificateCache::new(),
         }
     }
 
@@ -81,47 +70,23 @@ impl SnsVerifier {
             }
             Err(_) => return Err(SnsRefusal::NotJson),
         };
-        if !matches!(
-            message.message_type.as_str(),
-            "Notification" | "SubscriptionConfirmation" | "UnsubscribeConfirmation"
-        ) {
-            return Err(SnsRefusal::Unverified("the SNS message type is unknown"));
-        }
-        if !topics.contains(&message.topic_arn) {
-            return Err(SnsRefusal::Unverified("the topic is not in topic_arns"));
-        }
-        let certificate_url = message.signing_cert_url.trim();
-        if !is_signing_cert_url(certificate_url) {
-            return Err(SnsRefusal::Unverified(
-                "SigningCertURL is not an SNS certificate URL",
-            ));
-        }
-        if !matches!(message.signature_version.trim(), "1" | "2") {
-            return Err(SnsRefusal::Unverified(
-                "SignatureVersion is neither 1 nor 2",
-            ));
-        }
-        let published = DateTime::parse_from_rfc3339(message.timestamp.trim())
-            .map_err(|_| SnsRefusal::Unverified("Timestamp is not a date"))?
-            .with_timezone(&Utc);
-        if (now - published).num_seconds().unsigned_abs() > tolerance_secs {
-            return Err(SnsRefusal::Unverified(
-                "Timestamp is further from now than tolerance_secs",
-            ));
-        }
-        let key = self.certificate(certificate_url, now).await?;
+        message
+            .check_envelope(topics, tolerance_secs, now)
+            .map_err(|error| SnsRefusal::Unverified(reason(error)))?;
+        let key = self
+            .certificate(message.signing_cert_url.trim(), now)
+            .await?;
         message
             .verify_signature(&key)
             .map_err(|_| SnsRefusal::Unverified("the signature does not match"))?;
         Ok(message)
     }
 
-    /// The key of the certificate at `url`, from the cache or fetched.
+    /// The key of the certificate at `url` (an SNS certificate URL, checked
+    /// by the caller), from the cache or fetched.
     async fn certificate(&self, url: &str, now: DateTime<Utc>) -> Result<VerifyingKey, SnsRefusal> {
-        if let Some(cached) = lock(&self.certificates).get(url)
-            && now - cached.fetched_at < CERTIFICATE_TTL
-        {
-            return Ok(cached.key.clone());
+        if let Some(key) = self.certificates.get(url, now) {
+            return Ok(key);
         }
         let client = self.client.as_ref().ok_or(SnsRefusal::Unavailable)?;
         let response = client
@@ -133,30 +98,23 @@ impl SnsVerifier {
             .ok_or(SnsRefusal::Unavailable)?;
         let key = VerifyingKey::from_pem(&response.text())
             .map_err(|_| SnsRefusal::Unverified("the signing certificate is not valid"))?;
-        let mut certificates = lock(&self.certificates);
-        if certificates.len() >= MAX_CERTIFICATES
-            && let Some(oldest) = certificates
-                .iter()
-                .min_by_key(|(_, cached)| cached.fetched_at)
-                .map(|(url, _)| url.clone())
-        {
-            certificates.remove(&oldest);
-        }
-        certificates.insert(
-            url.to_owned(),
-            Cached {
-                key: key.clone(),
-                fetched_at: now,
-            },
-        );
+        self.certificates.insert(url, key.clone(), now);
         Ok(key)
     }
 }
 
-/// Locks `mutex`, recovering it from a panic elsewhere (the cache stays
-/// usable).
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+/// What the log says about a message refused before its signature is
+/// checked.
+fn reason(error: SnsEnvelopeError) -> &'static str {
+    match error {
+        SnsEnvelopeError::UnknownType => "the SNS message type is unknown",
+        SnsEnvelopeError::ForeignTopic => "the topic is not in topic_arns",
+        SnsEnvelopeError::ForeignCertificate => "SigningCertURL is not an SNS certificate URL",
+        SnsEnvelopeError::UnsupportedVersion => "SignatureVersion is neither 1 nor 2",
+        SnsEnvelopeError::MalformedTimestamp => "Timestamp is not a date",
+        SnsEnvelopeError::OutOfTolerance => "Timestamp is further from now than tolerance_secs",
+        _ => "the SNS message cannot be trusted",
+    }
 }
 
 #[cfg(test)]

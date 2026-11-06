@@ -1,19 +1,15 @@
 //! [`SenderKeys`]: the public keys senders sign with, fetched and cached.
 
-use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Mutex, MutexGuard};
 
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_crypto::jose::{JwkSet, VerifyingKey};
+use navree_crypto::sns::CertificateCache;
 use navree_http_client::HttpClient;
 
 use crate::verify::VerifyError;
 
-/// How long a fetched signing certificate is kept.
-const CERTIFICATE_TTL: TimeDelta = TimeDelta::hours(24);
-/// The most certificates kept; the oldest goes first.
-const MAX_CERTIFICATES: usize = 32;
 /// How long Google's keys are kept when the response has no `max-age`.
 const DEFAULT_KEYS_TTL: TimeDelta = TimeDelta::hours(1);
 /// The shortest time between two fetches of Google's keys for a key id
@@ -25,7 +21,8 @@ const KEYS_REFRESH_INTERVAL: TimeDelta = TimeDelta::minutes(1);
 pub(crate) const GOOGLE_KEYS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 
 /// Fetches and caches the public keys that senders without a shared secret
-/// sign with: AWS SNS signing certificates (kept a day, by URL) and
+/// sign with: AWS SNS signing certificates (kept a day, by URL, in the
+/// same `navree_crypto::sns::CertificateCache` navree-mail uses) and
 /// Google's OAuth 2.0 key set (kept for the `max-age` Google sends, an hour
 /// when it sends none, and fetched again, at most once a minute, when a
 /// token names a key the cached set lacks).
@@ -37,7 +34,7 @@ pub(crate) const GOOGLE_KEYS_URL: &str = "https://www.googleapis.com/oauth2/v3/c
 /// directly.
 pub struct SenderKeys {
     client: HttpClient,
-    certificates: Mutex<HashMap<String, Cached<VerifyingKey>>>,
+    certificates: CertificateCache,
     google: Mutex<Option<Cached<JwkSet>>>,
 }
 
@@ -54,7 +51,7 @@ impl SenderKeys {
     pub fn new(client: HttpClient) -> Self {
         Self {
             client,
-            certificates: Mutex::new(HashMap::new()),
+            certificates: CertificateCache::new(),
             google: Mutex::new(None),
         }
     }
@@ -71,10 +68,8 @@ impl SenderKeys {
         url: &str,
         now: DateTime<Utc>,
     ) -> Result<VerifyingKey, VerifyError> {
-        if let Some(cached) = lock(&self.certificates).get(url)
-            && cached.expires_at > now
-        {
-            return Ok(cached.value.clone());
+        if let Some(key) = self.certificates.get(url, now) {
+            return Ok(key);
         }
         let response = self
             .client
@@ -87,23 +82,7 @@ impl SenderKeys {
         let key = VerifyingKey::from_pem(&response.text()).map_err(|_| {
             VerifyError::Rejected("the signing certificate is not valid".to_owned())
         })?;
-        let mut certificates = lock(&self.certificates);
-        if certificates.len() >= MAX_CERTIFICATES
-            && let Some(oldest) = certificates
-                .iter()
-                .min_by_key(|(_, cached)| cached.fetched_at)
-                .map(|(url, _)| url.clone())
-        {
-            certificates.remove(&oldest);
-        }
-        certificates.insert(
-            url.to_owned(),
-            Cached {
-                value: key.clone(),
-                fetched_at: now,
-                expires_at: now + CERTIFICATE_TTL,
-            },
-        );
+        self.certificates.insert(url, key.clone(), now);
         Ok(key)
     }
 
@@ -148,7 +127,7 @@ impl SenderKeys {
 impl fmt::Debug for SenderKeys {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SenderKeys")
-            .field("certificates", &lock(&self.certificates).len())
+            .field("certificates", &self.certificates.len())
             .field("google", &lock(&self.google).is_some())
             .finish_non_exhaustive()
     }

@@ -246,7 +246,8 @@ replies to navree-notify's delivery log (see `navree-notification-channels`).
 
 `id()` falls back to the hex SHA-256 of the body. GitHub, Twilio, Postmark,
 Meta and Graph have no timestamp (`timestamp()` is `None`), so no age check; the
-SNS `Timestamp` is checked only against the source's own `tolerance_secs`.
+SNS `Timestamp` must be within the source's own `tolerance_secs`, else an hour
+(SNS retries a delivery for up to an hour; an older message is a replay).
 Answers: 400 `Invalid webhook signature` (bad, missing or old signature,
 wrong topic, audience or account; the reason is logged at debug), 413 over
 `webhooks.incoming.max_body_bytes`, 503 when an SNS certificate or Google's
