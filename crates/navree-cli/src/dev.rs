@@ -248,6 +248,10 @@ fn rebuild(
 /// Runs the dev loop for the app at `root` until interrupted.
 pub fn run(root: &Path, options: &DevOptions) -> anyhow::Result<()> {
     let package = package_name(root);
+    // The web app's settings repeat three facts of the API's: warn when they differ.
+    for problem in crate::shared_settings::mismatches(root) {
+        eprintln!("[navree dev] warning: {problem}");
+    }
     let (tx, rx) = mpsc::channel();
     let mut debouncer = new_debouncer(options.debounce, tx).context("cannot watch files")?;
     let watcher = debouncer.watcher();

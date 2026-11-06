@@ -59,4 +59,5 @@ pub mod openapi_client;
 pub mod project;
 pub mod resource;
 pub mod scaffold;
+mod shared_settings;
 pub mod templates;
