@@ -1,11 +1,12 @@
 //! A country's flag, inline.
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use super::root_methods;
 use crate::flags::CountryCode;
 use crate::html::SafeHtml;
-use crate::node::{Element, Node, el, into_node};
+use crate::node::{Element, Node, Uses, el, into_node};
 
 /// The shape of a [`Flag`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -85,6 +86,7 @@ pub struct Flag {
     label: Option<Cow<'static, str>>,
     decorative: bool,
     scope: Option<&'static str>,
+    sprite: bool,
 }
 
 impl Flag {
@@ -97,6 +99,7 @@ impl Flag {
             label: None,
             decorative: false,
             scope: None,
+            sprite: false,
         }
     }
 
@@ -121,6 +124,7 @@ impl Flag {
             label: None,
             decorative: false,
             scope: None,
+            sprite: false,
         }
     }
 
@@ -161,6 +165,17 @@ impl Flag {
     /// written beside it.
     pub fn decorative(mut self) -> Self {
         self.decorative = true;
+        self
+    }
+
+    /// Draws the flag as a pointer to a definition made once on the page by a
+    /// [`FlagSprite`], not as its own artwork. A heavy flag is tens of kilobytes (Serbia's is
+    /// 179 KB), and a table of a hundred rows would repeat it a hundred times; the pointer is
+    /// about a hundred bytes. The page must hold a [`FlagSprite`] with this code in it,
+    /// or the flag is drawn empty. A flag of a code the toolkit does not know is drawn in
+    /// full, as always.
+    pub fn sprite(mut self) -> Self {
+        self.sprite = true;
         self
     }
 
@@ -206,13 +221,97 @@ impl Flag {
             };
             root.attr("role", "img").attr("aria-label", name)
         };
-        let art = match self.scope {
-            Some(scope) if art.contains(" id=\"") => {
-                Node::Raw(SafeHtml::trusted(scoped(art, scope)))
-            }
-            _ => Node::Static(art),
+        let art = match (self.code, self.sprite) {
+            (Some(code), true) => el("use")
+                .attr("href", format!("#{}", sprite_id(code, square)))
+                .into(),
+            _ => match self.scope {
+                Some(scope) if art.contains(" id=\"") => {
+                    Node::Raw(SafeHtml::trusted(scoped(art, scope)))
+                }
+                _ => Node::Static(art),
+            },
         };
         root.child(art).into()
+    }
+}
+
+/// The id of the definition of `code` in a [`FlagSprite`].
+fn sprite_id(code: CountryCode, square: bool) -> String {
+    format!(
+        "flag-{}{}",
+        code.as_str().to_ascii_lowercase(),
+        if square { "-square" } else { "" }
+    )
+}
+
+/// The flags a page draws with [`Flag::sprite`], each defined once. Put it on the page once,
+/// anywhere (it draws nothing and is hidden from assistive technology), with the codes of
+/// the flags the page shows.
+///
+/// ```
+/// use navree_ui::{Flag, FlagSprite, flags, render};
+///
+/// let sprite = render(&FlagSprite::new([flags::IN, flags::RS, flags::IN]).into());
+/// assert_eq!(sprite.matches("<symbol").count(), 2, "each flag once");
+/// let cell = render(&Flag::new(flags::RS).sprite().into());
+/// assert!(cell.contains("#flag-rs"));
+/// assert!(cell.len() < 400);
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct FlagSprite {
+    codes: Vec<CountryCode>,
+    squares: bool,
+}
+
+impl FlagSprite {
+    /// A sprite of `codes`. A code given twice is defined once.
+    pub fn new(codes: impl IntoIterator<Item = CountryCode>) -> Self {
+        let mut seen = HashSet::new();
+        Self {
+            codes: codes
+                .into_iter()
+                .filter(|code| seen.insert(*code))
+                .collect(),
+            squares: false,
+        }
+    }
+
+    /// Also defines the square art of each flag, for [`Flag::sprite`] on a square or round
+    /// flag.
+    pub fn with_squares(mut self) -> Self {
+        self.squares = true;
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let mut symbols: Vec<Element> = Vec::with_capacity(self.codes.len() * 2);
+        for code in self.codes {
+            symbols.push(
+                el("symbol")
+                    .attr("id", sprite_id(code, false))
+                    .attr("viewBox", "0 0 640 480")
+                    .child(Node::Static(code.rect_shapes())),
+            );
+            if self.squares {
+                symbols.push(
+                    el("symbol")
+                        .attr("id", sprite_id(code, true))
+                        .attr("viewBox", "0 0 512 512")
+                        .child(Node::Static(code.square_shapes())),
+                );
+            }
+        }
+        el("svg")
+            .slot("flag-sprite")
+            .attr("width", "0")
+            .attr("height", "0")
+            .attr("aria-hidden", "true")
+            .attr("focusable", "false")
+            .uses(Uses::PARTS_STYLES)
+            .child(symbols)
+            .into()
     }
 }
 
@@ -230,4 +329,4 @@ impl From<CountryCode> for Flag {
 }
 
 root_methods!(Flag);
-into_node!(Flag);
+into_node!(Flag, FlagSprite);

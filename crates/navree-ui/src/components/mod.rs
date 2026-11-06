@@ -48,7 +48,7 @@ pub use display::{
 pub(crate) use dropdown::menu_element;
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
 pub use fact::{FactCard, FactGrid};
-pub use flag::{Flag, FlagShape, FlagSize};
+pub use flag::{Flag, FlagShape, FlagSize, FlagSprite};
 pub use input_otp::{InputOtp, OtpError, OtpKind, OtpRules};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,

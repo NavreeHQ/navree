@@ -252,7 +252,10 @@ impl Picker {
             .attr("data-ui-anchor", popup_id.to_owned())
             .flag("data-placeholder", placeholder)
             .children((
-                chosen.and_then(|choice| choice.icon).map(icon),
+                chosen
+                    .and_then(Choice::lead_slot)
+                    .map(Node::from)
+                    .or_else(|| chosen.and_then(|choice| choice.icon).map(icon)),
                 el("span")
                     .slot("select-value")
                     .attr("dir", "auto")

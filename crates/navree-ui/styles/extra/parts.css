@@ -164,3 +164,9 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
   &[data-empty]{color:var(--fg-3);text-align:center}
 }
 @media (forced-colors:active){[data-slot=sparkline-cell] svg{forced-color-adjust:none}}
+
+/* A leading node in a choice of a select (a flag, a dot), and the flags a page draws by pointer */
+[data-slot=icon][data-lead]{display:inline-flex;align-items:center;width:auto;height:auto;fill:initial;stroke:initial;stroke-width:initial;stroke-linecap:initial;stroke-linejoin:initial;
+  & > [data-slot=flag]{--flag-w:20px}
+}
+[data-slot=flag-sprite]{position:absolute;width:0;height:0;overflow:hidden}

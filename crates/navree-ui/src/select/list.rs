@@ -52,6 +52,7 @@ pub(crate) fn option_element(
             .attr("loading", "lazy")
     });
     row.children((
+        choice.lead_slot(),
         choice.icon.map(icon),
         avatar,
         el("span").slot("option-body").children((

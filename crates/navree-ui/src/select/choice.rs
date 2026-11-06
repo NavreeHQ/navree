@@ -1,7 +1,8 @@
 //! [`Choice`]: one thing a list offers, and the entries a list is made of.
 
-use crate::components::OptionItem;
+use crate::components::{Flag, OptionItem};
 use crate::icons::Icon;
+use crate::node::{Element, Node, Uses, el};
 
 /// One choice in a [`Select`](super::Select), [`Combobox`](super::Combobox) or
 /// [`MultiSelect`](super::MultiSelect).
@@ -20,6 +21,7 @@ pub struct Choice {
     pub(crate) selected_label: Option<String>,
     pub(crate) description: Option<String>,
     pub(crate) icon: Option<Icon>,
+    pub(crate) lead: Option<Node>,
     pub(crate) avatar: Option<String>,
     pub(crate) keywords: Vec<String>,
     pub(crate) disabled: bool,
@@ -35,6 +37,7 @@ impl Choice {
             selected_label: None,
             description: None,
             icon: None,
+            lead: None,
             avatar: None,
             keywords: Vec::new(),
             disabled: false,
@@ -52,6 +55,32 @@ impl Choice {
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
         self
+    }
+
+    /// Any small node before the label, in the list and in the control: a flag, a coloured
+    /// dot, a logo. It is hidden from assistive technology, so what it shows must be in the
+    /// label. The page links the parts stylesheet for it. A reply that a remote list sends
+    /// is checked down to the elements a list is drawn with, so a node that is only
+    /// shapes in a `svg` survives it and anything else does not.
+    pub fn lead(mut self, node: impl Into<Node>) -> Self {
+        self.lead = Some(node.into());
+        self
+    }
+
+    /// A country's flag before the label, in the list and in the control. The flag is
+    /// hidden from assistive technology: the label should be the country's name.
+    ///
+    /// ```
+    /// use navree_ui::{Choice, Select, flags, render};
+    ///
+    /// let country = Select::new("country")
+    ///     .choice(Choice::new("IN", "India").flag(flags::IN))
+    ///     .choice(Choice::new("NP", "Nepal").flag(flags::NP));
+    /// let html = render(&country.into());
+    /// assert!(html.contains(r#"data-slot="flag""#));
+    /// ```
+    pub fn flag(self, code: crate::flags::CountryCode) -> Self {
+        self.lead(Flag::new(code).decorative())
     }
 
     /// A small picture before the label: a URL on this site (the content security policy
@@ -130,7 +159,23 @@ impl Choice {
 
     /// Whether the list draws more than the label.
     pub(crate) fn is_rich(&self) -> bool {
-        self.description.is_some() || self.icon.is_some() || self.avatar.is_some()
+        self.description.is_some()
+            || self.icon.is_some()
+            || self.lead.is_some()
+            || self.avatar.is_some()
+    }
+
+    /// The node before the label, in the one slot the runtime copies into the control
+    /// when this choice is chosen.
+    pub(crate) fn lead_slot(&self) -> Option<Element> {
+        self.lead.clone().map(|node| {
+            el("span")
+                .slot("icon")
+                .flag("data-lead", true)
+                .attr("aria-hidden", "true")
+                .uses(Uses::PARTS_STYLES)
+                .child(node)
+        })
     }
 
     /// The words the runtime searches, besides the label.

@@ -514,3 +514,116 @@ fn a_table_column_can_hold_a_cell_sparkline() {
     assert_eq!(count(&out, "<table"), 1, "the table, and no table in any cell");
     assert!(out.contains("Orders of Store 7"), "each picture is named for its row");
 }
+
+#[test]
+fn a_choice_leads_with_a_flag_in_the_list_and_in_the_control() {
+    use navree_ui::{Choice, Select, flags};
+    let country = |chosen: &str| {
+        Select::new("country")
+            .choice(Choice::new("IN", "India").flag(flags::IN))
+            .choice(Choice::new("NP", "Nepal").flag(flags::NP))
+            .choice(Choice::new("LK", "Sri Lanka"))
+            .selected(chosen)
+    };
+    let out = html(country("NP"));
+    assert_eq!(
+        count(&out, r#"data-slot="flag""#),
+        3,
+        "two in the list, one in the control: {out}"
+    );
+    assert_eq!(count(&out, "data-lead"), 3, "{out}");
+    let trigger = out.find("select-trigger").expect("trigger");
+    let first_flag = out.find(r#"data-slot="flag""#).expect("flag");
+    let value = out.find("select-value").expect("value");
+    assert!(
+        trigger < first_flag && first_flag < value,
+        "the flag leads the control's text: {out}"
+    );
+    assert!(uses(country("IN")).has(Uses::PARTS_STYLES));
+
+    // A choice with no lead, chosen: the control has none.
+    let plain = html(country("LK"));
+    assert_eq!(
+        count(&plain, r#"data-slot="flag""#),
+        2,
+        "only the two in the list: {plain}"
+    );
+}
+
+#[test]
+fn a_choice_takes_any_node_as_its_lead() {
+    use navree_ui::{Choice, Select, el};
+    let out = html(
+        Select::new("tone")
+            .choice(Choice::new("red", "Red").lead(el("span").attr("data-dot", "red")))
+            .selected("red"),
+    );
+    assert!(out.contains(r#"data-dot="red""#), "{out}");
+    assert!(out.contains(r#"aria-hidden="true""#), "{out}");
+}
+
+#[test]
+fn a_flag_in_a_timeline_meta_is_a_picture_beside_the_words_and_read_once() {
+    use navree_ui::{Flag, Meta, Timeline, TimelineEvent, flags};
+    let out = html(
+        Timeline::new("steps", "What happened").event(
+            TimelineEvent::new("Signed in")
+                .at(1_793_592_667)
+                .meta(Meta::flag(Flag::new(flags::IN).decorative(), "Mumbai"))
+                .meta(Meta::flag(Flag::new(flags::NP), "Kathmandu")),
+        ),
+    );
+    assert_eq!(
+        count(&out, r#"data-slot="meta-start" aria-hidden="true""#),
+        2,
+        "{out}"
+    );
+    assert_eq!(count(&out, r#"data-slot="flag""#), 2, "{out}");
+    assert!(out.contains("Mumbai") && out.contains("Kathmandu"), "{out}");
+    // The slot hides the flag from a reader, so its name is not read twice.
+    assert!(
+        out.contains(r#"<span data-slot="meta-start" aria-hidden="true"><svg data-slot="flag""#),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_flag_by_pointer_is_small_and_the_sprite_holds_each_flag_once() {
+    use navree_ui::{Flag, FlagShape, FlagSprite, flags};
+    let inline = html(Flag::new(flags::RS));
+    let pointer = html(Flag::new(flags::RS).sprite());
+    assert!(pointer.contains(r##"<use href="#flag-rs">"##), "{pointer}");
+    assert!(
+        pointer.len() * 20 < inline.len(),
+        "{} against {}",
+        pointer.len(),
+        inline.len()
+    );
+    assert!(
+        pointer.contains(r#"aria-label="Serbia""#),
+        "the name is kept: {pointer}"
+    );
+
+    let rows: String = (0..100).map(|_| pointer.clone()).collect();
+    let sprite = html(FlagSprite::new([flags::RS, flags::IN, flags::RS]));
+    assert_eq!(count(&sprite, "<symbol"), 2);
+    assert!(sprite.contains(r#"id="flag-rs""#) && sprite.contains(r#"id="flag-in""#));
+    assert!(sprite.contains(r#"aria-hidden="true""#));
+    let whole_page = rows.len() + sprite.len();
+    assert!(
+        whole_page < inline.len() * 2,
+        "a hundred rows and the sprite: {whole_page} bytes, one flag inline is {}",
+        inline.len()
+    );
+    assert!(uses(FlagSprite::new([flags::IN])).has(Uses::PARTS_STYLES));
+
+    // A square flag points at its own art.
+    let square = html(Flag::new(flags::IN).shape(FlagShape::Round).sprite());
+    assert!(square.contains("#flag-in-square"), "{square}");
+    let both = html(FlagSprite::new([flags::IN]).with_squares());
+    assert_eq!(count(&both, "<symbol"), 2);
+    // Without the sprite option the flag is as before.
+    assert!(!html(Flag::new(flags::IN)).contains("<use"));
+    // A code nobody knows is drawn in full, whatever is asked.
+    assert!(!html(Flag::country("??").sprite()).contains("<use"));
+}
