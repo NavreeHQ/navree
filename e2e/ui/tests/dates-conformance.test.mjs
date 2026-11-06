@@ -51,6 +51,27 @@ const still = async (page) => {
   await page.waitForTimeout(80);
 };
 
+/**
+ * Waits until a popover has settled: it is open, none of its animations is running (one that a later change cancels is over, as in
+ * `still`), and its box is the same two frames on. A page that is still scrolling a few pixels makes the script place the popover
+ * again, which starts a new transition on `top` (the suite's reduced motion gives every element a 0.01 ms one) and cancels the last.
+ * It fails with the box it last saw instead of waiting forever.
+ */
+const settled = (page, selector) =>
+  page.evaluate(async (sel) => {
+    const pop = document.querySelector(sel);
+    const frames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const box = () => JSON.stringify(pop.getBoundingClientRect());
+    const began = performance.now();
+    for (;;) {
+      await Promise.all(pop.getAnimations().map((a) => a.finished.catch(() => {})));
+      const before = box();
+      await frames();
+      if (pop.matches(":popover-open") && box() === before && pop.getAnimations().every((a) => a.playState === "finished")) return;
+      if (performance.now() - began > 5000) throw new Error(`${sel} did not settle: ${box()}`);
+    }
+  }, selector);
+
 inBrowsers(({ open }) => {
   for (const [name, path, prepare, options] of STATES) {
     test(`axe, dark, 1440px: ${name}`, { timeout: 90000 }, async () => {
@@ -148,7 +169,7 @@ inBrowsers(({ open }) => {
     const { page, close } = await open("/dates");
     await page.locator("#dp-basic [data-ui-act=open]").click();
     await page.waitForFunction(() => document.querySelector("#dp-basic-pop").style.top !== "");
-    await page.evaluate(() => Promise.all(document.querySelector("#dp-basic-pop").getAnimations().map((a) => a.finished)));
+    await settled(page, "#dp-basic-pop");
     const under = await page.evaluate(() => {
       const field = document.querySelector("#dp-basic [data-slot=input-group]").getBoundingClientRect();
       const pop = document.querySelector("#dp-basic-pop").getBoundingClientRect();
@@ -161,7 +182,7 @@ inBrowsers(({ open }) => {
     await page.locator("#dp-basic").evaluate((e) => e.scrollIntoView({ block: "end" }));
     await page.locator("#dp-basic [data-ui-act=open]").click();
     await page.waitForFunction(() => document.querySelector("#dp-basic-pop").style.top !== "");
-    await page.evaluate(() => Promise.all(document.querySelector("#dp-basic-pop").getAnimations().map((a) => a.finished)));
+    await settled(page, "#dp-basic-pop");
     const above = await page.evaluate(() => {
       const field = document.querySelector("#dp-basic [data-slot=input-group]").getBoundingClientRect();
       const pop = document.querySelector("#dp-basic-pop").getBoundingClientRect();
