@@ -155,14 +155,14 @@ async fn authorized_apps(world: &World, access: &str) -> usize {
 #[tokio::test]
 async fn revoking_a_domain_ends_every_kind_of_credential_of_its_users() {
     let world = World::new().await;
-    world.user("ann@acme.test", &["deals.read"]).await;
+    world.user("aru@acme.test", &["deals.read"]).await;
     world.user("ned@Acme.Test", &["deals.read"]).await;
-    world.user("bob@other.test", &["deals.read"]).await;
+    world.user("bal@other.test", &["deals.read"]).await;
     let app = app(&world).await;
-    let ann = issue(&world, &app, "ann@acme.test").await;
+    let ann = issue(&world, &app, "aru@acme.test").await;
     let ned = issue(&world, &app, "ned@acme.test").await;
-    let bob = issue(&world, &app, "bob@other.test").await;
-    let (ann_jwt, _) = sign_in(&world, "ann@acme.test").await;
+    let bob = issue(&world, &app, "bal@other.test").await;
+    let (ann_jwt, _) = sign_in(&world, "aru@acme.test").await;
     assert_eq!(authorized_apps(&world, &ann_jwt).await, 1);
 
     // Everything works now.
@@ -207,7 +207,7 @@ async fn revoking_a_domain_ends_every_kind_of_credential_of_its_users() {
     assert_eq!(exchange_code(&world, &app, &bob).await, 200);
     assert_eq!(oauth_refresh(&world, &app, &bob.oauth_refresh).await, 200);
     // The remembered consent of the revoked users is gone.
-    let (bob_jwt, _) = sign_in(&world, "bob@other.test").await;
+    let (bob_jwt, _) = sign_in(&world, "bal@other.test").await;
     assert_eq!(authorized_apps(&world, &bob_jwt).await, 1);
 
     let audited = world.audit.with_action("auth.credentials_revoked");
@@ -219,11 +219,11 @@ async fn revoking_a_domain_ends_every_kind_of_credential_of_its_users() {
 #[tokio::test]
 async fn one_user_can_be_cut_off_and_unknown_domains_revoke_nothing() {
     let world = World::new().await;
-    let (ann, _) = world.user("ann@acme.test", &["deals.read"]).await;
+    let (ann, _) = world.user("aru@acme.test", &["deals.read"]).await;
     let (ned, _) = world.user("ned@acme.test", &["deals.read"]).await;
     let app = app(&world).await;
     let (ann_creds, ned_creds) = (
-        issue(&world, &app, "ann@acme.test").await,
+        issue(&world, &app, "aru@acme.test").await,
         issue(&world, &app, "ned@acme.test").await,
     );
     let auth = world.app.get::<AuthService>().await;

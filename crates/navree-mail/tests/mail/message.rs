@@ -26,7 +26,7 @@ fn extra_headers_are_checked() {
     for (name, value) in [
         ("Subject", "Injected"),
         ("content-type", "text/plain"),
-        ("Bcc", "eve@example.com"),
+        ("Bcc", "ela@example.com"),
         ("DKIM-Signature", "v=1"),
     ] {
         let error = base().header(name, value).validate().unwrap_err();
@@ -37,7 +37,7 @@ fn extra_headers_are_checked() {
     }
 
     let error = base()
-        .header("X-Note", "one\r\nBcc: eve@example.com")
+        .header("X-Note", "one\r\nBcc: ela@example.com")
         .validate()
         .unwrap_err();
     assert!(matches!(error, MailError::Header { reason, .. } if reason.contains("line breaks")));
@@ -53,11 +53,11 @@ fn recipients_and_sender_domain() {
     let message = Message::new()
         .from("Agra <Hello@ACME.test>")
         .to("anu@example.com")
-        .cc("bob@example.com")
+        .cc("bal@example.com")
         .bcc("log@example.com");
     assert_eq!(
         message.recipients().collect::<Vec<_>>(),
-        ["anu@example.com", "bob@example.com", "log@example.com"]
+        ["anu@example.com", "bal@example.com", "log@example.com"]
     );
     assert_eq!(message.sender_domain().as_deref(), Some("acme.test"));
     assert_eq!(Message::new().sender_domain(), None);

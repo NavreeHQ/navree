@@ -131,7 +131,7 @@ fn ping() -> PingRequest {
 async fn current_workspace_comes_from_the_x_workspace_metadata() {
     let app = app().await;
     let ada = user(&app, "anu").await;
-    let bob = user(&app, "bob").await;
+    let bob = user(&app, "bal").await;
     let agra = workspace(&app, ada, "Agra").await;
     let member = || TestChannel::new(&app).acting_as(principal(ada));
 

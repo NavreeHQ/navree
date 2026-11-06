@@ -122,7 +122,7 @@ async fn through_relations_composed_from_two_relations() {
         .await
         .unwrap();
     let names: Vec<&str> = contacts.iter().map(|c| c.name.as_str()).collect();
-    assert_eq!(names, ["Alice", "Carol"]);
+    assert_eq!(names, ["Aarti", "Charu"]);
     assert!(crm.orphan.contacts().get(&t.db).await.unwrap().is_empty());
 
     let deals = Deal::query()
@@ -137,7 +137,7 @@ async fn through_relations_composed_from_two_relations() {
         .collect();
     assert_eq!(counts, [2, 2, 1, 0]);
     let reachable = Deal::query()
-        .where_relation("contacts", Contact::NAME.eq("Dave"))
+        .where_relation("contacts", Contact::NAME.eq("Deep"))
         .get(&t.db)
         .await
         .unwrap();
@@ -171,7 +171,7 @@ async fn soft_deleted_intermediate_records_are_left_out() {
     assert_eq!(
         titles(&deals),
         ["Renewal", "Platform"],
-        "Bob's Upgrade is out"
+        "Bal's Upgrade is out"
     );
     let all = crm
         .team

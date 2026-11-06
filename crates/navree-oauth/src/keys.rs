@@ -376,7 +376,7 @@ mod tests {
         let other = SigningKeys::new(SigningKey25519::generate(), Vec::new());
         assert!(other.verify(&token).is_err());
         let mut parts: Vec<&str> = fresh.split('.').collect();
-        let forged = URL_SAFE_NO_PAD.encode(r#"{"sub":"mallory"}"#);
+        let forged = URL_SAFE_NO_PAD.encode(r#"{"sub":"manjeet"}"#);
         parts[1] = &forged;
         assert!(after.verify(&parts.join(".")).is_err());
         assert!(after.verify("a.b").is_err());
@@ -389,7 +389,7 @@ mod tests {
         let hmac = SigningKey::hmac(Algorithm::HS256, [1_u8; 32])
             .unwrap()
             .with_kid(keys.current().kid());
-        let token = hmac.sign_jwt(&json!({"sub": "mallory"})).unwrap();
+        let token = hmac.sign_jwt(&json!({"sub": "manjeet"})).unwrap();
         assert_eq!(keys.verify(&token), Err(KeyError::InvalidSignature));
         // The header is `{"alg":"EdDSA","kid":..,"typ":"JWT"}`.
         let header: Value = serde_json::from_slice(

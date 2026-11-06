@@ -246,7 +246,7 @@ async fn permitted_asks_every_check_and_any_grant_wins() {
             .await
             .unwrap()
     );
-    // Bob holds it in agra only.
+    // Bal holds it in agra only.
     assert!(
         !permitted(ctx, &principal(bob), "operations.view", None)
             .await

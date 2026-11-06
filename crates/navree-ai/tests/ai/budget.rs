@@ -47,7 +47,7 @@ async fn a_user_who_spent_their_tokens_waits_until_midnight_utc() {
     fake.assert_prompt_count(2);
 
     // Others and requests without a user are not affected.
-    ai.text("sam").user(sam).await.unwrap();
+    ai.text("sahil").user(sam).await.unwrap();
     ai.text("nobody").await.unwrap();
 
     // A new UTC day, a new allowance.

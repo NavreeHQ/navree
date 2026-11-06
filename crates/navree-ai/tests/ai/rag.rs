@@ -127,7 +127,7 @@ async fn answers_use_only_the_deals_own_activity() {
         &app,
         agra_note,
         agra,
-        "Dana wants to be live before January planning",
+        "Daljit wants to be live before January planning",
     )
     .await;
     index(
@@ -152,7 +152,7 @@ async fn answers_use_only_the_deals_own_activity() {
         sources,
         [Source {
             activity_id: agra_note,
-            excerpt: "Dana wants to be live before January planning".into()
+            excerpt: "Daljit wants to be live before January planning".into()
         }],
         "the invented source 7 is dropped"
     );
@@ -176,7 +176,7 @@ async fn reindexing_replaces_an_activitys_chunks() {
         .await;
     let notes = app.get::<VectorStore>().await.collection("activity_notes");
     let (deal, activity) = (Uuid::now_v7(), Uuid::now_v7());
-    let long = "Pricing call with Dana. ".repeat(200);
+    let long = "Pricing call with Daljit. ".repeat(200);
 
     index(&app, activity, deal, &long).await;
     let before = notes.count().await.unwrap();

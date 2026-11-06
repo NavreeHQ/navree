@@ -363,7 +363,7 @@ async fn configured_synonyms_and_stop_words_apply() {
         let app = support::builder(engine, "inline")
             .config(
                 "search.indexes.contacts.synonyms",
-                serde_json::json!({ "bob": ["robert"] }),
+                serde_json::json!({ "bal": ["robert"] }),
             )
             .config("search.indexes.contacts.stop_words", "the,of")
             .build()
@@ -373,7 +373,7 @@ async fn configured_synonyms_and_stop_words_apply() {
         settle(&app).await;
         let search = app.get::<Search>().await;
         assert_eq!(
-            search.query::<Contact>("bob ").ids(10).await.unwrap(),
+            search.query::<Contact>("bal ").ids(10).await.unwrap(),
             [rows[0].id.to_string()],
             "{engine}: synonyms"
         );

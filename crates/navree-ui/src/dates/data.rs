@@ -286,7 +286,7 @@ static FR: LocaleData = LocaleData {
         "Choisir une date",
         "Choisir une heure",
         "Mois",
-        "Année",
+        "Aruée",
         "Semaine",
         "Du",
         "Au",

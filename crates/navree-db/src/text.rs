@@ -89,9 +89,9 @@ pub fn contains_ignore_case(backend: Backend, expr: &str, term: &str) -> Stateme
 /// ```
 /// use navree_db::{Backend, Value, eq_ignore_case};
 ///
-/// let condition = eq_ignore_case(Backend::Postgres, "\"email\"", "Ann@Example.com");
+/// let condition = eq_ignore_case(Backend::Postgres, "\"email\"", "Aru@Example.com");
 /// assert_eq!(condition.sql(), r#"LOWER("email") = ?"#);
-/// assert_eq!(condition.values(), [Value::from("ann@example.com")]);
+/// assert_eq!(condition.values(), [Value::from("aru@example.com")]);
 /// ```
 pub fn eq_ignore_case(backend: Backend, expr: &str, value: &str) -> Statement {
     match backend {
@@ -323,9 +323,9 @@ mod tests {
             text(&eq_ignore_case(
                 Backend::Postgres,
                 "\"name\"",
-                "Ann@Example.com"
+                "Aru@Example.com"
             )),
-            (r#"LOWER("name") = ?"#, vec![Value::from("ann@example.com")])
+            (r#"LOWER("name") = ?"#, vec![Value::from("aru@example.com")])
         );
     }
 }

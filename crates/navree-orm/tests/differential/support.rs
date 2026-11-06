@@ -269,7 +269,7 @@ fn seed(dialect: Dialect) -> String {
     ));
     sql.push_str(&format!(
         "INSERT INTO users (name, email, active) VALUES \
-         ('Anu', 'anu@example.com', {}), ('Gauri', NULL, {}), ('Linus', 'linus@example.com', {});\n",
+         ('Anu', 'anu@example.com', {}), ('Gauri', NULL, {}), ('Laksh', 'laksh@example.com', {});\n",
         b(true),
         b(true),
         b(false)
@@ -344,7 +344,7 @@ fn seed(dialect: Dialect) -> String {
             250_000,
             "won",
             Some(r#"["vip"]"#),
-            Some(r#"{"owner":{"name":"linus"},"items":[1]}"#),
+            Some(r#"{"owner":{"name":"laksh"},"items":[1]}"#),
             Some("2026-10-27 08:30:00"),
             "2026-10-15 15:20:00",
             None,

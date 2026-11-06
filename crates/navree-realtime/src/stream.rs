@@ -1082,7 +1082,7 @@ mod tests {
         assert!(streams.admit(Some("anu")));
         assert!(streams.admit(Some("anu")));
         assert!(!streams.admit(Some("anu")));
-        assert!(streams.admit(Some("bob")));
+        assert!(streams.admit(Some("bal")));
         assert!(
             streams.admit(None),
             "guests are held by the server's limits"

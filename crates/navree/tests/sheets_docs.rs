@@ -337,7 +337,7 @@ async fn a_contacts_file_is_imported_from_code() {
                 "contacts.csv",
                 "Email address,Name,Organization\n\
                  anu@example.com,Anu Lakhotia,Analytical Engines\n\
-                 bob@competitor.example,Bob,Rival\n",
+                 bal@competitor.example,Bal,Rival\n",
             ),
             UploadOptions::default().owner(ADMIN),
         )

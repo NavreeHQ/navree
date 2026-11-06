@@ -30,11 +30,11 @@ async fn assert_json_path_reports_actual_on_failure() {
     let message = panic_message(|| {
         response
             .clone()
-            .assert_json_path("data.0.name", json!("Bob"));
+            .assert_json_path("data.0.name", json!("Bal"));
     });
     assert!(message.contains("data.0.name"), "{message}");
-    assert!(message.contains(r#"expected: "Bob""#), "{message}");
-    assert!(message.contains(r#"actual: "Alice""#), "{message}");
+    assert!(message.contains(r#"expected: "Bal""#), "{message}");
+    assert!(message.contains(r#"actual: "Aarti""#), "{message}");
     assert!(
         message.contains(r#""meta":{"total":2}"#),
         "the body is shown: {message}"
@@ -43,7 +43,7 @@ async fn assert_json_path_reports_actual_on_failure() {
     let missing = panic_message(|| {
         response
             .clone()
-            .assert_json_path("data.5.name", json!("Eve"));
+            .assert_json_path("data.5.name", json!("Ela"));
     });
     assert!(
         missing.contains("actual: <missing>") && missing.contains("`data.5`"),
@@ -56,7 +56,7 @@ async fn assert_json_path_walks_objects_and_arrays() {
     let response = items()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.name", json!("Alice"))
+        .assert_json_path("data.0.name", json!("Aarti"))
         .assert_json_path("data.0.tags.1", json!("sales"))
         .assert_json_path("data.1.tags", json!([]))
         .assert_json_path("meta", json!({ "total": 2 }));
@@ -71,7 +71,7 @@ async fn assert_status_shows_the_body_on_failure() {
     });
     assert!(message.contains("expected status 201"), "{message}");
     assert!(message.contains("200"), "{message}");
-    assert!(message.contains("Alice"), "the body is shown: {message}");
+    assert!(message.contains("Aarti"), "the body is shown: {message}");
 }
 
 #[tokio::test]
@@ -90,7 +90,7 @@ async fn json_deserializes_typed_bodies() {
     assert_eq!(
         items.data[0],
         Item {
-            name: "Alice".into(),
+            name: "Aarti".into(),
             tags: vec!["admin".into(), "sales".into()]
         }
     );

@@ -15,7 +15,7 @@ fn message() -> Message {
     Message::new()
         .from("Agra Billing <billing@acme.test>")
         .to("Anu <anu@example.com>")
-        .cc("bob@example.com")
+        .cc("bal@example.com")
         .bcc("audit@acme.test")
         .reply_to("help@acme.test")
         .subject("Your invoice")
@@ -91,7 +91,7 @@ async fn ses_sends_simple_content_signed_with_sigv4() {
             "FromEmailAddress": "Agra Billing <billing@acme.test>",
             "Destination": {
                 "ToAddresses": ["Anu <anu@example.com>"],
-                "CcAddresses": ["bob@example.com"],
+                "CcAddresses": ["bal@example.com"],
                 "BccAddresses": ["audit@acme.test"],
             },
             "ReplyToAddresses": ["help@acme.test"],
@@ -197,7 +197,7 @@ async fn mailgun_posts_a_form_with_basic_auth() {
     };
     assert_eq!(field("from"), ["Agra Billing <billing@acme.test>"]);
     assert_eq!(field("to"), ["Anu <anu@example.com>"]);
-    assert_eq!(field("cc"), ["bob@example.com"]);
+    assert_eq!(field("cc"), ["bal@example.com"]);
     assert_eq!(field("bcc"), ["audit@acme.test"]);
     assert_eq!(field("subject"), ["Your invoice"]);
     assert_eq!(field("text"), ["Thanks"]);
@@ -260,7 +260,7 @@ async fn postmark_posts_json_with_the_server_token() {
         json!({
             "From": "Agra Billing <billing@acme.test>",
             "To": "Anu <anu@example.com>",
-            "Cc": "bob@example.com",
+            "Cc": "bal@example.com",
             "Bcc": "audit@acme.test",
             "Subject": "Your invoice",
             "TextBody": "Thanks",
@@ -321,7 +321,7 @@ async fn resend_posts_json_with_a_bearer_token() {
         json!({
             "from": "Agra Billing <billing@acme.test>",
             "to": ["Anu <anu@example.com>"],
-            "cc": ["bob@example.com"],
+            "cc": ["bal@example.com"],
             "bcc": ["audit@acme.test"],
             "subject": "Your invoice",
             "text": "Thanks",

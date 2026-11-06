@@ -95,12 +95,12 @@ A schema reads the database's catalogs:
 
 ```rust
 if !schema.has_column("deals", "currency").await? {
-    schema.table("deals", |t| { t.char("currency", 3).default("USD"); }).await?;
+    schema.table("deals", |t| { t.char("currency", 3).default("INR"); }).await?;
 }
 
 schema
     .when_table_doesnt_have_column("deals", "currency", |t| {
-        t.char("currency", 3).default("USD");
+        t.char("currency", 3).default("INR");
     })
     .await?;
 ```

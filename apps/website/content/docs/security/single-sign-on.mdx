@@ -250,7 +250,7 @@ With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connecti
 { "statusCode": 403, "message": "Sign in with Agra Okta", "error": "Forbidden", "code": "sso_required" }
 ```
 
-A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected. An address's domain is compared in the form verified domains are kept in, the one mail is routed by: lower-case, an international spelling in its `xn--` form, without a trailing dot. So `eve@ACME.com.` and full-width spellings of `agra.com` are `agra.com`. The same form is what `SignInAttempt::domain()` gives your own [sign-in policies](/docs/security/authentication/#sign-in-policies) (`navree::auth::email_domain` in navree-auth does the normalizing, and this module uses it), and what the profile's `email_domain()` returns.
+A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected. An address's domain is compared in the form verified domains are kept in, the one mail is routed by: lower-case, an international spelling in its `xn--` form, without a trailing dot. So `ela@ACME.com.` and full-width spellings of `agra.com` are `agra.com`. The same form is what `SignInAttempt::domain()` gives your own [sign-in policies](/docs/security/authentication/#sign-in-policies) (`navree::auth::email_domain` in navree-auth does the normalizing, and this module uses it), and what the profile's `email_domain()` returns.
 
 The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign-in-policies) the module registers, and every navree-auth flow, social sign-in and single sign-on ask it, so a sign-in path added later asks it too. Each refusal is audited as `auth.login_refused` with the method (`password`, `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`), the email and the code. A connection with `enforce: false` keeps every method working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default. A disabled connection (`enabled: false`) enforces nothing.
 
@@ -504,7 +504,7 @@ use navree::testing::TestApp;
 use serde_json::json;
 
 #[tokio::test]
-async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxError> {
+async fn aarti_signs_in_with_her_company_identity_provider() -> Result<(), BoxError> {
     let app = TestApp::builder()
         .temp_database()
         .config("app.key", navree::crypto::generate_key())
@@ -534,7 +534,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
     // ...which posts its signed answer to the assertion consumer service.
     let answer = idp
         .respond_to(&url)?
-        .name_id("alice@acme.test")
+        .name_id("aarti@acme.test")
         .attribute("groups", ["Engineering"]);
     app.client()
         .post("/api/sso/saml/agra/acs")
@@ -542,7 +542,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("alice@acme.test"));
+        .assert_json_path("user.email", json!("aarti@acme.test"));
     Ok(())
 }
 ```

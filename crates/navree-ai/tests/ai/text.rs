@@ -272,7 +272,7 @@ async fn validated_checks_the_validation_rules_and_repairs() {
     fake.respond_with([
         FakeReply::json(json!({ "subject": "x".repeat(100), "body": "Hi", "send_on": null })),
         FakeReply::json(
-            json!({ "subject": "Next steps", "body": "Hi Dana", "send_on": "2026-10-30" }),
+            json!({ "subject": "Next steps", "body": "Hi Daljit", "send_on": "2026-10-30" }),
         ),
     ]);
 

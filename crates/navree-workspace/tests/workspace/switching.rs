@@ -364,7 +364,7 @@ async fn defaulting_world() -> World {
 async fn a_browser_that_chose_nothing_is_in_its_first_workspace_when_asked() {
     let world = defaulting_world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let nobody = world.user("Mallory", "mallory@example.com").await;
+    let nobody = world.user("Manjeet", "manjeet@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let gulati = world.workspace(ada, "Gulati").await;
     let client = world.as_user(ada);
@@ -447,7 +447,7 @@ async fn a_stolen_session_cookie_reaches_no_other_workspace() {
     let (world, _sink) = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let mallory = world.user("Mallory", "mallory@example.com").await;
+    let mallory = world.user("Manjeet", "manjeet@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let gulati = world.workspace(grace, "Gulati").await;
     let victim = world.as_user(ada);
@@ -739,7 +739,7 @@ async fn the_live_hubs_workspace_lookup_follows_the_switch() {
     assert_eq!(hub(&client).await, json!(gulati.id));
 
     // Another user replaying Anu's cookie reaches none of her workspaces.
-    let bob = world.user("Bob", "bob@example.com").await;
+    let bob = world.user("Bal", "bal@example.com").await;
     let thief = world.as_user(bob);
     thief.set_cookie(
         &session_cookie(),
@@ -782,7 +782,7 @@ async fn a_switch_ends_the_users_live_subscriptions() {
     assert_eq!(broadcaster.ended(), [ada, ada]);
 
     // A refused switch ends nothing.
-    let bob = world.user("Bob", "bob@example.com").await;
+    let bob = world.user("Bal", "bal@example.com").await;
     world.workspace(bob, "Indrani").await;
     switch(&client, "indrani", "/").await.assert_status(403);
     assert_eq!(broadcaster.ended(), [ada, ada]);

@@ -27,7 +27,7 @@ async fn fake_embeddings_are_deterministic_and_close_for_shared_words() {
     let embeddings = embeddings(64);
 
     let a = embeddings
-        .embed("Dana wants to be live before January planning")
+        .embed("Daljit wants to be live before January planning")
         .await
         .unwrap();
     let b = embeddings
@@ -41,7 +41,7 @@ async fn fake_embeddings_are_deterministic_and_close_for_shared_words() {
     assert_eq!(
         a,
         embeddings
-            .embed("Dana wants to be live before January planning")
+            .embed("Daljit wants to be live before January planning")
             .await
             .unwrap()
     );
@@ -165,7 +165,7 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
     let texts = [
         (
             "a1:0",
-            "Dana wants to be live before January planning",
+            "Daljit wants to be live before January planning",
             "d1",
             "call",
             3,
@@ -201,7 +201,7 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
     assert_eq!(matches[0].id, "a1:0");
     assert_eq!(
         matches[0].text,
-        "Dana wants to be live before January planning"
+        "Daljit wants to be live before January planning"
     );
     assert_eq!(matches[0].metadata["subject_id"], "d1");
     assert!(matches.windows(2).all(|w| w[0].score >= w[1].score));
@@ -251,7 +251,7 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
 
     // min_score drops distant records.
     let close = notes
-        .search("Dana wants to be live before January planning")
+        .search("Daljit wants to be live before January planning")
         .min_score(0.99)
         .await
         .unwrap();
@@ -380,7 +380,7 @@ async fn the_qdrant_store_speaks_the_rest_api() {
             "filter": { "must": [{ "key": "metadata.subject_id", "match": { "value": "d1" } }] }
         })))
         .respond_with(json(200, json!({ "result": [
-            { "id": "6a2f...", "score": 0.91, "payload": { "id": "a1:0", "text": "Dana...", "metadata": { "subject_id": "d1" } } }
+            { "id": "6a2f...", "score": 0.91, "payload": { "id": "a1:0", "text": "Daljit...", "metadata": { "subject_id": "d1" } } }
         ], "status": "ok" })))
         .mount(&server)
         .await;
@@ -399,7 +399,7 @@ async fn the_qdrant_store_speaks_the_rest_api() {
     notes
         .upsert(
             VectorRecord::new("a1:0", Embedding::new(vec![0.5; 4]))
-                .text("Dana...")
+                .text("Daljit...")
                 .metadata(json!({ "subject_id": "d1" })),
         )
         .await

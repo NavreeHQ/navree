@@ -89,7 +89,7 @@ async fn requires_flag_hides_the_route_while_the_flag_is_off() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("currency", json!("USD"));
+        .assert_json_path("currency", json!("INR"));
 
     // Access is still declared and checked: guests get 401.
     world

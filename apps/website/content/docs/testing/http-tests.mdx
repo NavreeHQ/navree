@@ -83,13 +83,13 @@ const PASSWORD: &str = "correct horse battery";
 
 app.get::<AuthService>()
     .await
-    .create_user("Alice", "alice@example.com", PASSWORD)
+    .create_user("Aarti", "aarti@example.com", PASSWORD)
     .await
     .expect("the user is created");
 let body = app
     .client()
     .post("/api/auth/login")
-    .json(&json!({ "email": "alice@example.com", "password": PASSWORD }))
+    .json(&json!({ "email": "aarti@example.com", "password": PASSWORD }))
     .send()
     .await
     .assert_status(200)
@@ -102,7 +102,7 @@ app.client()
     .send()
     .await
     .assert_status(200)
-    .assert_json_path("email", json!("alice@example.com"));
+    .assert_json_path("email", json!("aarti@example.com"));
 ```
 
 Set fast hashing (`hashing.memory_kib = 1024`, `hashing.iterations = 1`) in tests that sign in: Argon2id with production settings is deliberately slow. Access tokens expire after 15 minutes (`auth.jwt.access_ttl_secs`) by the app's clock, which matters once you [move the clock](/docs/testing/fakes/#the-clock).

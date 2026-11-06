@@ -133,11 +133,11 @@ pub struct SignInAttempt {
 ///
 /// [`SignInAttempt::domain`] returns this, so a [`SignInPolicy`] compares
 /// one spelling whatever an identity provider, social provider or form
-/// sent (`Eve@ACME.test.` is `acme.test`). Use it for any other comparison
+/// sent (`Ela@ACME.test.` is `acme.test`). Use it for any other comparison
 /// of an email domain (navree-sso keeps its verified domains in this form).
 ///
 /// ```
-/// assert_eq!(navree_auth::email_domain("Eve@ACME.test.").as_deref(), Some("acme.test"));
+/// assert_eq!(navree_auth::email_domain("Ela@ACME.test.").as_deref(), Some("acme.test"));
 /// assert_eq!(navree_auth::email_domain("eve"), None);
 /// ```
 pub fn email_domain(email: &str) -> Option<String> {
@@ -329,24 +329,24 @@ mod tests {
     #[test]
     fn domains_are_normalized_for_policies() {
         for email in [
-            "ann@acme.test",
-            "Eve@ACME.test.",
-            " Eve@Acme.Test ",
-            "eve@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.test",
-            "eve@agra\u{3002}test",
-            "eve@agra\u{ff0e}test\u{3002}",
+            "aru@acme.test",
+            "Ela@ACME.test.",
+            " Ela@Acme.Test ",
+            "ela@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.test",
+            "ela@agra\u{3002}test",
+            "ela@agra\u{ff0e}test\u{3002}",
         ] {
             let attempt = SignInAttempt::new(email, SignInMethod::Otp);
             assert_eq!(attempt.domain(), Some("acme.test"), "{email}");
             assert_eq!(email_domain(email).as_deref(), Some("acme.test"), "{email}");
         }
         assert_eq!(
-            SignInAttempt::new("ann@bücher.example", SignInMethod::Otp).domain(),
+            SignInAttempt::new("aru@bücher.example", SignInMethod::Otp).domain(),
             Some("xn--bcher-kva.example")
         );
-        assert_eq!(email_domain("ann"), None);
-        assert_eq!(email_domain("ann@"), None);
-        assert_eq!(email_domain("ann@."), None);
+        assert_eq!(email_domain("aru"), None);
+        assert_eq!(email_domain("aru@"), None);
+        assert_eq!(email_domain("aru@."), None);
     }
 
     /// Found by fuzzing: a domain `url` cannot read as a host name (it has a
@@ -356,22 +356,22 @@ mod tests {
     #[test]
     fn blanks_around_a_domain_are_not_part_of_it() {
         assert_eq!(
-            email_domain("ann@acme.test. ").as_deref(),
+            email_domain("aru@acme.test. ").as_deref(),
             Some("acme.test")
         );
         assert_eq!(
-            email_domain("ann@acme.test .").as_deref(),
+            email_domain("aru@acme.test .").as_deref(),
             Some("acme.test")
         );
-        assert_eq!(email_domain("ann@ acme.test").as_deref(), Some("acme.test"));
+        assert_eq!(email_domain("aru@ acme.test").as_deref(), Some("acme.test"));
         for email in [
             " CRAEvA@E.tcM.me-Corpp.com:84/3.comes. .",
             "a@b c . .",
             "a@ . x . ",
             "a@x\t.\t",
-            "Eve@er\u{fc}3.h.n.er\u{fc}.\r\r\r\r\r.\r\r\r\r",
-            "eve@er\u{fc}.test.\r",
-            "eve@er\u{fc}.test\u{3002}\u{3002} ",
+            "Ela@er\u{fc}3.h.n.er\u{fc}.\r\r\r\r\r.\r\r\r\r",
+            "ela@er\u{fc}.test.\r",
+            "ela@er\u{fc}.test\u{3002}\u{3002} ",
         ] {
             if let Some(domain) = email_domain(email) {
                 assert!(
@@ -385,7 +385,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(SignInAttempt::new("ann@", SignInMethod::Otp).domain(), None);
+        assert_eq!(SignInAttempt::new("aru@", SignInMethod::Otp).domain(), None);
     }
 
     #[test]

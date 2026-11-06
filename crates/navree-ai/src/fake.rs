@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn hashed_embeddings_are_close_for_shared_words() {
-        let a = hashed_embedding("Dana wants to be live before January planning", 64);
+        let a = hashed_embedding("Daljit wants to be live before January planning", 64);
         let b = hashed_embedding("live before January", 64);
         let c = hashed_embedding("Gulati prefers summer", 64);
         let dot = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p * q).sum::<f32>();
@@ -592,7 +592,7 @@ mod tests {
         assert!((dot(&a, &a) - 1.0).abs() < 1e-5);
         assert_eq!(
             a,
-            hashed_embedding("Dana wants to be live before January planning", 64)
+            hashed_embedding("Daljit wants to be live before January planning", 64)
         );
     }
 }

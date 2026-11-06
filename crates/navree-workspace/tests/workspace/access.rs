@@ -175,11 +175,11 @@ async fn route_permissions_use_the_role_in_the_current_workspace() {
     world
         .join(
             agra.id,
-            world.user("Linus", "linus@example.com").await,
+            world.user("Laksh", "laksh@example.com").await,
             "admin",
         )
         .await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     world
         .as_user(eve)
         .get("/api/deals")

@@ -289,7 +289,7 @@ async fn events_for_unknown_messages_are_still_recorded() {
         .await
         .record(
             ProviderEvent::new("ses", "unknown-id", MailEventKind::Complained)
-                .recipient("eve@example.com"),
+                .recipient("ela@example.com"),
         )
         .await
         .unwrap();
@@ -298,7 +298,7 @@ async fn events_for_unknown_messages_are_still_recorded() {
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         suppressions
-            .is_suppressed(None, "eve@example.com")
+            .is_suppressed(None, "ela@example.com")
             .await
             .unwrap()
     );
@@ -324,7 +324,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .add(
             &uow,
             None,
-            "eve@example.com",
+            "ela@example.com",
             SuppressionReason::Manual,
             Some("spam trap".into()),
         )
@@ -350,7 +350,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .deliver(
             &Message::new()
                 .to("anu@example.com")
-                .to("bob@example.com")
+                .to("bal@example.com")
                 .subject("Hi")
                 .text("Hi"),
         )
@@ -358,7 +358,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
         .unwrap();
     assert_eq!(in_a.status, DeliveryStatus::Sent);
     assert_eq!(in_a.suppressed, ["anu@example.com"]);
-    assert_eq!(mail.fake.sent()[0].to, ["bob@example.com"]);
+    assert_eq!(mail.fake.sent()[0].to, ["bal@example.com"]);
 
     let in_b = mailer
         .for_scope(&MailScope::workspace(b))
@@ -369,7 +369,7 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
 
     let everywhere = mailer
         .for_scope(&MailScope::workspace(b))
-        .deliver(&welcome("eve@example.com"))
+        .deliver(&welcome("ela@example.com"))
         .await
         .unwrap();
     assert_eq!(everywhere.status, DeliveryStatus::Suppressed);

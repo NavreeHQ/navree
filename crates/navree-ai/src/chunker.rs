@@ -313,12 +313,12 @@ mod tests {
     fn short_text_is_one_chunk() {
         let chunks = Chunker::new()
             .max_tokens(300)
-            .split("Pricing call with Dana.");
+            .split("Pricing call with Daljit.");
         assert_eq!(
             chunks,
             [Chunk {
                 index: 0,
-                text: "Pricing call with Dana.".into()
+                text: "Pricing call with Daljit.".into()
             }]
         );
         assert!(Chunker::new().split("   \n\n ").is_empty());

@@ -395,7 +395,7 @@ pub fn button_urls(html: &str) -> Vec<String> {
 #[tokio::test]
 async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
     let Page { app, nudges } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let ai = app.get::<Ai>().await;
     ai.fake().unwrap().respond(FakeReply::text(
@@ -412,7 +412,7 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
     assert!(html.contains("How many notes do I have?"), "{html}");
     assert!(html.contains("You have no notes yet."), "{html}");
     assert!(html.contains(r#"data-role="user""#) && html.contains(r#"data-role="assistant""#));
-    // Each write was told to Dana's pages only.
+    // Each write was told to Daljit's pages only.
     let channel = format!("private-navree-live.user.{dana}.assistant.{id}");
     let told = nudges.0.lock().unwrap().clone();
     assert!(told.contains(&channel), "{told:?}");
@@ -451,13 +451,13 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
 #[tokio::test]
 async fn another_reader_never_sees_the_conversation() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Dana", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
     let (dana_access, ravi_access) = (access_of(&app, dana).await, access_of(&app, ravi).await);
     app.get::<Ai>()
         .await
         .fake()
         .unwrap()
-        .respond(FakeReply::text("Hello Dana."));
+        .respond(FakeReply::text("Hello Daljit."));
     let assistant = assistant(&app).await;
     let id = assistant
         .start(dana_access.clone(), "Hello", None)
@@ -489,7 +489,7 @@ async fn another_reader_never_sees_the_conversation() {
 #[tokio::test]
 async fn stop_ends_the_answer_and_a_second_message_waits_for_it() {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     // `slow` runs past its one-second limit: the run is busy in the tool.
     app.get::<Ai>()
@@ -530,7 +530,7 @@ async fn stop_ends_the_answer_and_a_second_message_waits_for_it() {
 #[tokio::test]
 async fn a_message_is_checked_before_anything_runs() {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let assistant = assistant(&app).await;
     let long = "x".repeat(5000);
@@ -555,13 +555,13 @@ async fn a_message_is_checked_before_anything_runs() {
 #[tokio::test]
 async fn a_component_is_checked_stored_and_drawn_from_the_readers_data() {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     add_note(&app, dana, "Call Harpreet about the quote").await;
     add_note(&app, dana, "Send Arjun the invoice").await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     fake.respond_with([
-        FakeReply::tool_call("show_notes_summary", json!({ "heading": "Dana's notes" })),
+        FakeReply::tool_call("show_notes_summary", json!({ "heading": "Daljit's notes" })),
         FakeReply::text("There they are."),
     ]);
     let assistant = assistant(&app).await;
@@ -572,7 +572,7 @@ async fn a_component_is_checked_stored_and_drawn_from_the_readers_data() {
     let html = settled(&app, &access, id).await;
 
     assert!(html.contains(r#"data-genui="surface""#), "{html}");
-    assert!(html.contains("Dana&#39;s notes"), "{html}");
+    assert!(html.contains("Daljit&#39;s notes"), "{html}");
     assert!(html.contains("2 notes"), "{html}");
     // The page's id is put under the component's own prefix.
     assert!(!html.contains(r#"id="count""#), "{html}");
@@ -598,7 +598,7 @@ async fn a_component_is_checked_stored_and_drawn_from_the_readers_data() {
 #[tokio::test]
 async fn refused_arguments_are_retried_then_the_model_answers_in_words() {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     fake.respond_with([
@@ -639,17 +639,17 @@ async fn refused_arguments_are_retried_then_the_model_answers_in_words() {
 #[tokio::test]
 async fn a_component_the_reader_may_not_see_shows_nothing_of_its_data() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Dana", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
     let access = access_of(&app, ravi).await;
-    // Dana's note: Ravi may read it, but the card shows only notes the reader may update.
-    let note = add_note(&app, dana, "Dana's private plan").await;
+    // Daljit's note: Ravi may read it, but the card shows only notes the reader may update.
+    let note = add_note(&app, dana, "Daljit's private plan").await;
     app.get::<Ai>().await.fake().unwrap().respond_with([
         FakeReply::tool_call("show_note_card", json!({ "note": note })),
         FakeReply::text("Here is the note."),
     ]);
     let assistant = assistant(&app).await;
     let id = assistant
-        .start(access.clone(), "Show me Dana's note", None)
+        .start(access.clone(), "Show me Daljit's note", None)
         .await
         .unwrap();
     let html = settled(&app, &access, id).await;
@@ -666,11 +666,11 @@ async fn a_component_the_reader_may_not_see_shows_nothing_of_its_data() {
 // A component's buttons act safely
 // ---------------------------------------------------------------------------
 
-/// A conversation in which Dana's note card is drawn: the app, Dana, her access, the
+/// A conversation in which Daljit's note card is drawn: the app, Daljit, her access, the
 /// conversation, the note, and the drawn items.
 async fn card() -> (TestApp, Uuid, Arc<PrincipalAccess>, Uuid, Uuid, String) {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let note = add_note(&app, dana, "Call Harpreet").await;
     app.get::<Ai>().await.fake().unwrap().respond_with([
@@ -733,7 +733,7 @@ async fn forged_cross_user_and_cross_conversation_posts_are_refused() {
     let ravi = user(&app, "Ravi", &[]).await;
     let ravi_access = access_of(&app, ravi).await;
 
-    // Another reader's post of Dana's button.
+    // Another reader's post of Daljit's button.
     let error = assistant
         .act(ravi_access.clone(), &archive.parse().unwrap(), false)
         .await
@@ -799,10 +799,10 @@ async fn a_destructive_action_asks_first_and_rechecks_access() {
 // Approvals in the page's own place
 // ---------------------------------------------------------------------------
 
-/// A conversation stopped at `rename_note` for Dana's note.
+/// A conversation stopped at `rename_note` for Daljit's note.
 async fn waiting() -> (TestApp, Arc<PrincipalAccess>, Uuid, String) {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let note = add_note(&app, dana, "Old").await;
     app.get::<Ai>()
@@ -910,7 +910,7 @@ async fn rejecting_tells_the_model_why() {
 #[tokio::test]
 async fn state_the_model_writes_is_checked_and_the_page_edits_it() {
     let Page { app, .. } = page().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let access = access_of(&app, dana).await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     fake.respond_with([
@@ -957,7 +957,7 @@ async fn state_the_model_writes_is_checked_and_the_page_edits_it() {
 #[tokio::test]
 async fn a_page_context_is_signed_for_its_reader_and_resolved_under_their_access() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Dana", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
     let access = access_of(&app, dana).await;
     let note = add_note(&app, dana, "Order 1042 for Simran").await;
     let foreign = add_note(&app, ravi, "Ravi's own note").await;

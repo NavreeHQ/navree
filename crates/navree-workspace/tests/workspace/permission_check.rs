@@ -15,8 +15,8 @@ async fn the_members_role_answers_for_its_workspace() {
         json!(["operations.view"]),
     ))
     .await;
-    let owner = world.user("Olive", "olive@example.test").await;
-    let support = world.user("Sam", "sam@example.test").await;
+    let owner = world.user("Ojas", "ojas@example.test").await;
+    let support = world.user("Sahil", "sahil@example.test").await;
     let member = world.user("Mia", "mia@example.test").await;
     let outsider = world.user("Otto", "otto@example.test").await;
     let agra = world.workspace(owner, "Agra").await;
@@ -61,7 +61,7 @@ async fn the_members_role_answers_for_its_workspace() {
 #[tokio::test]
 async fn the_check_answers_only_about_a_workspace() {
     let world = World::new().await;
-    let owner = world.user("Olive", "olive@example.test").await;
+    let owner = world.user("Ojas", "ojas@example.test").await;
     let agra = world.workspace(owner, "Agra").await;
     let checks = world
         .app
@@ -94,9 +94,9 @@ async fn the_check_answers_only_about_a_workspace() {
 #[tokio::test]
 async fn an_organization_role_answers_as_it_does_behind_the_guard() {
     let world = World::with(org_builder()).await;
-    let owner = world.user("Olive", "olive@example.test").await;
+    let owner = world.user("Ojas", "ojas@example.test").await;
     let ken = world.user("Ken", "ken@example.test").await;
-    let linus = world.user("Linus", "linus@example.test").await;
+    let linus = world.user("Laksh", "laksh@example.test").await;
     let agra = world.organization(owner, "Agra").await;
     let uk = world.workspace(owner, "UK").await;
     let de = world.workspace(owner, "DE").await;

@@ -330,7 +330,7 @@ mod tests {
 
         // A tampered payload.
         let mut tampered: Vec<String> = RFC7515_A3_TOKEN.split('.').map(str::to_owned).collect();
-        tampered[1] = URL_SAFE_NO_PAD.encode(br#"{"iss":"mallory"}"#);
+        tampered[1] = URL_SAFE_NO_PAD.encode(br#"{"iss":"manjeet"}"#);
         let tampered = CompactJws::parse(&tampered.join(".")).unwrap();
         assert!(!tampered.verified_by(&[jwk(RFC7515_A3_JWK)]));
     }

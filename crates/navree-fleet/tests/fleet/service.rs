@@ -352,7 +352,7 @@ async fn fail_exports(h: &Harness, contacts: &[&str]) -> Vec<String> {
 #[tokio::test]
 async fn failed_jobs_are_searched_retried_and_forgotten() {
     let h = Harness::new(builder()).await;
-    let ids = fail_exports(&h, &["anu", "gauri", "linus"]).await;
+    let ids = fail_exports(&h, &["anu", "gauri", "laksh"]).await;
     h.queue.dispatch(Record::new("fine")).await.unwrap();
 
     let all = h.fleet.failed_jobs(None).await.unwrap();
@@ -384,7 +384,7 @@ async fn failed_jobs_are_searched_retried_and_forgotten() {
         h.fleet.retry("missing").await,
         Err(FleetError::FailedJobNotFound { .. })
     ));
-    assert_eq!(h.fleet.retry_all(Some("linus")).await.unwrap(), 1);
+    assert_eq!(h.fleet.retry_all(Some("laksh")).await.unwrap(), 1);
     assert!(h.fleet.failed_jobs(None).await.unwrap().is_empty());
     assert_eq!(h.queue.pending_count("exports").await.unwrap(), 2);
 

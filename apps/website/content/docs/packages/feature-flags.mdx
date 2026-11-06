@@ -422,7 +422,7 @@ async fn the_forecast_is_hidden_until_the_new_pipeline_is_on() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("currency", json!("USD"));
+        .assert_json_path("currency", json!("INR"));
 }
 ```
 

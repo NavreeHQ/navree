@@ -155,7 +155,7 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
     s.app
         .client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Linus", "email": "linus@corp.test", "password": PASSWORD }))
+        .json(&json!({ "name": "Laksh", "email": "laksh@corp.test", "password": PASSWORD }))
         .send()
         .await
         .assert_error_code(403, "sso_required");

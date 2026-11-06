@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::models::Ticket;
 use crate::support::{app, sqlite};
 
-/// Two of Alice's tickets (one closed), one of Bob's, one without owner.
+/// Two of Aarti's tickets (one closed), one of Bal's, one without owner.
 async fn tickets(db: &navree_db::Db, alice: Uuid, bob: Uuid) -> Vec<Record<Ticket>> {
     let mut made = Vec::new();
     for (owner, status, priority) in [
@@ -45,7 +45,7 @@ async fn tickets(db: &navree_db::Db, alice: Uuid, bob: Uuid) -> Vec<Record<Ticke
     made
 }
 
-/// Alice's abilities under the ticket policy.
+/// Aarti's abilities under the ticket policy.
 fn abilities_of(user: Uuid) -> navree_access::Ability {
     let ctx = AbilityCtx::for_user(user, Vec::new(), Vec::new());
     let mut rules = Rules::new();
@@ -121,7 +121,7 @@ async fn records_are_checked_like_lists_are_filtered() {
     let ability = abilities_of(alice);
     assert!(ability.allows(Update, &made[0]));
     assert!(!ability.allows(Update, &made[1]), "closed");
-    assert!(!ability.allows(Update, &made[2]), "Bob's");
+    assert!(!ability.allows(Update, &made[2]), "Bal's");
     assert!(ability.allows_action("read", &made[2]));
     assert!(ability.authorize(Update, &made[0]).is_ok());
     let denied = ability.authorize(Update, &made[2]).unwrap_err();
@@ -306,7 +306,7 @@ async fn routes_load_and_authorize_model_records() {
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
     let made = tickets(&db, alice, bob).await;
 
-    // The policy attached to the model joined Alice's rules.
+    // The policy attached to the model joined Aarti's rules.
     app.acting_as(principal(alice))
         .get("/api/tickets")
         .send()

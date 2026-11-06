@@ -32,10 +32,10 @@ const PROTOCOL_VERSION: &str = "2025-11-25";
 ///
 /// let mcp = McpTestClient::new(app.acting_as(user)).initialize().await;
 /// assert!(mcp.list_tools().await.iter().any(|tool| tool.name == "log_activity"));
-/// mcp.call_tool("log_activity", json!({ "subject": "Call with Dana" }))
+/// mcp.call_tool("log_activity", json!({ "subject": "Call with Daljit" }))
 ///     .await
 ///     .assert_ok()
-///     .assert_json_path("subject", json!("Call with Dana"));
+///     .assert_json_path("subject", json!("Call with Daljit"));
 /// # }
 /// ```
 ///

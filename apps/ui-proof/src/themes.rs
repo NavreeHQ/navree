@@ -176,7 +176,7 @@ fn layout_page(headers: &HeaderMap, layout: &str, query: Option<&str>) -> Respon
                         [
                             ("Agra renewal", "Anu", "Won", "$12,000"),
                             ("Gulati expansion", "Gauri", "Proposal", "$48,500"),
-                            ("Indrani pilot", "Linus", "Lead", "$3,200"),
+                            ("Indrani pilot", "Laksh", "Lead", "$3,200"),
                         ]
                         .into_iter()
                         .map(|(deal, owner, stage, amount)| {

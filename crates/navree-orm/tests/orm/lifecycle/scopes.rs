@@ -140,7 +140,7 @@ fn declared_scopes_and_soft_deletes_have_names_too() {
 #[tokio::test]
 async fn declared_scopes_are_removed_by_name() {
     let t = sqlite().await;
-    for (title, published, author) in [("Mine", true, "anu"), ("Theirs", true, "bob")] {
+    for (title, published, author) in [("Mine", true, "anu"), ("Theirs", true, "bal")] {
         Article::create(
             &t.db,
             Article {

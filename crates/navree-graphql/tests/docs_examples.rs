@@ -532,7 +532,7 @@ async fn seed_rep_with_deal(app: &TestApp) -> (Uuid, Uuid) {
             id: Uuid::now_v7(),
             title: "Agra renewal".to_owned(),
             amount_cents: 500_000,
-            currency: "USD".to_owned(),
+            currency: "INR".to_owned(),
             stage: "negotiation".to_owned(),
             owner_id: rep,
             company_id: company.id,

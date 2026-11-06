@@ -361,8 +361,8 @@ async fn route_checks_use_the_organization_role_behind_the_guard() {
 async fn organization_a_cannot_see_organization_b() {
     let world = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let bob = world.user("Bob", "bob@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let bob = world.user("Bal", "bal@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let a = world.organization(ada, "Org A").await;
     let b = world.organization(bob, "Org B").await;
     let a1 = world.workspace(ada, "A One").await;
@@ -469,10 +469,10 @@ async fn organization_a_cannot_see_organization_b() {
         .assert_json_path("granted_by", json!("membership"));
     // The organization's owner reaches workspaces they don't belong to, as
     // their owner.
-    let theirs = world.workspace(linus, "Linus Co").await;
+    let theirs = world.workspace(linus, "Laksh Co").await;
     world.attach(a.id, theirs.id).await;
     owner
-        .get("/api/workspaces/linus-co")
+        .get("/api/workspaces/laksh-co")
         .send()
         .await
         .assert_status(200)
@@ -480,7 +480,7 @@ async fn organization_a_cannot_see_organization_b() {
         .assert_json_path("organization_id", json!(a.id));
     owner
         .get("/api/ws")
-        .header("x-workspace", "linus-co")
+        .header("x-workspace", "laksh-co")
         .send()
         .await
         .assert_json_path(
@@ -494,7 +494,7 @@ async fn partition_grants_hold() {
     let world = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let other = world.workspace(ada, "Other").await;
     world.join(agra.id, grace, "member").await;

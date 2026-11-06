@@ -61,7 +61,7 @@ impl Seeder for DemoSeeder {
 
 /// Creates (or finds) the demo accounts, workspace and projects.
 pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
-    let owner = ensure_account(ctx, "Olivia Owner", DEMO_OWNER, DEMO_PASSWORD)
+    let owner = ensure_account(ctx, "Ojaswi Owner", DEMO_OWNER, DEMO_PASSWORD)
         .await?
         .id;
     let member = ensure_account(ctx, "Max Member", DEMO_MEMBER, DEMO_PASSWORD)

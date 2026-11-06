@@ -80,7 +80,7 @@ impl navree::schema::Migration for Migration {
     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
         schema
             .table("deals", |t| {
-                t.char("currency", 3).default("USD");   // add
+                t.char("currency", 3).default("INR");   // add
                 t.text("title").change();                // change: the whole new definition
             })
             .await

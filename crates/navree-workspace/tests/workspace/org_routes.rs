@@ -81,7 +81,7 @@ async fn organization_routes_follow_the_organization_role() {
     let world = World::with(org_builder()).await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let uk = world.workspace(ada, "Agra UK").await;
@@ -350,7 +350,7 @@ async fn access_requests_over_http() {
     let world = World::with(org_builder()).await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let uk = world.workspace(ada, "Agra UK").await;
     world.attach(agra.id, uk.id).await;
@@ -437,7 +437,7 @@ async fn partitions_over_http() {
     let world = World::with(org_builder()).await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     world.join(agra.id, grace, "admin").await;
     world.join(agra.id, linus, "member").await;
@@ -467,7 +467,7 @@ async fn partitions_over_http() {
         .await
         .assert_error(403, None);
 
-    // Limit Linus to one partition; he lists only that one.
+    // Limit Laksh to one partition; he lists only that one.
     let uk = world
         .partitions()
         .await

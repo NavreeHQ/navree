@@ -53,7 +53,7 @@ async fn a_burst_then_one_request_per_interval() {
     );
     assert!(
         limiter
-            .hit("exports:bob", 2, minute)
+            .hit("exports:bal", 2, minute)
             .await
             .unwrap()
             .is_allowed(),

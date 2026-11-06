@@ -327,7 +327,7 @@ pub async fn relations(db: Db, server: Server) {
         db,
         User {
             team_id: Some(team.id),
-            name: "Bob".into(),
+            name: "Bal".into(),
             ..User::default()
         },
     )

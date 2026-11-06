@@ -1100,7 +1100,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
                 val(Value::Null(navree_orm::Kind::String)),
                 val(true),
             ],
-            vec![val("Pied Piper"), val("US"), val(false)],
+            vec![val("Pind Pantry"), val("US"), val(false)],
         ],
     );
     cases.push(case("insert rows", Kind::Insert(companies.clone())));

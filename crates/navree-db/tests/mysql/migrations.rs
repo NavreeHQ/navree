@@ -166,7 +166,7 @@ async fn fresh_drops_every_table_and_reruns() {
     Migrator::up(app.ctx()).await.unwrap();
     let db = db(&app).await;
     for sql in [
-        "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'ann')",
+        "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'aru')",
         "INSERT INTO companies (id, title, owner_id) VALUES \
          (UNHEX('0199A7A0000070008000000000000002'), 'agra', UNHEX('0199A7A0000070008000000000000001'))",
         "CREATE TABLE stray (id INT PRIMARY KEY)",
@@ -287,7 +287,7 @@ impl NamedMigration for FailAfterInserting {
         Box::pin(async move {
             schema
                 .statement(
-                    "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'ann')",
+                    "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'aru')",
                 )
                 .await?;
             Err(failure("users", "backfill failed"))

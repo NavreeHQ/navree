@@ -68,7 +68,7 @@ async fn error_file(client: &TestClient, id: Uuid) -> TestResponse {
 async fn an_upload_is_staged_previewed_and_applied() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
-    let file = b"Email,Name,Age,VIP\nada@example.com,Anu Lakhotia,36,yes\nnot-an-email,Bob,x,no\nalan@example.com,Arun Tiwari,,0\n";
+    let file = b"Email,Name,Age,VIP\nada@example.com,Anu Lakhotia,36,yes\nnot-an-email,Bal,x,no\nalan@example.com,Arun Tiwari,,0\n";
     let uploaded = upload(&admin, "contacts.csv", file, &[])
         .await
         .assert_status(202)
@@ -149,7 +149,7 @@ async fn an_upload_is_staged_previewed_and_applied() {
         csv_lines(errors.bytes()),
         [
             "Row,Email,Name,Age,VIP,Errors",
-            "3,not-an-email,Bob,x,no,age must be an integer number",
+            "3,not-an-email,Bal,x,no,age must be an integer number",
         ]
     );
 }
@@ -398,7 +398,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
     seed(&app, &[("anu@example.com", "Anu", Some(30), false)]).await;
     let admin = app.acting_as(principal(ADMIN));
     let file =
-        b"Email,Name\nADA@example.com,Anu Bains\nbob@example.com,Bob\nbob@example.com,Bobby\n";
+        b"Email,Name\nADA@example.com,Anu Bains\nbob@example.com,Bal\nbob@example.com,Bobby\n";
     let record = staged(&app, &admin, "c.csv", file, &[]).await;
     assert_eq!(record["counts"]["valid"], 1, "{record}");
     assert_eq!(record["counts"]["duplicate"], 1);
@@ -431,7 +431,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
         stored_contacts(&app).await,
         [
             contact("anu@example.com", "Anu Bains", None, false),
-            contact("bob@example.com", "Bob", None, false),
+            contact("bal@example.com", "Bal", None, false),
         ]
     );
 
@@ -446,8 +446,8 @@ async fn duplicates_are_updated_skipped_or_refused() {
         [
             "Row,Email,Name,Errors",
             "2,ANU@example.com,Anu Bains,A record with this key already exists",
-            "3,bob@example.com,Bob,A record with this key already exists",
-            "4,bob@example.com,Bobby,Repeats row 3",
+            "3,bal@example.com,Bal,A record with this key already exists",
+            "4,bal@example.com,Bobby,Repeats row 3",
         ]
     );
 }

@@ -375,7 +375,7 @@ pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
 
     // The operator signed up first, at the start of the history.
     let operator =
-        ensure_account_at(ctx, "Olivia Operator", OPERATOR_EMAIL, calendar.start()).await?;
+        ensure_account_at(ctx, "Ojaswi Operator", OPERATOR_EMAIL, calendar.start()).await?;
 
     ensure_roles(ctx, &db, operator.id).await?;
 
@@ -411,7 +411,7 @@ pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
     // The two accounts with a fixed purpose.
     let first = workspaces[0].id;
     let support =
-        ensure_account_at(ctx, "Sam Support", SUPPORT_EMAIL, calendar.when(&mut rng)).await?;
+        ensure_account_at(ctx, "Sahil Support", SUPPORT_EMAIL, calendar.when(&mut rng)).await?;
     ensure_member(&db, &members, &directory, first, support.id, "member").await?;
     let observer = ensure_account_at(
         ctx,

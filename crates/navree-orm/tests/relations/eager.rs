@@ -179,7 +179,7 @@ async fn eager_loads_select_columns_and_need_the_matching_keys() {
         selects[1]
     );
     let contacts = agra.loaded(Company::contacts).unwrap();
-    assert_eq!(contacts.map(|c| c.name.clone()), ["Alice", "Carol"]);
+    assert_eq!(contacts.map(|c| c.name.clone()), ["Aarti", "Charu"]);
     assert!(
         contacts.iter().all(|c| c.email.is_empty()),
         "not selected: the field's default"
@@ -470,7 +470,7 @@ async fn has_one_and_relations_on_other_columns_than_keys() {
     };
     assert!(contact(&companies[0]).is_some(), "one of Agra's two");
     assert_eq!(contact(&companies[1]), None);
-    assert_eq!(contact(&companies[2]).as_deref(), Some("Dave"));
+    assert_eq!(contact(&companies[2]).as_deref(), Some("Deep"));
     assert_eq!(
         crm.gulati
             .contact()
@@ -479,7 +479,7 @@ async fn has_one_and_relations_on_other_columns_than_keys() {
             .unwrap()
             .unwrap()
             .name,
-        "Dave"
+        "Deep"
     );
 
     // Text columns as the keys: the parent's `code`, the contacts'

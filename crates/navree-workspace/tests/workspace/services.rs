@@ -136,7 +136,7 @@ async fn ownership_moves_to_a_member() {
     let mut events = world.events(&["workspace.ownership_transferred"]).await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let stranger = world.user("Eve", "eve@example.com").await;
+    let stranger = world.user("Ela", "ela@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     world.join(agra.id, grace, "member").await;
 
@@ -189,7 +189,7 @@ async fn deleting_a_workspace_removes_its_members_and_invitations() {
                 .invite(
                     &uow,
                     agra.id,
-                    "linus@example.com",
+                    "laksh@example.com",
                     WorkspaceRole::Member,
                     Some(ada),
                 )

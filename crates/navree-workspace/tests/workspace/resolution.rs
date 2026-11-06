@@ -147,7 +147,7 @@ async fn the_header_wins_by_default_and_the_order_is_configurable() {
 async fn errors_follow_the_framework_shape() {
     let world = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     world.workspace(ada, "Agra").await;
 
     world

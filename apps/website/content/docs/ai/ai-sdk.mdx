@@ -268,7 +268,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
 ```json wrap
-{"summary": "Agra moved to negotiation after Tuesday's pricing call, where Dana asked for a 12-month term. Next step: Sam sends the revised quote by Friday."}
+{"summary": "Agra moved to negotiation after Tuesday's pricing call, where Daljit asked for a 12-month term. Next step: Sahil sends the revised quote by Friday."}
 ```
 
 <Callout type="tip" title="Keep the model call out of the transaction">
@@ -669,7 +669,7 @@ async fn the_summary_is_written_from_the_deal_activity() {
         .build()
         .await;
     let ai = crm.get::<Ai>().await.fake().unwrap();
-    ai.respond(FakeReply::text("Agra is in negotiation. Sam sends the revised quote on Friday."));
+    ai.respond(FakeReply::text("Agra is in negotiation. Sahil sends the revised quote on Friday."));
 
     let rep = crm.login_as(Role::Rep1).await;
     let company = rep
@@ -691,7 +691,7 @@ async fn the_summary_is_written_from_the_deal_activity() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("summary", json!("Agra is in negotiation. Sam sends the revised quote on Friday."));
+        .assert_json_path("summary", json!("Agra is in negotiation. Sahil sends the revised quote on Friday."));
 
     ai.assert_prompt_count(1);
     ai.assert_prompted(|request| {
@@ -708,7 +708,7 @@ The fake answers from a queue of replies, in order:
 
 ```rust
 ai.respond(FakeReply::text("Two sentences."));
-ai.respond(FakeReply::json(json!({ "subject": "Next steps", "body": "Hi Dana, ...", "send_on": null })));
+ai.respond(FakeReply::json(json!({ "subject": "Next steps", "body": "Hi Daljit, ...", "send_on": null })));
 ai.respond(FakeReply::error(AiError::unavailable("anthropic")));
 ai.respond_with([FakeReply::text("first"), FakeReply::text("second")]);
 ```

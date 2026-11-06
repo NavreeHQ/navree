@@ -54,7 +54,7 @@ Batch   Status   Migration
 
 ```text
 deals/m20261027_120000_add_currency_to_deals:
-  ALTER TABLE "deals" ADD COLUMN "currency" CHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE "deals" ADD COLUMN "currency" CHAR(3) NOT NULL DEFAULT 'INR';
   ALTER TABLE "deals" ALTER COLUMN "title" TYPE TEXT, ALTER COLUMN "title" SET NOT NULL, ALTER COLUMN "title" DROP DEFAULT, ALTER COLUMN "title" DROP IDENTITY IF EXISTS;
   COMMENT ON COLUMN "deals"."title" IS NULL;
 ```

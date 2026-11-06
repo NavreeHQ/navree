@@ -144,7 +144,7 @@ async fn the_routes_create_show_and_update_the_zone() {
 async fn members_without_update_permission_cannot_change_the_zone() {
     let world = World::new().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let bob = world.user("Bob", "bob@example.com").await;
+    let bob = world.user("Bal", "bal@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     world.join(agra.id, bob, "member").await;
     world
@@ -202,7 +202,7 @@ async fn zoned_world() -> World {
 async fn the_request_workspace_gives_the_zone() {
     let world = zoned_world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let gulf = world.workspace(ada, "Gulf").await;
     let workspaces = world.workspaces().await;
@@ -396,7 +396,7 @@ async fn organizations_store_checked_zones_and_countries() {
 async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
     let world = zoned_org_world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     let group = world.organization(ada, "Agra Group").await;
     let agra = world.workspace(ada, "Agra").await;
     let paris = world.workspace(ada, "Paris").await;
@@ -436,7 +436,7 @@ async fn the_organization_gives_the_zone_when_the_workspace_has_none() {
 async fn an_organization_member_reaching_the_workspace_gets_the_organization_zone() {
     let world = zoned_org_world().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let bob = world.user("Bob", "bob@example.com").await;
+    let bob = world.user("Bal", "bal@example.com").await;
     let group = world.organization(ada, "Agra Group").await;
     let agra = world.workspace(ada, "Agra").await;
     world.attach(group.id, agra.id).await;

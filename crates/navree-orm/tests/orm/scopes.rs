@@ -66,7 +66,7 @@ async fn global_scopes_apply_unless_removed() {
         ("Mine", true, "anu"),
         ("Draft", false, "anu"),
         ("House", true, "house"),
-        ("Theirs", true, "bob"),
+        ("Theirs", true, "bal"),
     ] {
         Article::create(
             &t.db,

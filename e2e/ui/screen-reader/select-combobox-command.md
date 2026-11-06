@@ -139,9 +139,9 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 ### Pickers that search on the server
 
 **22. A list that is fetched**
-- Keys: Both readers: Tab to "Person (searched on the server)" (it holds "Gauri Hundal 3"). Press Down arrow. Then Ctrl+A and type mallory.
-- The page: the list fills with the first 20 people, with a "Show more" row at the end. After "mallory" one person is left, whose name is made of the text `<img src=x onerror=alert(1)> Mallory`.
-- The reader says: expanded, then "20 results available", once, when the list lands. The "Show more" row is spoken as an option. After "mallory": "1 result available", once, and the name read as plain text (a reader may spell out the angle brackets), with no image and no alert. Press Escape.
+- Keys: Both readers: Tab to "Person (searched on the server)" (it holds "Gauri Hundal 3"). Press Down arrow. Then Ctrl+A and type manjeet.
+- The page: the list fills with the first 20 people, with a "Show more" row at the end. After "manjeet" one person is left, whose name is made of the text `<img src=x onerror=alert(1)> Manjeet`.
+- The reader says: expanded, then "20 results available", once, when the list lands. The "Show more" row is spoken as an option. After "manjeet": "1 result available", once, and the name read as plain text (a reader may spell out the angle brackets), with no image and no alert. Press Escape.
 
 **23. A minimum number of letters**
 - Keys: Both readers: Tab to "Person (2 characters first)", type a, then d.

@@ -54,12 +54,12 @@ async fn a_service_account_connects_and_acts_as_the_admin() {
         .await
         .unwrap();
     assert_eq!(google.domain(), Some("acme.test"));
-    let bob = google.as_user("bob@acme.test");
+    let bob = google.as_user("bal@acme.test");
     let token = bob.token().await.unwrap();
     assert_eq!(bob.token().await.unwrap().expose(), token.expose());
     let minted = h.fake.minted();
     assert_eq!(minted.len(), 2);
-    assert_eq!(minted[1].subject.as_deref(), Some("bob@acme.test"));
+    assert_eq!(minted[1].subject.as_deref(), Some("bal@acme.test"));
 }
 
 #[tokio::test]

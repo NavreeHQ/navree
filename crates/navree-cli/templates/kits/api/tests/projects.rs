@@ -33,9 +33,9 @@ async fn project_names(
 #[tokio::test]
 async fn members_create_list_filter_and_update_projects() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
-    let token = sign_in(&app, "olivia@example.com").await;
+    let token = sign_in(&app, "ojaswi@example.com").await;
 
     for name in ["Website", "Mobile app", "Web shop"] {
         in_workspace(app.client().post("/api/v1/projects"), &token, &team.slug)
@@ -91,11 +91,11 @@ async fn members_create_list_filter_and_update_projects() {
 #[tokio::test]
 async fn projects_never_leave_their_workspace() {
     let (app, _guard) = boot().await;
-    let olivia = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let olivia = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let agra = workspace(&app, &olivia, "Agra").await;
     let grace = user(&app, "Gauri Hundal", "gauri@example.com").await;
     let gulati = workspace(&app, &grace, "Gulati").await;
-    let olivia_token = sign_in(&app, "olivia@example.com").await;
+    let olivia_token = sign_in(&app, "ojaswi@example.com").await;
     let grace_token = sign_in(&app, "gauri@example.com").await;
 
     let project = in_workspace(
@@ -148,13 +148,13 @@ async fn projects_never_leave_their_workspace() {
 #[tokio::test]
 async fn roles_decide_who_changes_what() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
     add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;
-    let owner_token = sign_in(&app, "olivia@example.com").await;
+    let owner_token = sign_in(&app, "ojaswi@example.com").await;
     let member_token = sign_in(&app, "max@example.com").await;
     let viewer_token = sign_in(&app, "vera@example.com").await;
 
@@ -229,9 +229,9 @@ async fn roles_decide_who_changes_what() {
 #[tokio::test]
 async fn the_project_list_reads_the_list_query() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
-    let token = sign_in(&app, "olivia@example.com").await;
+    let token = sign_in(&app, "ojaswi@example.com").await;
     let slug = team.slug.as_str();
 
     for (name, status) in [

@@ -138,8 +138,8 @@ async fn accessible_filters_list_to_permitted_rows() {
     let (app, _audit) = app().await;
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
     insert_post(&app, "a published", Some(bob), "open", true).await;
-    insert_post(&app, "b alice draft", Some(alice), "draft", false).await;
-    insert_post(&app, "c bob draft", Some(bob), "draft", false).await;
+    insert_post(&app, "b aarti draft", Some(alice), "draft", false).await;
+    insert_post(&app, "c bal draft", Some(bob), "draft", false).await;
     insert_post(&app, "d orphan draft", None, "draft", false).await;
 
     app.acting_as(principal(alice))
@@ -147,13 +147,13 @@ async fn accessible_filters_list_to_permitted_rows() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("titles", json!(["a published", "b alice draft"]));
+        .assert_json_path("titles", json!(["a published", "b aarti draft"]));
     app.acting_as(principal(bob))
         .get("/api/posts")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("titles", json!(["a published", "c bob draft"]));
+        .assert_json_path("titles", json!(["a published", "c bal draft"]));
 }
 
 fn token(user: Uuid, abilities: &[&str]) -> Principal {

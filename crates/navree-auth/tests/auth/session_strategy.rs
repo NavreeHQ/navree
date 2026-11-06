@@ -934,7 +934,7 @@ async fn a_browser_that_must_set_up_two_factor_reaches_the_setup_only() {
         .assert_status(200);
     whoami(&browser).await.assert_status(200);
 
-    let (_, other) = signed_in_browser(&app, "bob@example.com").await;
+    let (_, other) = signed_in_browser(&app, "bal@example.com").await;
     whoami(&other)
         .await
         .assert_error_code(403, "two_factor_required");

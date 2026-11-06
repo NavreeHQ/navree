@@ -87,7 +87,7 @@ async fn notifications_render_in_the_recipients_saved_locale() {
     )
     .await;
     let french = world.user("Camille").await;
-    let unsaved = world.user("Dana").await;
+    let unsaved = world.user("Daljit").await;
     let i18n = world.app.get::<I18n>().await;
     world
         .work(|uow| {

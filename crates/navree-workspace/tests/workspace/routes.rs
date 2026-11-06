@@ -78,7 +78,7 @@ async fn permissions_follow_the_workspace_role() {
     let world = World::new().await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     world.join(agra.id, grace, "admin").await;
     world.join(agra.id, linus, "member").await;
@@ -283,7 +283,7 @@ async fn invitations_are_sent_listed_revoked_and_accepted() {
     // Revoking: the token stops working.
     let revoked = owner
         .post("/api/workspaces/agra/invitations")
-        .json(&json!({ "email": "linus@example.com" }))
+        .json(&json!({ "email": "laksh@example.com" }))
         .send()
         .await
         .assert_status(201)

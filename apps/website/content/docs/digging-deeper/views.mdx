@@ -257,12 +257,13 @@ Navree adds two filters to the built-in ones.
 ```jinja
 {{ 123456|money("USD") }}   {# $1,234.56 #}
 {{ 123456|money("EUR") }}   {# €1,234.56 #}
+{{ 123456789|money("INR") }} {# ₹12,34,567.89 #}
 {{ 150000|money("JPY") }}   {# ¥150,000 #}
 {{ 1999|money("CHF") }}     {# CHF 19.99 #}
 {{ 1234567|money("KWD") }}  {# KWD 1,234.567 #}
 ```
 
-`USD`, `EUR`, `GBP`, `JPY` and `INR` get their symbol; other currencies get their ISO code. The number of decimals follows ISO 4217 (0 for `JPY` or `KRW`, 3 for `KWD` or `BHD`, 2 otherwise). `none` prints nothing. A non-integer amount or a currency that isn't three letters is a render error. There is no locale-aware formatting.
+`USD`, `EUR`, `GBP`, `JPY` and `INR` get their symbol; other currencies get their ISO code. Rupees group in lakhs and crores (`₹12,34,567.89`); every other currency groups by thousands. The number of decimals follows ISO 4217 (0 for `JPY` or `KRW`, 3 for `KWD` or `BHD`, 2 otherwise). `none` prints nothing. A non-integer amount or a currency that isn't three letters is a render error. There is no locale-aware formatting.
 
 ### date
 

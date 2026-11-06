@@ -91,13 +91,13 @@ fn envelope_recipients_override_the_headers() {
 fn a_forwarded_message_is_attached_whole() {
     let original = Incoming::compose()
         .from("helpdesk@bad.example")
-        .to("joan@acme.test")
+        .to("jaya@acme.test")
         .subject("Your mailbox is full")
         .html("<a href=\"https://bad.example/login\">here</a>")
         .to_bytes();
 
     let mail = Incoming::compose()
-        .from("joan@acme.test")
+        .from("jaya@acme.test")
         .to("phish@in.acme.test")
         .subject("Fwd: Your mailbox is full")
         .text("This looks suspicious.")

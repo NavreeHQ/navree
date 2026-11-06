@@ -117,13 +117,13 @@ use navree::workspace::{OrgMembers, OrgRole, WorkspaceSelector};
 
 // Gauri runs every workspace of the organization.
 org_members.add(&uow, agra.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
-// Linus works in the UK workspace only.
+// Laksh works in the UK workspace only.
 org_members
-    .add(&uow, agra.id, linus, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
+    .add(&uow, agra.id, laksh, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
     .await?;
 // Add, or change a member's role and workspaces.
 org_members
-    .grant(&uow, agra.id, linus, OrgRole::Viewer, WorkspaceSelector::All)
+    .grant(&uow, agra.id, laksh, OrgRole::Viewer, WorkspaceSelector::All)
     .await?;
 ```
 
@@ -343,12 +343,12 @@ admin
     .assert_status(200);
 admin
     .post("/api/organizations/agra/members")
-    .json(&json!({ "user_id": linus, "role": "member", "workspaces": [uk.id] }))
+    .json(&json!({ "user_id": laksh, "role": "member", "workspaces": [uk.id] }))
     .send()
     .await
     .assert_status(201);
 
-let member = app.acting_as(principal(linus));
+let member = app.acting_as(principal(laksh));
 member
     .get("/api/v1/deals")
     .header("X-Workspace", "agra-uk") // reached through the organization
@@ -357,7 +357,7 @@ member
     .assert_status(200);
 member
     .get("/api/v1/deals")
-    .header("X-Workspace", "agra-de") // not in Linus's selector
+    .header("X-Workspace", "agra-de") // not in Laksh's selector
     .send()
     .await
     .assert_error(403, "You are not a member of this workspace.");

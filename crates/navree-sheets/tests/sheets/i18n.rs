@@ -76,7 +76,7 @@ async fn rows_are_checked_in_the_uploader_locale() {
         &[("importer", "contacts")],
         Some((
             "c.csv",
-            b"Email,Name,Age\nnope,Bob,1\nbob@example.com,Bob,x\n",
+            b"Email,Name,Age\nnope,Bal,1\nbob@example.com,Bal,x\n",
         )),
     );
     let uploaded = admin

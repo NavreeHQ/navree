@@ -362,7 +362,7 @@ mod tests {
         relations
             .get_mut::<Option<String>>("owner")
             .unwrap()
-            .replace("linus".into());
+            .replace("laksh".into());
         assert_eq!(
             copy.get::<Option<String>>("owner").unwrap().as_deref(),
             Some("gauri")
@@ -374,7 +374,7 @@ mod tests {
                 .take::<Option<String>>("owner")
                 .unwrap()
                 .as_deref(),
-            Some("linus")
+            Some("laksh")
         );
         assert!(relations.is_empty());
         assert_eq!(format!("{copy:?}"), r#"["owner"]"#);

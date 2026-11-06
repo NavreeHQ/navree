@@ -71,7 +71,7 @@ async fn constraint_errors_map_to_conflicts() {
     let owner = Uuid::now_v7();
     db.pool()
         .execute_script(&format!(
-            "INSERT INTO users (id, title) VALUES (UNHEX('{}'), 'ann')",
+            "INSERT INTO users (id, title) VALUES (UNHEX('{}'), 'aru')",
             owner.simple()
         ))
         .await

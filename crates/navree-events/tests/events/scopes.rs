@@ -93,9 +93,9 @@ async fn request_scoped_listener_is_built_per_emit() {
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
     bus.emit(UserRegistered::new("anu")).await.unwrap();
-    bus.emit(UserRegistered::new("bob")).await.unwrap();
+    bus.emit(UserRegistered::new("bal")).await.unwrap();
 
-    assert_eq!(journal.entries(), ["unit1:anu", "unit2:bob"]);
+    assert_eq!(journal.entries(), ["unit1:anu", "unit2:bal"]);
 }
 
 #[tokio::test]

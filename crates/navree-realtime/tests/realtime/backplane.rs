@@ -85,7 +85,7 @@ async fn presence_lists_agree_across_processes() {
     a.join(&mut ada_on_a, ada, ROOM).await;
     members_become(&b.realtime, ROOM, &[ada]).await;
 
-    // Bob joins on the other process and sees Anu, who sees him arrive.
+    // Bal joins on the other process and sees Anu, who sees him arrive.
     let mut bob_on_b = b.connect().await;
     let joined = b.join(&mut bob_on_b, bob, ROOM).await;
     assert_eq!(joined.data["presence"]["count"], 2, "{:?}", joined.data);
@@ -107,7 +107,7 @@ async fn presence_lists_agree_across_processes() {
     bob_on_b.expect_silence(QUIET).await;
     members_become(&a.realtime, ROOM, &[ada, bob]).await;
 
-    // Bob leaving B is announced to Anu's remaining connection.
+    // Bal leaving B is announced to Anu's remaining connection.
     drop(bob_on_b);
     let removed = ada_on_b.expect("pusher_internal:member_removed").await;
     assert_eq!(removed.data, json!({ "user_id": bob.to_string() }));

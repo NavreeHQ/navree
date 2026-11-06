@@ -21,7 +21,7 @@ pub(crate) fn format(cents: i64, code: &str) -> String {
             out.push(' ');
         }
     }
-    out.push_str(&group_thousands(amount / divisor));
+    out.push_str(&group_digits(amount / divisor, code == "INR"));
     if decimals > 0 {
         let width = decimals as usize;
         let _ = write!(out, ".{:0width$}", amount % divisor);
@@ -105,12 +105,19 @@ pub(crate) fn minor_units(code: &str) -> u32 {
     }
 }
 
-/// `1234567` as `1,234,567`.
-fn group_thousands(n: u64) -> String {
+/// `1234567` as `1,234,567`, or as `12,34,567` (three digits, then pairs: lakhs and
+/// crores) when `indian`.
+fn group_digits(n: u64, indian: bool) -> String {
     let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    let mut out = String::with_capacity(digits.len() + digits.len() / 2);
     for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+        let left = digits.len() - i;
+        let comma = if indian {
+            left == 3 || (left > 3 && (left - 3).is_multiple_of(2))
+        } else {
+            left.is_multiple_of(3)
+        };
+        if i > 0 && comma {
             out.push(',');
         }
         out.push(digit);
@@ -132,7 +139,7 @@ pub(crate) fn format_number(n: f64) -> String {
     if negative && (whole > 0 || fraction > 0) {
         out.push('-');
     }
-    out.push_str(&group_thousands(whole));
+    out.push_str(&group_digits(whole, false));
     if fraction > 0 {
         if fraction.is_multiple_of(10) {
             let _ = write!(out, ".{}", fraction / 10);
@@ -158,6 +165,7 @@ mod tests {
             (1999, "CHF"),
             (-5, "EUR"),
             (123_456_789, "KWD"),
+            (123_456_789, "INR"),
         ] {
             let expected = views
                 .render(
@@ -168,6 +176,8 @@ mod tests {
             assert_eq!(format(cents, code), expected, "{cents} {code}");
         }
         assert_eq!(format(1_250_000, "usd"), "$12,500.00");
+        assert_eq!(format(123_456_789, "inr"), "₹12,34,567.89");
+        assert_eq!(format(1_000_000_000, "INR"), "₹1,00,00,000.00");
     }
 
     #[test]

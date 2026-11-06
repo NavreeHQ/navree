@@ -183,8 +183,8 @@ async fn me(CurrentPrincipal(principal): CurrentPrincipal) -> Json<Value> {
 async fn items() -> Json<Value> {
     Json(json!({
         "data": [
-            { "name": "Alice", "tags": ["admin", "sales"] },
-            { "name": "Bob", "tags": [] }
+            { "name": "Aarti", "tags": ["admin", "sales"] },
+            { "name": "Bal", "tags": [] }
         ],
         "meta": { "total": 2 }
     }))

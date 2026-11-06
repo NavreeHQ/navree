@@ -227,13 +227,13 @@ async fn changing_email_requires_current_password() {
     let (_, access, _) = signed_in(&app, "anu@example.com").await;
     let client = app.client();
 
-    update_profile(&client, &access, json!({ "email": "mallory@example.com" }))
+    update_profile(&client, &access, json!({ "email": "manjeet@example.com" }))
         .await
         .assert_validation_error("current_password");
     update_profile(
         &client,
         &access,
-        json!({ "email": "mallory@example.com", "current_password": "wrong password" }),
+        json!({ "email": "manjeet@example.com", "current_password": "wrong password" }),
     )
     .await
     .assert_validation_error("current_password");
@@ -245,7 +245,7 @@ async fn changing_email_requires_current_password() {
     assert!(sent_mail(&app).await.is_empty());
     client
         .post("/api/auth/forgot-password")
-        .json(&json!({ "email": "mallory@example.com" }))
+        .json(&json!({ "email": "manjeet@example.com" }))
         .send()
         .await
         .assert_status(202);

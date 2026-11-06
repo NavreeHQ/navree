@@ -236,16 +236,16 @@ async fn two_processes_share_broadcasts_and_presence() {
     ada.join(&a, "anu").await;
     members_become(&b.realtime, &["anu"]).await;
     let mut bob = Client::connect(&b).await;
-    let joined = bob.join(&b, "bob").await;
+    let joined = bob.join(&b, "bal").await;
     assert_eq!(joined["presence"]["count"], 2, "{joined}");
     let (_, _, added) = ada.expect("pusher_internal:member_added").await;
-    assert_eq!(added["user_id"], "bob");
-    members_become(&a.realtime, &["anu", "bob"]).await;
+    assert_eq!(added["user_id"], "bal");
+    members_become(&a.realtime, &["anu", "bal"]).await;
     assert_eq!(a.realtime.members(ROOM), b.realtime.members(ROOM));
 
     drop(bob);
     let (_, _, removed) = ada.expect("pusher_internal:member_removed").await;
-    assert_eq!(removed, json!({ "user_id": "bob" }));
+    assert_eq!(removed, json!({ "user_id": "bal" }));
     members_become(&a.realtime, &["anu"]).await;
 
     // A process that shuts down takes its members with it.

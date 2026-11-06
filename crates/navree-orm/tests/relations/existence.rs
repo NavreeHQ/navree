@@ -191,7 +191,7 @@ async fn conditions_on_one_related_column() {
         .unwrap();
     assert_eq!(titles(&agra), ["Renewal", "Upgrade"]);
     let nested = ordered()
-        .where_relation("company.contacts", Contact::NAME.eq("Dave"))
+        .where_relation("company.contacts", Contact::NAME.eq("Deep"))
         .get(&t.db)
         .await
         .unwrap();

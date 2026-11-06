@@ -502,7 +502,7 @@ mod tests {
                 .is_some()
         );
         let newest = Draft::new("one");
-        assert_eq!(block(store.save("dana", &newest, None)), Ok(()));
+        assert_eq!(block(store.save("daljit", &newest, None)), Ok(()));
         assert_eq!(store.len(), 3);
         assert_eq!(
             block(store.load("owner-1", &drafts[1].id)),
@@ -519,7 +519,7 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        assert!(block(store.load("dana", &newest.id)).unwrap().is_some());
+        assert!(block(store.load("daljit", &newest.id)).unwrap().is_some());
         // A saved draft counts as touched too.
         let mut again = block(store.load("owner-2", &drafts[2].id))
             .unwrap()

@@ -175,7 +175,7 @@ async fn named_transports_suppressions_and_held_mail() {
     // Named transports.
     let report = mailer
         .via("campaigns")
-        .deliver(&newsletter("bob@example.com"))
+        .deliver(&newsletter("bal@example.com"))
         .await
         .unwrap();
     assert_eq!(report.transport, Some("array"));
@@ -188,7 +188,7 @@ async fn named_transports_suppressions_and_held_mail() {
         .add(
             &uow,
             Some(workspace_id),
-            "eve@example.com",
+            "ela@example.com",
             SuppressionReason::Unsubscribed,
             None,
         )
@@ -197,7 +197,7 @@ async fn named_transports_suppressions_and_held_mail() {
     uow.commit().await.unwrap();
     assert!(
         suppressions
-            .is_suppressed(Some(workspace_id), "eve@example.com")
+            .is_suppressed(Some(workspace_id), "ela@example.com")
             .await
             .unwrap()
     );

@@ -396,7 +396,7 @@ fn urls_read_what_apps_and_services_write() {
     // Upper-case scheme and type, lower-case secret, parameters in any
     // order, an unknown parameter and a fragment.
     let totp = Totp::from_url(&format!(
-        "OTPAUTH://TOTP/Agra:bob?foo=bar&period=60&algorithm=sha256&digits=8&secret={}#top",
+        "OTPAUTH://TOTP/Agra:bal?foo=bar&period=60&algorithm=sha256&digits=8&secret={}#top",
         secret.to_lowercase()
     ))
     .unwrap();
@@ -414,25 +414,25 @@ fn bad_urls_are_refused() {
     let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     for url in [
         "".to_owned(),
-        "https://totp/Agra:bob?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".to_owned(),
-        format!("otpauth://hotp/Agra:bob?secret={secret}&counter=1"),
+        "https://totp/Agra:bal?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".to_owned(),
+        format!("otpauth://hotp/Agra:bal?secret={secret}&counter=1"),
         format!("otpauth://totp?secret={secret}"),
-        "otpauth://totp/Agra:bob".to_owned(),
-        "otpauth://totp/Agra:bob?secret=".to_owned(),
-        "otpauth://totp/Agra:bob?secret=!!!!".to_owned(),
+        "otpauth://totp/Agra:bal".to_owned(),
+        "otpauth://totp/Agra:bal?secret=".to_owned(),
+        "otpauth://totp/Agra:bal?secret=!!!!".to_owned(),
         // Too short a secret (80 bits).
-        "otpauth://totp/Agra:bob?secret=GEZDGNBVGY3TQOJQ".to_owned(),
-        format!("otpauth://totp/Agra:bob?secret={secret}&digits=5"),
-        format!("otpauth://totp/Agra:bob?secret={secret}&digits=x"),
-        format!("otpauth://totp/Agra:bob?secret={secret}&period=0"),
-        format!("otpauth://totp/Agra:bob?secret={secret}&period=-5"),
-        format!("otpauth://totp/Agra:bob?secret={secret}&algorithm=MD5"),
+        "otpauth://totp/Agra:bal?secret=GEZDGNBVGY3TQOJQ".to_owned(),
+        format!("otpauth://totp/Agra:bal?secret={secret}&digits=5"),
+        format!("otpauth://totp/Agra:bal?secret={secret}&digits=x"),
+        format!("otpauth://totp/Agra:bal?secret={secret}&period=0"),
+        format!("otpauth://totp/Agra:bal?secret={secret}&period=-5"),
+        format!("otpauth://totp/Agra:bal?secret={secret}&algorithm=MD5"),
         // The label and the parameter name different issuers.
-        format!("otpauth://totp/Agra:bob?secret={secret}&issuer=Other"),
+        format!("otpauth://totp/Agra:bal?secret={secret}&issuer=Other"),
         // Invalid UTF-8 and truncated escapes.
         format!("otpauth://totp/Agra:%FF?secret={secret}"),
-        format!("otpauth://totp/Agra:bob%?secret={secret}"),
-        format!("otpauth://totp/Agra:bob%2?secret={secret}"),
+        format!("otpauth://totp/Agra:bal%?secret={secret}"),
+        format!("otpauth://totp/Agra:bal%2?secret={secret}"),
         // A second colon in the account.
         format!("otpauth://totp/Agra:a:b?secret={secret}"),
     ] {

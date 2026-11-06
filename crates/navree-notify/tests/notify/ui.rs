@@ -25,7 +25,7 @@ async fn the_bell_lists_the_signed_in_users_notifications() {
             .unwrap();
     }
     notifier
-        .send(&bob, DealWon::via(&[Channel::Database], "Bob's deal"))
+        .send(&bob, DealWon::via(&[Channel::Database], "Bal's deal"))
         .await
         .unwrap();
 
@@ -40,7 +40,7 @@ async fn the_bell_lists_the_signed_in_users_notifications() {
     assert!(html.contains("Lakhotia renewal"), "{html}");
     assert!(html.contains("Hundal expansion was won"), "{html}");
     assert!(html.contains(r#"href="/deals/1""#), "{html}");
-    assert!(!html.contains("Bob"), "{html}");
+    assert!(!html.contains("Bal"), "{html}");
     assert!(html.contains("Mark all read"), "{html}");
 
     app.client()
@@ -66,7 +66,7 @@ async fn marking_read_changes_the_count_and_stays_with_the_owner() {
         .await
         .unwrap();
     let bobs = notifier
-        .send(&bob, DealWon::via(&[Channel::Database], "bob's"))
+        .send(&bob, DealWon::via(&[Channel::Database], "bal's"))
         .await
         .unwrap();
     let as_alice = app.acting_as(principal(alice.id));

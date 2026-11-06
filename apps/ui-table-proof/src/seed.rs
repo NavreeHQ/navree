@@ -91,9 +91,9 @@ pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
         "Hariyali",
         "Stark",
         "Wayne",
-        "Tyrell",
-        "Cyberdyne",
-        "Soylent",
+        "Tiwana",
+        "Chandni",
+        "Sarson",
         "Massive",
     ];
     let rows = names.iter().enumerate().map(|(at, name)| Company {

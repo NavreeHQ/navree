@@ -75,7 +75,7 @@ async fn listeners_run_in_registration_order() {
 
     let bus = app.ctx().get::<EventBus>().await.unwrap();
     bus.emit(UserRegistered::new("anu")).await.unwrap();
-    bus.emit(UserRegistered::new("bob")).await.unwrap();
+    bus.emit(UserRegistered::new("bal")).await.unwrap();
 
     assert_eq!(
         journal.entries(),
@@ -83,9 +83,9 @@ async fn listeners_run_in_registration_order() {
             "second:anu",
             "first:anu",
             "third:anu",
-            "second:bob",
-            "first:bob",
-            "third:bob"
+            "second:bal",
+            "first:bal",
+            "third:bal"
         ]
     );
 }

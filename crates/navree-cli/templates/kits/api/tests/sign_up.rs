@@ -91,9 +91,9 @@ async fn sign_up_checks_its_input() {
 #[tokio::test]
 async fn invited_people_join_with_their_role() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
-    let owner_token = sign_in(&app, "olivia@example.com").await;
+    let owner_token = sign_in(&app, "ojaswi@example.com").await;
 
     app.client()
         .post(&format!("/api/workspaces/{}/invitations", team.slug))

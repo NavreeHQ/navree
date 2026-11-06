@@ -453,7 +453,7 @@ async fn the_reply_address_of_a_notification_leads_back_to_its_ticket() {
     let forged = inbound
         .receive(
             Incoming::compose()
-                .from("mallory@example.com")
+                .from("manjeet@example.com")
                 .to("reply+forged@in.acme.test")
                 .text("Close it.")
                 .build(),
@@ -521,7 +521,7 @@ async fn reported_phish_is_analyzed_from_the_forwarded_message() {
     let app = app(&fake).await;
     let original = Incoming::compose()
         .from("IT Desk <helpdesk@bad.example>")
-        .to("joan@acme.test")
+        .to("jaya@acme.test")
         .subject("Your mailbox is full")
         .html("<a href=\"https://bad.example/login\">Keep your mail</a>")
         .verdicts(Verdicts {
@@ -534,7 +534,7 @@ async fn reported_phish_is_analyzed_from_the_forwarded_message() {
         .receive(
             app.ctx(),
             Incoming::compose()
-                .from("Joan Clarke <joan@acme.test>")
+                .from("Jaya Clarke <jaya@acme.test>")
                 .to("phish@in.acme.test")
                 .subject("Fwd: Your mailbox is full")
                 .text("This looks suspicious.")
@@ -552,7 +552,7 @@ async fn reported_phish_is_analyzed_from_the_forwarded_message() {
             .unwrap()
             .clone(),
         vec![(
-            "joan@acme.test".to_owned(),
+            "jaya@acme.test".to_owned(),
             "Your mailbox is full".to_owned()
         )]
     );
@@ -561,7 +561,7 @@ async fn reported_phish_is_analyzed_from_the_forwarded_message() {
         .receive(
             app.ctx(),
             Incoming::compose()
-                .from("joan@acme.test")
+                .from("jaya@acme.test")
                 .to("phish@in.acme.test")
                 .text("I got a weird mail.")
                 .build(),

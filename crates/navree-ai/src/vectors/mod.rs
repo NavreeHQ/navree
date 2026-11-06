@@ -367,14 +367,14 @@ struct StoreInner {
 /// let vectors = VectorStore::memory(embeddings.clone());
 /// let notes = vectors.collection("activity_notes");
 ///
-/// let text = "Pricing call with Dana. She asked for a 12-month term.";
+/// let text = "Pricing call with Daljit. She asked for a 12-month term.";
 /// notes.upsert(
 ///     VectorRecord::new("a1:0", embeddings.embed(text).await?)
 ///         .text(text)
 ///         .metadata(json!({ "subject_id": "deal-1" })),
 /// ).await?;
 ///
-/// let matches = notes.search("what term did Dana ask for").filter(Filter::eq("subject_id", "deal-1")).limit(8).await?;
+/// let matches = notes.search("what term did Daljit ask for").filter(Filter::eq("subject_id", "deal-1")).limit(8).await?;
 /// assert_eq!(matches[0].id, "a1:0");
 /// # Ok(())
 /// # }

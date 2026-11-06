@@ -10,10 +10,10 @@ use support::{add_member, boot, in_workspace, sign_in, user, workspace};
 #[tokio::test]
 async fn owners_rename_the_workspace_and_change_its_slug() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let other = workspace(&app, &owner, "Gulati").await;
-    let token = sign_in(&app, "olivia@example.com").await;
+    let token = sign_in(&app, "ojaswi@example.com").await;
 
     in_workspace(
         app.client().get("/api/v1/settings/workspace"),
@@ -68,7 +68,7 @@ async fn owners_rename_the_workspace_and_change_its_slug() {
 #[tokio::test]
 async fn members_cannot_change_the_workspace() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
@@ -96,7 +96,7 @@ async fn members_cannot_change_the_workspace() {
 #[tokio::test]
 async fn the_front_end_reads_the_rules_of_the_role_in_the_workspace() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
     add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;
@@ -124,11 +124,11 @@ async fn the_front_end_reads_the_rules_of_the_role_in_the_workspace() {
 #[tokio::test]
 async fn each_member_keeps_their_own_notification_preferences() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
-    let owner_token = sign_in(&app, "olivia@example.com").await;
+    let owner_token = sign_in(&app, "ojaswi@example.com").await;
     let member_token = sign_in(&app, "max@example.com").await;
 
     in_workspace(

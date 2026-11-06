@@ -12,7 +12,7 @@ schema
         t.foreign_uuid("company_id").constrained();
         t.string("title");
         t.big_integer("amount_cents").default(0);
-        t.char("currency", 3).default("USD");
+        t.char("currency", 3).default("INR");
         t.string("stage").length(16).default("lead").index();
         t.date("expected_close_date").nullable();
         t.json("meta").nullable();

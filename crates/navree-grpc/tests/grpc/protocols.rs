@@ -101,7 +101,7 @@ async fn connect_unary_calls_carry_json_or_protobuf() {
             "id": deal.id.to_string(),
             "title": "Agra renewal",
             "amountCents": "1200000",
-            "currency": "USD",
+            "currency": "INR",
             "stage": "lead",
             "ownerId": rep.to_string(),
         }),

@@ -268,7 +268,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
     let world = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let uk = world.workspace(ada, "Agra UK").await;
@@ -571,7 +571,7 @@ async fn access_requests_are_requested_approved_and_declined() {
     let world = world().await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let uk = world.workspace(ada, "Agra UK").await;
     let outside = world.workspace(ada, "Outside").await;

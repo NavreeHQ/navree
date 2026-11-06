@@ -110,11 +110,11 @@ async fn refresh(app: &navree_testing::TestApp, token: &str) -> u16 {
 async fn a_domains_sessions_end_whatever_the_spelling_of_the_email_or_the_domain() {
     let app = support::app().await;
     let auth = app.get::<AuthService>().await;
-    let agra = support::create_user(&app, "ann@acme.test").await;
+    let agra = support::create_user(&app, "aru@acme.test").await;
     let idn = support::create_user(&app, "ina@bücher.example").await;
-    let other = support::create_user(&app, "bob@other.test").await;
+    let other = support::create_user(&app, "bal@other.test").await;
     let mut sessions = Vec::new();
-    for email in ["ann@acme.test", "bob@other.test"] {
+    for email in ["aru@acme.test", "bal@other.test"] {
         let (_, refresh) = tokens(&login(&app.client(), email, support::PASSWORD).await);
         sessions.push(refresh);
     }
@@ -163,9 +163,9 @@ async fn every_registered_revoker_is_asked_even_when_one_fails() {
         .build()
         .await;
     let auth = app.get::<AuthService>().await;
-    let ann = support::create_user(&app, "ann@acme.test").await;
+    let ann = support::create_user(&app, "aru@acme.test").await;
     let ned = support::create_user(&app, "ned@acme.test").await;
-    let (_, session) = tokens(&login(&app.client(), "ann@acme.test", support::PASSWORD).await);
+    let (_, session) = tokens(&login(&app.client(), "aru@acme.test", support::PASSWORD).await);
 
     let error = auth
         .revoke_credentials_of_domain("acme.test")

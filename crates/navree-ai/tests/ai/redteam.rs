@@ -125,7 +125,7 @@ fn every_probe_the_check_must_refuse_is_refused() {
 async fn hostile_text_a_model_chose_is_drawn_as_text_in_a_real_conversation() {
     let page = page().await;
     let app = &page.app;
-    let dana = user(app, "Dana", &[]).await;
+    let dana = user(app, "Daljit", &[]).await;
     let access = access_of(app, dana).await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     let assistant = assistant(app).await;
@@ -163,7 +163,7 @@ async fn a_tool_result_that_tells_the_model_to_act_changes_nothing_without_the_r
     // stops for the reader's approval; the managers' tool is never offered.
     let page = page().await;
     let app = &page.app;
-    let dana = user(app, "Dana", &[]).await;
+    let dana = user(app, "Daljit", &[]).await;
     let access = access_of(app, dana).await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     // `whoami`'s result stands in for a hostile one; the model then does as told.
@@ -214,7 +214,7 @@ async fn a_tool_result_that_tells_the_model_to_act_changes_nothing_without_the_r
 async fn a_component_outside_the_catalogue_never_reaches_the_page() {
     let page = page().await;
     let app = &page.app;
-    let dana = user(app, "Dana", &[]).await;
+    let dana = user(app, "Daljit", &[]).await;
     let access = access_of(app, dana).await;
     let fake = app.get::<Ai>().await.fake().unwrap();
     fake.respond_with([

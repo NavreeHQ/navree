@@ -379,7 +379,7 @@ async fn keys_and_foreign_keys_change_by_rebuild() {
         })
         .await
         .unwrap();
-    exec(&conn, "INSERT INTO authors (name) VALUES ('Ann')").await;
+    exec(&conn, "INSERT INTO authors (name) VALUES ('Aru')").await;
     exec(
         &conn,
         "INSERT INTO books (id, author_id, title) VALUES ('b1', 1, 'First')",

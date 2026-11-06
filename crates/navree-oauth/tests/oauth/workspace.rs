@@ -126,7 +126,7 @@ async fn a_workspace_client_s_tokens_are_pinned_to_it() {
 async fn only_members_approve_a_workspace_client() {
     let world = world().await;
     let (ada, _) = world.user("anu@acme.test", &["deals.read"]).await;
-    let (eve, eve_token) = world.user("eve@acme.test", &["deals.read"]).await;
+    let (eve, eve_token) = world.user("ela@acme.test", &["deals.read"]).await;
     let agra = workspace(&world, ada.id, "Agra").await;
     let client = world
         .register(

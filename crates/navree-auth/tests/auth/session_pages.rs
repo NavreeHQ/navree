@@ -562,7 +562,7 @@ async fn a_single_page_app_signs_in_with_json_on_the_cookie() {
         .build()
         .await;
     let user = create_user(&app, "anu@example.com").await;
-    let two = create_user(&app, "bob@example.com").await;
+    let two = create_user(&app, "bal@example.com").await;
     let secret = enable_two_factor(&app, &clock, &two).await;
     let spa = app.client();
     token(&spa).await;
@@ -615,7 +615,7 @@ async fn a_single_page_app_signs_in_with_json_on_the_cookie() {
     let body = post_json(
         &spa,
         "/api/auth/session/login",
-        json!({ "email": "bob@example.com", "password": PASSWORD }),
+        json!({ "email": "bal@example.com", "password": PASSWORD }),
     )
     .await
     .assert_status(200)

@@ -128,7 +128,7 @@ fn titles(page: &Value) -> Vec<&str> {
 #[tokio::test]
 async fn jwt_login_refresh_and_reuse_detection() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
     blog.app
         .client()
         .get("/api/auth/me")
@@ -137,7 +137,7 @@ async fn jwt_login_refresh_and_reuse_detection() {
         .await
         .assert_status(200)
         .assert_json_path("id", json!(alice.id))
-        .assert_json_path("email", json!("alice@example.com"));
+        .assert_json_path("email", json!("aarti@example.com"));
 
     let refreshed = blog
         .app
@@ -167,14 +167,14 @@ async fn jwt_login_refresh_and_reuse_detection() {
         .send()
         .await
         .assert_error(401, "Invalid refresh token");
-    blog.login("alice@example.com", "wrong password")
+    blog.login("aarti@example.com", "wrong password")
         .await
         .assert_error(401, "Invalid credentials");
     // Registration is off in this app.
     blog.app
         .client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Eve", "email": "eve@example.com", "password": PASSWORD }))
+        .json(&json!({ "name": "Ela", "email": "ela@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(404);
@@ -183,8 +183,8 @@ async fn jwt_login_refresh_and_reuse_detection() {
 #[tokio::test]
 async fn guests_list_only_published_posts() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
-    let bob = blog.sign_in("Bob", "bob@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
+    let bob = blog.sign_in("Bal", "bal@example.com").await;
     let live = blog.write(&alice, "Hello world").await;
     blog.write(&alice, "Secret draft").await;
     blog.publish(&alice, &live).await.assert_status(200);
@@ -204,8 +204,8 @@ async fn guests_list_only_published_posts() {
 #[tokio::test]
 async fn author_updates_own_post_and_others_get_403() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
-    let bob = blog.sign_in("Bob", "bob@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
+    let bob = blog.sign_in("Bal", "bal@example.com").await;
     let id = blog.write(&alice, "First title").await;
     let path = format!("/api/v1/posts/{id}");
 
@@ -264,7 +264,7 @@ async fn author_updates_own_post_and_others_get_403() {
 #[tokio::test]
 async fn invalid_input_is_a_400_naming_the_fields() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
     let response = blog
         .app
         .client()
@@ -283,7 +283,7 @@ async fn invalid_input_is_a_400_naming_the_fields() {
 #[tokio::test]
 async fn publishing_queues_a_mail_to_the_author() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
     let id = blog.write(&alice, "Launch day").await;
     blog.publish(&alice, &id)
         .await
@@ -305,11 +305,11 @@ async fn publishing_queues_a_mail_to_the_author() {
     assert_eq!((stats.succeeded, stats.failed), (1, 0));
     let mails = sent();
     assert_eq!(mails.len(), 1);
-    assert_eq!(mails[0].to, ["alice@example.com"]);
+    assert_eq!(mails[0].to, ["aarti@example.com"]);
     assert_eq!(mails[0].subject, "Your post is live");
     assert_eq!(
         mails[0].text.as_deref(),
-        Some("Hi Alice, \"Launch day\" is live.")
+        Some("Hi Aarti, \"Launch day\" is live.")
     );
     assert!(
         mails[0]
@@ -322,8 +322,8 @@ async fn publishing_queues_a_mail_to_the_author() {
 #[tokio::test]
 async fn a_forbidden_publish_queues_nothing() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
-    let bob = blog.sign_in("Bob", "bob@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
+    let bob = blog.sign_in("Bal", "bal@example.com").await;
     let id = blog.write(&alice, "Not yours").await;
     blog.publish(&bob, &id).await.assert_status(403);
     let queue = blog.app.get::<Queue>().await;
@@ -333,7 +333,7 @@ async fn a_forbidden_publish_queues_nothing() {
 #[tokio::test]
 async fn changes_and_sign_ins_are_audited() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
     let id = blog.write(&alice, "Audited").await;
     blog.app
         .client()
@@ -429,7 +429,7 @@ async fn openapi_lists_the_routes() {
 #[tokio::test]
 async fn abilities_endpoint_serves_casl_rules() {
     let blog = Blog::boot().await;
-    let alice = blog.sign_in("Alice", "alice@example.com").await;
+    let alice = blog.sign_in("Aarti", "aarti@example.com").await;
     let response = blog
         .app
         .client()

@@ -63,14 +63,14 @@ async fn channels_turned_off_are_skipped_and_the_workspace_gives_the_defaults() 
         .await
         .unwrap();
     notifier
-        .send(&texter, Mention { by: "Bob".into() })
+        .send(&texter, Mention { by: "Bal".into() })
         .await
         .unwrap();
 
     // Both in-app notifications are stored.
     assert_eq!(support::rows(&app).await.len(), 2);
     // `quiet` turned mail off for mentions, the workspace turned SMS off.
-    assert_eq!(subjects(&app).await, ["Bob mentioned you"]);
+    assert_eq!(subjects(&app).await, ["Bal mentioned you"]);
     assert!(fakes.sms.sent_to("+14155550100").is_empty());
     // `texter` turned SMS back on.
     assert_eq!(fakes.sms.sent_to("+447400123456").len(), 1);
@@ -126,7 +126,7 @@ async fn preferences_are_disabled_with_notify_preferences_enabled_false() {
     prefer(&app, &ada.owner(), json!({"channels": {"sms": false}})).await;
     app.get::<Notifier>()
         .await
-        .send(&ada, Mention { by: "Bob".into() })
+        .send(&ada, Mention { by: "Bal".into() })
         .await
         .unwrap();
     assert_eq!(fakes.sms.sent().len(), 1);
@@ -495,7 +495,7 @@ async fn a_workspaces_overrides_restyle_its_mail() {
         .await
         .unwrap();
     notifier
-        .send(&Person::in_zone(Some("UTC")), Mention { by: "Bob".into() })
+        .send(&Person::in_zone(Some("UTC")), Mention { by: "Bal".into() })
         .await
         .unwrap();
     // A failing source sends the default mail.
@@ -514,6 +514,6 @@ async fn a_workspaces_overrides_restyle_its_mail() {
         Some("<p style=\"color: #0F766E\">Anu</p>")
     );
     assert_eq!(mail[0].text.as_deref(), Some("Anu was won."));
-    assert_eq!(mail[1].subject, "Mention from Bob");
+    assert_eq!(mail[1].subject, "Mention from Bal");
     assert_eq!(mail[2].subject, "Cy mentioned you");
 }

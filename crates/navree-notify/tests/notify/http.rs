@@ -34,7 +34,7 @@ async fn seeded() -> (TestApp, TestUser, TestUser, Vec<Uuid>, Uuid) {
         clock.advance(Duration::from_secs(60));
     }
     let bobs = notifier
-        .send(&bob, DealWon::via(&[Channel::Database], "bob's"))
+        .send(&bob, DealWon::via(&[Channel::Database], "bal's"))
         .await
         .unwrap();
     (app, alice, bob, ids, bobs)

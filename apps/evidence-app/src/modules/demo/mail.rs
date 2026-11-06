@@ -228,7 +228,7 @@ pub fn varied(n: u32) -> TemplateMail {
             .context(json!({
                 "name": name,
                 "number": format!("INV-{number}"),
-                "currency": "USD",
+                "currency": "INR",
                 "total_cents": total,
                 "due": due.format("%-d %B %Y").to_string(),
                 "items": items

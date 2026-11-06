@@ -449,7 +449,7 @@ async fn users_connect_list_and_disconnect_providers() {
 async fn a_link_state_works_only_for_its_user() {
     let (app, fake) = fake_app(|b| b).await;
     let grace = create_user(&app, "Gauri", "gauri@example.com").await;
-    let mallory = create_user(&app, "Mallory", "mallory@example.com").await;
+    let mallory = create_user(&app, "Manjeet", "manjeet@example.com").await;
     let grace_token = access_token(&app, &grace).await;
     let mallory_token = access_token(&app, &mallory).await;
     fake.on_code("github", "code", github("42", None, false));

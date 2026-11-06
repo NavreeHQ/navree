@@ -228,7 +228,7 @@ pub struct LogActivity {
     /// `note`, `call`, `email`, `meeting`, or `task` for something to do later.
     #[validate(skip)]
     pub kind: ActivityKind,
-    /// One line, e.g. "Call Dana about the revised quote".
+    /// One line, e.g. "Call Daljit about the revised quote".
     #[validate(length(min = 1, max = 255))]
     pub subject: String,
     /// Details, if any.

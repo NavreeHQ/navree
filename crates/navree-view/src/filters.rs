@@ -19,6 +19,7 @@ pub(crate) fn register(env: &mut Environment) {
 /// with the currency's symbol (or ISO code), thousands separators and its
 /// number of decimals: `123456|money("USD")` is `$1,234.56`,
 /// `150000|money("JPY")` is `¥150,000`, `1999|money("CHF")` is `CHF 19.99`.
+/// Rupees group in lakhs and crores: `123456789|money("INR")` is `₹12,34,567.89`.
 /// `none` renders as an empty string.
 fn money(value: Value, currency: &str) -> Result<String, Error> {
     if value.is_none() {
@@ -52,7 +53,7 @@ fn format_money(cents: i64, code: &str) -> String {
             out.push(' ');
         }
     }
-    out.push_str(&group_thousands(amount / divisor));
+    out.push_str(&group_digits(amount / divisor, code == "INR"));
     if decimals > 0 {
         let width = decimals as usize;
         let _ = write!(out, ".{:0width$}", amount % divisor);
@@ -82,12 +83,19 @@ fn minor_units(code: &str) -> u32 {
     }
 }
 
-/// `1234567` as `1,234,567`.
-fn group_thousands(n: u64) -> String {
+/// `1234567` as `1,234,567`, or as `12,34,567` (three digits, then pairs: lakhs and
+/// crores) when `indian`.
+fn group_digits(n: u64, indian: bool) -> String {
     let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    let mut out = String::with_capacity(digits.len() + digits.len() / 2);
     for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+        let left = digits.len() - i;
+        let comma = if indian {
+            left == 3 || (left > 3 && (left - 3).is_multiple_of(2))
+        } else {
+            left.is_multiple_of(3)
+        };
+        if i > 0 && comma {
             out.push(',');
         }
         out.push(digit);
@@ -168,10 +176,21 @@ mod tests {
 
     #[test]
     fn groups_thousands() {
-        assert_eq!(group_thousands(0), "0");
-        assert_eq!(group_thousands(999), "999");
-        assert_eq!(group_thousands(1_000), "1,000");
-        assert_eq!(group_thousands(12_345_678), "12,345,678");
-        assert_eq!(group_thousands(u64::MAX), "18,446,744,073,709,551,615");
+        assert_eq!(group_digits(0, false), "0");
+        assert_eq!(group_digits(999, false), "999");
+        assert_eq!(group_digits(1_000, false), "1,000");
+        assert_eq!(group_digits(12_345_678, false), "12,345,678");
+        assert_eq!(group_digits(u64::MAX, false), "18,446,744,073,709,551,615");
+    }
+
+    #[test]
+    fn groups_lakhs_and_crores() {
+        assert_eq!(group_digits(0, true), "0");
+        assert_eq!(group_digits(999, true), "999");
+        assert_eq!(group_digits(1_000, true), "1,000");
+        assert_eq!(group_digits(99_999, true), "99,999");
+        assert_eq!(group_digits(100_000, true), "1,00,000");
+        assert_eq!(group_digits(12_345_678, true), "1,23,45,678");
+        assert_eq!(group_digits(u64::MAX, true), "1,84,46,74,40,73,70,95,51,615");
     }
 }

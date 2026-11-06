@@ -51,7 +51,7 @@ async fn eager_loads_keep_what_the_viewer_may_read() {
         .unwrap()
         .unwrap();
     let deals = agra.loaded(Company::deals).unwrap();
-    assert_eq!(titles(deals), ["Renewal"], "Bob's Upgrade is hidden");
+    assert_eq!(titles(deals), ["Renewal"], "Bal's Upgrade is hidden");
     let kinds: Vec<&str> = deals[0]
         .loaded(Deal::activities)
         .unwrap()

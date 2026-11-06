@@ -257,7 +257,7 @@ async fn embeddings_page(
     ids: Vec<Uuid>,
 ) -> Result<(), AiError> {
     let one: Embedding = embeddings
-        .embed("Dana asked whether onboarding takes more than a month")
+        .embed("Daljit asked whether onboarding takes more than a month")
         .await?;
     let many: Vec<Embedding> = embeddings
         .embed_many(&["first passage", "second passage"])
@@ -270,7 +270,7 @@ async fn embeddings_page(
     notes
         .upsert(
             VectorRecord::new("0199c1d2:0", one.clone())
-                .text("Pricing call with Dana.")
+                .text("Pricing call with Daljit.")
                 .metadata(json!({ "activity_id": Uuid::now_v7(), "subject_id": deal_id })),
         )
         .await?;

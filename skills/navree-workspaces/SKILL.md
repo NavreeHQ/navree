@@ -258,7 +258,7 @@ workspace_role = "viewer"            # the workspace role it gives (default: sam
 let agra = organizations.create(&uow, owner, NewOrganization::named("Agra Group").country("gb")).await?;
 organizations.attach(&uow, agra.id, ws.id).await?;   // 409 if attached elsewhere
 org_members.add(&uow, agra.id, gauri, OrgRole::Admin, WorkspaceSelector::All).await?;
-org_members.grant(&uow, agra.id, linus, OrgRole::Member, WorkspaceSelector::only([ws.id])).await?;
+org_members.grant(&uow, agra.id, laksh, OrgRole::Member, WorkspaceSelector::only([ws.id])).await?;
 access_requests.approve(&uow, agra.id, request_id, Some(admin), Approval::default()).await?;
 ```
 

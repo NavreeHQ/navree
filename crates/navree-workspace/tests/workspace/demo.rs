@@ -313,7 +313,7 @@ async fn editor_roles_and_allowed_routes_write_to_read_only_demos() {
     .await;
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
-    let linus = world.user("Linus", "linus@example.com").await;
+    let linus = world.user("Laksh", "laksh@example.com").await;
     let demo = world.demo(ada, "Agra demo").await;
     world.join(demo.id, grace, "admin").await;
     world.join(demo.id, linus, "member").await;

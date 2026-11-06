@@ -132,7 +132,7 @@ export function siteGraph(): Json {
         installUrl: abs(site.getStarted),
         license: licenseUrls(),
         isAccessibleForFree: true,
-        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        offers: { "@type": "Offer", price: "0", priceCurrency: "INR" },
         featureList: [
           "Modules and dependency injection, checked when the app boots",
           "An ORM and migrations for TimescaleDB, PostgreSQL, MySQL, SQLite and MongoDB",

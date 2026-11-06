@@ -379,12 +379,12 @@ mod tests {
         let point = json!({
             "id": "6a2f",
             "vector": [0.5, 1.0],
-            "payload": { "id": "a1:0", "text": "Dana", "metadata": { "kind": "call" } }
+            "payload": { "id": "a1:0", "text": "Daljit", "metadata": { "kind": "call" } }
         });
         let record = record(&point, "a1:0");
         assert_eq!(record.id, "a1:0");
         assert_eq!(&record.embedding[..], &[0.5, 1.0]);
-        assert_eq!(record.text, "Dana");
+        assert_eq!(record.text, "Daljit");
         assert_eq!(record.metadata, json!({ "kind": "call" }));
         let bare = super::record(&json!({ "id": "6a2f" }), "x");
         assert_eq!((bare.id.as_str(), bare.embedding.dimensions()), ("x", 0));

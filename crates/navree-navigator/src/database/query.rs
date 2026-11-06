@@ -293,7 +293,7 @@ mod tests {
             vec!["email".into(), "password_hash".into()],
             vec![
                 vec![Value::from("anu@example.com"), Value::from("$argon2id$...")],
-                vec![Value::from("bob@example.com"), Value::Null],
+                vec![Value::from("bal@example.com"), Value::Null],
             ],
             Instant::now(),
         );

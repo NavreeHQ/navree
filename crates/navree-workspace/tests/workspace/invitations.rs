@@ -129,7 +129,7 @@ async fn accepting_adds_the_member_with_the_invited_role() {
 async fn only_the_invited_address_may_accept() {
     let world = World::new().await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world
@@ -162,7 +162,7 @@ async fn the_address_check_can_be_turned_off() {
     )
     .await;
     let ada = world.user("Anu", "anu@example.com").await;
-    let eve = world.user("Eve", "eve@example.com").await;
+    let eve = world.user("Ela", "ela@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let invitations = world.invitations().await;
     let sent = world

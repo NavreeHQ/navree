@@ -275,7 +275,7 @@ struct Tagged {
 fn each_checks_every_item() {
     let tagged = Tagged {
         tags: vec!["vip".into(), " ".into(), "toolong".into()],
-        scores: BTreeMap::from([("anu".to_owned(), 101), ("bob".to_owned(), 5)]),
+        scores: BTreeMap::from([("anu".to_owned(), 101), ("bal".to_owned(), 5)]),
         emails: Some(HashSet::from(["x".to_owned()])),
         grid: vec![vec![0, 1], vec![-1]],
         items: [Item {

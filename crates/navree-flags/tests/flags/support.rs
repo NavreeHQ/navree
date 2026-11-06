@@ -140,7 +140,7 @@ impl DealsController {
     #[authenticated]
     #[requires_flag(NewPipeline)]
     async fn forecast(&self) -> Json<Value> {
-        Json(json!({"currency": "USD"}))
+        Json(json!({"currency": "INR"}))
     }
 
     #[post("/forecast/{id}")]

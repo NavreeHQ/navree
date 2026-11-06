@@ -528,7 +528,7 @@ fn mutators_also_run_through_generated_setters_and_set_attribute() {
     assert_eq!(member.email, "gauri@example.com");
     let mut record = Record::new(Member::default());
     record.set_attribute("email", "LINUS@example.com").unwrap();
-    assert_eq!(record.email, "linus@example.com");
+    assert_eq!(record.email, "laksh@example.com");
     record.set_attribute("is_admin", true).unwrap();
     assert!(record.is_admin, "set_attribute is not guarded");
     assert!(Member::meta().column("email").unwrap().has_mutator());

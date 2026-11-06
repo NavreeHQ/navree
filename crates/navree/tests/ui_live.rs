@@ -209,7 +209,7 @@ async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_reso
     };
     let mut ada_in_agra = open(ada, &agra.slug).await;
     let mut bob_in_gulati = open(bob, &gulati.slug).await;
-    // Bob names Agra, where he is no member: his stream is in no workspace.
+    // Bal names Agra, where he is no member: his stream is in no workspace.
     let mut bob_in_agra = open(bob, &agra.slug).await;
     for page in [&mut ada_in_agra, &mut bob_in_gulati, &mut bob_in_agra] {
         assert_eq!(page.next(WAIT).await.as_deref(), Some("ui:live"));
@@ -285,11 +285,11 @@ async fn a_stream_ends_when_its_reader_leaves_the_workspace_and_when_the_workspa
         assert_eq!(page.next(WAIT).await.as_deref(), Some("ui:live"));
     }
 
-    // Bob is removed: his stream ends, the others' go on.
+    // Bal is removed: his stream ends, the others' go on.
     let uow = db.uow(None, None).await;
     members.remove(&uow, agra.id, bob).await.unwrap();
     uow.commit().await.unwrap();
-    assert!(bob_page.closed(WAIT).await, "bob's stream stayed open");
+    assert!(bob_page.closed(WAIT).await, "bal's stream stayed open");
     let live = app.get::<Live>().await;
     live.nudge([Topic::workspace(agra.id, "deals")])
         .await

@@ -498,7 +498,7 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
     let contacts = || crm.gulati.contacts();
 
     let found = contacts()
-        .first_or_new(&t.db, [Contact::NAME.set("Dave")], |_| {})
+        .first_or_new(&t.db, [Contact::NAME.set("Deep")], |_| {})
         .await
         .unwrap();
     assert!(found.exists());
@@ -512,10 +512,10 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
     assert_eq!(new.company_id, Some(crm.gulati.id));
     assert_eq!(new.email, "erin@gulati.test");
 
-    // Alice works at Agra: not found through Gulati's contacts.
+    // Aarti works at Agra: not found through Gulati's contacts.
     let created = contacts()
-        .first_or_create(&t.db, [Contact::NAME.set("Alice")], |c| {
-            c.email = "alice@gulati.test".into();
+        .first_or_create(&t.db, [Contact::NAME.set("Aarti")], |c| {
+            c.email = "aarti@gulati.test".into();
         })
         .await
         .unwrap();
@@ -524,26 +524,26 @@ async fn find_or_create_on_relations_fills_the_foreign_key() {
 
     // A unique violation returns the record that is there.
     let first = contacts()
-        .create_or_first(&t.db, [Contact::EMAIL.set("dave@gulati.test")], |c| {
-            c.name = "Dave again".into();
+        .create_or_first(&t.db, [Contact::EMAIL.set("deep@gulati.test")], |c| {
+            c.name = "Deep again".into();
         })
         .await
         .unwrap();
-    assert_eq!(first.name, "Dave");
+    assert_eq!(first.name, "Deep");
 
     let updated = contacts()
-        .update_or_create(&t.db, [Contact::NAME.set("Dave")], |c| {
-            c.email = "dave@new.test".into();
+        .update_or_create(&t.db, [Contact::NAME.set("Deep")], |c| {
+            c.email = "deep@new.test".into();
         })
         .await
         .unwrap();
-    assert_eq!(updated.email, "dave@new.test");
+    assert_eq!(updated.email, "deep@new.test");
     assert_eq!(
         Contact::find_or_fail(&t.db, updated.id)
             .await
             .unwrap()
             .email,
-        "dave@new.test"
+        "deep@new.test"
     );
 
     let counted = crm

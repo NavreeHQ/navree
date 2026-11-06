@@ -42,13 +42,13 @@ async fn mail_suppressions_adds_lists_and_removes() {
     mail.app
         .run_command(
             "mail:suppressions",
-            &["add", "eve@example.com", "--reason", "complaint"],
+            &["add", "ela@example.com", "--reason", "complaint"],
         )
         .await
         .expect("add");
     assert!(
         suppressions
-            .is_suppressed(None, "eve@example.com")
+            .is_suppressed(None, "ela@example.com")
             .await
             .unwrap()
     );
@@ -57,12 +57,12 @@ async fn mail_suppressions_adds_lists_and_removes() {
         .await
         .expect("list");
     mail.app
-        .run_command("mail:suppressions", &["remove", "eve@example.com"])
+        .run_command("mail:suppressions", &["remove", "ela@example.com"])
         .await
         .expect("remove");
     assert!(
         !suppressions
-            .is_suppressed(None, "eve@example.com")
+            .is_suppressed(None, "ela@example.com")
             .await
             .unwrap()
     );
@@ -71,7 +71,7 @@ async fn mail_suppressions_adds_lists_and_removes() {
         .app
         .run_command(
             "mail:suppressions",
-            &["add", "eve@example.com", "--reason", "boredom"],
+            &["add", "ela@example.com", "--reason", "boredom"],
         )
         .await
         .unwrap_err();
@@ -133,7 +133,7 @@ async fn the_fake_plays_the_provider() {
         .send_message(
             navree_mail::Message::new()
                 .to("anu@example.com")
-                .cc("bob@example.com")
+                .cc("bal@example.com")
                 .subject("One")
                 .text("1"),
         )
@@ -142,7 +142,7 @@ async fn the_fake_plays_the_provider() {
     mailer
         .send_message(
             navree_mail::Message::new()
-                .to("bob@example.com")
+                .to("bal@example.com")
                 .subject("Two")
                 .text("2"),
         )
@@ -156,7 +156,7 @@ async fn the_fake_plays_the_provider() {
     // The event goes to the last message sent to the recipient.
     let delivery = mail
         .fake
-        .open(mail.app.ctx(), "bob@example.com")
+        .open(mail.app.ctx(), "bal@example.com")
         .await
         .unwrap()
         .unwrap();

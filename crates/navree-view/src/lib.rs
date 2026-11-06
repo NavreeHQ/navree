@@ -14,7 +14,7 @@
 //!   HTML-escaped; `.txt` ones are not.
 //! - Printing an undefined variable is an error, so a typo cannot send a
 //!   blank email; `{% if title %}` still works for optional values.
-//! - Filters: `{{ cents|money("USD") }}` (`$1,234.56`) and
+//! - Filters: `{{ cents|money("USD") }}` (`$1,234.56`; rupees group in lakhs, `₹12,34,567.89`) and
 //!   `{{ created_at|date("%d %b %Y") }}`.
 //!
 //! ```

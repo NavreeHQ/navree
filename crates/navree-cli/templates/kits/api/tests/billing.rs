@@ -11,9 +11,9 @@ use support::{add_member, boot, in_workspace, sign_in, user, workspace};
 #[tokio::test]
 async fn owners_check_out_a_plan_and_start_its_trial() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
-    let token = sign_in(&app, "olivia@example.com").await;
+    let token = sign_in(&app, "ojaswi@example.com").await;
 
     // The plans of config/app.toml; no subscription yet.
     let overview = in_workspace(app.client().get("/api/billing"), &token, &team.slug)
@@ -77,9 +77,9 @@ async fn owners_check_out_a_plan_and_start_its_trial() {
 #[tokio::test]
 async fn seats_follow_the_member_count() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
-    let token = sign_in(&app, "olivia@example.com").await;
+    let token = sign_in(&app, "ojaswi@example.com").await;
     let checkout = in_workspace(
         app.client().post("/api/billing/checkout"),
         &token,
@@ -123,7 +123,7 @@ async fn seats_follow_the_member_count() {
 #[tokio::test]
 async fn only_billing_managers_reach_billing() {
     let (app, _guard) = boot().await;
-    let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
+    let owner = user(&app, "Ojaswi Owner", "ojaswi@example.com").await;
     let team = workspace(&app, &owner, "Agra").await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
     add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;

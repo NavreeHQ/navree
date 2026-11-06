@@ -157,7 +157,7 @@ impl From<Deal> for pb::deals::Deal {
             id: model.id.to_string(),
             title: model.title,
             amount_cents: model.amount_cents,
-            currency: "USD".to_owned(),
+            currency: "INR".to_owned(),
             stage: model.stage,
             company_id: String::new(),
             owner_id: model.owner_id.to_string(),

@@ -82,7 +82,7 @@ pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f32 {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), navree_ai::AiError> {
 /// let embeddings = Embeddings::new(AiFake::new().ai());
-/// let one = embeddings.embed("Dana asked whether onboarding takes more than a month").await?;
+/// let one = embeddings.embed("Daljit asked whether onboarding takes more than a month").await?;
 /// let many = embeddings.embed_many(["first passage", "second passage"]).await?;
 /// assert_eq!(one.dimensions(), 1536);
 /// assert_eq!(many.len(), 2);

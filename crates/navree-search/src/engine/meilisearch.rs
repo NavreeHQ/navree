@@ -509,14 +509,14 @@ mod tests {
             .text("last_name", 3)
             .filter("status")
             .sort("created_at")
-            .synonyms("bob", ["robert"]);
+            .synonyms("bal", ["robert"]);
         assert_eq!(
             index_settings(&settings),
             json!({
                 "searchableAttributes": ["last_name", "email"],
                 "filterableAttributes": ["status", "_workspace"],
                 "sortableAttributes": ["created_at"],
-                "synonyms": {"bob": ["robert"], "robert": ["bob"]},
+                "synonyms": {"bal": ["robert"], "robert": ["bal"]},
                 "stopWords": [],
             })
         );

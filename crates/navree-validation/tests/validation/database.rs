@@ -13,13 +13,13 @@ use crate::support::{NotReserved, database_app, errors, insert};
 async fn unique_rule_rejects_existing_and_ignores_self(scratch: Scratch) {
     let app = database_app(&scratch).await;
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
-    insert(&app, "users", alice, "alice@example.com").await;
-    insert(&app, "users", bob, "bob@example.com").await;
+    insert(&app, "users", alice, "aarti@example.com").await;
+    insert(&app, "users", bob, "bal@example.com").await;
 
     let response = app
         .client()
         .post("/db/users")
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await
         .assert_error(400, None);
@@ -29,7 +29,7 @@ async fn unique_rule_rejects_existing_and_ignores_self(scratch: Scratch) {
     );
     app.client()
         .post("/db/users")
-        .json(&json!({ "email": "carol@example.com" }))
+        .json(&json!({ "email": "charu@example.com" }))
         .send()
         .await
         .assert_status(200);
@@ -37,20 +37,20 @@ async fn unique_rule_rejects_existing_and_ignores_self(scratch: Scratch) {
     // Updating alice keeps her own address; bob may not take it.
     app.client()
         .patch(&format!("/db/users/{alice}"))
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await
         .assert_status(200);
     app.client()
         .patch(&format!("/db/users/{bob}"))
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await
         .assert_error(400, None);
 
     // The same through the API, with an explicit id to ignore.
     let db = app.get::<Db>().await;
-    let taken = |ignore| AsyncRule::unique("email", "users", "email", "alice@example.com", ignore);
+    let taken = |ignore| AsyncRule::unique("email", "users", "email", "aarti@example.com", ignore);
     assert!(!taken(None).passes(&*db).await.unwrap());
     assert!(taken(Some(alice)).passes(&*db).await.unwrap());
     assert!(!taken(Some(bob)).passes(&*db).await.unwrap());
@@ -274,7 +274,7 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
         errors(&response.json_value()),
         &json!({ "code": ["code has already been taken"] })
     );
-    for code in [json!("bob"), json!(null)] {
+    for code in [json!("bal"), json!(null)] {
         app.client()
             .post("/db/handles")
             .json(&json!({ "code": code }))
@@ -290,7 +290,7 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
         .await
         .assert_status(200);
     app.client()
-        .patch("/db/handles/bob")
+        .patch("/db/handles/bal")
         .json(&json!({ "code": "admin" }))
         .send()
         .await
@@ -320,8 +320,8 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
 async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     let app = database_app(&scratch).await;
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
-    insert(&app, "users", alice, "alice@example.com").await;
-    insert(&app, "users", bob, "bob@example.com").await;
+    insert(&app, "users", alice, "aarti@example.com").await;
+    insert(&app, "users", bob, "bal@example.com").await;
     let agra = Uuid::now_v7();
     insert(&app, "companies", agra, "Agra").await;
 
@@ -329,14 +329,14 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     let taken = app
         .client()
         .post("/db/checked/users")
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await;
     assert_eq!(failed(taken), json!({ "failed": [["email", "unique"]] }));
     let free = app
         .client()
         .post("/db/checked/users")
-        .json(&json!({ "email": "carol@example.com" }))
+        .json(&json!({ "email": "charu@example.com" }))
         .send()
         .await;
     assert_eq!(failed(free), json!({ "failed": [] }));
@@ -345,14 +345,14 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     let own = app
         .client()
         .patch(&format!("/db/checked/users/{alice}"))
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await;
     assert_eq!(failed(own), json!({ "failed": [] }));
     let other = app
         .client()
         .patch(&format!("/db/checked/users/{bob}"))
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await;
     assert_eq!(failed(other), json!({ "failed": [["email", "unique"]] }));
@@ -381,7 +381,7 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     let response = app
         .client()
         .post("/db/users")
-        .json(&json!({ "email": "alice@example.com" }))
+        .json(&json!({ "email": "aarti@example.com" }))
         .send()
         .await
         .assert_error(400, None);

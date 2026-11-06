@@ -459,13 +459,13 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
     /** Two links, a form; the form's answer changes what `/x-private` shows. */
     function staleScene(answer) {
       const name = key("stale");
-      const state = { user: "alice", version: 1 };
+      const state = { user: "aarti", version: 1 };
       route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
       route(`/${name}-private`, () => doc(`<h1 id="who">${state.user} v${state.version}</h1>`));
       f.routes.set(`/${name}-write`, (req, res) => {
-        state.user = "bob";
+        state.user = "bal";
         state.version = 2;
-        f.ops(res, answer(name), 200, { "set-cookie": "user=bob; Path=/" });
+        f.ops(res, answer(name), 200, { "set-cookie": "user=bal; Path=/" });
       });
       return { name, state };
     }
@@ -479,7 +479,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await sleep(150);
       await page.click("#link");
       await page.waitForSelector("#who");
-      assert.equal(await page.textContent("#who"), "bob v2");
+      assert.equal(await page.textContent("#who"), "bal v2");
       await context.close();
     });
 
@@ -491,18 +491,18 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
         await sleep(150);
         await page.click("#go");
         await page.waitForSelector("#who");
-        assert.equal(await page.textContent("#who"), "bob v2", `absolute=${absolute}`);
+        assert.equal(await page.textContent("#who"), "bal v2", `absolute=${absolute}`);
         await context.close();
       }
     });
 
     test(`a prefetch started during a write is not shown after it (${engine})`, async () => {
       const name = key("during");
-      const state = { user: "alice" };
+      const state = { user: "aarti" };
       route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
       route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
       f.routes.set(`/${name}-write`, (req, res) => setTimeout(() => {
-        state.user = "bob";
+        state.user = "bal";
         f.ops(res, { ops: [] });
       }, 300));
       const { context, page } = await fresh(`/${name}`);
@@ -511,7 +511,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await sleep(450);
       await page.click("#link");
       await page.waitForSelector("#who");
-      assert.equal(await page.textContent("#who"), "bob");
+      assert.equal(await page.textContent("#who"), "bal");
       await context.close();
     });
 
@@ -529,17 +529,17 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await sleep(150);
       await one.click("#link");
       await one.waitForSelector("#who");
-      assert.equal(await one.textContent("#who"), "bob v2");
+      assert.equal(await one.textContent("#who"), "bal v2");
       await context.close();
     });
 
     test(`a plain form's post drops the prefetch of other tabs (${engine})`, async () => {
       const name = key("plainpost");
-      const state = { user: "alice" };
+      const state = { user: "aarti" };
       route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" method="post" action="/${name}-write"><button id="go">go</button></form>`));
       route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
       f.routes.set(`/${name}-write`, (req, res) => {
-        state.user = "bob";
+        state.user = "bal";
         f.html(res, doc(`<h1>signed out</h1>`));
       });
       const context = await browser.newContext();
@@ -554,7 +554,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await sleep(150);
       await one.click("#link");
       await one.waitForSelector("#who");
-      assert.equal(await one.textContent("#who"), "bob");
+      assert.equal(await one.textContent("#who"), "bal");
       await context.close();
     });
 
@@ -693,13 +693,13 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
 
     test(`an eager prefetch waits out a write and is never shown after one (${engine})`, async () => {
       const name = key("eagerwrite");
-      const state = { user: "alice" };
+      const state = { user: "aarti" };
       route(`/${name}`, doc(`<a id="link" data-ui-prefetch="eager" href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
       // A user's own page is no-store: the HTTP cache, which no guard of the runtime's
       // reaches, never holds it.
       route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
       f.routes.set(`/${name}-write`, (req, res) => {
-        state.user = "bob";
+        state.user = "bal";
         f.ops(res, { ops: [{ op: "toast", tone: "success", text: "saved" }] });
       });
       const { context, page } = await fresh(`/${name}`);
@@ -709,7 +709,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await sleep(250);
       await page.click("#link");
       await page.waitForSelector("#who");
-      assert.equal(await page.textContent("#who"), "bob");
+      assert.equal(await page.textContent("#who"), "bal");
       await context.close();
     });
 
@@ -1487,7 +1487,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
 
     test(`stored markup can't make itself stay on every page (${engine})`, async () => {
       const name = key("persist");
-      route(`/${name}`, doc(`<div id="stored" data-ui-persist>content of user alice</div><a id="n" href="/${name}-next">n</a>`));
+      route(`/${name}`, doc(`<div id="stored" data-ui-persist>content of user aarti</div><a id="n" href="/${name}-next">n</a>`));
       route(`/${name}-next`, doc(`<h1 id="h">other page</h1>`));
       const { context, page } = await fresh(`/${name}`);
       await page.click("#n");

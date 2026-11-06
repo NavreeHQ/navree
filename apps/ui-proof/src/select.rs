@@ -25,7 +25,7 @@ const FIRST: [&str; 20] = [
     "Barbara",
     "Donald",
     "Margaret",
-    "Linus",
+    "Laksh",
     "Radia",
     "Ken",
     "Dennis",
@@ -73,7 +73,7 @@ static PEOPLE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         })
         .collect();
     let odd = [
-        "<img src=x onerror=alert(1)> Mallory",
+        "<img src=x onerror=alert(1)> Manjeet",
         "محمد الأحمد (Arabic)",
         "O'Brien & \"Sons\" <b>bold</b>",
         "100%_literal \\ backslash",

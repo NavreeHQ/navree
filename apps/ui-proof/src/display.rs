@@ -73,7 +73,7 @@ const PEOPLE: [Person; 8] = [
         flag: "IN",
     },
     Person {
-        name: "Tomás García",
+        name: "Tejás García",
         email: "tomas.garcia@example.com",
         device: "Chrome on Android",
         place: "Berlin",

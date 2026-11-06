@@ -100,7 +100,7 @@ enforce_for_verified_domains = true                     # refuse passwords for v
   `POST /auth/2fa/verify` of a challenge started earlier, and other
   connections (checked on the IdP's email before provisioning, and on the
   account). The email's domain is compared IDNA-mapped, lower-case,
-  without a trailing dot (`eve@ACME.test.` is `acme.test`). Refusals are audited `auth.login_refused` with
+  without a trailing dot (`ela@ACME.test.` is `acme.test`). Refusals are audited `auth.login_refused` with
   `metadata.method`. Existing sessions and tokens are not ended: when
   turning enforcement on call
   `AuthService::revoke_credentials_of_domain(domain)` (sessions, personal
@@ -145,7 +145,7 @@ let domain = sso.add_domain(&uow, "agra", "acme.test").await?;
 sso.mark_domain_verified(&uow, domain.id).await?;   // skips DNS
 uow.commit().await?;
 let url = app.client().get("/api/sso/agra/login").send().await.json_value()["url"].as_str().unwrap().to_owned();
-let answer = idp.respond_to(&url)?.name_id("alice@acme.test").attribute("groups", ["Admins"]);
+let answer = idp.respond_to(&url)?.name_id("aarti@acme.test").attribute("groups", ["Admins"]);
 app.client().post("/api/sso/saml/agra/acs").form(&answer.form()).send().await.assert_status(200);
 ```
 

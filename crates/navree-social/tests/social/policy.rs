@@ -69,12 +69,12 @@ async fn social_sign_in_is_refused_for_an_enforced_domain() {
     let auth = app.get::<AuthService>().await;
 
     // A new person of the domain: refused, and no account is created.
-    fake.on_code("github", "new", github("1", Some("bob@corp.test")));
+    fake.on_code("github", "new", github("1", Some("bal@corp.test")));
     sign_in(&app, "github", "new")
         .await
         .assert_error(403, "Sign in with Corp SSO")
         .assert_error_code(403, "sso_required");
-    assert!(auth.find_by_email("bob@corp.test").await.unwrap().is_none());
+    assert!(auth.find_by_email("bal@corp.test").await.unwrap().is_none());
 
     // An existing account of the domain, by its verified email.
     let ada = create_user(&app, "Anu", "anu@corp.test").await;

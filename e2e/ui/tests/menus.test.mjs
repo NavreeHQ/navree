@@ -1458,8 +1458,8 @@ for (const name of NAMES) {
 
       test("R3 a plain sign-out right after a boosted write doesn't hand the toast to the sign-in page", async () => {
         const unique = ++uniqueRoute;
-        // The page sets Alice's token; the write answers with a toast that offers an Undo.
-        const home = route(doc(`<main id="main"><h1 id="h">Home</h1><form id="pay" data-ui-form method="post" action="/pay${unique}"><button id="paybtn">Pay</button></form><form id="out" method="post" action="/logout${unique}"><button id="outbtn">Sign out</button></form></main>${TOASTER}`, { css: true }), { "set-cookie": "XSRF-TOKEN=tok-alice; Path=/" });
+        // The page sets Aarti's token; the write answers with a toast that offers an Undo.
+        const home = route(doc(`<main id="main"><h1 id="h">Home</h1><form id="pay" data-ui-form method="post" action="/pay${unique}"><button id="paybtn">Pay</button></form><form id="out" method="post" action="/logout${unique}"><button id="outbtn">Sign out</button></form></main>${TOASTER}`, { css: true }), { "set-cookie": "XSRF-TOKEN=tok-aarti; Path=/" });
         const login = paged(`<main id="main"><h1 id="login">Sign in</h1></main>${TOASTER}`);
         f.routes.set(`/pay${unique}`, (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "Paid $5,000.", duration: "sticky", action: { label: "Undo", href: "/undo", post: true } }] }));
         // A plain form: the answer is a redirect that also changes the token.
@@ -1467,11 +1467,11 @@ for (const name of NAMES) {
         const page = await fixture(home);
         await page.click("#paybtn");
         await toasts(page).filter({ hasText: "Paid $5,000." }).waitFor();
-        // Within a moment of the write that raised it, Alice signs out with a plain form.
+        // Within a moment of the write that raised it, Aarti signs out with a plain form.
         await page.click("#outbtn");
         await page.locator("#login").waitFor();
         await page.waitForTimeout(500);
-        assert.equal(await toasts(page).count(), 0, "Alice's toast is not on the sign-in page");
+        assert.equal(await toasts(page).count(), 0, "Aarti's toast is not on the sign-in page");
         assert.equal(await page.locator("[data-slot=toast-action]").count(), 0, "and neither is her Undo");
         assert.equal(await page.evaluate(() => sessionStorage.getItem("navree-ui-toasts")), null);
         await page.done();

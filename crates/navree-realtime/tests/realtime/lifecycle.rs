@@ -26,7 +26,7 @@ async fn disconnect_user_closes_sockets() {
     server.join(&mut first, ada, "private-crm.deals").await;
     let mut second = server.connect().await;
     server.join(&mut second, ada, "presence-room.1").await;
-    // Bob's connection, in the same presence room.
+    // Bal's connection, in the same presence room.
     let mut other = server.connect().await;
     server.join(&mut other, bob, "presence-room.1").await;
     second.expect("pusher_internal:member_added").await;
@@ -39,7 +39,7 @@ async fn disconnect_user_closes_sockets() {
         assert!(message.contains("disconnected"), "{message}");
         assert_eq!(client.expect_close().await, 4009);
     }
-    // Bob sees Anu leave the room; he and the anonymous client stay connected.
+    // Bal sees Anu leave the room; he and the anonymous client stay connected.
     let removed = other.expect("pusher_internal:member_removed").await;
     assert_eq!(removed.data["user_id"], ada.to_string());
     other.assert_alive().await;

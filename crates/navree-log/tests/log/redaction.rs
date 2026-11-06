@@ -8,14 +8,14 @@ use crate::support::{capture, pretty};
 fn redacts_configured_fields() {
     let out = capture(&pretty(), |_| {
         tracing::info!(
-            user = "bob",
+            user = "bal",
             password = "hunter2",
             api_token = "tok-123",
             "signed in"
         );
     });
     assert!(out.contains("signed in"), "{out}");
-    assert!(out.contains("user=\"bob\""), "{out}");
+    assert!(out.contains("user=\"bal\""), "{out}");
     assert!(out.contains("password=[redacted]"), "{out}");
     assert!(out.contains("api_token=[redacted]"), "{out}");
     assert!(!out.contains("hunter2"), "{out}");
@@ -99,6 +99,6 @@ fn blank_redact_keys_are_ignored() {
         redact: vec![String::new(), "  ".to_owned()],
         ..pretty()
     };
-    let out = capture(&options, |_| tracing::info!(user = "bob", "plain"));
-    assert!(out.contains("user=\"bob\""), "{out}");
+    let out = capture(&options, |_| tracing::info!(user = "bal", "plain"));
+    assert!(out.contains("user=\"bal\""), "{out}");
 }

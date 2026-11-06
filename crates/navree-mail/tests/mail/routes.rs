@@ -650,12 +650,12 @@ async fn suppressions_are_managed() {
 
     let created = client
         .post("/api/mail/suppressions")
-        .json(&json!({ "email": "Eve <EVE@example.com>", "workspace_id": workspace, "detail": "asked by phone" }))
+        .json(&json!({ "email": "Ela <EVE@example.com>", "workspace_id": workspace, "detail": "asked by phone" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
-    assert_eq!(created["email"], "eve@example.com");
+    assert_eq!(created["email"], "ela@example.com");
     assert_eq!(created["reason"], "manual");
     client
         .post("/api/mail/suppressions")
@@ -681,7 +681,7 @@ async fn suppressions_are_managed() {
     let suppressions = mail.get::<Suppressions>().await;
     assert!(
         !suppressions
-            .is_suppressed(Some(workspace), "eve@example.com")
+            .is_suppressed(Some(workspace), "ela@example.com")
             .await
             .unwrap()
     );

@@ -73,7 +73,7 @@ The UI proof app, see [Start the proof apps](README.md#start-the-proof-apps) (ht
 **8. Find the feed and read a row**
 - Keys: both readers: move to the heading "Activity feed" and the feed "Recent activity" under it.
 - The page: a group with the title as its heading, the summary "14 events", the line "Times in Asia/Kolkata (GMT+05:30)", a select "Period", the notice "1 item was hidden.", and the list of rows, newest first.
-- The reader says: the heading "Recent activity" (level 3); "14 events"; the zone line; then the select named "Period" with the value "Since launch". The first row reads, in order: the person as a link ("Tomás García"), the verb ("replied to"), the object ("the Autumn launch email"), the tag ("Autumn launch"), the device and place ("Chrome on Android", "Berlin"), and the time ("09:50:47"). The row's round icon is not spoken.
+- The reader says: the heading "Recent activity" (level 3); "14 events"; the zone line; then the select named "Period" with the value "Since launch". The first row reads, in order: the person as a link ("Tejás García"), the verb ("replied to"), the object ("the Autumn launch email"), the tag ("Autumn launch"), the device and place ("Chrome on Android", "Berlin"), and the time ("09:50:47"). The row's round icon is not spoken.
 
 **9. Keyboard stops in the feed**
 - Keys: both readers: Tab from the heading through the feed.

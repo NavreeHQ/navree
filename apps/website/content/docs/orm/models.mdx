@@ -124,7 +124,7 @@ pub struct Tag {
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "currencies", primary_key = "code")]
 pub struct Currency {
-    pub code: String, // yours to set: "USD"
+    pub code: String, // yours to set: "INR"
     pub name: String,
 }
 
@@ -155,7 +155,7 @@ let deal = Deal::create(&uow, Deal {
     company_id,
     title: "Agra renewal".into(),
     amount_cents: 120_000,
-    currency: "USD".into(),
+    currency: "INR".into(),
     ..Default::default()
 })
 .await?;

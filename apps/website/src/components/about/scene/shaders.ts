@@ -20,7 +20,7 @@ const f = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 /** GLSL shared by both: the hash, and when picture pixel `p` lands in the opening. */
 const common = /* glsl */ `
-// A hash without sine, steady at any size on any GPU (Dave Hoskins).
+// A hash without sine, steady at any size on any GPU (Deep Hoskins).
 float hash(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;

@@ -46,9 +46,9 @@ const ROOT: &str = "input";
 ///     "subject must be longer than or equal to 1 characters"
 /// );
 ///
-/// let call = validate_json::<LogCall>(&json!({ "subject": "Call Dana" }), &Messages::default())
+/// let call = validate_json::<LogCall>(&json!({ "subject": "Call Daljit" }), &Messages::default())
 ///     .unwrap();
-/// assert_eq!(call.subject, "Call Dana");
+/// assert_eq!(call.subject, "Call Daljit");
 /// ```
 pub fn validate_json<T>(input: &Value, messages: &Messages) -> Result<T, ValidationErrors>
 where

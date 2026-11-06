@@ -15,15 +15,15 @@ pub struct Crm {
     pub ada: Record<User>,
     /// Owns Gulati and Upgrade.
     pub bob: Record<User>,
-    /// Contacts Alice and Carol; deals Renewal and Upgrade.
+    /// Contacts Aarti and Charu; deals Renewal and Upgrade.
     pub agra: Record<Company>,
     /// A subsidiary of Agra, without deals or contacts.
     pub agra_labs: Record<Company>,
-    /// Contact Dave; deal Platform.
+    /// Contact Deep; deal Platform.
     pub gulati: Record<Company>,
     /// Agra, Anu, 5 000: calls of 30 and 45 minutes and an email of 5.
     pub renewal: Record<Deal>,
-    /// Agra, Bob, 25 000: a meeting of 60 minutes.
+    /// Agra, Bal, 25 000: a meeting of 60 minutes.
     pub upgrade: Record<Deal>,
     /// Gulati, Anu, 90 000: no activities.
     pub platform: Record<Deal>,
@@ -51,7 +51,7 @@ pub async fn seed(db: &Db) -> Crm {
         ..User::default()
     };
     let ada = User::create(db, rep("Anu")).await.unwrap();
-    let bob = User::create(db, rep("Bob")).await.unwrap();
+    let bob = User::create(db, rep("Bal")).await.unwrap();
 
     let agra = Company::create(
         db,
@@ -117,9 +117,9 @@ pub async fn seed(db: &Db) -> Crm {
     }
 
     for (company_id, name, email) in [
-        (agra.id, "Alice", "alice@acme.test"),
-        (agra.id, "Carol", "carol@acme.test"),
-        (gulati.id, "Dave", "dave@gulati.test"),
+        (agra.id, "Aarti", "aarti@acme.test"),
+        (agra.id, "Charu", "charu@acme.test"),
+        (gulati.id, "Deep", "deep@gulati.test"),
     ] {
         Contact::create(
             db,

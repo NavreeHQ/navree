@@ -81,7 +81,7 @@ impl navree::schema::Migration for Migration {
     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
         schema
             .table("deals", |t| {
-                t.char("currency", 3).default("USD");
+                t.char("currency", 3).default("INR");
                 t.text("title").change();
             })
             .await
@@ -108,7 +108,7 @@ A migration can look at the database before it changes it:
 
 ```rust
 if !schema.has_column("deals", "currency").await? {
-    schema.table("deals", |t| { t.char("currency", 3).default("USD"); }).await?;
+    schema.table("deals", |t| { t.char("currency", 3).default("INR"); }).await?;
 }
 ```
 

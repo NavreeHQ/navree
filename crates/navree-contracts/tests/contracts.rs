@@ -350,7 +350,7 @@ async fn dispatch_serializes_job_into_envelope() {
         .await
         .unwrap();
     let second = dispatcher
-        .dispatch_later(SendWelcome { user: "bob".into() }, Duration::from_secs(90))
+        .dispatch_later(SendWelcome { user: "bal".into() }, Duration::from_secs(90))
         .await
         .unwrap();
     assert_eq!((first.as_str(), second.as_str()), ("job-1", "job-2"));
@@ -361,7 +361,7 @@ async fn dispatch_serializes_job_into_envelope() {
     assert_eq!(envelopes[0].options, SendWelcome::options());
     assert_eq!(envelopes[0].delay_secs, None);
     assert_eq!(envelopes[0].unique_key, None);
-    assert_eq!(envelopes[1].payload, json!({"user": "bob"}));
+    assert_eq!(envelopes[1].payload, json!({"user": "bal"}));
     assert_eq!(envelopes[1].delay_secs, Some(90));
 }
 

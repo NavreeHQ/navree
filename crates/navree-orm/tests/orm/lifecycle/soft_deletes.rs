@@ -512,8 +512,8 @@ async fn restore_or_create_and_create_or_restore_bring_records_back() {
     assert_eq!(restored.id, new.id);
     assert!(!restored.trashed());
     let created = Member::query()
-        .create_or_restore(&t.db, [Member::EMAIL.set("linus@example.com")], |m| {
-            m.name = "Linus".into();
+        .create_or_restore(&t.db, [Member::EMAIL.set("laksh@example.com")], |m| {
+            m.name = "Laksh".into();
         })
         .await
         .unwrap();

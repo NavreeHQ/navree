@@ -46,7 +46,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
     // ...which posts its signed answer to the assertion consumer service.
     let answer = idp
         .respond_to(&url)?
-        .name_id("alice@acme.test")
+        .name_id("aarti@acme.test")
         .attribute("groups", ["Engineering"]);
     app.client()
         .post("/api/sso/saml/agra/acs")
@@ -54,7 +54,7 @@ async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxEr
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("user.email", json!("alice@acme.test"));
+        .assert_json_path("user.email", json!("aarti@acme.test"));
     Ok(())
 }
 
@@ -129,7 +129,7 @@ async fn a_workspace_connects_and_its_admin_lists_it() -> Result<(), BoxError> {
 
     let auth = app.get::<AuthService>().await;
     let olive = auth
-        .create_user("Olive", "olive@acme.test", "correct horse battery")
+        .create_user("Ojas", "ojas@acme.test", "correct horse battery")
         .await?;
     let sso = app.get::<Sso>().await;
     let workspaces = app.get::<navree::workspace::Workspaces>().await;

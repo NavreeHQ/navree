@@ -118,7 +118,7 @@ async fn rep_cannot_create_user() {
     let admin = crm.login_as(Role::Admin).await;
     admin
         .get("/api/v1/users")
-        .query(&[("search", "eve@")])
+        .query(&[("search", "ela@")])
         .send()
         .await
         .assert_status(200)

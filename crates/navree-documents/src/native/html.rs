@@ -496,8 +496,8 @@ mod tests {
     #[test]
     fn references_decode() {
         assert_eq!(
-            decode("Tom &amp; Jerry &lt;3 &#39;x&#x27; &mdash; &copy;&nbsp;2026 &bogus; & done"),
-            "Tom & Jerry <3 'x' — ©\u{a0}2026 &bogus; & done"
+            decode("Tej &amp; Jerry &lt;3 &#39;x&#x27; &mdash; &copy;&nbsp;2026 &bogus; & done"),
+            "Tej & Jerry <3 'x' — ©\u{a0}2026 &bogus; & done"
         );
         let doc = parse("<p title=\"a &quot;b&quot;\">x</p>");
         assert_eq!(doc.find("p").unwrap().attr("title"), Some("a \"b\""));

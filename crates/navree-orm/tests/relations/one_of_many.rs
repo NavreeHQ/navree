@@ -171,7 +171,7 @@ async fn to_many_relations_as_to_one() {
         .first(&t.db)
         .await
         .unwrap();
-    assert_eq!(contact.unwrap().name, "Alice");
+    assert_eq!(contact.unwrap().name, "Aarti");
     let biggest = crm.team.biggest_deal().first(&t.db).await.unwrap().unwrap();
     assert_eq!(biggest.title, "Platform");
     let a_deal = crm.team.deals().one().first(&t.db).await.unwrap();

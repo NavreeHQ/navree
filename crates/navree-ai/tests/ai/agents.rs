@@ -35,7 +35,7 @@ pub struct ListNotes {
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct AddNote {
-    /// One line, e.g. "Call Dana about the quote".
+    /// One line, e.g. "Call Daljit about the quote".
     #[validate(length(min = 1, max = 50))]
     pub title: String,
 }
@@ -170,18 +170,18 @@ async fn notes(app: &TestApp) -> Vec<Note> {
 #[tokio::test]
 async fn a_tool_call_runs_as_the_user_and_its_result_goes_back() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
-        FakeReply::tool_call("add_note", json!({ "title": "Call Dana about the quote" })),
+        FakeReply::tool_call("add_note", json!({ "title": "Call Daljit about the quote" })),
         FakeReply::text("Logged the call."),
     ]);
 
     let reply = ai
         .agent::<NotesAssistant>()
         .acting_as_user(dana)
-        .prompt("Log a call with Dana")
+        .prompt("Log a call with Daljit")
         .await
         .unwrap();
 
@@ -201,12 +201,12 @@ async fn a_tool_call_runs_as_the_user_and_its_result_goes_back() {
     fake.assert_tool_not_called("purge_notes");
     assert_eq!(
         fake.tool_results("add_note")[0]["title"],
-        "Call Dana about the quote"
+        "Call Daljit about the quote"
     );
     let first = &fake.requests()[0];
     let system = first.system().unwrap();
     assert!(
-        system.starts_with("You keep notes for Dana. Today is 2026-10-26."),
+        system.starts_with("You keep notes for Daljit. Today is 2026-10-26."),
         "{system}"
     );
     assert!(
@@ -231,7 +231,7 @@ async fn a_tool_call_runs_as_the_user_and_its_result_goes_back() {
     // The second request carries the tool call and its result.
     let second = &fake.requests()[1];
     assert_eq!(second.messages().len(), 3);
-    assert_eq!(second.last_user_message(), "Log a call with Dana");
+    assert_eq!(second.last_user_message(), "Log a call with Daljit");
 }
 
 #[tokio::test]
@@ -242,7 +242,7 @@ async fn tool_schemas_and_descriptions_come_from_the_types_and_doc_comments() {
     assert_eq!(add.parameters["type"], "object");
     assert_eq!(
         add.parameters["properties"]["title"]["description"],
-        "One line, e.g. \"Call Dana about the quote\"."
+        "One line, e.g. \"Call Daljit about the quote\"."
     );
     assert!(!add.read_only && !add.needs_approval);
     assert_eq!(add.access, [navree_ai::ToolAccess::can("create", "Note")]);
@@ -281,7 +281,7 @@ async fn managers_are_offered_the_tools_their_abilities_allow() {
 #[tokio::test]
 async fn invalid_arguments_reach_the_model_as_the_api_messages() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -309,7 +309,7 @@ async fn invalid_arguments_reach_the_model_as_the_api_messages() {
 #[tokio::test]
 async fn failed_tools_roll_back_and_hide_server_errors() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -338,7 +338,7 @@ async fn failed_tools_roll_back_and_hide_server_errors() {
 #[tokio::test]
 async fn a_slow_tool_is_a_timeout_the_model_reads() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -361,10 +361,10 @@ async fn a_slow_tool_is_a_timeout_the_model_reads() {
 #[tokio::test]
 async fn approvals_pause_the_run_and_approve_resumes_it() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
-    // Dana's own note.
+    // Daljit's own note.
     fake.respond_with([
         FakeReply::tool_call("add_note", json!({ "title": "Old" })),
         FakeReply::text("Added."),
@@ -471,7 +471,7 @@ async fn access_is_checked_when_an_approved_tool_runs() {
 #[tokio::test]
 async fn reject_tells_the_model_why() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -512,7 +512,7 @@ async fn reject_tells_the_model_why() {
 #[tokio::test]
 async fn a_new_message_instead_of_an_answer_rejects_the_pending_call() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -546,13 +546,13 @@ async fn a_new_message_instead_of_an_answer_rejects_the_pending_call() {
 #[tokio::test]
 async fn memory_continues_a_conversation_for_its_owner_only() {
     let app = app().await;
-    let (dana, sam) = (user(&app, "Dana", &[]).await, user(&app, "Sam", &[]).await);
+    let (dana, sam) = (user(&app, "Daljit", &[]).await, user(&app, "Sahil", &[]).await);
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
         FakeReply::tool_call("whoami", json!({})),
-        FakeReply::text("You are Dana."),
-        FakeReply::text("Still Dana."),
+        FakeReply::text("You are Daljit."),
+        FakeReply::text("Still Daljit."),
     ]);
 
     let first = ai
@@ -564,7 +564,7 @@ async fn memory_continues_a_conversation_for_its_owner_only() {
         .unwrap();
     let id = first.conversation_id.unwrap();
     let whoami = &fake.tool_results("whoami")[0];
-    assert_eq!(whoami["name"], "Dana");
+    assert_eq!(whoami["name"], "Daljit");
     assert_eq!(whoami["conversation_id"], json!(id));
     assert_eq!(whoami["now"], json!(start()));
     assert_eq!(whoami["can_read"], true);
@@ -615,7 +615,7 @@ async fn memory_continues_a_conversation_for_its_owner_only() {
     );
     let messages = conversations.messages(dana, id).await.unwrap();
     assert_eq!(messages.len(), 6);
-    assert_eq!(messages[5].text, "Still Dana.");
+    assert_eq!(messages[5].text, "Still Daljit.");
     assert!(matches!(
         conversations.messages(sam, id).await,
         Err(AiError::NotFound { .. })
@@ -653,12 +653,12 @@ async fn long_conversations_are_folded_into_a_summary() {
         .module(AssistantModule)
         .build()
         .await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_when(
         |r| r.system().is_some_and(|s| s.contains("running summary")),
-        FakeReply::text("Dana asked twice."),
+        FakeReply::text("Daljit asked twice."),
     );
     fake.respond_with([
         FakeReply::text("one"),
@@ -691,7 +691,7 @@ async fn long_conversations_are_folded_into_a_summary() {
     assert!(
         last.system()
             .unwrap()
-            .contains("Summary of the earlier conversation:\nDana asked twice.")
+            .contains("Summary of the earlier conversation:\nDaljit asked twice.")
     );
     assert!(last.messages().len() <= 2, "{:?}", last.messages());
     assert_eq!(last.last_user_message(), "Third");
@@ -700,7 +700,7 @@ async fn long_conversations_are_folded_into_a_summary() {
 #[tokio::test]
 async fn the_last_step_answers_without_tools() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -737,7 +737,7 @@ async fn the_last_step_answers_without_tools() {
 #[tokio::test]
 async fn read_only_runs_offer_only_read_only_tools() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond(FakeReply::text("Here is the review."));
@@ -757,7 +757,7 @@ async fn read_only_runs_offer_only_read_only_tools() {
 #[tokio::test]
 async fn acting_as_an_access_value_carries_token_restrictions() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond(FakeReply::text("ok"));
@@ -809,7 +809,7 @@ async fn a_run_needs_a_user() {
 #[tokio::test]
 async fn a_streamed_run_sends_tool_events_text_and_done() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -852,7 +852,7 @@ async fn a_streamed_run_sends_tool_events_text_and_done() {
 #[tokio::test]
 async fn a_streamed_run_reports_a_pending_approval() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond(FakeReply::tool_call(
@@ -877,11 +877,11 @@ async fn a_streamed_run_reports_a_pending_approval() {
     assert!(matches!(events.last(), Some(StreamEvent::Done(_))));
 }
 
-/// A conversation stopped at a `rename_note` call for Dana's own note "Old":
-/// the app, Dana, the conversation and the pending call's id.
+/// A conversation stopped at a `rename_note` call for Daljit's own note "Old":
+/// the app, Daljit, the conversation and the pending call's id.
 async fn stopped_for_approval() -> (TestApp, Uuid, Uuid, String) {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -1040,7 +1040,7 @@ struct Review {
 #[tokio::test]
 async fn a_run_can_answer_with_a_type() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
@@ -1062,7 +1062,7 @@ async fn a_run_can_answer_with_a_type() {
 #[tokio::test]
 async fn ai_prune_deletes_untouched_conversations() {
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let ai = app.get::<Ai>().await;
     ai.fake().unwrap().respond(FakeReply::text("hi"));
     ai.agent::<NotesAssistant>()
@@ -1120,7 +1120,7 @@ async fn unregistered_agents_are_configuration_errors() {
     }
 
     let app = app().await;
-    let dana = user(&app, "Dana", &[]).await;
+    let dana = user(&app, "Daljit", &[]).await;
     let error = app
         .get::<Ai>()
         .await

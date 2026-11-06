@@ -90,7 +90,7 @@ impl DealsController {
     #[can(Read, Deal)]
     #[requires_flag(NewPipeline)]
     async fn forecast(&self) -> Result<Json<Forecast>> {
-        Ok(Json(Forecast { currency: "USD" }))
+        Ok(Json(Forecast { currency: "INR" }))
     }
 
     #[get("/summary")]
@@ -220,7 +220,7 @@ async fn the_docs_examples_run_through_the_facade() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("currency", json!("USD"));
+        .assert_json_path("currency", json!("INR"));
     client
         .get("/api/v1/deals/board")
         .send()
@@ -349,7 +349,7 @@ async fn the_testing_examples_run_through_the_facade() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("currency", json!("USD"));
+        .assert_json_path("currency", json!("INR"));
 
     // A FlagsFake.
     let fake = FlagsFake::new().on::<NewPipeline>().off::<AiSummaries>();

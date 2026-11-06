@@ -412,12 +412,12 @@ mod tests {
         }
         let outcome =
             call_tool(
-                serde_json::json!({ "subject": "Call Dana" }),
+                serde_json::json!({ "subject": "Call Daljit" }),
                 |args: Args| async move {
                     Ok::<_, AppError>(serde_json::json!({ "logged": args.subject }))
                 },
             )
             .await;
-        assert!(matches!(outcome, ToolOutcome::Ok(value) if value["logged"] == "Call Dana"));
+        assert!(matches!(outcome, ToolOutcome::Ok(value) if value["logged"] == "Call Daljit"));
     }
 }

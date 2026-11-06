@@ -1,6 +1,6 @@
 {
   "error": "unauthorized_client",
-  "error_description": "AADSTS700016: Application with identifier '0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f' was not found in the directory 'Contoso'. This can happen if the application has not been installed by the administrator of the tenant or consented to by any user in the tenant.",
+  "error_description": "AADSTS700016: Application with identifier '0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f' was not found in the directory 'Chhabra'. This can happen if the application has not been installed by the administrator of the tenant or consented to by any user in the tenant.",
   "error_codes": [
     700016
   ],

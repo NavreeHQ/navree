@@ -441,7 +441,7 @@ pub fn statements() -> Vec<Portable> {
                 true,
             )
             .order_by(col("name").asc()),
-            json!([["Agra"], ["Gulati"], ["Linus"]]),
+            json!([["Agra"], ["Gulati"], ["Laksh"]]),
         ),
         query(
             "intersect",
@@ -537,7 +537,7 @@ pub fn statements() -> Vec<Portable> {
                     ),
             )
             .order_by(col("id").asc()),
-            json!([[1, "anu"], [2, "gauri"], [5, "linus"], [8, "anu"]]),
+            json!([[1, "anu"], [2, "gauri"], [5, "laksh"], [8, "anu"]]),
         ),
         query(
             "json array elements from the end",

@@ -7,7 +7,7 @@ description: "Turn your records into vectors with `Embeddings`, keep them in pgv
 
 <Badge feature="ai" /> A model knows the world up to its training date and nothing about your customers. **Retrieval-augmented generation** (RAG) closes that gap: when a question comes in, you find the few passages of your own data that answer it, give them to the model with the question, and get an answer that cites them.
 
-Finding those passages is a search by meaning, which is what embeddings are for. An **embedding** is a vector of numbers that a model computes from a text; texts that mean similar things get vectors that point in similar directions. "The customer is worried about rollout time" and "Dana asked whether onboarding takes more than a month" share no words and sit close together.
+Finding those passages is a search by meaning, which is what embeddings are for. An **embedding** is a vector of numbers that a model computes from a text; texts that mean similar things get vectors that point in similar directions. "The customer is worried about rollout time" and "Daljit asked whether onboarding takes more than a month" share no words and sit close together.
 
 `navree-ai` gives you the pieces:
 
@@ -122,7 +122,7 @@ use navree::ai::{Filter, VectorRecord, VectorStore};
 let notes = vectors.collection("activity_notes");
 
 notes.upsert(VectorRecord::new("0199c1d2-…:0", embedding)
-    .text("Pricing call with Dana. She asked for a 12-month term...")
+    .text("Pricing call with Daljit. She asked for a 12-month term...")
     .metadata(json!({ "activity_id": activity_id, "subject_id": deal_id }))).await?;
 
 let matches = notes
@@ -157,7 +157,7 @@ Most code never calls `Embeddings` directly, because `search` embeds the query f
 ```rust
 use navree::ai::Embeddings;
 
-let one = embeddings.embed("Dana asked whether onboarding takes more than a month").await?;
+let one = embeddings.embed("Daljit asked whether onboarding takes more than a month").await?;
 let many = embeddings.embed_many(&["first passage", "second passage"]).await?; // same order
 assert_eq!(one.dimensions(), 1536);
 ```
@@ -436,10 +436,10 @@ Content-Type: application/json
 
 ```json
 {
-  "answer": "Dana wants the team live before their January planning cycle and asked whether onboarding takes more than a month [1]. Sam offered a two-week guided rollout on the pricing call [2].",
+  "answer": "Daljit wants the team live before their January planning cycle and asked whether onboarding takes more than a month [1]. Sahil offered a two-week guided rollout on the pricing call [2].",
   "answered": true,
   "sources": [
-    {"activity_id": "0199c2f0-33aa-7d10-8c2b-1e2f3a4b5c6d", "excerpt": "Discovery call with Dana. They need to be live before January planning..."},
+    {"activity_id": "0199c2f0-33aa-7d10-8c2b-1e2f3a4b5c6d", "excerpt": "Discovery call with Daljit. They need to be live before January planning..."},
     {"activity_id": "0199c3a1-07bc-7e21-9d3c-2f3a4b5c6d7e", "excerpt": "Pricing call. Offered the guided rollout (two weeks) if they sign the 12-month term..."}
   ]
 }
@@ -475,7 +475,7 @@ async fn answers_use_only_the_deals_own_activity() {
 
     let agra = create_deal(&rep, "Agra renewal").await;    // POSTs a company and a deal
     let gulati = create_deal(&rep, "Gulati expansion").await;
-    log_note(&rep, &agra, "Dana wants to be live before January planning").await;
+    log_note(&rep, &agra, "Daljit wants to be live before January planning").await;
     log_note(&rep, &gulati, "Gulati wants to be live before the summer").await;
     crm.run_queue().await; // runs the IndexActivity jobs
 
@@ -491,7 +491,7 @@ async fn answers_use_only_the_deals_own_activity() {
         .await
         .assert_status(200)
         .assert_json_path("answered", json!(true))
-        .assert_json_path("sources.0.excerpt", json!("Dana wants to be live before January planning"));
+        .assert_json_path("sources.0.excerpt", json!("Daljit wants to be live before January planning"));
 
     ai.assert_prompted(|r| r.last_user_message().contains("January planning"));
     ai.assert_not_prompted(|r| r.last_user_message().contains("Gulati"));

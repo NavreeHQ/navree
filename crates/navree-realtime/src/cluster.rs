@@ -358,13 +358,13 @@ mod tests {
     fn a_snapshot_replaces_what_the_node_reported() {
         let mut presence = RemotePresence::default();
         presence.add("n1", "a", "anu", json!({ "name": "anu" }));
-        presence.add("n1", "a", "bob", json!({ "name": "bob" }));
-        presence.add("n2", "a", "bob", json!({ "name": "bob" }));
+        presence.add("n1", "a", "bal", json!({ "name": "bal" }));
+        presence.add("n2", "a", "bal", json!({ "name": "bal" }));
         let mut changes = presence.replace("n1", vec![entry("a", "anu"), entry("b", "cy")]);
         changes.sort_by_key(|change| format!("{change:?}"));
-        assert_eq!(changes, vec![added("b", "cy")], "bob stays through n2");
+        assert_eq!(changes, vec![added("b", "cy")], "bal stays through n2");
         let changes = presence.replace("n2", Vec::new());
-        assert_eq!(changes, vec![removed("a", "bob")]);
+        assert_eq!(changes, vec![removed("a", "bal")]);
         let mut members = presence.members("a");
         members.sort_by(|x, y| x.0.cmp(&y.0));
         assert_eq!(members, vec![("anu".to_owned(), json!({ "name": "anu" }))]);
@@ -377,7 +377,7 @@ mod tests {
         presence.seen("n1", start);
         presence.seen("n2", start);
         presence.add("n1", "a", "anu", json!({ "name": "anu" }));
-        presence.add("n2", "a", "bob", json!({ "name": "bob" }));
+        presence.add("n2", "a", "bal", json!({ "name": "bal" }));
         presence.seen("n2", start + Duration::from_secs(15));
 
         let now = start + NODE_TIMEOUT;
@@ -386,8 +386,8 @@ mod tests {
             vec![removed("a", "anu")]
         );
         assert_eq!(presence.nodes(), 1);
-        assert!(presence.has("a", "bob"));
-        assert_eq!(presence.forget("n2"), vec![removed("a", "bob")]);
+        assert!(presence.has("a", "bal"));
+        assert_eq!(presence.forget("n2"), vec![removed("a", "bal")]);
         assert_eq!(presence.nodes(), 0);
     }
 }

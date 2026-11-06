@@ -284,7 +284,7 @@ async fn writes_need_the_level_permission() {
     let world = World::new().await;
     let ada = world.user("Anu").await;
     let grace = world.user("Gauri").await;
-    let linus = world.user("Linus").await;
+    let linus = world.user("Laksh").await;
     let holding = world.organization(ada, "Holding").await;
     let agra = world.workspace(ada, "Agra").await;
     world.member(agra.id, grace, WorkspaceRole::Member).await;
@@ -304,11 +304,11 @@ async fn writes_need_the_level_permission() {
         .as_user(linus)
         .patch("/api/settings/portal?scope=workspace")
         .header("X-Workspace", "agra")
-        .json(&json!({"welcome_text": "Hi from Linus"}))
+        .json(&json!({"welcome_text": "Hi from Laksh"}))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.welcome_text", json!("Hi from Linus"))
+        .assert_json_path("data.welcome_text", json!("Hi from Laksh"))
         .assert_json_path("sources.welcome_text", json!("workspace"))
         .assert_json_path("overridden", json!(["welcome_text"]));
 
@@ -381,7 +381,7 @@ async fn writes_need_the_level_permission() {
 async fn a_type_permission_replaces_the_level_permissions() {
     let world = World::new().await;
     let ada = world.user("Anu").await;
-    let linus = world.user("Linus").await;
+    let linus = world.user("Laksh").await;
     let agra = world.workspace(ada, "Agra").await;
     world.member(agra.id, linus, WorkspaceRole::Admin).await;
 
