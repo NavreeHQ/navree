@@ -5,6 +5,7 @@ mod support;
 
 mod domains;
 mod enforcement;
+mod keycloak;
 mod module;
 mod oidc_flow;
 mod provisioning;

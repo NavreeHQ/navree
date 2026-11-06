@@ -97,3 +97,19 @@ services:
       - start
       - --host-port=0.0.0.0:8085
       - --project=acme-prod
+
+  # Keycloak, with the realm `navree` imported at start: a SAML client for
+  # https://api.acme.test/api/sso/saml/keycloak/metadata, an OpenID Connect
+  # client (navree-oidc) and the user harpreet.kaur@example.in
+  # (scripts/services/integrations/keycloak/navree-realm.json). The service
+  # provider URLs are the ones navree-sso tests use; nothing is served there.
+  keycloak:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4}
+    container_name: navree-int-keycloak
+    ports: ["127.0.0.1:18081:8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-secret
+    volumes:
+      - ./integrations/keycloak:/opt/keycloak/data/import:ro
+    command: ["start-dev", "--import-realm"]

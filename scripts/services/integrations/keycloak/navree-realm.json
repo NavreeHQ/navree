@@ -1,0 +1,101 @@
+{
+  "realm": "navree",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "users": [
+    {
+      "username": "harpreet.kaur@example.in",
+      "email": "harpreet.kaur@example.in",
+      "firstName": "Harpreet",
+      "lastName": "Kaur",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        { "type": "password", "value": "Passw0rd-Test!", "temporary": false }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "https://api.acme.test/api/sso/saml/keycloak/metadata",
+      "name": "Navree test application (SAML)",
+      "protocol": "saml",
+      "enabled": true,
+      "baseUrl": "https://api.acme.test",
+      "redirectUris": ["https://api.acme.test/*"],
+      "frontchannelLogout": true,
+      "attributes": {
+        "saml_assertion_consumer_url_post": "https://api.acme.test/api/sso/saml/keycloak/acs",
+        "saml_idp_initiated_sso_url_name": "navree",
+        "saml_name_id_format": "email",
+        "saml_force_name_id_format": "true",
+        "saml.server.signature": "true",
+        "saml.assertion.signature": "true",
+        "saml.signature.algorithm": "RSA_SHA256",
+        "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#",
+        "saml.client.signature": "false",
+        "saml.authnstatement": "true",
+        "saml.force.post.binding": "true",
+        "saml.encrypt": "false",
+        "saml.onetimeuse.condition": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "attribute.name": "email",
+            "friendly.name": "email",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "firstName",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "firstName",
+            "attribute.name": "firstName",
+            "friendly.name": "firstName",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "lastName",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "lastName",
+            "attribute.name": "lastName",
+            "friendly.name": "lastName",
+            "attribute.nameformat": "Basic"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "navree-oidc",
+      "name": "Navree test application (OpenID Connect)",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "oidc-client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["https://api.acme.test/api/sso/oidc/keycloak-oidc/callback"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}

@@ -64,6 +64,10 @@ navree-api = { workspace = true }
 navree-mail = { workspace = true }
 navree-testing = { workspace = true }
 navree-view = { workspace = true }
+# The Keycloak tests sign in on Keycloak's login page with a client that keeps
+# cookies and does not follow redirects by itself.
+reqwest = { workspace = true }
+rustls = { workspace = true }
 # The tests check real SHA-1 signatures (refused by the verifier) to prove
 # the canonical form matches other signers'.
 ring = { workspace = true }

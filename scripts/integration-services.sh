@@ -23,6 +23,7 @@
 #
 #   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3),
 #             the Pub/Sub emulator
+#   identity  Keycloak (SAML and OpenID Connect)
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -73,11 +74,12 @@ SMTP_PASSWORD=navree-secret
 group_services() {
   case "$1" in
     mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
+    identity) echo "keycloak" ;;
     *) return 1 ;;
   esac
 }
 
-ALL_GROUPS=(mail)
+ALL_GROUPS=(mail identity)
 COMMAND="${1:-}"
 shift || true
 WANTED_GROUPS=("$@")
@@ -147,6 +149,7 @@ NAVREE_TEST_GREENMAIL_SMTP_URL=smtp://127.0.0.1:13025
 NAVREE_TEST_GREENMAIL_IMAP=127.0.0.1:13143
 NAVREE_TEST_GREENMAIL_POP3=127.0.0.1:13110
 NAVREE_TEST_PUBSUB_URL=http://127.0.0.1:18085
+NAVREE_TEST_KEYCLOAK_URL=http://127.0.0.1:18081
 EOF
 }
 
@@ -231,6 +234,8 @@ start() {
   ready localstack navree-int-localstack localstack_ready
   ready greenmail navree-int-greenmail greenmail_ready
   ready pubsub navree-int-pubsub curl --fail --silent http://127.0.0.1:18085/
+  # Keycloak answers once the realm is imported.
+  ready keycloak navree-int-keycloak curl --fail --silent http://127.0.0.1:18081/realms/navree/.well-known/openid-configuration
 
   variables
   if [ -n "${GITHUB_ENV:-}" ]; then
