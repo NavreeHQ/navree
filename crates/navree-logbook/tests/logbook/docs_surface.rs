@@ -73,7 +73,8 @@ fn every_documented_key_can_be_set() {
                 "requests": false, "queries": false, "jobs": false, "mail": false,
                 "events": false, "cache": false, "logs": false, "exceptions": false,
                 "http_client": false, "notifications": false, "models": false,
-                "schedule": false
+                "schedule": false, "ai": false, "broadcasts": false, "storage": false,
+                "webhooks": false, "search": false, "sign_ins": false, "ui": false
             }
         }),
     ));
