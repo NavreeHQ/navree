@@ -34,6 +34,7 @@
 //!   | `POST /auth/magic-link` `{email}`, `POST /auth/magic-link/verify` `{token}` | public; when `auth.magic_link.enabled` | 202 `{message}`; 200 like login |
 //!   | `POST /auth/otp` `{email}`, `POST /auth/otp/verify` `{email, code}` | public; when `auth.otp.enabled` | 202 `{message}`; 200 like login |
 //!   | `/auth/passkeys/{register/options, register, login/options, login}`, `GET /auth/passkeys`, `DELETE /auth/passkeys/{id}` | when `auth.passkeys.enabled` | WebAuthn ceremonies (ES256, EdDSA) |
+//!   | `POST /auth/session/login` `{email, password, remember?}`, `POST /auth/session/2fa/verify` `{code \| recovery_code}`, and when on `POST /auth/session/magic-link/verify`, `POST /auth/session/otp/verify` (feature `session`) | public; the session's CSRF token | 200 the user, or `{two_factor_required: true}`; the browser keeps the session cookie and gets no token |
 //!   | `POST /auth/platform/login`, `POST /auth/platform/2fa/verify` | public; when `auth.platform.enabled` | a challenge; 200 a platform session |
 //!   | `POST /auth/exchange` `{token}` | public; when `auth.trusted_issuers` is set | 200 like login for a trusted issuer's JWT |
 //!
@@ -77,9 +78,17 @@
 //!   token, so `.authenticated()`, `#[recent_auth]`,
 //!   `#[not_while_impersonating]` and the two-factor setup rule hold for
 //!   both. "Remember me" keeps a browser signed in for
-//!   `auth.session.remember_days`. `AuthPages` (feature `ui`) draws the
-//!   sign-in, two-factor, forgotten and reset password and sign-out pages
-//!   with navree-ui.
+//!   `auth.session.remember_days`. `login_with_magic_link_session`,
+//!   `login_with_code_session` and `login_with_passkey_session` sign a
+//!   browser in with a mailed link, a mailed code and a passkey, and
+//!   `impersonate_session` / `stop_impersonating_session` let an
+//!   administrator act as a user in the browser and come back. `AuthPages`
+//!   (feature `ui`) draws the sign-in, two-factor, forgotten and reset
+//!   password and sign-out pages, the two-factor setup page (a user a
+//!   [`TwoFactorPolicy`] requires it of is sent there), and the pages of the
+//!   mailed link, the mailed code and the passkey when those are on, with
+//!   navree-ui. The `/auth/session/*` routes are the same sign-in as JSON for
+//!   a single-page app.
 //! - [`CurrentUser`] loads the signed-in [`User`] in handlers;
 //!   [`ClientMeta`] gives the client's IP, user agent and
 //!   request id.
