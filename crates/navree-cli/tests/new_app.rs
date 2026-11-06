@@ -873,11 +873,11 @@ fn the_readme_does_not_send_readers_to_navree_help() {
 }
 
 // MOD-002
-/// `--ui navree` is a third choice; the default stays no front end.
+/// Navree UI is the default front end of the minimal app; `--ui none` is the API alone.
 #[test]
-fn ui_none_is_still_the_default() {
+fn ui_navree_is_the_default() {
     use clap::ValueEnum;
-    assert_eq!(Ui::default(), Ui::None);
+    assert_eq!(Ui::default(), Ui::Navree);
     let names: Vec<String> = Ui::value_variants()
         .iter()
         .filter_map(|ui| ui.to_possible_value())
@@ -963,11 +963,17 @@ fn ui_navree_wires_the_screens_into_the_app() {
     let root = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
     let app_rs = read(&root, "src/app.rs");
     for line in [
+        "use navree::auth::{AuthModule, AuthPages};",
+        "use navree::realtime::RealtimeModule;",
         "use navree::session::SessionModule;",
         "use navree::ui::UiModule;",
+        "use navree::workspace::WorkspaceModule;",
         "use crate::{abilities, modules, ui};",
         ".module(UiModule::from_config())",
         ".module(SessionModule::from_config())",
+        ".module(RealtimeModule::from_config())",
+        ".module(AuthPages::new().app_name(\"Demo\"))",
+        ".module(WorkspaceModule::from_config())",
         ".module(ui::UiAppModule)",
         ".module(modules::customers::CustomersModule)",
         ".module(modules::users::UsersModule)",
@@ -981,7 +987,8 @@ fn ui_navree_wires_the_screens_into_the_app() {
     assert!(app_rs.contains("    // navree:modules\n"), "{app_rs}");
     assert!(read(&root, "src/lib.rs").contains("pub mod ui;\n"));
     assert!(read(&root, "src/modules/mod.rs").contains("pub mod customers;\n"));
-    // The minimal app without screens has none of it.
+    // The minimal app without screens has none of it, but it has workspaces
+    // from the start.
     let plain = create_app(dir.path(), &app("plain", Ui::None), now()).unwrap();
     for file in [
         "src/app.rs",
@@ -993,6 +1000,8 @@ fn ui_navree_wires_the_screens_into_the_app() {
         for word in [
             "SessionModule",
             "UiModule",
+            "AuthPages",
+            "RealtimeModule",
             "customers",
             "pub mod ui",
             "futures-util",
@@ -1003,6 +1012,10 @@ fn ui_navree_wires_the_screens_into_the_app() {
             );
         }
     }
+    let plain_app = read(&plain, "src/app.rs");
+    assert!(plain_app.contains("use navree::workspace::WorkspaceModule;"));
+    assert!(plain_app.contains(".module(WorkspaceModule::from_config())"));
+    assert!(read(&plain, "tests/app.rs").contains("a_new_app_has_workspaces_and_resolves_one"));
 }
 
 /// The pages build on the facade's default features, and on a few crates of their own.
@@ -1098,6 +1111,19 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
         Some("IN")
     );
     assert_eq!(config["auth"]["registration"].as_bool(), Some(false));
+    assert_eq!(
+        config["auth"]["password_reset"]["url"].as_str(),
+        Some("http://127.0.0.1:8080/reset-password"),
+        "the reset mail links to the reset page"
+    );
+    // A browser is in the workspace it switched to; API clients name theirs.
+    let resolvers: Vec<&str> = config["workspace"]["resolvers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect();
+    assert_eq!(resolvers, ["session", "header"]);
     let undocumented: Vec<&str> = config["api"]["undocumented"]
         .as_array()
         .unwrap()
@@ -1108,7 +1134,11 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
         "/_navree/*",
         "/",
         "/sign-in",
+        "/sign-in/*",
         "/sign-out",
+        "/account/*",
+        "/workspace/*",
+        "/broadcasting/*",
         "/customers*",
         "/fragments/*",
     ] {
@@ -1121,12 +1151,20 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
     for table in ["session", "ui", "validation"] {
         assert!(config.get(table).is_none(), "{table}");
     }
+    let resolvers: Vec<&str> = config["workspace"]["resolvers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect();
+    assert_eq!(resolvers, ["header"], "the API names its workspace in a header");
 }
 
-/// How a browser signs in is one file with a small, documented API; no other file
-/// touches the session, the cookie or the password check.
+/// The sign-in pages are the framework's `AuthPages`; the app keeps one small file
+/// for who is signed in and the demo account, and no other file touches the
+/// cookie, the session or the password check.
 #[test]
-fn ui_navree_signs_in_through_one_file() {
+fn ui_navree_signs_in_through_auth_pages() {
     let dir = tempfile::Builder::new()
         .prefix("navree-test-")
         .tempdir()
@@ -1134,23 +1172,27 @@ fn ui_navree_signs_in_through_one_file() {
     let root = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
     let auth = read(&root, "src/ui/auth.rs");
     assert!(
-        auth.starts_with("//! How a browser signs in. This is the only file that knows.\n"),
+        auth.starts_with("//! Who is signed in, and the demo account.\n"),
         "{auth}"
     );
     for needle in [
         "pub struct CurrentAccount",
         "impl FromRequestParts for CurrentAccount",
         "impl OptionalFromRequestParts for CurrentAccount",
-        "pub struct Browser",
-        "pub fn csrf_token(&self) -> String",
-        "pub async fn sign_in(",
-        "pub fn sign_out(&self)",
-        "pub struct BrowserStrategy",
         "pub async fn ensure_demo_account(",
-        "replace the bodies of `Browser::sign_in`, `Browser::sign_out` and",
-        "The pages, the shell and the tests stay as they are",
+        "`AuthPages` (navree-auth, registered in",
     ] {
         assert!(auth.contains(needle), "src/ui/auth.rs lacks `{needle}`");
+    }
+    // No sign-in code of the app's own is left.
+    for gone in [
+        "pub struct Browser",
+        "pub struct BrowserStrategy",
+        "pub async fn sign_in(",
+        "validate_user",
+        "regenerate",
+    ] {
+        assert!(!auth.contains(gone), "src/ui/auth.rs still has `{gone}`");
     }
     // The demo account is the one the CLI, the README and the message name.
     let navree_cli_email = navree_cli::new_app::DEMO_EMAIL;
@@ -1171,39 +1213,33 @@ fn ui_navree_signs_in_through_one_file() {
         "{readme}"
     );
 
-    // Everything else calls those functions and knows nothing more.
+    // Everything else asks the framework's pages and knows nothing more.
     let mut checked = 0;
     for file in tree(&root) {
         if !(file.starts_with("src/") && file.ends_with(".rs"))
             || file == "src/ui/auth.rs"
+            || file == "src/ui/shell.rs"
             || file == "src/app.rs"
         {
             continue;
         }
         let lower = read(&root, &file).to_lowercase();
-        for needle in [
-            "session",
-            "hasher",
-            "password_hash",
-            "validate_user",
-            "authservice",
-            "xsrf",
-        ] {
+        for needle in ["hasher", "password_hash", "validate_user", "authservice"] {
             assert!(
                 !lower.contains(needle),
-                "{file} mentions `{needle}`: only src/ui/auth.rs knows how a browser signs in"
+                "{file} mentions `{needle}`: signing in is AuthPages' work"
             );
         }
         checked += 1;
     }
-    assert!(checked >= 20, "{checked}");
-    // The pages go through it.
+    assert!(checked >= 18, "{checked}");
+    // The sign-in and sign-out routes are not the app's.
     let pages = read(&root, "src/ui/pages.rs");
-    assert!(pages.contains("browser.sign_in("), "{pages}");
-    assert!(pages.contains("browser.sign_out()"), "{pages}");
+    assert!(!pages.contains("/sign-in"), "{pages}");
+    assert!(!pages.contains("/sign-out"), "{pages}");
     let customers = read(&root, "src/modules/customers/pages.rs");
     assert!(
-        customers.contains("use crate::ui::auth::Browser;"),
+        customers.contains("use crate::ui::shell::Desk;"),
         "{customers}"
     );
 }
@@ -1333,16 +1369,35 @@ fn ui_navree_demo_data_is_indian() {
     assert!(read(&root, "src/modules/customers/pages.rs").contains("TimeDelta::minutes(330)"));
 }
 
-/// The two files `insta` records for the seam and the shell.
+/// The shell file: the app's shell, and the extractor that fills in the person
+/// and the workspace of each request.
 #[test]
-fn ui_navree_snapshots_of_the_sign_in_seam_and_the_shell() {
+fn ui_navree_shell_draws_the_person_and_the_workspace_of_the_request() {
     let dir = tempfile::Builder::new()
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
     let root = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
-    let auth = read(&root, "src/ui/auth.rs");
-    insta::assert_snapshot!("ui_navree_auth", auth);
     let shell = read(&root, "src/ui/shell.rs");
-    insta::assert_snapshot!("ui_navree_shell", shell);
+    for needle in [
+        "Shell::new(\"Demo\")",
+        "NavItem::new(\"Customers\", \"/customers\")",
+        "pub struct Desk",
+        "impl FromRequestParts for Desk",
+        "WorkspaceSwitcher",
+        ".context(workspace.name.clone())",
+        "\"Stop impersonating\", \"/impersonate/stop\"",
+        "\"Sign out\", \"/sign-out\"",
+    ] {
+        assert!(shell.contains(needle), "src/ui/shell.rs lacks `{needle}`");
+    }
+    // Customers belong to a workspace and are read through its repository.
+    let entity = read(&root, "src/modules/customers/entity.rs");
+    assert!(entity.contains("pub workspace_id: Uuid,"), "{entity}");
+    assert!(entity.contains("impl WorkspaceScoped for Customer {}"), "{entity}");
+    let service = read(&root, "src/modules/customers/service.rs");
+    assert!(service.contains("WorkspaceRepo::<Customer>::insert("), "{service}");
+    let live = read(&root, "src/ui/live.rs");
+    assert!(live.contains("Topic::workspace(workspace, TOPIC)"), "{live}");
+    assert!(!live.contains("broadcast::channel"), "the app's own hub is gone");
 }
