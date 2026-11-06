@@ -77,6 +77,22 @@ async fn form_body_is_validated() {
         &json!({ "newsletter": ["newsletter must be a boolean value"] })
     );
 
+    // A wrong value and a failed rule, in one answer.
+    let response = app
+        .client()
+        .post("/v/subscribe")
+        .form(&[("email", "nope"), ("newsletter", "maybe")])
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({
+            "email": ["email must be a valid email address"],
+            "newsletter": ["newsletter must be a boolean value"],
+        })
+    );
+
     app.client()
         .post("/v/subscribe")
         .form(&[("email", "ada@example.com"), ("newsletter", "true")])

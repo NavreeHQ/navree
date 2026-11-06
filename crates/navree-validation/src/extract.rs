@@ -18,6 +18,7 @@ use serde_json::Value;
 
 use crate::context;
 use crate::failure::{self, Failure};
+use crate::partial::{self, Mendable, Pairs, Stop};
 use crate::{
     AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages, Violation, Violations,
 };
@@ -89,7 +90,10 @@ where
 /// ["email must be a valid email address"]}}`):
 /// malformed JSON (on `body`), serde errors (at the serde path: a missing
 /// field is `required`, a wrong type is `string`, `integer`, ...) and the
-/// rules, with messages from the app's [`Messages`].
+/// rules, with messages from the app's [`Messages`]. One answer lists them
+/// all: a value of the wrong type is reported with the other fields' rule
+/// failures, not before and instead of them (input under 16 KiB, up to 16
+/// such values; longer input reports its first).
 ///
 /// ```
 /// use http::Method;
@@ -449,7 +453,7 @@ where
             urlencoded::<T>(input)
         })
         .await?;
-    let value = value.map_err(|failure| Invalid::new(vec![failure], None, root))?;
+    let value = value.map_err(|failures| Invalid::new(failures, None, root))?;
     let (value, checked) = context
         .run(Some(parts), long, value, |value| check(value))
         .await?;
@@ -824,11 +828,11 @@ where
     let mut context = Context::new(app);
     let long = is_long_value(&input);
     let (input, value) = context
-        .run(None, long, input, |input| from_json::<T>(input))
+        .run(None, long, input, |input| read_json::<T>(input))
         .await?;
     let value = match value {
         Ok(value) => value,
-        Err(failure) => return Err(Invalid::new(vec![failure], Some(input), "body")),
+        Err(failures) => return Err(Invalid::new(failures, Some(input), "body")),
     };
     let (value, checked) = context.run(None, long, value, |value| check(value)).await?;
     match checked {
@@ -882,11 +886,13 @@ impl JsonInput {
 ///
 /// A body is deserialized straight from its bytes. Only one that fails
 /// that way is parsed into a [`Value`] and deserialized from it
-/// ([`from_json`]), as every body once was: that reports every failure as
+/// ([`read_json`]), as every body once was: that reports every failure as
 /// before (malformed JSON on `body`, serde errors at their path) and
 /// accepts what the `Value` route accepts (a repeated key keeps its last
 /// value).
-fn from_json_bytes<T: DeserializeOwned>(bytes: &Bytes) -> Result<(T, JsonInput), Invalid> {
+fn from_json_bytes<T: DeserializeOwned + Validate>(
+    bytes: &Bytes,
+) -> Result<(T, JsonInput), Invalid> {
     if let Ok(value) = failure::encoding(|| serde_json::from_slice::<T>(bytes)) {
         return Ok((value, JsonInput::Bytes(bytes.clone())));
     }
@@ -896,16 +902,35 @@ fn from_json_bytes<T: DeserializeOwned>(bytes: &Bytes) -> Result<(T, JsonInput),
             return Err(Invalid::new(vec![Failure::keyed("", "json")], None, "body"));
         }
     };
-    match from_json::<T>(&input) {
+    match input.read::<T>() {
         Ok(value) => Ok((value, JsonInput::Value(input))),
-        Err(failure) => Err(Invalid::new(vec![failure], Some(input), "body")),
+        Err(stop) => {
+            let failures = every_failure::<T, _>(&input, stop, is_long(bytes.len()));
+            Err(Invalid::new(failures, Some(input), "body"))
+        }
     }
 }
 
-/// Deserializes `T` from a JSON value, reporting serde errors at their path.
-pub(crate) fn from_json<T: DeserializeOwned>(input: &Value) -> Result<T, Failure> {
-    failure::encoding(|| serde_path_to_error::deserialize::<_, T>(input))
-        .map_err(|error| failure::from_serde(error.path(), &error.inner().to_string()))
+/// Deserializes `T` from a JSON value: when it does not, every failure, as
+/// [`Valid`] reports them.
+pub(crate) fn read_json<T: DeserializeOwned + Validate>(input: &Value) -> Result<T, Vec<Failure>> {
+    input
+        .read::<T>()
+        .map_err(|stop| every_failure::<T, _>(input, stop, is_long_value(input)))
+}
+
+/// The failures of `input`, which serde stopped reading at `stop`: all of
+/// them ([`partial`]), or only that one for `long` input.
+fn every_failure<T, I>(input: &I, stop: Stop, long: bool) -> Vec<Failure>
+where
+    T: DeserializeOwned + Validate,
+    I: Mendable,
+{
+    if long {
+        vec![stop.into_failure()]
+    } else {
+        partial::every_failure::<T, I>(input, stop)
+    }
 }
 
 /// Reads a form, keeping the request head: `None` for `GET` and `HEAD`,
@@ -938,11 +963,14 @@ async fn read_body(req: Request) -> Result<(Parts, Bytes), AppError> {
     }
 }
 
-/// Deserializes URL-encoded pairs, reporting serde errors at their path.
-fn urlencoded<T: DeserializeOwned>(input: &[u8]) -> Result<T, Failure> {
+/// Deserializes URL-encoded pairs, reporting serde errors at their path:
+/// every failure, as [`Valid`] reports them.
+fn urlencoded<T: DeserializeOwned + Validate>(input: &Bytes) -> Result<T, Vec<Failure>> {
     let deserializer = serde_urlencoded::Deserializer::new(form_urlencoded::parse(input));
-    failure::encoding(|| serde_path_to_error::deserialize(deserializer))
-        .map_err(|error| failure::from_serde(error.path(), &error.inner().to_string()))
+    failure::encoding(|| serde_path_to_error::deserialize(deserializer)).map_err(|error| {
+        let stop = Stop::of(error.path(), &error.inner().to_string());
+        every_failure::<T, _>(&Pairs::parse(input), stop, is_long(input.len()))
+    })
 }
 
 /// Whether the content type (without parameters) is `expected`.

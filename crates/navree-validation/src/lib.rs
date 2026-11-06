@@ -110,6 +110,7 @@ mod html;
 mod locale;
 mod messages;
 mod module;
+mod partial;
 #[cfg(feature = "phone")]
 mod phone;
 mod rule_table;

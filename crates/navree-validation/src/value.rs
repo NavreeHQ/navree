@@ -7,7 +7,7 @@ use crate::Validate;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::extract::{check, from_json};
+use crate::extract::{check, read_json};
 use crate::failure;
 use crate::{Messages, ValidationErrors};
 
@@ -54,11 +54,11 @@ pub fn validate_json<T>(input: &Value, messages: &Messages) -> Result<T, Validat
 where
     T: DeserializeOwned + Validate,
 {
-    let value = match from_json::<T>(input) {
+    let value = match read_json::<T>(input) {
         Ok(value) => value,
-        Err(failure) => {
+        Err(failures) => {
             return Err(failure::render(
-                &[failure],
+                &failures,
                 messages,
                 None,
                 Some(input),

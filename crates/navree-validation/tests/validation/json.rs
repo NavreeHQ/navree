@@ -283,6 +283,66 @@ async fn bodies_the_straight_read_refuses_are_judged_as_json_values() {
         .assert_error(400, None);
     assert_eq!(
         errors(&response.json_value()),
-        &json!({ "age": ["age must be an integer number"] })
+        &json!({
+            "age": ["age must be an integer number"],
+            "tags": ["tags must contain at least 1 elements"],
+        })
     );
+}
+
+/// One answer lists every problem: values of the wrong type with the rule
+/// failures of the fields that read.
+#[tokio::test]
+async fn a_wrong_type_and_a_failed_rule_are_reported_together() {
+    let app = app().await;
+    let response = app
+        .client()
+        .post("/v/users")
+        .json(&json!({ "name": "", "email": "nope", "age": "old", "tags": "x" }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({
+            "name": ["name must be longer than or equal to 2 characters"],
+            "email": ["email must be a valid email address"],
+            "age": ["age must be an integer number"],
+            "tags": ["tags must be an array"],
+        })
+    );
+
+    // Missing fields are all named, and nested ones at their path.
+    let response = app
+        .client()
+        .post("/v/orders")
+        .json(&json!({ "customer": { "address": {} }, "items": [{ "sku": "" }] }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({
+            "customer.address.city": ["customer.address.city should not be empty"],
+            "items.0.quantity": ["items.0.quantity should not be empty"],
+            "items.0.sku": ["items.0.sku must be longer than or equal to 1 characters"],
+        })
+    );
+}
+
+/// A long body is read once more at most: its first wrong value is what it
+/// reports.
+#[tokio::test]
+async fn a_long_body_reports_its_first_wrong_value() {
+    let app = app().await;
+    let long = "a".repeat(20 * 1024);
+    let response = app
+        .client()
+        .post("/v/users")
+        .json(&json!({ "name": long, "email": "nope", "age": "old", "tags": "x" }))
+        .send()
+        .await
+        .assert_error(400, None);
+    let errors = errors(&response.json_value()).as_object().unwrap().clone();
+    assert_eq!(errors.len(), 1, "{errors:?}");
 }

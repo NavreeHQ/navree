@@ -55,7 +55,11 @@ async fn serde_failures_name_the_field() {
     assert_eq!(error.status, 400);
     assert_eq!(
         errors(&body(&error)),
-        &json!({ "name": ["name should not be empty"] })
+        &json!({
+            "name": ["name should not be empty"],
+            "age": ["age should not be empty"],
+            "tags": ["tags should not be empty"],
+        })
     );
 }
 
