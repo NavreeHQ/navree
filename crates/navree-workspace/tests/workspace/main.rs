@@ -7,6 +7,7 @@ mod support;
 mod access;
 mod conformity;
 mod demo;
+mod directory;
 mod invitations;
 mod isolation;
 mod isolation_suite;

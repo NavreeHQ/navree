@@ -4,8 +4,9 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::{Backend, Db, Executor, Row, Statement, Value};
+use navree_db::{Backend, Db, Executor, Statement, Value};
 use navree_kernel::{BoxError, BoxFuture};
+use navree_orm::{Row, col, table};
 use serde::Serialize;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -81,6 +82,8 @@ impl fmt::Debug for TableUserDirectory {
     }
 }
 
+/// Whether `table` exists: a question for the catalog, which no model or
+/// builder query asks, so it stays a statement.
 async fn table_exists(db: &Db, table: &str) -> Result<bool, BoxError> {
     let reader = db.read_executor().await;
     let sql = match reader.backend() {
@@ -95,17 +98,6 @@ async fn table_exists(db: &Db, table: &str) -> Result<bool, BoxError> {
     Ok(reader.fetch_optional(&statement).await?.is_some())
 }
 
-/// `SELECT id, name, email FROM <table> WHERE <condition>` for `backend`.
-fn select(backend: Backend, table: &str, condition: &str) -> String {
-    format!(
-        "SELECT {id}, {name}, {email} FROM {table} WHERE {condition}",
-        id = backend.quote_identifier("id"),
-        name = backend.quote_identifier("name"),
-        email = backend.quote_identifier("email"),
-        table = backend.quote_identifier(table),
-    )
-}
-
 fn summary(row: &Row) -> Result<UserSummary, BoxError> {
     Ok(UserSummary {
         id: row.get("id")?,
@@ -117,21 +109,19 @@ fn summary(row: &Row) -> Result<UserSummary, BoxError> {
 impl UserDirectory for TableUserDirectory {
     fn users<'a>(&'a self, ids: &'a [Uuid]) -> BoxFuture<'a, Result<Vec<UserSummary>, BoxError>> {
         Box::pin(async move {
-            let Some(table) = self.table().await? else {
+            let Some(users) = self.table().await? else {
                 return Ok(Vec::new());
             };
             if ids.is_empty() {
                 return Ok(Vec::new());
             }
-            let reader = self.db.read_executor().await;
-            let backend = reader.backend();
-            let marks = vec!["?"; ids.len()].join(", ");
-            let condition = format!("{} IN ({marks})", backend.quote_identifier("id"));
-            let statement = Statement::portable(
-                select(backend, table, &condition),
-                ids.iter().map(|id| Value::from(*id)),
-            );
-            let rows = reader.fetch_all(&statement).await?;
+            // The table is named in configuration and has no model, so it is
+            // read with the untyped builder.
+            let rows = table(users)
+                .select(["id", "name", "email"])
+                .where_(col("id").is_in(ids.iter().copied()))
+                .get(&self.db)
+                .await?;
             rows.iter().map(summary).collect()
         })
     }
@@ -141,17 +131,14 @@ impl UserDirectory for TableUserDirectory {
         email: &'a str,
     ) -> BoxFuture<'a, Result<Option<UserSummary>, BoxError>> {
         Box::pin(async move {
-            let Some(table) = self.table().await? else {
+            let Some(users) = self.table().await? else {
                 return Ok(None);
             };
-            let reader = self.db.read_executor().await;
-            let backend = reader.backend();
-            let condition = format!("{} = ? LIMIT 1", backend.quote_identifier("email"));
-            let statement = Statement::portable(
-                select(backend, table, &condition),
-                [Value::from(email.trim().to_lowercase())],
-            );
-            let row = reader.fetch_optional(&statement).await?;
+            let row = table(users)
+                .select(["id", "name", "email"])
+                .where_(col("email").eq(email.trim().to_lowercase()))
+                .first(&self.db)
+                .await?;
             row.as_ref().map(summary).transpose()
         })
     }
