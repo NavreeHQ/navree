@@ -26,8 +26,9 @@
 //!   process.
 //! - Every key starts with `redis.prefix` (default `navree:`): the cache
 //!   under `cache:`, locks under `locks:`, jobs under `queue:`, sessions
-//!   under `session:`, rate limits under `limit:`, and the backplane's
-//!   pub/sub channel is `realtime:<app_id>`.
+//!   under `session:`, rate limits under `limit:` (the HTTP server's under
+//!   `http-limit:`), and the backplane's pub/sub channel is
+//!   `realtime:<app_id>`.
 //! - [`redis`] is the redis-rs crate, re-exported for raw commands
 //!   (`redis::AsyncCommands`).
 //!

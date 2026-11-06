@@ -179,7 +179,14 @@ fn micros(limit: u32, per: Duration) -> (u64, u64) {
 /// process of the app counts them together: registered by `RedisModule` as
 /// the [`RateLimitStore`] named `redis`, which `http.rate_limit_store =
 /// "redis"` selects. It uses the connection named `rate_limiter` when there
-/// is one, and keys under `<prefix>limit:http:`.
+/// is one, and keys of its own under `<prefix>http-limit:`, apart from
+/// [`RateLimiter`]'s, so an app's limit named like one of the server's
+/// neither counts with it nor resets it.
+///
+/// A key names a route as it is written, `{id}` and all; in a key the braces
+/// are written `%7B` and `%7D` (and `%` as `%25`), as Redis Cluster would
+/// take what is between them for the part of the key that places it, and put
+/// the throttles of every route with an `{id}` in one place.
 ///
 /// It counts as [`RateLimiter`] does, on Redis's clock, in one round trip
 /// per request.
@@ -191,18 +198,18 @@ pub struct RedisRateLimitStore {
 }
 
 impl RedisRateLimitStore {
-    /// The store on `connection`, with keys under `<prefix>limit:`.
+    /// The store on `connection`, with keys under `<prefix>http-limit:`.
     pub fn new(connection: RedisConnection, prefix: &str) -> Self {
         Self {
             connection,
-            namespace: format!("{prefix}limit:"),
+            namespace: format!("{prefix}http-limit:"),
             hit: Script::new(HTTP_HIT),
         }
     }
 
     /// Where the limit `key` is counted.
     pub fn redis_key(&self, key: &str) -> String {
-        format!("{}{key}", self.namespace)
+        store_key(&self.namespace, key)
     }
 
     async fn count(&self, key: &str, limit: u32, per: Duration) -> StoreVerdict {
@@ -221,6 +228,22 @@ impl RedisRateLimitStore {
         let retry_after = Duration::from_micros(u64::try_from(retry_after).unwrap_or_default());
         Ok(Err(Limited::new(retry_after, report == 1)))
     }
+}
+
+/// `key` under `namespace`, with no braces: `%`, `{` and `}` are written
+/// `%25`, `%7B` and `%7D`, so two keys stay two keys.
+fn store_key(namespace: &str, key: &str) -> String {
+    let mut stored = String::with_capacity(namespace.len() + key.len());
+    stored.push_str(namespace);
+    for c in key.chars() {
+        match c {
+            '%' => stored.push_str("%25"),
+            '{' => stored.push_str("%7B"),
+            '}' => stored.push_str("%7D"),
+            c => stored.push(c),
+        }
+    }
+    stored
 }
 
 impl RateLimitStore for RedisRateLimitStore {
@@ -244,5 +267,27 @@ impl fmt::Debug for RateLimiter {
             .field("connection", &self.connection.name())
             .field("namespace", &self.namespace)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Redis Cluster places a key by what is between its first braces: the
+    /// throttles of every route with an `{id}` would share one place.
+    #[test]
+    fn a_route_throttles_key_has_no_braces_and_stays_its_own() {
+        let key = store_key("navree:http-limit:", "http:route:GET /deals/{id}:user:7");
+        assert_eq!(
+            key,
+            "navree:http-limit:http:route:GET /deals/%7Bid%7D:user:7"
+        );
+        assert_ne!(
+            store_key("p:", "http:route:GET /a/{id}"),
+            store_key("p:", "http:route:GET /a/%7Bid%7D"),
+            "a path written with the escape is another key"
+        );
+        assert_eq!(store_key("p:", "http:ip:192.0.2.1"), "p:http:ip:192.0.2.1");
     }
 }

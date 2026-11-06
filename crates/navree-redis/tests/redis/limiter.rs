@@ -121,6 +121,33 @@ async fn the_http_store_counts_every_process_together_and_reports_a_flood_once()
     t.cleanup().await;
 }
 
+/// The HTTP server's limits keep to keys of their own: an app's limit named
+/// like one of them neither counts with it nor resets it.
+#[tokio::test]
+async fn the_http_store_and_the_apps_own_limits_keep_apart() {
+    let Some(t) = TestRedis::connect("the_http_store_and_the_apps_own_limits_keep_apart").await
+    else {
+        return;
+    };
+    let store = RedisRateLimitStore::new(t.redis.connection().clone(), &t.prefix);
+    let limiter = RateLimiter::new(t.redis.connection().clone(), &t.prefix);
+    let minute = Duration::from_secs(60);
+    let key = "http:ip:192.0.2.1";
+    assert_ne!(store.redis_key(key), limiter.redis_key(key));
+
+    assert!(store.hit(key, 1, minute).await.unwrap().is_ok());
+    assert!(
+        limiter.hit(key, 1, minute).await.unwrap().is_allowed(),
+        "not counted together"
+    );
+    limiter.reset(key).await.unwrap();
+    assert!(
+        store.hit(key, 1, minute).await.unwrap().is_err(),
+        "not reset by the app"
+    );
+    t.cleanup().await;
+}
+
 /// `GET /export`, two a minute, and `GET /other`.
 struct Exports;
 
