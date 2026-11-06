@@ -14,13 +14,14 @@ use navree_contracts::{BoxError, Broadcaster, Job, JobEnvelope, Principal, permi
 use navree_db::{Db, Executor, Statement, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_openapi::ToSchema;
+use navree_realtime::{NUDGE_EVENT, Topic};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-pub(crate) use controller::authorize_channel;
 pub use controller::{OPERATION_EVENT, OperationsController};
+pub(crate) use controller::{authorize_channel, visible};
 pub(crate) use hooks::{QueueMonitor, RunningJobs, batch_settled, job_finished, skips};
 
 use crate::batch::{Batch, JobBatch};
@@ -29,6 +30,14 @@ use crate::{OperationsOptions, Queue, QueueError};
 /// The realtime event every change of an operation is broadcast as, on the
 /// private channel `operations.{id}`.
 pub const OPERATION_UPDATED_EVENT: &str = "operation.updated";
+
+/// The topic of the live hub a page hears an operation change on: `operation.{id}`, told to the
+/// operation's owner and, when it has one, to the members of its workspace (see
+/// [`RealtimeModule`](navree_realtime::RealtimeModule)). A nudge carries nothing; the page
+/// fetches the operation again.
+pub fn operation_topic(id: Uuid) -> String {
+    format!("operation.{id}")
+}
 
 /// Where an operation is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
@@ -762,6 +771,29 @@ impl Announcer {
             .await
         {
             tracing::warn!(target: "navree::job", operation_id = %record.id, %error, "cannot broadcast an operation update");
+        }
+        // The pages that follow the operation through the live hub fetch it again. Only an app
+        // with the hub (`RealtimeModule`) has anyone to tell.
+        if app.try_get::<navree_realtime::Live>().await.is_some() {
+            let name = operation_topic(record.id);
+            let mut channels = Vec::new();
+            if let Some(owner) = record.owner_id {
+                channels.push(Topic::user(owner, name.clone()).channel());
+            }
+            if let Some(workspace) = record.workspace_id {
+                channels.push(Topic::workspace(workspace, name).channel());
+            }
+            if !channels.is_empty()
+                && let Err(error) = broadcaster
+                    .broadcast(
+                        channels,
+                        NUDGE_EVENT.to_owned(),
+                        Value::Object(serde_json::Map::new()),
+                    )
+                    .await
+            {
+                tracing::warn!(target: "navree::job", operation_id = %record.id, %error, "cannot tell the live hub an operation changed");
+            }
         }
     }
 }

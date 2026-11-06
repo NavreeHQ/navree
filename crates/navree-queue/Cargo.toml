@@ -19,6 +19,9 @@ postgres = ["navree-db/postgres"]
 ## `NAVREE_TEST_MYSQL_URL` set, every test harness runs on its own fresh
 ## MySQL database.
 mysql = ["navree-db/mysql"]
+## `navree_queue::ui::OperationProgress`: a Navree UI region that follows an operation, and the
+## fragment route it fetches. The facade turns it on when both `ui` and `queue` are on.
+ui = ["dep:navree-ui"]
 
 [dependencies]
 chrono = { workspace = true }
@@ -39,6 +42,7 @@ navree-realtime = { workspace = true }
 # The watchdog, scheduled every minute in apps with `ScheduleModule`.
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
+navree-ui = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -49,6 +53,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests draw the progress region.
+navree-queue = { workspace = true, features = ["ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

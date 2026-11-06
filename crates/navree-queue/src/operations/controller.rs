@@ -95,7 +95,7 @@ fn api(summary: &str, responses: &[u16], response: Option<SchemaFn>) -> ApiMeta 
 }
 
 /// The operation `id` when `principal` may see it, else a 404.
-async fn visible(
+pub(crate) async fn visible(
     operations: &Operations,
     principal: &Principal,
     id: &str,

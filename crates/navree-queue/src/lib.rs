@@ -142,6 +142,8 @@ mod options;
 mod queue;
 mod record;
 mod store;
+#[cfg(feature = "ui")]
+pub mod ui;
 mod worker;
 
 pub use batch::{Batch, JobBatch};
@@ -152,7 +154,7 @@ pub use module::QueueModule;
 pub use operations::{
     FAILED_MESSAGE, OPERATION_EVENT, OPERATION_UPDATED_EVENT, Operation, OperationProgress,
     OperationRecord, OperationStatus, Operations, OperationsController, STALLED_MESSAGE,
-    SweepReport,
+    SweepReport, operation_topic,
 };
 pub use options::{OperationsOptions, QueueDriver, QueueOptions};
 pub use queue::Queue;

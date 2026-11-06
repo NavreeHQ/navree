@@ -182,13 +182,17 @@ notify = [
 ## pages (`navree::auth::AuthPages`, on the session); with `workspace`, the
 ## workspace switcher (`navree::workspace::WorkspaceSwitcher`); with `i18n`,
 ## the toolkit's labels, money and dates in the request's language
-## (`navree::i18n::ui`).
+## (`navree::i18n::ui`); with `queue`, a region that follows an operation
+## (`navree::queue::ui::OperationProgress`); with `notify`, the notification
+## bell (`navree::notify::ui::NotificationBell`).
 ui = [
     "dep:navree-ui",
     "http",
     "validation",
     "navree-auth?/ui",
     "navree-i18n?/ui",
+    "navree-notify?/ui",
+    "navree-queue?/ui",
     "navree-workspace?/ui",
 ]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,

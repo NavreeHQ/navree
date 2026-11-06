@@ -172,8 +172,9 @@ const HIERARCHY: &[Rule] = &[
     // the private channel `operations.{id}` (realtime) and schedule their
     // watchdog (schedule, same layer; schedule never depends on queue).
     // Failed jobs are navree-orm models (same layer; the ORM never depends
-    // on the queue: it dispatches through navree-contracts).
-    rule("navree-queue", 4, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule", "navree-orm"]),
+    // on the queue: it dispatches through navree-contracts). Its optional feature `ui` draws an
+    // operation's progress with navree-ui (same layer; the toolkit never depends on the queue).
+    rule("navree-queue", 4, &["navree-openapi", "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule", "navree-orm", "navree-ui"]),
     // Schedule: `in_zone` and `per_workspace_local` evaluate cron
     // expressions on local clocks (navree-time).
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
@@ -196,6 +197,9 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-mail", "navree-orm", "navree-crypto", "navree-http-client",
         "navree-validation", "navree-time", "navree-schedule", "navree-view", "navree-macros",
+        // The live hub is told when a notification is stored, and the optional feature `ui` draws
+        // the bell with navree-ui (same layer; the toolkit never depends on notify).
+        "navree-realtime", "navree-ui",
     ]),
     // The UI toolkit. Its forms read navree-validation's rules, and its derives
     // come from navree-ui-macros.

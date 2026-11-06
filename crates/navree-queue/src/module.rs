@@ -209,6 +209,8 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
         .controller::<OperationsController>()
         .channel("operations.{id}", authorize_channel)
         .migrations(migration::migrations());
+    #[cfg(feature = "ui")]
+    m.controller::<crate::ui::OperationProgressController>();
     // Runs only in apps with `ScheduleModule`; inert otherwise.
     m.schedule(|s| {
         s.task(WATCHDOG_TASK, run_watchdog)

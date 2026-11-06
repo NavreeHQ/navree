@@ -17,6 +17,8 @@ mod servers;
 mod suite;
 mod support;
 mod telemetry;
+#[cfg(feature = "ui")]
+mod ui;
 
 /// Runs each named function of `operations` as a test against `$driver`.
 macro_rules! operations_suite {
