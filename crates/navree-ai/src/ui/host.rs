@@ -28,7 +28,7 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 use super::signing::{ActionClaim, action_url, context_ref, nonce, read_action, read_context};
-use super::store::{Begun, ItemRow, Store, kind, no_conversation, status};
+use super::store::{Begun, ItemRow, RUNNING, Store, kind, no_conversation, status};
 use super::tools::{AssistantTools, STATE_TOOL};
 use super::{AssistantConfig, topic};
 use crate::agent::{Agent, AgentRun, AgentStream, PageTools, RunShared};
@@ -591,6 +591,7 @@ impl Core {
         &self,
         conversation: Uuid,
         csrf: Option<&str>,
+        catch_up: bool,
     ) -> Result<Node, AppError> {
         let path = &self.config.path;
         let card = self.pending(conversation).await?.map(|row| {
@@ -610,9 +611,13 @@ impl Core {
             card
         });
         let stream = LiveStream::topics([topic(conversation)]);
+        let mut live = stream.on(topic(conversation));
+        if catch_up {
+            live = live.catch_up();
+        }
         Ok(Region::new(APPROVAL_ID)
             .src(format!("{path}/{conversation}/approval"))
-            .live_on(stream.on(topic(conversation)))
+            .live_on(live)
             .children(card)
             .into())
     }
@@ -978,11 +983,18 @@ impl<A: Agent> Assistant<A> {
         let csrf = options.csrf.as_deref();
         let items = self.core.draw(&access, id, &rows, csrf).await?;
         let path = &self.core.config.path;
+        // An answer being written goes on between this draw and the moment the page's
+        // stream opens: the page asks once then for what it missed.
+        let writing = run.status == RUNNING;
         let stream = LiveStream::topics([topic(id)]);
+        let mut live = stream.on(topic(id));
+        if writing {
+            live = live.catch_up();
+        }
         let mut conversation = Conversation::new(CONVERSATION_ID, format!("{path}/{id}/items"))
             .items(items)
             .since(run.revision.to_string())
-            .live(stream.on(topic(id)))
+            .live(live)
             .labels(self.core.config.labels.clone());
         if earlier && let Some(first) = rows.first() {
             conversation =
@@ -994,7 +1006,7 @@ impl<A: Agent> Assistant<A> {
             .map(|(kind, key)| self.context_ref(user, kind, key));
         Ok(AssistantPage {
             conversation: conversation.into(),
-            approval: self.core.approval_region(id, csrf).await?,
+            approval: self.core.approval_region(id, csrf, writing).await?,
             composer: self.core.composer(
                 Some(id),
                 csrf,
@@ -1115,7 +1127,7 @@ impl<A: Agent> Assistant<A> {
     ) -> Result<Node, AppError> {
         let user = user_of(&access)?;
         self.core.store.owned(id, user).await?;
-        self.core.approval_region(id, csrf).await
+        self.core.approval_region(id, csrf, false).await
     }
 
     /// Runs the post of a component's button, sent to `uri`: refused unless the server

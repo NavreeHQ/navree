@@ -27,7 +27,7 @@ use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery;
 use navree_realtime::Live;
 use navree_testing::{TestApp, TestClient, TestResponse, principal};
-use navree_ui::{LazyAsk, el};
+use navree_ui::{LazyAsk, el, render};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -524,9 +524,24 @@ async fn stop_ends_the_answer_and_a_second_message_waits_for_it() {
         .await
         .unwrap_err();
     assert_eq!(busy.status.as_u16(), 409);
+    // Drawn while the answer is being written, the conversation and the approval's place
+    // ask for what they missed once the page's stream opens.
+    let drawn = assistant
+        .page(access.clone(), id, PageOptions::default())
+        .await
+        .unwrap();
+    let html = render(&drawn.conversation) + &render(&drawn.approval);
+    assert_eq!(html.matches("data-ui-live-catch-up").count(), 2, "{html}");
 
     assistant.stop(dana, id).await.unwrap();
     let html = settled(&app, &access, id).await;
+    // Drawn when the run is over, they ask only when they hear something.
+    let drawn = assistant
+        .page(access.clone(), id, PageOptions::default())
+        .await
+        .unwrap();
+    let drawn = render(&drawn.conversation) + &render(&drawn.approval);
+    assert!(!drawn.contains("data-ui-live-catch-up"), "{drawn}");
     assert!(html.contains("Stopped"), "{html}");
     assert!(
         html.contains(r#"data-state="failed""#),
