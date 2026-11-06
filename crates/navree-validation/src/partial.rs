@@ -551,9 +551,16 @@ mod tests {
         );
     }
 
+    /// serde stops at the body itself, so nothing in it can get a stand-in.
+    /// (A list is not such a body: serde reads a struct from a list field by
+    /// field, so each item it cannot read is a failure of its own.)
     #[test]
     fn a_body_that_is_not_an_object_is_one_failure() {
-        assert_eq!(json_failures(&json!([1, 2])).len(), 1);
+        assert_eq!(
+            json_failures(&json!("Phulkari dupatta")),
+            [pair("", "object")]
+        );
+        assert_eq!(json_failures(&json!(7)), [pair("", "object")]);
     }
 
     #[test]
