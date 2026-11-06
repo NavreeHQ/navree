@@ -763,3 +763,21 @@ async fn signing_out_while_impersonating_ends_both_sign_ins() {
     let live = service.sessions(admin.id, None).await.unwrap();
     assert!(live.is_empty(), "the administrator's sign-in ended too: {live:?}");
 }
+
+// An app without navree-session's layer has no routes that sign a browser in
+// on the session: the JSON routes are not there to fail.
+#[tokio::test]
+async fn the_json_session_routes_exist_only_with_the_session_layer() {
+    let app = support::app().await;
+    app.client()
+        .post("/api/auth/session/login")
+        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .send()
+        .await
+        .assert_status(404);
+    // The token routes are as they were.
+    create_user(&app, "ada@example.com").await;
+    support::login(&app.client(), "ada@example.com", PASSWORD)
+        .await
+        .assert_status(200);
+}

@@ -142,6 +142,10 @@ const PASSWORDLESS_SENT: &str =
 pub(crate) struct SessionController {
     pub(crate) service: Arc<AuthService>,
     pub(crate) options: Arc<AuthOptions>,
+    /// Whether the app runs navree-session's layer: only then does it have
+    /// the routes that sign a browser in on its session.
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    pub(crate) sessions: bool,
 }
 
 impl Injectable for SessionController {
@@ -154,9 +158,18 @@ impl Injectable for SessionController {
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            #[cfg(feature = "session")]
+            let sessions = r
+                .app()
+                .try_get::<navree_session::SessionOptions>()
+                .await
+                .is_some();
+            #[cfg(not(feature = "session"))]
+            let sessions = false;
             Ok(SessionController {
                 service: r.get::<AuthService>().await?,
                 options: r.get::<AuthOptions>().await?,
+                sessions,
             })
         })
     }
@@ -172,7 +185,9 @@ impl Controller for SessionController {
         let path = |p: &str| format!("{prefix}{p}");
         let mut routes = self.session_routes(&path);
         #[cfg(feature = "session")]
-        routes.extend(self.browser_routes(&path));
+        if self.sessions {
+            routes.extend(self.browser_routes(&path));
+        }
         if self.options.impersonation.enabled {
             routes.extend(self.impersonation_routes(&path));
         }
