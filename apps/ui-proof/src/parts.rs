@@ -50,8 +50,10 @@ fn boxes() -> Stack {
 }
 
 fn breadcrumb() -> Breadcrumb {
+    // The shell's header has the page's own breadcrumb: this one is named apart from it.
     Breadcrumb::new()
         .id("parts-trail")
+        .label("Customer trail")
         .max_items(4)
         .link("Home", "/")
         .link("Customers", "/customers")
