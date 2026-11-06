@@ -1,6 +1,10 @@
 //! [`AuthPages`] (feature `ui`): the pages a browser signs in and out with,
 //! drawn with navree-ui on the session ([`AuthService::sign_in_session`]).
 
+mod account;
+mod passkey;
+mod passwordless;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +27,7 @@ use navree_ui::{
 };
 use serde::Deserialize;
 
-use crate::session_auth::SIGN_OUT_PATH;
+use crate::session_auth::{SIGN_OUT_PATH, TWO_FACTOR_SETUP_PATH};
 use crate::{AuthError, AuthService, ClientMeta, SessionSignIn, TwoFactorProof};
 
 /// How many forgotten-password requests one client may send per minute.
@@ -42,6 +46,11 @@ const FORGOT_PER_MINUTE: u32 = 5;
 /// | `GET`, `POST /forgot-password` | mails a reset link ([`AuthService::send_password_reset_link`]); always the same answer |
 /// | `GET /reset-password?token=&email=`, `POST /reset-password` | sets the new password ([`AuthService::reset_password`]), which signs every session out |
 /// | `POST /sign-out` | [`AuthService::sign_out_session`], then the sign-in page |
+/// | `GET`, `POST /account/two-factor`, `POST /account/two-factor/confirm` | sets two-factor authentication up: the secret as a picture and a key, the first code, the recovery codes shown once ([`AuthService::enable_two_factor`], [`AuthService::confirm_two_factor`]); a user a policy requires it of is sent here after signing in |
+/// | `POST /impersonate/stop` | an impersonating administrator goes back to their own sign-in ([`AuthService::stop_impersonating_session`]) |
+/// | `GET`, `POST /sign-in/link`, `GET`, `POST /sign-in/link/verify` | when `auth.magic_link.enabled`: mails a link; the link opens a page with one button that signs in ([`AuthService::login_with_magic_link_session`]); set `auth.magic_link.url` to `https://app.example.com/sign-in/link/verify` |
+/// | `GET`, `POST /sign-in/code`, `POST /sign-in/code/verify` | when `auth.otp.enabled`: mails a code, then asks for it ([`AuthService::login_with_code_session`]) |
+/// | `GET /sign-in/passkey`, `/sign-in/passkey.js`, `POST /sign-in/passkey/options`, `/sign-in/passkey/verify` | when `auth.passkeys.enabled`: the page, its script and the two JSON routes of the ceremony ([`AuthService::login_with_passkey_session`]) |
 ///
 /// Every post carries the session's CSRF token (the forms hold it as
 /// `_csrf`; navree-session checks it), every page works with JavaScript
@@ -129,6 +138,14 @@ struct Paths {
     forgot: String,
     reset: String,
     home: String,
+    magic_link: String,
+    code: String,
+    passkey: String,
+    setup: String,
+    /// Which ways other than a password the app turned on.
+    has_magic_link: bool,
+    has_code: bool,
+    has_passkey: bool,
 }
 
 impl Paths {
@@ -155,10 +172,17 @@ impl Paths {
         Paths {
             app_name: pages.app_name.clone(),
             two_factor: format!("{sign_in}/two-factor"),
-            sign_in,
             forgot: "/forgot-password".to_owned(),
             reset: "/reset-password".to_owned(),
             home,
+            magic_link: format!("{sign_in}/link"),
+            code: format!("{sign_in}/code"),
+            passkey: format!("{sign_in}/passkey"),
+            setup: TWO_FACTOR_SETUP_PATH.to_owned(),
+            has_magic_link: false,
+            has_code: false,
+            has_passkey: false,
+            sign_in,
         }
     }
 
@@ -300,8 +324,42 @@ fn link(text: &'static str, href: &str) -> Node {
     el("a").href(href).child(text).into()
 }
 
-/// The sign-in page around `form`.
-fn sign_in_page(paths: &Paths, form: FormView<SignInForm>, notice: Option<Alert>) -> View {
+/// A link to a page that loads a script of its own: the browser reloads the
+/// whole page, so the script runs.
+fn plain_link(text: &'static str, href: &str) -> Node {
+    el("a")
+        .href(href)
+        .flag("data-ui-noboost", true)
+        .child(text)
+        .into()
+}
+
+/// The sign-in page around `form`; `next` travels to the other ways in.
+fn sign_in_page(
+    paths: &Paths,
+    form: FormView<SignInForm>,
+    notice: Option<Alert>,
+    next: Option<&str>,
+) -> View {
+    let mut others = vec![link("Forgot your password?", &paths.forgot)];
+    if paths.has_passkey {
+        others.push(plain_link(
+            "Sign in with a passkey",
+            paths.with_next(&paths.passkey, next).as_str(),
+        ));
+    }
+    if paths.has_magic_link {
+        others.push(link(
+            "Email me a sign-in link",
+            paths.with_next(&paths.magic_link, next).as_str(),
+        ));
+    }
+    if paths.has_code {
+        others.push(link(
+            "Email me a sign-in code",
+            paths.with_next(&paths.code, next).as_str(),
+        ));
+    }
     page(
         paths,
         "Sign in",
@@ -310,10 +368,36 @@ fn sign_in_page(paths: &Paths, form: FormView<SignInForm>, notice: Option<Alert>
             .children((
                 notice,
                 Node::from(form.submit("Sign in")),
-                link("Forgot your password?", &paths.forgot),
+                Node::from(Stack::gap(2).children(others)),
             ))
             .into(),
     )
+}
+
+/// Where a browser that just signed in goes: to `next` (else home), or, when
+/// a policy makes it set up two-factor authentication first, to the setup
+/// page, which carries `next` on.
+fn signed_in_target(
+    service: &AuthService,
+    session: &Session,
+    paths: &Paths,
+    next: Option<&str>,
+) -> LocalHref {
+    if service.two_factor_setup_required(session) {
+        paths.with_next(&paths.setup, next)
+    } else {
+        paths.after(next)
+    }
+}
+
+/// The redirect to [`signed_in_target`].
+fn signed_in_redirect(
+    service: &AuthService,
+    session: &Session,
+    paths: &Paths,
+    next: Option<&str>,
+) -> Response {
+    Reply::redirect(signed_in_target(service, session, paths, next)).into_response()
 }
 
 fn two_factor_page(paths: &Paths, form: FormView<TwoFactorForm>) -> View {
@@ -423,9 +507,14 @@ impl Injectable for PagesController {
             let service = r.get::<AuthService>().await?;
             let pages = r.get::<AuthPages>().await?;
             let ui = r.app().try_get::<PagesOptions>().await;
+            let mut paths = Paths::new(&pages, ui.as_deref());
+            let options = service.options();
+            paths.has_magic_link = options.magic_link.enabled;
+            paths.has_code = options.otp.enabled;
+            paths.has_passkey = options.passkeys.enabled;
             Ok(PagesController {
                 service,
-                paths: Arc::new(Paths::new(&pages, ui.as_deref())),
+                paths: Arc::new(paths),
             })
         })
     }
@@ -454,6 +543,11 @@ impl Controller for PagesController {
                             return Reply::redirect(paths.after(query.next.as_deref()))
                                 .into_response();
                         }
+                        let next = query
+                            .next
+                            .as_deref()
+                            .and_then(|next| ReturnTo::parse_for(next, &paths.sign_in))
+                            .map(|next| next.as_str().to_owned());
                         let form = FormView::<SignInForm>::new()
                             .post(paths.sign_in.as_str())
                             .csrf(session.csrf_token())
@@ -461,13 +555,15 @@ impl Controller for PagesController {
                                 email: String::new(),
                                 password: String::new(),
                                 remember: false,
-                                next: query
-                                    .next
-                                    .as_deref()
-                                    .and_then(|next| ReturnTo::parse_for(next, &paths.sign_in))
-                                    .map(|next| next.as_str().to_owned()),
+                                next: next.clone(),
                             });
-                        sign_in_page(&paths, form, notice(query.status.as_deref())).into_response()
+                        sign_in_page(
+                            &paths,
+                            form,
+                            notice(query.status.as_deref()),
+                            next.as_deref(),
+                        )
+                        .into_response()
                     }
                 },
             )
@@ -492,7 +588,9 @@ impl Controller for PagesController {
                         let redraw = |rejected: Rejected<SignInForm>| {
                             let paths = paths.clone();
                             let token = token.clone();
-                            rejected.respond(move |form| sign_in_page(&paths, form.csrf(token), None))
+                            rejected.respond(move |form| {
+                                sign_in_page(&paths, form.csrf(token), None, None)
+                            })
                         };
                         let input = match submitted {
                             Ok(Submit(input)) => input,
@@ -508,9 +606,12 @@ impl Controller for PagesController {
                             )
                             .await;
                         match outcome {
-                            Ok(SessionSignIn::SignedIn(_)) => {
-                                Ok(Reply::redirect(paths.after(input.next.as_deref())).into_response())
-                            }
+                            Ok(SessionSignIn::SignedIn(_)) => Ok(signed_in_redirect(
+                                &service,
+                                &session,
+                                &paths,
+                                input.next.as_deref(),
+                            )),
                             Ok(SessionSignIn::TwoFactorRequired) => Ok(Reply::redirect(
                                 paths.with_next(&paths.two_factor, input.next.as_deref()),
                             )
@@ -632,8 +733,12 @@ impl Controller for PagesController {
                             }
                         };
                         match service.verify_two_factor_session(&session, proof, &meta).await {
-                            Ok(_) => Ok(Reply::redirect(paths.after(input.next.as_deref()))
-                                .into_response()),
+                            Ok(_) => Ok(signed_in_redirect(
+                                &service,
+                                &session,
+                                &paths,
+                                input.next.as_deref(),
+                            )),
                             Err(AuthError::InvalidTwoFactorCode) => Ok(redraw(
                                 Rejected::after_decode(
                                     &input,
@@ -855,6 +960,16 @@ impl Controller for PagesController {
             .page()
             .name("auth.pages.sign_out"),
         );
+        if paths.has_magic_link {
+            routes.extend(self.link_routes());
+        }
+        if paths.has_code {
+            routes.extend(self.code_routes());
+        }
+        if paths.has_passkey {
+            routes.extend(self.passkey_routes());
+        }
+        routes.extend(self.account_routes());
         routes
     }
 }
