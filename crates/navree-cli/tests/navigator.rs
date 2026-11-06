@@ -181,7 +181,7 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
 
     assert_eq!(info["serverInfo"]["name"], "navree");
     let tools = client.request("tools/list", json!({})).await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 12);
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 14);
 
     let (error, text) = call(&mut client, "read_config", json!({})).await;
     assert!(!error, "{text}");
@@ -225,8 +225,23 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert!(!error, "{text}");
     assert!(text.contains("ai/agent-skills"), "{text}");
 
+    // The component catalog is built into Navigator: no app needs to run.
+    let (error, text) = call(
+        &mut client,
+        "list_components",
+        json!({"query": "date picker"}),
+    )
+    .await;
+    assert!(!error, "{text}");
+    let components: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(components["components"][0]["id"], "date-picker", "{text}");
+    assert_eq!(components["components"][0]["docs"], "components/date-picker");
+    assert_eq!(components["version"], env!("CARGO_PKG_VERSION"));
+
     // Nothing is built, and --no-build never builds: the app tools say so.
     let (error, text) = call(&mut client, "list_routes", json!({})).await;
+    assert!(error && text.contains("--no-build"), "{text}");
+    let (error, text) = call(&mut client, "render_page", json!({"path": "/"})).await;
     assert!(error && text.contains("--no-build"), "{text}");
 
     client.close().await;

@@ -102,7 +102,7 @@ impl Client {
 }
 
 #[tokio::test]
-async fn the_server_lists_twelve_read_only_tools() {
+async fn the_server_lists_fourteen_read_only_tools() {
     let fixture = Fixture::new("[app]\nname = \"crm\"\n");
     let mut client = Client::connect(&fixture);
 
@@ -139,9 +139,28 @@ async fn the_server_lists_twelve_read_only_tools() {
             "last_error",
             "read_config",
             "search_docs",
-            "read_doc"
+            "read_doc",
+            "list_components",
+            "render_page"
         ]
     );
+    let list_routes = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "list_routes")
+        .unwrap();
+    assert_eq!(
+        list_routes["inputSchema"]["properties"]["pages_only"]["type"],
+        "boolean"
+    );
+    let render_page = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "render_page")
+        .unwrap();
+    assert_eq!(render_page["inputSchema"]["required"], json!(["path"]));
     for tool in tools.as_array().unwrap() {
         assert_eq!(
             tool["annotations"]["readOnlyHint"], true,
@@ -186,8 +205,8 @@ name = \"crm\"
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    assert_eq!(names.len(), 17);
-    assert_eq!(names[12..], navree_navigator::lighthouse::LIGHTHOUSE_TOOLS);
+    assert_eq!(names.len(), 19);
+    assert_eq!(names[14..], navree_navigator::lighthouse::LIGHTHOUSE_TOOLS);
     let issue = tools
         .as_array()
         .unwrap()

@@ -271,15 +271,15 @@ async fn the_tools_are_listed_only_when_the_app_includes_lighthouse() {
     let names = |fixture: &Fixture| -> Vec<&'static str> {
         fixture.navigator().tools().iter().map(|t| t.name).collect()
     };
-    assert_eq!(names(&fixture).len(), 12);
+    assert_eq!(names(&fixture).len(), 14);
     assert!(!names(&fixture).contains(&"lighthouse_list_issues"));
     let message = refused(&fixture.navigator(), "lighthouse_list_issues", json!({})).await;
     assert!(message.contains("LighthouseModule"), "{message}");
 
     write(&fixture.root().join("src/app.rs"), APP_RS);
     let names = names(&fixture);
-    assert_eq!(names.len(), 17);
-    assert_eq!(names[12..], LIGHTHOUSE_TOOLS);
+    assert_eq!(names.len(), 19);
+    assert_eq!(names[14..], LIGHTHOUSE_TOOLS);
 }
 
 #[tokio::test]

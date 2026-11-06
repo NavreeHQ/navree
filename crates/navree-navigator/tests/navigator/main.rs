@@ -11,3 +11,4 @@ mod files;
 mod lighthouse;
 mod postgres;
 mod protocol;
+mod ui;
