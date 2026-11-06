@@ -118,6 +118,8 @@ test("a good submit toasts and goes on, keeping the shell", async () => {
   await page.locator("[data-slot=toast]", { hasText: "Agra renewal created" }).waitFor();
   assert.equal(await page.evaluate(() => window.kept), true, "no reload");
   assert.equal(await sidebar.evaluate((el) => el.isConnected), true, "the same sidebar");
+  // The toast can show before the new page's title is set: wait for the title.
+  await page.waitForFunction(() => document.title === "Deals", undefined, { timeout: 5000 }).catch(() => {});
   assert.equal(await page.title(), "Deals");
   assert.deepEqual(problems, []);
   await close();
