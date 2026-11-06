@@ -188,8 +188,8 @@ mod tests {
         dir
     }
 
-    const API: &str = "[http]\naddr = \"127.0.0.1:8080\"\n[http.cors]\nallowed_origins = [\"http://localhost:3000\"]\n[realtime]\nkey = \"acme\"\n";
-    const WEB: &str = "NAVREE_API_URL=http://127.0.0.1:8080\nNEXT_PUBLIC_REALTIME_KEY=acme\nNEXT_PUBLIC_REALTIME_PORT=8080\n";
+    const API: &str = "[http]\naddr = \"127.0.0.1:8080\"\n[http.cors]\nallowed_origins = [\"http://localhost:3000\"]\n[realtime]\nkey = \"agra\"\n";
+    const WEB: &str = "NAVREE_API_URL=http://127.0.0.1:8080\nNEXT_PUBLIC_REALTIME_KEY=agra\nNEXT_PUBLIC_REALTIME_PORT=8080\n";
 
     #[test]
     fn matching_files_have_nothing_to_say() {
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn a_wrong_port_key_or_origin_is_named() {
-        let web = "NAVREE_API_URL=http://127.0.0.1:9090\nNEXT_PUBLIC_REALTIME_KEY=other\nNEXT_PUBLIC_REALTIME_PORT=9090\nAPP_ORIGINS=https://acme.example.com\n";
+        let web = "NAVREE_API_URL=http://127.0.0.1:9090\nNEXT_PUBLIC_REALTIME_KEY=other\nNEXT_PUBLIC_REALTIME_PORT=9090\nAPP_ORIGINS=https://agra.example.com\n";
         let dir = app(&[("config/app.toml", API), ("web/.env.local", web)]);
         let problems = mismatches(dir.path());
         assert_eq!(problems.len(), 4, "{problems:?}");
@@ -214,7 +214,7 @@ mod tests {
         assert!(
             !problems
                 .iter()
-                .any(|p| p.contains("other") || p.contains("acme\""))
+                .any(|p| p.contains("other") || p.contains("agra\""))
         );
     }
 
@@ -224,7 +224,7 @@ mod tests {
             ("config/app.toml", API),
             (
                 ".env",
-                "APP_HTTP__ADDR=127.0.0.1:9090\nAPP_REALTIME__KEY=acme\n",
+                "APP_HTTP__ADDR=127.0.0.1:9090\nAPP_REALTIME__KEY=agra\n",
             ),
             ("web/.env.local", WEB),
         ]);

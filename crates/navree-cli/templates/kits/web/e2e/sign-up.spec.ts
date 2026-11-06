@@ -3,8 +3,8 @@ import { uniqueEmail } from "./support";
 
 test("people sign up and create their first workspace", async ({ page }) => {
   await page.goto("/sign-up");
-  await page.getByLabel("Name").fill("Ada Lovelace");
-  await page.getByLabel("Email").fill(uniqueEmail("ada"));
+  await page.getByLabel("Name").fill("Anu Lakhotia");
+  await page.getByLabel("Email").fill(uniqueEmail("anu"));
   await page.getByLabel("Password").fill("a long enough password");
   await page.getByRole("button", { name: "Create account" }).click();
 
@@ -17,5 +17,5 @@ test("people sign up and create their first workspace", async ({ page }) => {
   await page.getByRole("button", { name: "Create workspace" }).click();
 
   await expect(page).toHaveURL(/\/w\/analytical-engines/);
-  await expect(page.getByRole("heading", { name: /Welcome, Ada/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome, Anu/ })).toBeVisible();
 });

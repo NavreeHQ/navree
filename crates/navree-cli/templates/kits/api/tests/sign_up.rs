@@ -16,8 +16,8 @@ async fn people_sign_up_verify_their_address_and_create_a_workspace() {
     let body = client
         .post("/api/auth/register")
         .json(&json!({
-            "name": "Ada Lovelace",
-            "email": "ada@example.com",
+            "name": "Anu Lakhotia",
+            "email": "anu@example.com",
             "password": "a long enough password",
         }))
         .send()
@@ -82,7 +82,7 @@ async fn sign_up_checks_its_input() {
     let (app, _guard) = boot().await;
     app.client()
         .post("/api/auth/register")
-        .json(&json!({ "name": "Ada", "email": "not an address", "password": "a long enough password" }))
+        .json(&json!({ "name": "Anu", "email": "not an address", "password": "a long enough password" }))
         .send()
         .await
         .assert_validation_error("email");
@@ -92,13 +92,13 @@ async fn sign_up_checks_its_input() {
 async fn invited_people_join_with_their_role() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let owner_token = sign_in(&app, "olivia@example.com").await;
 
     app.client()
         .post(&format!("/api/workspaces/{}/invitations", team.slug))
         .bearer(&owner_token)
-        .json(&json!({ "email": "grace@example.com", "role": "member" }))
+        .json(&json!({ "email": "gauri@example.com", "role": "member" }))
         .send()
         .await
         .assert_status(201);
@@ -109,9 +109,9 @@ async fn invited_people_join_with_their_role() {
         .expect("an invitation mail");
     let token = invitation_token(&text);
 
-    // Grace signs up with the invited address and accepts.
-    user(&app, "Grace Hopper", "grace@example.com").await;
-    let grace = sign_in(&app, "grace@example.com").await;
+    // Gauri signs up with the invited address and accepts.
+    user(&app, "Gauri Hundal", "gauri@example.com").await;
+    let grace = sign_in(&app, "gauri@example.com").await;
     app.client()
         .post("/api/invitations/accept")
         .bearer(&grace)

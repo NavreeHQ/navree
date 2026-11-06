@@ -8,13 +8,13 @@ use support::{PASSWORD, boot, sign_in, user};
 #[tokio::test]
 async fn people_see_and_end_their_sessions() {
     let (app, _guard) = boot().await;
-    user(&app, "Ada Lovelace", "ada@example.com").await;
-    let laptop = sign_in(&app, "ada@example.com").await;
+    user(&app, "Anu Lakhotia", "anu@example.com").await;
+    let laptop = sign_in(&app, "anu@example.com").await;
     let phone = app
         .client()
         .post("/api/auth/login")
         .header("user-agent", "Phone")
-        .json(&json!({ "email": "ada@example.com", "password": PASSWORD }))
+        .json(&json!({ "email": "anu@example.com", "password": PASSWORD }))
         .send()
         .await
         .assert_status(200)
@@ -68,8 +68,8 @@ async fn people_see_and_end_their_sessions() {
 #[tokio::test]
 async fn the_user_resource_says_whether_two_factor_is_on() {
     let (app, _guard) = boot().await;
-    user(&app, "Ada Lovelace", "ada@example.com").await;
-    let token = sign_in(&app, "ada@example.com").await;
+    user(&app, "Anu Lakhotia", "anu@example.com").await;
+    let token = sign_in(&app, "anu@example.com").await;
     app.client()
         .get("/api/auth/me")
         .bearer(&token)

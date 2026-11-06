@@ -94,7 +94,7 @@ fn the_saas_kit_ships_what_the_generator_writes() {
         .tempdir()
         .unwrap();
     let app = NewApp {
-        name: AppName::parse("acme").unwrap(),
+        name: AppName::parse("agra").unwrap(),
         ui: Ui::None,
         kit: Some(Kit::Saas),
         database: Database::default(),

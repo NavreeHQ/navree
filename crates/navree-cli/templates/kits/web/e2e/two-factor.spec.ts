@@ -2,10 +2,10 @@ import { expect, test } from "@playwright/test";
 import { signIn, signOut, totp, uniqueEmail } from "./support";
 
 test("two-step verification: turn it on, then sign in with a code", async ({ page }) => {
-  const email = uniqueEmail("grace");
+  const email = uniqueEmail("gauri");
   const password = "a long enough password";
   await page.goto("/sign-up");
-  await page.getByLabel("Name").fill("Grace Hopper");
+  await page.getByLabel("Name").fill("Gauri Hundal");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
@@ -28,5 +28,5 @@ test("two-step verification: turn it on, then sign in with a code", async ({ pag
   await page.waitForTimeout(31_000);
   await page.getByLabel("Authentication code").fill(totp(secret));
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page.getByRole("heading", { name: /Welcome, Grace/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome, Gauri/ })).toBeVisible();
 });

@@ -11,8 +11,8 @@ use support::{add_member, boot, in_workspace, sign_in, user, workspace};
 async fn owners_rename_the_workspace_and_change_its_slug() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
-    let other = workspace(&app, &owner, "Globex").await;
+    let team = workspace(&app, &owner, "Agra").await;
+    let other = workspace(&app, &owner, "Gulati").await;
     let token = sign_in(&app, "olivia@example.com").await;
 
     in_workspace(
@@ -23,23 +23,23 @@ async fn owners_rename_the_workspace_and_change_its_slug() {
     .send()
     .await
     .assert_status(200)
-    .assert_json_path("name", json!("Acme"));
+    .assert_json_path("name", json!("Agra"));
     in_workspace(
         app.client().patch("/api/v1/settings/workspace"),
         &token,
         &team.slug,
     )
-    .json(&json!({ "name": "Acme Inc.", "slug": "acme-inc" }))
+    .json(&json!({ "name": "Agra Inc.", "slug": "agra-inc" }))
     .send()
     .await
     .assert_status(200)
-    .assert_json_path("name", json!("Acme Inc."))
-    .assert_json_path("slug", json!("acme-inc"));
+    .assert_json_path("name", json!("Agra Inc."))
+    .assert_json_path("slug", json!("agra-inc"));
     // The new slug names the workspace from now on.
     in_workspace(
         app.client().get("/api/v1/settings/workspace"),
         &token,
-        "acme-inc",
+        "agra-inc",
     )
     .send()
     .await
@@ -48,7 +48,7 @@ async fn owners_rename_the_workspace_and_change_its_slug() {
     in_workspace(
         app.client().patch("/api/v1/settings/workspace"),
         &token,
-        "acme-inc",
+        "agra-inc",
     )
     .json(&json!({ "slug": other.slug }))
     .send()
@@ -57,7 +57,7 @@ async fn owners_rename_the_workspace_and_change_its_slug() {
     in_workspace(
         app.client().patch("/api/v1/settings/workspace"),
         &token,
-        "acme-inc",
+        "agra-inc",
     )
     .json(&json!({ "slug": "Not A Slug" }))
     .send()
@@ -69,7 +69,7 @@ async fn owners_rename_the_workspace_and_change_its_slug() {
 async fn members_cannot_change_the_workspace() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
     let token = sign_in(&app, "max@example.com").await;
@@ -97,7 +97,7 @@ async fn members_cannot_change_the_workspace() {
 async fn the_front_end_reads_the_rules_of_the_role_in_the_workspace() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
     add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;
     let token = sign_in(&app, "vera@example.com").await;
@@ -125,7 +125,7 @@ async fn the_front_end_reads_the_rules_of_the_role_in_the_workspace() {
 async fn each_member_keeps_their_own_notification_preferences() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
     let owner_token = sign_in(&app, "olivia@example.com").await;

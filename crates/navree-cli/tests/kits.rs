@@ -109,7 +109,7 @@ const API_FILES: &[&str] = &[
 
 #[test]
 fn the_saas_kit_writes_the_api_and_the_web_app() {
-    let (_dir, root) = generate("acme", Kit::Saas);
+    let (_dir, root) = generate("agra", Kit::Saas);
     let files = tree(&root);
     assert_has(&files, API_FILES);
     assert_has(
@@ -152,7 +152,7 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     // The front end is named after the app and pins its package manager.
     let package: serde_json::Value =
         serde_json::from_str(&read(&root, "web/package.json")).unwrap();
-    assert_eq!(package["name"], "acme-web");
+    assert_eq!(package["name"], "agra-web");
     assert!(
         package["packageManager"]
             .as_str()
@@ -199,7 +199,7 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
         read(&root, "web/.env.local"),
         read(&root, "web/.env.example")
     );
-    assert!(read(&root, "web/.env.local").contains("NEXT_PUBLIC_REALTIME_KEY=acme\n"));
+    assert!(read(&root, "web/.env.local").contains("NEXT_PUBLIC_REALTIME_KEY=agra\n"));
     assert!(read(&root, ".gitignore").contains("/web/.env.local"));
     // The API knows the web app's origin.
     let config = toml(&root, "config/app.toml");
@@ -227,7 +227,7 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
 
 #[test]
 fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
-    let (_dir, root) = generate("acme", Kit::Saas);
+    let (_dir, root) = generate("agra", Kit::Saas);
     // The API believes X-Forwarded-For from loopback, where the web app's
     // backend-for-frontend calls from, and from no other peer.
     let config = toml(&root, "config/app.toml");
@@ -251,7 +251,7 @@ fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
     assert!(navree.contains("createNavree()"));
     assert!(!navree.contains("trustedProxyHops"));
     // The API kit has no web app, so no proxy to trust.
-    let (_dir2, api) = generate("acme", Kit::Api);
+    let (_dir2, api) = generate("agra", Kit::Api);
     assert!(
         toml(&api, "config/app.toml")["http"]
             .get("trusted_proxies")
@@ -270,7 +270,7 @@ fn web_files(root: &Path) -> Vec<String> {
 
 #[test]
 fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
-    let (_dir, root) = generate("acme", Kit::Saas);
+    let (_dir, root) = generate("agra", Kit::Saas);
     let files = web_files(&root);
 
     // The copies are gone: the BFF, its error bodies, the real-time, abilities and per-route code.
@@ -371,7 +371,7 @@ fn the_saas_kits_web_app_from_a_published_navree_asks_npm_for_the_packages() {
         .unwrap();
     let published = NewApp {
         navree: NavreeSource::Version("1.0.0".to_owned()),
-        ..app("acme", Kit::Saas)
+        ..app("agra", Kit::Saas)
     };
     let root = create_app(dir.path(), &published, now()).unwrap();
 
@@ -438,10 +438,10 @@ fn no_template_carries_a_backend_for_frontend_of_its_own() {
 #[test]
 fn saas_and_api_kits_ship_their_openapi_document() {
     for kit in [Kit::Saas, Kit::Api] {
-        let (_dir, root) = generate("acme-cloud", kit);
+        let (_dir, root) = generate("agra-cloud", kit);
         let document: serde_json::Value =
             serde_json::from_str(&read(&root, "openapi.json")).unwrap();
-        assert_eq!(document["info"]["title"], "Acme cloud API", "{kit}");
+        assert_eq!(document["info"]["title"], "Agra cloud API", "{kit}");
         for path in [
             "/api/auth/register",
             "/api/auth/login",
@@ -463,8 +463,8 @@ fn saas_and_api_kits_ship_their_openapi_document() {
 
 #[test]
 fn the_api_kit_is_the_saas_api_without_the_web_app() {
-    let (_dir, saas) = generate("acme", Kit::Saas);
-    let (_dir2, api) = generate("acme", Kit::Api);
+    let (_dir, saas) = generate("agra", Kit::Saas);
+    let (_dir2, api) = generate("agra", Kit::Api);
     let api_files = tree(&api);
     assert_has(&api_files, API_FILES);
     assert!(api_files.iter().all(|file| !file.starts_with("web/")));
@@ -491,7 +491,7 @@ fn the_api_kit_is_the_saas_api_without_the_web_app() {
 
 #[test]
 fn saas_and_api_kits_configure_the_documented_modules() {
-    let (_dir, root) = generate("acme", Kit::Saas);
+    let (_dir, root) = generate("agra", Kit::Saas);
     let platform = read(&root, "src/platform.rs");
     for module in [
         "ConfigModule",
@@ -548,7 +548,7 @@ fn every_kit_records_its_kit_and_its_navree_features() {
         (Kit::Api, &["package", "metadata", "navree"]),
         (Kit::Micro, &["workspace", "metadata", "navree"]),
     ] {
-        let (_dir, root) = generate("acme", kit);
+        let (_dir, root) = generate("agra", kit);
         let manifest = toml(&root, "Cargo.toml");
         let whole = toml::Value::Table(manifest.clone());
         let navree = metadata.iter().fold(&whole, |value, key| &value[*key]);
@@ -565,7 +565,7 @@ fn every_kit_records_its_kit_and_its_navree_features() {
         );
         if kit == Kit::Micro {
             assert_eq!(dependency["default-features"].as_bool(), Some(false));
-            let service = toml(&root, "crates/acme/Cargo.toml");
+            let service = toml(&root, "crates/agra/Cargo.toml");
             let features = service["dependencies"]["navree"]["features"]
                 .as_array()
                 .unwrap();
@@ -680,7 +680,7 @@ fn the_micro_kit_is_a_workspace_of_the_service_and_its_contracts() {
 
 #[test]
 fn env_points_at_the_services_dock_starts() {
-    let (_dir, root) = generate("acme", Kit::Saas);
+    let (_dir, root) = generate("agra", Kit::Saas);
     let env = read(&root, ".env");
     let example = read(&root, ".env.example");
     // `.env.example`'s settings, then Dock's between its markers.
@@ -709,16 +709,16 @@ fn env_points_at_the_services_dock_starts() {
 #[test]
 fn every_kit_s_harbor_and_dock_files_are_valid() {
     for kit in Kit::ALL {
-        let (_dir, root) = generate("acme", kit);
+        let (_dir, root) = generate("agra", kit);
         let harbor = navree_harbor::HarborConfig::parse(
             &read(&root, "harbor.toml"),
             &root.join("harbor.toml"),
         )
         .unwrap_or_else(|e| panic!("{kit}: {e}"));
-        assert_eq!(harbor.app, "acme");
+        assert_eq!(harbor.app, "agra");
         assert_eq!(harbor.validate(), Vec::<String>::new(), "{kit}");
         assert_eq!(harbor.deploy.health_check, "/health/ready");
-        navree_dock::DockFile::parse(&read(&root, "dock.toml"), "acme")
+        navree_dock::DockFile::parse(&read(&root, "dock.toml"), "agra")
             .unwrap_or_else(|e| panic!("{kit}: {e}"));
     }
 }
@@ -726,7 +726,7 @@ fn every_kit_s_harbor_and_dock_files_are_valid() {
 #[test]
 fn generated_files_are_free_of_template_syntax() {
     for kit in Kit::ALL {
-        let (_dir, root) = generate("acme-cloud", kit);
+        let (_dir, root) = generate("agra-cloud", kit);
         for file in tree(&root) {
             let text = read(&root, &file);
             for marker in [
@@ -752,11 +752,11 @@ fn generated_files_are_free_of_template_syntax() {
 
 #[test]
 fn the_created_message_lists_the_kit_s_next_steps() {
-    let (_dir, root) = generate("acme", Kit::Saas);
-    let message = created_message(&app("acme", Kit::Saas), &root);
-    assert!(message.starts_with(&format!("Created acme in {} (kit: saas)\n", root.display())));
+    let (_dir, root) = generate("agra", Kit::Saas);
+    let message = created_message(&app("agra", Kit::Saas), &root);
+    assert!(message.starts_with(&format!("Created agra in {} (kit: saas)\n", root.display())));
     for line in [
-        "  cd acme\n",
+        "  cd agra\n",
         "  navree dock up                 # TimescaleDB and Mailpit\n",
         "  navree migrate:fresh --seed    # tables and a demo workspace\n",
         "  pnpm --dir /opt/navree/packages/js install # the Navree packages (not on npm yet)\n",
@@ -769,7 +769,7 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     // A published navree has published packages: only the web app's own install.
     let published = NewApp {
         navree: NavreeSource::Version("1.0.0".to_owned()),
-        ..app("acme", Kit::Saas)
+        ..app("agra", Kit::Saas)
     };
     let message = created_message(&published, &root);
     assert!(message.contains("  pnpm --dir web install         # the web app's packages\n"));
@@ -777,7 +777,7 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     let micro = created_message(&app("billing", Kit::Micro), &root);
     assert!(micro.contains("(kit: micro)"));
     assert!(micro.contains("# TimescaleDB and NATS"));
-    let api = created_message(&app("acme", Kit::Api), &root);
+    let api = created_message(&app("agra", Kit::Api), &root);
     assert!(api.contains("(kit: api)"));
     assert!(!api.contains("pnpm"));
 }
@@ -785,7 +785,7 @@ fn the_created_message_lists_the_kit_s_next_steps() {
 #[test]
 fn ui_next_goes_with_the_saas_kit_only() {
     // The SaaS kit's front end is Next.js: saying so changes nothing.
-    let (_dir, saas) = generate("acme", Kit::Saas);
+    let (_dir, saas) = generate("agra", Kit::Saas);
     let dir = tempfile::Builder::new()
         .prefix("navree-test-")
         .tempdir()
@@ -794,7 +794,7 @@ fn ui_next_goes_with_the_saas_kit_only() {
         dir.path(),
         &NewApp {
             ui: Ui::Next,
-            ..app("acme", Kit::Saas)
+            ..app("agra", Kit::Saas)
         },
         now(),
     )
@@ -810,13 +810,13 @@ fn ui_next_goes_with_the_saas_kit_only() {
             dir.path(),
             &NewApp {
                 ui: Ui::Next,
-                ..app("acme", kit)
+                ..app("agra", kit)
             },
             now(),
         )
         .unwrap_err();
         assert!(error.to_string().contains("has no front end"), "{error}");
-        assert!(!dir.path().join("acme").exists());
+        assert!(!dir.path().join("agra").exists());
     }
 }
 
@@ -824,7 +824,7 @@ fn ui_next_goes_with_the_saas_kit_only() {
 /// and SQLite go with the minimal app.
 #[test]
 fn kits_run_on_timescaledb_or_postgres() {
-    let (_dir, timescale) = generate("acme", Kit::Api);
+    let (_dir, timescale) = generate("agra", Kit::Api);
     let dock = std::fs::read_to_string(timescale.join("dock.toml")).unwrap();
     assert!(dock.contains("[services.postgres]\n"), "{dock}");
     assert!(!dock.contains("timescaledb = false"), "{dock}");
@@ -843,7 +843,7 @@ fn kits_run_on_timescaledb_or_postgres() {
             .unwrap();
         let postgres = NewApp {
             database: Database::Postgres,
-            ..app("acme", kit)
+            ..app("agra", kit)
         };
         let root = create_app(dir.path(), &postgres, now()).unwrap();
         let dock = std::fs::read_to_string(root.join("dock.toml")).unwrap();
@@ -851,7 +851,7 @@ fn kits_run_on_timescaledb_or_postgres() {
             dock.contains("[services.postgres]\ntimescaledb = false\n"),
             "{kit}: {dock}"
         );
-        let file = navree_dock::DockFile::parse(&dock, "acme").unwrap();
+        let file = navree_dock::DockFile::parse(&dock, "agra").unwrap();
         assert!(!file.env().is_empty(), "{kit}");
         let ci = read(&root, ".github/workflows/ci.yml");
         assert!(ci.contains("image: postgres:17\n"), "{kit}: {ci}");
@@ -871,13 +871,13 @@ fn kits_run_on_timescaledb_or_postgres() {
                 dir.path(),
                 &NewApp {
                     database,
-                    ..app("acme", kit)
+                    ..app("agra", kit)
                 },
                 now(),
             )
             .unwrap_err();
             assert!(error.to_string().contains("runs on PostgreSQL"), "{error}");
-            assert!(!dir.path().join("acme").exists());
+            assert!(!dir.path().join("agra").exists());
         }
     }
 }
@@ -888,11 +888,11 @@ fn kits_refuse_a_directory_that_is_not_empty() {
         .prefix("navree-test-")
         .tempdir()
         .unwrap();
-    std::fs::create_dir(dir.path().join("acme")).unwrap();
-    std::fs::write(dir.path().join("acme").join("notes.txt"), "mine").unwrap();
-    assert!(create_app(dir.path(), &app("acme", Kit::Saas), now()).is_err());
+    std::fs::create_dir(dir.path().join("agra")).unwrap();
+    std::fs::write(dir.path().join("agra").join("notes.txt"), "mine").unwrap();
+    assert!(create_app(dir.path(), &app("agra", Kit::Saas), now()).is_err());
     assert_eq!(
-        std::fs::read_to_string(dir.path().join("acme").join("notes.txt")).unwrap(),
+        std::fs::read_to_string(dir.path().join("agra").join("notes.txt")).unwrap(),
         "mine"
     );
 }
@@ -937,7 +937,7 @@ fn kit_rust_is_rustfmt_clean() {
     }
     let mut unformatted = Vec::new();
     for kit in [Kit::Api, Kit::Micro] {
-        let (_dir, root) = generate("acme", kit);
+        let (_dir, root) = generate("agra", kit);
         let mut files = Vec::new();
         rust_files(&root, &mut files);
         for file in files {
@@ -974,7 +974,7 @@ fn kit_rust_is_rustfmt_clean() {
 #[test]
 fn the_comment_on_the_admin_module_names_the_resources_it_registers() {
     for kit in [Kit::Api, Kit::Saas] {
-        let (_dir, root) = generate("acme", kit);
+        let (_dir, root) = generate("agra", kit);
         let admin = read(&root, "src/modules/admin/mod.rs");
         let wire = admin.split("fn wire").nth(1).expect("the wire function");
         let registered: Vec<&str> = wire

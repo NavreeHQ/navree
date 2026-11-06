@@ -3652,7 +3652,7 @@ export interface components {
             /** @description 1 to 100 characters. */
             name?: string | null;
             /**
-             * @description Lower-case letters, digits and single dashes (`acme-inc`); the web
+             * @description Lower-case letters, digits and single dashes (`agra-inc`); the web
              *     app's URLs (`/w/<slug>/`) and the `X-Workspace` header use it.
              */
             slug?: string | null;

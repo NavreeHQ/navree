@@ -32,7 +32,7 @@ fn fixtures() -> PathBuf {
 
 fn new_app(kit: Option<Kit>, database: Database) -> NewApp {
     NewApp {
-        name: AppName::parse("acme-cloud").unwrap(),
+        name: AppName::parse("agra-cloud").unwrap(),
         ui: Ui::None,
         kit,
         database,

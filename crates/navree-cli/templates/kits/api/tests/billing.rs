@@ -12,7 +12,7 @@ use support::{add_member, boot, in_workspace, sign_in, user, workspace};
 async fn owners_check_out_a_plan_and_start_its_trial() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let token = sign_in(&app, "olivia@example.com").await;
 
     // The plans of config/app.toml; no subscription yet.
@@ -78,7 +78,7 @@ async fn owners_check_out_a_plan_and_start_its_trial() {
 async fn seats_follow_the_member_count() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let token = sign_in(&app, "olivia@example.com").await;
     let checkout = in_workspace(
         app.client().post("/api/billing/checkout"),
@@ -105,7 +105,7 @@ async fn seats_follow_the_member_count() {
     .await
     .assert_status(204);
 
-    let grace = user(&app, "Grace Hopper", "grace@example.com").await;
+    let grace = user(&app, "Gauri Hundal", "gauri@example.com").await;
     add_member(&app, &team, &grace, WorkspaceRole::Member).await;
     // The seat count is updated by a queued listener.
     app.get::<Queue>()
@@ -124,7 +124,7 @@ async fn seats_follow_the_member_count() {
 async fn only_billing_managers_reach_billing() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
     add_member(&app, &team, &viewer, WorkspaceRole::Viewer).await;
     let token = sign_in(&app, "vera@example.com").await;

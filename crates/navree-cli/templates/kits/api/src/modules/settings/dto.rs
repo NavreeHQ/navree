@@ -14,7 +14,7 @@ pub struct UpdateWorkspace {
     /// 1 to 100 characters.
     #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
-    /// Lower-case letters, digits and single dashes (`acme-inc`); the web
+    /// Lower-case letters, digits and single dashes (`agra-inc`); the web
     /// app's URLs (`/w/<slug>/`) and the `X-Workspace` header use it.
     #[validate(length(min = 1, max = 64), pattern(r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
     pub slug: Option<String>,

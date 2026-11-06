@@ -418,7 +418,7 @@ mod tests {
         std::fs::create_dir(&web).unwrap();
         std::fs::write(
             web.join("package.json"),
-            r#"{"name":"acme-web","packageManager":"pnpm@11.25.0"}"#,
+            r#"{"name":"agra-web","packageManager":"pnpm@11.25.0"}"#,
         )
         .unwrap();
         let pnpm = web_invocation(dir.path()).unwrap();

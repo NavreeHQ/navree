@@ -598,12 +598,12 @@ mod tests {
             ("api", Kit::Api),
             ("micro", Kit::Micro),
         ] {
-            let Command::New(args) = parse(&["new", "acme", "--kit", flag]) else {
+            let Command::New(args) = parse(&["new", "agra", "--kit", flag]) else {
                 panic!("expected new");
             };
             assert_eq!(args.kit, Some(kit));
         }
-        let Command::New(args) = parse(&["new", "acme", "--kit=saas", "--navree-path", ".."])
+        let Command::New(args) = parse(&["new", "agra", "--kit=saas", "--navree-path", ".."])
         else {
             panic!("expected new");
         };
@@ -611,11 +611,11 @@ mod tests {
         assert!(args.navree_path.is_some());
         // The SaaS kit's front end is Next.js; `create_app` refuses a
         // front end for the other kits.
-        let Command::New(args) = parse(&["new", "acme", "--kit", "saas", "--ui", "next"]) else {
+        let Command::New(args) = parse(&["new", "agra", "--kit", "saas", "--ui", "next"]) else {
             panic!("expected new");
         };
         assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Some(Ui::Next)));
-        let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
+        let error = Cli::try_parse_from(["navree", "new", "agra", "--kit", "crm"]).unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
@@ -976,7 +976,7 @@ mod tests {
         let Command::Mcp(args) = parse(&[
             "mcp",
             "--path",
-            "/home/ada/code/crm",
+            "/home/anu/code/crm",
             "--no-build",
             "--allow-remote-database",
             "--docs-offline",
@@ -985,7 +985,7 @@ mod tests {
         };
         assert_eq!(
             args.path.as_deref(),
-            Some(std::path::Path::new("/home/ada/code/crm"))
+            Some(std::path::Path::new("/home/anu/code/crm"))
         );
         assert!(args.no_build && args.allow_remote_database && args.docs_offline);
     }

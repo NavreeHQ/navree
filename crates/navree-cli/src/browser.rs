@@ -254,23 +254,23 @@ mod tests {
 
     #[test]
     fn the_cache_dir_matches_navree_browser() {
-        let env = env_of(&[("HOME", "/home/ada")]);
+        let env = env_of(&[("HOME", "/home/anu")]);
         assert_eq!(
             cache_dir("linux", &env),
-            Some(PathBuf::from("/home/ada/.cache/navree"))
+            Some(PathBuf::from("/home/anu/.cache/navree"))
         );
-        let env = env_of(&[("HOME", "/home/ada"), ("XDG_CACHE_HOME", "/xdg")]);
+        let env = env_of(&[("HOME", "/home/anu"), ("XDG_CACHE_HOME", "/xdg")]);
         assert_eq!(cache_dir("linux", &env), Some(PathBuf::from("/xdg/navree")));
         assert_eq!(
             cache_dir("macos", &env),
-            Some(PathBuf::from("/home/ada/Library/Caches/navree"))
+            Some(PathBuf::from("/home/anu/Library/Caches/navree"))
         );
-        let env = env_of(&[("LOCALAPPDATA", r"C:\Users\ada\AppData\Local")]);
+        let env = env_of(&[("LOCALAPPDATA", r"C:\Users\anu\AppData\Local")]);
         assert_eq!(
             cache_dir("windows", &env),
-            Some(PathBuf::from(r"C:\Users\ada\AppData\Local").join("navree"))
+            Some(PathBuf::from(r"C:\Users\anu\AppData\Local").join("navree"))
         );
-        let env = env_of(&[("NAVREE_CACHE_DIR", "/ci/cache"), ("HOME", "/home/ada")]);
+        let env = env_of(&[("NAVREE_CACHE_DIR", "/ci/cache"), ("HOME", "/home/anu")]);
         assert_eq!(cache_dir("linux", &env), Some(PathBuf::from("/ci/cache")));
         assert_eq!(cache_dir("linux", &env_of(&[])), None);
     }

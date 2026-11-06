@@ -34,7 +34,7 @@ async fn project_names(
 async fn members_create_list_filter_and_update_projects() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let token = sign_in(&app, "olivia@example.com").await;
 
     for name in ["Website", "Mobile app", "Web shop"] {
@@ -92,16 +92,16 @@ async fn members_create_list_filter_and_update_projects() {
 async fn projects_never_leave_their_workspace() {
     let (app, _guard) = boot().await;
     let olivia = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let acme = workspace(&app, &olivia, "Acme").await;
-    let grace = user(&app, "Grace Hopper", "grace@example.com").await;
-    let globex = workspace(&app, &grace, "Globex").await;
+    let agra = workspace(&app, &olivia, "Agra").await;
+    let grace = user(&app, "Gauri Hundal", "gauri@example.com").await;
+    let gulati = workspace(&app, &grace, "Gulati").await;
     let olivia_token = sign_in(&app, "olivia@example.com").await;
-    let grace_token = sign_in(&app, "grace@example.com").await;
+    let grace_token = sign_in(&app, "gauri@example.com").await;
 
     let project = in_workspace(
         app.client().post("/api/v1/projects"),
         &olivia_token,
-        &acme.slug,
+        &agra.slug,
     )
     .json(&json!({ "name": "Secret plan" }))
     .send()
@@ -114,7 +114,7 @@ async fn projects_never_leave_their_workspace() {
     in_workspace(
         app.client().get("/api/v1/projects"),
         &grace_token,
-        &globex.slug,
+        &gulati.slug,
     )
     .send()
     .await
@@ -122,7 +122,7 @@ async fn projects_never_leave_their_workspace() {
     in_workspace(
         app.client().get(&format!("/api/v1/projects/{id}")),
         &grace_token,
-        &globex.slug,
+        &gulati.slug,
     )
     .send()
     .await
@@ -131,7 +131,7 @@ async fn projects_never_leave_their_workspace() {
     in_workspace(
         app.client().get("/api/v1/projects"),
         &grace_token,
-        &acme.slug,
+        &agra.slug,
     )
     .send()
     .await
@@ -149,7 +149,7 @@ async fn projects_never_leave_their_workspace() {
 async fn roles_decide_who_changes_what() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let member = user(&app, "Max Member", "max@example.com").await;
     add_member(&app, &team, &member, WorkspaceRole::Member).await;
     let viewer = user(&app, "Vera Viewer", "vera@example.com").await;
@@ -230,7 +230,7 @@ async fn roles_decide_who_changes_what() {
 async fn the_project_list_reads_the_list_query() {
     let (app, _guard) = boot().await;
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
-    let team = workspace(&app, &owner, "Acme").await;
+    let team = workspace(&app, &owner, "Agra").await;
     let token = sign_in(&app, "olivia@example.com").await;
     let slug = team.slug.as_str();
 

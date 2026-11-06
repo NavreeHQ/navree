@@ -20,20 +20,20 @@ afterEach(() => {
 describe("the API client", () => {
   it("sends the current workspace as X-Workspace, and JSON bodies", async () => {
     const { fetch, calls } = recording(Response.json({ id: "p1" }, { status: 201 }));
-    setWorkspace("acme");
+    setWorkspace("agra");
 
     const created = await api.post<{ id: string }>("/api/v1/projects", { name: "Website" }, { fetch });
 
     expect(created).toEqual({ id: "p1" });
     const headers = calls[0].init.headers as Record<string, string>;
-    expect(headers["x-workspace"]).toBe("acme");
+    expect(headers["x-workspace"]).toBe("agra");
     expect(headers["content-type"]).toBe("application/json");
     expect(calls[0].init.body).toBe('{"name":"Website"}');
   });
 
   it("can call outside the current workspace", async () => {
     const { fetch, calls } = recording(Response.json({ data: [] }));
-    setWorkspace("acme");
+    setWorkspace("agra");
 
     await api.get("/api/workspaces", { workspace: null, fetch });
 
@@ -91,7 +91,7 @@ describe("the API client", () => {
 
   it("sends a list request with filter[name]=value and no flat filter", async () => {
     const { fetch, calls } = recording(Response.json({ data: [], meta: { total: 0 } }));
-    setWorkspace("acme");
+    setWorkspace("agra");
 
     const list = listQuery({ filter: { status: "active", owner: undefined }, search: "web", page: 2, per_page: 20 });
     await api.get(`/api/v1/projects${list}`, { fetch });

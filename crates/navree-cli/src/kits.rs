@@ -100,11 +100,11 @@ pub struct KitContext {
     pub kit_version: &'static str,
     /// Whether the app has the `web/` front end.
     pub web: bool,
-    /// The package name (`acme-cloud`).
+    /// The package name (`agra-cloud`).
     pub package: String,
-    /// The crate name (`acme_cloud`).
+    /// The crate name (`agra_cloud`).
     pub crate_name: String,
-    /// The display name (`Acme cloud`).
+    /// The display name (`Agra cloud`).
     pub title: String,
     /// The right-hand side of `navree = ...` in `Cargo.toml`, with the
     /// kit's features (`saas`, `api`).
@@ -231,11 +231,11 @@ pub fn output_path_for(path: &str, package: &str, migration_prefix: &str) -> Str
 /// What the templates of `ui/` are rendered with.
 #[derive(Debug, Clone, Serialize)]
 pub struct UiContext {
-    /// The package name (`acme-cloud`).
+    /// The package name (`agra-cloud`).
     pub package: String,
-    /// The crate name (`acme_cloud`).
+    /// The crate name (`agra_cloud`).
     pub crate_name: String,
-    /// The display name (`Acme cloud`).
+    /// The display name (`Agra cloud`).
     pub title: String,
     /// The prefix of the migration names (`m20261027_101500`).
     pub migration_prefix: String,
@@ -334,7 +334,7 @@ mod tests {
 
     fn ctx() -> KitContext {
         let app = NewApp {
-            name: AppName::parse("acme").unwrap(),
+            name: AppName::parse("agra").unwrap(),
             ui: Ui::None,
             kit: Some(Kit::Saas),
             database: Database::default(),
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(output_path("web/dot.env.example", &ctx), "web/.env.example");
         assert_eq!(
             output_path("crates/__package__-contracts/Cargo.toml.j2", &ctx),
-            "crates/acme-contracts/Cargo.toml"
+            "crates/agra-contracts/Cargo.toml"
         );
         assert_eq!(
             output_path("migrations/mNOW_create_projects_table.rs.j2", &ctx),

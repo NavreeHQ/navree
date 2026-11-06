@@ -185,7 +185,7 @@ fn openapi_is_current(root: &Path) -> bool {
 #[test]
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn api_kit_compiles_and_its_tests_pass() {
-    let (parent, root) = generate(Kit::Api, "acme-api");
+    let (parent, root) = generate(Kit::Api, "agra-api");
     // Every route is documented, and the committed contract is current.
     let ok = rust_checks(&root, &["conformity:check"]) && openapi_is_current(&root);
     finish(parent, ok, "api kit");
@@ -194,7 +194,7 @@ fn api_kit_compiles_and_its_tests_pass() {
 #[test]
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn saas_kit_api_compiles_and_its_tests_pass() {
-    let (parent, root) = generate(Kit::Saas, "acme");
+    let (parent, root) = generate(Kit::Saas, "agra");
     let ok = rust_checks(&root, &["conformity:check"]) && openapi_is_current(&root);
     finish(parent, ok, "saas kit");
 }
@@ -227,7 +227,7 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
         eprintln!("SKIPPED: set NAVREE_TEST_KIT_WEB=1 to install and build the SaaS kit's web app");
         return;
     }
-    let (parent, root) = generate(Kit::Saas, "acme");
+    let (parent, root) = generate(Kit::Saas, "agra");
     let web = root.join("web");
     // The packages the web app links are installed and built where it links them from.
     let packages = PathBuf::from(
