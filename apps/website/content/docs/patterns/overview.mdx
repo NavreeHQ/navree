@@ -12,9 +12,10 @@ Navree builds every shape of backend from the same unit: the **module**. A modul
 - modules whose data is scoped to the current workspace make a **multi-tenant SaaS**;
 - modules that announce changes and react to each other's events are **event-driven**;
 - modules whose routes, inputs, outputs and errors form a documented contract are **API-first**;
-- a web server that holds the tokens and calls those routes is a **backend for frontend**.
+- a web server that holds the tokens and calls those routes is a **backend for frontend**;
+- a binary that draws its own screens with Navree UI is a **server-rendered app**.
 
-These shapes are not exclusive. A typical Navree product is all six at once: a modular monolith, API-first, multi-tenant by workspace, event-driven inside, with a BFF for its web app and one or two services split out where the load demands it. The reference CRM in `apps/crm-api` and `apps/crm-web` is a modular monolith, API-first and event-driven, with a BFF.
+These shapes are not exclusive. A typical Navree product combines several: a modular monolith, API-first, multi-tenant by workspace, event-driven inside, with a BFF for its web app and one or two services split out where the load demands it. The reference CRM in `apps/crm-api` and `apps/crm-web` is a modular monolith, API-first and event-driven, with a BFF.
 
 ## The map
 
@@ -66,6 +67,14 @@ The browser never sees a token. A web server on the same origin keeps the access
 
 [Backend for frontend](/docs/patterns/backend-for-frontend/): sign-in, refresh rotation, CSRF, client addresses, real time through the BFF.
 
+### Server-rendered app
+
+The server draws the screens. Handlers return Navree UI components, the browser signs in on a session cookie, and pages and JSON routes use the same modules and access rules in one binary, with no front-end project to build.
+
+<Diagram name="server-rendered-app" />
+
+[Server-rendered app](/docs/patterns/server-rendered-app/): pages as handlers, forms, live updates, one set of rules, testing.
+
 ## A decision guide
 
 Start with a modular monolith that is API-first. Then let these questions decide what to add.
@@ -95,7 +104,7 @@ Start with a modular monolith that is API-first. Then let these questions decide
 
 ### Clients
 
-- **Your own web app:** a BFF, so no token reaches the browser.
+- **Your own web app:** a server-rendered app when you draw screens in Rust, or a BFF in front of a Next.js or Nuxt app. Either way no token reaches the browser.
 - **Mobile apps, partners, other teams:** API-first, with a versioned, exported OpenAPI document and generated clients.
 - **Third-party apps acting for your users:** the [OAuth server](/docs/packages/oauth-server/).
 
@@ -152,5 +161,8 @@ A codebase that follows these four rules can take any of the shapes on this page
   </LinkCard>
   <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
     A web app that never sees a token.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/server-rendered-app/" title="Server-rendered app">
+    Screens drawn in Rust, in the same binary as the API.
   </LinkCard>
 </LinkCards>

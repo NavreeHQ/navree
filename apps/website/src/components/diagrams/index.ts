@@ -16,6 +16,7 @@ import { ormParts } from "./orm-parts";
 import { requestLifecycle } from "./request-lifecycle";
 import { requestToPixels } from "./request-to-pixels";
 import { reverseEngineering } from "./reverse-engineering";
+import { serverRenderedApp } from "./server-rendered-app";
 import { tokenAndSession } from "./token-and-session";
 import { transportChoice } from "./transport-choice";
 import { twoWays } from "./two-ways";
@@ -46,6 +47,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "transport-choice": transportChoice,
   "token-and-session": tokenAndSession,
   "request-to-pixels": requestToPixels,
+  "server-rendered-app": serverRenderedApp,
 };
 
 /**

@@ -77,7 +77,7 @@ export const sections: DocsSection[] = [
   {
     slug: "patterns",
     title: "Architecture patterns",
-    description: "Choose a shape for your application: a modular monolith, microservices, multi-tenancy, events, API first or a backend for a front end.",
+    description: "Choose a shape for your application: a modular monolith, microservices, multi-tenancy, events, API first, a backend for a front end or server-rendered pages.",
     pages: [
       "overview",
       "modular-monolith",
@@ -86,6 +86,7 @@ export const sections: DocsSection[] = [
       "event-driven",
       "api-first",
       "backend-for-frontend",
+      "server-rendered-app",
     ],
   },
   {

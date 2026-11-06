@@ -27,6 +27,7 @@ export const diagramNames = [
   "transport-choice",
   "token-and-session",
   "request-to-pixels",
+  "server-rendered-app",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];

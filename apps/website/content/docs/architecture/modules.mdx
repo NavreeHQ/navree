@@ -442,7 +442,7 @@ crates/
 
 Every feature module imports `CrmCoreModule`, so the shared tables and roles are set up before the features that use them. A feature that needs another feature's service imports that feature's module, as `DealsModule` would import `CompaniesModule`.
 
-You don't need separate crates. `navree make:module deals` writes a module (controller, service, model, DTOs, a migration and tests) into `src/modules/deals/` and adds it to the app; with `--crud`, its controller serves the five JSON resource routes, guarded by abilities on its model. See the [CLI](/docs/digging-deeper/cli/) page.
+You don't need separate crates. The [modular monolith](/docs/patterns/modular-monolith/#laying-out-the-code) pattern compares the two layouts. `navree make:module deals` writes a module (controller, service, model, DTOs, a migration and tests) into `src/modules/deals/` and adds it to the app; with `--crud`, its controller serves the five JSON resource routes, guarded by abilities on its model. See the [CLI](/docs/digging-deeper/cli/) page.
 
 ## Testing modules
 
