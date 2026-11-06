@@ -7,7 +7,7 @@
  */
 import { abilitiesPlugin, useAbility as useCaslAbility } from "@casl/vue";
 import { createAbility, type AppAbility, type CaslRule } from "@navree/client/abilities";
-import type { App } from "vue";
+import { inject, readonly, ref, type App, type InjectionKey, type Ref } from "vue";
 
 export { Can } from "@casl/vue";
 export type { AppAbility, CaslRule } from "@navree/client/abilities";
@@ -17,6 +17,28 @@ export function installAbilities(app: App, rules: readonly CaslRule[] = []): App
   const ability = createAbility(rules);
   app.use(abilitiesPlugin, ability, { useGlobalProperties: true });
   return ability;
+}
+
+const READY: InjectionKey<Readonly<Ref<boolean>>> = Symbol("navree-ability-ready");
+
+/**
+ * Provides the "rules loaded" flag to the app and returns the ref that sets it. `true` once the
+ * rules for the current user and workspace are in, `false` while they load (after sign-in and after
+ * a workspace switch). Signed out there is nothing to load, so it is `true`.
+ */
+export function provideAbilityReady(app: App): Ref<boolean> {
+  const ready = ref(false);
+  app.provide(READY, readonly(ready));
+  return ready;
+}
+
+/**
+ * Whether the app's rules are loaded. Until they are, `can(...)` answers from an empty rule set, so a
+ * shell that shows or hides screens by ability waits for this (a skeleton until it is `true`).
+ * Apps without `abilities: true` get a flag that is always `true`.
+ */
+export function useAbilityReady(): Readonly<Ref<boolean>> {
+  return inject(READY, readonly(ref(true)));
 }
 
 /** The app's ability: `can("update", deal)` is reactive. */

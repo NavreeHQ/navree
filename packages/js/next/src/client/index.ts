@@ -8,8 +8,10 @@
  */
 export {
   DataTable,
+  DataTable as NavreeDataTable,
   defaultLabels,
   Pagination,
+  Pagination as NavreePagination,
   useDataTable,
   type DataTableLabels,
   type DataTableProps,
@@ -21,8 +23,8 @@ export {
   type UseDataTableOptions,
 } from "./data-table.js";
 export { applyFieldErrors } from "./forms.js";
-export { direction, errorKey, isRtl, localeAttributes, translateError, type Translate } from "./intl.js";
-export { isListParam, mergeListParams, useListQuery, type ListQueryState } from "./list-query-state.js";
+export { direction, errorKey, errorMessage, isRtl, localeAttributes, translateError, type Translate } from "./intl.js";
+export { isListParam, mergeListParams, mergeListQuery, useListQuery, type ListQueryState } from "./list-query-state.js";
 export { useOperation, type UseOperationOptions, type UseOperationResult } from "./operation.js";
 export {
   readWorkspaceCookie,

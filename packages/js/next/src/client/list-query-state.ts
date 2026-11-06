@@ -24,8 +24,8 @@ import { useCallback, useMemo } from "react";
 
 export { isListParam };
 
-/** `params` with its list-query parameters replaced by `query`'s (other parameters stay). */
-export function mergeListParams(params: URLSearchParams, query: ListQuery, defaults: ListQuery = {}): URLSearchParams {
+/** `params` with its list-query parameters replaced by `query`'s (other parameters stay; values equal to `defaults` are left out). */
+export function mergeListQuery(params: URLSearchParams, query: ListQuery, defaults: ListQuery = {}): URLSearchParams {
   const merged = new URLSearchParams();
   params.forEach((value, key) => {
     if (!isListParam(key)) merged.append(key, value);
@@ -37,6 +37,9 @@ export function mergeListParams(params: URLSearchParams, query: ListQuery, defau
   serializeListQuery(trimmed).forEach((value, key) => merged.append(key, value));
   return merged;
 }
+
+/** The first name of {@link mergeListQuery}, kept so existing code compiles. */
+export const mergeListParams = mergeListQuery;
 
 export interface ListQueryState {
   /** The list query in the URL, over `defaults`. */
@@ -74,7 +77,7 @@ export function useListQuery(defaults: ListQuery = {}): ListQueryState {
   const setQuery = useCallback(
     (next: ListQuery | ((current: ListQuery) => ListQuery)) => {
       const value = typeof next === "function" ? next(query) : next;
-      const merged = mergeListParams(new URLSearchParams(search), value, JSON.parse(defaultsKey) as ListQuery);
+      const merged = mergeListQuery(new URLSearchParams(search), value, JSON.parse(defaultsKey) as ListQuery);
       const qs = merged.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },

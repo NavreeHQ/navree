@@ -39,6 +39,11 @@ export function direction(locale: string | undefined | null): "rtl" | "ltr" {
   return isRtl(locale) ? "rtl" : "ltr";
 }
 
+/** `<html {...localeAttributes(locale)}>`: `lang` and `dir`. */
+export function localeAttributes(locale: string): { lang: string; dir: "rtl" | "ltr" } {
+  return { lang: locale, dir: direction(locale) };
+}
+
 /** The message key of an error: `errors.<code>` (`errors.network_error` offline, `errors.unknown` otherwise). */
 export function errorKey(error: unknown, prefix = "errors"): string {
   if (isNavreeError(error)) return `${prefix}.${error.code}`;

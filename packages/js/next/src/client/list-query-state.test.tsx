@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isListParam, mergeListParams, useListQuery } from "./list-query-state.js";
+import { isListParam, mergeListParams, mergeListQuery, useListQuery } from "./list-query-state.js";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -16,14 +16,18 @@ beforeEach(() => {
 
 const lastUrl = () => decodeURIComponent(nav.replace.mock.calls.at(-1)![0] as string);
 
-describe("mergeListParams", () => {
+describe("mergeListQuery", () => {
+  it("is the same function as mergeListParams, its first name", () => {
+    expect(mergeListParams).toBe(mergeListQuery);
+  });
+
   it("replaces the list parameters and keeps the page's own", () => {
-    const merged = mergeListParams(new URLSearchParams("tab=open&filter[stage]=lead&page=3"), { filter: { stage: "won" } });
+    const merged = mergeListQuery(new URLSearchParams("tab=open&filter[stage]=lead&page=3"), { filter: { stage: "won" } });
     expect(decodeURIComponent(merged.toString())).toBe("tab=open&filter[stage]=won");
   });
 
   it("leaves out values equal to the defaults", () => {
-    const merged = mergeListParams(new URLSearchParams(), { per_page: 25, sort: ["-created_at"], search: "a" }, { per_page: 25, sort: ["-created_at"] });
+    const merged = mergeListQuery(new URLSearchParams(), { per_page: 25, sort: ["-created_at"], search: "a" }, { per_page: 25, sort: ["-created_at"] });
     expect(merged.toString()).toBe("search=a");
   });
 
@@ -33,7 +37,7 @@ describe("mergeListParams", () => {
   });
 
   it("drops the cursor parameters with the others, and writes the canonical form", () => {
-    const merged = mergeListParams(
+    const merged = mergeListQuery(
       new URLSearchParams("tab=open&cursor=a&before=b&limit=5&filter=1&q=old&page=2"),
       { limit: 10, filter: { stage: { in: ["lead", "won"] } }, search: "acme corp" },
     );

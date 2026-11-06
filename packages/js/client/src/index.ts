@@ -22,7 +22,16 @@ export {
   reasonPhrase,
   type NavreeErrorBody,
 } from "./errors.js";
-export { direction, errorKey, isRtl, RTL_LANGUAGES, translateError, type Translate, type TranslateErrorOptions } from "./i18n.js";
+export {
+  direction,
+  errorKey,
+  isRtl,
+  localeAttributes,
+  RTL_LANGUAGES,
+  translateError,
+  type Translate,
+  type TranslateErrorOptions,
+} from "./i18n.js";
 export {
   checkListQuery,
   firstPage,

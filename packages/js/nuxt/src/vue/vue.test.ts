@@ -4,7 +4,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { Can, installAbilities, useAbility } from "./abilities.js";
+import { Can, installAbilities, provideAbilityReady, useAbility, useAbilityReady } from "./abilities.js";
 import { createNavreeAuth } from "./auth.js";
 import { applyFieldErrors } from "./forms.js";
 import { mergeListQuery, useListQuery } from "./list-query.js";
@@ -257,6 +257,38 @@ describe("applyFieldErrors (vee-validate)", () => {
     expect(onOther).toHaveBeenCalledWith("plan is unknown");
     expect(applyFieldErrors(new Error("x"), setFieldError)).toBe(false);
   });
+
+  it("renames the API's fields to the form's when fields is an object, and hands the rest on", () => {
+    const error = NavreeError.fromResponse(new Response(null, { status: 400 }), {
+      statusCode: 400,
+      message: ["company_id is required", "stage is unknown", "constructor is odd"],
+      error: "Bad Request",
+      errors: { company_id: ["company_id is required"], stage: ["stage is unknown"], constructor: ["constructor is odd"] },
+    });
+    const setFieldError = vi.fn();
+    const onOther = vi.fn();
+
+    expect(applyFieldErrors(error, setFieldError, { fields: { company_id: "company", stage: "stage" }, onOther })).toBe(true);
+
+    expect(setFieldError.mock.calls).toEqual([
+      ["company", "company_id is required"],
+      ["stage", "stage is unknown"],
+    ]);
+    // A name that only exists on Object.prototype is not a field of the form.
+    expect(onOther).toHaveBeenCalledExactlyOnceWith("constructor is odd");
+  });
+
+  it("without fields, sets every field under the name the API used", () => {
+    const error = NavreeError.fromResponse(new Response(null, { status: 400 }), {
+      statusCode: 400,
+      message: ["a", "b"],
+      error: "Bad Request",
+      errors: { a: ["a"], b: ["b"] },
+    });
+    const setFieldError = vi.fn();
+    applyFieldErrors(error, setFieldError);
+    expect(setFieldError.mock.calls).toEqual([["a", "a"], ["b", "b"]]);
+  });
 });
 
 describe("real time", () => {
@@ -321,5 +353,28 @@ describe("abilities", () => {
     ability.update([{ action: "update", subject: "Deal", conditions: { owner_id: "u1" } }, { action: "delete", subject: "Deal" }] as never);
     await flushPromises();
     expect(wrapper.text()).toBe("editdelete");
+  });
+
+  it("tells a shell when the rules are in: false while they load, true after; always true without abilities", async () => {
+    let ready!: ReturnType<typeof provideAbilityReady>;
+    const View = defineComponent({
+      setup() {
+        const flag = useAbilityReady();
+        return () => h("p", flag.value ? "ready" : "loading");
+      },
+    });
+    const wrapper = mount(View, { global: { plugins: [{ install: (app) => (ready = provideAbilityReady(app)) }] } });
+    expect(wrapper.text()).toBe("loading");
+
+    ready.value = true;
+    await nextTick();
+    expect(wrapper.text()).toBe("ready");
+
+    ready.value = false;
+    await nextTick();
+    expect(wrapper.text()).toBe("loading");
+
+    const without = mount(View);
+    expect(without.text()).toBe("ready");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NavreeError } from "./errors.js";
-import { direction, errorKey, isRtl, translateError } from "./i18n.js";
+import { direction, errorKey, isRtl, localeAttributes, translateError } from "./i18n.js";
 
 const navreeError = (statusCode: number, code: string, message = "Detail from the API") =>
   NavreeError.fromResponse(new Response(null, { status: statusCode }), {
@@ -9,6 +9,13 @@ const navreeError = (statusCode: number, code: string, message = "Detail from th
     error: "Error",
     code,
   });
+
+describe("localeAttributes", () => {
+  it("gives <html> its lang and dir", () => {
+    expect(localeAttributes("ar-AE")).toEqual({ lang: "ar-AE", dir: "rtl" });
+    expect(localeAttributes("hi")).toEqual({ lang: "hi", dir: "ltr" });
+  });
+});
 
 describe("right to left", () => {
   it("knows the right-to-left languages, with or without a region", () => {

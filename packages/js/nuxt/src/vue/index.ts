@@ -21,4 +21,4 @@ export { applyFieldErrors, type ApplyFieldErrorsOptions } from "./forms.js";
 export { isListParam, mergeListQuery, useListQuery, type ListQueryState } from "./list-query.js";
 export { useOperation, type UseOperationOptions, type UseOperationResult } from "./operation.js";
 export { createWorkspace, WORKSPACE_COOKIE, type Workspace } from "./workspace.js";
-export { direction, errorKey, errorMessage, isRtl, translateError, type Translate } from "@navree/client";
+export { direction, errorKey, errorMessage, isRtl, localeAttributes, translateError, type Translate } from "@navree/client";

@@ -58,6 +58,25 @@ describe("applyFieldErrors", () => {
     expect(setError).toHaveBeenCalledWith("root.server", { type: "server", message: "plan is not known" });
   });
 
+  it("renames the API's fields to the form's when given an object, and sends the rest to root.server", () => {
+    const setError = vi.fn();
+    const error = NavreeError.fromResponse(new Response(null, { status: 400 }), {
+      statusCode: 400,
+      message: ["company_id is required", "plan is not known", "constructor is odd"],
+      error: "Bad Request",
+      errors: { company_id: ["company_id is required"], plan: ["plan is not known"], constructor: ["constructor is odd"] },
+    });
+
+    expect(applyFieldErrors(error, setError, { company_id: "company", plan: "plan" })).toBe(true);
+
+    expect(setError.mock.calls).toEqual([
+      ["company", { type: "server", message: "company_id is required" }],
+      ["plan", { type: "server", message: "plan is not known" }],
+      // A name that only exists on Object.prototype is not a field of the form.
+      ["root.server", { type: "server", message: "constructor is odd" }],
+    ]);
+  });
+
   it("ignores errors that aren't validation errors", () => {
     const setError = vi.fn();
     const conflict = NavreeError.fromResponse(new Response(null, { status: 409 }), { statusCode: 409, message: "Taken", error: "Conflict" });
