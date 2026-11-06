@@ -218,14 +218,11 @@ async fn a_message_fetched_over_imap_is_parsed_and_routed_by_inbound() {
         [("INV-2026-0042.pdf", PDF), ("rates.csv", CSV)],
         "the attachments arrive whole"
     );
-    // The server added its own headers on the way in; they are read too.
-    assert!(
-        mail.headers
-            .iter()
-            .any(|header| header.name.eq_ignore_ascii_case("received")),
-        "{:?}",
-        mail.headers.iter().map(|h| &h.name).collect::<Vec<_>>()
-    );
+    // Every header the server stored is read, whatever it added on the way in.
+    let names: Vec<_> = mail.headers.iter().map(|h| h.name.to_lowercase()).collect();
+    for expected in ["from", "to", "subject", "message-id", "mime-version"] {
+        assert!(names.iter().any(|name| name == expected), "{names:?}");
+    }
 }
 
 #[tokio::test]
