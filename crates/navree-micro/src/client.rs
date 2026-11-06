@@ -426,6 +426,7 @@ impl EmitBuilder {
 
     /// Uses `id` as the message id (the `MicroFake` client's
     /// `redelivered`).
+    #[cfg_attr(not(feature = "testing"), allow(dead_code))]
     pub(crate) fn message_id(mut self, id: String) -> Self {
         self.message_id = Some(id);
         self

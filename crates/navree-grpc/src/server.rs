@@ -80,6 +80,7 @@ impl GrpcServer {
     }
 
     /// Serves one request in-process (what `TestChannel` sends).
+    #[cfg_attr(not(feature = "testing"), allow(dead_code))]
     pub(crate) async fn serve_in_process(
         &self,
         request: http::Request<Body>,
