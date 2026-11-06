@@ -8,7 +8,13 @@
 //! transaction can update at a time: a page that asks for what changed since a revision
 //! never misses a write that commits after it. The row also says whether a run is
 //! going, and whether someone asked it to stop, so a stop reaches a run in any process.
+//!
+//! Every write commits in a unit of work of its own, never in the request's: a run
+//! reads and writes these rows beside the request that started it, on other
+//! connections, while the request's transaction is still open (and on SQLite that
+//! transaction holds the database's only write lock until the request ends).
 
+use std::future::Future;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -220,10 +226,20 @@ pub(crate) struct Store {
     db: Arc<Db>,
 }
 
-/// A run that began: its id, and the answer it writes into.
+/// A run that began: its id, the answer it writes into, and the notes the page left
+/// for it.
 pub(crate) struct Begun {
     pub(crate) run_id: Uuid,
     pub(crate) answer: Uuid,
+    pub(crate) notes: Vec<String>,
+}
+
+/// The notes a run row holds.
+fn notes_of(row: &RunRow) -> Vec<String> {
+    row.notes
+        .as_deref()
+        .and_then(|text| serde_json::from_str(text).ok())
+        .unwrap_or_default()
 }
 
 impl Store {
@@ -234,6 +250,26 @@ impl Store {
     /// A unit of work for `user`.
     pub(crate) async fn uow(&self, user: Uuid) -> Uow {
         self.db.uow(Some(user), None).await
+    }
+
+    /// Runs `work` in a unit of work of its own for `user` (what it writes through the
+    /// database goes there), committed when it succeeds and rolled back when it fails.
+    pub(crate) async fn own<T>(
+        &self,
+        user: Uuid,
+        work: impl Future<Output = Result<T, AppError>>,
+    ) -> Result<T, AppError> {
+        let uow = self.uow(user).await;
+        match uow.scope(work).await {
+            Ok(value) => {
+                uow.commit().await.map_err(db_error)?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = uow.rollback().await;
+                Err(error)
+            }
+        }
     }
 
     /// The conversation's next revision, taken in `uow`'s transaction from its row,
@@ -276,16 +312,24 @@ impl Store {
             notes: None,
             updated_at: Utc::now(),
         };
-        match record::insert(&*self.db, &row).await {
-            Ok(()) => Ok(row),
+        let uow = self.uow(user).await;
+        match record::insert(&uow, &row).await {
+            Ok(()) => {
+                uow.commit().await.map_err(db_error)?;
+                Ok(row)
+            }
             // Two first messages at once: the other made it.
             Err(error) if error.kind() == ErrorKind::UniqueViolation => {
+                let _ = uow.rollback().await;
                 record::find::<RunRow, _>(&*self.db, conversation)
                     .await
                     .map_err(db_error)?
                     .ok_or_else(|| AppError::internal("the assistant's run row went missing"))
             }
-            Err(error) => Err(db_error(error)),
+            Err(error) => {
+                let _ = uow.rollback().await;
+                Err(db_error(error))
+            }
         }
     }
 
@@ -300,7 +344,8 @@ impl Store {
 
     /// Begins a run: refuses one while another goes (unless that one went quiet past
     /// [`STALE_AFTER_MINUTES`]), writes the reader's message when there is one, and the
-    /// answer the run writes into.
+    /// answer the run writes into. A run that answers a message takes the notes the page
+    /// left since the last one.
     pub(crate) async fn begin(
         &self,
         conversation: Uuid,
@@ -328,13 +373,17 @@ impl Store {
             return Err(AppError::conflict("The assistant is still answering."));
         }
         let run_id = Uuid::now_v7();
-        RunRow::update_where(Filter::all().eq("conversation_id", conversation))
+        let mut start = RunRow::update_where(Filter::all().eq("conversation_id", conversation))
             .set("status", RUNNING)
             .set("run_id", Some(run_id))
-            .set("cancel", 0)
-            .execute(&uow)
-            .await
-            .map_err(db_error)?;
+            .set("cancel", 0);
+        let notes = if message.is_some() {
+            start = start.set("notes", None::<String>);
+            notes_of(&row)
+        } else {
+            Vec::new()
+        };
+        start.execute(&uow).await.map_err(db_error)?;
         if let Some(text) = message {
             self.insert(
                 &uow,
@@ -357,7 +406,11 @@ impl Store {
             )
             .await?;
         uow.commit().await.map_err(db_error)?;
-        Ok(Begun { run_id, answer })
+        Ok(Begun {
+            run_id,
+            answer,
+            notes,
+        })
     }
 
     /// Ends run `run_id`, unless another took its place.
@@ -550,17 +603,23 @@ impl Store {
     }
 
     /// Asks the conversation's run to stop: the flag every process's run reads.
-    pub(crate) async fn ask_to_stop(&self, conversation: Uuid) -> Result<(), AppError> {
-        RunRow::update_where(
+    pub(crate) async fn ask_to_stop(&self, conversation: Uuid, user: Uuid) -> Result<(), AppError> {
+        let uow = self.uow(user).await;
+        let asked = RunRow::update_where(
             Filter::all()
                 .eq("conversation_id", conversation)
                 .eq("status", RUNNING),
         )
         .set("cancel", 1)
-        .execute(&*self.db)
-        .await
-        .map_err(db_error)?;
-        Ok(())
+        .execute(&uow)
+        .await;
+        match asked {
+            Ok(_) => uow.commit().await.map_err(db_error),
+            Err(error) => {
+                let _ = uow.rollback().await;
+                Err(db_error(error))
+            }
+        }
     }
 
     /// Whether someone asked run `run_id` to stop, or another run took its place.
@@ -634,11 +693,7 @@ impl Store {
             .await
             .map_err(db_error)?
             .ok_or_else(no_conversation)?;
-        let mut notes: Vec<String> = row
-            .notes
-            .as_deref()
-            .and_then(|text| serde_json::from_str(text).ok())
-            .unwrap_or_default();
+        let mut notes = notes_of(&row);
         notes.push(note.chars().take(500).collect());
         if notes.len() > 10 {
             notes.drain(..notes.len() - 10);
@@ -652,28 +707,5 @@ impl Store {
             .await
             .map_err(db_error)?;
         Ok(())
-    }
-
-    /// Takes the notes for the next run.
-    pub(crate) async fn take_notes(&self, conversation: Uuid) -> Result<Vec<String>, AppError> {
-        let Some(row) = record::find::<RunRow, _>(&*self.db, conversation)
-            .await
-            .map_err(db_error)?
-        else {
-            return Ok(Vec::new());
-        };
-        let notes: Vec<String> = row
-            .notes
-            .as_deref()
-            .and_then(|text| serde_json::from_str(text).ok())
-            .unwrap_or_default();
-        if !notes.is_empty() {
-            RunRow::update_where(Filter::all().eq("conversation_id", conversation))
-                .set("notes", None::<String>)
-                .execute(&*self.db)
-                .await
-                .map_err(db_error)?;
-        }
-        Ok(notes)
     }
 }

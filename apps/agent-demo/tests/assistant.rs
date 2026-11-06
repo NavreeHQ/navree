@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_demo::assistant::ShopAssistant;
-use agent_demo::shop::{self, MANAGER, Order, SAMPLE_ORDER, STAFF, rupees};
+use agent_demo::shop::{self, DEMO_PASSWORD, MANAGER, Order, SAMPLE_ORDER, STAFF, rupees};
 use agent_demo::{Settings, app};
 use http::Uri;
 use navree::access::{AbilityFactory, PrincipalAccess};
@@ -18,7 +18,7 @@ use navree::auth::AuthService;
 use navree::contracts::{AuthVia, Principal};
 use navree::db::{Db, ExecutorExt as _, Statement, Value};
 use navree::orm::Model as _;
-use navree::testing::TestApp;
+use navree::testing::{TestApp, TestClient, TestResponse};
 use navree::ui::LazyAsk;
 use serde_json::json;
 use uuid::Uuid;
@@ -116,6 +116,27 @@ fn buttons(html: &str) -> Vec<String> {
             rest[..rest.find('"').unwrap()].replace("&amp;", "&")
         })
         .collect()
+}
+
+/// Posts a form as the page does, with the session's CSRF token.
+async fn post_form(client: &TestClient, path: &str, fields: &[(&str, &str)]) -> TestResponse {
+    if client.cookie("XSRF-TOKEN").is_none() {
+        client
+            .get("/sign-in")
+            .header("accept", "text/html")
+            .send()
+            .await
+            .assert_status(200);
+    }
+    let csrf = client.cookie("XSRF-TOKEN").expect("the XSRF-TOKEN cookie");
+    let mut all = fields.to_vec();
+    all.push(("_csrf", csrf.as_str()));
+    client
+        .post(path)
+        .header("accept", "text/html")
+        .form(&all)
+        .send()
+        .await
 }
 
 async fn sample(app: &TestApp) -> Order {
@@ -310,4 +331,72 @@ async fn an_orders_page_tells_the_assistant_which_order_it_is_about() {
         system.contains("order KK-1042 by Harpreet Kaur of Ludhiana: ₹1,250 by UPI, paid"),
         "{system}"
     );
+}
+
+// The composer's posts go through the whole app, as a browser sends them: the request's
+// own unit of work is open around the handler while the answer is written beside it.
+#[tokio::test]
+async fn a_question_asked_from_the_page_is_answered() {
+    let shop = shop("page").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    let browser = app.client();
+    let signed_in = post_form(
+        &browser,
+        "/sign-in",
+        &[("email", MANAGER.1), ("password", DEMO_PASSWORD)],
+    )
+    .await;
+    assert_eq!(signed_in.status(), 303, "{}", signed_in.text());
+    browser
+        .get("/assistant")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+
+    fake.respond(FakeReply::text("UPI took the most this week."));
+    let asked = post_form(
+        &browser,
+        "/assistant",
+        &[("message", "How did UPI do this week?")],
+    )
+    .await;
+    assert_eq!(asked.status(), 303, "{}", asked.text());
+    let page = asked
+        .header("location")
+        .expect("the conversation's page")
+        .to_owned();
+    let id: Uuid = page
+        .strip_prefix("/assistant/")
+        .and_then(|id| id.parse().ok())
+        .unwrap_or_else(|| panic!("a conversation's page: {page}"));
+    let html = settled(app, &simran, id).await;
+    assert!(html.contains("How did UPI do this week?"), "{html}");
+    assert!(html.contains("UPI took the most this week."), "{html}");
+    browser
+        .get(&page)
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+
+    // The next message, in the same conversation.
+    fake.respond(FakeReply::text("Card came second."));
+    let sent = post_form(
+        &browser,
+        &format!("{page}/messages"),
+        &[("message", "And cards?")],
+    )
+    .await;
+    assert!(
+        sent.status().is_success() || sent.status().is_redirection(),
+        "{}: {}",
+        sent.status(),
+        sent.text()
+    );
+    let html = settled(app, &simran, id).await;
+    assert!(html.contains("And cards?"), "{html}");
+    assert!(html.contains("Card came second."), "{html}");
 }

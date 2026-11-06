@@ -781,13 +781,36 @@ impl<A: Agent> Assistant<A> {
                 Utc::now(),
             )?;
         }
+        // The conversation is committed before its run starts, which reads and writes
+        // it beside the request (see the store's docs).
+        let conversations = &self.core.conversations;
         let row = self
             .core
-            .conversations
-            .create(user, A::NAME, message)
-            .await
-            .map_err(|error| error.to_app_error())?;
-        self.send(access, row.id, message, context).await?;
+            .store
+            .own(user, async {
+                conversations
+                    .create(user, A::NAME, message)
+                    .await
+                    .map_err(|error| error.to_app_error())
+            })
+            .await?;
+        if let Err(error) = self.send(access, row.id, message, context).await {
+            // A first message that was refused leaves no conversation behind.
+            let removed = self
+                .core
+                .store
+                .own(user, async {
+                    conversations
+                        .delete(user, row.id)
+                        .await
+                        .map_err(|error| error.to_app_error())
+                })
+                .await;
+            if let Err(removal) = removed {
+                tracing::warn!(target: "navree::ai", message = %removal.body()["message"], "a refused conversation could not be removed");
+            }
+            return Err(error);
+        }
         Ok(row.id)
     }
 
@@ -814,8 +837,8 @@ impl<A: Agent> Assistant<A> {
                 "The conversation's working state, as JSON: {state}"
             ));
         }
-        let begun = self.core.store.begin(id, user, Some(message)).await?;
-        for note in self.core.store.take_notes(id).await? {
+        let mut begun = self.core.store.begin(id, user, Some(message)).await?;
+        for note in std::mem::take(&mut begun.notes) {
             notes.push(format!("Since your last answer, on the page: {note}"));
         }
         self.core.nudge(user, id).await;
@@ -845,7 +868,7 @@ impl<A: Agent> Assistant<A> {
     /// it. Nothing happens when none is.
     pub async fn stop(&self, user: Uuid, id: Uuid) -> Result<(), AppError> {
         self.core.store.owned(id, user).await?;
-        self.core.store.ask_to_stop(id).await?;
+        self.core.store.ask_to_stop(id, user).await?;
         self.core.signal_stop(id);
         Ok(())
     }

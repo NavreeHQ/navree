@@ -26,7 +26,7 @@ use navree_kernel::{BoxError, Module, ModuleBuilder};
 use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery;
 use navree_realtime::Live;
-use navree_testing::TestApp;
+use navree_testing::{TestApp, TestClient, TestResponse, principal};
 use navree_ui::{LazyAsk, el};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -561,6 +561,79 @@ async fn a_message_is_checked_before_anything_runs() {
         .fake()
         .unwrap()
         .assert_nothing_prompted();
+}
+
+// ---------------------------------------------------------------------------
+// Through the routes
+// ---------------------------------------------------------------------------
+
+/// The page's app, with each request signed in as the test says.
+async fn routed() -> TestApp {
+    agent_app()
+        .fake_auth()
+        .module(HttpModule::from_config())
+        .override_value::<Live>(Arc::new(Live::new(Arc::new(Nudges::default()))))
+        .module(PageModule)
+        .build()
+        .await
+}
+
+/// Posts `fields` to `path` as a page's form does.
+async fn post_form(client: &TestClient, path: &str, fields: &[(&str, &str)]) -> TestResponse {
+    client
+        .post(path)
+        .header("accept", "text/html")
+        .form(fields)
+        .send()
+        .await
+}
+
+/// Whether a form's post went: a redirect, or a page's ops.
+fn went(response: &TestResponse) -> bool {
+    response.status().is_success() || response.status().is_redirection()
+}
+
+// The composer's posts go through the whole app: each request's own unit of work is open
+// around its handler while the answer is written beside it, on other connections.
+#[tokio::test]
+async fn messages_posted_to_the_routes_are_answered_and_stopped() {
+    let app = routed().await;
+    let daljit = user(&app, "Daljit", &[]).await;
+    let access = access_of(&app, daljit).await;
+    let fake = app.get::<Ai>().await.fake().unwrap();
+    let browser = app.acting_as(principal(daljit));
+
+    fake.respond(FakeReply::text("You have no notes yet."));
+    let started = post_form(
+        &browser,
+        "/assistant",
+        &[("message", "How many notes do I have?")],
+    )
+    .await;
+    assert_eq!(started.status(), 303, "{}", started.text());
+    let page = started.header("location").unwrap().to_owned();
+    let id: Uuid = page
+        .strip_prefix("/assistant/")
+        .and_then(|id| id.parse().ok())
+        .unwrap_or_else(|| panic!("a conversation's page: {page}"));
+    let html = settled(&app, &access, id).await;
+    assert!(html.contains("How many notes do I have?"), "{html}");
+    assert!(html.contains("You have no notes yet."), "{html}");
+
+    // `slow` runs past its one-second limit: the run is busy in the tool when it stops.
+    fake.respond(FakeReply::tool_call("slow", json!({})));
+    let sent = post_form(
+        &browser,
+        &format!("{page}/messages"),
+        &[("message", "Do the slow thing")],
+    )
+    .await;
+    assert!(went(&sent), "{}: {}", sent.status(), sent.text());
+    let stopped = post_form(&browser, &format!("{page}/stop"), &[]).await;
+    assert!(went(&stopped), "{}: {}", stopped.status(), stopped.text());
+    let html = settled(&app, &access, id).await;
+    assert!(html.contains("Do the slow thing"), "{html}");
+    assert!(html.contains("Stopped"), "{html}");
 }
 
 // ---------------------------------------------------------------------------
