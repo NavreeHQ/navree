@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", "apps/evidence-app", "apps/theme-demo", "apps/ui-docs", "apps/ui-proof", "apps/ui-table-proof"]
+members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", "apps/evidence-app", "apps/theme-demo", "apps/ui-docs", "apps/ui-proof", "apps/ui-table-proof", "apps/agent-demo"]
 # The benchmark apps (Navree's and other Rust frameworks') are separate projects,
 # and so is the fuzzing workspace (it needs a nightly toolchain).
 exclude = ["bench", "fuzz"]

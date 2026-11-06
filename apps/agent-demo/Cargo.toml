@@ -1,0 +1,33 @@
+[package]
+name = "agent-demo"
+description = "An example app on Navree UI with an assistant: a kitchenware shop's orders and payments, an agent that answers with components it chooses from a closed catalogue, refunds approved in the page, and buttons that act under the reader's own access, on SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "agent-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "realtime", "auth", "access", "session", "ai", "crypto"] }
+# The assistant on pages (`navree::ai::ui`).
+navree-ai = { workspace = true, features = ["ui"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "sqlite", "realtime", "auth", "access", "session", "ai", "crypto", "testing"] }
