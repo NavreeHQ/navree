@@ -74,6 +74,7 @@ jobs:
           scripts/integration-services.sh pull mail &
           pulling=$!
           cargo test --locked -p navree-mail --test mail --no-run
+          cargo test --locked -p navree-integrations --test integrations --no-run
           wait "$pulling"
 
       - name: Start the servers
@@ -88,6 +89,9 @@ jobs:
 
       - name: Inbound mail from IMAP and POP3 (GreenMail)
         run: cargo test --locked -p navree-mail --test mail greenmail -- --ignored --nocapture
+
+      - name: Gmail push through the Pub/Sub emulator
+        run: cargo test --locked -p navree-integrations --test integrations pubsub -- --ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}

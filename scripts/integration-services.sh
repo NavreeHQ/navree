@@ -21,7 +21,8 @@
 #
 # The groups (all of them when none is named), one per job of the workflow:
 #
-#   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3)
+#   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3),
+#             the Pub/Sub emulator
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -71,7 +72,7 @@ SMTP_PASSWORD=navree-secret
 # The services of a group.
 group_services() {
   case "$1" in
-    mail) echo "mailpit-starttls mailpit-tls localstack greenmail" ;;
+    mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
     *) return 1 ;;
   esac
 }
@@ -145,6 +146,7 @@ NAVREE_TEST_LOCALSTACK_URL=http://127.0.0.1:14566
 NAVREE_TEST_GREENMAIL_SMTP_URL=smtp://127.0.0.1:13025
 NAVREE_TEST_GREENMAIL_IMAP=127.0.0.1:13143
 NAVREE_TEST_GREENMAIL_POP3=127.0.0.1:13110
+NAVREE_TEST_PUBSUB_URL=http://127.0.0.1:18085
 EOF
 }
 
@@ -228,6 +230,7 @@ start() {
   done
   ready localstack navree-int-localstack localstack_ready
   ready greenmail navree-int-greenmail greenmail_ready
+  ready pubsub navree-int-pubsub curl --fail --silent http://127.0.0.1:18085/
 
   variables
   if [ -n "${GITHUB_ENV:-}" ]; then

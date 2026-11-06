@@ -81,3 +81,19 @@ services:
       - "127.0.0.1:13143:3143"
     environment:
       GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
+
+  # Google's Pub/Sub emulator. A push subscription posts to the app on the
+  # host, which the container reaches as host.docker.internal.
+  pubsub:
+    image: ${PUBSUB_IMAGE:-gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators}
+    container_name: navree-int-pubsub
+    ports: ["127.0.0.1:18085:8085"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command:
+      - gcloud
+      - beta
+      - emulators
+      - pubsub
+      - start
+      - --host-port=0.0.0.0:8085
+      - --project=acme-prod

@@ -12,6 +12,7 @@ mod health;
 mod lifecycle;
 mod mailboxes;
 mod notify;
+mod pubsub;
 mod real;
 mod routes;
 mod scopes;
