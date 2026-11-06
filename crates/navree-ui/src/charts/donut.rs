@@ -293,6 +293,7 @@ impl Donut {
                     )
                 })
                 .collect(),
+            links: Vec::new(),
             note: None,
         };
         Some(Drawn {

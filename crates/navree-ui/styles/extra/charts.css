@@ -125,3 +125,6 @@
 [data-slot=chart-grains]{display:inline-flex;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid var(--line);border-radius:var(--radius);& a{display:inline-flex;align-items:center;height:1.625rem;padding:0 .625rem;border-radius:calc(var(--radius) - 1px);font-size:12px;color:var(--fg-2);text-decoration:none}& a:hover{background:var(--ink-3);color:var(--fg)}& a[aria-current]{background:var(--ink-3);color:var(--fg);font-weight:500}& a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}}
 
 @media (forced-colors:active){[data-slot=chart] svg text{fill:CanvasText}[data-slot=chart-body]:focus-visible{outline-color:Highlight}}
+/* A bar that drills down: a link around the bar. The chart stays one tab stop, so the link is
+   for the pointer and for a reader; the period's name in the table is the keyboard's. */
+[data-slot=chart-drill]{cursor:pointer;outline:0;&:hover [data-slot=chart-bar]{fill:color-mix(in oklab,var(--c) 78%,var(--fg))}&:focus-visible [data-slot=chart-bar]{stroke:var(--ring);stroke-width:2px}}

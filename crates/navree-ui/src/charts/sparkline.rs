@@ -299,6 +299,7 @@ impl Sparkline {
                     )
                 })
                 .collect(),
+            links: Vec::new(),
             note: None,
         };
         Some(Drawn {

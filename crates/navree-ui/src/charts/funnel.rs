@@ -240,6 +240,7 @@ impl Funnel {
                 (labels.of_previous.to_string(), None),
             ],
             rows,
+            links: Vec::new(),
             note: None,
         };
         Some(Drawn {

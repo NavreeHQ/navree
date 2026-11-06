@@ -46,6 +46,7 @@ mod downsample;
 mod format;
 mod funnel;
 mod report;
+mod report_export;
 #[cfg(feature = "orm")]
 mod report_orm;
 mod scale;
@@ -58,6 +59,7 @@ pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
 pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
+pub use report_export::ReportTable;
 #[cfg(feature = "orm")]
 pub use report_orm::{Bucketing, Metric, TimeColumn};
 pub use scale::Grain;
@@ -571,6 +573,8 @@ pub(crate) fn value_cell(text: Option<String>, labels: &ChartLabels) -> Node {
 pub(crate) struct TableData {
     pub head: Vec<(String, Option<Color>)>,
     pub rows: Vec<(String, Vec<Node>)>,
+    /// A link for the name of a row, by row: where a mark drills down to. Empty for none.
+    pub links: Vec<Option<String>>,
     pub note: Option<String>,
 }
 
@@ -616,10 +620,16 @@ fn table_node(caption: &str, data: TableData) -> Node {
             }
         })
         .collect();
+    let links = data.links;
     let rows: Vec<Node> = data
         .rows
         .into_iter()
-        .map(|(name, cells)| {
+        .enumerate()
+        .map(|(at, (name, cells))| {
+            let name: Node = match links.get(at).and_then(Option::as_ref) {
+                Some(href) => el("a").href(href.clone()).child(name).into(),
+                None => name.into(),
+            };
             el("tr")
                 .children((
                     el("th").attr("scope", "row").child(name),

@@ -58,6 +58,13 @@ impl Series {
         self
     }
 
+    /// Draws the series in the quiet ink the chart uses for what is not the subject: the
+    /// period before, beside the one on show ([`Report::previous_series`](super::Report::previous_series)).
+    pub fn muted(mut self) -> Self {
+        self.color = Some(Color::Other);
+        self
+    }
+
     /// Pins the series to categorical colour `slot` (1 to 8), so it keeps its colour
     /// when other series come and go.
     pub fn color(mut self, slot: u8) -> Self {
@@ -253,6 +260,7 @@ pub struct Chart {
     dots: bool,
     week_start: Weekday,
     rtl: bool,
+    drill: Vec<String>,
 }
 
 common_methods!(Chart);
@@ -283,6 +291,7 @@ impl Chart {
             dots: true,
             week_start: Weekday::Mon,
             rtl: false,
+            drill: Vec::new(),
         }
     }
 
@@ -446,6 +455,18 @@ impl Chart {
         self
     }
 
+    /// Makes each category or period a link, `links[i]` for the i-th: where its rows are
+    /// listed, such as a [`DataTable`](crate::DataTable) filtered to that day. Each bar of
+    /// a vertical bar chart is a link named by its series and its period, and the name of
+    /// the period in the chart's table is one too, which a keyboard and a screen reader
+    /// reach. When bars are merged or a line is thinned, a row stands for several values
+    /// and has no link. A link must stay on this site; a `Report::drill_links` builds the
+    /// links for a report's periods.
+    pub fn drill<S: Into<String>>(mut self, links: impl IntoIterator<Item = S>) -> Self {
+        self.drill = links.into_iter().map(Into::into).collect();
+        self
+    }
+
     /// Makes the legend a set of switches that hide and show each series, with or
     /// without JavaScript. Not for stacked charts, whose stacks would lose a layer.
     pub fn toggles(mut self) -> Self {
@@ -549,6 +570,16 @@ fn stats(values: &[Option<f64>]) -> Stats {
 }
 
 impl Chart {
+    /// The link of each drawn row, when each row stands for one value of the data.
+    fn row_links(&self, rows: &[Row], total: usize) -> Vec<Option<String>> {
+        if self.drill.is_empty() || rows.len() != total {
+            return Vec::new();
+        }
+        rows.iter()
+            .map(|row| self.drill.get(row.start).cloned())
+            .collect()
+    }
+
     /// The time grain: the one set, or the spacing of the times.
     fn time_grain(&self, times: &[i64]) -> Grain {
         if let Some(grain) = self.grain {
@@ -984,6 +1015,7 @@ impl Chart {
         let table = TableData {
             head,
             rows: table_rows,
+            links: self.row_links(&rows, n),
             note: reduced.then(|| {
                 fill(
                     &labels.reduced,
@@ -1283,6 +1315,7 @@ impl Chart {
         if bars {
             let k = if plan.stacked { 1 } else { plan.series.len() };
             let band = 100.0 / m as f64;
+            let links = self.row_links(rows, rows_n);
             let mut marks: Vec<Node> = Vec::with_capacity(m * plan.series.len());
             for (s, ready) in plan.series.iter().enumerate() {
                 // In a stack, the outermost segment of each side is the one with the rounded end.
@@ -1311,23 +1344,30 @@ impl Chart {
                     } else {
                         band * i as f64
                     };
-                    marks.push(
-                        ready
-                            .color
-                            .on(el("rect")
-                                .slot("chart-bar")
-                                .attr("data-i", i as i64)
-                                .attr("data-s", s as i64)
-                                .attr("x", pct(x))
-                                .attr("width", pct(band))
-                                .attr("y", n(top, 1))
-                                .attr("height", n(h, 1))
-                                .attr(
-                                    "clip-path",
-                                    bar_clip(k, if plan.stacked { 0 } else { s }, corners),
-                                ))
+                    let bar = ready
+                        .color
+                        .on(el("rect")
+                            .slot("chart-bar")
+                            .attr("data-i", i as i64)
+                            .attr("data-s", s as i64)
+                            .attr("x", pct(x))
+                            .attr("width", pct(band))
+                            .attr("y", n(top, 1))
+                            .attr("height", n(h, 1))
+                            .attr(
+                                "clip-path",
+                                bar_clip(k, if plan.stacked { 0 } else { s }, corners),
+                            ));
+                    marks.push(match links.get(i).and_then(Option::as_ref) {
+                        Some(href) => el("a")
+                            .slot("chart-drill")
+                            .attr("href", href.clone())
+                            .attr("aria-label", format!("{}: {}", ready.name, rows[i].name))
+                            .attr("tabindex", -1_i64)
+                            .child(bar)
                             .into(),
-                    );
+                        None => bar.into(),
+                    });
                 }
             }
             plot.push(el("g").slot("chart-bars").child(marks).into());

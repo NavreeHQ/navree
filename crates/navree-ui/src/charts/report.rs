@@ -191,7 +191,7 @@ impl Report {
         Self::build(range, grain, Weekday::Mon, zone)
     }
 
-    fn build<Tz: ReportZone>(
+    pub(crate) fn build<Tz: ReportZone>(
         range: DateRange,
         asked: Grain,
         week_start: Weekday,
