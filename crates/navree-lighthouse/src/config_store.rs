@@ -6,8 +6,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_db::{Executor as _, Statement};
-use navree_orm::{ConflictUpdate, Model as _, Record};
+use navree_orm::{ConflictUpdate, Model as _, Record, col, table};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -279,19 +278,15 @@ impl LighthouseStore {
     ) -> Result<HashMap<String, i64>, LighthouseError> {
         let mut counts: HashMap<String, i64> = HashMap::new();
         for chunk in names.chunks(200) {
-            let places = vec!["?"; chunk.len()].join(", ");
-            let statement = Statement::portable(
-                format!(
-                    "SELECT {column} AS name, COUNT(*) AS issues FROM lighthouse_issues \
-                     WHERE {column} IN ({places}) GROUP BY {column}"
-                ),
-                chunk.iter().map(|name| name.as_str().into()),
-            );
-            // `column` is one of two column names this module passes as literals, and
-            // `places` holds only `?` placeholders: every release name is bound.
-            // nosemgrep: navree-sql-built-from-strings
-            for row in self.db.fetch_all(&statement).await? {
-                let name: String = row.get("name")?;
+            let rows = table("lighthouse_issues")
+                .select([column])
+                .select_raw("COUNT(*) AS issues", Vec::<i64>::new())
+                .where_(col(column).is_in(chunk.iter().cloned()))
+                .group_by([column])
+                .get(&self.db)
+                .await?;
+            for row in rows {
+                let name: String = row.get(column)?;
                 *counts.entry(name).or_default() += row.get::<i64>("issues")?;
             }
         }
