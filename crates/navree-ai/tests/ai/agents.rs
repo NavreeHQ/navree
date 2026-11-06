@@ -174,7 +174,10 @@ async fn a_tool_call_runs_as_the_user_and_its_result_goes_back() {
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([
-        FakeReply::tool_call("add_note", json!({ "title": "Call Daljit about the quote" })),
+        FakeReply::tool_call(
+            "add_note",
+            json!({ "title": "Call Daljit about the quote" }),
+        ),
         FakeReply::text("Logged the call."),
     ]);
 
@@ -546,7 +549,10 @@ async fn a_new_message_instead_of_an_answer_rejects_the_pending_call() {
 #[tokio::test]
 async fn memory_continues_a_conversation_for_its_owner_only() {
     let app = app().await;
-    let (dana, sam) = (user(&app, "Daljit", &[]).await, user(&app, "Sahil", &[]).await);
+    let (dana, sam) = (
+        user(&app, "Daljit", &[]).await,
+        user(&app, "Sahil", &[]).await,
+    );
     let ai = app.get::<Ai>().await;
     let fake = ai.fake().unwrap();
     fake.respond_with([

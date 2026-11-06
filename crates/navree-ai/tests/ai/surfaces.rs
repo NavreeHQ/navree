@@ -451,7 +451,10 @@ async fn a_message_streams_into_the_conversation_as_items_at_new_revisions() {
 #[tokio::test]
 async fn another_reader_never_sees_the_conversation() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (
+        user(&app, "Daljit", &[]).await,
+        user(&app, "Ravi", &[]).await,
+    );
     let (dana_access, ravi_access) = (access_of(&app, dana).await, access_of(&app, ravi).await);
     app.get::<Ai>()
         .await
@@ -639,7 +642,10 @@ async fn refused_arguments_are_retried_then_the_model_answers_in_words() {
 #[tokio::test]
 async fn a_component_the_reader_may_not_see_shows_nothing_of_its_data() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (
+        user(&app, "Daljit", &[]).await,
+        user(&app, "Ravi", &[]).await,
+    );
     let access = access_of(&app, ravi).await;
     // Daljit's note: Ravi may read it, but the card shows only notes the reader may update.
     let note = add_note(&app, dana, "Daljit's private plan").await;
@@ -957,7 +963,10 @@ async fn state_the_model_writes_is_checked_and_the_page_edits_it() {
 #[tokio::test]
 async fn a_page_context_is_signed_for_its_reader_and_resolved_under_their_access() {
     let Page { app, .. } = page().await;
-    let (dana, ravi) = (user(&app, "Daljit", &[]).await, user(&app, "Ravi", &[]).await);
+    let (dana, ravi) = (
+        user(&app, "Daljit", &[]).await,
+        user(&app, "Ravi", &[]).await,
+    );
     let access = access_of(&app, dana).await;
     let note = add_note(&app, dana, "Order 1042 for Simran").await;
     let foreign = add_note(&app, ravi, "Ravi's own note").await;
