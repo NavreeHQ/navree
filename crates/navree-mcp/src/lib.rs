@@ -108,6 +108,7 @@ mod sessions;
 mod stdio;
 mod uri;
 
+#[cfg(feature = "testing")]
 pub mod testing;
 
 #[doc(hidden)]

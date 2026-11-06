@@ -18,7 +18,7 @@ default = []
 i18n = ["dep:navree-i18n"]
 ## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
 ## import tests run on their own fresh PostgreSQL database.
-postgres = ["navree-db/postgres", "navree-queue/postgres"]
+postgres = ["navree-db/postgres", "navree-queue/test-postgres"]
 ## MySQL for the tests: with `NAVREE_TEST_MYSQL_URL` set, the import
 ## tests run on their own fresh MySQL database.
 mysql = ["navree-db/mysql"]

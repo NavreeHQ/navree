@@ -1,6 +1,6 @@
 //! The delivery tables on every database: SQLite always, PostgreSQL with
-//! TimescaleDB (`--features postgres`, `NAVREE_TEST_POSTGRES_URL`) and
-//! MySQL (`--features mysql`, `NAVREE_TEST_MYSQL_URL`).
+//! TimescaleDB (`--features test-postgres`, `NAVREE_TEST_POSTGRES_URL`) and
+//! MySQL (`--features test-mysql`, `NAVREE_TEST_MYSQL_URL`).
 //!
 //! Each scenario runs in a database of its own (created on the server and
 //! dropped afterwards): the migration, the delivery log and its events
@@ -9,7 +9,7 @@
 //! the message goes out once).
 //!
 //! ```text
-//! cargo test -p navree-mail --features postgres,mysql --test mail servers
+//! cargo test -p navree-mail --features test-postgres,test-mysql --test mail servers
 //! ```
 
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -51,8 +51,8 @@ impl Scratch {
     async fn new(server: Server) -> Option<Scratch> {
         let (variable, compiled) = match server {
             Server::Sqlite => return None,
-            Server::Postgres => ("NAVREE_TEST_POSTGRES_URL", cfg!(feature = "postgres")),
-            Server::MySql => ("NAVREE_TEST_MYSQL_URL", cfg!(feature = "mysql")),
+            Server::Postgres => ("NAVREE_TEST_POSTGRES_URL", cfg!(feature = "test-postgres")),
+            Server::MySql => ("NAVREE_TEST_MYSQL_URL", cfg!(feature = "test-mysql")),
         };
         let admin_url = match std::env::var(variable) {
             Ok(url) if compiled && !url.is_empty() => url,

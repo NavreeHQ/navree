@@ -18,9 +18,9 @@ mcp = ["dep:navree-mcp", "dep:navree-validation"]
 ## PostgreSQL integration tests (`tests/postgres.rs`, with
 ## NAVREE_TEST_POSTGRES_URL): several processes recording into one database.
 ## Also the test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres`).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -65,6 +65,8 @@ uuid = { workspace = true }
 navree-auth = { workspace = true, features = ["session", "ui"] }
 # The browser suite drives the dashboard in Chrome.
 navree-browser = { workspace = true }
+# The MCP tests speak to the server with `McpTestClient`.
+navree-mcp = { workspace = true, features = ["testing"] }
 navree-crypto = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }

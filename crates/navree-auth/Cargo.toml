@@ -14,9 +14,9 @@ workspace = true
 default = []
 ## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
 ## NAVREE_TEST_POSTGRES_URL; also `tests/postgres.rs`).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 ## Browser sign-in on navree-session's session: `SessionStrategy` and the
 ## `AuthService::sign_in_session` family (two-factor, throttles, sign-in
 ## policies and the audit trail as for tokens). The facade turns it on when

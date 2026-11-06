@@ -51,8 +51,8 @@ impl Server {
     fn compiled(self) -> bool {
         match self {
             Server::Sqlite => true,
-            Server::Postgres => cfg!(feature = "postgres"),
-            Server::MySql => cfg!(feature = "mysql"),
+            Server::Postgres => cfg!(feature = "test-postgres"),
+            Server::MySql => cfg!(feature = "test-mysql"),
         }
     }
 }

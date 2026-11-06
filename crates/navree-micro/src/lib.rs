@@ -49,6 +49,7 @@ mod codec;
 mod context;
 mod envelope;
 mod error;
+#[cfg(feature = "testing")]
 mod fake;
 mod handlers;
 mod listener;
@@ -68,6 +69,7 @@ pub use codec::Codec;
 pub use context::MessageContext;
 pub use envelope::{Envelope, headers};
 pub use error::{MicroError, RemoteError};
+#[cfg(feature = "testing")]
 pub use fake::{FakeClient, FakeEmit, MicroFake, Reply};
 pub use handlers::{
     MessageHandlers, MessageReply, ModuleBuilderMicroExt, PatternDef, PatternMeta, ReplyCodec,

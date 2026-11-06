@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! NAVREE_TEST_DATABASE=postgres \
-//!   cargo test -p navree-social --features postgres
+//!   cargo test -p navree-social --features test-postgres
 //! ```
 
 #![allow(dead_code)]
@@ -40,8 +40,8 @@ impl Server {
             Ok(other) => panic!("NAVREE_TEST_DATABASE: `{other}` is not sqlite, postgres or mysql"),
         };
         let compiled = match server {
-            Server::Postgres => cfg!(feature = "postgres"),
-            _ => cfg!(feature = "mysql"),
+            Server::Postgres => cfg!(feature = "test-postgres"),
+            _ => cfg!(feature = "test-mysql"),
         };
         assert!(
             compiled,

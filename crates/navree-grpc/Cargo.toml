@@ -11,8 +11,9 @@ publish.workspace = true
 workspace = true
 
 [features]
-default = ["testing"]
-## `navree_grpc::testing::TestChannel`: tonic clients on a `TestApp`, in-process.
+default = []
+## `navree_grpc::testing::TestChannel`: tonic clients on a `TestApp`, in-process. The facade
+## turns it on with its own `testing` feature.
 testing = ["dep:navree-testing"]
 
 [dependencies]
@@ -52,6 +53,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests drive its services through `TestChannel`.
+navree-grpc = { workspace = true, features = ["testing"] }
 navree-access = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }

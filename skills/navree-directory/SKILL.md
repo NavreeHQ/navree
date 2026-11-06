@@ -202,7 +202,7 @@ events and SCIM stay real. SCIM: create a `scim` connection and use
 `app.client().post("/scim/v2/Users").bearer(token.expose())`. Real
 responses: point integrations' `api_url`/`authority_url`/`token_url` at
 wiremock and allow `127.0.0.1` in the HTTP client's SSRF policy. Servers:
-`cargo test -p navree-directory --features postgres,mysql --test directory servers`
+`cargo test -p navree-directory --features test-postgres,test-mysql --test directory servers`
 with `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL`.
 
 ## Errors (`code`)

@@ -2,13 +2,13 @@
 //! library columns and their `CHECK` constraint, the visibility scope's
 //! organization subquery, the guard, clones and seeding on real servers.
 //!
-//! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or with `--features mysql` and set
+//! Opt-in: build with `--features test-postgres` and set
+//! `NAVREE_TEST_POSTGRES_URL`, or with `--features test-mysql` and set
 //! `NAVREE_TEST_MYSQL_URL`, to the URL of a throwaway server whose user may
 //! create databases. Each test creates its own database and drops it at the
 //! end; without the feature or the variable the test returns at once.
 
-#[cfg(any(feature = "postgres", feature = "mysql"))]
+#[cfg(any(feature = "test-postgres", feature = "test-mysql"))]
 mod real {
     use navree_db::{DbOptions, Executor, Pool};
     use navree_orm::prelude::*;
@@ -203,7 +203,7 @@ mod real {
         lib.world.app.shutdown().await.unwrap();
     }
 
-    #[cfg(feature = "postgres")]
+    #[cfg(feature = "test-postgres")]
     #[tokio::test]
     async fn libraries_on_postgres() {
         let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", |name| {
@@ -217,7 +217,7 @@ mod real {
         scratch.drop().await;
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(feature = "test-mysql")]
     #[tokio::test]
     async fn libraries_on_mysql() {
         let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", |name| {

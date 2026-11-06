@@ -14,12 +14,15 @@ workspace = true
 default = []
 ## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
 ## NAVREE_TEST_POSTGRES_URL).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 ## The consent page, drawn with Navree UI and served at `/oauth/consent`. The facade turns it
 ## on when both `ui` and `oauth` are on.
 ui = ["dep:navree-ui"]
+## `navree_oauth::testing`: helpers that walk the authorization code flow with
+## navree-testing's `TestClient`. The facade turns it on with its own `testing` feature.
+testing = ["dep:navree-testing"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -39,8 +42,8 @@ navree-kernel = { workspace = true }
 navree-openapi = { workspace = true }
 # The OAuth tables are models (`Client`, `PersonalAccessToken`, ...).
 navree-orm = { workspace = true }
-# `navree_oauth::testing` drives the flows with navree-testing's TestClient.
-navree-testing = { workspace = true }
+# Feature `testing`: `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+navree-testing = { workspace = true, optional = true }
 navree-ui = { workspace = true, optional = true }
 # Workspace-limited clients pin their tokens with `PinnedWorkspace`.
 navree-workspace = { workspace = true }
@@ -56,7 +59,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 # The crate's own tests draw the consent page.
-navree-oauth = { workspace = true, features = ["ui"] }
+navree-oauth = { workspace = true, features = ["ui", "testing"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 http-body-util = { workspace = true }

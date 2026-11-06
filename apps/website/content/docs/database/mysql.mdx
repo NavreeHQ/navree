@@ -116,7 +116,7 @@ The ORM's real-server suite runs on MySQL 8.4 as well ([PostgreSQL page](/docs/d
 The other modules' suites (auth, queue, audit, workspaces and the rest) run on MySQL 8.4 too, in the scheduled CI job ([PostgreSQL page](/docs/database/postgresql/#what-has-been-run)):
 
 ```sh
-NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features mysql
+NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features test-mysql
 ```
 
 MariaDB connects through the same code but hasn't been run against a MariaDB server yet: treat it as untested.

@@ -17,7 +17,7 @@
 //! SQLite always runs; PostgreSQL (with TimescaleDB) and MySQL run with the
 //! crate's `postgres` / `mysql` features when `NAVREE_TEST_POSTGRES_URL` /
 //! `NAVREE_TEST_MYSQL_URL` is set (or in `target/test-databases.env`):
-//! `cargo test -p navree-orm --features postgres,mysql --test differential
+//! `cargo test -p navree-orm --features test-postgres,test-mysql --test differential
 //! -- --nocapture` prints the tallies.
 
 mod across;
@@ -39,13 +39,13 @@ async fn sqlite_renders_what_the_compiler_runs() {
     compare_paths(Dialect::Sqlite).await;
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(feature = "test-postgres")]
 #[tokio::test]
 async fn postgres_renders_what_the_compiler_runs() {
     compare_paths(Dialect::Postgres).await;
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(feature = "test-mysql")]
 #[tokio::test]
 async fn mysql_renders_what_the_compiler_runs() {
     compare_paths(Dialect::MySql).await;
@@ -56,13 +56,13 @@ async fn sqlite_runs_the_portable_statements() {
     portable(Dialect::Sqlite).await;
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(feature = "test-postgres")]
 #[tokio::test]
 async fn postgres_runs_the_portable_statements() {
     portable(Dialect::Postgres).await;
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(feature = "test-mysql")]
 #[tokio::test]
 async fn mysql_runs_the_portable_statements() {
     portable(Dialect::MySql).await;

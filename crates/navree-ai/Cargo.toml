@@ -14,10 +14,10 @@ workspace = true
 default = []
 ## PostgreSQL driver for navree-db, for the pgvector store and conversation
 ## memory on PostgreSQL.
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## MySQL driver for navree-db, for conversation memory on MySQL (the test
 ## suite runs on it with `NAVREE_TEST_DATABASE=mysql`).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 ## An assistant on Navree UI pages (`navree_ai::ui`): its conversation drawn and
 ## streamed into a page through the live hub, components a model may choose from a
 ## closed catalogue, their buttons' signed actions, approvals the page draws, the

@@ -22,10 +22,14 @@ rabbitmq = ["dep:lapin"]
 redis = ["dep:redis"]
 ## MQTT 5.
 mqtt = ["dep:rumqttc"]
+## `MicroFake`: stubs other services and records what a service sends, in process
+## (it answers with navree-testing's `TestResponse`). The facade turns it on with its
+## own `testing` feature.
+testing = ["dep:navree-testing"]
 ## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 async-nats = { workspace = true, optional = true }
@@ -44,7 +48,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
-navree-testing = { workspace = true }
+navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true }
 percent-encoding = { workspace = true }
 redis = { workspace = true, optional = true, features = ["tls-rustls-webpki-roots"] }
@@ -64,6 +68,8 @@ uuid = { workspace = true }
 webpki-roots = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests use `MicroFake`.
+navree-micro = { workspace = true, features = ["testing"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-access = { workspace = true }

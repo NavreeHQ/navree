@@ -6,8 +6,8 @@
 //! subscription upsert, and UUIDs and timestamps that come back as they
 //! were written.
 //!
-//! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or `--features mysql` and
+//! Opt-in: build with `--features test-postgres` and set
+//! `NAVREE_TEST_POSTGRES_URL`, or `--features test-mysql` and
 //! `NAVREE_TEST_MYSQL_URL`, to a URL of a throwaway server whose user may
 //! create databases. Each test creates its own database and drops it at
 //! the end.
@@ -229,7 +229,7 @@ async fn flow(scratch: &Scratch) {
     app.shutdown().await.unwrap();
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(feature = "test-postgres")]
 #[tokio::test]
 async fn channel_tables_work_on_postgres() {
     let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres", false).await else {
@@ -239,7 +239,7 @@ async fn channel_tables_work_on_postgres() {
     scratch.drop().await;
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(feature = "test-mysql")]
 #[tokio::test]
 async fn channel_tables_work_on_mysql() {
     let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql", true).await else {
@@ -380,7 +380,7 @@ async fn preference_flow(scratch: &Scratch) {
     app.shutdown().await.unwrap();
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(feature = "test-postgres")]
 #[tokio::test]
 async fn preferences_and_held_deliveries_work_on_postgres() {
     let Some(scratch) =
@@ -392,7 +392,7 @@ async fn preferences_and_held_deliveries_work_on_postgres() {
     scratch.drop().await;
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(feature = "test-mysql")]
 #[tokio::test]
 async fn preferences_and_held_deliveries_work_on_mysql() {
     let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql preferences", true).await

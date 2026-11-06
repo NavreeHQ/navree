@@ -14,10 +14,10 @@ workspace = true
 default = []
 ## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
 ## database tests also run on a fresh PostgreSQL database each.
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## MySQL for the tests: with `NAVREE_TEST_MYSQL_URL` set, the database
 ## tests also run on a fresh MySQL database each.
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 chrono = { workspace = true }

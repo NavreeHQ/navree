@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! NAVREE_TEST_DATABASE=postgres \
-//!   cargo test -p navree-access --features postgres,mysql --test module
+//!   cargo test -p navree-access --features test-postgres,test-mysql --test module
 //! ```
 
 #![allow(dead_code)]
@@ -86,8 +86,8 @@ impl Scratch {
     fn new(server: Server) -> Scratch {
         let (variable, compiled) = match server {
             Server::Sqlite => unreachable!("SQLite databases are files"),
-            Server::Postgres => ("NAVREE_TEST_POSTGRES_URL", cfg!(feature = "postgres")),
-            Server::MySql => ("NAVREE_TEST_MYSQL_URL", cfg!(feature = "mysql")),
+            Server::Postgres => ("NAVREE_TEST_POSTGRES_URL", cfg!(feature = "test-postgres")),
+            Server::MySql => ("NAVREE_TEST_MYSQL_URL", cfg!(feature = "test-mysql")),
         };
         assert!(
             compiled,

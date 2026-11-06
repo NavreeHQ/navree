@@ -17,8 +17,8 @@ default = []
 # `media-ffmpeg`).
 ffmpeg = ["dep:tempfile"]
 # The database drivers of the gated server tests (`tests/media/servers.rs`).
-postgres = ["navree-db/postgres"]
-mysql = ["navree-db/mysql"]
+test-postgres = ["navree-db/postgres"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 bytes = { workspace = true }

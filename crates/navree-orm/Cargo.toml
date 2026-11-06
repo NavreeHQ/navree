@@ -14,11 +14,11 @@ workspace = true
 default = []
 ## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver, which
 ## binds pgvector's `vector` for `cast = "vector"` fields).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## Run on MySQL / MariaDB (navree-db's `mysql` driver: `mysql://` and
 ## `mariadb://` URLs). SQL for every dialect is generated without any
 ## feature.
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 ## Access control on models: `#[model(subject, policy)]`, navree-access's
 ## abilities as query filters (`accessible`) and record checks
 ## (`AbilityExt`), `Authorized<Model, A>` routes. The facade turns it on
@@ -90,7 +90,7 @@ trybuild = { workspace = true }
 
 # Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL
 # (a TimescaleDB server) or NAVREE_TEST_MYSQL_URL is set:
-# `cargo test -p navree-orm --features postgres,mysql --test servers`.
+# `cargo test -p navree-orm --features test-postgres,test-mysql --test servers`.
 [[test]]
 name = "servers"
-required-features = ["postgres", "mysql"]
+required-features = ["test-postgres", "test-mysql"]

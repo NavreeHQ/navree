@@ -467,7 +467,7 @@ async fn the_qdrant_store_passes_the_conformance_suite() {
 
 /// Runs the suite against PostgreSQL with pgvector
 /// (`NAVREE_TEST_PGVECTOR_URL`, feature `postgres`).
-#[cfg(feature = "postgres")]
+#[cfg(feature = "test-postgres")]
 #[tokio::test]
 async fn the_pgvector_store_passes_the_conformance_suite() {
     let Ok(url) = std::env::var("NAVREE_TEST_PGVECTOR_URL") else {

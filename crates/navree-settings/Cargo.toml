@@ -14,9 +14,9 @@ workspace = true
 default = []
 ## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
 ## `servers` tests run the store and resolution on a database of their own.
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## MySQL for the tests, with `NAVREE_TEST_MYSQL_URL`.
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 ## How notification mail looks, as settings: the `notification-templates`
 ## group (logo, brand color, footer, subject and body overrides per
 ## notification type) and navree-notify's `dyn TemplateOverrides` read from

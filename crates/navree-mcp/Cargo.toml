@@ -14,6 +14,9 @@ workspace = true
 ## Entry points for the fuzz targets in `fuzz/` (`navree_mcp::fuzzing`). Not
 ## part of the API.
 fuzzing = []
+## `navree_mcp::testing::McpTestClient`: speaks the protocol to a `TestApp` in
+## process. The facade turns it on with its own `testing` feature.
+testing = ["dep:navree-testing"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -34,7 +37,7 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-openapi = { workspace = true }
-navree-testing = { workspace = true }
+navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -45,6 +48,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests use `McpTestClient`.
+navree-mcp = { workspace = true, features = ["testing"] }
 navree-crypto = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }

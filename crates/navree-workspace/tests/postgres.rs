@@ -2,14 +2,14 @@
 //! `navree.organization` and `navree.partition`, schema isolation through
 //! `search_path`, and demo resets under both.
 //!
-//! Opt-in: build with `--features postgres` and set
+//! Opt-in: build with `--features test-postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` (or start the test servers, which write
 //! `target/test-databases.env`) to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and a non-superuser login role (superusers
 //! bypass row-level security), and drops both at the end. Every model is a
 //! navree-orm model: row-level security and schemas cover their queries.
-#![cfg(feature = "postgres")]
+#![cfg(feature = "test-postgres")]
 
 use std::sync::Arc;
 

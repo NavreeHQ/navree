@@ -12,8 +12,8 @@ workspace = true
 
 [features]
 # The database drivers of the gated server tests (`tests/notify/servers.rs`).
-postgres = ["navree-db/postgres"]
-mysql = ["navree-db/mysql"]
+test-postgres = ["navree-db/postgres"]
+test-mysql = ["navree-db/mysql"]
 ## `navree_notify::ui::NotificationBell`: the signed-in user's stored notifications in a Navree UI
 ## shell, and the routes it uses. The facade turns it on when both `ui` and `notify` are on.
 ui = ["dep:navree-ui"]

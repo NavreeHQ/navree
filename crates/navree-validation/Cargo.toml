@@ -24,9 +24,9 @@ time = ["dep:navree-time"]
 ## Not part of the API.
 fuzzing = ["html"]
 ## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 chrono = { workspace = true }

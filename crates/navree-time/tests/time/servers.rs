@@ -2,7 +2,7 @@
 //! same local days as Rust, across a DST change and in half-hour zones, and
 //! every zone name navree-time produces is one the server knows.
 //!
-//! Opt-in on the servers: build with `--features postgres,mysql` and set
+//! Opt-in on the servers: build with `--features test-postgres,test-mysql` and set
 //! `NAVREE_TEST_POSTGRES_URL` and `NAVREE_TEST_MYSQL_URL` (each test creates
 //! a database of its own and drops it). Without them the test prints
 //! `SKIPPED` and passes, unless `NAVREE_TEST_REQUIRE_SERVICES=1`.

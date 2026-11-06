@@ -15,11 +15,11 @@ default = []
 ## The embedded Tantivy engine (`search.engine = "tantivy"`).
 tantivy = ["dep:tantivy"]
 ## PostgreSQL driver for navree-db (the `postgres` engine and `pgvector`).
-postgres = ["navree-db/postgres", "navree-orm/postgres", "navree-workspace/postgres"]
+postgres = ["navree-db/postgres", "navree-orm/test-postgres", "navree-workspace/test-postgres"]
 ## MySQL driver for navree-db (the HTTP, Tantivy and memory engines on a
 ## MySQL app database; the test suite runs on it with
 ## `NAVREE_TEST_DATABASE=mysql`).
-mysql = ["navree-db/mysql", "navree-orm/mysql", "navree-workspace/mysql"]
+mysql = ["navree-db/mysql", "navree-orm/test-mysql", "navree-workspace/test-mysql"]
 ## Entry points for the fuzz targets in `fuzz/` (`navree_search::fuzzing`). Not
 ## part of the API.
 fuzzing = []

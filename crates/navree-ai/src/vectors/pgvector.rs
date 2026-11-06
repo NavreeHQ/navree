@@ -423,7 +423,7 @@ mod tests {
     /// collection's, with a `varchar(64)` where the extension's column
     /// goes; searching needs pgvector (`NAVREE_TEST_PGVECTOR_URL`, see the
     /// conformance suite in `tests/ai/retrieval.rs`).
-    #[cfg(feature = "postgres")]
+    #[cfg(feature = "test-postgres")]
     #[tokio::test]
     async fn statements_run_on_a_server() {
         use navree_db::DbOptions;

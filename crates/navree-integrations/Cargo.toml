@@ -12,8 +12,8 @@ workspace = true
 
 [features]
 # The database drivers of the gated server tests (`tests/integrations/servers.rs`).
-postgres = ["navree-db/postgres"]
-mysql = ["navree-db/mysql"]
+test-postgres = ["navree-db/postgres"]
+test-mysql = ["navree-db/mysql"]
 ## Connections as the tokens of navree-notify's Slack and Teams bot routes
 ## (`IntegrationTokens`, registered as `dyn ConnectionTokens`).
 notify = ["dep:navree-notify"]

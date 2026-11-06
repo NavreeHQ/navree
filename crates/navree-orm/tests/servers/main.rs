@@ -4,7 +4,7 @@
 //! notice when its server is not configured, and runs in a schema
 //! (PostgreSQL) or database (MySQL) of its own.
 //!
-//! `cargo test -p navree-orm --features postgres,mysql --test servers`
+//! `cargo test -p navree-orm --features test-postgres,test-mysql --test servers`
 
 mod attributes;
 mod databases;

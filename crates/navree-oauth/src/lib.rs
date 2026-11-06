@@ -63,6 +63,7 @@
 #![forbid(unsafe_code)]
 
 pub mod entity;
+#[cfg(feature = "testing")]
 pub mod testing;
 
 mod api;

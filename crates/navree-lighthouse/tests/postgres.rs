@@ -3,14 +3,14 @@
 //! than their detail queues, and every count adds up exactly; a resolved
 //! issue both of them hit again reopens once.
 //!
-//! Opt-in: build with `--features postgres` and set
+//! Opt-in: build with `--features test-postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and drops it at the end.
 //!
 //! The module's down migration runs under a writer that adds chunks to the
 //! hypertables, as a flush does.
-#![cfg(feature = "postgres")]
+#![cfg(feature = "test-postgres")]
 
 use std::sync::Arc;
 use std::time::Duration;

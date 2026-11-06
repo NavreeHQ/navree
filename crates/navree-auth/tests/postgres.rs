@@ -3,11 +3,11 @@
 //! `impersonator_id`, exercised through sessions, impersonation, emailed
 //! codes and passkeys.
 //!
-//! Opt-in: build with `--features postgres` and set
+//! Opt-in: build with `--features test-postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and drops it at the end.
-#![cfg(feature = "postgres")]
+#![cfg(feature = "test-postgres")]
 
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_audit::{AuditFilter, AuditLog, AuditModule};

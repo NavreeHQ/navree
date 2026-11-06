@@ -18,9 +18,9 @@ workspace = true
 inbound = ["dep:encoding_rs", "dep:html5ever", "dep:memchr", "dep:navree-storage", "dep:regex"]
 ## navree-db's PostgreSQL driver (the delivery tables on PostgreSQL and
 ## TimescaleDB; the `servers` tests with `NAVREE_TEST_POSTGRES_URL`).
-postgres = ["navree-db/postgres"]
+test-postgres = ["navree-db/postgres"]
 ## navree-db's MySQL driver (the `servers` tests with `NAVREE_TEST_MYSQL_URL`).
-mysql = ["navree-db/mysql"]
+test-mysql = ["navree-db/mysql"]
 
 [dependencies]
 base64 = { workspace = true }
