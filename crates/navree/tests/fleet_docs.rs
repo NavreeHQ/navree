@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
 use navree::BoxFuture;
+use navree::auth::AuthPages;
 use navree::contracts::{Clock, Job, JobContext, JobOptions};
 use navree::events::Listener;
 use navree::fleet::{Fleet, LongWaitDetected};
@@ -16,7 +17,7 @@ use navree::testing::{FixedClock, TestApp};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// "Installation": the app root.
+/// "Installation": the app root, with the sign-in the dashboard uses.
 #[allow(dead_code)]
 fn app(sources: ConfigSources) -> AppBuilder {
     Navree::app()
@@ -25,6 +26,10 @@ fn app(sources: ConfigSources) -> AppBuilder {
         .module(DatabaseModule::from_config())
         .module(QueueModule::from_config())
         .module(FleetModule::from_config())
+        .module(SessionModule::from_config())
+        .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Acme Operations"))
 }
 
 /// The chat client of the long-wait example.
