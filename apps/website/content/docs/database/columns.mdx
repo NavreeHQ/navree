@@ -1,6 +1,6 @@
 ---
 title: "Columns"
-description: "The schema builder's column types and the SQL each writes on PostgreSQL, MySQL and SQLite (and, untested, MariaDB), plus modifiers, defaults, generated columns and changing columns."
+description: "The schema builder's column types and the SQL each writes on PostgreSQL, MySQL and SQLite, with modifiers, defaults, generated columns and changes."
 ---
 
 Column methods of the [schema builder](/docs/database/schema-builder/) add a column to the table a blueprint describes, and return a builder for its modifiers:
@@ -21,7 +21,7 @@ schema
     .await?;
 ```
 
-The MariaDB SQL in these tables is what the builder writes; it has not been run against a MariaDB server yet ([MariaDB is untested](/docs/database/getting-started/#mysql-and-mariadb)).
+The MariaDB SQL in these tables is what the builder writes; it has not been run against a MariaDB server yet ([MariaDB is untested](/docs/database/mysql/)).
 
 Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't have fails before any SQL runs, with a message saying what to use instead: "PostgreSQL does not support `set` columns (column `tags`): `set` is a MySQL type; use a `jsonb` array or a join table".
 

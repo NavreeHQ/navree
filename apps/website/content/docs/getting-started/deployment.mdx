@@ -363,7 +363,7 @@ A new app runs on [TimescaleDB](/docs/database/timescaledb/), so production want
 
 [Harbor](/docs/tools/harbor/)'s `postgres` role installs PostgreSQL from the PostgreSQL project's repository, without TimescaleDB. Keep `schema.timescaledb = "auto"` there, or install TimescaleDB on that server before the first deploy.
 
-Navree's performance harness runs on PostgreSQL (the pool, the unit of work, pagination, inserts and the auth user lookup) while the test suite runs on SQLite; [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql) lists the paths to try in staging first, such as the queue's `FOR UPDATE SKIP LOCKED` job reservation.
+Navree's performance harness runs on PostgreSQL (the pool, the unit of work, pagination, inserts and the auth user lookup) while the test suite runs on SQLite; [what has been run on PostgreSQL](/docs/database/postgresql/) lists the paths to try in staging first, such as the queue's `FOR UPDATE SKIP LOCKED` job reservation.
 
 An app made with `--database sqlite` keeps its database in a file, which suits a single server: Navree opens it in WAL mode with a 5-second busy timeout, so the server, workers and scheduler on one machine can share the file. Keep `storage/` on a persistent disk and back the file up.
 

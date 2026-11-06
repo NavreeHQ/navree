@@ -1,6 +1,6 @@
 ---
 title: "Getting started"
-description: "Connect to TimescaleDB (the default), PostgreSQL, MySQL or SQLite, configure the pool and run your first queries with the ORM."
+description: "Choose a database (TimescaleDB, PostgreSQL, MySQL, SQLite), configure the pool and run your first queries with the ORM."
 ---
 
 A Navree app works with its data through the [ORM](/docs/orm/getting-started/): models are plain Rust structs with `#[derive(Model)]`, queried with typed columns and saved as records that track their own changes. Underneath, the `navree-db` crate (the `db` feature of the `navree` facade, on by default) owns the connections, which run on SQLx, and adds what an application needs around them:
@@ -12,16 +12,22 @@ A Navree app works with its data through the [ORM](/docs/orm/getting-started/): 
 - [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
 - [models and records](/docs/database/entities-and-repositories/): how a table maps to a model, and the change events its writes record.
 
-Navree supports four SQL databases:
+## Choose your database
 
-- **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
-- **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
-- **MySQL** is behind the `mysql` Cargo feature. **MariaDB** connects through the same driver but is untested: no Navree suite has run against a MariaDB server yet ([below](#mysql-and-mariadb)).
-- **SQLite** is behind the `sqlite` Cargo feature, and it is bundled: the feature compiles SQLite into your app, so there is nothing to install. Tests run on it, each in a file of its own ([below](#sqlite)).
+Navree supports four SQL databases and, through the ORM's document driver, MongoDB. Each has a page of its own for its connection, its settings and how Navree behaves on it.
+
+| Database | Cargo feature | You run it | Choose it when | Page |
+|---|---|---|---|---|
+| TimescaleDB | `postgres` | `navree dock up` starts it in a container | You want the default, or you keep time-series data: the audit log, events, metrics | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
+| PostgreSQL | `postgres` | Your server; `navree dock up` runs one too | You want PostgreSQL without the extension: hypertables become regular tables | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
+| MySQL | `mysql` | Your server | Your organization runs MySQL 8.4 | [MySQL and MariaDB](/docs/database/mysql/) |
+| MariaDB | `mysql` | Your server | You have to use it; no Navree suite has run against a MariaDB server yet | [MySQL and MariaDB](/docs/database/mysql/) |
+| SQLite | `sqlite` | Nothing: the feature compiles SQLite into your app | Tests, tools and single-writer apps | [SQLite](/docs/database/sqlite/) |
+| MongoDB | `mongo` | Your server | You store documents through the ORM's document driver | [MongoDB](/docs/orm/mongodb/) |
+
+`navree new my-app` makes a TimescaleDB app with the `postgres` feature; `--database postgres`, `--database mysql` and `--database sqlite` make the others, each with its own feature.
 
 Each driver is a feature of its own, and none is on by default: a PostgreSQL or MySQL build compiles no SQLite, and a SQLite build compiles no PostgreSQL or MySQL driver. Turn on the one you use (`navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }`), and a second one only when the app talks to two kinds of server. An app whose `database.url` names a driver it was built without fails to boot with a message naming the feature to enable (for example "enable the `sqlite` feature of navree-db").
-
-`navree new my-app` makes a TimescaleDB app with the `postgres` feature; `--database postgres`, `--database mysql` and `--database sqlite` make the others, each with its own feature. MongoDB is supported too, by the ORM's [document driver](/docs/orm/mongodb/).
 
 ## Configuration
 
@@ -51,7 +57,7 @@ transaction_settings = true
 | `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
 | `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
 | `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
-| `test_before_acquire` | `false` | Pings every connection taken from the pool before handing it out, which costs one round trip per checkout. Off, only a connection that sat idle in the pool for 30 seconds or more is pinged first ([below](#the-pool)). |
+| `test_before_acquire` | `false` | Pings every connection taken from the pool before handing it out, which costs one round trip per checkout. Off, only a connection that sat idle in the pool for 30 seconds or more is pinged first ([the pool](/docs/database/postgresql/#the-pool)). |
 | `idle_timeout_secs` | `600` | Closes a connection idle in the pool this long, as long as `min_connections` stay open. `0` keeps idle connections. |
 | `max_lifetime_secs` | `1800` | Replaces a connection once it is this old. `0` sets no limit. |
 | `log_queries` | `false` | Logs every statement at debug level. |
@@ -59,7 +65,7 @@ transaction_settings = true
 | `migrate_on_boot` | `false` | Runs pending migrations when the app boots. Handy in development and tests; run `migrate` in deployments instead. |
 | `transaction_settings` | `true` | Makes the actor and request id of every unit of work readable in SQL: `navree.actor` and `navree.request_id` on PostgreSQL, `@navree_actor` and `@navree_request_id` on MySQL and MariaDB. Turn it off when no trigger or policy reads them: each transaction then saves the statement that sets them (and on MySQL the one that clears them). |
 
-The sections `[database.postgres]` ([session settings](#session-settings)), `[database.mysql]` ([SQL mode and isolation level](#sql-mode-and-isolation-level)) and `[database.sqlite]` ([SQLite settings](#sqlite-settings)) shape the session of every connection to that kind of database, and `[database.connections.<name>]` adds [named connections](/docs/orm/connections-and-transactions/#named-connections), each with any key of this section.
+The sections `[database.postgres]` ([session settings](/docs/database/postgresql/#session-settings)), `[database.mysql]` ([SQL mode and isolation level](/docs/database/mysql/#sql-mode-and-isolation-level)) and `[database.sqlite]` ([SQLite settings](/docs/database/sqlite/#sqlite-settings)) shape the session of every connection to that kind of database, and `[database.connections.<name>]` adds [named connections](/docs/orm/connections-and-transactions/#named-connections), each with any key of this section.
 
 Like every section, these keys can come from environment variables with the `APP_` prefix and `__` between levels: `APP_DATABASE__URL` sets `database.url`. Keep a production URL, and its password, in the environment rather than in `config/app.toml`. A `.env` entry overrides `config/app.toml`, so `APP_DATABASE__URL` in `.env` replaces the `database.url` that a new app's `config/app.toml` sets. See [configuration](/docs/getting-started/configuration/) for the order in which sources apply.
 
@@ -105,252 +111,40 @@ The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` 
 
 ## TimescaleDB
 
-<Badge feature="postgres" /> TimescaleDB is PostgreSQL with an extension for time-series data, so it connects through the same driver: a `postgres://` URL and the `postgres` feature of the facade. Your tables are regular PostgreSQL tables until a migration makes one a [hypertable](/docs/database/timescaledb/), and Navree's own time-series tables (the audit log, webhook deliveries, job history, Lighthouse's events) become hypertables in their modules' migrations.
-
-A new app is set up for it: `navree new` turns on the feature, writes the URL of Dock's `postgres` service into `config/app.toml`, and adds a `dock.toml` that runs TimescaleDB 2.31 on PostgreSQL 17:
+<Badge feature="postgres" /> TimescaleDB is PostgreSQL with an extension for time-series data, so it connects through the same driver: a `postgres://` URL and the `postgres` feature of the facade. A new app is set up for it: `navree new` turns on the feature, writes the URL of Dock's `postgres` service into `config/app.toml`, and adds a `dock.toml` that runs TimescaleDB 2.31 on PostgreSQL 17:
 
 ```sh
 navree dock up               # TimescaleDB on 127.0.0.1:5432
 navree dev
 ```
 
-In production, point `APP_DATABASE__URL` at a server with TimescaleDB and set `APP_SCHEMA__TIMESCALEDB=require`, so a migration stops instead of falling back to regular tables on a server without it. [TimescaleDB](/docs/database/timescaledb/#running-it) covers running it, and which tables to make hypertables.
+[PostgreSQL and TimescaleDB](/docs/database/postgresql/#timescaledb) says how to run it in production. [TimescaleDB](/docs/database/timescaledb/) covers hypertables, compression and retention.
 
 ## PostgreSQL
 
-<Badge feature="postgres" /> Turn on the `postgres` feature of the facade. It adds SQLx's PostgreSQL driver to `navree-db` (and turns on `db`):
-
-```toml title="Cargo.toml"
-[dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
-```
-
-The crates aren't on crates.io yet, so the dependency comes from git. An app made by `navree new` depends on the checkout the CLI was built from instead, with the feature already on for TimescaleDB and PostgreSQL apps: `navree = { path = "...", features = ["postgres"] }`.
-
-Then point `database.url` at the server with an environment variable, which overrides `config/app.toml`:
+<Badge feature="postgres" /> Turn on the `postgres` feature of the facade, then point `database.url` at the server:
 
 ```sh
 export APP_DATABASE__URL=postgres://crm:secret@db.internal:5432/crm
 ```
 
-Without the feature, the app fails to boot with "cannot connect to postgres://crm:***@db.internal:5432/crm: ... (enable the `postgres` feature of navree-db)".
-
-On PostgreSQL, Navree behaves differently in a few places:
-
-- Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`, with one `SELECT set_config(..)` right after `BEGIN`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`. With `transaction_settings = false` the statement isn't sent and the settings stay unset.
-- `Uow::lock_for_update()` is true, so queries that call `lock_for_update()` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
-- `migrate:fresh` drops every table of the current schema with `CASCADE`.
-- The case-insensitive search helpers use `LOWER(..) LIKE` for ASCII terms and a regular expression for the rest ([below](#searching-text)).
-
-<Callout type="warning" title="What has been run on PostgreSQL">
-
-Most tests of Navree and of the reference CRM run on SQLite on a developer's machine. A scheduled CI job runs the suites of the 26 crates that own tables (auth, queue, audit, workspaces, billing, OAuth and the rest) again on PostgreSQL 17 with TimescaleDB and on MySQL 8.4, with `NAVREE_TEST_DATABASE=postgres` or `mysql`. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), paginated queries, record inserts and navree-auth's user lookup. No Navree code had to change for it.
-
-The ORM's real-server suite runs on PostgreSQL 17 with TimescaleDB 2.31, and on MySQL 8.4: records round-tripping every column type and cast (vectors with pgvector), conditions with JSON operators and regular expressions, joins, aggregates and compound queries, bulk writes and upserts, offset and cursor pagination, chunks, streams and cursors, row locks between two units of work (`SKIP LOCKED`, `NOWAIT` and shared locks), the unit of work's change events and rollbacks, relations and eager loading, model events, soft deletes and pruning, time buckets, statement timeouts and, on PostgreSQL, reads retried after a lost connection. `cargo test -p navree-orm --features postgres,mysql --test servers` runs it against your servers.
-
-Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MySQL 8.4) in the opt-in real-server tests of navree-schema and navree-db: the schema builder's statements, hypertables with their policies and continuous aggregates, migrations written with the schema builder, `--pretend`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh`, and schema dumps loaded into empty databases.
-
-The facade's `time_series` suite boots the audit, webhooks, Fleet, scheduling and Lighthouse modules on the same servers: their time-series tables become hypertables with the documented time columns, chunk intervals and keys on TimescaleDB, and stay regular tables with time indexes on MySQL; running their conversions again changes nothing; `audit:prune` drops whole chunks; and the [time-bucket queries](/docs/database/timescaledb/#time-bucket-queries) return the same buckets as on SQLite.
-
-The queue's `SKIP LOCKED` job reservation, which is outside the ORM, has a real-server suite of its own: `NAVREE_TEST_DATABASE=postgres cargo test -p navree-queue --features postgres` with `NAVREE_TEST_POSTGRES_URL` set (see [Queues](/docs/digging-deeper/queues/)).
-
-</Callout>
-
-### Session settings
-
-The `database.postgres` section shapes the session of every connection the pool opens. Every key is optional:
-
-```toml title="config/app.toml"
-[database.postgres]
-search_path = ["app", "public"]
-timezone = "UTC"
-application_name = "crm-api"
-synchronous_commit = "on"
-isolation_level = "read_committed"
-ssl_mode = "prefer"
-```
-
-| Key | What it does |
-|---|---|
-| `search_path` | The schemas unqualified names resolve in, in order. A list, or a comma-separated string from the environment (`APP_DATABASE__POSTGRES__SEARCH_PATH=app,public`). Each entry must be a schema name. |
-| `timezone` | The session's time zone, such as `UTC` or `Europe/Berlin`. |
-| `application_name` | The name the server shows for these connections (`pg_stat_activity.application_name`): at most 63 printable characters, without quotes or backslashes. |
-| `synchronous_commit` | `on`, `off`, `local`, `remote_write` or `remote_apply`. |
-| `isolation_level` | The isolation level transactions start with (`default_transaction_isolation`): `read_uncommitted`, `read_committed`, `repeatable_read` or `serializable`, in any case, with spaces or hyphens if you like. |
-| `ssl_mode` | TLS: `disable`, `allow`, `prefer` (the default), `require`, `verify-ca` or `verify-full`. It overrides the URL's `sslmode`. |
-
-Other databases ignore this section.
-
-### The pool
-
-Navree doesn't ping a connection every time it takes one from the pool: on a busy app that ping is one round trip on every query. A connection that has sat idle in the pool for 30 seconds or more is pinged first, since a server, a proxy or a firewall may have dropped it in the meantime; a connection in steady use goes straight out. Set `test_before_acquire = true` to ping on every checkout instead.
-
-Connections idle for `idle_timeout_secs` are closed (down to `min_connections`), and connections older than `max_lifetime_secs` are closed and replaced with new ones as they are needed.
+[PostgreSQL and TimescaleDB](/docs/database/postgresql/) covers the session settings, the pool, how Navree behaves on PostgreSQL and what has run against a server.
 
 ## MySQL and MariaDB
 
-<Badge feature="mysql" /> Turn on the `mysql` feature of the facade. It adds SQLx's MySQL driver to `navree-db` (and turns on `db`). MariaDB speaks MySQL's protocol, so the same driver connects to both:
-
-```toml title="Cargo.toml"
-[dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["mysql"] }
-```
-
-Then point `database.url` at the server. `mariadb://` works the same as `mysql://`:
+<Badge feature="mysql" /> Turn on the `mysql` feature of the facade, then point `database.url` at the server. `mariadb://` works the same as `mysql://`:
 
 ```sh
 export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
 ```
 
-Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree's suites run on MySQL 8.4; earlier MySQL 8.0 releases are expected to work but are not tested.
-
-<Callout type="warning" title="MariaDB is untested">
-
-Navree reads `mariadb://` URLs, opens MariaDB connections with the MySQL driver and writes MariaDB's own SQL for UUID, vector and spatial columns, but none of it has run against a MariaDB server yet: not the migrations, not the ORM's SQL, not the row locks. Until a MariaDB run of the suites passes, treat MariaDB as untested and use MySQL 8.4 in production. If you try MariaDB (10.6 or later, for `SKIP LOCKED`), run your app's own tests against it first.
-
-</Callout>
-
-### Connections
-
-Every connection the pool opens starts its session with:
-
-- the time zone `+00:00`, so `TIMESTAMP` columns store and read UTC;
-- the `utf8mb4` character set, with the server's default collation for it;
-- `PIPES_AS_CONCAT` and `NO_ENGINE_SUBSTITUTION` added to the SQL mode;
-- strict SQL mode and, when you set one, an isolation level, from [`database.mysql`](#sql-mode-and-isolation-level).
-
-The URL also takes the driver's parameters:
-
-| Parameter | What it does |
-|---|---|
-| `ssl-mode` | `DISABLED`, `PREFERRED` (the default: TLS when the server offers it), `REQUIRED`, `VERIFY_CA` or `VERIFY_IDENTITY` (`VERIFY_CA` checks the server's certificate; `VERIFY_IDENTITY` also checks its host name) |
-| `ssl-ca`, `ssl-cert`, `ssl-key` | The CA certificate file to verify the server with; a client certificate and its key |
-| `socket` | Connects through the Unix socket at this path instead of TCP |
-| `charset`, `collation` | The connection's character set (default `utf8mb4`) and collation (default: the server's for that character set) |
-| `timezone` | The session time zone (default `+00:00`). Keep UTC: Navree stores and reads times as UTC. |
-| `statement-cache-capacity` | How many prepared statements each connection keeps (default 100) |
-
-For example, `mysql://crm:secret@db.internal:3306/crm?ssl-mode=VERIFY_IDENTITY&ssl-ca=/etc/ssl/db-ca.pem`.
-
-### TLS and sign-in
-
-MySQL 8 generates a certificate when it first starts, so with the default `ssl-mode=PREFERRED` connections use TLS out of the box.
-
-MySQL 8's default account type, `caching_sha2_password`, sends the account's password itself the first time the account signs in after the server starts; later sign-ins use a hash the server caches. Over TLS that needs nothing more. Without TLS (`ssl-mode=DISABLED`, or a server that offers none), MySQL wants the password encrypted with the server's RSA key, and Navree leaves that exchange out: it needs the `rsa` crate, which Navree's crypto policy keeps out of the dependency tree. Such a connection fails with "... RSA auth backend disabled ... (this caching_sha2_password account needs TLS: use `ssl-mode=PREFERRED`, the default, or `REQUIRED` against a server that offers TLS)". Accounts that use `mysql_native_password`, MariaDB's default, sign in without TLS.
-
-### SQL mode and isolation level
-
-The `database.mysql` section shapes the session of every connection. Every key is optional:
-
-```toml title="config/app.toml"
-[database.mysql]
-strict = true
-# modes = ["STRICT_ALL_TABLES", "NO_ENGINE_SUBSTITUTION"]
-# isolation_level = "read_committed"
-```
-
-| Key | Default | What it does |
-|---|---|---|
-| `strict` | `true` | Adds `ONLY_FULL_GROUP_BY`, `STRICT_TRANS_TABLES`, `NO_ZERO_IN_DATE`, `NO_ZERO_DATE` and `ERROR_FOR_DIVISION_BY_ZERO` to the server's SQL mode. A value too long or out of range for its column, or a zero date, is then an error instead of being cut or replaced, and a query that selects a column it neither groups by nor aggregates is refused, as on PostgreSQL. `false` removes `STRICT_TRANS_TABLES` and `STRICT_ALL_TABLES` from the session instead, whatever the server's default. |
-| `modes` | unset | The session's exact SQL mode, replacing the server's, `strict`'s and SQLx's: a list, or a comma-separated string from the environment (`APP_DATABASE__MYSQL__MODES=STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION`). `[]` clears the SQL mode. An entry that isn't a mode name (letters, digits and underscores) stops the boot. |
-| `isolation_level` | unset | `read_uncommitted`, `read_committed`, `repeatable_read` or `serializable`, in any case, with spaces or hyphens if you like (`"READ COMMITTED"`). Unset keeps the server's level, `REPEATABLE READ` unless it's configured otherwise. |
-
-`read_committed` is worth knowing about. Under MySQL's default `REPEATABLE READ`, InnoDB locks the gaps between index records as well as the records, so concurrent inserts into the same range can deadlock; `READ COMMITTED` locks only the records, and every statement sees the latest commits, as on PostgreSQL.
-
-### How Navree behaves on MySQL
-
-- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) The UUIDs that models write are 16 bytes on MySQL, in `BINARY(16)` columns ([below](#types-and-collations)), so a trigger that records who changed a row converts the text:
-
-  ```sql
-  CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW
-  SET NEW.updated_by = UNHEX(REPLACE(@navree_actor, '-', ''));
-  ```
-
-  Session variables belong to the connection, not to the transaction, and the connection goes back to the pool. Navree therefore clears them right before `COMMIT` or `ROLLBACK`, and rolls the unit of work back if it can't. Outside a unit of work they're `NULL`.
-- MySQL has no row-level security, so with [workspaces](/docs/workspaces/isolation/) isolation is query scoping alone: `WorkspaceRepo` filters every query by the workspace, and nothing in the database stops a query that leaves the filter out.
-- `Uow::lock_for_update()` is true, so queries that call `lock_for_update()` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
-- A deadlock (error 1213) makes MySQL roll back the whole transaction at once. Whatever the unit of work runs after that commits on its own, and its rollback can't undo it, so let the error end the request (`?` does, with a 500) instead of carrying on.
-- MySQL commits every DDL statement on its own, so migrations run outside a transaction unless they ask for one. See [transactions](/docs/database/migrations/#transactions). `navree_migrations.applied_at` is a `DATETIME` holding UTC.
-- `migrate:fresh` drops every base table of the current database in one `DROP TABLE`, on one connection with `FOREIGN_KEY_CHECKS = 0`, and turns the checks back on before the connection returns to the pool.
-- A duplicate key (error 1062) and foreign key failures (1451, 1452 and their relatives) answer 409, as on every database ([below](#database-errors)).
-- The case-insensitive [search helpers](#searching-text) ignore case under any collation and never ignore accents.
-- Under `REPEATABLE READ`, a paginated query on a unit of work's transaction reads its `COUNT(*)` and its page from the transaction's single snapshot, so the total matches the page.
-
-### Types and collations
-
-The [schema builder](/docs/database/columns/#column-types) writes MySQL's types for you, and a few of them behave differently:
-
-- Models write a `Uuid` as its 16 bytes, which belong in a `BINARY(16)` column. The schema builder's `uuid_primary()`, `uuid` and `foreign_uuid` columns are `CHAR(36)` on MySQL, which refuse those bytes, so declare UUID columns as binaries there ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)). A UUID v7 sorts by creation time, so [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) pages in creation order. In raw SQL, bind a `Uuid` value: a UUID string such as `'0199a7a0-…'` doesn't match a binary column (`UNHEX(REPLACE(?, '-', ''))` converts one).
-- `timestamp_tz` columns (and `timestamps_tz()`) are `TIMESTAMP(6)`. They store UTC, but the type ends on 2038-01-19. `date_time_tz` columns are `DATETIME(6)`, which has no such limit, and `DateTime<Utc>` fields read and write both as UTC.
-- Time columns keep microseconds, the schema builder's `default_time_precision`. A column declared without a precision (`.default_precision()`) keeps whole seconds, and MySQL rounds a longer fraction instead of storing it.
-- Comparisons and unique indexes follow each column's collation. MySQL 8's default for `utf8mb4`, `utf8mb4_0900_ai_ci`, ignores case and accents: `WHERE name = 'equipe'` finds "Équipe", and a unique index refuses "Equipe" next to "Équipe". Give columns that must compare exactly a binary collation such as `utf8mb4_bin`.
-
-<Callout type="note" title="What has been run on MySQL">
-
-navree-db's MySQL test suite runs against MySQL 8.4: connections and their session settings, TLS sign-in, the unit of work and triggers reading its variables, model writes and row locks, offset and cursor pagination, the search helpers, migrations, rollbacks and `migrate:fresh`, constraint errors through HTTP, and the health check. To run it against your own server, give it a URL whose user may create databases (each test works in a database of its own):
-
-```sh
-NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-db --features mysql --test mysql
-```
-
-The ORM's real-server suite runs on MySQL 8.4 as well ([above](#postgresql)), on tables whose UUID columns are `BINARY(16)`.
-
-The other modules' suites (auth, queue, audit, workspaces and the rest) run on MySQL 8.4 too, in the scheduled CI job ([above](#postgresql)):
-
-```sh
-NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features mysql
-```
-
-MariaDB connects through the same code but hasn't been run against a MariaDB server yet ([above](#mysql-and-mariadb)): treat it as untested.
-
-</Callout>
+Navree's suites run on MySQL 8.4. MariaDB connects through the same driver but is untested: no Navree suite has run against a MariaDB server yet. [MySQL and MariaDB](/docs/database/mysql/) covers TLS, the SQL mode, the types and collations and how Navree behaves on MySQL.
 
 ## SQLite
 
-SQLite is the `sqlite` Cargo feature, and it is off unless you turn it on: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`. `navree new my-app --database sqlite` writes that for you. The feature compiles the bundled SQLite library (a C library, built with the C compiler your Rust toolchain links with); a PostgreSQL or MySQL build compiles none of it. An app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`, and without the feature that default stops the boot with "enable the `sqlite` feature of navree-db", so an app on another database always sets its URL.
+<Badge feature="sqlite" /> SQLite is the `sqlite` Cargo feature, and it is off unless you turn it on. `navree new my-app --database sqlite` writes that for you. The feature compiles the bundled SQLite library, so there is nothing to install; a PostgreSQL or MySQL build compiles none of it. Tests run on SQLite, each in a file of its own, so an app on another database turns the feature on for its tests only, in `[dev-dependencies]`.
 
-Tests run on SQLite, each in a file of its own, so an app on PostgreSQL turns the feature on for its tests only, in `[dev-dependencies]`, and its release build still compiles no SQLite. `navree new` writes this:
-
-```toml title="Cargo.toml"
-[dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
-
-[dev-dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }
-```
-
-Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
-
-A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
-
-Navree opens every SQLite connection with:
-
-- the write-ahead log (`journal_mode = WAL`), so readers don't block the writer;
-- `busy_timeout = 5000`: a statement waits up to 5 seconds for a lock before failing;
-- `foreign_keys = ON`, so foreign keys are enforced (SQLite's default is off).
-
-Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite's write lock at once. Concurrent requests that write therefore queue for up to 5 seconds instead of failing halfway through. SQLite allows one writer at a time, so this is also its limit: a busy app that writes on most requests outgrows it.
-
-<Callout type="warning" title="Don't use in-memory SQLite">
-
-An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/). The one exception is `TestApp`'s `memory_database()`, which keeps the pool to a single connection.
-
-</Callout>
-
-### SQLite settings
-
-The `database.sqlite` section changes these, and adds pragmas, for every connection the pool opens. Every key is optional:
-
-```toml title="config/app.toml"
-[database.sqlite]
-journal_mode = "wal"      # delete, truncate, persist, memory, wal or off
-busy_timeout_ms = 5000    # how long a connection waits for a lock
-foreign_keys = true
-synchronous = "normal"    # off, normal, full or extra; SQLite's own default when unset
-pragmas = { cache_size = "-20000", temp_store = "memory" }
-```
-
-`pragmas` runs further `PRAGMA name = value` statements on every connection: a name is letters, digits and `_`, a value letters, digits, `_`, `-` and `.`. Other databases ignore the section.
+[SQLite](/docs/database/sqlite/) covers the URL, how every connection opens, the write lock and the settings.
 
 ## Running queries
 

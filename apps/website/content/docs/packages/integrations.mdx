@@ -49,7 +49,7 @@ Navree::app()
 
 Only `ConfigModule`, `CryptoModule` and `DatabaseModule` are required. Without `CacheModule`, token locks and used states live in the process, which is enough for a single instance; with several instances, give the cache a shared store such as [Redis](/docs/digging-deeper/redis/) so two instances never refresh the same connection at once. Without `WorkspaceModule`, connections belong to the app itself.
 
-The module contributes the migration set `integrations`, which creates `integration_connections`: one row per owner, provider and scope set, with the encrypted credentials, the cached token and its expiry, the granted scopes, the tenant at the provider, and the health of the connection. It runs on PostgreSQL (with or without TimescaleDB), MySQL and SQLite (MariaDB is [untested](/docs/database/getting-started/#mysql-and-mariadb)); its UUID columns are `BINARY(16)` on MySQL and MariaDB, where [models write UUIDs as 16 bytes](/docs/database/columns/#uuid-columns-on-mysql).
+The module contributes the migration set `integrations`, which creates `integration_connections`: one row per owner, provider and scope set, with the encrypted credentials, the cached token and its expiry, the granted scopes, the tenant at the provider, and the health of the connection. It runs on PostgreSQL (with or without TimescaleDB), MySQL and SQLite (MariaDB is [untested](/docs/database/mysql/)); its UUID columns are `BINARY(16)` on MySQL and MariaDB, where [models write UUIDs as 16 bytes](/docs/database/columns/#uuid-columns-on-mysql).
 
 ## Configuration
 

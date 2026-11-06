@@ -1,6 +1,6 @@
 ---
 title: "Squashing migrations"
-description: "`schema:dump` writes the schema your migrations produce as one SQL file, read from the database's catalogs; `migrate` loads it into an empty database and runs only the newer migrations."
+description: "`schema:dump` writes the schema your migrations produce as one SQL file; `migrate` loads it into an empty database and runs only newer migrations."
 ---
 
 Over time an app collects hundreds of migrations, and every new database (a fresh checkout, a CI run, a new tenant database) runs them all, one by one. Squashing replaces that history with a snapshot: `schema:dump` writes the schema the migrations produced as one SQL file, together with the rows of the migrations table, and `migrate` loads that file into an empty database before running only the migrations it doesn't record.

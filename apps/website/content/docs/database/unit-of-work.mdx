@@ -1,6 +1,6 @@
 ---
 title: "The unit of work and transactions"
-description: "One lazy transaction per request, committed when the response succeeds; units of work in jobs and commands, after-commit hooks, row locks and change observers."
+description: "One lazy transaction per request, committed when the response succeeds; units of work in jobs and commands, after-commit hooks and row locks."
 ---
 
 Every HTTP request in a Navree app gets a **unit of work**. It carries the signed-in user and the request id, opens a database transaction the first time you use the database, collects the changes you make and the work that must wait for them, and then commits or rolls back exactly once, when the response is ready.
@@ -86,7 +86,7 @@ How the transaction begins depends on the database:
 
 - **SQLite**: `BEGIN IMMEDIATE`, which takes the write lock at once ([SQLite and concurrency](#sqlite-and-concurrency)).
 - **PostgreSQL**: `BEGIN`, then `set_config` makes the actor and request id available to SQL as `current_setting('navree.actor', true)` and `current_setting('navree.request_id', true)` for the rest of the transaction.
-- **MySQL and MariaDB**: `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?` makes them available as session variables. Session variables outlive the transaction on the pooled connection, so Navree clears them right before `COMMIT` or `ROLLBACK` ([how Navree behaves on MySQL](/docs/database/getting-started/#how-navree-behaves-on-mysql)).
+- **MySQL and MariaDB**: `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?` makes them available as session variables. Session variables outlive the transaction on the pooled connection, so Navree clears them right before `COMMIT` or `ROLLBACK` ([how Navree behaves on MySQL](/docs/database/mysql/#how-navree-behaves-on-mysql)).
 
 When no trigger or policy of yours reads the actor or the request id, set `database.transaction_settings = false`: PostgreSQL, MySQL and MariaDB transactions then start with a plain `BEGIN`, one statement (on MySQL two) fewer per unit of work. `uow.actor()` and `uow.request_id()` are unaffected.
 

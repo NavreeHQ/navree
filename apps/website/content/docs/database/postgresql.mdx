@@ -1,0 +1,90 @@
+---
+title: "PostgreSQL and TimescaleDB"
+description: "Connect to PostgreSQL or TimescaleDB: the feature, the URL, session settings, the pool, how Navree behaves and what has run against a server."
+---
+
+TimescaleDB is the default database of a new Navree app, and it is PostgreSQL with an extension, so the two share this page: one driver, one feature and one set of settings. [Getting started](/docs/database/getting-started/) covers what every database shares (the `database` section, the module, queries and errors).
+
+## Turning it on
+
+<Badge feature="postgres" /> Turn on the `postgres` feature of the facade. It adds SQLx's PostgreSQL driver to `navree-db` (and turns on `db`):
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
+```
+
+The crates aren't on crates.io yet, so the dependency comes from git. An app made by `navree new` depends on the checkout the CLI was built from instead, with the feature already on for TimescaleDB and PostgreSQL apps: `navree = { path = "...", features = ["postgres"] }`.
+
+Then point `database.url` at the server with an environment variable, which overrides `config/app.toml`:
+
+```sh
+export APP_DATABASE__URL=postgres://crm:secret@db.internal:5432/crm
+```
+
+Without the feature, the app fails to boot with "cannot connect to postgres://crm:***@db.internal:5432/crm: ... (enable the `postgres` feature of navree-db)".
+
+## TimescaleDB
+
+<Badge feature="postgres" /> TimescaleDB is PostgreSQL with an extension for time-series data, so it connects through the same driver: a `postgres://` URL and the `postgres` feature of the facade. Your tables are regular PostgreSQL tables until a migration makes one a [hypertable](/docs/database/timescaledb/), and Navree's own time-series tables (the audit log, webhook deliveries, job history, Lighthouse's events) become hypertables in their modules' migrations.
+
+A new app is set up for it: `navree new` turns on the feature, writes the URL of Dock's `postgres` service into `config/app.toml`, and adds a `dock.toml` that runs TimescaleDB 2.31 on PostgreSQL 17:
+
+```sh
+navree dock up               # TimescaleDB on 127.0.0.1:5432
+navree dev
+```
+
+In production, point `APP_DATABASE__URL` at a server with TimescaleDB and set `APP_SCHEMA__TIMESCALEDB=require`, so a migration stops instead of falling back to regular tables on a server without it. [TimescaleDB](/docs/database/timescaledb/#running-it) covers running it, and which tables to make hypertables.
+
+## How Navree behaves on PostgreSQL
+
+Navree behaves differently on PostgreSQL in a few places:
+
+- Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`, with one `SELECT set_config(..)` right after `BEGIN`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`. With `transaction_settings = false` the statement isn't sent and the settings stay unset.
+- `Uow::lock_for_update()` is true, so queries that call `lock_for_update()` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
+- `migrate:fresh` drops every table of the current schema with `CASCADE`.
+- The case-insensitive search helpers use `LOWER(..) LIKE` for ASCII terms and a regular expression for the rest ([searching text](/docs/database/getting-started/#searching-text)).
+
+## What has been run
+
+Most tests of Navree and of the reference CRM run on SQLite on a developer's machine. A scheduled CI job runs the suites of the 26 crates that own tables (auth, queue, audit, workspaces, billing, OAuth and the rest) again on PostgreSQL 17 with TimescaleDB and on MySQL 8.4, with `NAVREE_TEST_DATABASE=postgres` or `mysql`. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), paginated queries, record inserts and navree-auth's user lookup. No Navree code had to change for it.
+
+The ORM's real-server suite runs on PostgreSQL 17 with TimescaleDB 2.31, and on MySQL 8.4: records round-tripping every column type and cast (vectors with pgvector), conditions with JSON operators and regular expressions, joins, aggregates and compound queries, bulk writes and upserts, offset and cursor pagination, chunks, streams and cursors, row locks between two units of work (`SKIP LOCKED`, `NOWAIT` and shared locks), the unit of work's change events and rollbacks, relations and eager loading, model events, soft deletes and pruning, time buckets, statement timeouts and, on PostgreSQL, reads retried after a lost connection. `cargo test -p navree-orm --features postgres,mysql --test servers` runs it against your servers.
+
+Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MySQL 8.4) in the opt-in real-server tests of navree-schema and navree-db: the schema builder's statements, hypertables with their policies and continuous aggregates, migrations written with the schema builder, `--pretend`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh`, and schema dumps loaded into empty databases.
+
+The facade's `time_series` suite boots the audit, webhooks, Fleet, scheduling and Lighthouse modules on the same servers: their time-series tables become hypertables with the documented time columns, chunk intervals and keys on TimescaleDB, and stay regular tables with time indexes on MySQL; running their conversions again changes nothing; `audit:prune` drops whole chunks; and the [time-bucket queries](/docs/database/timescaledb/#time-bucket-queries) return the same buckets as on SQLite.
+
+The queue's `SKIP LOCKED` job reservation, which is outside the ORM, has a real-server suite of its own: `NAVREE_TEST_DATABASE=postgres cargo test -p navree-queue --features postgres` with `NAVREE_TEST_POSTGRES_URL` set (see [Queues](/docs/digging-deeper/queues/)).
+
+## Session settings
+
+The `database.postgres` section shapes the session of every connection the pool opens. Every key is optional:
+
+```toml title="config/app.toml"
+[database.postgres]
+search_path = ["app", "public"]
+timezone = "UTC"
+application_name = "crm-api"
+synchronous_commit = "on"
+isolation_level = "read_committed"
+ssl_mode = "prefer"
+```
+
+| Key | What it does |
+|---|---|
+| `search_path` | The schemas unqualified names resolve in, in order. A list, or a comma-separated string from the environment (`APP_DATABASE__POSTGRES__SEARCH_PATH=app,public`). Each entry must be a schema name. |
+| `timezone` | The session's time zone, such as `UTC` or `Europe/Berlin`. |
+| `application_name` | The name the server shows for these connections (`pg_stat_activity.application_name`): at most 63 printable characters, without quotes or backslashes. |
+| `synchronous_commit` | `on`, `off`, `local`, `remote_write` or `remote_apply`. |
+| `isolation_level` | The isolation level transactions start with (`default_transaction_isolation`): `read_uncommitted`, `read_committed`, `repeatable_read` or `serializable`, in any case, with spaces or hyphens if you like. |
+| `ssl_mode` | TLS: `disable`, `allow`, `prefer` (the default), `require`, `verify-ca` or `verify-full`. It overrides the URL's `sslmode`. |
+
+Other databases ignore this section.
+
+## The pool
+
+Navree doesn't ping a connection every time it takes one from the pool: on a busy app that ping is one round trip on every query. A connection that has sat idle in the pool for 30 seconds or more is pinged first, since a server, a proxy or a firewall may have dropped it in the meantime; a connection in steady use goes straight out. Set `test_before_acquire = true` to ping on every checkout instead.
+
+Connections idle for `idle_timeout_secs` are closed (down to `min_connections`), and connections older than `max_lifetime_secs` are closed and replaced with new ones as they are needed.

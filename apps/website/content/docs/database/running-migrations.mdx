@@ -1,6 +1,6 @@
 ---
 title: "Running migrations"
-description: "The migration commands: `migrate`, `migrate:status`, `--pretend`, rollback, reset, refresh and fresh, the production guard, migrating on boot and the migrator's API."
+description: "The migration commands: `migrate`, `migrate:status`, `--pretend`, rollback, reset, refresh and fresh, the production guard and migrating on boot."
 ---
 
 Migrations run through commands that `DatabaseModule` registers on your app. The `navree` CLI forwards them to your app's binary (`navree migrate` runs `cargo run --quiet -- migrate` in the project); in a deployment, run the built binary directly (`./crm-api migrate`). Every command boots the app first, so it reads the same configuration and connects to the same database as the app does.

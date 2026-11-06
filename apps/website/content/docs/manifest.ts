@@ -146,6 +146,9 @@ export const sections: DocsSection[] = [
     description: "Entities, repositories, migrations, the schema builder, TimescaleDB, seeding and pagination on PostgreSQL, MySQL and SQLite.",
     pages: [
       "getting-started",
+      "postgresql",
+      "mysql",
+      "sqlite",
       "entities-and-repositories",
       "unit-of-work",
       "migrations",

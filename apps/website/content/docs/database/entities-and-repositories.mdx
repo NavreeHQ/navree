@@ -1,6 +1,6 @@
 ---
 title: "Models and records"
-description: "How a table maps to a `#[derive(Model)]` struct and what a write through the unit of work records: UUID v7 keys, relations, change events, soft deletes and raw statements."
+description: "How a table maps to a `#[derive(Model)]` struct, and what a write records: UUID v7 keys, relations, change events, soft deletes and raw statements."
 ---
 
 A table is a Rust struct with `#[derive(Model)]`. Reading it gives you `Record<M>` values, and writing a record through the request's [unit of work](/docs/database/unit-of-work/) records a change event for the [audit log](/docs/security/audit-log/). This page is the database-side view of that: how tables map to models, what a write records, and how to drop to SQL when a model is the wrong tool. The [ORM section](/docs/orm/getting-started/) is the full reference for the query builder, relationships, casts and events.

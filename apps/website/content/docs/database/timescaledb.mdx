@@ -1,11 +1,11 @@
 ---
 title: "TimescaleDB"
-description: "Navree's default database: why, how to run it locally and in production, which tables to make hypertables, and compression, retention, continuous aggregates and time-bucket queries."
+description: "Navree's default database: how to run it locally and in production, which tables to make hypertables, compression, retention and time-bucket queries."
 ---
 
 TimescaleDB is Navree's default database: PostgreSQL with an extension for time-series data. Its central idea is the **hypertable**, a table PostgreSQL stores as many chunks, each holding one span of time. Queries over a recent window read only the chunks they need, old chunks can be compressed to a fraction of their size or dropped whole, and continuous aggregates keep rollups (events per day, revenue per hour) up to date incrementally. To your queries a hypertable is an ordinary table.
 
-You decide in your migrations which tables become hypertables, with the [schema builder](/docs/database/schema-builder/). The same migration runs on plain PostgreSQL, MySQL and SQLite, which get a regular table with the right indexes and a notice (MariaDB too, [untested](/docs/database/getting-started/#mysql-and-mariadb)).
+You decide in your migrations which tables become hypertables, with the [schema builder](/docs/database/schema-builder/). The same migration runs on plain PostgreSQL, MySQL and SQLite, which get a regular table with the right indexes and a notice (MariaDB too, [untested](/docs/database/mysql/)).
 
 ## Why TimescaleDB is the default
 
@@ -25,7 +25,7 @@ navree dock up               # TimescaleDB on 127.0.0.1:5432
 navree dev
 ```
 
-`navree new my-shop --database postgres` sets up plain PostgreSQL instead, `--database mysql` MySQL (MariaDB is [untested](/docs/database/getting-started/#mysql-and-mariadb)), and `--database sqlite` a SQLite file with nothing to install.
+`navree new my-shop --database postgres` sets up plain PostgreSQL instead, `--database mysql` MySQL (MariaDB is [untested](/docs/database/mysql/)), and `--database sqlite` a SQLite file with nothing to install.
 
 **An existing app** needs the `postgres` feature of the facade and a server. [Dock](/docs/tools/dock/#postgresql-and-timescaledb) runs one for development:
 
