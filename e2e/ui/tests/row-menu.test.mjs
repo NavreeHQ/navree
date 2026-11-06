@@ -13,7 +13,7 @@ import { createRequire } from "node:module";
 import { after, before, describe, test } from "node:test";
 import * as playwright from "playwright";
 import { launch } from "./support/launch.mjs";
-import { LIGHT } from "./support/light.mjs";
+import { lightFromTheStart } from "./support/light.mjs";
 
 const BASE = process.env.UI_TABLE_URL || "http://127.0.0.1:8097";
 const require = createRequire(import.meta.url);
@@ -75,8 +75,9 @@ for (const browserName of browsers) {
         if (message.type() === "error" && !/Failed to load resource/.test(message.text())) problems.push(message.text());
       });
       page.on("pageerror", (error) => problems.push(String(error)));
+      if (options.light) await lightFromTheStart(context);
       await page.goto(BASE + path);
-      if (options.light) await page.addStyleTag({ content: LIGHT });
+      if (options.light) assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light", "the page is light");
       return {
         page,
         problems,

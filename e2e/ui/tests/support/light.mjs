@@ -12,3 +12,26 @@ export const LIGHT =
   ":root{color-scheme:light" +
   [...tokens.matchAll(/t\("([a-z0-9-]+)",\s*"(#[0-9a-f]{6})",\s*"(#[0-9a-f]{6})"\)/g)].map((m) => `;--${m[1]}:${m[3]}`).join("") +
   "}";
+
+/**
+ * Gives every page of `context` the light tokens before its first style is worked out, ahead of the toolkit's
+ * own (`:root:root` outranks its `:root`). Tokens changed after a page has loaded can leave WebKit's table cells
+ * with the colours they had (their computed colour stays the dark one while the body's turns light), so a check
+ * that reads the cells' colours gives the page its light tokens from the start.
+ * @param {import("playwright").BrowserContext} context
+ */
+export function lightFromTheStart(context) {
+  return context.addInitScript((css) => {
+    const add = () => {
+      const style = document.createElement("style");
+      style.textContent = css;
+      document.documentElement.append(style);
+    };
+    if (document.documentElement) add();
+    else new MutationObserver((_, seen) => {
+      if (!document.documentElement) return;
+      seen.disconnect();
+      add();
+    }).observe(document, { childList: true });
+  }, LIGHT.replace(/^:root/, ":root:root"));
+}
