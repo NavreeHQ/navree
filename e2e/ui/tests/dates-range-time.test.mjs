@@ -438,4 +438,24 @@ inBrowsers(({ open }) => {
     assert.equal(await page.locator("#dr-b_from [data-ui-act=open]").isVisible(), false);
     await close();
   });
+
+  test("JavaScript off: Back to the report shows the window the server drew, not dates typed before leaving it", async () => {
+    const { page, close } = await open("/dates/report?from=2026-11-01&to=2026-11-03", { js: false });
+    const from = page.locator("#report-range input[name=from]");
+    const to = page.locator("#report-range input[name=to]");
+    await from.fill("2026-11-10");
+    await to.fill("2026-11-20");
+    const asked = [];
+    page.on("request", (r) => { if (/\/dates\/report/.test(r.url())) asked.push(r.url()); });
+    await page.goto(`${BASE}/dates`);
+    await page.goBack();
+    await page.waitForLoadState("load");
+    // A page the back-forward cache kept is the same page, typed dates and all. One loaded again is the
+    // server's, and the browser must not fill its fields back in.
+    if (asked.length) {
+      assert.equal(await from.inputValue(), "2026-11-01", "the start the server drew");
+      assert.equal(await to.inputValue(), "2026-11-03", "the end the server drew");
+    }
+    await close();
+  });
 });

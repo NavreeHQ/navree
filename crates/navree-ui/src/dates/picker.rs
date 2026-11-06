@@ -315,6 +315,7 @@ impl DatePicker {
             .attr_opt("aria-label", self.label.clone())
             .attr_opt("aria-invalid", self.invalid.then_some("true"))
             .attr("data-ui-native", "")
+            .attr("autocomplete", "off")
             .flag("required", self.required)
             .flag("disabled", self.disabled)
             .flag("readonly", self.read_only);
@@ -752,6 +753,8 @@ impl DateRangePicker {
                     .attr_opt("min", self.rules.earliest().map(|d| d.to_string()))
                     .attr_opt("max", self.rules.latest().map(|d| d.to_string()))
                     .attr("data-ui-native", which)
+                    // Back to a page loaded again shows the server's window, not dates typed before leaving it.
+                    .attr("autocomplete", "off")
                     .flag("required", self.required)
                     .flag("disabled", self.disabled),
             ))

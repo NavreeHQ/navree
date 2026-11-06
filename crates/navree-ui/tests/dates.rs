@@ -496,6 +496,35 @@ fn a_range_picker_posts_two_dates_and_offers_presets_counted_from_today() {
     assert!(page.contains(r#"title="11/01/2026 – 11/03/2026""#));
 }
 
+/// A browser that loads a page again on Back puts back what was typed into its fields,
+/// unless they say not to: a range or a date in a GET form would then read an older
+/// window than the page shows. Every field that posts a date says not to.
+#[test]
+fn the_fields_that_post_a_date_are_never_filled_back_in_by_the_browser() {
+    let range = html(
+        DateRangePicker::new("from", "to")
+            .today(today())
+            .value(DateRange::new(day(2026, 11, 1), day(2026, 11, 3))),
+    );
+    for name in ["from", "to"] {
+        assert_eq!(
+            attr_of(&range, &format!("name=\"{name}\""), "autocomplete").as_deref(),
+            Some("off"),
+            "{name}: {range}"
+        );
+    }
+    let single = html(DatePicker::new("due").today(today()).value(day(2026, 11, 12)));
+    assert_eq!(
+        attr_of(&single, "name=\"due\"", "autocomplete").as_deref(),
+        Some("off"),
+        "{single}"
+    );
+    assert_eq!(
+        attr_of(&single, "data-ui-text", "autocomplete").as_deref(),
+        Some("off")
+    );
+}
+
 #[test]
 fn the_matching_preset_is_pressed() {
     let page = html(
