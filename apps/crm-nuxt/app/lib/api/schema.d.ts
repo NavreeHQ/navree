@@ -3518,7 +3518,7 @@ export interface components {
              * @description The main contact (must exist).
              */
             contact_id?: string | null;
-            /** @description The ISO 4217 code (default `USD`; stored upper-case). */
+            /** @description The ISO 4217 code (default `INR`; stored upper-case). */
             currency?: string | null;
             /**
              * Format: date

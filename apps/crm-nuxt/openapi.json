@@ -609,7 +609,7 @@
             "type": "string"
           },
           "domain": {
-            "description": "The web domain, e.g. `acme.com`.",
+            "description": "The web domain, e.g. `agra.com`.",
             "type": [
               "string",
               "null"
@@ -736,7 +736,7 @@
             ]
           },
           "domain": {
-            "description": "The web domain, e.g. `acme.com`.",
+            "description": "The web domain, e.g. `agra.com`.",
             "type": [
               "string",
               "null"
@@ -1618,7 +1618,7 @@
             ]
           },
           "currency": {
-            "description": "The ISO 4217 code (default `USD`; stored upper-case).",
+            "description": "The ISO 4217 code (default `INR`; stored upper-case).",
             "type": [
               "string",
               "null"
