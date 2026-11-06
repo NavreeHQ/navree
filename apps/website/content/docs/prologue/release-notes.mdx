@@ -13,11 +13,31 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 </Callout>
 
-The sections below list what Navree includes. They describe the code of this release.
+## What ships
 
-## Connection limits
+The table is the whole release on one screen. Each row links to the section that lists its parts, and the sections describe the code of this release.
 
-The `serve` command runs on `navree::http::serve`, which bounds what a client can hold (slow headers, slow bodies, idle connections, responses it stops reading, unanswered HTTP/2 pings, the number of connections in all and per address) with the safe defaults of [`http.server`](/docs/getting-started/deployment/#connection-limits). A full server closes its longest-idle connection for a client that's waiting and has sent something. Behind a reverse proxy, list it in `http.trusted_proxies`, or its connections count against `http.server.max_connections_per_ip` (256). WebSockets are bounded only if you set `http.server.upgraded_idle_timeout_ms`. A request head over 32 KiB or with over 100 headers is a 431, and the peer's address is `navree::http::serve::ConnectInfo`. A gRPC client's `grpc-timeout` can shorten `grpc.timeout_secs` but not extend it, so raise that key if a method needs longer than the default of `http.timeout_secs`.
+| Area | What ships | Details |
+|---|---|---|
+| Foundation | The module graph, dependency injection, typed configuration with redacted secrets, logging | [Foundation](#foundation) |
+| HTTP | The server and its connection limits, the router, extractors, validation, OpenAPI documents, sessions with CSRF protection | [HTTP](#http), [Connection limits](#connection-limits) |
+| Data | The database engine, the ORM, migrations built on the schema builder, the cache | [Data](#data) |
+| Security | JWT sign-in with rotating refresh tokens, two-factor authentication, roles and abilities, encryption, the audit log | [Security](#security) |
+| Workspaces | Multi-tenancy at the workspace level: members, roles, invitations, and data isolated by row, schema or database | [Workspaces](#workspaces) |
+| Background work | Queues, events, schedules and time zones | [Background work](#background-work) |
+| Communication | Mail, notifications over many channels, a real-time server, templates | [Communication](#communication) |
+| Integrations and operations | Storage disks, outgoing HTTP, health checks and metrics | [Integrations and operations](#integrations-and-operations) |
+| Testing | `TestApp`, `TestClient` and fakes | [Testing](#testing) |
+| Navree UI | Screens drawn on the server in Rust: components, forms, tables, charts, themes, live updates | [Navree UI](#navree-ui) |
+| Tools | Lighthouse, Logbook, Fleet, Helm, Harbor, Dock and Navigator | [Tools](#tools) |
+| Packages | Search, AI, MCP servers, microservices, OAuth, billing, webhooks, documents and more | [Packages](#packages) |
+| AI-native | Agent skills, ways to bring a product or a design into Navree, docs for agents | [AI-native](#ai-native) |
+| The CLI | `navree new`, the generators, `navree dev`, the OpenAPI client generator and starter kits | [The CLI](#the-cli) |
+| Example apps | The reference CRM with Next.js and Nuxt front ends, and a store, a board and an inbox on Navree UI | [The reference CRM](#the-reference-crm), [Example apps on Navree UI](#example-apps-on-navree-ui) |
+| Performance | One binary that starts in milliseconds, with the measurements behind it | [Performance](#performance) |
+| Security hardening | Limits on parsers, imports, documents and other untrusted input | [Security hardening](#security-hardening) |
+| Checks | Supply-chain gates, fuzzing and clean test folders | [Supply-chain checks, fuzzing and test folders](#supply-chain-checks-fuzzing-and-test-folders) |
+| Decisions | Why tokens for APIs and sessions for pages, one error shape, built-in real time | [Design decisions](#design-decisions) |
 
 ## The framework
 
@@ -42,6 +62,10 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 - **`navree-openapi`**: the OpenAPI 3.1 document model and `#[derive(ToSchema)]`, which reads serde's attributes.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, an API reference page at `/api/docs` that loads nothing from a third party, `openapi:export`, and API resource helpers.
 - **`navree-session`**: encrypted session cookies (named `__Host-navree_session` wherever browsers allow the prefix) with memory and database stores, a lifetime a session can set for itself ("remember me"), and CSRF protection for pages and single-page apps that use cookies, with the handshake at `GET /csrf-cookie`.
+
+### Connection limits
+
+The `serve` command runs on `navree::http::serve`, which bounds what a client can hold (slow headers, slow bodies, idle connections, responses it stops reading, unanswered HTTP/2 pings, the number of connections in all and per address) with the safe defaults of [`http.server`](/docs/getting-started/deployment/#connection-limits). A full server closes its longest-idle connection for a client that's waiting and has sent something. Behind a reverse proxy, list it in `http.trusted_proxies`, or its connections count against `http.server.max_connections_per_ip` (256). WebSockets are bounded only if you set `http.server.upgraded_idle_timeout_ms`. A request head over 32 KiB or with over 100 headers is a 431, and the peer's address is `navree::http::serve::ConnectInfo`. A gRPC client's `grpc-timeout` can shorten `grpc.timeout_secs` but not extend it, so raise that key if a method needs longer than the default of `http.timeout_secs`.
 
 ### Data
 
