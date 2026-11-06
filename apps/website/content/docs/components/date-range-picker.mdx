@@ -93,21 +93,25 @@ async fn report(
     zone: CurrentZone, // navree-time: the person's or the workspace's zone
 ) -> Result<AppPage> {
     let limits = window_limits();
+    let dates = DateLocale::of("en-IN"); // or locale.date_locale() with navree-i18n
     let range = match query.checked(&limits) {
         Ok(range) => range,                     // Option<DateRange>
-        Err(why) => return Ok(refused(&shell, why.message(&locale))),
+        Err(why) => return Ok(refused(&shell, why.message(&dates))),
     };
     if let Some(range) = range {
         let (start, end) = range.utc_bounds(&zone.zone().tz()); // [start, end)
         // WHERE created_at >= start AND created_at < end
     }
     let picker = DateRangePicker::new("from", "to")
-        .today(zone.today().date())
+        .today_in(&zone)
+        .locale(dates)
         .limits(limits)
         .value_opt(range);
     // ...
 }
 ```
+
+With the `time` feature, `.today_in(&zone)` counts today, and so every preset, from the zone's day instead of the day in UTC. A [DatePicker](/docs/components/date-picker/) and a [Calendar](/docs/components/calendar/) take it the same way.
 
 ## The shape of a window
 

@@ -75,6 +75,26 @@ Below 768 px the sidebar is off-canvas. The top bar keeps its button, and pressi
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
 
+## Only what a reader may use
+
+A button that answers "no" should not have been drawn. With the `access` feature, `navree::ui::ability` asks the reader's [abilities](/docs/security/authorization/) before the page draws a navigation item, a bulk action, a row action or any other part. `Requires::requires(action, subject)` gates a part, and `ByAbility` (implemented for `Ability`, which the `Abilities` extractor derefs to) keeps what the reader may see:
+
+```rust
+use navree::ui::ability::{ByAbility, Requires};
+use navree::ui::{BulkAction, NavItem};
+
+let items = ability.only([
+    NavItem::new("Deals", "/deals").requires("read", "Deal"),
+    NavItem::new("Reports", "/reports").requires("read", "Report"),
+]);
+let actions = ability.only([
+    BulkAction::new("archive", "Archive").requires("update", "Deal"),
+    BulkAction::new("delete", "Delete").requires("delete", "Deal"),
+]);
+```
+
+`show` keeps one part or drops it, and `nav_group(group, items)` returns the group with the items the reader may use, or `None` when none are left, so an empty group is not drawn. The check is on the kind of subject, so a reader who may edit some deals sees the Edit button; the server still decides each record, and a route's guard refuses a request the page should not have offered.
+
 ## Layouts and folding
 
 `Shell::layout` places the navigation: a docked sidebar (the default), `ShellLayout::Inset` with the page in a card beside the sidebar, `ShellLayout::Floating` with the sidebar as a card, or `ShellLayout::Header` with the links in the top bar and each labelled group as a menu. `Shell::collapse` sets what folding does: `Collapse::Icons` (the default), `Collapse::Offcanvas` to slide it away, or `Collapse::Never`. On a phone every layout puts the links in a sheet. See [Themes](/docs/ui/themes/#layouts) for each one drawn.

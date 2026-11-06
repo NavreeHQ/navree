@@ -377,6 +377,16 @@ A page looks like this ([pagination](/docs/database/pagination/) explains `page`
 
 An `unread` value other than `true`, `1`, `false` or `0` is a 400. The routes appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the tag `Notifications`.
 
+### In a Navree UI page
+
+With the `ui` and `notify` features on together, `navree::notify::ui::NotificationBell` shows the signed-in user's stored (database) notifications in the [app shell](/docs/ui/app-shell/): the number of unread ones and the latest eight, each a link to what it is about, with Mark read and Mark all read.
+
+```rust
+let shell = Shell::new("Acme").search(NotificationBell::new().live());
+```
+
+The bell fetches its list after the page paints, so the shell stays fast. `.live()` hears a new notification on the app's live hub and needs `RealtimeModule`; without it the bell polls once a minute (`.poll(duration)` changes that). `NotifyModule` mounts the routes it uses when `notify.routes` is on and the app has a database and an authenticator: `GET /notifications/bell`, `POST /notifications/{id}/mark-read` and `POST /notifications/read-all`. A notification's `data` is read as `{title, message, url}`, and `url` becomes the link only when it is an address on your own site. The words are in `BellLabels` (`.labels(..)`).
+
 ### In code
 
 The same read state is available on the `Notifier`, for any notifiable. Each method takes the executor to use (any `navree::orm::Executor`: a `Db`, a `Uow`): in a handler, `uow.db()` to read and `&uow` to write.

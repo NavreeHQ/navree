@@ -364,6 +364,31 @@ let locale = i18n.user_locale(owner.id).await?; // saved, or default_locale
 Locale::scope(locale, async { mailer.queue(&deal_won_mail(&owner, &deal)).await }).await?;
 ```
 
+## Navree UI in the reader's language
+
+With the `ui` and `i18n` features on together, `navree::i18n::ui` gives [Navree UI](/docs/ui/overview/) the reader's words, money and dates, so a page needs no translation work of its own to speak English or Hindi.
+
+**Labels.** Every label struct of the toolkit (`TableLabels`, `StateLabels`, `UploadLabels`, `SelectLabels`, `ChartLabels` and the rest) has its words in Fluent. English and Hindi ship with the crate. A word you define under the same id in your own `locales/<tag>/*.ftl` wins over the shipped one, and a locale with no shipped words gets the toolkit's English, word by word, never a message id.
+
+**Money.** `MoneyIn::display_in(&locale, currency)` prints an amount in minor units with the locale's grouping, separators and symbol: `Money(10_000_000)` of `INR` is `₹1,00,000.00` in `en-IN` and `hi`, `₹100,000.00` in `en`, and `100.000,00 €` in `de` with `EUR`.
+
+**Dates.** `LocaleUi::date_locale` gives the date and time pickers the locale's month and weekday names, the order of a typed date, the first day of the week and the clock.
+
+```rust
+use navree::i18n::Locale;
+use navree::i18n::ui::{LocaleUi, MoneyIn};
+use navree::ui::{AppPage, AppShell, Money, TableLabels};
+
+async fn deals(shell: AppShell, locale: Locale) -> AppPage {
+    let labels = locale.labels::<TableLabels>();       // "खोजें" for the search box in hi
+    let total = Money(10_000_000).display_in(&locale, "INR"); // ₹1,00,000.00 in en-IN and hi
+    let dates = locale.date_locale();                  // for a picker's `.locale(dates)`
+    // ... pass `&labels` to the table with `.labels(&labels)`
+}
+```
+
+**Forms.** `I18nModule` also registers a `Localizer`, so a form that comes back with errors says its date, time and slider messages, its "Check this form" heading and its submit button in the language of the request. `LocaleUi::reader_words` gives those words to your own code.
+
 ## Checking translations
 
 `i18n:check` parses every file of every locale and compares each locale with `default_locale`:
@@ -441,6 +466,7 @@ async fn plurals_follow_the_language() {
 | `Locale` | Extractor: `tag()`, `language()`, `direction()`, `native_name()`, `translate`, `has`, `format_money`, `format_date`, `format_date_with`, `format_number`; `Locale::scope(locale, future)`, `Locale::current()` |
 | `I18n` | Service: `new`, `t`, `has`, `locales`, `default_locale`, `locale`, `matching`, `scope`, `user_locale`, `set_user_locale`, `workspace_locale`, `set_workspace_locale`, `missing`, `reload` |
 | `I18nError` | `InvalidLocale`, `UnsupportedLocale`, `MissingMessage`, `Format`, `Files`, `NoDatabase`, `Database` |
+| `navree::i18n::ui` | With the `ui` feature: `FromLocale` (a label struct's words in a locale), `LocaleUi` (`labels`, `date_locale`, `reader_words`) and `MoneyIn` (`display_in`) |
 
 | Route | |
 |---|---|

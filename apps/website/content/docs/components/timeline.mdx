@@ -35,7 +35,7 @@ It is plain HTML: a list, `<time>` elements and no script. It works with JavaScr
 
 The first argument to `Timeline::new` is an id: the day headings and the hidden-items notice build their own ids from it. The second is the name a screen reader reads for the whole group.
 
-`.time_zone(name, offset_seconds)` sets the zone the clock times and the day boundaries use, and writes "Times in Asia/Kolkata (GMT+05:30)" above the events. The toolkit formats the date and time itself, in English, from the unix seconds and the offset, so it adds no date library to your build. Without a zone the times are in UTC and no note is written.
+`.time_zone(name, offset_seconds)` sets the zone the clock times and the day boundaries use, and writes "Times in Asia/Kolkata (GMT+05:30)" above the events. The toolkit formats the date and time itself, in English, from the unix seconds and the offset, so it adds no date library to your build. Without a zone the times are in UTC and no note is written. With the `time` feature, `.zone(&zone)` takes a navree-time `CurrentZone` instead: the zone's name and its offset from UTC now.
 
 Each event after the first gets a **gap chip**, which says how long it came after the event before it in time:
 

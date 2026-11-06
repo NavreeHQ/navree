@@ -332,6 +332,23 @@ channel.bind("operation.updated", (op: Operation) => {
 
 `OperationRecord::channel()` gives the channel name in Rust.
 
+### In a Navree UI page
+
+With the `ui` and `queue` features on together, `navree::queue::ui::OperationProgress` is a [region](/docs/ui/regions/) that follows an operation: a progress bar with the operation's note, and, when it finishes, a link to the result or the error. It polls every 2 seconds (`.poll(duration)` changes that), and `.live()` also hears the change on the app's live hub, so it needs `RealtimeModule`; without one it only polls. The region stops asking once the operation has finished.
+
+```rust
+let op = operations.start(&uow, Operation::new("deals.export").owner(user)).await?;
+operations.dispatch(&uow, &op, ExportDeals { operation: op.id }).await?;
+
+// On the page:
+OperationProgress::new(op.id).live()
+
+// In the job, when it is done:
+operations.complete(op.id, json!({ "url": "/exports/deals.csv" })).await?;
+```
+
+The link comes from the `url` of the operation's `result` (`.result_key("path")` reads another key), and only an address on your own site becomes a link. `QueueModule` serves the fragment at `GET /operations/{id}/progress` when the routes above are on, with the same rules as the JSON route: the owner and holders of `operations.view` see it, and everyone else gets a 404. It draws English words; for other words, mount a route of your own that answers with `OperationProgress::new(id).labels(words).record(record)`, where `words` is an `OperationLabels`.
+
 ### Who may see an operation
 
 An operation is visible to:

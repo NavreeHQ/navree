@@ -131,3 +131,25 @@ async fn routes_and_commands() {
         .assert_status(200);
     app.shutdown().await.unwrap();
 }
+
+/// What the section "Navree UI in the reader's language" names: the label
+/// structs from a locale, money by locale, the locale's dates and the words a
+/// form says on its own.
+#[cfg(feature = "ui")]
+#[test]
+fn navree_ui_in_the_readers_language() {
+    use navree_i18n::ui::{FromLocale, LocaleUi, MoneyIn};
+    use navree_ui::{Money, TableLabels};
+
+    let i18n = I18n::new(I18nOptions {
+        locales: vec!["en".into(), "hi".into()],
+        ..I18nOptions::default()
+    })
+    .unwrap();
+    let hindi = i18n.locale("hi");
+    let labels: TableLabels = hindi.labels();
+    assert_eq!(labels.search, TableLabels::from_locale(&hindi).search);
+    assert_eq!(labels.search, "खोजें");
+    assert_eq!(Money(10_000_000).display_in(&hindi, "INR"), "₹1,00,000.00");
+    let _ = (hindi.date_locale(), hindi.reader_words());
+}

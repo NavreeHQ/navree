@@ -39,7 +39,7 @@ The feed is plain markup. On its own it ships no script. Put it in a [Region](/d
 
 `ActivityItem::new(actor, verb)` reads as a sentence: "Manpreet Gill" "replied to" "Ticket 2041". The actor and the object are user text, so each sits in a `<bdi>` and keeps its own direction. `.tone(...)` colours the icon and the verb; `.icon(...)` picks the glyph. The icon is a circle; the feed has no initials and no avatars.
 
-`.at(unix_seconds)` prints the clock time in the feed's zone (`.time_zone(name, offset)`, which also writes "Times in …" under the title). `.time_text("2 min ago")` prints your own words instead.
+`.at(unix_seconds)` prints the clock time in the feed's zone (`.time_zone(name, offset)`, which also writes "Times in …" under the title). `.time_text("2 min ago")` prints your own words instead. With the `time` feature, `.zone(&zone)` takes a navree-time `CurrentZone` in place of `.time_zone(name, offset)`.
 
 `.href(url)` makes the actor a link and the whole row a click target. Point it at a page, or at a page that opens a [Sheet](/docs/components/sheet/) with the details. It is a real link: it opens in a new tab with a middle click, and it works with JavaScript off.
 

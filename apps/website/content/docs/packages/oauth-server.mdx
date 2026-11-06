@@ -175,7 +175,7 @@ let created = clients
 
 ## The authorization code flow
 
-This is the flow for any app that acts for a signed-in user. Navree is API-first, so the consent screen is a page of **your** front end, and the API does the protocol:
+This is the flow for any app that acts for a signed-in user. Navree is API-first, so the consent screen is a page of **your** front end (or, in an app with [Navree UI](/docs/ui/overview/), [the one the module serves](#the-consent-page-of-navree-ui)), and the API does the protocol:
 
 1. The client sends the browser to `GET /oauth/authorize` with `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state` and a PKCE `code_challenge` (`code_challenge_method=S256`), and with `nonce` for OpenID Connect.
 2. Navree checks the request and redirects the browser to `oauth.consent_url?request=<id>`. A request that can't be checked (unknown client, a `redirect_uri` that isn't registered) gets a 400 page and never redirects.
@@ -217,6 +217,19 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 The redirect carries `iss` (RFC 9207), so clients can tell authorization servers apart. A denial redirects with `error=access_denied` and the `state`. An unknown or already decided request is a 404, an expired one a 410. These routes need a first-party sign-in: a request made with an OAuth token or a personal access token gets a 403, so a token can never approve more access for itself.
 
 An approval is remembered in `oauth_authorizations`. When the same client later asks for scopes the user already approved, `already_approved` is `true` and your page can approve at once. Trusted clients (`--trusted`) skip the page: `GET /oauth/authorize` sends the browser straight to the consent page with `already_approved: true`, which approves without showing anything. Authorization requests expire after `oauth.request_ttl_secs` (10 minutes), codes after 60 seconds, and a code works once: presenting it again revokes every token issued from it.
+
+### The consent page of Navree UI
+
+With the `ui` and `oauth` features on together, the module serves the consent page itself at `/oauth/consent`, so an app with Navree UI needs no front end of its own for it. Point `oauth.consent_url` at it, with the address of your app:
+
+```toml title="config/app.toml"
+[oauth]
+consent_url = "https://api.acme.test/oauth/consent"
+```
+
+The signed-in person sees who is asking (the client's name, and its website when it has one), the scopes it asks for in the words of `oauth.scopes`, whether they allowed these scopes before, and two buttons, Allow and Deny. Both post to the same decisions as the JSON routes (`approve` and `deny`: the approval is remembered, the audit entry is written, the code is issued) and send the browser back to the client. The page is drawn in the app's shell when there is one.
+
+A guest is sent to sign in and back. A request made with an OAuth or a personal access token is refused, as the JSON routes refuse it. The browser follows the client's redirect address when it is an address on the web (`http` or `https`); a client that registered another scheme, such as an app on a phone, reads its decision from the JSON routes. The page draws English words (`ConsentLabels`).
 
 ### Exchanging the code
 
