@@ -492,11 +492,11 @@ async fn the_check_constraint_refuses_contradicting_owners() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     let (org, ws) = (lib.group.id.to_string(), lib.agra.id.to_string());
-    // UUIDs are 16 bytes on MySQL.
+    // UUIDs are 16 bytes on MySQL and MariaDB (which has no `UUID_TO_BIN`).
     let mysql = db.backend() == navree_db::Backend::MySql;
     let uuid = |id: &str| {
         if mysql {
-            format!("UUID_TO_BIN('{id}')")
+            format!("UNHEX(REPLACE('{id}', '-', ''))")
         } else {
             format!("'{id}'")
         }
