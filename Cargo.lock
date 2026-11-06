@@ -4551,6 +4551,7 @@ version = "1.0.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
+ "navree-macros",
  "proptest",
  "serde",
  "serde_json",
@@ -5289,6 +5290,7 @@ dependencies = [
  "http-body-util",
  "navree-access",
  "navree-auth",
+ "navree-config",
  "navree-contracts",
  "navree-http",
  "navree-kernel",

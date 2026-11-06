@@ -104,13 +104,13 @@ pub fn render(schema: &SectionSchema, defaults: Option<&Json>) -> String {
         out,
         "#\n# Every key is commented out beside its default. Remove the `#` to change one."
     );
-    fields(&mut out, &schema.key, &schema.fields, defaults, "");
+    write_fields(&mut out, &schema.key, &schema.fields, defaults, "");
     out
 }
 
 /// Writes `fields`: plain keys, then each table under its own header.
 /// `table` is the path of the table below the section (`smtp.tls`).
-fn fields(
+fn write_fields(
     out: &mut String,
     key: &str,
     fields: &[FieldSchema],
@@ -153,7 +153,7 @@ fn fields(
         }
         let _ = writeln!(out, "# [{path}]");
         let nested = defaults.and_then(|defaults| defaults.get(&field.name));
-        fields(out, key, &field.fields, nested, &format!("{path}."));
+        write_fields(out, key, &field.fields, nested, &format!("{path}."));
     }
 }
 
