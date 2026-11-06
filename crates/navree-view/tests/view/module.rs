@@ -92,7 +92,7 @@ async fn modules_add_functions_and_filters_to_the_environment() {
             .await
             .render("mail/shout", json!({ "name": "Anu" }))
             .expect("render"),
-        "ADA! 5 EUR"
+        "ANU! 5 EUR"
     );
     app.shutdown().await.expect("shutdown");
 }

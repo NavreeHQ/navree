@@ -18,7 +18,7 @@
 //! let out = env
 //!     .render_str("hi.txt", "{{ greet(name|shout, end='!') }}", serde_json::json!({ "name": "anu" }))
 //!     .unwrap();
-//! assert_eq!(out, "Hello, ADA!");
+//! assert_eq!(out, "Hello, ANU!");
 //! ```
 
 use std::fmt;

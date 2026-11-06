@@ -30,7 +30,7 @@ fn only_serialized_fields_exist() {
     assert_eq!(
         env.render_str("t.txt", "{{ a.name }}{{ a.password is defined }}", &ctx)
             .expect("renders"),
-        "adaFalse"
+        "anuFalse"
     );
     assert!(env.render_str("t.txt", "{{ a.secret() }}", &ctx).is_err());
 }
