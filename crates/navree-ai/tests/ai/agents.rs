@@ -877,6 +877,154 @@ async fn a_streamed_run_reports_a_pending_approval() {
     assert!(matches!(events.last(), Some(StreamEvent::Done(_))));
 }
 
+/// A conversation stopped at a `rename_note` call for Dana's own note "Old":
+/// the app, Dana, the conversation and the pending call's id.
+async fn stopped_for_approval() -> (TestApp, Uuid, Uuid, String) {
+    let app = app().await;
+    let dana = user(&app, "Dana", &[]).await;
+    let ai = app.get::<Ai>().await;
+    let fake = ai.fake().unwrap();
+    fake.respond_with([
+        FakeReply::tool_call("add_note", json!({ "title": "Old" })),
+        FakeReply::text("Added."),
+    ]);
+    ai.agent::<NotesAssistant>()
+        .acting_as_user(dana)
+        .prompt("Add")
+        .await
+        .unwrap();
+    let id = notes(&app).await[0].id;
+    fake.respond(FakeReply::tool_call(
+        "rename_note",
+        json!({ "note_id": id, "title": "New" }),
+    ));
+    let reply = ai
+        .agent::<NotesAssistant>()
+        .acting_as_user(dana)
+        .conversation(None)
+        .prompt("Rename my note to New")
+        .await
+        .unwrap();
+    let call = reply.pending_approval.expect("rename_note waits").call_id;
+    (app, dana, reply.conversation_id.unwrap(), call)
+}
+
+#[tokio::test]
+async fn approve_stream_runs_the_call_then_streams_the_rest_of_the_run() {
+    let (app, dana, conversation, call) = stopped_for_approval().await;
+    let ai = app.get::<Ai>().await;
+    let fake = ai.fake().unwrap();
+    fake.respond_with([
+        FakeReply::tool_call("list_notes", json!({})),
+        FakeReply::text("Renamed it to New.").with_usage(40, 5),
+    ]);
+
+    let stream = ai
+        .agent::<NotesAssistant>()
+        .acting_as_user(dana)
+        .conversation(Some(conversation))
+        .approve_stream(call.clone())
+        .await
+        .unwrap();
+    let events: Vec<StreamEvent> = stream.map(Result::unwrap).collect().await;
+
+    // The approved call's result first, then the next step's tool, the text and the end.
+    assert!(
+        matches!(&events[0], StreamEvent::ToolResult { id, tool, ok: true } if id == &call && tool == "rename_note"),
+        "{events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::ToolCall { tool, .. } if tool == "list_notes"))
+    );
+    let text: String = events
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(text, "Renamed it to New.");
+    match events.last().unwrap() {
+        StreamEvent::Done(done) => assert_eq!(done.conversation_id, Some(conversation)),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(notes(&app).await[0].title, "New");
+    // The call is decided: streaming its approval again is a 404, before any event.
+    let error = ai
+        .agent::<NotesAssistant>()
+        .acting_as_user(dana)
+        .conversation(Some(conversation))
+        .approve_stream(call)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, AiError::NotFound { .. }), "{error:?}");
+}
+
+#[tokio::test]
+async fn reject_stream_tells_the_model_why_and_streams_its_answer() {
+    let (app, dana, conversation, call) = stopped_for_approval().await;
+    let ai = app.get::<Ai>().await;
+    let fake = ai.fake().unwrap();
+    fake.respond(FakeReply::text("Okay, I left the old name."));
+
+    let stream = ai
+        .agent::<NotesAssistant>()
+        .acting_as_user(dana)
+        .conversation(Some(conversation))
+        .reject_stream(call, Some("Keep it".into()))
+        .await
+        .unwrap();
+    let events: Vec<StreamEvent> = stream.map(Result::unwrap).collect().await;
+
+    assert!(
+        !events.iter().any(|e| matches!(e, StreamEvent::ToolResult { .. })),
+        "a rejected call never runs: {events:?}"
+    );
+    assert!(events.iter().any(|e| matches!(e, StreamEvent::Text(t) if t.contains("old name"))));
+    assert!(matches!(events.last(), Some(StreamEvent::Done(_))));
+    assert_eq!(notes(&app).await[0].title, "Old");
+    let result = &fake.tool_results("rename_note")[0];
+    assert_eq!(result["declined"], true);
+    assert_eq!(result["message"], "The user declined this call: Keep it");
+}
+
+#[tokio::test]
+async fn streaming_a_decision_on_an_unknown_call_is_not_found() {
+    let (app, dana, conversation, _call) = stopped_for_approval().await;
+    let ai = app.get::<Ai>().await;
+    for wrong in ["call_that_never_was", ""] {
+        let error = ai
+            .agent::<NotesAssistant>()
+            .acting_as_user(dana)
+            .conversation(Some(conversation))
+            .approve_stream(wrong)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AiError::NotFound { .. }), "{error:?}");
+        let error = ai
+            .agent::<NotesAssistant>()
+            .acting_as_user(dana)
+            .conversation(Some(conversation))
+            .reject_stream(wrong, None)
+            .await
+            .unwrap_err();
+        assert_eq!(error.status().as_u16(), 404);
+    }
+    // Someone else's conversation is not found either.
+    let other = user(&app, "Other", &[]).await;
+    let error = ai
+        .agent::<NotesAssistant>()
+        .acting_as_user(other)
+        .conversation(Some(conversation))
+        .approve_stream("anything")
+        .await
+        .unwrap_err();
+    assert_eq!(error.status().as_u16(), 404);
+    assert_eq!(notes(&app).await[0].title, "Old");
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct Review {
     /// How many notes there are.

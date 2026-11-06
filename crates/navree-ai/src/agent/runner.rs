@@ -72,7 +72,7 @@ enum Input {
 }
 
 /// A run being set up ([`Ai::agent`]).
-#[must_use = "a run does nothing until `prompt`, `structured`, `stream`, `approve` or `reject` is awaited"]
+#[must_use = "a run does nothing until `prompt`, `structured`, `stream`, `approve`, `reject` or a `_stream` form is awaited"]
 pub struct AgentRunBuilder<A> {
     ai: Ai,
     acting: Option<Acting>,
@@ -196,28 +196,8 @@ impl<A: Agent> AgentRunBuilder<A> {
     /// returned here; later ones arrive as an error event.
     pub async fn stream(self, message: impl Into<String>) -> Result<AgentStream, AiError> {
         let message = message.into();
-        let mut run = self.setup(Input::Prompt(message.clone())).await?;
-        let (sender, receiver) = mpsc::channel(64);
-        tokio::spawn(async move {
-            let emitter = Emitter(sender.clone());
-            match run.execute(Input::Prompt(message), Some(emitter)).await {
-                Ok(reply) => {
-                    let completion = Completion {
-                        model: run.last_model.clone(),
-                        provider: run.last_provider.clone(),
-                        usage: reply.usage,
-                        finish: run.last_finish,
-                        conversation_id: reply.conversation_id,
-                    };
-                    let _ = sender.send(Ok(StreamEvent::Done(completion))).await;
-                }
-                Err(AiError::Internal { message }) if message == DISCONNECTED => {}
-                Err(error) => {
-                    let _ = sender.send(Err(error)).await;
-                }
-            }
-        });
-        Ok(AgentStream { receiver })
+        let run = self.setup(Input::Prompt(message.clone())).await?;
+        Ok(run.spawn_stream(Input::Prompt(message)))
     }
 
     /// Runs the tool call `call_id` the run stopped for, then continues.
@@ -240,6 +220,34 @@ impl<A: Agent> AgentRunBuilder<A> {
             .setup(Input::Reject(call_id.clone(), reason.clone()))
             .await?;
         run.execute(Input::Reject(call_id, reason), None).await
+    }
+
+    /// Runs the tool call `call_id` the run stopped for, then streams the rest
+    /// of the run: the tool's events, the model's text, any further tool calls
+    /// or approval request, then `Done`, as [`stream`](Self::stream) does. An
+    /// unknown or already decided call is [`AiError::NotFound`], returned here.
+    pub async fn approve_stream(self, call_id: impl Into<String>) -> Result<AgentStream, AiError> {
+        let call_id = call_id.into();
+        let run = self.setup(Input::Approve(call_id.clone())).await?;
+        run.check_pending(&call_id)?;
+        Ok(run.spawn_stream(Input::Approve(call_id)))
+    }
+
+    /// Declines the tool call `call_id`, then streams the rest of the run: the
+    /// model is told the user declined, and why, and its answer arrives as
+    /// [`stream`](Self::stream)'s does. An unknown or already decided call is
+    /// [`AiError::NotFound`], returned here.
+    pub async fn reject_stream(
+        self,
+        call_id: impl Into<String>,
+        reason: Option<String>,
+    ) -> Result<AgentStream, AiError> {
+        let call_id = call_id.into();
+        let run = self
+            .setup(Input::Reject(call_id.clone(), reason.clone()))
+            .await?;
+        run.check_pending(&call_id)?;
+        Ok(run.spawn_stream(Input::Reject(call_id, reason)))
     }
 
     /// Loads everything the run needs.
@@ -410,6 +418,48 @@ struct StepAnswer {
 }
 
 impl<A: Agent> Running<A> {
+    /// Runs `input` in a task of its own, sending its events to the stream it
+    /// returns; the run stops when the stream is dropped.
+    fn spawn_stream(mut self, input: Input) -> AgentStream {
+        let (sender, receiver) = mpsc::channel(64);
+        tokio::spawn(async move {
+            let emitter = Emitter(sender.clone());
+            match self.execute(input, Some(emitter)).await {
+                Ok(reply) => {
+                    let completion = Completion {
+                        model: self.last_model.clone(),
+                        provider: self.last_provider.clone(),
+                        usage: reply.usage,
+                        finish: self.last_finish,
+                        conversation_id: reply.conversation_id,
+                    };
+                    let _ = sender.send(Ok(StreamEvent::Done(completion))).await;
+                }
+                Err(AiError::Internal { message }) if message == DISCONNECTED => {}
+                Err(error) => {
+                    let _ = sender.send(Err(error)).await;
+                }
+            }
+        });
+        AgentStream { receiver }
+    }
+
+    /// An error unless the run stopped for the call `call_id`: a stream that
+    /// approves or rejects reports a wrong call before it starts.
+    fn check_pending(&self, call_id: &str) -> Result<(), AiError> {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.approval.call_id == call_id)
+        {
+            Ok(())
+        } else {
+            Err(AiError::not_found(format!(
+                "no tool call `{call_id}` is waiting for approval"
+            )))
+        }
+    }
+
     /// A fresh unit of work acting as the run's user.
     async fn uow(&self) -> navree_db::Uow {
         let request_id =
