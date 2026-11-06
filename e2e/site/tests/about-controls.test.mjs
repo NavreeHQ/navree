@@ -51,6 +51,22 @@ describe("the About picture", { concurrency: false }, () => {
       args: headed ? ["--start-maximized"] : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
     });
     context = await browser.newContext(headed ? { viewport: null } : { viewport: { width: 1440, height: 900 } });
+    if (!headed) {
+      // Headless Chromium draws WebGL in software, where the page keeps the still (a software renderer is a
+      // low-end device to it). Told it has a GPU, the page runs the live picture there, so its controls are tested.
+      await context.addInitScript(() => {
+        const getContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, options) {
+          const relaxed = type === "webgl2" && options?.failIfMajorPerformanceCaveat ? { ...options, failIfMajorPerformanceCaveat: false } : options;
+          return getContext.call(this, type, relaxed);
+        };
+        const getParameter = WebGL2RenderingContext.prototype.getParameter;
+        WebGL2RenderingContext.prototype.getParameter = function (name) {
+          // UNMASKED_RENDERER_WEBGL, from WEBGL_debug_renderer_info.
+          return name === 0x9246 ? "ANGLE (headless test GPU)" : getParameter.call(this, name);
+        };
+      });
+    }
     page = await context.newPage();
     page.on("request", (r) => r.url().includes("/_next/static/chunks/") && sceneRequests.push(r.url()));
     button = page.locator(PAUSE);
