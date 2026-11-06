@@ -411,8 +411,8 @@ mod tests {
     #[test]
     fn paths_are_encoded_twice_except_for_s3() {
         assert_eq!(
-            canonical_path("/model/us.anthropic.claude-opus-5-5%3A0/converse", true),
-            "/model/us.anthropic.claude-opus-5-5%253A0/converse"
+            canonical_path("/model/amazon.titan-embed-text-v2%3A0/invoke", true),
+            "/model/amazon.titan-embed-text-v2%253A0/invoke"
         );
         assert_eq!(canonical_path("/bucket/a%20b/c", false), "/bucket/a%20b/c");
         assert_eq!(canonical_path("", true), "/");

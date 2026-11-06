@@ -537,7 +537,7 @@ On each sync, the embedded fields are joined into one text, one field per line, 
 
 ### With the AI SDK
 
-With the `ai` feature next to `search`, nothing more is needed: the [AI SDK's](/docs/ai/embeddings-and-rag/) `Embeddings` (the model of `ai.embeddings.model`, batched and cached) is the provider, and `store = "ai"` keeps the vectors in its `VectorStore`, so vectors are configured once, in `ai.vectors`:
+With the `ai` feature next to `search`, nothing more is needed: the [AI SDK's](/docs/ai/embeddings-and-rag/) `Embeddings` (the model of `ai.embeddings.model`, with its cache) is the provider, and `store = "ai"` keeps the vectors in its `VectorStore`, so vectors are configured once, in `ai.vectors`:
 
 ```toml title="config/app.toml"
 [ai.models.embed]
