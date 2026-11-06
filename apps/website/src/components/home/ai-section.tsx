@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { AgentSession } from "@/components/ai/agent-session";
 import { Button } from "@/components/ui/button";
+import { navigatorToolCount } from "@/lib/navigator-tools";
 
 /*
  * The homepage's AI section: Navree is built for the developer and for the
@@ -82,7 +83,7 @@ export function AiSection() {
         </div>
 
         <div className="min-w-0 lg:col-span-7">
-          <AgentSession className="shadow-glow-lg" />
+          <AgentSession className="shadow-glow-lg" tools={navigatorToolCount()} />
         </div>
       </div>
     </section>

@@ -44,7 +44,7 @@ export const pageInfo: Record<string, PageInfo> = {
     name: "Architecture",
     sources: ["src/components/architecture", "src/components/diagrams", "src/content/faq.ts"],
   },
-  "/ai/": { name: "AI", sources: ["src/components/ai"] },
+  "/ai/": { name: "AI", sources: ["src/components/ai", "src/components/home/two-ways.tsx", "src/lib/navigator-tools.ts", "src/content/faq.ts"] },
   "/ui/": {
     name: "UI",
     sources: [

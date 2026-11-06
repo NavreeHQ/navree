@@ -123,7 +123,7 @@ export function NavigatorMock({ className }: { className?: string }) {
       title="agent · ~/code/crm"
       className={className}
       bodyClassName="@container"
-      label="A coding agent fixing the example CRM with Navigator. Asked why the deals page returns 500, it calls last_error, which shows a missing column deals.expected_close_date; describe_schema, which shows the migration that adds it is pending; and list_commands. It answers: run navree migrate. Beside the session, Navigator's twelve tools, with the three it used marked."
+      label={`A coding agent fixing the example CRM with Navigator. Asked why the deals page returns 500, it calls last_error, which shows a missing column deals.expected_close_date; describe_schema, which shows the migration that adds it is pending; and list_commands. It answers: run navree migrate. Beside the session, Navigator's ${navigatorTools.length} tools, with the three it used marked.`}
     >
       <div ref={ref} className="grid h-full @3xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <div className="min-w-0 p-4 @xl:p-5">

@@ -9,8 +9,12 @@ import { MagicCard } from "@/components/magicui/magic-card";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
 
+import { navigatorToolNames } from "@/lib/navigator-tools";
+
 import { agentsMdExcerpt, llmsPreview, skillsData } from "./content";
 import { ArrowLink, BlockHeading, HalfHeading, WindowFrame } from "./parts";
+import { SessionStill } from "./session-still";
+import { WaysIn } from "./ways-in";
 
 /** Navigator's tools, from /docs/ai/navigator/, grouped by what they answer. */
 const navigatorTools: { group: string; tools: [string, string][] }[] = [
@@ -183,6 +187,14 @@ function SkillsBlock() {
 }
 
 function NavigatorBlock() {
+  // The table below groups and describes the tools; the code says which there are. A tool the table does not list, or one the code no longer has, fails the build.
+  const inCode = navigatorToolNames();
+  const listed = navigatorTools.flatMap((group) => group.tools.map(([name]) => name));
+  const unlisted = inCode.filter((name) => !listed.includes(name));
+  const gone = listed.filter((name) => !inCode.includes(name));
+  if (unlisted.length || gone.length) {
+    throw new Error(`/ai/: Navigator's tools in the code and in the table differ (not in the table: ${unlisted.join(", ") || "none"}; not in the code: ${gone.join(", ") || "none"})`);
+  }
   return (
     <div className="grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-12">
       <div className="lg:order-2 lg:col-span-5 lg:pt-2">
@@ -220,7 +232,7 @@ function NavigatorBlock() {
           aside={
             <span className="inline-flex items-center gap-2 font-mono text-xs text-fg-3">
               <span aria-hidden className="size-1.5 rounded-full bg-accent shadow-[0_0_6px_rgb(61_255_143/0.8)]" />
-              12 tools
+              {inCode.length} tools
             </span>
           }
           bodyClassName="px-1.5 pb-1.5"
@@ -419,8 +431,10 @@ export function AgentsHalf() {
         <div className="mt-16 space-y-24 lg:mt-20 lg:space-y-32">
           <SkillsBlock />
           <NavigatorBlock />
+          <SessionStill />
           <DocsBlock />
           <SetupRail />
+          <WaysIn />
         </div>
       </div>
     </section>

@@ -30,6 +30,7 @@ import { LibraryCard } from "@/components/ecosystem/library-card";
 import { LighthouseMock } from "@/components/ecosystem/lighthouse-mock";
 import { LogbookMock } from "@/components/ecosystem/logbook-mock";
 import { Manifest } from "@/components/ecosystem/manifest";
+import { navigatorTools } from "@/components/ecosystem/mock-data";
 import { NavigatorMock } from "@/components/ecosystem/navigator-mock";
 import { ToolBlock } from "@/components/ecosystem/tool-block";
 import { Faq } from "@/components/faq";
@@ -38,6 +39,7 @@ import { GridPattern } from "@/components/magicui/grid-pattern";
 import { CopyButton } from "@/components/mdx/copy-button";
 import { categories, ecosystem, entriesIn, entry, type EcosystemCategory } from "@/content/ecosystem";
 import { pageMetadata } from "@/lib/metadata";
+import { navigatorToolNames } from "@/lib/navigator-tools";
 import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
@@ -48,6 +50,11 @@ export const metadata: Metadata = pageMetadata({
     "Monitoring, an admin panel, queue supervision, debugging, deployment, search, billing, OAuth and AI: first-party, open source and self-hosted.",
   path: "/ecosystem/",
 });
+
+// The Navigator mock lists the tools its server has; the code says which they are, and a mock that has fallen behind fails the build.
+if (navigatorTools.join() !== navigatorToolNames().join()) {
+  throw new Error("/ecosystem/: the Navigator mock lists different tools than crates/navree-navigator/src/tools.rs");
+}
 
 /** The tools that get a feature block with a working mock, by slug. */
 const blocks: Record<string, { mock: ReactNode; layout?: "split" | "wide"; reverse?: boolean }> = {

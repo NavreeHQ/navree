@@ -2,6 +2,7 @@ import { ArrowDownIcon } from "lucide-react";
 
 import { AgentSession } from "@/components/ai/agent-session";
 import { DotPattern } from "@/components/magicui/dot-pattern";
+import { navigatorToolCount } from "@/lib/navigator-tools";
 
 import { PrimaryCta, SecondaryCta } from "./parts";
 
@@ -51,7 +52,7 @@ export function AiHero() {
         </div>
 
         <div className="relative min-w-0 lg:col-span-6">
-          <AgentSession className="shadow-glow-lg" />
+          <AgentSession className="shadow-glow-lg" tools={navigatorToolCount()} />
         </div>
       </div>
 

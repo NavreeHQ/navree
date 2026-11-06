@@ -16,6 +16,8 @@ import { useInView } from "@/lib/use-in-view";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
+import { scenarios, type Line, type Scenario } from "./scenarios";
+
 /*
  * A coding agent at work in a Navree app: the user's request, the skills it
  * loads, the Navigator tools it calls (`navree mcp`) with their results, the
@@ -23,117 +25,9 @@ import { cn } from "@/lib/utils";
  * panel scrolls into view, then the next scenario plays. Under
  * prefers-reduced-motion every line shows at once and nothing advances.
  *
- * The tool names and results follow /docs/ai/navigator/.
+ * The scenarios are in `./scenarios.tsx`, which the still session on /ai/
+ * reads too. The tool names and results follow /docs/ai/navigator/.
  */
-
-type Line =
-  | { kind: "prompt"; text: string }
-  | { kind: "skill"; name: string }
-  | { kind: "tool"; name: string; args?: string; result: ReactNode[] }
-  | { kind: "run"; verb: string; detail: string; result?: ReactNode[] }
-  | { kind: "reply"; text: ReactNode };
-
-export type Scenario = { id: string; label: string; lines: Line[] };
-
-const C = ({ children }: { children: ReactNode }) => <span className="font-mono text-[0.92em] text-fg-1">{children}</span>;
-
-export const scenarios: Scenario[] = [
-  {
-    id: "debug",
-    label: "Fix a 500",
-    lines: [
-      { kind: "prompt", text: "The deals page is empty since I pulled main, and the API returns 500. Fix it." },
-      {
-        kind: "tool",
-        name: "last_error",
-        result: [
-          <>
-            <span className="text-danger">500</span> GET /api/v1/deals <span className="text-fg-3">request_id=0199c4b1</span>
-          </>,
-          <>error: no such column: deals.expected_close_date</>,
-        ],
-      },
-      {
-        kind: "tool",
-        name: "describe_schema",
-        args: 'table: "deals"',
-        result: [
-          <>deals: id, title, amount_cents, currency, stage, position, …</>,
-          <>
-            pending migration: <C>m20261026_000004_add_expected_close_date</C>
-          </>,
-        ],
-      },
-      { kind: "run", verb: "Run", detail: "navree migrate", result: [<>Applied m20261026_000004_add_expected_close_date</>] },
-      {
-        kind: "reply",
-        text: (
-          <>
-            The code you pulled reads <C>deals.expected_close_date</C>, but the migration that adds it hadn&rsquo;t run on
-            your database. I ran <C>navree migrate</C>; <C>GET /api/v1/deals</C> answers 200 again.
-          </>
-        ),
-      },
-    ],
-  },
-  {
-    id: "route",
-    label: "Add a route",
-    lines: [
-      { kind: "prompt", text: "Let a manager reassign a deal to another rep, and test it." },
-      { kind: "skill", name: "navree-controllers-and-routing" },
-      { kind: "skill", name: "navree-access-control" },
-      {
-        kind: "tool",
-        name: "list_routes",
-        args: 'path: "/api/v1/deals"',
-        result: [
-          <>
-            GET&nbsp;&nbsp;/api/v1/deals <span className="text-fg-3">can:read Deal</span>
-          </>,
-          <>
-            POST /api/v1/deals/{"{id}"}/move <span className="text-fg-3">can:move Deal from id</span>
-          </>,
-        ],
-      },
-      {
-        kind: "tool",
-        name: "module_graph",
-        args: 'module: "DealsModule"',
-        result: [<>DealsModule exports DealService</>],
-      },
-      {
-        kind: "run",
-        verb: "Edit",
-        detail: "crates/crm-deals/src/controller.rs",
-        result: [
-          <>
-            <span className="text-accent">+</span> #[post(&quot;/{"{id}"}/reassign&quot;)] #[can(Manage, Deal, from = &quot;id&quot;)]
-          </>,
-        ],
-      },
-      {
-        kind: "run",
-        verb: "Run",
-        detail: "cargo test -p crm-deals reassign",
-        result: [
-          <>
-            2 passed: manager_reassigns_deal, rep_cannot_reassign <span className="text-accent">ok</span>
-          </>,
-        ],
-      },
-      {
-        kind: "reply",
-        text: (
-          <>
-            Added <C>POST /api/v1/deals/{"{id}"}/reassign</C> next to <C>move</C>, behind <C>Manage</C> on the deal, with a
-            validated body and two tests.
-          </>
-        ),
-      },
-    ],
-  },
-];
 
 const noop = () => () => {};
 const isClient = () => true;
@@ -232,19 +126,22 @@ function Result({ lines }: { lines: ReactNode[] }) {
 }
 
 /**
- * The animated session in a double-bezel frame. `startIndex` picks the
- * first scenario; `autoAdvance` plays the next one after a pause.
+ * The animated session in a double-bezel frame. `autoAdvance` plays the next
+ * scenario after a pause.
  */
 export function AgentSession({
   className,
   items = scenarios,
   autoAdvance = true,
   title = "~/code/crm",
+  tools,
 }: {
   className?: string;
   items?: Scenario[];
   autoAdvance?: boolean;
   title?: string;
+  /** How many tools Navigator has (`navigatorToolCount()`, read from its source). */
+  tools: number;
 }) {
   const reduced = useReducedMotion();
   const root = useRef<HTMLDivElement>(null);
@@ -428,7 +325,7 @@ export function AgentSession({
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 font-mono text-[0.75rem] text-fg-3">
-          <span className="truncate">12 tools · read-only · stdio</span>
+          <span className="truncate">{tools} tools · read-only · stdio</span>
           <span aria-hidden className={cn("inline-flex items-center gap-1.5", done || all ? "text-fg-3" : "text-fg-2")}>
             <span
               className={cn(
