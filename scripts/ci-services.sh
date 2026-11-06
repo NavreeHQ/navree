@@ -197,7 +197,7 @@ NAVREE_TEST_KAFKA_SASL_URL=localhost:9094
 NAVREE_TEST_KAFKA_TLS_URL=localhost:9095
 NAVREE_TEST_BROKER_USER=$BROKER_USER
 NAVREE_TEST_BROKER_PASSWORD=$BROKER_PASSWORD
-NAVREE_TEST_BROKER_CA=$(consumer_path "$STATE/tls/cert.pem")
+NAVREE_TEST_BROKER_CA=$(consumer_path "$STATE/tls/ca.pem")
 NAVREE_TEST_RABBITMQ_URL=amqp://navree:$PASSWORD@127.0.0.1:5672/%2f
 NAVREE_TEST_MAILPIT_URL=http://127.0.0.1:8025
 NAVREE_TEST_SMTP_URL=smtp://127.0.0.1:1025
@@ -267,18 +267,25 @@ prepare_state() {
   printf '%s:%s\n' "$SMTP_USER" "$SMTP_PASSWORD" >"$dir/auth.txt"
   chmod a+r "$dir/cert.pem" "$dir/key.pem" "$dir/auth.txt"
 
-  # The certificate of the brokers that speak TLS (its own authority, for
-  # localhost), and the PEM key store Kafka reads: the key, then the
-  # certificate.
+  # The certificate of the brokers that speak TLS, for localhost, signed by an
+  # authority of its own (ca.pem, which the suites trust: a client refuses an
+  # authority's own certificate as a server's), and the PEM key store Kafka
+  # reads: the key, then the certificate and the authority.
   local tls="$STATE/tls"
   mkdir -p "$tls"
-  if [ ! -s "$tls/cert.pem" ] || [ ! -s "$tls/key.pem" ]; then
+  if [ ! -s "$tls/ca.pem" ] || [ ! -s "$tls/cert.pem" ] || [ ! -s "$tls/key.pem" ]; then
     openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
-      -keyout "$tls/key.pem" -out "$tls/cert.pem" -subj "/CN=localhost" \
-      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+      -keyout "$tls/ca-key.pem" -out "$tls/ca.pem" -subj "/CN=Navree test brokers" >/dev/null 2>&1
+    openssl req -newkey rsa:2048 -nodes -keyout "$tls/key.pem" -out "$tls/cert.csr" \
+      -subj "/CN=localhost" >/dev/null 2>&1
+    printf '%s\n' "subjectAltName=DNS:localhost,IP:127.0.0.1" "basicConstraints=critical,CA:FALSE" \
+      "keyUsage=critical,digitalSignature,keyEncipherment" "extendedKeyUsage=serverAuth" >"$tls/cert.ext"
+    openssl x509 -req -in "$tls/cert.csr" -CA "$tls/ca.pem" -CAkey "$tls/ca-key.pem" \
+      -CAcreateserial -days 30 -extfile "$tls/cert.ext" -out "$tls/cert.pem" >/dev/null 2>&1
+    rm -f "$tls/cert.csr" "$tls/cert.ext" "$tls/ca.srl"
   fi
-  cat "$tls/key.pem" "$tls/cert.pem" >"$tls/keystore.pem"
-  chmod a+r "$tls/cert.pem" "$tls/key.pem" "$tls/keystore.pem"
+  cat "$tls/key.pem" "$tls/cert.pem" "$tls/ca.pem" >"$tls/keystore.pem"
+  chmod a+r "$tls/ca.pem" "$tls/cert.pem" "$tls/key.pem" "$tls/keystore.pem"
 
   # Mosquitto's password file (hashed by mosquitto_passwd, owned by the
   # mosquitto user) and a copy of the certificate.
@@ -289,7 +296,7 @@ prepare_state() {
   if ! left_out mqtt; then
     docker run --rm --entrypoint sh --volume "$(native_path "$mqtt"):/state" \
       "${MQTT_IMAGE:-eclipse-mosquitto:2}" -c \
-      "mosquitto_passwd -c -b /state/passwd '$BROKER_USER' '$BROKER_PASSWORD' && chown 1883:1883 /state/passwd && chmod 0600 /state/passwd"
+      "rm -f /state/passwd && mosquitto_passwd -c -b /state/passwd '$BROKER_USER' '$BROKER_PASSWORD' && chown 1883:1883 /state/passwd && chmod 0600 /state/passwd"
   fi
 }
 
