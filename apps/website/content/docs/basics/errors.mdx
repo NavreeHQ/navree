@@ -1,6 +1,6 @@
 ---
 title: "Errors"
-description: "Navree's JSON error shape, the machine-readable `code` front ends translate, `AppError`, mapping your own and database errors to statuses, and how 5xx errors and panics are logged."
+description: "Navree's JSON error shape, its machine-readable `code`, `AppError`, mapping your own and database errors to statuses, and how 5xx errors are logged."
 ---
 
 Every error a Navree app sends has the same JSON body: a 404 from a missing route, a 400 from validation, a 429 from the rate limiter, a 500 from a panic. Handlers return `AppError`; any other error type converts into a 500 with `?`, and modules can map their error types to specific statuses. Every body carries a machine-readable `code`, so a front end can show the refusal in the user's own language. Internal details never reach the client: they go to the log.

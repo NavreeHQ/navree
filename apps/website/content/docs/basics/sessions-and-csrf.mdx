@@ -1,6 +1,6 @@
 ---
 title: "Sessions and CSRF"
-description: "The session module: encrypted session cookies, memory, database and Redis stores, CSRF protection for cookie clients, browser sign-in through AuthModule, and when to use it instead of bearer tokens."
+description: "Encrypted session cookies, memory, database and Redis stores, CSRF protection, browser sign-in through AuthModule, and sessions versus bearer tokens."
 ---
 
 `SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. Single-page apps use a cookie-to-header handshake: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.

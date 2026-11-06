@@ -1,0 +1,320 @@
+---
+title: "International input"
+description: "Accept names, digits, phone numbers, countries, locales and rich text as people write them, and keep one canonical form of each."
+---
+
+People write their names in Arabic and Devanagari, type codes with the digits their keyboard has, and paste phone numbers in every format. navree-validation checks this input and turns it into one canonical form, so your handler compares and stores `+201001234567`, `EG` and `ar-EG`, not whatever was typed.
+
+| Type or rule | Accepts | The handler gets | Message when it fails |
+|---|---|---|---|
+| `rules::unicode_name` | names in any script | the string as sent | `name must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `Folded<String>`, `Folded<u32>`, ... | digits of any script | ASCII digits, then the parsed value | the inner type's (`code must be longer than ...`) |
+| `Phone` | phone numbers as people write them | E.164: `+919876543210` | `phone must be a valid phone number` |
+| `Country` | ISO 3166-1 alpha-2 codes, any case | `IN` | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `Locale` | BCP 47 language tags, any case | `en-IN` | `locale must be a valid locale` |
+| `SafeHtml` | rich text | HTML with only the allowed tags | input over a [limit](#limits-on-rich-text) |
+
+The types do their work while the extractor deserializes. A field typed `Phone` holds a valid number in E.164 form, and a bad number is a field error like a wrong type. `rules::phone`, `rules::country` and `rules::locale` check a `String` field instead and leave it as sent.
+
+```rust title="src/contacts/dto.rs"
+use navree::validation::{rules, Country, Locale, Phone, SafeHtml, Validate};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateContact {
+    #[validate(length(min = 1, max = 100), custom(rules::unicode_name))]
+    pub name: String,
+    #[validate(skip)]
+    pub phone: Phone,
+    #[validate(skip)]
+    pub mobile: Option<Phone>,
+    #[validate(skip)]
+    pub country: Country,
+    #[validate(skip)]
+    pub locale: Option<Locale>,
+    #[validate(length(max = 20_000))]
+    pub notes: SafeHtml,
+}
+```
+
+In an app whose default phone region is Egypt (`validation.phone.default_region = "EG"`), this body:
+
+```json title="POST /api/v1/contacts"
+{
+  "name": "مُحَمَّد عبد الله",
+  "phone": "٠١٠٠ ١٢٣ ٤٥٦٧",
+  "country": "eg",
+  "locale": "ar-eg",
+  "notes": "<p dir=\"rtl\">عميل جديد</p><script>steal()</script>"
+}
+```
+
+reaches the handler as:
+
+```json title="CreateContact"
+{
+  "name": "مُحَمَّد عبد الله",
+  "phone": "+201001234567",
+  "mobile": null,
+  "country": "EG",
+  "locale": "ar-EG",
+  "notes": "<p dir=\"rtl\">عميل جديد</p>"
+}
+```
+
+The messages of these rules come from the [message table](/docs/basics/validation/#message-keys) like every other, with the keys `unicode_name`, `phone`, `country` and `locale`, so you can override them and [localization](/docs/packages/localization/) translates them.
+
+## Names in any script
+
+`rules::unicode_name` accepts what names are made of in every script: letters, the combining marks many scripts write vowels and accents with (the Devanagari `ि`, the Arabic `َ`), numbers, spaces, hyphens, apostrophes (`'` and `’`), periods, the middle dot (`l·l`), and the zero-width non-joiner and joiner that Persian and Indic names are written with.
+
+| Passes | Fails |
+|---|---|
+| `Amritpal Singh`, `अमृतपाल सिंह`, `ਅੰਮ੍ਰਿਤਪਾਲ ਸਿੰਘ` | `<script>alert(1)</script>`, `Robert'); DROP TABLE students;--` |
+| `محمد عبد الله`, `مُحَمَّد`, `فاطمه‌زهرا` | `Ada 😀`, `@ada`, a name with a tab in it |
+| `Zoë O’Brien-Smith`, `J. R. R. Tolkien`, `李小龙`, `Louis 14` | `   ` and `١٢٣`, which have no letter |
+
+A name needs at least one letter and at most four combining marks in a row, which keeps stacked "Zalgo" text out. The rule says nothing about length: combine it with `length(...)`.
+
+## Digits in any script
+
+On Arabic keyboards the digits are `٠١٢٣٤٥٦٧٨٩`, on Persian ones `۰۱۲۳۴۵۶۷۸۹`, on Hindi ones `०१२३४५६७८९`. Wrap a field in `Folded` and its digits are ASCII before any rule sees them:
+
+```rust title="src/auth/dto.rs"
+use navree::validation::Folded;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct VerifyCode {
+    #[validate(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    pub code: Folded<String>, // "٦٥٤٣٢١" arrives as "654321"
+    #[validate(range(min = 1, max = 99))]
+    pub quantity: Option<Folded<u32>>, // "٤٢" and 42 are both 42
+}
+```
+
+Without `Folded`, `"٦٥٤٣٢١"` has the right length but fails the pattern, which only accepts ASCII digits.
+
+- `Folded<String>` (the default type parameter) keeps the folded text. The string rules (`length`, `pattern`, `ascii`, `contains`, ...) and Navree's rules work on it.
+- `Folded<T>` parses the folded text into any `T: FromStr` (`u32`, `i64`, `f64`, `Decimal`) and accepts a JSON number too. `range` works on it, and a value that doesn't parse fails as `T` does (`quantity must be an integer number`).
+- It derefs to the value (`*input.code`) and `into_inner()` hands it over. It serializes as the value.
+- Every Unicode decimal digit folds: Arabic-Indic, Persian, Devanagari, Bengali, Gurmukhi, Thai, fullwidth and the rest. Other characters stay, including look-alikes that aren't decimal digits (`²`, `½`, `Ⅻ`).
+- Query strings and forms fold too: `GET /codes?code=٦٥٤٣٢١` gives `654321`.
+
+`fold_digits(text)` does the same to any string. It returns a `Cow<str>` that borrows `text` when there is nothing to fold.
+
+## Phone numbers
+
+<Badge feature="validation-phone" /> `Phone` holds a valid phone number in E.164 form, `+919876543210`: the form to store and to compare. It reads what people type: spaces, dashes and brackets, `tel:` URIs, an extension (`ext. 12`), and digits in any script.
+
+| Input | Default region | `Phone` |
+|---|---|---|
+| `+91 98765 43210` | any | `+919876543210` |
+| `+٩٧١ ٥٠ ١٢٣ ٤٥٦٧` | any | `+971501234567` |
+| `+९१ ८१२३४ ५६७८९` | any | `+918123456789` |
+| `098765 43210` | `IN` | `+919876543210` |
+| `00 971 50 123 4567` | `IN` | `+971501234567` |
+| `098765 43210` | none | `phone must be a valid phone number` |
+| `+91 98765` | any | `phone must be a valid phone number` |
+
+Valid means the number fits its region's numbering plan (country code, length, leading digits), and fits E.164's limit of 15 digits (a longer number is invalid even where a numbering plan allows it). Nothing checks that the line is in service: send a code to it for that. [Phone numbers](/docs/basics/phone-numbers/) has the whole story: the parser, number types, formats, the phone input and storing numbers.
+
+| Method | Returns |
+|---|---|
+| `as_str()`, `to_string()`, `String::from(phone)` | `+919876543210` |
+| `country_code()` | `91` |
+| `national_number()` | `"9876543210"`, with the leading zero of plans that keep one (`"0612345678"` in Italy) |
+| `number_type()` | `Some(NumberType::Mobile)`, `FixedLine`, `TollFree` and the rest; `None` for a stored number the plans don't recognise |
+| `region()` | `Some(Country)` (`IN`); `None` for non-geographic numbers and areas outside ISO 3166-1, such as Kosovo |
+| `international()`, `national()`, `rfc3966()` | `+91 98765 43210`, `098765 43210`, `tel:+91-98765-43210`, with the extension when there is one |
+| `number()` | the `navree::phone::PhoneNumber`, with everything the parser knows |
+| `extension()` | `Some("12")` for `ext. 12` |
+
+`Phone` serializes as the E.164 string. E.164 has no room for an extension, so read `extension()` before you store the number if you keep it. Outside a request, `Phone::parse(text, region)` parses with an explicit region and `"+91 98765 43210".parse::<Phone>()` parses international numbers.
+
+To keep a field a `String` and only check it, write `#[validate(phone)]` (or `#[validate(custom(rules::phone))]`). It reads numbers without a country code in the same default region.
+
+### The default region
+
+A number without a country code, such as `098765 43210`, only means something in a region. `Phone` and `rules::phone` take the region from, in order:
+
+1. the app's `RegionSource`, asked for the current request;
+2. the `validation.phone.default_region` setting;
+3. nowhere: the number is invalid.
+
+Numbers written with a country code (`+91 ...`) ignore the region.
+
+```toml title="config/app.toml"
+[validation.phone]
+default_region = "IN"
+```
+
+From the environment: `APP_VALIDATION__PHONE__DEFAULT_REGION=IN`. `ValidationModule::from_config()` reads it, and an unknown code fails the boot. In code, set `ValidationOptions { phone: PhoneOptions { default_region: Country::parse("IN").ok() }, ..ValidationOptions::default() }`.
+
+When the region depends on the request (the workspace's country, the user's, the country your edge proxy detected), implement `RegionSource`. It gets the request head, `&mut Parts`, with its headers and its extensions (the principal and whatever earlier extractors cached), and returns `Option<Country>`. `None` falls back to the configured region.
+
+```rust title="src/contacts/region.rs"
+use http::request::Parts;
+use navree::validation::{Country, RegionSource};
+use navree::BoxFuture;
+use navree::prelude::*;
+
+/// The country the edge proxy reports in `CF-IPCountry`.
+#[injectable]
+pub struct EdgeCountry;
+
+impl RegionSource for EdgeCountry {
+    fn region<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Option<Country>> {
+        let country = parts
+            .headers
+            .get("cf-ipcountry")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|code| Country::parse(code).ok());
+        Box::pin(async move { country })
+    }
+}
+```
+
+Register it from a module with `m.region_source::<EdgeCountry>()`, which makes it the app's `dyn RegionSource` (the method comes from `ModuleBuilderValidationExt`, which the prelude brings):
+
+```rust title="src/contacts/module.rs"
+use navree::prelude::*;
+
+#[module(controllers = [ContactsController], register = Self::wire)]
+pub struct ContactsModule;
+
+impl ContactsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.region_source::<EdgeCountry>();
+    }
+}
+```
+
+The extractors ask the source only when a number needs a region, and at most once per request. Requests without such a number, and every route without a `Phone`, never call it.
+
+## Countries and locales
+
+`Country` is an ISO 3166-1 alpha-2 code: one of the 249 assigned codes, in upper case. `Locale` is a well-formed BCP 47 language tag in canonical case. Both read any case:
+
+| Input | Becomes |
+|---|---|
+| `"in"`, `"In"` | `Country` `IN` |
+| `"uk"`, `"EU"`, `"XK"`, `"GBR"` | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `"en-in"`, `"EN-IN"` | `Locale` `en-IN` |
+| `"zh-hant-tw"` | `Locale` `zh-Hant-TW` |
+| `"ar-EG-u-nu-arab"` | `Locale` `ar-EG-u-nu-arab` |
+| `"en_IN"`, `"e"`, `"en-"` | `locale must be a valid locale` |
+
+- `Country` has `as_str()`, `Country::parse(code)` and `Country::all()`. Codes that are only reserved (`UK`, `EU`) or user-assigned (`XK`) are not countries here.
+- `Locale` has `as_str()`, `language()` (`zh`), `script()` (`Some("Hant")`), `region()` (`Some("TW")`, or a UN M.49 area such as `419`) and `country()`. It checks the form of a tag, not whether the language exists, and subtags are separated by hyphens only.
+- Both serialize as their canonical string. `rules::country` and `rules::locale` check `String` fields and leave them as sent.
+
+## Rich text
+
+<Badge feature="validation-html" /> `SafeHtml` holds rich text from the client after sanitizing it: the HTML is parsed (with html5ever, which follows the HTML standard's parsing rules) and written back with only the tags, attributes and URL schemes of the app's `HtmlPolicy`. Scripts, event handlers, `style` attributes and `javascript:` or `data:` links never reach your handler, so you can store the value and render it as HTML.
+
+```rust title="src/comments/dto.rs"
+use navree::validation::SafeHtml;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct NewComment {
+    #[validate(length(min = 1, max = 20_000))]
+    pub body: SafeHtml,
+}
+```
+
+With the default policy:
+
+| Input | `SafeHtml` |
+|---|---|
+| `<p>Hello <strong>world</strong></p>` | unchanged |
+| `<p dir="rtl" lang="ar">مرحبا</p>` | unchanged |
+| `<a href="https://example.com">x</a>` | `<a href="https://example.com" rel="noopener noreferrer nofollow">x</a>` |
+| `<script>alert(1)</script><p>after</p>` | `<p>after</p>` |
+| `<img src=x onerror=alert(1)>` | empty |
+| `<a href="javascript:alert(1)">x</a>` | `<a rel="noopener noreferrer nofollow">x</a>` |
+| `<p onclick="steal()" style="color:red">x</p>` | `<p>x</p>` |
+| `<!-- note --><u>hi</u>` | `<u>hi</u>` |
+| `1 < 2 & 3` | `1 &lt; 2 &amp; 3` |
+
+- A tag that isn't allowed is removed and its text kept. `script` and `style` are removed with their content.
+- A URL attribute (`href`, `src`, `action`, `formaction`, `data`, `poster`, `cite` and the like, on any tag) keeps only an allowed scheme or a relative URL. The scheme is the one a browser reads, so ` JaVaScRiPt:` and `jav&#x09;ascript:` are `javascript:`.
+- An SVG or MathML element where the HTML parser would not put it is removed with its content, and SVG animation elements (`animate`, `set`) are always removed: they change another element's attributes, which the policy's lists can't check.
+- The sanitized HTML is parsed again before your handler sees it, and kept only when that parse is the tree the policy allowed, so a browser builds exactly what was checked. Markup the parser rearranges comes out the way a browser reads it (`<a>1<table><a>2</a></table></a>` becomes two links side by side, and the blank line after `<pre>` goes), and markup no HTML can hold, such as an allowed `plaintext`, leaves only its text.
+- Anything unsafe is removed, so a string fails only when it is over one of the policy's [limits](#limits-on-rich-text): a 400 on the field, with a message that says which. Rules measure the sanitized HTML: `length(max = 20_000)` limits what you store, and a body that was only a script fails `min = 1`.
+- It serializes as the sanitized string, derefs to `str`, and `as_str()`, `into_inner()` and `String::from(html)` give it back. `SafeHtml::new(html)` sanitizes with the default policy, `SafeHtml::with_policy(html, &policy)` with another. These two can't fail: over a limit, the input comes back whole as escaped text, tags and all. `SafeHtml::try_with_policy` and `HtmlPolicy::try_clean` return the `HtmlError` instead.
+
+### The HTML policy
+
+The default policy keeps what a rich-text editor produces:
+
+| Key | Default |
+|---|---|
+| `tags` | `a`, `b`, `blockquote`, `br`, `code`, `del`, `em`, `h1` to `h6`, `hr`, `i`, `li`, `ol`, `p`, `pre`, `s`, `span`, `strong`, `sub`, `sup`, `table`, `tbody`, `td`, `th`, `thead`, `tr`, `u`, `ul` |
+| `generic_attributes` | `dir`, `lang`, allowed on every tag, so right-to-left text keeps its direction |
+| `tag_attributes` | `a`: `href`, `title`; `ol`: `start`; `td`: `colspan`, `rowspan`; `th`: `colspan`, `rowspan`, `scope` |
+| `url_schemes` | `http`, `https`, `mailto`, `tel`; relative URLs are kept |
+| `link_rel` | `noopener noreferrer nofollow`, set on every link |
+
+Images aren't in the default: an image in one user's comment loads from any server when another user reads it. Change the policy in the `validation.html` section. A key you set replaces its default:
+
+```toml title="config/app.toml"
+[validation.html]
+tags = ["p", "br", "strong", "em", "a", "ul", "ol", "li", "img"]
+url_schemes = ["https", "mailto"]
+
+[validation.html.tag_attributes]
+a = ["href", "title"]
+img = ["src", "alt"]
+```
+
+In code, `HtmlPolicy` has builders: `HtmlPolicy::default().allow_tags(["img"]).allow_attributes("img", ["src", "alt"])`, `url_schemes([...])`, `link_rel("noopener")`, and `HtmlPolicy::text_only()`, which keeps no tags at all. Pass it as `ValidationOptions { html, ..ValidationOptions::default() }`.
+
+A policy can't allow `script` or `style`, an `on*` event handler, `srcdoc` (it holds a whole document for an `iframe`) or `http-equiv` (it makes a `meta` redirect the page), and can't allow a `rel` attribute while `link_rel` is set (set `link_rel = ""` to let links keep their own). `ValidationModule` refuses to boot with such a policy and names the key: ``validation.html.tags: `script` can't be allowed (scripts and styles are always removed)``. `link_rel` goes on every `a` and `area`.
+
+A scheme list is about schemes: a relative URL stays, whatever the list says. A URL with a host of its own and no scheme (`//evil.test`, and `/\evil.test` or `\\evil.test`, which a browser reads the same) leaves the site with the page's scheme, so it stays only when both `http` and `https` are allowed. So `url_schemes = ["https"]` removes `//evil.test` and keeps `https://evil.test`, and `url_schemes = []` keeps every link on the site. The URL lists `srcset`, `imagesrcset` and `ping` are checked URL by URL.
+
+### Limits on rich text
+
+Rich text comes from strangers, and HTML is cheap to write and dear to parse: the parser copies open formatting elements for every block it meets, so a few kilobytes can ask for millions of nodes, and each block scans the stack of open elements, so deep nesting takes the square of its length. So a parse has limits, in the same `validation.html` section. Over one, the field is a 400 and the parse stops there:
+
+| Key | Default | What it bounds |
+|---|---|---|
+| `max_input_bytes` | 524288 (512 KiB) | The input, before any of it is parsed. Over: `body must be shorter than or equal to 524288 bytes of HTML`. |
+| `max_nodes` | 131072 | The markup one parse may hold: 1 for each element, text run and comment, 1 for each attribute, 1 for every 32 bytes of attributes, and a budget of 64 scans of the parser's stacks for each. Over: `body has too much markup`. |
+| `max_depth` | 128 | How deep elements nest, up to 256; text inside the deepest element is not another level. Over: `body nests deeper than 128 levels`. |
+
+A tag with more than 256 attributes is refused as well; nothing written by a person or an editor comes near it. `HtmlPolicy::default().limits(max_input_bytes, max_nodes, max_depth)` sets the three in code. A limit of 0 would refuse every field, so `ValidationModule` refuses to boot with one and names the key.
+
+Chromium and Firefox read markup past 512 levels flat, so what they build from anything deeper isn't what was checked: that's why `max_depth` can't go past 256, which leaves room for how deep the page already is. `HtmlPolicy::clean` and `try_clean` hold to 256 even for a policy that was never checked (`limits(.., 2000)` gives 256). A real article stays below 30 levels and well inside the rest: 512 KiB of headings, paragraphs, links and lists is about 100,000 nodes.
+
+**The cost.** A parse takes time in proportion to its input, and the limits above bound it. No input is parsed more than twice: the output is parsed again to check that a browser would build the tree that was kept, and when it wouldn't (markup that cleaning leaves for the parser to rearrange, a blank line a `<pre>` drops), only the text is kept, so an input that gives way at every reading costs what one that doesn't does. A body can hold several fields, and when one fails the body is read again to report the rest. So the most one request can ask for is about `body_limit_bytes / max_input_bytes` inputs at the limit (4 with the defaults), twice over when a field fails. Lower `max_input_bytes` when your rich text is short (a comment has no need of 512 KiB): the time follows the input. How long an input at your limit takes depends on your hardware, so time one on the machine you deploy to.
+
+**The worker.** The extractors (`Valid<Json<T>>`, `Valid<Form<T>>`, `Valid<Query<T>>` and the extractors built on `ValidInput`) decide from the length of the whole body, not of a field: a body of 16 KiB or more is deserialized, sanitized and checked on Tokio's blocking pool, so the async worker that reads the request goes on with other requests, whatever fields the body holds. A shorter body is read on the worker: the most it can ask of the worker is some milliseconds, and an ordinary body takes microseconds, less than a hop to another thread costs. It works on any runtime: a current-thread one, a `LocalSet`, or none. The functions that sanitize (`HtmlPolicy::clean`, `try_clean`, `SafeHtml::new`) work on the thread that calls them: in async code, call them from `tokio::task::spawn_blocking` when the text is long.
+
+## Outside the extractors
+
+The extractors give `Phone` and `SafeHtml` the request's `InputContext`: its default region and the app's HTML policy. Anywhere else, such as a job deserializing its payload, they use the defaults: no default region and the default policy. To use the app's, inject `Arc<InputContext>` (exported by `ValidationModule`) and deserialize inside its `scope`:
+
+```rust
+let context = ctx.get::<InputContext>().await?;
+let row: ImportRow = context.scope(|| serde_json::from_str(&line))?;
+```
+
+`InputContext::new().with_default_region(..).with_html(..)` builds one by hand, for tests or scripts.
+
+`validate_in(&value, Some(&ctx))`, which checks a value that arrived some other way (a gRPC message, an event), runs its rules in the app's context as configured: `rules::phone` reads a number without a country code in `validation.phone.default_region`. There is no request, so no `RegionSource` is asked. `validate_value(json, Some(&ctx))` (MCP tool arguments, agent tool calls) and extractors built on `ValidInput` (navree-micro's `Payload<T>`) do the same while they deserialize: a `Phone` without a country code gets `validation.phone.default_region`, and `SafeHtml` the app's policy. `validate_json(&json, &messages)` takes no app, so it uses the defaults unless you call it inside `context.scope(..)`.
+
+The extractors resolve the context only when a value asks for it: a phone number without a country code, or a `SafeHtml` field. The rest of your routes pay nothing for it.
+
+## In the OpenAPI document
+
+These types have no `ToSchema` of their own. Mark such a field with the schema of what it serializes as:
+
+```rust
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct CreateContact {
+    #[validate(skip)]
+    #[schema(value_type = String)]
+    pub phone: Phone,
+}
+```

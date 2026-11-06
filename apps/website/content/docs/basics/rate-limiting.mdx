@@ -1,6 +1,6 @@
 ---
 title: "Rate limiting"
-description: "The per-IP limit every app gets, IPv6 clients counted by network, throttles on single routes, the login throttle, limits shared by every process with Redis, and how client addresses work behind proxies."
+description: "The per-IP limit every app gets, throttles on single routes, the login throttle, limits shared through Redis, and client addresses behind proxies."
 ---
 
 Navree limits how fast clients can call your API at two levels. Every app has a **per-IP limit**, 600 requests a minute by default, that runs before routing. On top of it, any route can declare its own **throttle**, counted per user. Both answer `429 Too Many Requests` with a `Retry-After` header. The auth module adds a **login throttle** for failed sign-ins.

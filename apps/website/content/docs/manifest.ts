@@ -99,6 +99,7 @@ export const sections: DocsSection[] = [
       "middleware",
       "requests",
       "validation",
+      "international-input",
       "list-queries",
       "phone-numbers",
       "responses",
