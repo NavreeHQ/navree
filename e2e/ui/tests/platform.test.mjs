@@ -1,8 +1,10 @@
-// The app `navree new --ui navree` writes, in real browsers: sign-in with its wrong-password
-// message, the customers table with Indian names and rupees, search, filters and sort through
-// the table's own controls with the one list query in the address, the form that adds a
-// customer (the browser's own checks, then the server's, then the toast), a second window
-// whose new customer reaches the first window's table by itself, and sign-out.
+// The app `navree new` writes (Navree UI is the default front end), in real browsers: sign-in
+// with its wrong-password message, the customers table with Indian names and rupees, search,
+// filters and sort through the table's own controls with the one list query in the address, the
+// form that adds a customer (the browser's own checks, then the server's, then the toast), a
+// second window whose new customer reaches the first window's table by itself, the switch to
+// the account's second workspace (its own customers, its name in the sidebar, the first
+// workspace's customers not in it), and sign-out.
 //
 // Needs the app serving, with its demo account and forty demo customers (it makes them when
 // it starts outside production). `cargo test -p navree-cli --test generated_kits -- --ignored
@@ -178,7 +180,7 @@ for (const name of NAMES) {
         assert.equal(await page.inputValue("input[name=email]"), email, "what was typed stays");
         assert.equal(new URL(page.url()).pathname, "/sign-in");
       }
-      assert.equal(messages[0], "Check your email and password, then try again.");
+      assert.equal(messages[0], "These details don't match an account. Check them and try again.");
       assert.equal(messages[0], messages[1]);
 
       // The right one goes where the visitor was going.
@@ -368,6 +370,39 @@ for (const name of NAMES) {
       assert.equal(await first.evaluate(() => window.kept), true, "the first window never reloaded");
       await first.done();
       await second.done();
+    });
+
+    // ---- Workspaces ----------------------------------------------------------------------
+
+    test("the account's second workspace has its own customers, and the switcher moves between them", async () => {
+      const page = await signedIn("/customers");
+      await rows(page).first().waitFor();
+      // The sidebar names the workspace the browser is in: the first one it belongs to.
+      assert.match(await page.locator("[data-slot=sidebar-header]").innerText(), /Ludhiana desk/);
+      await page.goto(BASE + "/customers?search=Rajesh");
+      await rows(page).first().waitFor();
+      assert.deepEqual(await names(page), ["Rajesh Sharma"]);
+
+      // Choosing the other workspace in the switcher loads the page again inside it.
+      await page.locator("#ui-workspace-switcher-trigger").click();
+      await Promise.all([
+        page.waitForResponse((r) => r.request().isNavigationRequest() && new URL(r.url()).pathname === "/customers"),
+        page.locator("#ui-workspace-switcher").getByRole("button", { name: "Jalandhar desk" }).click(),
+      ]);
+      await page.waitForLoadState("domcontentloaded");
+      assert.match(await page.locator("[data-slot=sidebar-header]").innerText(), /Jalandhar desk/);
+      assert.equal(await rows(page).count(), 0, "Rajesh Sharma is a customer of the first workspace only");
+      await page.goto(BASE + "/customers?per_page=40");
+      await rows(page).first().waitFor();
+      assert.equal(await rows(page).count(), 10, "the ten customers of Jalandhar and Amritsar");
+      assert.deepEqual(new Set(await rows(page).locator("td[data-col=city]").allInnerTexts().then((cities) => cities.map((city) => city.trim()))), new Set(["Jalandhar", "Amritsar"]));
+
+      // The choice stays with this browser: another window starts in the first workspace.
+      const other = await signedIn("/customers?per_page=40", await visitor());
+      await rows(other).first().waitFor();
+      assert.equal(await rows(other).count(), 40);
+      await page.done();
+      await other.done();
     });
 
     // ---- Signing out ---------------------------------------------------------------------
