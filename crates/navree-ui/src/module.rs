@@ -20,8 +20,8 @@ use navree_kernel::{
     ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
 
-use crate::op::{Envelope, PendingOps, UI_HEADER};
-use crate::pages::{PagesOptions, Renderer, UiOptions};
+use crate::op::{Envelope, PendingOps, UI_HEADER, is_prefetch};
+use crate::pages::{PagesOptions, REGION_HEADER, Renderer, UiOptions};
 use crate::shell::FLASH_COOKIE;
 use crate::{assets, compress};
 
@@ -251,7 +251,16 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     let from_runtime = request.headers().contains_key(UI_HEADER);
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
+    // What the runtime asked for, for telemetry: a fetch ahead of a click is
+    // not an operation anyone performed.
+    let operation = (from_runtime && !is_prefetch(request.headers()))
+        .then(|| operation_kind(&method, request.headers()));
+    let started = std::time::Instant::now();
     let mut response = next.run(request).await;
+    let ops = response
+        .extensions()
+        .get::<PendingOps>()
+        .map_or(0, |pending| u32::try_from(pending.0.ops.len()).unwrap_or(u32::MAX));
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
         if from_runtime {
             response = to_ops(response, envelope, status);
@@ -261,7 +270,48 @@ async fn reply_layer(request: Request, next: Next) -> Response {
             .headers_mut()
             .append(header::VARY, HeaderValue::from_static(UI_HEADER));
     }
+    if let Some(kind) = operation {
+        navree_telemetry::Telemetry::current().ui_operation(|| {
+            let name = response
+                .extensions()
+                .get::<Arc<navree_http::RouteMeta>>()
+                .map_or_else(|| "unmatched".to_owned(), |route| route.full_path.clone());
+            navree_telemetry::UiOperation::new(
+                name,
+                kind,
+                response.status().as_u16(),
+                ops,
+                started.elapsed(),
+            )
+        });
+    }
     compress::encode(&method, &accept, response).await
+}
+
+/// What a request from the runtime is: a region fetched again, a fragment
+/// of a page, a form posted or another action.
+fn operation_kind(method: &Method, headers: &HeaderMap) -> navree_telemetry::UiOperationKind {
+    use navree_telemetry::UiOperationKind;
+
+    if method == Method::GET || method == Method::HEAD {
+        return if headers.contains_key(REGION_HEADER) {
+            UiOperationKind::LiveRegion
+        } else {
+            UiOperationKind::Fragment
+        };
+    }
+    let form = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value.starts_with("application/x-www-form-urlencoded")
+                || value.starts_with("multipart/form-data")
+        });
+    if form {
+        UiOperationKind::FormPost
+    } else {
+        UiOperationKind::Action
+    }
 }
 
 /// What only the fallback's own body or destination means: everything else on a

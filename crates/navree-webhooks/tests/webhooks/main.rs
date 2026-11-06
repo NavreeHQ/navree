@@ -13,4 +13,5 @@ mod routes;
 mod servers;
 mod sources;
 mod support;
+mod telemetry;
 mod time_series;

@@ -244,9 +244,11 @@ impl AuthService {
         method: SignInMethod,
         meta: &ClientMeta,
     ) -> Result<TokenPair, AuthError> {
-        self.check_sign_in(&SignInAttempt::of(user, method), meta)
+        self.check_sign_in(&SignInAttempt::of(user, method.clone()), meta)
             .await?;
-        self.issue_tokens(user, meta.clone()).await
+        let tokens = self.issue_tokens(user, meta.clone()).await?;
+        crate::telemetry::report_signed_in(user, &method);
+        Ok(tokens)
     }
 
     /// The two-factor challenge token of `user` signing in with `method`,

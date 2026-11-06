@@ -25,6 +25,7 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 rand = { workspace = true }
 # The relay: workers post broadcasts to the process serving the sockets.
 reqwest = { workspace = true }

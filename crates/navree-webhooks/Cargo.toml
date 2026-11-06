@@ -41,6 +41,7 @@ navree-notify = { workspace = true, optional = true }
 navree-openapi = { workspace = true }
 # The webhook tables are models (endpoints, deliveries, attempts, receipts).
 navree-orm = { workspace = true }
+navree-telemetry = { workspace = true }
 navree-workspace = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

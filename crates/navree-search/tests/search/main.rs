@@ -16,5 +16,6 @@ mod servers;
 mod support;
 mod surface;
 mod sync;
+mod telemetry;
 mod vector_stores;
 mod vectors;

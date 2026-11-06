@@ -18,5 +18,6 @@ mod presign;
 mod s3_server;
 mod serve;
 mod sync;
+mod telemetry;
 mod upload;
 mod urls;

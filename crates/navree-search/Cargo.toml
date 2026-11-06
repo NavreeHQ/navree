@@ -44,6 +44,7 @@ navree-macros = { workspace = true }
 # through its `access` feature.
 navree-orm = { workspace = true, features = ["access"] }
 navree-queue = { workspace = true }
+navree-telemetry = { workspace = true }
 navree-workspace = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -825,6 +825,26 @@ impl Webhooks {
         let outcome = self
             .send(deps, &endpoint, &delivery.message_id, &delivery.payload)
             .await?;
+        navree_telemetry::Telemetry::current().webhook_delivery(|| {
+            let attempt = u32::try_from(delivery.attempts + 1).unwrap_or(u32::MAX);
+            let duration = Duration::from_millis(outcome.duration_ms);
+            match outcome.status_code {
+                Some(status) => navree_telemetry::WebhookDelivery::new(
+                    endpoint.id.to_string(),
+                    delivery.event_type.clone(),
+                    attempt,
+                    status,
+                    duration,
+                ),
+                None => navree_telemetry::WebhookDelivery::unanswered(
+                    endpoint.id.to_string(),
+                    delivery.event_type.clone(),
+                    attempt,
+                    duration,
+                    "no_response",
+                ),
+            }
+        });
         self.record(deps, delivery, endpoint, outcome).await
     }
 

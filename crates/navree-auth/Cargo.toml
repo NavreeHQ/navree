@@ -51,6 +51,7 @@ navree-mail = { workspace = true }
 navree-openapi = { workspace = true }
 # Browser sign-in (feature `session`) and its pages (feature `ui`).
 navree-session = { workspace = true, optional = true }
+navree-telemetry = { workspace = true }
 navree-ui = { workspace = true, optional = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
 # sign-in tokens, pending resets and passkeys are written through the ORM;

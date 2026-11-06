@@ -34,6 +34,7 @@ navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 mime_guess = { workspace = true }
 object_store = { workspace = true, optional = true }
 percent-encoding = { workspace = true }

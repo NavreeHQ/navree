@@ -47,6 +47,7 @@ navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
 navree-openapi = { workspace = true }
 navree-storage = { workspace = true }
+navree-telemetry = { workspace = true }
 # The assistant's pages, its live nudges and the session's token (feature `ui`).
 navree-realtime = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }

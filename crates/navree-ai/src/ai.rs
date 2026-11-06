@@ -172,6 +172,7 @@ impl Finisher {
     pub(crate) async fn finish(self, usage: Usage) {
         self.ai.spend(self.user, usage).await;
         self.ai.record(
+            "stream",
             &self.model,
             &self.provider,
             if self.position == 0 { "ok" } else { "failover" },
@@ -450,6 +451,7 @@ impl Ai {
     /// counted here, successes by the caller (once the tokens are known).
     pub(crate) async fn failover<T, F>(
         &self,
+        operation: &'static str,
         spec: &Spec,
         extra: &Extra,
         attempt: F,
@@ -468,7 +470,9 @@ impl Ai {
             let model = match self.resolve(name) {
                 Ok(model) => model,
                 Err(error) => {
-                    self.record(name, "", "error", None, spec.user, &tried, started);
+                    self.record(
+                        operation, name, "", "error", None, spec.user, &tried, started,
+                    );
                     return Err(error);
                 }
             };
@@ -545,6 +549,7 @@ impl Ai {
                             );
                         }
                         self.record(
+                            operation,
                             &model.name,
                             &model.provider,
                             "error",
@@ -565,6 +570,7 @@ impl Ai {
             },
             Some((model, ProviderError::Scripted(error))) => {
                 self.record(
+                    operation,
                     &model.name,
                     &model.provider,
                     "error",
@@ -593,20 +599,23 @@ impl Ai {
             .and_then(|name| self.resolve(name).ok())
             .map(|m| (m.name, m.provider))
             .unwrap_or_default();
-        self.record(&name, &provider, "error", None, spec.user, &tried, started);
+        self.record(
+            operation, &name, &provider, "error", None, spec.user, &tried, started,
+        );
         Err(error)
     }
 
     /// One whole answer, with failover; usage is recorded.
     pub(crate) async fn complete(&self, spec: &Spec, extra: &Extra) -> Result<Answer, AiError> {
         let success = self
-            .failover(spec, extra, |driver, request| {
+            .failover("generate", spec, extra, |driver, request| {
                 Box::pin(async move { driver.chat(&request).await })
             })
             .await?;
         let response = success.value;
         self.spend(spec.user, response.usage).await;
         self.record(
+            "generate",
             &success.model.name,
             &success.model.provider,
             if success.position == 0 {
@@ -658,7 +667,7 @@ impl Ai {
         extra: &Extra,
     ) -> Result<OpenStream, AiError> {
         let success = self
-            .failover(spec, extra, |driver, request| {
+            .failover("stream", spec, extra, |driver, request| {
                 Box::pin(async move {
                     let mut chunks = driver.stream(&request).await?;
                     // The first chunk decides whether this model answers.
@@ -759,6 +768,7 @@ impl Ai {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
+        operation: &'static str,
         model: &str,
         provider: &str,
         outcome: &'static str,
@@ -768,6 +778,18 @@ impl Ai {
         started: Instant,
     ) {
         let elapsed = started.elapsed();
+        navree_telemetry::Telemetry::current().ai_call(|| {
+            let mut call = navree_telemetry::AiCall::new(provider, model, operation, elapsed);
+            if let Some(usage) = usage {
+                call = call
+                    .tokens(usage.input_tokens, usage.output_tokens)
+                    .cached_tokens(usage.cached_input_tokens);
+            }
+            if outcome == "error" {
+                call = call.failed("the provider could not answer");
+            }
+            call
+        });
         let labels = [
             ("model", model.to_owned()),
             ("provider", provider.to_owned()),

@@ -28,6 +28,7 @@ mod sessions;
 mod sign_in_policy;
 mod strategy;
 mod subject;
+mod telemetry;
 mod two_factor;
 mod two_factor_policy;
 mod verification;

@@ -1058,6 +1058,13 @@ impl AuthService {
     }
 
     pub(crate) async fn audit(&self, entry: AuditEntry) {
+        // Every sign-in flow writes its outcome here: telemetry gets it too.
+        let telemetry = navree_telemetry::Telemetry::current();
+        if telemetry.enabled(navree_telemetry::EventKind::SignIn)
+            && let Some(event) = crate::telemetry::sign_in_of(&entry)
+        {
+            telemetry.emit(navree_telemetry::TelemetryEvent::SignIn(event));
+        }
         if let Some(sink) = self.audit_sink().await {
             record(sink, entry).await;
         }

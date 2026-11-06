@@ -54,6 +54,7 @@ http-body = { workspace = true }
 navree-config = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
 navree-ui-macros = { workspace = true }
 navree-validation = { workspace = true }
 # `Markdown`: CommonMark read into events, written back through the toolkit's one escaping path.

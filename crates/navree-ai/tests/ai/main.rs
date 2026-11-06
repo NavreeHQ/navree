@@ -12,4 +12,5 @@ mod servers;
 mod streaming;
 mod support;
 mod surfaces;
+mod telemetry;
 mod text;

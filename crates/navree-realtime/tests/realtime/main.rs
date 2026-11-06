@@ -12,3 +12,4 @@ mod presence;
 mod relay;
 mod streams;
 mod support;
+mod telemetry;

@@ -510,6 +510,7 @@ impl Realtime {
         I::Item: AsRef<str>,
     {
         check_event(event)?;
+        let started = Instant::now();
         let data = serde_json::to_string(&data)?;
         let channels: Vec<String> = channels
             .into_iter()
@@ -517,6 +518,14 @@ impl Realtime {
             .collect();
         let id = self.streams.next_id();
         let delivered = self.deliver(&channels, event, &data, id);
+        navree_telemetry::Telemetry::current().broadcast(|| {
+            navree_telemetry::BroadcastSent::new(
+                channels.iter().map(String::as_str),
+                event,
+                delivered as u64,
+                started.elapsed(),
+            )
+        });
         if let Some(cluster) = &self.cluster {
             cluster.publish(Message::Broadcast {
                 channels,

@@ -233,6 +233,7 @@ mod session_json;
 mod sessions;
 mod sign_in_policy;
 mod strategy;
+mod telemetry;
 pub mod testing;
 mod throttle;
 mod token;

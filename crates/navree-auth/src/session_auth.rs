@@ -355,9 +355,11 @@ impl AuthService {
         remember: bool,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
-        self.check_sign_in(&SignInAttempt::of(user, method), meta)
+        self.check_sign_in(&SignInAttempt::of(user, method.clone()), meta)
             .await?;
-        self.start_session(session, user, remember, meta).await
+        self.start_session(session, user, remember, meta).await?;
+        crate::telemetry::report_signed_in(user, &method);
+        Ok(())
     }
 
     /// Binds the browser's session to `user`, whose sign-in was already

@@ -154,3 +154,61 @@ async fn big_pages_go_out_in_brotli_and_small_ones_in_gzip() {
     let none = app.client().get("/small").send().await;
     assert_eq!(none.header("content-encoding"), None);
 }
+
+#[tokio::test]
+async fn a_runtime_request_is_reported_as_a_ui_operation_and_nothing_else_is() {
+    use navree_telemetry::{TelemetryRecorder, UiOperationKind};
+
+    let recorder = TelemetryRecorder::new();
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App)
+        .module(recorder.module())
+        .build()
+        .await;
+    let client = app.client();
+
+    client
+        .post("/act")
+        .header("x-navree-ui", "1")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await;
+    client
+        .get("/small")
+        .header("x-navree-ui", "1")
+        .send()
+        .await;
+    client
+        .get("/small")
+        .header("x-navree-ui", "1")
+        .header("x-navree-region", "kpis")
+        .send()
+        .await;
+    // Not from the runtime, and a fetch ahead of a click: neither is an operation.
+    client.post("/act").send().await;
+    client
+        .get("/small")
+        .header("x-navree-ui", "1")
+        .header("x-navree-prefetch", "1")
+        .send()
+        .await;
+
+    let operations = recorder.ui_operations();
+    let seen: Vec<(&str, UiOperationKind, u16)> = operations
+        .iter()
+        .map(|op| (op.name.as_str(), op.kind, op.status))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("/act", UiOperationKind::FormPost, 200),
+            ("/small", UiOperationKind::Fragment, 200),
+            ("/small", UiOperationKind::LiveRegion, 200),
+        ]
+    );
+    assert!(operations[0].ops >= 1, "the toast and the redirect are ops");
+    assert_eq!(operations[1].ops, 0, "a page is not ops");
+    app.shutdown().await.unwrap();
+}

@@ -110,8 +110,8 @@ mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "htt
 ## a `storage` disk (in `full`). With `integrations` on too, Gmail and
 ## Microsoft 365 mailboxes watched through their connections.
 mail-inbound = ["mail", "storage", "navree-mail/inbound", "navree-integrations?/mail"]
-realtime = ["dep:navree-realtime", "http", "crypto", "db"]
-storage = ["dep:navree-storage", "http", "crypto", "navree-ui?/storage"]
+realtime = ["dep:navree-realtime", "http", "crypto", "db", "telemetry"]
+storage = ["dep:navree-storage", "http", "crypto", "telemetry", "navree-ui?/storage"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
 ## Spaces), on rustls with ring (in `full`).
 storage-s3 = ["storage", "navree-storage/s3"]
@@ -196,6 +196,7 @@ notify = [
 ui = [
     "dep:navree-ui",
     "http",
+    "telemetry",
     "validation",
     "navree-auth?/ui",
     "navree-i18n?/ui",
@@ -224,6 +225,7 @@ orm = [
 auth = [
     "dep:navree-auth",
     "http",
+    "telemetry",
     "db",
     "crypto",
     "validation",
@@ -284,6 +286,7 @@ settings = [
 webhooks = [
     "dep:navree-webhooks",
     "http",
+    "telemetry",
     "crypto",
     "events",
     "http-client",
@@ -397,6 +400,7 @@ grpc = ["dep:navree-grpc", "http", "db", "validation"]
 ai = [
     "dep:navree-ai",
     "http",
+    "telemetry",
     "http-client",
     "cache",
     "db",
@@ -438,6 +442,7 @@ documents-docx = ["navree-documents/docx", "http", "view", "storage", "pdf"]
 search = [
     "dep:navree-search",
     "http",
+    "telemetry",
     "http-client",
     "db",
     "orm",

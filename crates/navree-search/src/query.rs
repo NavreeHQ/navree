@@ -352,8 +352,48 @@ impl<E: Searchable> SearchQuery<E> {
     }
 
     /// Runs the query on the engine: hits `offset..offset + limit`, the
-    /// total, and the row condition still to apply.
+    /// total, and the row condition still to apply. Reports the search to
+    /// telemetry: the engine, the index, the length of the term (never the
+    /// term), the hits and how long it took.
     async fn run(
+        &self,
+        offset: u64,
+        limit: u64,
+        highlight: bool,
+    ) -> Result<(Vec<EngineHit>, u64, Option<RowFilter>), SearchError> {
+        let started = std::time::Instant::now();
+        let result = self.run_on_engine(offset, limit, highlight).await;
+        navree_telemetry::Telemetry::current().search(|| {
+            let index = self
+                .search
+                .entry::<E>()
+                .map(|entry| entry.index.clone())
+                .unwrap_or_default();
+            let hybrid = self
+                .hybrid
+                .is_some_and(|weight| weight > 0.0 && !self.text.trim().is_empty());
+            let mode = if hybrid {
+                navree_telemetry::SearchMode::Hybrid
+            } else {
+                navree_telemetry::SearchMode::Text
+            };
+            let search = navree_telemetry::SearchQueried::new(
+                self.search.engine().name(),
+                index,
+                mode,
+                &self.text,
+                started.elapsed(),
+            );
+            match &result {
+                Ok((_, total, _)) => search.hits(*total),
+                Err(_) => search.failed("failed"),
+            }
+        });
+        result
+    }
+
+    /// [`run`](Self::run) without the report.
+    async fn run_on_engine(
         &self,
         offset: u64,
         limit: u64,

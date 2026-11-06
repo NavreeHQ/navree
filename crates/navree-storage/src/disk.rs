@@ -11,6 +11,7 @@ use futures_util::{Stream, StreamExt, TryStreamExt};
 use navree_contracts::HealthStatus;
 use navree_crypto::random_token;
 use navree_kernel::BoxError;
+use navree_telemetry::StorageOperation;
 use serde::Serialize;
 
 use crate::StorageError;
@@ -102,11 +103,23 @@ impl Disk {
     /// is atomic: readers see the old or the new file, never a partial one.
     pub async fn put(&self, path: &str, contents: impl Into<Bytes>) -> Result<(), StorageError> {
         let location = self.location(path)?;
-        self.inner
+        let contents = contents.into();
+        let bytes = contents.len() as u64;
+        let started = std::time::Instant::now();
+        let result = self
+            .inner
             .store
-            .put(&location, contents.into())
+            .put(&location, contents)
             .await
-            .map_err(|error| self.error(&location, error))
+            .map_err(|error| self.error(&location, error));
+        self.report(
+            StorageOperation::Write,
+            &location,
+            started,
+            Some(bytes),
+            result.as_ref().err(),
+        );
+        result
     }
 
     /// Writes a stream of chunks to `path` without buffering the whole file
@@ -114,6 +127,25 @@ impl Disk {
     /// the stream ends successfully; if the stream fails, nothing is stored
     /// and the error is [`StorageError::Stream`].
     pub async fn put_stream<S, E>(&self, path: &str, stream: S) -> Result<u64, StorageError>
+    where
+        S: Stream<Item = Result<Bytes, E>>,
+        E: Into<BoxError>,
+    {
+        let started = std::time::Instant::now();
+        let result = self.write_stream(path, stream).await;
+        let location = self.location(path).unwrap_or_else(|_| path.to_owned());
+        self.report(
+            StorageOperation::Write,
+            &location,
+            started,
+            result.as_ref().ok().copied(),
+            result.as_ref().err(),
+        );
+        result
+    }
+
+    /// [`put_stream`](Self::put_stream) without the report.
+    async fn write_stream<S, E>(&self, path: &str, stream: S) -> Result<u64, StorageError>
     where
         S: Stream<Item = Result<Bytes, E>>,
         E: Into<BoxError>,
@@ -154,11 +186,21 @@ impl Disk {
     /// The contents of `path`.
     pub async fn get(&self, path: &str) -> Result<Bytes, StorageError> {
         let location = self.location(path)?;
-        self.inner
+        let started = std::time::Instant::now();
+        let result = self
+            .inner
             .store
             .read(&location, None)
             .await
-            .map_err(|error| self.error(&location, error))
+            .map_err(|error| self.error(&location, error));
+        self.report(
+            StorageOperation::Read,
+            &location,
+            started,
+            result.as_ref().ok().map(|bytes| bytes.len() as u64),
+            result.as_ref().err(),
+        );
+        result
     }
 
     /// The contents of `path` as a stream of chunks (local files are read
@@ -170,12 +212,21 @@ impl Disk {
     /// The size of `path` and a stream of its contents.
     pub(crate) async fn open(&self, path: &str) -> Result<(u64, ByteStream), StorageError> {
         let location = self.location(path)?;
+        let started = std::time::Instant::now();
         let object = self
             .inner
             .store
             .open(&location)
             .await
-            .map_err(|error| self.error(&location, error))?;
+            .map_err(|error| self.error(&location, error));
+        self.report(
+            StorageOperation::Read,
+            &location,
+            started,
+            object.as_ref().ok().map(|object| object.size),
+            object.as_ref().err(),
+        );
+        let object = object?;
         let disk = self.clone();
         let stream = object
             .stream
@@ -197,10 +248,19 @@ impl Disk {
     /// Deletes `path`; deleting a missing file succeeds.
     pub async fn delete(&self, path: &str) -> Result<(), StorageError> {
         let location = self.location(path)?;
-        match self.inner.store.delete(&location).await {
+        let started = std::time::Instant::now();
+        let result = match self.inner.store.delete(&location).await {
             Ok(()) | Err(StoreError::NotFound) => Ok(()),
             Err(error) => Err(self.error(&location, error)),
-        }
+        };
+        self.report(
+            StorageOperation::Delete,
+            &location,
+            started,
+            None,
+            result.as_ref().err(),
+        );
+        result
     }
 
     /// The size of `path` in bytes.
@@ -233,15 +293,21 @@ impl Disk {
     /// and last modification time, sorted by path.
     pub async fn files(&self, prefix: &str) -> Result<Vec<FileMeta>, StorageError> {
         let prefix = normalize(prefix, true)?;
-        let mut files: Vec<FileMeta> = self
+        let started = std::time::Instant::now();
+        let listed = self
             .inner
             .store
             .list(&prefix)
             .await
-            .map_err(|error| self.error(&prefix, error))?
-            .into_iter()
-            .map(file_meta)
-            .collect();
+            .map_err(|error| self.error(&prefix, error));
+        self.report(
+            StorageOperation::List,
+            &prefix,
+            started,
+            None,
+            listed.as_ref().err(),
+        );
+        let mut files: Vec<FileMeta> = listed?.into_iter().map(file_meta).collect();
         files.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(files)
     }
@@ -361,6 +427,36 @@ impl Disk {
     /// The store location of `path`: its normalised form.
     pub(crate) fn location(&self, path: &str) -> Result<String, StorageError> {
         normalize(path, false)
+    }
+
+    /// Reports one operation on `location` to telemetry (inside a request,
+    /// a job or a scheduled task): the disk, what was done, how many bytes,
+    /// how long it took and how it ended; never the contents.
+    fn report(
+        &self,
+        operation: StorageOperation,
+        location: &str,
+        started: std::time::Instant,
+        bytes: Option<u64>,
+        error: Option<&StorageError>,
+    ) {
+        navree_telemetry::Telemetry::current().storage_op(|| {
+            let mut op = navree_telemetry::StorageOp::new(
+                self.inner.name.as_str(),
+                self.inner.driver,
+                operation,
+                location,
+                started.elapsed(),
+            );
+            if let Some(bytes) = bytes {
+                op = op.bytes(bytes);
+            }
+            match error {
+                Some(StorageError::NotFound { .. }) => op.failed("not_found"),
+                Some(_) => op.failed("failed"),
+                None => op,
+            }
+        });
     }
 
     /// A backend error not tied to a path.

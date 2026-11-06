@@ -190,7 +190,7 @@ impl Embeddings {
         let started = Instant::now();
         let success = self
             .ai
-            .failover(&spec, &Extra::default(), move |driver, request| {
+            .failover("embed", &spec, &Extra::default(), move |driver, request| {
                 let texts = texts.clone();
                 let dimensions = ai
                     .resolve(&request.model_name)
@@ -211,6 +211,7 @@ impl Embeddings {
             .await?;
         let response = success.value;
         self.ai.record(
+            "embed",
             &success.model.name,
             &success.model.provider,
             if success.position == 0 {
