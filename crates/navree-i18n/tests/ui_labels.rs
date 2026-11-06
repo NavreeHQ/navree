@@ -4,7 +4,7 @@
 
 use chrono::NaiveDate;
 use navree_i18n::ui::{FromLocale, LocaleUi, MoneyIn};
-use navree_i18n::{DateStyle, I18n, I18nOptions, Locale};
+use navree_i18n::{DateStyle, I18n, I18nOptions};
 use navree_ui::charts::ChartLabels;
 use navree_ui::components::{CarouselLabels, DisplayLabels, LazyLabels};
 use navree_ui::flow::{SliderLabels, StepperLabels, ToolbarLabels, TreeLabels, WizardLabels};
