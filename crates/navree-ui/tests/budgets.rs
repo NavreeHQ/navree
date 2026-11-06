@@ -617,7 +617,7 @@ fn conversation_page() -> String {
                 None,
                 LazyEnd::End,
             ),
-            Combobox::new("agent").search("/inbox/agents/options"),
+            Combobox::new("assignee").search("/inbox/team/options"),
             DropdownMenu::new("status", "Status").item(MenuItem::link("Close", "/inbox/1/close")),
             DatePicker::new("until"),
             el("a").href("/inbox/2").hotkey("j").child("Next"),
