@@ -599,7 +599,62 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filters on `subject_type`, `subject_id`, `kind`, `assignee_id`, `due`, `completed`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`). */
+                    filter?: {
+                        assignee_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        completed?: boolean;
+                        /** @enum {string} */
+                        due?: "overdue" | "today" | "upcoming";
+                        kind?: ("note" | "call" | "email" | "meeting" | "task") | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** @enum {string} */
+                            ne?: "note" | "call" | "email" | "meeting" | "task";
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        subject_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        subject_type?: ("company" | "contact" | "deal") | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** @enum {string} */
+                            ne?: "company" | "contact" | "deal";
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                    };
+                    /** @description The page number, for numbered pages (default 1). */
+                    page?: number;
+                    /** @description The page size for numbered pages (default 15, at most 100). */
+                    per_page?: number;
+                    /** @description The cursor of the page to read, for cursor pages: the `next` of the page before it. */
+                    cursor?: string;
+                    /** @description The page size for cursor pages (default 15, at most 100). */
+                    limit?: number;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -915,7 +970,34 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filters on `owner_id`, `industry`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`). */
+                    filter?: {
+                        industry?: string;
+                        owner_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                    };
+                    /** @description Sort by `name`, `created_at`, comma-separated, with `-` in front for descending. Default: `name`. */
+                    sort?: string;
+                    /** @description Text to search for. */
+                    search?: string;
+                    /** @description The page number, for numbered pages (default 1). */
+                    page?: number;
+                    /** @description The page size for numbered pages (default 15, at most 100). */
+                    per_page?: number;
+                    /** @description The cursor of the page to read, for cursor pages: the `next` of the page before it. */
+                    cursor?: string;
+                    /** @description The page size for cursor pages (default 15, at most 100). */
+                    limit?: number;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1206,7 +1288,51 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filters on `company_id`, `status`, `owner_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`). */
+                    filter?: {
+                        company_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        owner_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        status?: ("lead" | "prospect" | "customer" | "churned") | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** @enum {string} */
+                            ne?: "lead" | "prospect" | "customer" | "churned";
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                    };
+                    /** @description Text to search for. */
+                    search?: string;
+                    /** @description The page number, for numbered pages (default 1). */
+                    page?: number;
+                    /** @description The page size for numbered pages (default 15, at most 100). */
+                    per_page?: number;
+                    /** @description The cursor of the page to read, for cursor pages: the `next` of the page before it. */
+                    cursor?: string;
+                    /** @description The page size for cursor pages (default 15, at most 100). */
+                    limit?: number;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1323,19 +1449,57 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filters on `company_id`, `status`, `owner_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`). */
+                    filter?: {
+                        company_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        owner_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        status?: ("lead" | "prospect" | "customer" | "churned") | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** @enum {string} */
+                            ne?: "lead" | "prospect" | "customer" | "churned";
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                    };
+                    /** @description Text to search for. */
+                    search?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
+                /** @description The contacts that match, one row each, after a header row. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/csv": string;
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -1615,7 +1779,53 @@ export interface paths {
         /** List deals */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filters on `stage`, `owner_id`, `company_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`). */
+                    filter?: {
+                        company_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        owner_id?: string | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** Format: uuid */
+                            ne?: string;
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                        stage?: ("lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost") | {
+                            /** @description A comma-separated list of values. */
+                            in?: string;
+                            /** @enum {string} */
+                            ne?: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
+                            /** @description A comma-separated list of values. */
+                            not_in?: string;
+                            /** @description `true`: is NULL. `false`: is not NULL. */
+                            null?: boolean;
+                        };
+                    };
+                    /** @description Sort by `created_at`, `title`, `amount_cents`, `expected_close_date`, comma-separated, with `-` in front for descending. Default: `-created_at`. */
+                    sort?: string;
+                    /** @description Part of `title`, ignoring case. */
+                    search?: string;
+                    /** @description The page number, for numbered pages (default 1). */
+                    page?: number;
+                    /** @description The page size for numbered pages (default 15, at most 100). */
+                    per_page?: number;
+                    /** @description The cursor of the page to read, for cursor pages: the `next` of the page before it. */
+                    cursor?: string;
+                    /** @description The page size for cursor pages (default 15, at most 100). */
+                    limit?: number;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1729,7 +1939,10 @@ export interface paths {
         /** The deal board */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Only this owner's deals. */
+                    owner_id?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2092,7 +2305,20 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Sort by `name`, `email`, `created_at`, comma-separated, with `-` in front for descending. Default: `name`. */
+                    sort?: string;
+                    /** @description Part of `name`, `email`, ignoring case. */
+                    search?: string;
+                    /** @description The page number, for numbered pages (default 1). */
+                    page?: number;
+                    /** @description The page size for numbered pages (default 15, at most 100). */
+                    per_page?: number;
+                    /** @description The cursor of the page to read, for cursor pages: the `next` of the page before it. */
+                    cursor?: string;
+                    /** @description The page size for cursor pages (default 15, at most 100). */
+                    limit?: number;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2148,7 +2374,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["CreateUser"];
+                    "application/json": components["schemas"]["UserCreateInput"];
                 };
             };
             responses: {
@@ -2221,7 +2447,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["UpdateUser"];
+                    "application/json": components["schemas"]["UserUpdateInput"];
                 };
             };
             responses: {
@@ -2412,10 +2638,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/bell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["notifications.bell"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["notifications.bell.read_all"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{id}/mark-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["notifications.bell.read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["operations.progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description One rule of the signed-in user's abilities, as CASL's `createMongoAbility` takes it
+         *     (`GET /api/me/abilities` answers with a list of them).
+         */
+        AbilityRule: {
+            action: string | string[];
+            /** @description Conditions on the record's fields, in the MongoDB query language. */
+            conditions?: Record<string, never>;
+            fields?: string | string[];
+            /** @description Whether the rule takes the ability away (`cannot`). */
+            inverted?: boolean | null;
+            /** @description Why the rule exists, for the message of a refusal. */
+            reason?: string | null;
+            subject: string | string[];
+        };
         /**
          * @description An activity as the API returns it:
          *     `{__type: "Activity", id, kind, subject, body, due_at, completed_at,
@@ -2425,9 +2730,9 @@ export interface components {
         Activity: {
             /**
              * @description Always `"Activity"` (the CASL subject type).
-             * @example Activity
+             * @enum {string}
              */
-            __type: string;
+            __type: "Activity";
             assignee: components["schemas"]["OwnerRef"] | null;
             /**
              * Format: uuid
@@ -2478,7 +2783,7 @@ export interface components {
              */
             subject_label: string;
             /** @description The kind of record it is attached to. */
-            subject_type: components["schemas"]["SubjectType"];
+            subject_type: components["schemas"]["ActivitySubjectType"];
         };
         /** @description The body of `POST /api/v1/activities`. */
         ActivityInput: {
@@ -2504,7 +2809,7 @@ export interface components {
              */
             subject_id: string;
             /** @description The kind of record it is attached to. */
-            subject_type: components["schemas"]["SubjectType"];
+            subject_type: components["schemas"]["ActivitySubjectType"];
         };
         /**
          * @description What an activity records (`activities.kind`); only tasks have due
@@ -2547,6 +2852,12 @@ export interface components {
             };
         };
         /**
+         * @description The kind of record an activity is attached to
+         *     (`activities.subject_type`).
+         * @enum {string}
+         */
+        ActivitySubjectType: "company" | "contact" | "deal";
+        /**
          * @description The body of `PATCH /api/v1/activities/{id}`: only the fields present
          *     change. `body`, `due_at` and `assignee_id` are cleared with `null`; the
          *     other fields cannot be `null`.
@@ -2574,7 +2885,7 @@ export interface components {
              */
             subject_id?: string;
             /** @description The kind of record it is attached to. */
-            subject_type?: components["schemas"]["SubjectType"];
+            subject_type?: components["schemas"]["ActivitySubjectType"];
         };
         /** @description One audit trail entry. */
         AuditEntry: {
@@ -2646,7 +2957,7 @@ export interface components {
              */
             probability: number;
             /** @description The stage. */
-            stage: components["schemas"]["Stage"];
+            stage: components["schemas"]["DealStage"];
         };
         /** @description `PATCH /auth/me/password`. */
         ChangePasswordInput: {
@@ -3022,17 +3333,6 @@ export interface components {
             /** @description The job title. */
             title?: string | null;
         };
-        /** @description The body of `POST /api/v1/users`. */
-        CreateUser: {
-            /** @description The email address (trimmed; stored lower-cased; unique). */
-            email: string;
-            /** @description The display name. */
-            name: string;
-            /** @description The password (at least `auth.password_min_length` characters). */
-            password: string;
-            /** @description The CRM role. */
-            role: components["schemas"]["UserRole"];
-        };
         /** @description The dashboard; see the [module docs](self). */
         Dashboard: {
             /** @description Deals not won or lost. */
@@ -3090,7 +3390,7 @@ export interface components {
              */
             count: number;
             /** @description The stage. */
-            stage: components["schemas"]["Stage"];
+            stage: components["schemas"]["DealStage"];
         };
         /** @description Open tasks by due date (UTC days). */
         DashboardTaskCounts: {
@@ -3118,9 +3418,9 @@ export interface components {
         Deal: {
             /**
              * @description Always `"Deal"` (the CASL subject type).
-             * @example Deal
+             * @enum {string}
              */
-            __type: string;
+            __type: "Deal";
             /**
              * Format: int64
              * @description The value in the currency's minor unit (cents).
@@ -3181,7 +3481,7 @@ export interface components {
              */
             probability: number;
             /** @description The pipeline stage. */
-            stage: components["schemas"]["Stage"];
+            stage: components["schemas"]["DealStage"];
             /** @description The title. */
             title: string;
             /**
@@ -3227,7 +3527,7 @@ export interface components {
              *     `manage` on deals).
              */
             owner_id?: string | null;
-            stage?: components["schemas"]["Stage"] | null;
+            stage?: components["schemas"]["DealStage"] | null;
             /** @description The title. */
             title: string;
         };
@@ -3242,7 +3542,7 @@ export interface components {
              */
             position?: number | null;
             /** @description The target stage. */
-            stage: components["schemas"]["Stage"];
+            stage: components["schemas"]["DealStage"];
         };
         /** @description A page of deals (the OpenAPI shape of `GET /api/v1/deals`). */
         DealPage: {
@@ -3271,6 +3571,12 @@ export interface components {
                 total: number;
             } & Record<string, never>;
         };
+        /**
+         * @description A deal's pipeline stage (`deals.stage`), in board order; new deals
+         *     start as `lead`.
+         * @enum {string}
+         */
+        DealStage: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
         /**
          * @description The body of `PATCH /api/v1/deals/{id}`: only the fields present
          *     change; `contact_id` and `expected_close_date` may be `null` to clear
@@ -3306,7 +3612,7 @@ export interface components {
              * @description A new owner (needs `manage` on deals).
              */
             owner_id?: string | null;
-            stage?: components["schemas"]["Stage"] | null;
+            stage?: components["schemas"]["DealStage"] | null;
             /** @description The title. */
             title?: string | null;
         };
@@ -3651,6 +3957,12 @@ export interface components {
             /** @description The token from the reset mail. */
             token: string;
         };
+        /**
+         * @description A CRM role, as `POST /api/v1/users` and `PATCH /api/v1/users/{id}` take
+         *     it (`"admin" | "manager" | "rep"`).
+         * @enum {string}
+         */
+        Role: "admin" | "manager" | "rep";
         /** @description `GET /auth/sessions`: the user's live sessions. */
         SessionList: {
             /** @description The sessions, most recently used first. */
@@ -3700,18 +4012,6 @@ export interface components {
             /** @description The client's `User-Agent` at its last sign-in or refresh. */
             user_agent?: string | null;
         };
-        /**
-         * @description A deal's pipeline stage (`deals.stage`), in board order; new deals
-         *     start as `lead`.
-         * @enum {string}
-         */
-        Stage: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
-        /**
-         * @description The kind of record an activity is attached to
-         *     (`activities.subject_type`).
-         * @enum {string}
-         */
-        SubjectType: "company" | "contact" | "deal";
         /**
          * @description An access token and a refresh token, as returned by the login, register
          *     and refresh routes:
@@ -3802,12 +4102,6 @@ export interface components {
             /** @description The new display name. */
             name?: string | null;
         };
-        /** @description The body of `PATCH /api/v1/users/{id}`: only the fields present change. */
-        UpdateUser: {
-            /** @description The display name. */
-            name?: string | null;
-            role?: components["schemas"]["UserRole"] | null;
-        };
         /**
          * @description A user as `/api/v1/users` returns it:
          *     `{__type: "User", id, name, email, email_verified_at, roles, created_at}`.
@@ -3815,9 +4109,9 @@ export interface components {
         User: {
             /**
              * @description Always `"User"` (the CASL subject type).
-             * @example User
+             * @enum {string}
              */
-            __type: string;
+            __type: "User";
             /**
              * Format: date-time
              * @description When the account was created.
@@ -3839,6 +4133,17 @@ export interface components {
             name: string;
             /** @description The user's role names (`admin`, `manager`, `rep`), sorted. */
             roles: string[];
+        };
+        /** @description The body of `POST /api/v1/users`. */
+        UserCreateInput: {
+            /** @description The email address (trimmed; stored lower-cased; unique). */
+            email: string;
+            /** @description The display name. */
+            name: string;
+            /** @description The password (at least `auth.password_min_length` characters). */
+            password: string;
+            /** @description The CRM role. */
+            role: components["schemas"]["Role"];
         };
         /**
          * @description The OpenAPI shape of `GET /api/v1/users` (a `Page<UserView>`):
@@ -3903,12 +4208,12 @@ export interface components {
             /** @description The display name. */
             name: string;
         };
-        /**
-         * @description A CRM role, as `POST /api/v1/users` and `PATCH /api/v1/users/{id}` take
-         *     it (`"admin" | "manager" | "rep"`).
-         * @enum {string}
-         */
-        UserRole: "admin" | "manager" | "rep";
+        /** @description The body of `PATCH /api/v1/users/{id}`: only the fields present change. */
+        UserUpdateInput: {
+            /** @description The display name. */
+            name?: string | null;
+            role?: components["schemas"]["Role"] | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -4160,7 +4465,20 @@ export interface operations {
     };
     "audit.index": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The page number (default 1). */
+                page?: number;
+                /** @description The page size (default 15, at most 100). */
+                per_page?: number;
+                /** @description Only what this user did. */
+                actor_id?: string;
+                /** @description Only entries about this kind of record (`Deal`). */
+                subject_type?: string;
+                /** @description Only entries about this record. */
+                subject_id?: string;
+                /** @description Only this action (`deals.updated`). */
+                action?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4993,12 +5311,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description The rules, with an ETag */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AbilityRule"][];
+                };
             };
             /** @description Not Modified */
             304: {
@@ -5020,7 +5340,14 @@ export interface operations {
     };
     "notifications.index": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The page number (default 1). */
+                page?: number;
+                /** @description The page size (default 15, at most 100). */
+                per_page?: number;
+                /** @description `true`: only the notifications not read yet. */
+                unread?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5584,8 +5911,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Switching Protocols: the connection is now a Pusher protocol 7 WebSocket. */
+            101: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5649,12 +5976,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description The signature that lets the client subscribe */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** @description `<app key>:<signature>`. */
+                        auth: string;
+                        /** @description For a presence channel: the member, as JSON text. */
+                        channel_data?: string;
+                    };
+                };
             };
             /** @description Bad Request */
             400: {
@@ -5748,12 +6082,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description The process answers */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "up";
+                    };
+                };
             };
         };
     };
@@ -5766,12 +6105,57 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Every check is up */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** @description Each check's result, by its name. */
+                        checks: {
+                            [key: string]: {
+                                /** @description Why the check is down. */
+                                error?: string;
+                                /** @description How long the check took. */
+                                latency_ms: number;
+                                /** @enum {string} */
+                                status: "up" | "down";
+                            };
+                        };
+                        /**
+                         * @description `up` when every check is up.
+                         * @enum {string}
+                         */
+                        status: "up" | "down";
+                    };
+                };
+            };
+            /** @description At least one check is down */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Each check's result, by its name. */
+                        checks: {
+                            [key: string]: {
+                                /** @description Why the check is down. */
+                                error?: string;
+                                /** @description How long the check took. */
+                                latency_ms: number;
+                                /** @enum {string} */
+                                status: "up" | "down";
+                            };
+                        };
+                        /**
+                         * @description `up` when every check is up.
+                         * @enum {string}
+                         */
+                        status: "up" | "down";
+                    };
+                };
             };
         };
     };
@@ -5865,12 +6249,126 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description The metrics in the Prometheus text format. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain; version=0.0.4": string;
+                };
+            };
+        };
+    };
+    "notifications.bell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
             /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.bell.read_all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.bell.read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "operations.progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
             };
         };
     };

@@ -1,12 +1,81 @@
 {
   "components": {
     "schemas": {
+      "AbilityRule": {
+        "description": "One rule of the signed-in user's abilities, as CASL's `createMongoAbility` takes it\n(`GET /api/me/abilities` answers with a list of them).",
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "conditions": {
+            "description": "Conditions on the record's fields, in the MongoDB query language.",
+            "type": "object"
+          },
+          "fields": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "inverted": {
+            "description": "Whether the rule takes the ability away (`cannot`).",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "Why the rule exists, for the message of a refusal.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "subject"
+        ],
+        "type": "object"
+      },
       "Activity": {
         "description": "An activity as the API returns it:\n`{__type: \"Activity\", id, kind, subject, body, due_at, completed_at,\nsubject_type, subject_id, subject_label, owner_id, owner, assignee_id,\nassignee, created_at}`.",
         "properties": {
           "__type": {
             "description": "Always `\"Activity\"` (the CASL subject type).",
-            "example": "Activity",
+            "enum": [
+              "Activity"
+            ],
             "type": "string"
           },
           "assignee": {
@@ -88,7 +157,7 @@
             "type": "string"
           },
           "subject_type": {
-            "$ref": "#/components/schemas/SubjectType",
+            "$ref": "#/components/schemas/ActivitySubjectType",
             "description": "The kind of record it is attached to."
           }
         },
@@ -151,7 +220,7 @@
             "type": "string"
           },
           "subject_type": {
-            "$ref": "#/components/schemas/SubjectType",
+            "$ref": "#/components/schemas/ActivitySubjectType",
             "description": "The kind of record it is attached to."
           }
         },
@@ -227,6 +296,15 @@
         ],
         "type": "object"
       },
+      "ActivitySubjectType": {
+        "description": "The kind of record an activity is attached to\n(`activities.subject_type`).",
+        "enum": [
+          "company",
+          "contact",
+          "deal"
+        ],
+        "type": "string"
+      },
       "ActivityUpdateInput": {
         "description": "The body of `PATCH /api/v1/activities/{id}`: only the fields present\nchange. `body`, `due_at` and `assignee_id` are cleared with `null`; the\nother fields cannot be `null`.",
         "properties": {
@@ -267,7 +345,7 @@
             "type": "string"
           },
           "subject_type": {
-            "$ref": "#/components/schemas/SubjectType",
+            "$ref": "#/components/schemas/ActivitySubjectType",
             "description": "The kind of record it is attached to."
           }
         },
@@ -473,7 +551,7 @@
             "type": "integer"
           },
           "stage": {
-            "$ref": "#/components/schemas/Stage",
+            "$ref": "#/components/schemas/DealStage",
             "description": "The stage."
           }
         },
@@ -1235,34 +1313,6 @@
         },
         "type": "object"
       },
-      "CreateUser": {
-        "description": "The body of `POST /api/v1/users`.",
-        "properties": {
-          "email": {
-            "description": "The email address (trimmed; stored lower-cased; unique).",
-            "type": "string"
-          },
-          "name": {
-            "description": "The display name.",
-            "type": "string"
-          },
-          "password": {
-            "description": "The password (at least `auth.password_min_length` characters).",
-            "type": "string"
-          },
-          "role": {
-            "$ref": "#/components/schemas/UserRole",
-            "description": "The CRM role."
-          }
-        },
-        "required": [
-          "name",
-          "email",
-          "password",
-          "role"
-        ],
-        "type": "object"
-      },
       "Dashboard": {
         "description": "The dashboard; see the [module docs](self).",
         "properties": {
@@ -1362,7 +1412,7 @@
             "type": "integer"
           },
           "stage": {
-            "$ref": "#/components/schemas/Stage",
+            "$ref": "#/components/schemas/DealStage",
             "description": "The stage."
           }
         },
@@ -1407,7 +1457,9 @@
         "properties": {
           "__type": {
             "description": "Always `\"Deal\"` (the CASL subject type).",
-            "example": "Deal",
+            "enum": [
+              "Deal"
+            ],
             "type": "string"
           },
           "amount_cents": {
@@ -1501,7 +1553,7 @@
             "type": "integer"
           },
           "stage": {
-            "$ref": "#/components/schemas/Stage",
+            "$ref": "#/components/schemas/DealStage",
             "description": "The pipeline stage."
           },
           "title": {
@@ -1604,7 +1656,7 @@
           "stage": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/Stage",
+                "$ref": "#/components/schemas/DealStage",
                 "description": "The stage (default `lead`)."
               },
               {
@@ -1643,7 +1695,7 @@
             ]
           },
           "stage": {
-            "$ref": "#/components/schemas/Stage",
+            "$ref": "#/components/schemas/DealStage",
             "description": "The target stage."
           }
         },
@@ -1713,6 +1765,18 @@
         ],
         "type": "object"
       },
+      "DealStage": {
+        "description": "A deal's pipeline stage (`deals.stage`), in board order; new deals\nstart as `lead`.",
+        "enum": [
+          "lead",
+          "qualified",
+          "proposal",
+          "negotiation",
+          "won",
+          "lost"
+        ],
+        "type": "string"
+      },
       "DealUpdateInput": {
         "description": "The body of `PATCH /api/v1/deals/{id}`: only the fields present\nchange; `contact_id` and `expected_close_date` may be `null` to clear\nthem.",
         "properties": {
@@ -1775,7 +1839,7 @@
           "stage": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/Stage",
+                "$ref": "#/components/schemas/DealStage",
                 "description": "A new stage: the deal moves to the end of that column (needs `move`\non the deal)."
               },
               {
@@ -2648,6 +2712,15 @@
         ],
         "type": "object"
       },
+      "Role": {
+        "description": "A CRM role, as `POST /api/v1/users` and `PATCH /api/v1/users/{id}` take\nit (`\"admin\" | \"manager\" | \"rep\"`).",
+        "enum": [
+          "admin",
+          "manager",
+          "rep"
+        ],
+        "type": "string"
+      },
       "SessionList": {
         "description": "`GET /auth/sessions`: the user's live sessions.",
         "properties": {
@@ -2736,27 +2809,6 @@
           "platform"
         ],
         "type": "object"
-      },
-      "Stage": {
-        "description": "A deal's pipeline stage (`deals.stage`), in board order; new deals\nstart as `lead`.",
-        "enum": [
-          "lead",
-          "qualified",
-          "proposal",
-          "negotiation",
-          "won",
-          "lost"
-        ],
-        "type": "string"
-      },
-      "SubjectType": {
-        "description": "The kind of record an activity is attached to\n(`activities.subject_type`).",
-        "enum": [
-          "company",
-          "contact",
-          "deal"
-        ],
-        "type": "string"
       },
       "TokenPair": {
         "description": "An access token and a refresh token, as returned by the login, register\nand refresh routes:\n`{\"access_token\", \"refresh_token\", \"token_type\": \"Bearer\", \"expires_in\"}`,\nplus `\"two_factor_setup_required\": true` when the user must set up\ntwo-factor authentication before the session reaches anything but the\nsetup routes.",
@@ -2910,36 +2962,14 @@
         },
         "type": "object"
       },
-      "UpdateUser": {
-        "description": "The body of `PATCH /api/v1/users/{id}`: only the fields present change.",
-        "properties": {
-          "name": {
-            "description": "The display name.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "role": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/UserRole",
-                "description": "The CRM role (replaces the user's roles)."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object"
-      },
       "User": {
         "description": "A user as `/api/v1/users` returns it:\n`{__type: \"User\", id, name, email, email_verified_at, roles, created_at}`.",
         "properties": {
           "__type": {
             "description": "Always `\"User\"` (the CASL subject type).",
-            "example": "User",
+            "enum": [
+              "User"
+            ],
             "type": "string"
           },
           "created_at": {
@@ -2983,6 +3013,34 @@
           "email",
           "roles",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "UserCreateInput": {
+        "description": "The body of `POST /api/v1/users`.",
+        "properties": {
+          "email": {
+            "description": "The email address (trimmed; stored lower-cased; unique).",
+            "type": "string"
+          },
+          "name": {
+            "description": "The display name.",
+            "type": "string"
+          },
+          "password": {
+            "description": "The password (at least `auth.password_min_length` characters).",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "description": "The CRM role."
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password",
+          "role"
         ],
         "type": "object"
       },
@@ -3083,14 +3141,29 @@
         ],
         "type": "object"
       },
-      "UserRole": {
-        "description": "A CRM role, as `POST /api/v1/users` and `PATCH /api/v1/users/{id}` take\nit (`\"admin\" | \"manager\" | \"rep\"`).",
-        "enum": [
-          "admin",
-          "manager",
-          "rep"
-        ],
-        "type": "string"
+      "UserUpdateInput": {
+        "description": "The body of `PATCH /api/v1/users/{id}`: only the fields present change.",
+        "properties": {
+          "name": {
+            "description": "The display name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Role",
+                "description": "The CRM role (replaces the user's roles)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -3099,12 +3172,6 @@
         "description": "A JWT access token from `POST /api/auth/login` or `/api/auth/refresh`: `Authorization: Bearer <token>`.",
         "scheme": "bearer",
         "type": "http"
-      },
-      "cookie": {
-        "description": "The session cookie of a first-party app (apps using navree-session). Unsafe methods (POST, PUT, PATCH, DELETE) also need the XSRF-TOKEN cookie's value in the X-XSRF-TOKEN header.",
-        "in": "cookie",
-        "name": "__Host-navree_session",
-        "type": "apiKey"
       }
     }
   },
@@ -3143,9 +3210,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -3203,9 +3267,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -3265,9 +3326,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -3338,9 +3396,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3400,9 +3455,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3415,6 +3467,68 @@
     "/api/audit": {
       "get": {
         "operationId": "audit.index",
+        "parameters": [
+          {
+            "description": "The page number (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only what this user did.",
+            "in": "query",
+            "name": "actor_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only entries about this kind of record (`Deal`).",
+            "in": "query",
+            "name": "subject_type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only entries about this record.",
+            "in": "query",
+            "name": "subject_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only this action (`deals.updated`).",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3458,9 +3572,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -3538,9 +3649,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3600,9 +3708,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3649,9 +3754,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3697,9 +3799,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -3839,9 +3938,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -3877,9 +3973,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4093,9 +4186,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4131,9 +4221,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4209,9 +4296,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4278,9 +4362,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4403,9 +4484,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4465,9 +4543,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4482,7 +4557,17 @@
         "operationId": "access.abilities",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AbilityRule"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "The rules, with an ETag"
           },
           "304": {
             "description": "Not Modified"
@@ -4500,9 +4585,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4515,6 +4597,39 @@
     "/api/notifications": {
       "get": {
         "operationId": "notifications.index",
+        "parameters": [
+          {
+            "description": "The page number (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`true`: only the notifications not read yet.",
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4548,9 +4663,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4587,9 +4699,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4645,9 +4754,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4693,9 +4799,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4771,9 +4874,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4833,9 +4933,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4890,9 +4987,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -4921,9 +5015,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -4960,9 +5051,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5013,9 +5101,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5044,9 +5129,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5124,9 +5206,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5181,9 +5260,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5234,9 +5310,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5249,6 +5322,218 @@
     "/api/v1/activities": {
       "get": {
         "description": "Query: `filter[subject_type]`, `filter[subject_id]`, `filter[kind]`, `filter[assignee_id]`, `filter[due]` (overdue | today | upcoming, by UTC day), `filter[completed]` (true | false), `page`, `per_page` (default 15, at most 100). With `filter[due]`, earliest due first; with `filter[completed]=true`, most recently completed first; otherwise newest first.",
+        "parameters": [
+          {
+            "description": "Filters on `subject_type`, `subject_id`, `kind`, `assignee_id`, `due`, `completed`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`).",
+            "explode": true,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "assignee_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "completed": {
+                  "type": "boolean"
+                },
+                "due": {
+                  "enum": [
+                    "overdue",
+                    "today",
+                    "upcoming"
+                  ],
+                  "type": "string"
+                },
+                "kind": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "note",
+                        "call",
+                        "email",
+                        "meeting",
+                        "task"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "enum": [
+                            "note",
+                            "call",
+                            "email",
+                            "meeting",
+                            "task"
+                          ],
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "subject_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "subject_type": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "company",
+                        "contact",
+                        "deal"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "enum": [
+                            "company",
+                            "contact",
+                            "deal"
+                          ],
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "The page number, for numbered pages (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size for numbered pages (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page size for cursor pages (default 15, at most 100).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5292,9 +5577,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5359,9 +5641,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5419,9 +5698,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5506,9 +5782,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5584,9 +5857,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5599,6 +5869,120 @@
     "/api/v1/companies": {
       "get": {
         "description": "Query: `search` (name or domain, case-insensitive), `filter[owner_id]`, `filter[industry]`, `sort` (`name`, `-name`, `created_at`, `-created_at`; default `name`), `page`, `per_page` (default 15, at most 100).",
+        "parameters": [
+          {
+            "description": "Filters on `owner_id`, `industry`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`).",
+            "explode": true,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "industry": {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                "owner_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Sort by `name`, `created_at`, comma-separated, with `-` in front for descending. Default: `name`.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Text to search for.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page number, for numbered pages (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size for numbered pages (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page size for cursor pages (default 15, at most 100).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5642,9 +6026,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5709,9 +6090,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5769,9 +6147,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5835,9 +6210,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -5922,9 +6294,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -5937,6 +6306,177 @@
     "/api/v1/contacts": {
       "get": {
         "description": "Query: `search` (every word must match the first name, last name, email or title; case-insensitive), `filter[company_id]`, `filter[status]`, `filter[owner_id]`, `page`, `per_page` (default 15, at most 100). Ordered by last name, then first name.",
+        "parameters": [
+          {
+            "description": "Filters on `company_id`, `status`, `owner_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`).",
+            "explode": true,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "company_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "owner_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "status": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "lead",
+                        "prospect",
+                        "customer",
+                        "churned"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "enum": [
+                            "lead",
+                            "prospect",
+                            "customer",
+                            "churned"
+                          ],
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Text to search for.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page number, for numbered pages (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size for numbered pages (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page size for cursor pages (default 15, at most 100).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5980,9 +6520,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6047,9 +6584,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6062,9 +6596,142 @@
     "/api/v1/contacts/export": {
       "get": {
         "description": "`text/csv; charset=utf-8` attachment `contacts.csv` with the columns id, first_name, last_name, email, phone, title, status, company, owner, created_at, one row per contact matching the list's `filter[...]` parameters and `search`, in list order.",
+        "parameters": [
+          {
+            "description": "Filters on `company_id`, `status`, `owner_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`).",
+            "explode": true,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "company_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "owner_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "status": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "lead",
+                        "prospect",
+                        "customer",
+                        "churned"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "enum": [
+                            "lead",
+                            "prospect",
+                            "customer",
+                            "churned"
+                          ],
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Text to search for.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The contacts that match, one row each, after a header row."
           },
           "400": {
             "content": {
@@ -6098,9 +6765,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6159,9 +6823,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6225,9 +6886,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6312,9 +6970,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6361,9 +7016,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6375,6 +7027,190 @@
     },
     "/api/v1/deals": {
       "get": {
+        "parameters": [
+          {
+            "description": "Filters on `stage`, `owner_id`, `company_id`: `filter[field]=value`, or `filter[field][operator]=value` with an operator the field takes (`ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `null`).",
+            "explode": true,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "company_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "owner_id": {
+                  "oneOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "stage": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "lead",
+                        "qualified",
+                        "proposal",
+                        "negotiation",
+                        "won",
+                        "lost"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "ne": {
+                          "enum": [
+                            "lead",
+                            "qualified",
+                            "proposal",
+                            "negotiation",
+                            "won",
+                            "lost"
+                          ],
+                          "type": "string"
+                        },
+                        "not_in": {
+                          "description": "A comma-separated list of values.",
+                          "type": "string"
+                        },
+                        "null": {
+                          "description": "`true`: is NULL. `false`: is not NULL.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Sort by `created_at`, `title`, `amount_cents`, `expected_close_date`, comma-separated, with `-` in front for descending. Default: `-created_at`.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Part of `title`, ignoring case.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page number, for numbered pages (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size for numbered pages (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page size for cursor pages (default 15, at most 100).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6418,9 +7254,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6485,9 +7318,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6499,6 +7329,18 @@
     },
     "/api/v1/deals/board": {
       "get": {
+        "parameters": [
+          {
+            "description": "Only this owner's deals.",
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6542,9 +7384,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6603,9 +7442,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6669,9 +7505,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6755,9 +7588,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -6844,9 +7674,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6882,9 +7709,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6897,6 +7721,72 @@
     "/api/v1/users": {
       "get": {
         "description": "Query: `search` (part of the name or email, case-insensitive), `sort` (`name`, `email`, `created_at`; `-` in front for descending; default `name`), `page`, `per_page` (default 15, at most 100).",
+        "parameters": [
+          {
+            "description": "Sort by `name`, `email`, `created_at`, comma-separated, with `-` in front for descending. Default: `name`.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Part of `name`, `email`, ignoring case.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page number, for numbered pages (default 1).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The page size for numbered pages (default 15, at most 100).",
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The cursor of the page to read, for cursor pages: the `next` of the page before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page size for cursor pages (default 15, at most 100).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6941,9 +7831,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -6957,7 +7844,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateUser"
+                "$ref": "#/components/schemas/UserCreateInput"
               }
             }
           },
@@ -7007,9 +7894,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -7035,7 +7919,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateUser"
+                "$ref": "#/components/schemas/UserUpdateInput"
               }
             }
           },
@@ -7095,9 +7979,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -7121,8 +8002,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "101": {
+            "description": "Switching Protocols: the connection is now a Pusher protocol 7 WebSocket."
           }
         },
         "summary": "Pusher protocol 7 WebSocket",
@@ -7190,7 +8071,27 @@
         "operationId": "realtime.auth",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "auth": {
+                      "description": "`<app key>:<signature>`.",
+                      "type": "string"
+                    },
+                    "channel_data": {
+                      "description": "For a presence channel: the member, as JSON text.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "auth"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The signature that lets the client subscribe"
           },
           "400": {
             "content": {
@@ -7224,9 +8125,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -7296,7 +8194,25 @@
         "operationId": "health.live",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "up"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The process answers"
           }
         },
         "summary": "Liveness: the process answers HTTP",
@@ -7310,7 +8226,114 @@
         "operationId": "health.ready",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "checks": {
+                      "additionalProperties": {
+                        "properties": {
+                          "error": {
+                            "description": "Why the check is down.",
+                            "type": "string"
+                          },
+                          "latency_ms": {
+                            "description": "How long the check took.",
+                            "type": "integer"
+                          },
+                          "status": {
+                            "enum": [
+                              "up",
+                              "down"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "latency_ms"
+                        ],
+                        "type": "object"
+                      },
+                      "description": "Each check's result, by its name.",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "status": {
+                      "description": "`up` when every check is up.",
+                      "enum": [
+                        "up",
+                        "down"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Every check is up"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "checks": {
+                      "additionalProperties": {
+                        "properties": {
+                          "error": {
+                            "description": "Why the check is down.",
+                            "type": "string"
+                          },
+                          "latency_ms": {
+                            "description": "How long the check took.",
+                            "type": "integer"
+                          },
+                          "status": {
+                            "enum": [
+                              "up",
+                              "down"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "latency_ms"
+                        ],
+                        "type": "object"
+                      },
+                      "description": "Each check's result, by its name.",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "status": {
+                      "description": "`up` when every check is up.",
+                      "enum": [
+                        "up",
+                        "down"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "At least one check is down"
           }
         },
         "summary": "Readiness: every health check; 503 when one is down",
@@ -7339,9 +8362,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -7368,9 +8388,6 @@
           }
         },
         "security": [
-          {
-            "cookie": []
-          },
           {
             "bearer": []
           }
@@ -7399,9 +8416,6 @@
         },
         "security": [
           {
-            "cookie": []
-          },
-          {
             "bearer": []
           }
         ],
@@ -7416,12 +8430,139 @@
         "operationId": "metrics",
         "responses": {
           "200": {
-            "description": "OK"
+            "content": {
+              "text/plain; version=0.0.4": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The metrics in the Prometheus text format."
           }
         },
         "summary": "Prometheus metrics",
         "tags": [
           "Observability"
+        ]
+      }
+    },
+    "/notifications/bell": {
+      "get": {
+        "operationId": "notifications.bell",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "notifications.bell.read_all",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/notifications/{id}/mark-read": {
+      "post": {
+        "operationId": "notifications.bell.read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/operations/{id}/progress": {
+      "get": {
+        "operationId": "operations.progress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     }
