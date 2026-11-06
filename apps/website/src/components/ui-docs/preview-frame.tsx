@@ -97,6 +97,11 @@ function watchOverlays(frame: HTMLIFrameElement, grow: (height: number) => void,
   const win = frame.contentWindow as FrameWindow | null;
   if (!doc?.body || !win) return IDLE;
   const body = doc.body;
+  // A whole page fills its frame, as an app fills its window: its sidebar and bars are the
+  // frame's height (`100dvh`), so a frame that grew would move everything at their foot,
+  // the control just pressed among them. Its popups are placed in the frame as an app's are
+  // in a window, flipped up or moved in where there is no room, and the frame stays put.
+  if (body.getAttribute("data-preview") === "fill") return IDLE;
   let pending = 0;
   let quiet = 0;
   let held = false;
@@ -370,6 +375,12 @@ export function PreviewFrame({
       data-deferred={defer || undefined}
       title={title}
       loading="lazy"
+      // `allow-same-origin` stays: this page measures the preview to size its frame and give
+      // an open popup room (`contentDocument`), and the preview loads the toolkit's modules,
+      // which as module scripts of an opaque origin would be cross-origin loads the static
+      // host doesn't allow. The preview is the project's own page with the toolkit's own
+      // content security policy, never content from outside; the sandbox is kept for what it
+      // still stops while the page doesn't lift it: forms posting, popups, top navigation.
       sandbox={forms ? "allow-scripts allow-same-origin allow-forms" : "allow-scripts allow-same-origin"}
       {...(thumb ? { "aria-hidden": true, tabIndex: -1 } : {})}
       style={
