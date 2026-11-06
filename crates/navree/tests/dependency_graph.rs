@@ -1059,7 +1059,9 @@ fn the_test_kits_come_only_with_the_testing_feature() {
         let without = packages_in_tree(false, &[feature]);
         assert!(
             !without.contains("navree-testing"),
-            "`navree` with `{feature}` links navree-testing: the test kits are the `testing`              feature's; find what pulls it in with `cargo tree -p navree -i navree-testing              --no-default-features --features {feature}`"
+            "`navree` with `{feature}` links navree-testing: the test kits are the `testing` \
+             feature's; find what pulls it in with `cargo tree -p navree -i navree-testing \
+             --no-default-features --features {feature}`"
         );
         let with = packages_in_tree(false, &[feature, "testing"]);
         assert!(

@@ -499,7 +499,9 @@ pub fn make_ui_item(
     hints.extend(next_steps(kind, &ctx, stem, &relative(root, &module_dir)));
     if uses_desk(root) {
         hints.push(
-            "this app's pages take `Desk` (src/ui/shell.rs), which also draws the signed-in              person, the workspace and the workspace switcher: use it where the generated code              takes `AppShell`"
+            "this app's pages take `Desk` (src/ui/shell.rs), which also draws the signed-in \
+             person, the workspace and the workspace switcher: use it where the generated code \
+             takes `AppShell`"
                 .to_owned(),
         );
     }
