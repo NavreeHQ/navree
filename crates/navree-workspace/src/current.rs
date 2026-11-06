@@ -8,7 +8,7 @@ use std::sync::Arc;
 use http::request::Parts;
 pub use navree_access::PinnedWorkspace;
 use navree_access::{Ability, PrincipalAccess};
-use navree_contracts::{AuthState, RequestId};
+use navree_contracts::{AuthState, AuthVia, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard, PathParams, RouteMeta};
@@ -257,6 +257,8 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
     // deleted, the user left it): then it is forgotten and the resolvers
     // after it answer, once. Every other resolver's answer stands.
     let mut skip_session = false;
+    // A browser that has chosen nothing gets its first workspace, once.
+    let mut tried_default = false;
     let (
         resolver,
         workspace,
@@ -267,7 +269,7 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         },
         guest,
     ) = loop {
-        let (resolver, identifier) = match source {
+        let looked_up = match source {
             Source::Configured => {
                 let found = if skip_session {
                     resolve::identifier_without_session(&config, parts)
@@ -280,9 +282,24 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             Source::Named(id) => Some((None, id.to_string())),
         }
         // A pinned credential names its workspace when the request doesn't.
-        .or_else(|| pinned.map(|id| (None, id.to_string())))
-        .ok_or(WorkspaceError::NoWorkspace)
-        .map_err(app_error)?;
+        .or_else(|| pinned.map(|id| (None, id.to_string())));
+        let Some((resolver, identifier)) = looked_up else {
+            // A browser signed in on its session that has not switched
+            // workspace yet is in the first one it belongs to, and keeps it
+            // until it switches.
+            if matches!(source, Source::Configured)
+                && !tried_default
+                && principal.via == AuthVia::Session
+                && config.resolvers.contains(&ResolverKind::Session)
+            {
+                tried_default = true;
+                if resolve::choose_first_workspace(parts, &workspaces, principal.user_id).await {
+                    skip_session = false;
+                    continue;
+                }
+            }
+            return Err(app_error(WorkspaceError::NoWorkspace));
+        };
         let from_session = resolver == Some(ResolverKind::Session);
         let workspace = match workspaces.resolve(&identifier).await {
             Ok(workspace) => workspace,

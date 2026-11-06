@@ -160,6 +160,48 @@ pub(crate) fn forget_session_choice(parts: &Parts) {
 #[cfg(not(feature = "session"))]
 pub(crate) fn forget_session_choice(_parts: &Parts) {}
 
+/// Stores the first workspace `user` belongs to (the oldest) as the
+/// session's choice, for a browser that has chosen none; whether there was
+/// one to store.
+#[cfg(feature = "session")]
+pub(crate) async fn choose_first_workspace(
+    parts: &Parts,
+    workspaces: &crate::Workspaces,
+    user: Uuid,
+) -> bool {
+    let Some(session) = parts.extensions.get::<navree_session::Session>() else {
+        return false;
+    };
+    let Ok(memberships) = workspaces.for_user(user).await else {
+        return false;
+    };
+    let Some(first) = memberships
+        .into_iter()
+        .min_by_key(|membership| (membership.workspace.created_at, membership.workspace.id))
+    else {
+        return false;
+    };
+    session
+        .insert(
+            SESSION_KEY,
+            &SessionChoice {
+                id: first.workspace.id,
+                user,
+            },
+        )
+        .is_ok()
+}
+
+/// Without the `session` feature a browser chooses nothing.
+#[cfg(not(feature = "session"))]
+pub(crate) async fn choose_first_workspace(
+    _parts: &Parts,
+    _workspaces: &crate::Workspaces,
+    _user: Uuid,
+) -> bool {
+    false
+}
+
 /// The workspace identifier (a slug or an id) a request names, and the
 /// resolver that found it: the resolvers of `config.resolvers` run in
 /// order and the first that finds one wins. Nothing is loaded or checked
