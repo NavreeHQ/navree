@@ -4,9 +4,9 @@
 //! `fleet`, starts a **master** that keeps the right number of worker
 //! processes on each queue, moves workers to the queues that need them,
 //! restarts workers that exit and recycles them before they grow. A
-//! dashboard at `/_fleet` shows each queue's throughput, wait time and
-//! runtimes, the failed jobs (retry or forget), and pauses and continues
-//! the workers.
+//! dashboard at `/_fleet`, drawn with Navree UI on the app's browser sign-in,
+//! shows each queue's throughput, wait time and runtimes, the failed jobs
+//! (retry or forget), and pauses and continues the workers.
 //!
 //! - **Supervisors** ([`SupervisorOptions`], `fleet.supervisors.<name>`):
 //!   a group of workers with one configuration: its queues, how it
@@ -39,10 +39,13 @@
 //! - **Long waits**: a master emits [`LongWaitDetected`] (`fleet.long_wait`)
 //!   when a queue's oldest job waited longer than its `fleet.long_wait`
 //!   threshold, at most once per queue per cooldown across masters.
-//! - **The dashboard** at `fleet.path` (`/_fleet`): a page rendered with
-//!   navree-view and a JSON API under `{path}/api`, behind the abilities
-//!   `view` and `operate` on the access subject `Fleet` (`fleet.view`,
-//!   `fleet.operate`).
+//! - **The dashboard** at `fleet.path` (`/_fleet`): pages drawn with
+//!   Navree UI that work without script and redraw themselves while open,
+//!   and a JSON API under `{path}/api`, both behind the abilities `view`
+//!   and `operate` on the access subject `Fleet` (`fleet.view`,
+//!   `fleet.operate`). People reach the pages on the same browser session
+//!   as the rest of the app (`SessionModule`, `AuthModule`, `UiModule` and
+//!   `AuthPages`); the API also takes bearer tokens.
 //! - **The service** [`Fleet`]: pause and resume, terminate, masters,
 //!   status, workload, long waits, failed jobs (list, retry, retry all,
 //!   forget), pending and completed jobs, metrics.
@@ -89,6 +92,7 @@ mod snapshot;
 mod spawner;
 mod store;
 pub mod testing;
+mod ui;
 mod worker;
 mod workload;
 

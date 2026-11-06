@@ -1,18 +1,14 @@
-//! The dashboard at `fleet.path` (`/_fleet`): a page rendered with
-//! navree-view and its script and styles (public, no data), and the JSON
-//! API under `{path}/api` behind the `Fleet` abilities `view` and
-//! `operate`.
+//! The dashboard's JSON API under `{path}/api`, behind the `Fleet` abilities
+//! `view` and `operate`. The pages are drawn with Navree UI (`crate::ui`),
+//! served next to it.
 
 use std::sync::Arc;
 
-use http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderName};
-use http::{HeaderValue, Method, StatusCode};
+use http::{Method, StatusCode};
 use navree_access::Subject;
-use navree_config::Config;
-use navree_http::{AppError, Controller, IntoResponse, Json, Path, Query, Response, RouteDef};
+use navree_http::{AppError, Controller, Json, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_queue::{FailedJob, PendingJob};
-use navree_view::Views;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -35,35 +31,9 @@ pub const VIEW: &str = "view";
 /// continues supervisors.
 pub const OPERATE: &str = "operate";
 
-const PAGE: &str = include_str!("../ui/fleet.html");
-const SCRIPT: &str = include_str!("../ui/fleet.js");
-const STYLES: &str = include_str!("../ui/fleet.css");
-
-/// The crate version, shown in the page.
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// FNV-1a of `bytes`, at compile time.
-const fn fingerprint(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash ^= bytes[i] as u64;
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        i += 1;
-    }
-    hash
-}
-
-/// The assets' file names carry a fingerprint of their content
-/// (`fleet-<16 hex>.js`), so they can be cached for good.
-fn asset_name(content: &str, extension: &str) -> String {
-    format!("fleet-{:016x}.{extension}", fingerprint(content.as_bytes()))
-}
-
-/// The dashboard's page, assets and API.
+/// The dashboard's pages and API.
 pub(crate) struct FleetController {
     fleet: Arc<Fleet>,
-    page: Arc<str>,
 }
 
 impl Injectable for FleetController {
@@ -74,46 +44,7 @@ impl Injectable for FleetController {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let fleet = r.get::<Fleet>().await?;
-            let config = r.app().try_get::<Config>().await;
-            let setting = |key: &str, default: &str| {
-                config
-                    .as_ref()
-                    .and_then(|c| c.get_string(key))
-                    .filter(|v| !v.trim().is_empty())
-                    .unwrap_or_else(|| default.to_owned())
-            };
-            let login = format!(
-                "{}{}/login",
-                setting("http.api_prefix", "/api").trim_end_matches('/'),
-                setting("auth.routes_prefix", "/auth").trim_end_matches('/'),
-            );
-            let base = fleet.options().base_path().to_owned();
-            let views = Views::from_templates([("fleet.html", PAGE)]).map_err(|error| {
-                KernelError::Construction {
-                    provider: std::any::type_name::<Self>().to_owned(),
-                    source: error.into(),
-                }
-            })?;
-            let page = views
-                .render(
-                    "fleet.html",
-                    json!({
-                        "base": base,
-                        "api": format!("{base}/api"),
-                        "login": login,
-                        "script": format!("{base}/assets/{}", asset_name(SCRIPT, "js")),
-                        "styles": format!("{base}/assets/{}", asset_name(STYLES, "css")),
-                        "version": VERSION,
-                    }),
-                )
-                .map_err(|error| KernelError::Construction {
-                    provider: std::any::type_name::<Self>().to_owned(),
-                    source: error.into(),
-                })?;
-            Ok(Self {
-                fleet,
-                page: page.into(),
-            })
+            Ok(Self { fleet })
         })
     }
 }
@@ -171,7 +102,8 @@ struct MetricsView {
     jobs: Vec<MetricSeries>,
 }
 
-fn api_error(error: FleetError) -> AppError {
+/// A service error as the response it is: a missing supervisor or job is a 404.
+pub(crate) fn api_error(error: FleetError) -> AppError {
     match error {
         FleetError::UnknownSupervisor(_) | FleetError::FailedJobNotFound { .. } => {
             AppError::not_found().with_detail(error.to_string())
@@ -193,34 +125,6 @@ impl Controller for FleetController {
         let api = format!("!{base}/api");
         let fleet = &self.fleet;
         let mut routes = Vec::new();
-
-        let page = self.page.clone();
-        routes.push(
-            RouteDef::on(Method::GET, format!("!{base}"), move || {
-                let page = page.clone();
-                async move { page_response(&page) }
-            })
-            .public()
-            .name("fleet.dashboard"),
-        );
-        routes.push(
-            RouteDef::on(
-                Method::GET,
-                format!("!{base}/assets/{}", asset_name(SCRIPT, "js")),
-                || async { asset(SCRIPT, "text/javascript; charset=utf-8") },
-            )
-            .public()
-            .name("fleet.script"),
-        );
-        routes.push(
-            RouteDef::on(
-                Method::GET,
-                format!("!{base}/assets/{}", asset_name(STYLES, "css")),
-                || async { asset(STYLES, "text/css; charset=utf-8") },
-            )
-            .public()
-            .name("fleet.styles"),
-        );
 
         let f = fleet.clone();
         routes.push(
@@ -451,59 +355,23 @@ impl Controller for FleetController {
             .name("fleet.metrics"),
         );
 
+        routes.extend(crate::ui::routes(fleet, &base));
         routes
     }
 }
 
+/// An API route that needs the `view` ability. Its errors are always JSON,
+/// even for a client that asks for HTML.
 fn view(route: RouteDef) -> RouteDef {
-    route.can(VIEW, FleetSubject::SUBJECT, None)
+    route.can(VIEW, FleetSubject::SUBJECT, None).json_only()
 }
 
+/// An API route that needs the `operate` ability.
 fn operate(route: RouteDef) -> RouteDef {
-    route.can(OPERATE, FleetSubject::SUBJECT, None)
+    route.can(OPERATE, FleetSubject::SUBJECT, None).json_only()
 }
 
 fn redacted(fleet: &Fleet, mut job: FailedJob) -> FailedJobView {
     job.payload = fleet.redact(&job.payload);
     FailedJobView { job }
-}
-
-/// Security headers of the page: scripts and styles only from the app.
-fn page_headers() -> [(HeaderName, HeaderValue); 4] {
-    [
-        (
-            CONTENT_TYPE,
-            HeaderValue::from_static("text/html; charset=utf-8"),
-        ),
-        (CACHE_CONTROL, HeaderValue::from_static("no-store")),
-        (
-            HeaderName::from_static("content-security-policy"),
-            HeaderValue::from_static(
-                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
-                 connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-            ),
-        ),
-        (
-            HeaderName::from_static("x-frame-options"),
-            HeaderValue::from_static("DENY"),
-        ),
-    ]
-}
-
-fn page_response(page: &str) -> Response {
-    (page_headers(), page.to_owned()).into_response()
-}
-
-fn asset(body: &'static str, content_type: &'static str) -> Response {
-    (
-        [
-            (CONTENT_TYPE, HeaderValue::from_static(content_type)),
-            (
-                CACHE_CONTROL,
-                HeaderValue::from_static("public, max-age=31536000, immutable"),
-            ),
-        ],
-        body,
-    )
-        .into_response()
 }

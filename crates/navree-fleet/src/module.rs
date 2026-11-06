@@ -7,7 +7,9 @@ use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::Clock;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{
+    AppContext, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_observe::MetricsCollector;
 use navree_queue::Queue;
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
@@ -31,9 +33,9 @@ use crate::{Fleet, FleetOptions};
 /// - the commands `fleet`, `fleet:status`, `fleet:pause [supervisor]`,
 ///   `fleet:continue [supervisor]`, `fleet:terminate`, `fleet:forget <id>`
 ///   and `fleet:work` (the worker process a master starts);
-/// - the dashboard at `fleet.path` (`/_fleet`) and its API under
-///   `{path}/api`, when `fleet.dashboard` is on, behind the abilities
-///   `view` and `operate` on the subject `Fleet` (permissions
+/// - the dashboard at `fleet.path` (`/_fleet`), drawn with Navree UI, and its
+///   JSON API under `{path}/api`, when `fleet.dashboard` is on, behind the
+///   abilities `view` and `operate` on the subject `Fleet` (permissions
 ///   `fleet.view` and `fleet.operate`);
 /// - a telemetry sink recording every job attempt of the process, which
 ///   workers report to their master;
@@ -43,6 +45,10 @@ use crate::{Fleet, FleetOptions};
 /// `fleet` command refuses the `memory` driver). With the dashboard on, it
 /// also needs an authenticator (`AuthModule`) and navree-access's route
 /// authorizer (`AccessModule`); set `fleet.dashboard = false` otherwise.
+/// People open the pages on the app's browser session, the way they open the
+/// rest of the app: `SessionModule`, `UiModule` and `AuthPages` give them the
+/// sign-in page, which a browser without a session is sent to and comes back
+/// from. A client with a bearer token reads the JSON API.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FleetModule;
 
@@ -136,6 +142,12 @@ fn register(m: &mut ModuleBuilder, options: Option<FleetOptions>) {
             .deps(vec![ProviderKey::of::<Fleet>()]),
         )
         .import(AccessModule::for_subject::<FleetSubject>())
+        .import(navree_ui::UiOnDemand)
+        .contribute(navree_ui::UiNeed::when(|ctx: AppContext| async move {
+            ctx.get::<FleetOptions>()
+                .await
+                .is_ok_and(|options| options.dashboard)
+        }))
         .controller::<FleetController>()
         .migrations(migrations());
     for command in commands() {

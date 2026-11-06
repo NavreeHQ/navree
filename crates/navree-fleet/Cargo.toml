@@ -1,6 +1,6 @@
 [package]
 name = "navree-fleet"
-description = "Navree FleetModule: supervised queue workers per queue with auto-balancing, recycling and graceful restarts, throughput, wait and runtime metrics, failed jobs, pause and continue, long-wait alerts and a dashboard at /_fleet."
+description = "Navree FleetModule: supervised queue workers per queue with auto-balancing, recycling and graceful restarts, throughput, wait and runtime metrics, failed jobs, pause and continue, long-wait alerts and a Navree UI dashboard at /_fleet."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,6 +24,9 @@ http = { workspace = true }
 memory-stats = { workspace = true }
 metrics = { workspace = true }
 navree-access = { workspace = true }
+# `CurrentUser` names the signed-in user in the shell's menu, and `SIGN_OUT_PATH`
+# is where that menu signs out.
+navree-auth = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
@@ -32,8 +35,11 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-observe = { workspace = true }
 navree-queue = { workspace = true }
+# The browser session's CSRF token, which the dashboard's forms carry.
+navree-session = { workspace = true }
 navree-telemetry = { workspace = true }
-navree-view = { workspace = true }
+# The dashboard's pages.
+navree-ui = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -45,6 +51,9 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-browser = { workspace = true }
+# The dashboard's tests sign browsers in on the session, as an app does.
+navree-auth = { workspace = true, features = ["session", "ui"] }
+navree-crypto = { workspace = true }
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }
 proptest = { workspace = true }
