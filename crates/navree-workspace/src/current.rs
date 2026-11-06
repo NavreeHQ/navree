@@ -284,12 +284,13 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         // A pinned credential names its workspace when the request doesn't.
         .or_else(|| pinned.map(|id| (None, id.to_string())));
         let Some((resolver, identifier)) = looked_up else {
-            // A browser signed in on its session that has not switched
-            // workspace yet is in the first one it belongs to, and keeps it
-            // until it switches.
+            // With `workspace.session_default`, a browser signed in on its
+            // session that has not switched workspace yet is in the first one
+            // it belongs to, and keeps it until it switches.
             if matches!(source, Source::Configured)
                 && !tried_default
-                && principal.via == AuthVia::Session
+                && principal.via != AuthVia::Token
+                && config.session_default
                 && config.resolvers.contains(&ResolverKind::Session)
             {
                 tried_default = true;

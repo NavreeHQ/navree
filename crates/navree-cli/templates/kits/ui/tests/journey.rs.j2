@@ -42,7 +42,8 @@ fn sources() -> (ConfigSources, TempDirGuard) {
         .set("hashing.iterations", 1)
         .set("session.store", "database")
         .set("ui.sign_in_redirect", true)
-        .set("workspace.resolvers", serde_json::json!(["session", "header"]));
+        .set("workspace.resolvers", serde_json::json!(["session", "header"]))
+        .set("workspace.session_default", true);
     (sources, guard)
 }
 

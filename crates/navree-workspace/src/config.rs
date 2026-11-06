@@ -450,6 +450,7 @@ pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
 /// isolation = "row"               # row | schema | database
 /// routes = true                   # /api/workspaces and /api/invitations
 /// switch_path = "/workspace/switch"  # where a browser switches workspace (feature `session`)
+/// session_default = false         # a browser that chose none is in its first workspace
 /// users_table = "users"           # names and emails of members; "" = none
 /// schema_prefix = "workspace_"    # schema isolation: workspace_<id>
 /// # database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"  # database isolation
@@ -509,6 +510,13 @@ pub struct WorkspaceConfig {
     /// resolver reads, mounted with [`routes`](Self::routes) when the
     /// crate's `session` feature is on (default `/workspace/switch`).
     pub switch_path: String,
+    /// Whether a browser signed in on its session that has not switched
+    /// workspace yet (and that no other resolver places) is put in the first
+    /// workspace its user belongs to, the oldest, which it then keeps until it
+    /// switches. Off by default: such a request names no workspace (400
+    /// `workspace_required`). Navree UI apps with the `session` resolver turn
+    /// it on, so a page opens in a workspace right after signing in.
+    pub session_default: bool,
     /// The table of user accounts (`id`, `name`, `email`; navree-auth's
     /// `users`) that member lists and invitation checks read; empty when
     /// the app has none.
@@ -547,6 +555,7 @@ impl Default for WorkspaceConfig {
             isolation: Isolation::Row,
             routes: true,
             switch_path: "/workspace/switch".to_owned(),
+            session_default: false,
             users_table: "users".to_owned(),
             invitations: InvitationOptions::default(),
             roles: BTreeMap::new(),

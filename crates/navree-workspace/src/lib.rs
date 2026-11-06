@@ -30,9 +30,11 @@
 //!   signed-in user's navree-session session after checking they may enter
 //!   the workspace (403 `not_a_member` otherwise, and nothing stored). A
 //!   choice made by another user is ignored, and one the user may no longer
-//!   enter is forgotten while the next resolver answers. [`WorkspaceSwitcher`]
-//!   (feature `ui`) is the Navree UI menu that posts to it, with JavaScript
-//!   on or off.
+//!   enter is forgotten while the next resolver answers. With
+//!   `workspace.session_default = true` a browser that has chosen none is put
+//!   in the first workspace its user belongs to (the oldest) and keeps it
+//!   until it switches. [`WorkspaceSwitcher`] (feature `ui`) is the Navree UI
+//!   menu that posts to it, with JavaScript on or off.
 //! - **Isolation** ([`Isolation`]). `Row`: a `workspace_id` column, scoped
 //!   by `#[model(workspace)]` and [`WorkspaceRepo`] and, on PostgreSQL,
 //!   enforced by row-level security ([`RlsPolicy`]) through

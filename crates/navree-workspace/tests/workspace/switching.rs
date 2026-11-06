@@ -342,6 +342,56 @@ async fn without_a_choice_the_next_resolver_answers() {
         .assert_error_code(400, "workspace_required");
 }
 
+/// A world as [`world`] is, with `workspace.session_default` on.
+async fn defaulting_world() -> World {
+    World::with(
+        builder()
+            .config("app.key", generate_key())
+            .config("workspace.resolvers", json!(["session", "header"]))
+            .config("workspace.session_default", true)
+            .module(CryptoModule)
+            .module(SessionModule::for_root(SessionOptions::default()))
+            .module(ProbeModule),
+    )
+    .await
+}
+
+// With `workspace.session_default`, a browser that has chosen nothing is in
+// the first workspace its user belongs to, keeps it, and can still switch;
+// a user who belongs to none is still told so, and a header still places
+// a request when the session names nothing.
+#[tokio::test]
+async fn a_browser_that_chose_nothing_is_in_its_first_workspace_when_asked() {
+    let world = defaulting_world().await;
+    let ada = world.user("Ada", "ada@example.com").await;
+    let nobody = world.user("Mallory", "mallory@example.com").await;
+    let acme = world.workspace(ada, "Acme").await;
+    let globex = world.workspace(ada, "Globex").await;
+    let client = world.as_user(ada);
+
+    current_of(&client)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("resolver", json!("session"));
+    // It keeps the choice: the session names it from now on.
+    current_of(&client)
+        .await
+        .assert_json_path("id", json!(acme.id))
+        .assert_json_path("resolver", json!("session"));
+    // Switching still works.
+    switch(&client, "globex", "/").await.assert_status(303);
+    current_of(&client)
+        .await
+        .assert_json_path("id", json!(globex.id))
+        .assert_json_path("resolver", json!("session"));
+
+    // Someone who belongs to no workspace has none to be put in.
+    current_of(&world.as_user(nobody))
+        .await
+        .assert_error_code(400, "workspace_required");
+}
+
 // MOD-003 (d): a choice the user may no longer enter (they left it, or it
 // was deleted) is forgotten and the next resolver answers: never a 403 on
 // every page.

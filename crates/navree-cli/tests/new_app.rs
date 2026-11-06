@@ -1124,6 +1124,11 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
         .filter_map(toml::Value::as_str)
         .collect();
     assert_eq!(resolvers, ["session", "header"]);
+    assert_eq!(
+        config["workspace"]["session_default"].as_bool(),
+        Some(true),
+        "a browser opens in its first workspace until it switches"
+    );
     let undocumented: Vec<&str> = config["api"]["undocumented"]
         .as_array()
         .unwrap()
