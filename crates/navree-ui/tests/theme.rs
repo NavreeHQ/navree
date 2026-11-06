@@ -163,14 +163,14 @@ fn a_name_is_cleaned_before_it_is_trimmed_and_cannot_reorder_text() {
     // A stored theme whose name reorders text is refused.
     for bidi in [r"\u202e", r"\u2066", r"\u200f", r"\u061c", "\u{202d}"] {
         assert!(
-            Theme::from_json(&named(&format!("Ac{bidi}me"))).is_err(),
+            Theme::from_json(&named(&format!("Ag{bidi}ra"))).is_err(),
             "{bidi}"
         );
     }
     // A name given in code, or typed into the builder, has them dropped.
     let theme = Theme::custom(id(), " \u{202e}Agra\u{7} ", spec).unwrap();
     assert_eq!(theme.name(), "Agra");
-    let draft = BuilderDraft::from_query("base=ocean&id=agra&name=%E2%80%AEAc%E2%81%A6me%07%20");
+    let draft = BuilderDraft::from_query("base=ocean&id=agra&name=%E2%80%AEAg%E2%81%A6ra%07%20");
     let theme = draft.to_theme().unwrap();
     assert_eq!(theme.name(), "Agra");
     let rust = theme.to_rust("navree::ui");

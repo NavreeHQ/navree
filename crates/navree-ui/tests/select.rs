@@ -648,7 +648,7 @@ fn control_characters_are_taken_out_of_a_search_text() {
         ("q=%00", ""),
         ("q=%00%00x%00", "x"),
         ("q=a%0Ab%09c%1Fd%7F", "abcd"),
-        ("q=%C2%85gr%C2%9Dace", "gauri"),
+        ("q=%C2%85ga%C2%9Duri", "gauri"),
         ("q=+%00+anu+%00+", "anu"),
     ] {
         assert_eq!(OptionQuery::parse(query).text(), text, "{query}");
