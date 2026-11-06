@@ -35,18 +35,12 @@
             ]
           },
           "inverted": {
-            "description": "Whether the rule takes the ability away (`cannot`).",
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "description": "Whether the rule takes the ability away (`cannot`). Left out, never null, when it\ndoesn't.",
+            "type": "boolean"
           },
           "reason": {
-            "description": "Why the rule exists, for the message of a refusal.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "description": "Why the rule exists, for the message of a refusal. Left out, never null, when\nthere is none.",
+            "type": "string"
           },
           "subject": {
             "oneOf": [

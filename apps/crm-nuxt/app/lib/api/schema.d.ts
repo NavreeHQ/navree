@@ -2715,10 +2715,16 @@ export interface components {
             /** @description Conditions on the record's fields, in the MongoDB query language. */
             conditions?: Record<string, never>;
             fields?: string | string[];
-            /** @description Whether the rule takes the ability away (`cannot`). */
-            inverted?: boolean | null;
-            /** @description Why the rule exists, for the message of a refusal. */
-            reason?: string | null;
+            /**
+             * @description Whether the rule takes the ability away (`cannot`). Left out, never null, when it
+             *     doesn't.
+             */
+            inverted?: boolean;
+            /**
+             * @description Why the rule exists, for the message of a refusal. Left out, never null, when
+             *     there is none.
+             */
+            reason?: string;
             subject: string | string[];
         };
         /**
