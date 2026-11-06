@@ -87,11 +87,13 @@ async fn the_pickers_and_the_timeline_use_the_readers_zone() {
         .send()
         .await
         .text();
+    // Each picker and its calendar mark the day.
     assert_eq!(
         html.matches(r#"data-today="2026-11-06""#).count(),
-        2,
+        4,
         "{html}"
     );
+    assert_eq!(html.matches("data-today=").count(), 4, "{html}");
     assert!(
         html.contains("Times in Asia/Kolkata (GMT+05:30)"),
         "the timeline names its zone: {html}"
@@ -107,7 +109,7 @@ async fn the_pickers_and_the_timeline_use_the_readers_zone() {
         .text();
     assert_eq!(
         html.matches(r#"data-today="2026-11-05""#).count(),
-        2,
+        4,
         "{html}"
     );
     assert!(html.contains("Times in UTC"), "{html}");
