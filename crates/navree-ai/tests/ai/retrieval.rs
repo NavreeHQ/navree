@@ -268,20 +268,40 @@ async fn conformance(store: VectorStore, embeddings: &Embeddings, collection: &s
         .await
         .unwrap();
     assert_eq!(notes.count().await.unwrap(), 3);
-    let found = notes.search(replacement).limit(1).await.unwrap();
+    let found = notes.search(replacement.clone()).limit(1).await.unwrap();
     assert_eq!(found[0].text, "Replaced text");
     notes.delete("a2:0").await.unwrap();
     assert_eq!(notes.count().await.unwrap(), 2);
+
+    // A record comes back by id, with its text, metadata and vector.
+    let got = notes.get("a3:0").await.unwrap().expect("a3:0 is stored");
+    assert_eq!(got.id, "a3:0");
+    assert_eq!(got.text, "Globex wants to be live before the summer");
+    assert_eq!(got.metadata["subject_id"], "d2");
+    assert_eq!(got.embedding.dimensions(), store.dimensions());
+    assert!(notes.get("a2:0").await.unwrap().is_none());
+
     notes
         .delete_where(Filter::eq("subject_id", "d2"))
         .await
         .unwrap();
     assert_eq!(notes.count().await.unwrap(), 1);
+
+    // delete_many skips ids that are not there; clear empties the
+    // collection, which stays usable.
     notes
-        .delete_where(Filter::eq("suite", "conformance"))
+        .upsert(
+            VectorRecord::new("a4:0", replacement.clone())
+                .metadata(json!({ "suite": "conformance" })),
+        )
         .await
         .unwrap();
+    notes.delete_many(["a4:0", "missing"]).await.unwrap();
+    assert_eq!(notes.count().await.unwrap(), 1);
+    notes.clear().await.unwrap();
     assert_eq!(notes.count().await.unwrap(), 0);
+    assert!(notes.search(replacement).await.unwrap().is_empty());
+    assert!(notes.get("a1:0").await.unwrap().is_none());
 }
 
 fn ids(matches: &[VectorMatch]) -> Vec<&str> {

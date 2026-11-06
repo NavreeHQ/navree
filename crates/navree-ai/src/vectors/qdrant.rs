@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{Filter, VectorDriver, VectorMatch, VectorRecord};
+use crate::embeddings::Embedding;
 use crate::error::AiError;
 use crate::options::Metric;
 
@@ -297,6 +298,68 @@ impl VectorDriver for Qdrant {
             Ok(result["count"].as_u64().unwrap_or(0))
         })
     }
+
+    fn get<'a>(
+        &'a self,
+        collection: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<VectorRecord>, AiError>> {
+        Box::pin(async move {
+            let result = self
+                .send(
+                    self.request(Method::POST, &format!("/collections/{collection}/points"))
+                        .json(&json!({
+                            "ids": [point_id(id)], "with_vector": true, "with_payload": true
+                        })),
+                )
+                .await?;
+            Ok(result
+                .as_array()
+                .and_then(|points| points.first())
+                .map(|point| record(point, id)))
+        })
+    }
+
+    fn clear<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>> {
+        Box::pin(async move {
+            let response = self
+                .request(Method::DELETE, &format!("/collections/{collection}"))
+                .send()
+                .await
+                .map_err(|error| AiError::internal(format!("Qdrant request failed: {error}")))?;
+            if !response.is_success() && response.status().as_u16() != 404 {
+                return Err(AiError::internal(format!(
+                    "Qdrant answered {} deleting collection `{collection}`",
+                    response.status()
+                )));
+            }
+            self.ensure(collection).await
+        })
+    }
+}
+
+/// The record of a point read `with_vector` and `with_payload`.
+fn record(point: &Value, id: &str) -> VectorRecord {
+    let payload = &point["payload"];
+    let vector = point["vector"]
+        .as_array()
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_f64)
+                .map(|value| value as f32)
+                .collect()
+        })
+        .unwrap_or_default();
+    VectorRecord {
+        id: payload["id"].as_str().unwrap_or(id).to_owned(),
+        embedding: Embedding::new(vector),
+        text: payload["text"].as_str().unwrap_or_default().to_owned(),
+        metadata: payload
+            .get("metadata")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    }
 }
 
 #[cfg(test)]
@@ -309,6 +372,23 @@ mod tests {
         assert_eq!(a, point_id("0199c1d2:0"));
         assert_ne!(a, point_id("0199c1d2:1"));
         assert_eq!(a.get_version_num(), 8);
+    }
+
+    #[test]
+    fn points_read_back_as_records() {
+        let point = json!({
+            "id": "6a2f",
+            "vector": [0.5, 1.0],
+            "payload": { "id": "a1:0", "text": "Dana", "metadata": { "kind": "call" } }
+        });
+        let record = record(&point, "a1:0");
+        assert_eq!(record.id, "a1:0");
+        assert_eq!(&record.embedding[..], &[0.5, 1.0]);
+        assert_eq!(record.text, "Dana");
+        assert_eq!(record.metadata, json!({ "kind": "call" }));
+        let bare = super::record(&json!({ "id": "6a2f" }), "x");
+        assert_eq!((bare.id.as_str(), bare.embedding.dimensions()), ("x", 0));
+        assert_eq!(bare.metadata, json!({}));
     }
 
     #[test]

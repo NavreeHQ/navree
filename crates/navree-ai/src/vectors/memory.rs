@@ -110,4 +110,18 @@ impl VectorDriver for MemoryStore {
         let count = self.with(collection, |map| map.len() as u64);
         Box::pin(async move { Ok(count) })
     }
+
+    fn get<'a>(
+        &'a self,
+        collection: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<VectorRecord>, AiError>> {
+        let record = self.with(collection, |map| map.get(id).cloned());
+        Box::pin(async move { Ok(record) })
+    }
+
+    fn clear<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>> {
+        self.with(collection, |map| map.clear());
+        Box::pin(async { Ok(()) })
+    }
 }

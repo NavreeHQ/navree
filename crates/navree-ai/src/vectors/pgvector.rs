@@ -10,6 +10,7 @@ use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
 
 use super::{Filter, VectorDriver, VectorMatch, VectorRecord, nested};
+use crate::embeddings::Embedding;
 use crate::error::AiError;
 use crate::options::Metric;
 
@@ -62,6 +63,15 @@ pub(crate) fn table(collection: &str) -> String {
 pub(crate) fn vector_literal(vector: &[f32]) -> String {
     let values: Vec<String> = vector.iter().map(|v| format!("{v}")).collect();
     format!("[{}]", values.join(","))
+}
+
+/// A vector read from pgvector's text form.
+pub(crate) fn parse_vector(text: &str) -> Vec<f32> {
+    text.trim()
+        .trim_matches(['[', ']'])
+        .split(',')
+        .filter_map(|value| value.trim().parse::<f32>().ok())
+        .collect()
 }
 
 /// The distance operator and index operator class of `metric`.
@@ -360,6 +370,46 @@ impl VectorDriver for PgVector {
             Ok(count.max(0) as u64)
         })
     }
+
+    fn get<'a>(
+        &'a self,
+        collection: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<VectorRecord>, AiError>> {
+        Box::pin(async move {
+            self.check_backend()?;
+            let row = self
+                .db
+                .fetch_optional(&Statement::new(
+                    Backend::Postgres,
+                    format!(
+                        "SELECT id, embedding::text AS embedding, text, metadata FROM {} WHERE id = $1",
+                        table(collection)
+                    ),
+                    vec![SqlValue::from(id.to_owned())],
+                ))
+                .await
+                .map_err(database)?;
+            let Some(row) = row else {
+                return Ok(None);
+            };
+            let embedding: String = row.get("embedding").map_err(database)?;
+            Ok(Some(VectorRecord {
+                id: row.get("id").map_err(database)?,
+                embedding: Embedding::new(parse_vector(&embedding)),
+                text: row.get("text").map_err(database)?,
+                metadata: row.get::<Value>("metadata").unwrap_or_else(|_| json!({})),
+            }))
+        })
+    }
+
+    fn clear<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>> {
+        Box::pin(async move {
+            self.execute(format!("DELETE FROM {}", table(collection)), Vec::new())
+                .await?;
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]
@@ -461,6 +511,13 @@ mod tests {
             .await
             .expect("drops the database");
         admin.close().await;
+    }
+
+    #[test]
+    fn vectors_read_back_from_their_text_form() {
+        assert_eq!(parse_vector("[0.5,1,-2.25]"), [0.5, 1.0, -2.25]);
+        assert_eq!(parse_vector(&vector_literal(&[0.5, 1.0])), [0.5, 1.0]);
+        assert!(parse_vector("[]").is_empty());
     }
 
     #[test]

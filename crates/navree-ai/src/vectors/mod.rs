@@ -1,5 +1,6 @@
 //! [`VectorStore`]: collections of vectors with their text and metadata,
-//! searched by meaning, in memory, pgvector or Qdrant.
+//! searched by meaning, in memory, pgvector or Qdrant. navree-search keeps
+//! its models' vectors here too with `search.vectors.store = "ai"`.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -333,6 +334,14 @@ pub(crate) trait VectorDriver: Send + Sync {
         min_score: Option<f32>,
     ) -> BoxFuture<'a, Result<Vec<VectorMatch>, AiError>>;
     fn count<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<u64, AiError>>;
+    /// The record `id`, with its vector.
+    fn get<'a>(
+        &'a self,
+        collection: &'a str,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<VectorRecord>, AiError>>;
+    /// Removes every record; the collection stays.
+    fn clear<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>>;
 }
 
 /// The shared state of a [`VectorStore`].
@@ -340,6 +349,7 @@ struct StoreInner {
     driver: Arc<dyn VectorDriver>,
     embeddings: Embeddings,
     dimensions: usize,
+    metric: Metric,
     kind: VectorStoreKind,
     ensured: Mutex<HashSet<String>>,
 }
@@ -392,11 +402,13 @@ impl VectorStore {
         kind: VectorStoreKind,
     ) -> Self {
         let dimensions = embeddings.dimensions();
+        let metric = embeddings.metric();
         Self {
             inner: Arc::new(StoreInner {
                 driver,
                 embeddings,
                 dimensions,
+                metric,
                 kind,
                 ensured: Mutex::new(HashSet::new()),
             }),
@@ -450,6 +462,18 @@ impl VectorStore {
     /// The store kind.
     pub fn kind(&self) -> VectorStoreKind {
         self.inner.kind
+    }
+
+    /// The vector size of every collection (`ai.vectors.dimensions`).
+    pub fn dimensions(&self) -> usize {
+        self.inner.dimensions
+    }
+
+    /// How vectors are compared (`ai.vectors.metric`), which says what a
+    /// [`VectorMatch`]'s score is: the cosine similarity (-1 to 1), the dot
+    /// product, or `1 / (1 + d)` for a Euclidean distance `d`.
+    pub fn metric(&self) -> Metric {
+        self.inner.metric
     }
 
     /// Creates `name` when it is missing (done on first use; at boot for
@@ -534,6 +558,34 @@ impl Collection {
     pub async fn delete(&self, id: impl Into<String>) -> Result<(), AiError> {
         self.ensure().await?;
         self.store.driver.delete(&self.name, vec![id.into()]).await
+    }
+
+    /// Removes the records `ids` (an id that is not there is skipped).
+    pub async fn delete_many<I, S>(&self, ids: I) -> Result<(), AiError>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let ids: Vec<String> = ids.into_iter().map(Into::into).collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        self.ensure().await?;
+        self.store.driver.delete(&self.name, ids).await
+    }
+
+    /// The record `id`, with its vector, text and metadata; `None` when
+    /// there is none. A cosine store may give the vector back normalized
+    /// (Qdrant does).
+    pub async fn get(&self, id: &str) -> Result<Option<VectorRecord>, AiError> {
+        self.ensure().await?;
+        self.store.driver.get(&self.name, id).await
+    }
+
+    /// Removes every record; the collection stays.
+    pub async fn clear(&self) -> Result<(), AiError> {
+        self.ensure().await?;
+        self.store.driver.clear(&self.name).await
     }
 
     /// Removes every record that matches `filter` (all chunks of one
