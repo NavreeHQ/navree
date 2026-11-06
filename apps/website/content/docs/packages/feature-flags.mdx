@@ -3,6 +3,27 @@ title: "Feature flags"
 description: "Define flags as types with `#[flag]`, turn them on per user, per workspace, by plan or by percentage, and check them with `Flags`, `CurrentFlags` or `#[requires_flag]`."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, define a flag, register it and check it in a handler. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["flags"] }
+```
+
+```rust
+/// The redesigned deal pipeline board.
+#[flag]
+pub struct NewPipeline;
+
+// src/app.rs: .module(FlagsModule::from_config())
+// the module that owns the flag: imports = [FlagsModule::for_feature::<NewPipeline>()]
+// a handler that takes `flags: CurrentFlags`:
+if flags.active::<NewPipeline>().await? { /* the new board */ }
+```
+
+With the default store the module needs `DatabaseModule`. A flag is off until you turn it on for a user, a workspace or a percentage: [scopes and rollouts](#scopes-and-rollouts) shows how.
+
 ## Introduction
 
 <Badge feature="flags" /> A feature flag separates shipping code from releasing it. You merge the new deal pipeline behind a flag, turn it on for your own workspace, then for 10% of customers, then for everyone, and turn it off in seconds if something goes wrong, without a deploy.
