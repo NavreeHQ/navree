@@ -299,6 +299,9 @@ fn combine(metric: Metric, a: f64, b: f64) -> f64 {
 /// The most groups `measure_by` names: one colour each, and one more for Other.
 const MOST_GROUPS: usize = crate::charts::MAX_SERIES - 1;
 
+/// The most rows `measure_rows` follows in one query: a page of a table.
+const MOST_ROWS: usize = 500;
+
 impl Report {
     /// `metric` in each period of the report, over `query` (the app's scoped query)
     /// with its rows' instants in `time`. A column of seconds or milliseconds since
@@ -367,16 +370,86 @@ impl Report {
         M: Model,
         E: Executor + ?Sized,
     {
-        let names = &groups[..groups.len().min(MOST_GROUPS)];
+        let names: Vec<Value> = groups[..groups.len().min(MOST_GROUPS)]
+            .iter()
+            .map(|name| Value::String((*name).to_owned()))
+            .collect();
         self.measure_groups(
             query,
             time.into(),
             metric,
-            Some((group, names)),
+            Some((group, &names)),
             Bucketing::Auto,
             exec,
         )
         .await
+    }
+
+    /// `metric` in each period for each of `keys`, a value of the column `key`: one series
+    /// per key, in that order, from one grouped query. This is how a page of a table gets
+    /// the series behind a [`Sparkline::cell`](super::Sparkline::cell) in each row without
+    /// a query per row: give the ids on the page, as the `Value` the column holds
+    /// (`Value::I64(id)` for a bigint, `Value::String(..)` for a text or uuid column).
+    /// Rows of any other key count nowhere. At most 500 keys are taken; more is
+    /// an error, as a page is never longer.
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, report: navree_ui::charts::Report) -> navree_orm::Result<()> {
+    /// use navree_orm::Value;
+    /// use navree_ui::charts::{Metric, Sparkline};
+    ///
+    /// let ids = [Value::I64(7), Value::I64(9)];
+    /// let rows = report
+    ///     .measure_rows(Deal::query(), "created_at", "account_id", &ids, Metric::Count, &db)
+    ///     .await?;
+    /// let cells: Vec<Sparkline> = rows
+    ///     .into_iter()
+    ///     .map(|series| Sparkline::new("Deals created", series).cell())
+    ///     .collect();
+    /// # let _ = cells;
+    /// # Ok(()) }
+    /// ```
+    pub async fn measure_rows<M, E>(
+        &self,
+        query: Builder<M>,
+        time: impl Into<TimeColumn>,
+        key: &'static str,
+        keys: &[Value],
+        metric: Metric,
+        exec: &E,
+    ) -> Result<Vec<Vec<Option<f64>>>>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+    {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        if keys.len() > MOST_ROWS {
+            return Err(invalid(format!(
+                "a measure per row takes at most {MOST_ROWS} rows"
+            )));
+        }
+        if !plain(key) {
+            return Err(invalid(
+                "a report's columns are plain names: letters, digits, `_` and one `.`",
+            ));
+        }
+        let only = grouped(query).where_(col(qualified::<M>(key)).is_in(keys.to_vec()));
+        let mut series = self
+            .measure_groups(
+                only,
+                time.into(),
+                metric,
+                Some((key, keys)),
+                Bucketing::Auto,
+                exec,
+            )
+            .await?;
+        // The last series is every other key, which the filter left empty.
+        series.truncate(keys.len());
+        Ok(series)
     }
 
     /// The figures of each group (or of all rows, with no groups) in each period.
@@ -385,7 +458,7 @@ impl Report {
         query: Builder<M>,
         time: TimeColumn,
         metric: Metric,
-        groups: Option<(&'static str, &[&str])>,
+        groups: Option<(&'static str, &[Value])>,
         bucketing: Bucketing,
         exec: &E,
     ) -> Result<Vec<Vec<Option<f64>>>>
@@ -421,13 +494,10 @@ impl Report {
                     for name in names {
                         let only = window
                             .clone()
-                            .where_(col(column.clone()).eq(Value::String((*name).to_owned())));
+                            .where_(col(column.clone()).eq(name.clone()));
                         out.push(self.measure_documents(only, time, metric, exec).await?);
                     }
-                    let values: Vec<Value> = names
-                        .iter()
-                        .map(|n| Value::String((*n).to_owned()))
-                        .collect();
+                    let values: Vec<Value> = names.to_vec();
                     let rest = if values.is_empty() {
                         window
                     } else {
@@ -483,7 +553,7 @@ impl Report {
             let mut which = String::from("CASE");
             for (at, name) in names.iter().enumerate() {
                 which.push_str(&format!(" WHEN {group_column} = ? THEN {at}"));
-                values.push(Value::String((*name).to_owned()));
+                values.push(name.clone());
             }
             which.push_str(&format!(" ELSE {} END", names.len()));
             sql = format!("({sql}) * {width} + ({which})");

@@ -9,7 +9,7 @@ use super::{
     value_cell,
 };
 use crate::components::Tone;
-use crate::node::{Node, el};
+use crate::node::{Node, Uses, el};
 
 /// A small line with no axes: the shape of a series beside its figure. It is a picture
 /// for assistive technology, named by its title and described by its summary, with the
@@ -36,6 +36,7 @@ pub struct Sparkline {
     format: NumberFormat,
     height: u32,
     max_points: usize,
+    cell: bool,
 }
 
 common_methods!(Sparkline);
@@ -58,7 +59,21 @@ impl Sparkline {
             format: NumberFormat::number(),
             height: 32,
             max_points: 120,
+            cell: false,
         }
+    }
+
+    /// Draws it for a table cell: the picture alone in a small box, named by its summary,
+    /// with no figure, no heading and no table behind it, so fifty rows hold fifty small
+    /// pictures and no nested tables. A reader hears the summary (first, last, highest and
+    /// lowest value); the full values are the page's own table. It keeps at most 16 points
+    /// and is 24 pixels high unless [`height`](Self::height) says otherwise. It links the
+    /// parts stylesheet and no script.
+    pub fn cell(mut self) -> Self {
+        self.cell = true;
+        self.max_points = 16;
+        self.height = 24;
+        self
     }
 
     /// What each value is called in the table: `14:00`, `Nov 3`. Counted from 1 when
@@ -96,7 +111,32 @@ impl Sparkline {
         let mut this = self;
         let height = this.height;
         let drawn = this.draw();
+        if this.cell {
+            return Self::in_cell(this.common, drawn);
+        }
         frame(this.common, drawn, "sparkline", height)
+    }
+
+    /// The cell form: one `img` named by the summary, or a dash named by the title when
+    /// there is nothing to draw.
+    fn in_cell(common: Common, drawn: Option<Drawn>) -> Node {
+        let root = el("span").slot("sparkline-cell").uses(Uses::PARTS_STYLES);
+        match drawn {
+            Some(drawn) => root
+                .attr("role", "img")
+                .attr("aria-label", common.summary.unwrap_or(drawn.summary))
+                .child(drawn.body)
+                .into(),
+            None => root
+                .flag("data-empty", true)
+                .attr("role", "img")
+                .attr(
+                    "aria-label",
+                    format!("{}: {}", common.title, common.labels.empty),
+                )
+                .child("\u{2013}")
+                .into(),
+        }
     }
 
     fn draw(&mut self) -> Option<Drawn> {
