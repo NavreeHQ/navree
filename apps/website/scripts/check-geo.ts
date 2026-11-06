@@ -8,7 +8,10 @@
  *   sections of `- [title](url): note` lines, an Optional section last), has
  *   the key facts, links every docs page as Markdown, and every link in it
  *   resolves to a file of the export;
- * - `llms-full.txt` opens with the same key facts and holds every docs page;
+ * - `llms-full.txt` opens with the same key facts and holds every docs page,
+ *   and each docs section has a file of its own (`llms-full/<section>.txt`)
+ *   that opens with the same key facts, holds exactly that section's pages
+ *   and is linked from `llms.txt`;
  * - every docs page links its Markdown copy with
  *   `<link rel="alternate" type="text/markdown">`, and the copy exists;
  * - one name, one category line, one license, one version, one list of
@@ -20,6 +23,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sections } from "../content/docs/manifest.ts";
 import { site } from "../site.config.ts";
 import { aiCrawlers } from "../src/lib/crawlers.ts";
 import { keyFacts, keyFactsMarkdown, platforms } from "../src/lib/site-facts.ts";
@@ -96,6 +100,25 @@ const full = read("llms-full.txt");
 if (!full.startsWith(`# ${site.name} documentation\n`)) problems.push("llms-full.txt: must start with the documentation title");
 if (!full.includes(facts)) problems.push("llms-full.txt: the Key facts block differs from src/lib/site-facts.ts");
 for (const page of docPages) if (!full.includes(`URL: ${SITE}${page.url}`)) problems.push(`llms-full.txt does not hold ${page.url}`);
+
+// Each section in a file of its own.
+let sectionFiles = 0;
+for (const section of sections) {
+  const file = `llms-full/${section.slug}.txt`;
+  if (!linked.has(`/${file}`)) problems.push(`llms.txt does not link /${file}`);
+  if (!fs.existsSync(path.join(OUT, file))) {
+    problems.push(`/${file} is not in the export`);
+    continue;
+  }
+  sectionFiles++;
+  const text = read(file);
+  if (!text.startsWith(`# ${site.name} documentation: ${section.title}\n`)) problems.push(`${file}: must start with the documentation title and the section's name`);
+  if (!text.includes(facts)) problems.push(`${file}: the Key facts block differs from src/lib/site-facts.ts`);
+  const own = new Set(section.pages.map((page) => `${SITE}/docs/${section.slug}/${page}/`));
+  const held = new Set([...text.matchAll(/^URL: (https:\/\/navree\.com\/docs\/[^\n]*)$/gm)].map((m) => m[1]));
+  for (const url of own) if (!held.has(url)) problems.push(`${file} does not hold ${url}`);
+  for (const url of held) if (!own.has(url) && url !== `${SITE}/docs/${section.slug}/`) problems.push(`${file} holds ${url}, which is not a page of the section`);
+}
 
 // ---------------------------------------------- Markdown copies of docs pages
 

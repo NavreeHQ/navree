@@ -224,7 +224,10 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
       section = page.section;
       out.push("", `## ${page.sectionTitle}`, "");
       const overview = overviews.get(section);
-      if (overview) out.push(`- [${overview.title}: all pages](${site.url}${overview.mdPath}): ${cap(overview.description)}`);
+      if (overview) {
+        out.push(`- [${overview.title}: all pages](${site.url}${overview.mdPath}): ${cap(overview.description)}`);
+        out.push(`- [${overview.title}: the whole section in one file](${site.url}${sectionFullPath(overview.slug)}): every page of the section as Markdown, for a model that needs this part of the docs and not all of it.`);
+      }
     }
     out.push(`- [${page.title}](${site.url}${page.mdPath})${page.description ? `: ${cap(page.description)}` : ""}`);
   }
@@ -232,7 +235,7 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
     "",
     "## Optional",
     "",
-    `- [Every docs page in one file](${site.url}/llms-full.txt): the whole documentation as Markdown, in the order of the sidebar.`,
+    `- [Every docs page in one file](${site.url}/llms-full.txt): the whole documentation as Markdown, in the order of the sidebar. Each section is also in a file of its own, linked under its heading above.`,
     `- [Sitemap](${site.url}/sitemap.xml): every page of the site with the date it last changed.`,
     `- [Changelog feed](${site.url}/changelog/feed.xml): every release, as an Atom feed.`,
   );
@@ -243,6 +246,42 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
     for (const skill of skills) out.push(`- [Skill ${skill.name}](${skill.url}): ${cap(skill.summary)}`);
   }
   return `${out.join("\n")}\n`;
+}
+
+/** Where a section's whole text is published: `/llms-full/basics.txt`. */
+export const sectionFullPath = (slug: string) => `/llms-full/${slug}.txt`;
+
+/** A page's Markdown with its URL under its title. */
+function withUrl(md: string, href: string): string {
+  const firstBreak = md.indexOf("\n");
+  const title = firstBreak === -1 ? md : md.slice(0, firstBreak);
+  const rest = firstBreak === -1 ? "" : md.slice(firstBreak);
+  return `${title}\n\nURL: ${site.url}${href}${rest}`;
+}
+
+/**
+ * `/llms-full/<section>.txt`: one section's own page and every page of it,
+ * each with its URL, in the order of the sidebar. For a model that needs one
+ * part of the docs: the whole of them is several megabytes.
+ */
+export function llmsSectionTxt(section: AgentSection, markdown: Map<string, string>): string {
+  const head = [
+    `# ${site.name} documentation: ${section.title}`,
+    "",
+    `> ${section.description}`,
+    "",
+    "## Key facts",
+    "",
+    keyFactsMarkdown(),
+    "",
+    `Every page of the ${section.title} section of ${site.url}/docs/ in one file, in the order of the sidebar. Each page starts with its title and URL. ` +
+      `The index of pages is ${site.url}/llms.txt, and the whole documentation is ${site.url}/llms-full.txt.`,
+  ].join("\n");
+  const parts = [
+    withUrl(sectionMarkdown(section).trimEnd(), section.href),
+    ...section.groups.flatMap((group) => group.pages).map((page) => withUrl((markdown.get(page.mdPath) ?? pageMarkdown(page)).trimEnd(), page.href)),
+  ];
+  return `${head}\n\n---\n\n${parts.join("\n\n---\n\n")}\n`;
 }
 
 /** `/llms-full.txt`: every page's Markdown in sidebar order, each with its URL. */
@@ -259,13 +298,6 @@ export function llmsFullTxt(pages: AgentPage[], markdown: Map<string, string>): 
     `Every page of ${site.url}/docs/ in one file, in the order of the sidebar. Each page starts with its title and URL. ` +
       `The index of pages is ${site.url}/llms.txt.`,
   ].join("\n");
-  // Put the page's URL under its title.
-  const withUrl = (md: string, href: string) => {
-    const firstBreak = md.indexOf("\n");
-    const title = firstBreak === -1 ? md : md.slice(0, firstBreak);
-    const rest = firstBreak === -1 ? "" : md.slice(firstBreak);
-    return `${title}\n\nURL: ${site.url}${href}${rest}`;
-  };
   // Each section's own page comes before the section's pages.
   const overviews = new Map(agentSections(pages).map((section) => [section.slug, section]));
   const parts: string[] = [];

@@ -6,7 +6,8 @@
  *   (`src/lib/agent-markdown.ts` says how components are converted), and
  *   `public/docs/<section>.md`: each section's own page, which lists its pages;
  * - `public/llms.txt`: the index, one line per page linking its `.md`;
- * - `public/llms-full.txt`: every page in one file;
+ * - `public/llms-full.txt`: every page in one file, and `public/llms-full/<section>.txt`:
+ *   the pages of one section in one file;
  * - `public/skills/<name>/...`: each skill of the repository's `skills/`
  *   directory (its `SKILL.md` and reference files), as they are at build
  *   time;
@@ -24,7 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { agentPages, agentSections, docsBundle, llmsFullTxt, llmsTxt, pageMarkdown, sectionMarkdown } from "../src/lib/agent-markdown.ts";
+import { agentPages, agentSections, docsBundle, llmsFullTxt, llmsSectionTxt, llmsTxt, pageMarkdown, sectionFullPath, sectionMarkdown } from "../src/lib/agent-markdown.ts";
 import { listSkills } from "../src/lib/agent-skills.ts";
 import { site } from "../site.config.ts";
 
@@ -41,7 +42,7 @@ function write(file: string, contents: string): void {
 
 const started = performance.now();
 
-for (const generated of ["docs", "skills", "llms.txt", "llms-full.txt", "v"]) {
+for (const generated of ["docs", "skills", "llms.txt", "llms-full.txt", "llms-full", "v"]) {
   fs.rmSync(path.join(PUBLIC, generated), { recursive: true, force: true });
 }
 
@@ -96,6 +97,9 @@ write(path.join(PUBLIC, "skills", "index.json"), `${JSON.stringify(index, null, 
 write(path.join(PUBLIC, "llms.txt"), llmsTxt(pages, skills));
 const full = llmsFullTxt(pages, markdown);
 write(path.join(PUBLIC, "llms-full.txt"), full);
+for (const section of sectionPages) {
+  write(path.join(PUBLIC, ...sectionFullPath(section.slug).split("/").filter(Boolean)), llmsSectionTxt(section, markdown));
+}
 
 // Navigator's docs bundle for this version.
 const cargoToml = fs.readFileSync(path.join(WEBSITE, "..", "..", "Cargo.toml"), "utf8");
@@ -107,6 +111,6 @@ if (!version) {
 write(path.join(PUBLIC, "v", version, "docs.json"), `${JSON.stringify(docsBundle(version, pages))}\n`);
 
 console.log(
-  `agent-files: ${pages.length} Markdown pages and ${sectionPages.length} sections, llms.txt, llms-full.txt (${Math.round(full.length / 1024)} KB), ` +
+  `agent-files: ${pages.length} Markdown pages and ${sectionPages.length} sections, llms.txt, llms-full.txt (${Math.round(full.length / 1024)} KB) and ${sectionPages.length} section files, ` +
     `docs.json for ${version}, ${skills.length} skills (${Math.round(performance.now() - started)} ms)`,
 );

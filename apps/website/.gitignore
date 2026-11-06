@@ -21,6 +21,7 @@ next-env.d.ts
 /public/skills/
 /public/llms.txt
 /public/llms-full.txt
+/public/llms-full/
 /public/v/
 
 # Visual checks (scripts/screenshots.ts)
