@@ -142,7 +142,7 @@ async fn a_page_draws_in_the_requests_locale() {
         "{total} में से {from} से {to} परिणाम दिख रहे हैं"
     );
     assert_eq!(hindi["price"], "₹1,00,000.00");
-    assert_eq!(hindi["october"], "अक्तूबर");
+    assert_eq!(hindi["october"], "अक्टूबर");
     let india = get("en-IN").await;
     assert_eq!(india["search"], "Search");
     assert_eq!(india["price"], "₹1,00,000.00");

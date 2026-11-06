@@ -247,7 +247,7 @@ fn the_toolkits_month_names_are_icus() {
 #[test]
 fn the_date_locale_follows_the_tag() {
     let i18n = i18n();
-    assert_eq!(i18n.locale("hi").date_locale().month_name(10), "अक्तूबर");
+    assert_eq!(i18n.locale("hi").date_locale().month_name(10), "अक्टूबर");
     let india = i18n.locale("en-IN").date_locale();
     assert_eq!(india.first_day, chrono::Weekday::Sun);
     assert_eq!(india.month_name(3), "March");
