@@ -595,6 +595,24 @@ const diagrams: Record<string, string> = {
     "From a design to Navree UI pages: reading the design (0 intake, 1 inventory), stop 1; mapping to Navree UI (2 tokens, 3 mapping, 4 reconcile), stop 2; build and verify (5 build, 6 verify), stop 3, where the owner accepts the pages seen beside the design. Phase n writes `design/0n-*/`.",
   "two-ways":
     "The two skills together: the old product's code and data go to navree-reverse-engineering, which builds the models, services and routes; its `screens.md`, `crud.md` and `lists.md` specs and the look (the old product's screenshots or a new design) go to navree-design-to-ui, which builds the Navree UI pages, one module at a time.",
+  "workspace-resolution":
+    "How a request finds its workspace: the resolvers in workspace.resolvers run in order and the first that finds a name wins, the name is looked up by id or by slug, and the user must be a member, hold an organization grant or be a guest of a demo workspace, or the answer is a 400, 404 or 403.",
+  "workspace-isolation":
+    "Three ways to isolate a workspace's data: row, shared tables with a workspace_id column scoped by WorkspaceRepo and, on PostgreSQL, row-level security; schema, a PostgreSQL schema per workspace reached through the transaction's search_path; database, a database per workspace with one connection pool each.",
+  "harbor-release":
+    "A Harbor release: build, upload, migrate once, start the new release in the idle slot, check its health, switch Caddy to it, drain the old slot, restart the workers and prune old releases; a release that fails its health check never gets traffic.",
+  "orm-parts":
+    "How the ORM fits together: a model, a builder from Model::query(), the unit of work or pool that runs it against the database, the records and collections that come back, and the events, hooks and after-commit work that follow a save.",
+  "jobs-and-events":
+    "From an event or a job to a finished job: sync listeners run at once, queued listeners and dispatched jobs join the request's unit of work and reach the queue after the commit, and a worker runs them and either finishes them, retries them after a backoff or moves them to the failed jobs.",
+  "transport-choice":
+    "One API, six transports: handlers and the ServiceClient never name a transport; MicroModule wraps each message in an envelope and the micro.transport setting picks TCP, NATS, Kafka, RabbitMQ, Redis Streams or MQTT.",
+  "token-and-session":
+    "Token and session flow: an API client signs in and gets an access token and a refresh token, calls the API with the access token, trades the refresh token for a new pair when it expires, and loses the whole session if an old refresh token is used again; a browser signs in on an encrypted HttpOnly session cookie and sends the CSRF token with every state-changing request.",
+  "request-to-pixels":
+    "From a request to pixels: a handler returns components that build one typed tree, render writes it to HTML with the page's content security policy, the browser loads only the modules the markup uses, and a live region morphs in place when an event tells it to fetch its HTML again.",
+  "server-rendered-app":
+    "A server-rendered app: one binary serves pages from Navree UI handlers, optional JSON routes for other clients and a live hub, all on the same feature modules and one database.",
 };
 
 /** A component as Markdown. `mode` is "flow" for blocks, "text" inside a paragraph. */
