@@ -67,11 +67,7 @@ async fn sqlite_gets_through_a_day_of_crm_work() {
     }
     assert_eq!(
         answer("industry SOFTWARE"),
-        json!([
-            "Beas Analytics",
-            "Chandni Cloudworks",
-            "Pipal Software"
-        ])
+        json!(["Beas Analytics", "Chandni Cloudworks", "Pipal Software"])
     );
     let found = |query: Value| -> Value {
         answers

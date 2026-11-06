@@ -414,7 +414,10 @@ mod tests {
         assert_eq!(formats("en").money(-1999, "USD"), "-$19.99");
         assert_eq!(formats("en").money(5, "KWD"), "KWD\u{a0}0.005");
         assert_eq!(formats("en-IN").money(123_456_750, "INR"), "₹12,34,567.50");
-        assert_eq!(formats("en-IN").money(1_000_000_000, "INR"), "₹1,00,00,000.00");
+        assert_eq!(
+            formats("en-IN").money(1_000_000_000, "INR"),
+            "₹1,00,00,000.00"
+        );
         assert_eq!(formats("en").money(123_456_750, "INR"), "₹1,234,567.50");
     }
 

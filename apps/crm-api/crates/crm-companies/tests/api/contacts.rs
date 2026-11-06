@@ -646,10 +646,7 @@ async fn the_contact_export_reads_the_same_list_query() {
             .map(|line| line.split(',').nth(2).unwrap_or_default().to_owned())
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        export(&[]).await,
-        ["Hundal", "Joshi", "Lakhotia", "Tiwari"]
-    );
+    assert_eq!(export(&[]).await, ["Hundal", "Joshi", "Lakhotia", "Tiwari"]);
     assert_eq!(
         export(&[("filter[company_id]", &agra)]).await,
         ["Joshi", "Lakhotia"]

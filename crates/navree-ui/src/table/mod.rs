@@ -447,7 +447,7 @@ impl CellValue for bool {
 impl CellValue for crate::form::Money {
     fn write_cell(&self, out: &mut CellWriter<'_>) {
         let grouping = out.grouping();
-        out.plain(&self.display_in(grouping));
+        out.plain(&self.display_grouped(grouping));
     }
 
     fn write_text(&self, out: &mut String) {

@@ -191,6 +191,9 @@ mod tests {
         assert_eq!(group_digits(99_999, true), "99,999");
         assert_eq!(group_digits(100_000, true), "1,00,000");
         assert_eq!(group_digits(12_345_678, true), "1,23,45,678");
-        assert_eq!(group_digits(u64::MAX, true), "1,84,46,74,40,73,70,95,51,615");
+        assert_eq!(
+            group_digits(u64::MAX, true),
+            "1,84,46,74,40,73,70,95,51,615"
+        );
     }
 }

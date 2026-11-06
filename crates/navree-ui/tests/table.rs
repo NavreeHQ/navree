@@ -3,8 +3,8 @@
 use navree_ui::charts::Grouping;
 use navree_ui::table::{Direction, FilterValue, NoFilter, TableRow as _, ValueKind};
 use navree_ui::{
-    BulkAction, DataTable, FilterBar, Money, Options, Pagination, RowAction, TableLabels, TablePage,
-    TableQuery, TableRow, render,
+    BulkAction, DataTable, FilterBar, Money, Options, Pagination, RowAction, TableLabels,
+    TablePage, TableQuery, TableRow, render,
 };
 use serde::Deserialize;
 
@@ -952,12 +952,19 @@ fn counts_and_amounts_are_grouped_as_the_labels_group_them() {
         grouping: Grouping::Indian,
         ..TableLabels::default()
     };
-    let lakhs = render(&DataTable::new("invoices", &query, &page).labels(&labels).into());
+    let lakhs = render(
+        &DataTable::new("invoices", &query, &page)
+            .labels(&labels)
+            .into(),
+    );
     assert!(lakhs.contains("of 12,34,567 results"), "{lakhs}");
     assert!(lakhs.contains("12,34,567.50"), "{lakhs}");
     assert!(!lakhs.contains("1,234,567"), "{lakhs}");
     // The browser groups the selection's count the same way.
-    assert!(lakhs.contains("&quot;grouping&quot;:&quot;indian&quot;"), "{lakhs}");
+    assert!(
+        lakhs.contains("&quot;grouping&quot;:&quot;indian&quot;"),
+        "{lakhs}"
+    );
     assert!(!thousands.contains("grouping&quot;"), "{thousands}");
 }
 

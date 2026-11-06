@@ -117,7 +117,7 @@ let labels = TableLabels { grouping: Grouping::Indian, ..TableLabels::default() 
 DataTable::new("deals", &query, &page).labels(&labels)
 ```
 
-`Money::display_in(Grouping::Indian)` writes one amount the same way (`12,34,567.50`), and `Money::parse` reads either grouping back.
+`Money::display_grouped(Grouping::Indian)` writes one amount the same way (`12,34,567.50`), and `Money::parse` reads either grouping back.
 
 ## Compact rows
 

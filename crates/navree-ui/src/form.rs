@@ -600,7 +600,7 @@ impl Money {
 
     /// `1250050` as `12,500.50`.
     pub fn display(self) -> String {
-        self.display_in(Grouping::Thousands)
+        self.display_grouped(Grouping::Thousands)
     }
 
     /// The amount with its digits grouped as a reader of a language groups them:
@@ -612,11 +612,11 @@ impl Money {
     /// use navree_ui::Money;
     /// use navree_ui::charts::Grouping;
     ///
-    /// assert_eq!(Money(123_456_750).display_in(Grouping::Indian), "12,34,567.50");
-    /// assert_eq!(Money(1_000_000_000).display_in(Grouping::Indian), "1,00,00,000.00");
-    /// assert_eq!(Money(123_456_750).display_in(Grouping::Thousands), "1,234,567.50");
+    /// assert_eq!(Money(123_456_750).display_grouped(Grouping::Indian), "12,34,567.50");
+    /// assert_eq!(Money(1_000_000_000).display_grouped(Grouping::Indian), "1,00,00,000.00");
+    /// assert_eq!(Money(123_456_750).display_grouped(Grouping::Thousands), "1,234,567.50");
     /// ```
-    pub fn display_in(self, grouping: Grouping) -> String {
+    pub fn display_grouped(self, grouping: Grouping) -> String {
         let cents = self.0.unsigned_abs();
         let whole = (cents / 100).to_string();
         let mut out = String::with_capacity(whole.len() + whole.len() / 2 + 4);
@@ -2998,25 +2998,42 @@ mod tests {
         assert_eq!(Money(100_000_000).display(), "1,000,000.00");
         // Lakhs and crores.
         assert_eq!(
-            Money(123_456_750).display_in(Grouping::Indian),
+            Money(123_456_750).display_grouped(Grouping::Indian),
             "12,34,567.50"
         );
         assert_eq!(
-            Money(10_000_000).display_in(Grouping::Indian),
+            Money(10_000_000).display_grouped(Grouping::Indian),
             "1,00,000.00"
         );
         assert_eq!(
-            Money(1_000_000_000).display_in(Grouping::Indian),
+            Money(1_000_000_000).display_grouped(Grouping::Indian),
             "1,00,00,000.00"
         );
-        assert_eq!(Money(99_900).display_in(Grouping::Indian), "999.00");
-        assert_eq!(Money(100_000).display_in(Grouping::Indian), "1,000.00");
-        assert_eq!(Money(-123_456_750).display_in(Grouping::Indian), "-12,34,567.50");
-        assert_eq!(Money(5).display_in(Grouping::Indian), "0.05");
-        assert_eq!(Money(123_456_750).display_in(Grouping::None), "1234567.50");
-        for money in [Money(0), Money(99_900), Money(123_456_750), Money(-1_000_000_000)] {
-            assert_eq!(Money::parse(&money.display_in(Grouping::Indian)), Some(money));
-            assert_eq!(Money::parse(&money.display_in(Grouping::Thousands)), Some(money));
+        assert_eq!(Money(99_900).display_grouped(Grouping::Indian), "999.00");
+        assert_eq!(Money(100_000).display_grouped(Grouping::Indian), "1,000.00");
+        assert_eq!(
+            Money(-123_456_750).display_grouped(Grouping::Indian),
+            "-12,34,567.50"
+        );
+        assert_eq!(Money(5).display_grouped(Grouping::Indian), "0.05");
+        assert_eq!(
+            Money(123_456_750).display_grouped(Grouping::None),
+            "1234567.50"
+        );
+        for money in [
+            Money(0),
+            Money(99_900),
+            Money(123_456_750),
+            Money(-1_000_000_000),
+        ] {
+            assert_eq!(
+                Money::parse(&money.display_grouped(Grouping::Indian)),
+                Some(money)
+            );
+            assert_eq!(
+                Money::parse(&money.display_grouped(Grouping::Thousands)),
+                Some(money)
+            );
         }
         assert_eq!(
             Money::parse(&Money(i64::MAX).display()),

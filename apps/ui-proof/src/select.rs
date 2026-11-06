@@ -40,26 +40,8 @@ const FIRST: [&str; 20] = [
     "Simran",
 ];
 const LAST: [&str; 20] = [
-    "Lakhotia",
-    "Tiwari",
-    "Hundal",
-    "Dhillon",
-    "Bains",
-    "Dua",
-    "Grewal",
-    "Toor",
-    "Brar",
-    "Khanna",
-    "Gill",
-    "Kaur",
-    "Joshi",
-    "Mann",
-    "Chahal",
-    "Bajwa",
-    "Sandhu",
-    "Sidhu",
-    "Sharma",
-    "Malhotra",
+    "Lakhotia", "Tiwari", "Hundal", "Dhillon", "Bains", "Dua", "Grewal", "Toor", "Brar", "Khanna",
+    "Gill", "Kaur", "Joshi", "Mann", "Chahal", "Bajwa", "Sandhu", "Sidhu", "Sharma", "Malhotra",
 ];
 /// The people a search can find: the same on every run.
 static PEOPLE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {

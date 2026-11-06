@@ -202,7 +202,12 @@ async fn any_signed_in_user_lists_and_searches_users() {
         .collect();
     assert_eq!(
         names,
-        ["Daljit Kaur", "Manpreet Gill", "Priya Verma", "Tarun Bhatia"]
+        [
+            "Daljit Kaur",
+            "Manpreet Gill",
+            "Priya Verma",
+            "Tarun Bhatia"
+        ]
     );
     assert_eq!(page["data"][2]["roles"], json!(["rep"]));
     assert_eq!(page["data"][0]["__type"], json!("User"));

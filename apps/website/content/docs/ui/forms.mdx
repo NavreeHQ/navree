@@ -63,7 +63,7 @@ FormView::<NewDeal>::new()
 | `bool` | a checkbox |
 | `NaiveDate`, `NaiveTime`, `NaiveDateTime` | the browser's own date, time or date-and-time input |
 | `DateTime<Utc>` | the browser's date-and-time input, shown and read in UTC |
-| `Money` | an amount typed like `12,50,000.50` or `1,250,000.50`, stored in its smallest unit; `display_in(Grouping::Indian)` writes it in lakhs and crores |
+| `Money` | an amount typed like `12,50,000.50` or `1,250,000.50`, stored in its smallest unit; `display_grouped(Grouping::Indian)` writes it in lakhs and crores |
 | `Phone`, `PhoneNumber` | a [phone input](/docs/components/phone-input/): a country list and the number, read on the server in the country chosen (`validation-phone`) |
 | an enum with `#[derive(Options)]` | a select of its variants |
 | `Many<T>` | a [MultiSelect](/docs/components/multi-select/): every value posted under the name, in order |
