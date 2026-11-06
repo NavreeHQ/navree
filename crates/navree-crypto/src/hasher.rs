@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use argon2::password_hash::{self, PasswordHasher as _, PasswordVerifier as _};
 use argon2::{Algorithm, Argon2, Params, PasswordHash, Version};
+use navree_config::ConfigSection;
 use serde::Deserialize;
 use tokio::sync::Semaphore;
 
@@ -18,7 +19,8 @@ use crate::{CryptoError, Result};
 /// iterations, 1 lane). Raising any cost parameter makes
 /// [`Hasher::needs_rehash`] true for existing hashes, so they are upgraded
 /// at the next login.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "hashing", docs = "/docs/security/encryption-and-hashing/", validate = Self::check_values)]
 #[serde(default)]
 pub struct HashingOptions {
     /// Memory cost in KiB (`m`; default 19 456 = 19 MiB).
@@ -30,6 +32,16 @@ pub struct HashingOptions {
     /// How many hashes may run at once; `None` (the default) uses the number
     /// of CPUs. Each running hash holds `memory_kib` of memory.
     pub max_concurrent_hashes: Option<usize>,
+}
+
+impl HashingOptions {
+    /// Checks the parameters (the boot calls this): the ones Argon2 refuses, and no
+    /// permits.
+    fn check_values(&self) -> std::result::Result<(), String> {
+        Hasher::new(self)
+            .map(drop)
+            .map_err(|error| error.to_string())
+    }
 }
 
 impl Default for HashingOptions {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::Secret;
 use navree_kernel::{
     BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
@@ -230,6 +230,11 @@ impl Module for ConfiguredCryptoModule {
 fn register(m: &mut ModuleBuilder, source: Source) {
     let deps = source.deps();
     let encrypter_source = source.clone();
+    if matches!(source, Source::Config) {
+        // Read from `Config` by the factories below; registered so
+        // `config:check` knows the section and its keys.
+        m.config_section::<HashingOptions>();
+    }
     m.global()
         .factory(
             Factory::<Encrypter>::new(move |r| {

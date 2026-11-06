@@ -3,8 +3,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use navree_config::Config;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_config::{ConfigSection, ConfigTable, ModuleBuilderConfigExt};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -34,7 +36,8 @@ pub const CONFIG_SECTION: &str = "validation";
 /// Nested tables flatten to dotted keys, so `[validation.messages.min]
 /// string = "..."` sets `min.string`. In code, start from the defaults:
 /// `ValidationOptions { messages, ..ValidationOptions::default() }`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "validation", docs = "/docs/basics/validation/", validate = Self::check_values)]
 #[serde(default)]
 pub struct ValidationOptions {
     /// Templates by rule (`"required"`, `"min.string"`) or by field and rule
@@ -45,13 +48,21 @@ pub struct ValidationOptions {
     #[serde(deserialize_with = "flat_strings")]
     pub attributes: BTreeMap<String, String>,
     /// Phone numbers (`validation.phone`).
+    #[config(table)]
     pub phone: PhoneOptions,
     /// What `SafeHtml` keeps (`validation.html`).
     pub html: HtmlPolicy,
 }
 
+impl ValidationOptions {
+    /// Checks the HTML policy (the boot calls this): an unsafe one stops the boot.
+    fn check_values(&self) -> Result<(), String> {
+        self.html.check()
+    }
+}
+
 /// Phone numbers (section `validation.phone`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PhoneOptions {
     /// The region of numbers written without a country code (`"GB"`, from
@@ -145,14 +156,12 @@ impl ValidationModule {
 
     /// The module with explicit message and attribute overrides.
     pub fn with_options(options: ValidationOptions) -> impl Module {
-        ConfiguredValidationModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<ValidationModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `validation` section of `Config`.
     pub fn from_config() -> impl Module {
-        ConfiguredValidationModule { options: None }
+        ConfiguredModule::<ValidationModule, ValidationOptions>::from_config(register)
     }
 }
 
@@ -162,37 +171,13 @@ impl Module for ValidationModule {
     }
 }
 
-/// `ValidationModule::for_root` / `with_options` / `from_config`: same module id, configured.
-struct ConfiguredValidationModule {
-    options: Option<ValidationOptions>,
-}
-
-impl Module for ConfiguredValidationModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<ValidationModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
-    }
-}
-
 fn register(m: &mut ModuleBuilder, options: Option<ValidationOptions>) {
     m.global();
     match options {
         Some(options) => m.value(options),
-        None => m.factory(
-            Factory::<ValidationOptions>::new(|r: Resolver| async move {
-                let config = r.get::<Config>().await?;
-                let options: ValidationOptions = config.section_or_default(CONFIG_SECTION)?;
-                Ok(Arc::new(options))
-            })
-            .deps(vec![ProviderKey::of::<Config>()]),
-        ),
+        // Built from section `validation` (absent: the defaults) and checked
+        // at boot, with the section registered for `config:check`.
+        None => m.config::<ValidationOptions>(),
     };
     m.factory(
         Factory::<Messages>::new(|r: Resolver| async move {
@@ -290,6 +275,32 @@ mod tests {
             error.to_string().contains("`required` must be a string"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn the_section_describes_itself_and_an_unsafe_policy_fails_the_check() {
+        let schema = ValidationOptions::schema().expect("schema");
+        assert_eq!(schema.key, CONFIG_SECTION);
+        assert!(schema.unmarked_secrets().is_empty());
+        let phone = schema
+            .fields
+            .iter()
+            .find(|field| field.name == "phone")
+            .expect("phone");
+        assert_eq!(phone.fields[0].name, "default_region");
+        assert!(ValidationOptions::defaults().is_some());
+
+        let unsafe_html = ValidationOptions {
+            html: HtmlPolicy::default().allow_tags(["script"]),
+            ..ValidationOptions::default()
+        };
+        assert!(
+            unsafe_html
+                .validate()
+                .unwrap_err()
+                .starts_with("validation.html.tags")
+        );
+        assert!(ValidationOptions::default().validate().is_ok());
     }
 
     #[test]

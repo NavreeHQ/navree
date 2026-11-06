@@ -19,7 +19,7 @@ pub mod return_to;
 mod state;
 
 pub use labels::{KindWords, StateKind, StateLabels};
-pub use options::PagesOptions;
+pub use options::{PagesOptions, UiOptions};
 pub(crate) use render::Renderer;
 pub(crate) use render::shell_of;
 pub use render::{ErrorShell, FROM_HEADER, REGION_HEADER, STATE_HEADER};

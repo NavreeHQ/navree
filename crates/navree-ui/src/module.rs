@@ -9,7 +9,7 @@ use bytes::Bytes;
 
 use http::header::{self, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, StatusCode};
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
@@ -20,7 +20,7 @@ use navree_kernel::{
 };
 
 use crate::op::{Envelope, PendingOps, UI_HEADER};
-use crate::pages::{PagesOptions, Renderer};
+use crate::pages::{PagesOptions, Renderer, UiOptions};
 use crate::shell::FLASH_COOKIE;
 use crate::{assets, compress};
 
@@ -126,12 +126,15 @@ struct UiGate(Arc<OnceLock<bool>>);
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();
     m.error_pages(Renderer);
+    // The `ui` section is read by the factory below (an app need not have
+    // `ConfigModule`), so it is registered here without a provider.
+    m.config_section::<UiOptions>();
     m.factory(Factory::<PagesOptions>::new(move |r: Resolver| {
         let explicit = pages.clone();
         async move {
             let base = explicit.unwrap_or_default();
             let options = match r.app().try_get::<Config>().await {
-                Some(config) => base.configured(&config),
+                Some(config) => base.try_configured(&config)?,
                 None => base,
             };
             Ok(Arc::new(options.checked()))

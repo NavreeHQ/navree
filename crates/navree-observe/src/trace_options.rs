@@ -290,6 +290,57 @@ mod tests {
 
     use super::*;
 
+    /// The section and the policy navree-http, navree-queue and
+    /// navree-schedule start traces with read the same three keys; they must
+    /// not drift apart.
+    #[test]
+    fn the_section_and_the_trace_policy_read_the_policy_keys_alike() {
+        use navree_config::{Config, ConfigSources};
+        use navree_telemetry::TracePolicy;
+
+        let cases: [(&[(&str, &str)], Option<&str>); 6] = [
+            (&[], None),
+            (&[("enabled", "false"), ("sample_ratio", "0.25")], None),
+            (&[("trust_incoming", "no")], None),
+            (&[("sample_ratio", "2")], None),
+            (&[], Some("0.5")),
+            (&[], Some("lots")),
+        ];
+        for (keys, env_ratio) in cases {
+            let mut sources = ConfigSources::new();
+            for (key, value) in keys {
+                sources = sources.set(&format!("observe.tracing.{key}"), *value);
+            }
+            let config = Config::load(&sources).expect("load");
+            let env = |name: &str| {
+                (name == "OTEL_TRACES_SAMPLER_ARG")
+                    .then(|| env_ratio.map(str::to_owned))
+                    .flatten()
+            };
+            let options = TracingOptions::from_config_with_env(&config, env);
+            let policy = TracePolicy::from_settings(|key| config.get_string(key), env);
+            match (options, policy) {
+                (Ok(options), Ok(policy)) => {
+                    assert_eq!(options.enabled, policy.enabled, "{keys:?} {env_ratio:?}");
+                    assert_eq!(
+                        options.trust_incoming, policy.trust_incoming,
+                        "{keys:?} {env_ratio:?}"
+                    );
+                    assert_eq!(
+                        options.sample_ratio, policy.sample_ratio,
+                        "{keys:?} {env_ratio:?}"
+                    );
+                }
+                (Err(_), Err(_)) => {}
+                (options, policy) => panic!(
+                    "{keys:?} {env_ratio:?}: the section says {:?}, the policy {:?}",
+                    options.map(|o| o.sample_ratio),
+                    policy.map(|p| p.sample_ratio)
+                ),
+            }
+        }
+    }
+
     #[test]
     fn the_section_describes_itself() {
         let schema = TracingOptions::schema().expect("schema");
