@@ -124,27 +124,30 @@ It depends on navree at /home/you/code/navree/crates/navree.
 Next steps:
   cd blog
   navree dock up             # TimescaleDB on 127.0.0.1:5432
-  navree dev                 # http://127.0.0.1:8080/api/docs
+  navree dev                 # http://127.0.0.1:8080
+
+Sign in at http://127.0.0.1:8080/sign-in as harpreet.singh@example.com with the password demo-password-2026.
+The account exists in development only.
 
 Initialized a Git repository (nothing committed yet).
 ```
 
 The name must start with a lower-case letter and use lower-case letters and digits separated by single `-` or `_`; Rust keywords and names such as `std`, `test` and `navree` are refused. The directory must not exist, or must be empty. `navree new` doesn't run Cargo. It runs `git init` (nothing is committed) unless the directory is inside a repository already or Git isn't installed, and for an app that ships a `harbor.toml` (the starter kits) it writes the secrets key `harbor.key` and keeps it out of Git.
 
-The app is complete and working: a root module with every common platform module configured, JWT authentication at `/api/auth/*`, roles and abilities, an example `users` module, OpenAPI docs and tests. [Directory structure](/docs/getting-started/directory-structure/) walks through every file.
+The app is complete and working: a root module with every common platform module configured, JWT authentication at `/api/auth/*`, roles and abilities, an example `users` module, OpenAPI docs and tests, and screens drawn on the server with [Navree UI](/docs/ui/overview/) (sign-in, workspaces and a customers example; `--ui none` leaves them out). [Directory structure](/docs/getting-started/directory-structure/) walks through every file.
 
 ### Options
 
 | Option | Default | What it does |
 |---|---|---|
 | `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
-| `--ui <next\|navree\|none>` | `none` | The front end. `next` also creates a Next.js front end in `web/`; its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`: sign-in, a customers table and forms, and a home page with live figures, with no `web/` folder and no Node ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `none` is the API alone. With a kit, only `saas` takes `next` (its front end is Next.js already); `api` and `micro` have no front end, and `navree` goes with no kit. |
+| `--ui <next\|navree\|none>` | `navree` | The front end. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`: sign-in, workspaces, a customers table and forms, and a home page with live figures, with no `web/` folder and no Node ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `next` creates a Next.js front end in `web/` instead; its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. `none` is the API alone. With a kit, only `saas` takes `next` (its front end is Next.js already); `api` and `micro` have no front end, and `navree` goes with no kit. |
 | `--database <db>` | `timescaledb` | The database: `timescaledb` (PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, run by `navree dock up` too), `mysql` (MySQL on a server of yours; MariaDB is [untested](/docs/database/mysql/)) or `sqlite` (a file in `storage/`, nothing to install). It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only the driver you chose is compiled into the app) and, for the first two, `dock.toml`. Tests of every app run on SQLite files, so `navree new` also turns `sqlite` on in the app's `[dev-dependencies]`. The kits run on `timescaledb` or `postgres`. |
 | `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
 
 ```sh
 navree new blog --ui next --navree-path ~/code/navree
-navree new shop --ui navree
+navree new shop --ui none
 ```
 
 ### Starting from a kit

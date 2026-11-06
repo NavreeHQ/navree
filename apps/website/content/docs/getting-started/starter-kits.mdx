@@ -15,7 +15,7 @@ Pick the kit for the shape you are building:
 | `api` | `navree new acme --kit api` | The same API without the front end: accounts, workspaces, billing and OpenAPI with a committed contract, for mobile apps, partners or a front end you build yourself |
 | `micro` | `navree new billing --kit micro` | A microservice: a message handler and an event handler on NATS, health checks and metrics, and a contracts crate for its clients |
 
-The minimal app has two front-end choices of its own, `--ui next` (a Next.js app in `web/`) and `--ui navree` (screens drawn on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no Node project). [The Navree UI app](#the-navree-ui-app) below describes the second one.
+The minimal app has three front-end choices of its own. Without a flag it draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no Node project (`--ui navree`, the default). `--ui next` makes a Next.js app in `web/` instead, and `--ui none` makes the API alone. [The Navree UI app](#the-navree-ui-app) below describes the default.
 
 Kits are generated code, not a framework layer. There is no kit runtime and nothing to stay compatible with: every route, screen and test is a file in your repository, written with the same modules, macros and conventions as the rest of these docs.
 
@@ -346,10 +346,10 @@ The service also serves `/health/live`, `/health/ready` (with a `micro` check th
 
 ## The Navree UI app
 
-`navree new shop --ui navree` is not a kit: it is the minimal app plus a front end that Navree UI draws on the server, with no `web/` folder, no Node and no build step beyond `cargo`. `--ui none` (API only) and `--ui next` are the other two choices. A kit brings its own front end or none, so `--ui navree` with `--kit` is an error.
+`navree new shop` is not a kit: it is the minimal app plus a front end that Navree UI draws on the server, with no `web/` folder, no Node and no build step beyond `cargo`. `--ui none` (API only) and `--ui next` are the other two choices. A kit brings its own front end or none, so `--ui navree` with `--kit` is an error.
 
 ```sh
-navree new shop --ui navree
+navree new shop
 cd shop
 navree dock up            # the database
 navree dev                # http://127.0.0.1:8080
@@ -361,12 +361,13 @@ Open `http://127.0.0.1:8080` and sign in as `harpreet.singh@example.com` with th
 
 | Address | Shows |
 |---|---|
-| `/sign-in` | the sign-in form. `?next=` is where to go afterwards, and only an address on your site is followed. A wrong password is a field error that does not say which part was wrong |
+| `/sign-in` | the sign-in form. `?next=` is where to go afterwards, and only an address on your site is followed. A wrong password is a field error that does not say which part was wrong. The two-factor, forgotten password and reset pages come with it |
 | `/` | four figures and the newest customers. The figures fetch themselves again when a customer changes |
 | `/customers` | a [DataTable](/docs/ui/data-table/): search, a text filter, a menu of cities and of statuses, a plan filter, a range of fees, a date range and sorting. They run in the database, and the address holds them in the [list query](/docs/ui/data-table/#the-url) the API reads (`?search=ludhiana&filter[city][in]=Ludhiana,Amritsar&sort=-monthly_paise&per_page=20`). It fetches itself again when a customer is added or changed |
 | `/customers/new`, `/customers/{id}/edit` | a [form](/docs/ui/forms/) from one struct (a text field, an email, a phone number, a plan and a status chosen from lists, a fee in rupees, a date, a tick box and notes). The browser checks it first, the server checks it again, and a mistake the rules cannot see (an email another customer has) comes back under its field |
 | `/customers/{id}` | one customer, in cards |
 | `/profile` | who is signed in |
+| `/account/two-factor` | sets up two-factor authentication with an authenticator app |
 | `POST /sign-out` | signs out, from the user menu |
 
 Amounts are stored in paise and shown with lakh grouping: `₹1,00,000`. Phone numbers are stored as `+919876501001` and shown as `+91 98765 01001`.
@@ -374,10 +375,10 @@ Amounts are stored in paise and shown with lakh grouping: `₹1,00,000`. Phone n
 ```text
 src/
 ├── ui/
-│   ├── auth.rs      # how a browser signs in: the one file that knows
-│   ├── shell.rs     # the sidebar, the top bar and the user menu
-│   ├── live.rs      # the server-sent event stream and its hub
-│   ├── pages.rs     # /sign-in, /sign-out, /profile
+│   ├── auth.rs      # who is signed in (CurrentAccount) and the demo account
+│   ├── shell.rs     # the sidebar, the top bar, the user menu and Desk
+│   ├── live.rs      # the topic and the stream that tell open pages to fetch again
+│   ├── pages.rs     # /profile
 │   └── format.rs    # rupees, phone numbers, days
 └── modules/customers/
     ├── entity.rs    # the table as an ORM model; Plan and Status
@@ -395,19 +396,23 @@ tests/journey.rs     # a visitor's whole way through, over HTTP
 
 Every page that needs a signed-in user is marked `.authenticated()` and `.page()`. A guest who asks for one is sent to `/sign-in?next=` and, once signed in, back to it ([Errors and states](/docs/ui/errors-and-states/#sign-in-and-back-to-where-you-were)). `config/app.toml` sets `ui.sign_in_redirect = true` for this.
 
-`src/ui/auth.rs` is the only file that knows how a browser signs in. It gives the pages three things: `CurrentAccount` (who is signed in, as a handler argument; `Option<CurrentAccount>` for a page a guest may see too), `Browser::sign_in(email, password)` and `Browser::sign_out()`. Today it looks the account up in the `users` table of `AuthModule`, checks the password with its hasher, and keeps the user's id in a [server-side session](/docs/basics/sessions-and-csrf/) that the browser's cookie names. A strategy tells the rest of the app who that is, so `.authenticated()` and `CurrentUser` work as they do for a call with a token. Forms carry the session's CSRF token (the page's script sends it as a header; a plain form posts it as a field), so a post without it is refused.
+`AuthPages`, registered in `src/app.rs`, draws the sign-in, two-factor, forgotten password and reset pages, plus `/account/two-factor`, and signs out. It works on the session cookie, with the throttle, two-factor authentication, the sign-in policies and the audit trail of `AuthModule`. When `auth.magic_link`, `auth.otp` or `auth.passkeys` are on, the pages add the link, code and passkey ways in. Forms carry the session's CSRF token (the page's script sends it as a header; a plain form posts it as a field), so a post without it is refused.
 
-To sign in another way, or when `AuthModule` offers cookie sign-in of its own, replace the bodies of `Browser::sign_in`, `Browser::sign_out` and `BrowserStrategy`. The pages, the shell and the tests stay as they are, because they never touch the cookie, the session or the hasher. The top of `auth.rs` says the same.
+`src/ui/auth.rs` gives the pages `CurrentAccount`: who is signed in, as a handler argument (`Option<CurrentAccount>` for a page a guest may see too), and it holds the demo account. A page takes the `Desk` extractor of `src/ui/shell.rs`, which fills in who is signed in and which workspace the page is for. To sign in some other way, register pages of your own and call `AuthService::sign_in_session` from them.
 
 Public sign-up is off in this app (`auth.registration = false`), since the screens are for your own staff. Accounts come from the seeder in development, or from you.
 
+### Workspaces
+
+The app registers `WorkspaceModule`, and the demo account owns two workspaces, the Ludhiana desk and the Jalandhar desk, each with its own customers. The switcher beside every page heading changes the workspace, which the browser remembers; the customers table, the figures and the live updates are the workspace's own. The Ludhiana desk holds all forty customers and the Jalandhar desk those of two cities.
+
 ### Live updates
 
-`src/ui/live.rs` is the one place that bridges the app's events to the page: a small hub. `CustomerService` calls `Hub::nudge` once a change has committed, and `GET /customers/events` tells every open table and figure to fetch itself again. Open two windows to see it. When the framework offers a live hub of its own, use that instead of this file; the pages only name the stream's address.
+The app's live hub (`RealtimeModule`) serves `GET /broadcasting/stream`. `CustomerService` nudges the workspace's `customers` topic once a change has committed, and every open table and figure of that workspace fetches itself again. Open two windows to see it. `src/ui/live.rs` names the topic and the stream, so the pages only name the stream.
 
 ### Tests
 
-`cargo test` runs `tests/journey.rs`, which boots the whole app on a fresh SQLite file and walks a visitor through it over HTTP: a guest sent to sign in, a wrong password, the right one, the table with its search, filters, sort and pages, a form with its mistakes, a good customer and its toast, an edit, the live stream speaking after an add, a post without the token refused, and signing out.
+`cargo test` runs `tests/journey.rs`, which boots the whole app on a fresh SQLite file and walks a visitor through it over HTTP (see also [Testing Navree UI pages](/docs/testing/ui-pages/)): a guest sent to sign in, a wrong password, the right one, the table with its search, filters, sort and pages, a form with its mistakes, a good customer and its toast, an edit, the live stream speaking after an add, a post without the token refused, and signing out.
 
 ## Every kit includes
 

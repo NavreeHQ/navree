@@ -137,7 +137,7 @@ These appear as you use more of Navree:
 
 ## With a front end
 
-The minimal app has two front-end choices. `--ui next` adds a Next.js app in `web/`. `--ui navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`.
+The minimal app has three front-end choices. Without a flag, or with `--ui navree`, it draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`. `--ui next` adds a Next.js app in `web/` instead, and `--ui none` makes the API alone.
 
 ### With Next.js
 
@@ -168,15 +168,15 @@ The browser only talks to the Next.js server, which talks to the API. `@navree/n
 
 ### With Navree UI
 
-`navree new planner --ui navree` adds a front end to the same minimal app, with no `web/` folder and no Node project. It writes these files beside the app's own:
+`navree new planner` (the same as `--ui navree`) adds a front end to the same minimal app, with no `web/` folder and no Node project. It writes these files beside the app's own:
 
 <FileTree title="planner/">{`
 src/
   ui/
-    auth.rs           # how a browser signs in: the one file that knows
-    shell.rs          # the sidebar, the top bar and the user menu
-    live.rs           # the server-sent event stream and its hub
-    pages.rs          # /sign-in, /sign-out, /profile
+    auth.rs           # who is signed in (CurrentAccount) and the demo account
+    shell.rs          # the sidebar, the top bar, the user menu and Desk
+    live.rs           # the topic and the stream that tell open pages to fetch again
+    pages.rs          # /profile
     format.rs         # rupees, phone numbers, days
   modules/
     customers/        # an example feature module with its pages

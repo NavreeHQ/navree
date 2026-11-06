@@ -25,7 +25,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 
 - **Gives:** One language, one binary and one deploy. Forms from a validated struct, a data table driven by one definition, the app shell, and pages that work with JavaScript off. No Node at run time or in `cargo build`.
 - **Costs:** Interactions that need data go to the server and back, so they wait on the network. Rich text is [coming](/docs/ui/coming-next/), not here yet; charts are here, drawn on the server.
-- **Start:** `navree new <name> --ui navree` writes a minimal app with a Navree UI front end: sign-in, a customers table and forms, and a home page with live figures ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). To add Navree UI to an app you have, use the `ui` feature of `navree` (on by default) and `UiModule::from_config()`. See the [overview](/docs/ui/overview/) and the [components](/docs/components/overview/).
+- **Start:** `navree new <name>` writes a minimal app with a Navree UI front end: sign-in, workspaces, a customers table and forms, and a home page with live figures ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `--ui none` leaves the screens out. To add Navree UI to an app you have, use the `ui` feature of `navree` (on by default) and `UiModule::from_config()`. See the [overview](/docs/ui/overview/) and the [components](/docs/components/overview/).
 
 ## Next.js (React)
 
