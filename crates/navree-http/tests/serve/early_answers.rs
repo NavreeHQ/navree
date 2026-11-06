@@ -23,15 +23,19 @@ fn app() -> Router {
     Router::new()
         .route(Method::GET, "/", || async { "hello" })
         .route(Method::POST, "/ignore", || async { "ignored" })
-        .route(Method::POST, "/small", |request: Request<Body>| async move {
-            match read_body(request.into_body(), 1024).await {
-                Ok(body) => Response::new(Body::from(body)),
-                Err(error) => Response::builder()
-                    .status(error.status())
-                    .body(Body::from(error.to_string()))
-                    .unwrap(),
-            }
-        })
+        .route(
+            Method::POST,
+            "/small",
+            |request: Request<Body>| async move {
+                match read_body(request.into_body(), 1024).await {
+                    Ok(body) => Response::new(Body::from(body)),
+                    Err(error) => Response::builder()
+                        .status(error.status())
+                        .body(Body::from(error.to_string()))
+                        .unwrap(),
+                }
+            },
+        )
 }
 
 /// The head of a request that declares `length` bytes of body.
@@ -67,7 +71,10 @@ async fn the_rest_of_a_body_is_read_after_an_early_answer_and_the_connection_goe
         ("PUT /", "405"),
     ] {
         let mut client = connect(server.addr).await;
-        client.write_all(&head(request_line, 32 * 1024)).await.unwrap();
+        client
+            .write_all(&head(request_line, 32 * 1024))
+            .await
+            .unwrap();
         client.write_all(&[b'x'; 1024]).await.unwrap();
         let answer = read_response(&mut client).await;
         assert!(
@@ -109,14 +116,20 @@ async fn a_body_that_declares_more_than_is_read_closes_the_connection_after_its_
     .await;
 
     let mut client = connect(server.addr).await;
-    client.write_all(&head("POST /ignore", limit)).await.unwrap();
+    client
+        .write_all(&head("POST /ignore", limit))
+        .await
+        .unwrap();
     let answer = read_response(&mut client).await;
     assert!(answer.ends_with("ignored") && !closes(&answer), "{answer}");
     client.write_all(&vec![b'x'; limit]).await.unwrap();
     assert!(exchange(&mut client, GET).await.ends_with("hello"));
 
     let mut client = connect(server.addr).await;
-    client.write_all(&head("POST /ignore", limit + 1)).await.unwrap();
+    client
+        .write_all(&head("POST /ignore", limit + 1))
+        .await
+        .unwrap();
     let answer = read_response(&mut client).await;
     assert!(answer.ends_with("ignored") && closes(&answer), "{answer}");
     client
@@ -183,7 +196,10 @@ async fn a_client_that_sends_its_whole_body_first_reads_the_early_answer_not_a_r
             .await
             .expect("the server reads what it is sent");
         let answer = clean_close(&mut client).await;
-        assert!(answer.starts_with(&format!("HTTP/1.1 {status}")), "{answer}");
+        assert!(
+            answer.starts_with(&format!("HTTP/1.1 {status}")),
+            "{answer}"
+        );
         assert!(closes(&answer), "{answer}");
     }
 }

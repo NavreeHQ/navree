@@ -616,7 +616,11 @@ mod tests {
         );
         assert_eq!(count(&limit, "192.0.2.1"), 2);
         drop(older_slot);
-        assert_eq!(count(&limit, "192.0.2.1"), 2, "its count went to the new one");
+        assert_eq!(
+            count(&limit, "192.0.2.1"),
+            2,
+            "its count went to the new one"
+        );
 
         let (_fourth, _fourth_slot) = busy_from(&mut limit, "192.0.2.1");
         assert!(newer.reclaimable_since().is_none(), "the next one made way");

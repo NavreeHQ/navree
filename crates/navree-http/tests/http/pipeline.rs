@@ -730,7 +730,11 @@ async fn a_body_over_the_limit_is_answered_at_once_and_none_of_it_is_read() {
         let began = Instant::now();
         let response = app.send(request.body(body).unwrap()).await;
         assert_eq!(response.assert_error(413)["code"], "payload_too_large");
-        assert_eq!(began.elapsed(), Duration::ZERO, "{version:?}: no wait for the body");
+        assert_eq!(
+            began.elapsed(),
+            Duration::ZERO,
+            "{version:?}: no wait for the body"
+        );
         assert_eq!(read.load(Ordering::SeqCst), 0, "{version:?}");
         assert_eq!(
             response.header("connection"),

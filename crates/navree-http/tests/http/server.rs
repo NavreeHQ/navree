@@ -248,13 +248,16 @@ async fn the_rest_of_a_body_is_read_up_to_its_routes_limit() {
             ("POST /api/nowhere", 4096),
         ] {
             let mut stream = TcpStream::connect(addr).await.expect("connects");
-            let head = format!("{head} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {length}\r\n\r\n");
+            let head =
+                format!("{head} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {length}\r\n\r\n");
             stream.write_all(head.as_bytes()).await.unwrap();
             // The answer comes before the body.
             let answer = read_answer(&mut stream).await;
             stream.write_all(&vec![b'x'; length]).await.unwrap();
             stream
-                .write_all(b"GET /api/fast HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .write_all(
+                    b"GET /api/fast HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                )
                 .await
                 .ok();
             let mut rest = Vec::new();
@@ -270,13 +273,22 @@ async fn the_rest_of_a_body_is_read_up_to_its_routes_limit() {
     let [(within, next), (over, after), (outside, beyond)] = &answers[..] else {
         panic!("{answers:?}");
     };
-    assert!(within.starts_with("HTTP/1.1 200") && within.ends_with("kept"), "{within}");
+    assert!(
+        within.starts_with("HTTP/1.1 200") && within.ends_with("kept"),
+        "{within}"
+    );
     assert!(!within.contains("connection: close"), "{within}");
-    assert!(next.contains("HTTP/1.1 200") && next.ends_with("fast"), "{next}");
+    assert!(
+        next.contains("HTTP/1.1 200") && next.ends_with("fast"),
+        "{next}"
+    );
 
     assert!(over.starts_with("HTTP/1.1 413"), "{over}");
     assert!(over.contains("connection: close"), "{over}");
-    assert!(!after.contains("HTTP/1.1"), "the connection closed: {after}");
+    assert!(
+        !after.contains("HTTP/1.1"),
+        "the connection closed: {after}"
+    );
 
     assert!(outside.starts_with("HTTP/1.1 404"), "{outside}");
     assert!(!outside.contains("connection: close"), "{outside}");

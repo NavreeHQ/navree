@@ -1246,7 +1246,10 @@ mod tests {
         socket.write_all(b"answer").await.unwrap();
         let started = Instant::now();
         socket.shutdown().await.unwrap();
-        assert!(started.elapsed() < LINGER, "it ended when the client closed");
+        assert!(
+            started.elapsed() < LINGER,
+            "it ended when the client closed"
+        );
         assert_eq!(client.await.unwrap(), b"answer");
     }
 

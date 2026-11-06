@@ -521,7 +521,9 @@ mod tests {
 
     impl Feed {
         fn send(&self, bytes: usize) {
-            self.sender.send(Ok(Bytes::from(vec![b'x'; bytes]))).unwrap();
+            self.sender
+                .send(Ok(Bytes::from(vec![b'x'; bytes])))
+                .unwrap();
         }
     }
 
@@ -559,7 +561,11 @@ mod tests {
         assert_eq!(rest(&mut body, 1024), Rest::Unread, "1,024 more to come");
         let (feed, mut body) = fed(Some(2048));
         feed.send(1024);
-        assert_eq!(rest(&mut body, 2048), Rest::Drain(1024), "exactly the limit");
+        assert_eq!(
+            rest(&mut body, 2048),
+            Rest::Drain(1024),
+            "exactly the limit"
+        );
 
         let (_feed, mut body) = fed(Some(2049));
         assert_eq!(rest(&mut body, 2048), Rest::Unread, "one byte over");
@@ -568,7 +574,11 @@ mod tests {
 
         let (feed, mut body) = fed(None);
         feed.send(4096);
-        assert_eq!(rest(&mut body, 2048), Rest::Unread, "more than the limit came");
+        assert_eq!(
+            rest(&mut body, 2048),
+            Rest::Unread,
+            "more than the limit came"
+        );
         let (feed, mut body) = fed(None);
         feed.sender.send(Err("broken")).unwrap();
         assert_eq!(rest(&mut body, 2048), Rest::Unread, "a body that failed");
@@ -583,7 +593,10 @@ mod tests {
             }
             request.body(()).unwrap().into_parts().0
         };
-        assert!(waits_to_continue(&parts(Version::HTTP_11, &["100-continue"])));
+        assert!(waits_to_continue(&parts(
+            Version::HTTP_11,
+            &["100-continue"]
+        )));
         assert!(waits_to_continue(&parts(
             Version::HTTP_11,
             &["something-else", "100-Continue"]
@@ -592,7 +605,10 @@ mod tests {
             Version::HTTP_11,
             &["100-continue", "something-else"]
         )));
-        assert!(!waits_to_continue(&parts(Version::HTTP_10, &["100-continue"])));
+        assert!(!waits_to_continue(&parts(
+            Version::HTTP_10,
+            &["100-continue"]
+        )));
         assert!(!waits_to_continue(&parts(Version::HTTP_11, &[])));
     }
 
@@ -602,7 +618,16 @@ mod tests {
         let (feed, body) = fed(Some(10));
         let mut body = kept(&unread, body, false);
         feed.send(10);
-        assert_eq!(body.frame().await.unwrap().unwrap().into_data().unwrap().len(), 10);
+        assert_eq!(
+            body.frame()
+                .await
+                .unwrap()
+                .unwrap()
+                .into_data()
+                .unwrap()
+                .len(),
+            10
+        );
         drop(body);
         assert!(!unread.closes());
         assert!(unread.take().is_none());
@@ -726,7 +751,11 @@ mod tests {
         for _ in 0..3 {
             feed.send(500);
         }
-        assert_eq!(drained(&unread).await, Duration::ZERO, "1,500 bytes of 1,024");
+        assert_eq!(
+            drained(&unread).await,
+            Duration::ZERO,
+            "1,500 bytes of 1,024"
+        );
         assert!(clock.lingers());
     }
 
@@ -758,7 +787,10 @@ mod tests {
         poll_fn(|cx| linger.poll_read(&mut socket, cx)).await;
         assert_eq!(started.elapsed(), LINGER_AT_MOST, "however much it sends");
         drop(socket);
-        assert!(!client.await.unwrap(), "the client sees the close in the end");
+        assert!(
+            !client.await.unwrap(),
+            "the client sees the close in the end"
+        );
 
         let (mut socket, peer) = duplex(64);
         let mut linger = Linger::new();

@@ -1918,7 +1918,10 @@ async fn a_storm_over_the_address_limit_leaves_no_count_behind() {
     println!("slowest request of another address in the storm: {slowest:?}");
     for held in [&mut first, &mut second] {
         let response = exchange(held, b"llo").await;
-        assert!(response.ends_with("hello"), "the storm cost it nothing: {response}");
+        assert!(
+            response.ends_with("hello"),
+            "the storm cost it nothing: {response}"
+        );
     }
     assert!(still_served(&mut first).await);
     drop(first);
