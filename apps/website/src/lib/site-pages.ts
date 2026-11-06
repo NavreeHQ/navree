@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { lastModifiedUnder, latestCommit } from "./last-modified.ts";
+import { lastModifiedUnder, latestCommit, missingOutsideSources } from "./last-modified.ts";
 
 /**
  * The site's pages that are not docs pages (`src/app/<route>/page.tsx`),
@@ -16,6 +16,9 @@ import { lastModifiedUnder, latestCommit } from "./last-modified.ts";
  * - `parent`: the page above it in the trail (default: the homepage);
  * - `sources`: the files whose last change dates the page, in addition to
  *   its own folder (`lastmod` in the sitemap, `dateModified` in the data).
+ *   A path is relative to `apps/website`; one that starts with `../../` is
+ *   in the rest of the repository (the proof a rule names, the constant a
+ *   number is read from), and one that is not there fails the build.
  *
  * A page left out of the registry gets its folder name as its name, kind
  * `WebPage`, the homepage as its parent and its own folder as its source.
@@ -32,7 +35,14 @@ export type PageInfo = {
 export const pageInfo: Record<string, PageInfo> = {
   "/": {
     name: "Navree",
-    sources: ["src/components/home", "src/content", "site.config.ts", "src/app/ui/showcases.ts"],
+    sources: [
+      "src/components/home",
+      "src/content",
+      "site.config.ts",
+      "src/app/ui/showcases.ts",
+      "../../Cargo.toml",
+      "../../crates/navree/tests/dependency_graph.rs",
+    ],
   },
   "/docs/": { name: "Docs", kind: "CollectionPage", sources: ["content/docs/manifest.ts"] },
   "/ecosystem/": {
@@ -42,9 +52,37 @@ export const pageInfo: Record<string, PageInfo> = {
   },
   "/architecture/": {
     name: "Architecture",
-    sources: ["src/components/architecture", "src/components/diagrams", "src/content/faq.ts"],
+    sources: [
+      "src/components/architecture",
+      "src/components/diagrams",
+      "src/content/faq.ts",
+      // The proof each rule names (scripts/check-fresh.ts holds this list to the rules).
+      "../../crates/navree-http/src/error_pages.rs",
+      "../../crates/navree-macros/src/route.rs",
+      "../../crates/navree-orm/src/pagination.rs",
+      "../../crates/navree-orm/tests/orm/pagination.rs",
+      "../../crates/navree-ui/runtime/src/dom.js",
+      "../../crates/navree-ui/runtime/src/morph.js",
+      "../../crates/navree-ui/src/form.rs",
+      "../../crates/navree-ui/src/sortable",
+      "../../crates/navree-ui/src/table",
+      "../../crates/navree-ui/src/theme",
+      "../../crates/navree-ui/src/view.rs",
+      "../../crates/navree-ui/tests/budgets.rs",
+      "../../crates/navree-ui/tests/drawn_pairs.rs",
+      "../../crates/navree-ui/tests/forms_tables.rs",
+      "../../crates/navree-ui/tests/sortable.rs",
+      "../../e2e/ui/tests/datatable.test.mjs",
+      "../../e2e/ui/tests/hostile.test.mjs",
+      "../../e2e/ui/tests/morph.test.mjs",
+      "../../e2e/ui/tests/pages.test.mjs",
+      "../../apps/inbox-demo/src/scale.rs",
+    ],
   },
-  "/ai/": { name: "AI", sources: ["src/components/ai", "src/components/home/two-ways.tsx", "src/lib/navigator-tools.ts", "src/content/faq.ts"] },
+  "/ai/": {
+    name: "AI",
+    sources: ["src/components/ai", "src/components/home/two-ways.tsx", "src/lib/navigator-tools.ts", "src/content/faq.ts", "../../crates/navree-navigator/src/tools.rs"],
+  },
   "/ui/": {
     name: "UI",
     sources: [
@@ -59,7 +97,17 @@ export const pageInfo: Record<string, PageInfo> = {
   },
   "/performance/": {
     name: "Performance",
-    sources: ["src/components/bench", "src/lib/bench.ts", "src/lib/screens.ts", "content/showcase/store.json", "src/components/showcase/inbox-numbers.ts", "src/components/showcase/board-numbers.ts", "src/content/faq.ts"],
+    sources: [
+      "src/components/bench",
+      "src/lib/bench.ts",
+      "src/lib/screens.ts",
+      "content/showcase/store.json",
+      "src/components/showcase/inbox-numbers.ts",
+      "src/components/showcase/board-numbers.ts",
+      "src/content/faq.ts",
+      "../../bench/results/navree.json",
+      "../../apps/inbox-demo/src/scale.rs",
+    ],
   },
   "/showcase/": {
     name: "Showcase",
@@ -85,6 +133,7 @@ export const pageInfo: Record<string, PageInfo> = {
       "src/components/showcase/inbox-numbers.ts",
       "src/components/showcase/more-apps.tsx",
       "content/ui/catalog.json",
+      "../../apps/inbox-demo/src/scale.rs",
     ],
   },
   "/showcase/board/": {
@@ -96,6 +145,8 @@ export const pageInfo: Record<string, PageInfo> = {
       "src/components/showcase/board-numbers.ts",
       "src/components/showcase/more-apps.tsx",
       "content/ui/previews/build-anything",
+      "../../apps/board-demo/src/data.rs",
+      "../../apps/board-demo/src/views/board.rs",
     ],
   },
   "/changelog/": { name: "Changelog", kind: "CollectionPage", sources: ["src/lib/changelog.ts"] },
@@ -143,7 +194,10 @@ export function infoFor(route: string): Required<Omit<PageInfo, "sources">> & { 
 /** When a non-docs page last changed (ISO date): the latest commit to its folder or its sources. */
 export function pageModified(route: string): string {
   if (route === "/changelog/") return latestCommit();
-  return lastModifiedUnder(...infoFor(route).sources);
+  const { sources } = infoFor(route);
+  const gone = missingOutsideSources(sources);
+  if (gone.length) throw new Error(`site-pages: ${route} names ${gone.join(", ")}, which ${gone.length === 1 ? "is" : "are"} not in the repository: update the page's sources in src/lib/site-pages.ts`);
+  return lastModifiedUnder(...sources);
 }
 
 /** When a docs section's own page (`/docs/<section>/`) last changed: its manifest entry, its pages or the page layout. */

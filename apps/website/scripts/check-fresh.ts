@@ -13,6 +13,8 @@
  * - the sitemap's `lastmod` of `/changelog/` is the date of the newest commit;
  * - every docs page's `dateModified` is the `lastmod` the sitemap gives it,
  *   and so is every other page's: one date per page, from git;
+ * - every file `/architecture/` shows as the proof of a rule is among the
+ *   sources that date the page, so the page's date follows its proof;
  * - the IndexNow key file is in the export and `deploy/navree.com/indexnow.sh`
  *   uses the same key.
  */
@@ -22,6 +24,7 @@ import path from "node:path";
 import { OUT, SITE, WEBSITE, finish, nodes, pages, requireOut, typesOf } from "./lib/site-html.ts";
 import { HIGHLIGHT_MAX, INTERNAL_SCOPES, RETIRED_SCOPES, changelog, weekStart } from "../src/lib/changelog.ts";
 import { latestCommit } from "../src/lib/last-modified.ts";
+import { infoFor } from "../src/lib/site-pages.ts";
 
 requireOut("check-fresh");
 process.chdir(WEBSITE);
@@ -131,6 +134,22 @@ for (const p of all) {
   dated++;
   for (const when of modified) {
     if (Date.parse(String(when)) !== Date.parse(expected)) problems.push(`${p.url}: dateModified ${String(when)} differs from the sitemap's lastmod ${expected}`);
+  }
+}
+
+// ------------------------------------------------ what dates /architecture/
+
+const architecture = all.find((p) => p.url === "/architecture/");
+if (architecture) {
+  // Repository paths of the sources: the website's own are under apps/website, the others are named with `../../`.
+  const sources = infoFor("/architecture/").sources.map((source) => path.posix.normalize(path.posix.join("apps/website", source.split(path.sep).join("/"))));
+  const proofs = new Set([...architecture.body.matchAll(/github\.com\/NavreeHQ\/navree\/blob\/main\/([^"#]+)"/g)].map((m) => m[1]));
+  if (!proofs.size) problems.push("/architecture/ links no proof files");
+  for (const file of proofs) {
+    if (file.startsWith("apps/website/")) continue;
+    if (!sources.some((source) => file === source || file.startsWith(`${source}/`))) {
+      problems.push(`/architecture/ shows ${file} as proof, which no source in src/lib/site-pages.ts covers: the page's date would not follow it`);
+    }
   }
 }
 
