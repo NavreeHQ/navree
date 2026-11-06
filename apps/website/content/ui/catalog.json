@@ -1762,7 +1762,7 @@
       "id": "table",
       "name": "Table",
       "url": "/docs/components/table/",
-      "summary": "A table of data. The wrapper scrolls on narrow screens, and a keyboard can reach it to scroll it: it is a tab stop, a region named by `Table::label` (\"Table\" until one is given).",
+      "summary": "A table of data. The wrapper scrolls on narrow screens, and a keyboard can reach it to scroll it: it is a tab stop. Named with `Table::label`, it is also a region a screen reader lists (two regions of one page need two names).",
       "group": "data",
       "types": [
         "Table",
@@ -5449,7 +5449,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -5539,7 +5539,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -5629,7 +5629,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -5732,7 +5732,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -5822,7 +5822,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -5912,7 +5912,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -6028,7 +6028,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
@@ -6118,7 +6118,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "carousel-30399fd67df0.js"
+        "carousel-1e6ce13f24d3.js"
       ],
       "captions": [],
       "slots": [
