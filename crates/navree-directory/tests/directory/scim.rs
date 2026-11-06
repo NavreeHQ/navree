@@ -257,7 +257,7 @@ async fn users_are_created_read_filtered_and_paged() {
     let by_name = get(
         &h,
         &token,
-        "/scim/v2/Users?filter=userName%20eq%20%22ADA%40agra.test%22",
+        "/scim/v2/Users?filter=userName%20eq%20%22ANU%40acme.test%22",
     )
     .await;
     by_name
@@ -285,7 +285,7 @@ async fn users_are_created_read_filtered_and_paged() {
     get(
         &h,
         &token,
-        "/scim/v2/Users?filter=name.familyName%20sw%20%22hop%22",
+        "/scim/v2/Users?filter=name.familyName%20sw%20%22hun%22",
     )
     .await
     .assert_json_path("totalResults", json!(1))

@@ -855,7 +855,7 @@ mod tests {
     #[test]
     fn dns_compare_without_case_or_spaces() {
         assert_eq!(
-            normalize_dn("CN=Anu Lakhotia, OU=People , DC=agra,DC = test"),
+            normalize_dn("CN=Anu Lakhotia, OU=People , DC=acme,DC = test"),
             "cn=anu lakhotia,ou=people,dc=acme,dc=test"
         );
     }
@@ -1031,7 +1031,7 @@ mod tests {
                 &[
                     ("entryUUID", &["g-ops"]),
                     ("cn", &["ops"]),
-                    ("memberUid", &["GRACE"]),
+                    ("memberUid", &["GAURI"]),
                 ],
             ),
         ];

@@ -59,7 +59,7 @@ async fn the_directory_serves_scim_and_syncs_end_to_end() {
         .await
         .assert_status(409);
     client
-        .get("/scim/v2/Users?filter=userName%20eq%20%22anu%40agra.test%22")
+        .get("/scim/v2/Users?filter=userName%20eq%20%22anu%40acme.test%22")
         .bearer(&token)
         .send()
         .await

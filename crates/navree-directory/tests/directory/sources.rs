@@ -1005,7 +1005,7 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
             .attr("objectClass", &["posixGroup"])
             .attr("entryUUID", &[OPS])
             .attr("cn", &["Operations"])
-            .attr("memberUid", &["ALAN@acme.test"]),
+            .attr("memberUid", &["ARUN@acme.test"]),
     ];
     let (server, pem) = LdapServer::start_tls(entries, None).await;
     let h = real(loopback_ldap).await;

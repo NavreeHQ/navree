@@ -836,8 +836,8 @@ mod tests {
         assert!(matches(r#"emails co "home.test""#));
         assert!(matches(r#"emails.value eq "anu@home.test""#));
         assert!(matches(r#"emails.type eq "work""#));
-        assert!(matches(r#"emails[type eq "work" and value co "agra"]"#));
-        assert!(!matches(r#"emails[type eq "home" and value co "agra"]"#));
+        assert!(matches(r#"emails[type eq "work" and value co "acme"]"#));
+        assert!(!matches(r#"emails[type eq "home" and value co "acme"]"#));
         assert!(matches(r#"emails[primary eq true]"#));
     }
 
