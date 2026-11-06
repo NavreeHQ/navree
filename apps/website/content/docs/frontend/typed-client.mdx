@@ -1,6 +1,6 @@
 ---
 title: "The typed client"
-description: "`@navree/client`: a client typed from your API's OpenAPI document, `NavreeError` with Navree's error codes, list queries, pages, query keys and operations."
+description: "`@navree/client`: a client typed from your API's OpenAPI document, with Navree's error codes, list queries, pages, query keys and operations."
 ---
 
 `@navree/client` calls a Navree API with types generated from the API's own OpenAPI document, so a renamed field or a removed route is a compile error in the front end. It is a typed fetch client with Navree's conventions built in: the error shape and its `code`, the workspace header, request ids, list queries and the page shapes. The fetch core under it is Navree's own, [described below](#the-fetch-core), and the package has no runtime dependencies.

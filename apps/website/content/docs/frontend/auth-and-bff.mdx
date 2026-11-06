@@ -1,6 +1,6 @@
 ---
 title: "Auth and the BFF"
-description: "`@navree/bff`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the Origin check, a streaming proxy, sessions for server rendering, and test helpers."
+description: "`@navree/bff`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the Origin check, a streaming proxy and server-side sessions."
 ---
 
 A token in `localStorage` is one cross-site scripting bug away from leaking every session. `@navree/bff` keeps the tokens on the server: it is the [backend-for-frontend](/docs/patterns/backend-for-frontend/) of a web app on a Navree API, written on web-standard `Request` and `Response`. `@navree/next` mounts it as route handlers and `@navree/nuxt` as Nitro routes; any server that speaks web requests can mount it too.

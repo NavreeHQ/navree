@@ -1,6 +1,6 @@
 ---
 title: "Data tables"
-description: "Lists driven by list queries: filters, sort, search and paging in the URL, sorted and paged on the server, rendered by `DataTable` (React) or `<NavreeDataTable>` (Vue) on TanStack Table."
+description: "Lists driven by list queries: filters, sort, search and paging in the URL and on the server, drawn by `DataTable` (React) or `NavreeDataTable` (Vue)."
 ---
 
 A list screen has the same parts in every app: a table of one page of records, sortable headings, a search box, filters and the page buttons, all kept in the URL so a reload, the back button and a shared link show the same list. With Navree the server does the sorting, filtering and paging (the list endpoint reads a [list query](/docs/frontend/typed-client/#list-queries)), so the table only renders the page it gets and turns clicks into the next list query. `@navree/next` and `@navree/nuxt` ship that table on [TanStack Table](https://tanstack.com/table), styled with [the theme](/docs/frontend/theming/).
