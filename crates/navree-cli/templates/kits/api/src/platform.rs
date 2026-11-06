@@ -18,7 +18,8 @@ pub const WORKSPACE_CHANNEL: &str = "workspace.{id}";
 /// Adds the framework modules to `builder`, configured from `sources`:
 ///
 /// Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail,
-/// Queue, Schedule, Validation, Auth, Access ([`abilities::define`], the
+/// Queue, Schedule, Validation, Auth, Session, Ui, AuthPages (the sign-in
+/// pages of the tools), Access ([`abilities::define`], the
 /// super-admin role `admin`), Workspace, Billing, Social, Notify,
 /// Realtime, Audit, Api, Observe and Helm, plus the workspace channel
 /// authorizer. Each `from_config()` module reads its section of
@@ -40,6 +41,11 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         // Accounts: JWT bearer tokens, refresh tokens, two-factor, email
         // verification and password reset (`/api/auth/*`).
         .module(AuthModule::from_config())
+        // A browser signs in on the server-side session: the pages that Helm and
+        // Lighthouse send guests to.
+        .module(SessionModule::from_config())
+        .module(UiModule::from_config())
+        .module(navree::auth::AuthPages::new())
         // Roles, permissions and abilities (`GET /api/me/abilities`); the
         // `admin` role passes every check (Helm's super admins).
         .module(AccessModule::for_root(AccessOptions {

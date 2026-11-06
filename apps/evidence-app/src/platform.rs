@@ -52,6 +52,8 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         }))
         .module(WorkspaceModule::from_config())
         .module(SessionModule::from_config())
+        // The sign-in page that Helm, Fleet and Lighthouse send guests to.
+        .module(navree::auth::AuthPages::new())
         .module(AuditModule::from_config())
         // Packages.
         .module(NotifyModule::from_config())
