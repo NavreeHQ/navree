@@ -937,7 +937,6 @@ mod tests {
         assert_eq!(invoice.status, InvoiceStatus::Draft);
     }
 
-    // CONN-101
     #[test]
     fn one_time_payments_are_non_catalog_transactions() {
         let data = tagged_metadata(
@@ -957,7 +956,6 @@ mod tests {
         assert_eq!(body["custom_data"]["navree_kind"], "payment");
     }
 
-    // CONN-101
     #[test]
     fn one_time_transactions_and_refunds_map_to_their_actions() {
         let one_time = json!({

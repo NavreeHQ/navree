@@ -789,7 +789,7 @@ mod tests {
 
     #[test]
     fn each_change_tells_the_lists_and_only_the_parts_it_touched() {
-        // MOD-004: the topics replace the page streams' filters.
+        // The topics replace the page streams' filters.
         assert_eq!(
             topics_of(Change::of(7, 3)),
             ["conversations", "conversation.7", "customer.3"]

@@ -1165,7 +1165,6 @@ mod tests {
         }
     }
 
-    // CONN-101
     #[test]
     fn one_time_payments_are_payment_mode_sessions_in_the_smallest_unit() {
         let form = payment_form(&payment()).unwrap();
@@ -1219,7 +1218,6 @@ mod tests {
         ));
     }
 
-    // CONN-101
     #[test]
     fn payment_links_sell_one_price_once() {
         let request = PaymentLinkRequest {
@@ -1287,7 +1285,6 @@ mod tests {
         );
     }
 
-    // CONN-101
     #[test]
     fn refunds_name_the_payment_intent_or_the_charge() {
         let mut request = RefundRequest {
@@ -1313,7 +1310,6 @@ mod tests {
         assert_eq!(field(&form, "amount"), None, "the rest of the payment");
     }
 
-    // CONN-103
     #[test]
     fn keys_are_per_call_or_derived_within_the_limit() {
         let (a, b) = (call_key("portal"), call_key("portal"));
@@ -1327,7 +1323,6 @@ mod tests {
         assert_ne!(derived, sub_key(&long, "link"));
     }
 
-    // CONN-101
     #[test]
     fn payment_and_refund_events_map_to_actions() {
         let session = json!({

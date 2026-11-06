@@ -399,7 +399,6 @@ mod tests {
         assert!(SigningKey25519::parse(value).is_ok());
     }
 
-    // CONN-105
     #[test]
     fn rsa_steps_name_the_settings() {
         assert!(RSA_KEY_STEPS.contains("openssl genpkey -algorithm RSA"));

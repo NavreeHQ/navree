@@ -1068,7 +1068,6 @@ mod tests {
         assert_eq!(env_file_value(text, "NAVREE_TEST_MONGODB_URL"), None);
     }
 
-    // CONN-100
     #[test]
     fn only_a_one_requires_the_servers() {
         assert!(requires(Some("1")));
@@ -1077,7 +1076,6 @@ mod tests {
         }
     }
 
-    // CONN-100
     #[test]
     #[should_panic(
         expected = "NAVREE_TEST_EXAMPLE_URL is not set (NAVREE_TEST_REQUIRE_SERVICES=1)"
@@ -1086,7 +1084,6 @@ mod tests {
         skip_unless(true, "NAVREE_TEST_EXAMPLE_URL is not set");
     }
 
-    // CONN-100
     #[test]
     fn a_test_that_would_skip_skips_when_they_are_not() {
         // A variable no suite reads, so the notice this prints is never a real

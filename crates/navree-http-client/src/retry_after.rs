@@ -50,7 +50,6 @@ mod tests {
     /// 1994-11-06T08:49:37Z, the date of RFC 9110's examples.
     const RFC_DATE: u64 = 784_111_777;
 
-    // CONN-103
     #[test]
     fn seconds_are_read_as_given() {
         let now = at(0);
@@ -65,7 +64,6 @@ mod tests {
         );
     }
 
-    // CONN-103
     #[test]
     fn the_three_date_forms_are_read() {
         let now = at(RFC_DATE - 30);
@@ -82,7 +80,6 @@ mod tests {
         }
     }
 
-    // CONN-103
     #[test]
     fn a_date_in_the_past_asks_for_no_wait() {
         assert_eq!(
@@ -91,7 +88,6 @@ mod tests {
         );
     }
 
-    // CONN-103
     #[test]
     fn anything_else_is_not_a_retry_after() {
         for value in ["", "soon", "-5", "1.5", "5s", "Sun, 06 Nov"] {

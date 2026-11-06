@@ -455,7 +455,7 @@ mod tests {
         assert_eq!(session.lock().data.len(), 1, "only the token");
     }
 
-    // MOD-001: "remember me" is a lifetime the session keeps for itself.
+    // "remember me" is a lifetime the session keeps for itself.
     #[test]
     fn a_session_keeps_its_own_lifetime_until_it_is_cleared() {
         use std::time::Duration;

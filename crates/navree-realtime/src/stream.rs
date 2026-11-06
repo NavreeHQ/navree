@@ -849,7 +849,6 @@ mod tests {
 
     #[test]
     fn ids_read_back_what_they_write_and_nothing_else() {
-        // MOD-004
         let written = id(1_730_000_000_000, 7);
         assert_eq!(written.to_string(), "1730000000000-7");
         assert_eq!(EventId::parse(&written.to_string()), Some(written));
@@ -870,7 +869,6 @@ mod tests {
 
     #[test]
     fn ids_never_go_back() {
-        // MOD-004
         let streams = Streams::new(StreamOptions::default());
         let mut last = streams.next_id();
         for _ in 0..1_000 {
@@ -882,7 +880,7 @@ mod tests {
 
     #[test]
     fn nothing_is_kept_before_a_stream_was_served() {
-        // MOD-004: lazy by default.
+        // Lazy by default.
         let mut recent = Recent::new(8);
         recent.record(id(10, 0), &channels(&["a"]), "changed");
         assert!(recent.entries.is_empty());
@@ -901,7 +899,6 @@ mod tests {
 
     #[test]
     fn what_was_missed_is_one_nudge_per_name_the_newest_oldest_first() {
-        // MOD-004
         let mut recent = Recent::new(16);
         recent.start(0);
         let t = 100_000;
@@ -934,7 +931,7 @@ mod tests {
 
     #[test]
     fn a_resume_looks_five_seconds_back_for_slow_clocks() {
-        // MOD-004: everything after the last id here, and what came in the five
+        // Everything after the last id here, and what came in the five
         // seconds before it, which a stream on another process may have seen
         // in another order.
         let mut recent = Recent::new(16);
@@ -963,7 +960,6 @@ mod tests {
 
     #[test]
     fn a_fresh_start_is_kept_so_a_stream_can_come_back_from_it() {
-        // MOD-004
         let mut recent = Recent::new(4);
         recent.start(0);
         recent.mark_start(id(500, 1));
@@ -975,7 +971,6 @@ mod tests {
 
     #[test]
     fn a_full_ring_cannot_resume_what_it_dropped() {
-        // MOD-004
         let mut recent = Recent::new(2);
         recent.start(0);
         let t = 1_000_000;
@@ -1015,7 +1010,7 @@ mod tests {
 
     #[test]
     fn a_reader_that_does_not_read_holds_one_nudge_per_name() {
-        // MOD-004: backpressure. However many broadcasts come, a stream that
+        // Backpressure. However many broadcasts come, a stream that
         // doesn't read holds one nudge per name, never more.
         let listener = listener(&[
             ("navree-live.orders", "orders"),
@@ -1048,7 +1043,6 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn a_reader_that_stops_reading_while_more_come_is_let_go_of() {
-        // MOD-004
         let listener = listener(&[("a", "a")]);
         listener.mark("a", id(1, 1), "changed");
         tokio::time::advance(STALL / 2).await;
@@ -1069,7 +1063,6 @@ mod tests {
 
     #[test]
     fn lists_are_trimmed_and_named_once() {
-        // MOD-004
         assert_eq!(names(Some(" a, b,,a ,c ")), ["a", "b", "c"]);
         assert!(names(None).is_empty());
         assert!(is_listenable_channel("private-crm.deals"));
@@ -1082,7 +1075,6 @@ mod tests {
 
     #[test]
     fn a_user_holds_at_most_their_share_of_streams() {
-        // MOD-004
         let streams = Streams::new(StreamOptions {
             per_user: 2,
             ..StreamOptions::default()

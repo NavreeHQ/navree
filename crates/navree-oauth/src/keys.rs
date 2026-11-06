@@ -416,7 +416,6 @@ mod tests {
         format!("{RSA_KEY_PREFIX}{body}")
     }
 
-    // CONN-105
     #[test]
     fn rsa_keys_are_read_from_pem_or_base64_der() {
         let from_pem = IdTokenKey::parse(RSA_PEM).unwrap();
@@ -449,7 +448,6 @@ mod tests {
         assert_eq!(parsed.kid(), ed.kid());
     }
 
-    // CONN-105
     #[test]
     fn weak_or_wrong_rsa_keys_are_refused() {
         let weak = include_str!("../tests/fixtures/rsa-1024.pem");
@@ -475,7 +473,6 @@ mod tests {
         assert_eq!(IdTokenKey::parse("").unwrap_err(), KeyError::UnknownKind);
     }
 
-    // CONN-105
     #[test]
     fn rs256_tokens_verify_with_ring_from_the_published_jwk() {
         let keys = SigningKeys::with_keys(IdTokenKey::parse(RSA_PEM).unwrap(), Vec::new());
@@ -503,7 +500,6 @@ mod tests {
         assert_eq!(keys.verify(&token).unwrap()["sub"], "harpreet");
     }
 
-    // CONN-105
     #[test]
     fn switching_to_rs256_keeps_eddsa_tokens_verifiable() {
         let old = SigningKey25519::generate();

@@ -505,7 +505,6 @@ impl<'a> RefundBuilder<'a> {
 mod tests {
     use super::*;
 
-    // CONN-103
     #[test]
     fn keys_stay_within_the_providers_limit() {
         assert_eq!(

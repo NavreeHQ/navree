@@ -273,7 +273,6 @@ mod tests {
 
     #[test]
     fn topic_names_are_what_a_channel_and_an_event_name_share() {
-        // MOD-004
         for good in ["orders", "conversation.42", "a_b-c.d", &"x".repeat(64)] {
             assert!(is_topic_name(good), "{good}");
         }
@@ -294,7 +293,6 @@ mod tests {
 
     #[test]
     fn channels_carry_the_audience_and_give_back_the_topic() {
-        // MOD-004
         let user = Uuid::now_v7();
         let workspace = Uuid::now_v7();
         for topic in [
@@ -323,7 +321,7 @@ mod tests {
 
     #[test]
     fn the_longest_topic_still_makes_a_valid_channel() {
-        // MOD-004: a UUID and a 64-character name fit Pusher's 200.
+        // A UUID and a 64-character name fit Pusher's 200.
         let topic = Topic::workspace(Uuid::now_v7(), "x".repeat(MAX_TOPIC_NAME));
         assert!(crate::channel::is_valid_name(&topic.channel()));
     }

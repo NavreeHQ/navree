@@ -251,7 +251,6 @@ mod base64_content {
 mod tests {
     use super::*;
 
-    // CONN-102
     #[test]
     fn attachments_round_trip_through_a_queued_job_in_base64() {
         let attachment = Attachment::new(
@@ -269,7 +268,6 @@ mod tests {
         );
     }
 
-    // CONN-102
     #[test]
     fn names_and_types_are_checked() {
         let ok = |name: &str, kind: &str| Attachment::new(name, kind, vec![1]).check();
@@ -294,7 +292,6 @@ mod tests {
         assert!(ok(&format!("{}.pdf", "a".repeat(252)), "application/pdf").is_err());
     }
 
-    // CONN-102
     #[test]
     fn types_follow_extensions() {
         assert_eq!(Attachment::content_type_for("a.PDF"), "application/pdf");
@@ -309,7 +306,6 @@ mod tests {
         );
     }
 
-    // CONN-102
     #[test]
     fn sizes_count_attachments_base64_encoded() {
         assert_eq!(encoded_len(0), 0);

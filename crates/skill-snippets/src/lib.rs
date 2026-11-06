@@ -195,7 +195,7 @@ mod tests {
         })
     }
 
-    // MOD-021: a component that ships in Navree UI is named in the skills that teach
+    // A component that ships in Navree UI is named in the skills that teach
     // pages, so an agent never calls a shipped component missing.
     #[test]
     fn the_ui_skill_names_every_component_of_the_catalog() {

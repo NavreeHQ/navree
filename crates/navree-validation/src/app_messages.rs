@@ -199,7 +199,7 @@ mod tests {
         }
     }
 
-    // MOD-005: the same words as the extractors, with names and fallbacks added on top.
+    // The same words as the extractors, with names and fallbacks added on top.
     #[test]
     fn renders_as_the_extractors_do_with_names_and_defaults_on_top() {
         let app = Messages::default()
@@ -251,7 +251,7 @@ mod tests {
         );
     }
 
-    // MOD-005: a translator renders every message, the field's name included.
+    // A translator renders every message, the field's name included.
     #[test]
     fn a_translator_renders_every_message() {
         let messages = AppMessages::new(Arc::new(Messages::default()), Some(Arc::new(Loud)))

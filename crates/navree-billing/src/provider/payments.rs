@@ -670,7 +670,6 @@ pub(crate) fn tagged_metadata(
 mod tests {
     use super::*;
 
-    // CONN-101
     #[test]
     // Rupees in lakh grouping, then the paise: `1_00_000_00` is ₹1,00,000.00.
     #[allow(clippy::inconsistent_digit_grouping)]
@@ -685,7 +684,6 @@ mod tests {
         assert_eq!(Money::inr(1_00_000_00).to_string(), "INR 100000.00");
     }
 
-    // CONN-101
     #[test]
     fn decimal_text_is_read_without_floating_point() {
         assert_eq!(Money::parse_major("1499", "inr"), Some(Money::inr(149_900)));
@@ -716,7 +714,6 @@ mod tests {
         assert_eq!(Money::parse_major("1.5", "jpy"), None);
     }
 
-    // CONN-101
     #[test]
     fn amounts_that_cannot_be_charged_are_named() {
         assert_eq!(Money::inr(100).problem(), None);
@@ -725,7 +722,6 @@ mod tests {
         assert!(Money::new(100, "rupees").problem().is_some());
     }
 
-    // CONN-101
     #[test]
     fn methods_have_stable_names() {
         for (method, name) in [
@@ -752,7 +748,6 @@ mod tests {
         );
     }
 
-    // CONN-101
     #[test]
     fn references_follow_the_strictest_provider() {
         assert!(is_reference("INV-2026-0042"));
@@ -763,7 +758,6 @@ mod tests {
         assert!(!is_reference("INV/42"));
     }
 
-    // CONN-101
     #[test]
     fn metadata_names_the_billable_the_reference_and_the_kind() {
         let id = Uuid::nil();
