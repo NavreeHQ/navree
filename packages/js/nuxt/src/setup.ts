@@ -3,6 +3,7 @@
  * so it can be tested without a Nuxt build.
  */
 import { defu } from "defu";
+import type { BffPages, BffSocialPaths } from "@navree/bff";
 import type { SessionGateOptions } from "./server/handlers.js";
 
 export interface RealtimeSettings {
@@ -22,6 +23,21 @@ export interface NavreeModuleOptions {
   broadcasting?: boolean;
   /** More prefixes to forward with the session's token, such as a server-rendered tool at `/admin`. */
   mounts?: string[];
+  /**
+   * Social sign-in: `GET /auth/social/{provider}` and `GET /auth/callback/{provider}` (default off).
+   * The routes end on `pages.signIn`, `pages.twoFactor` and the page the sign-in started from.
+   */
+  social?: boolean;
+  /** Where the social sign-in routes are mounted (defaults `/auth/social` and `/auth/callback`). */
+  socialPaths?: BffSocialPaths;
+  /**
+   * The pages the BFF's redirects end on: `signIn` (default: the session gate's `loginPath`),
+   * `twoFactor` (`/two-factor`) and `verifyEmail` (`/verify-email`, where the link in the
+   * verification mail lands).
+   */
+  pages?: BffPages;
+  /** Send a page request that the API refuses with 401 (a tool mounted at `/admin`) to the sign-in page. Default off. */
+  redirectNavigations?: boolean;
   /** Pages behind sign-in (default: everything but `/login`), or `false` for none. */
   sessionGate?: SessionGateOptions | false;
   /** The API's `workspace.header` (default `X-Workspace`). */
@@ -53,6 +69,7 @@ export const defaults = {
   apiPrefix: "/api",
   broadcasting: true,
   mounts: [] as string[],
+  social: false,
   sessionGate: { loginPath: "/login" } as SessionGateOptions | false,
   workspaceHeader: "X-Workspace",
   realtime: false as RealtimeSettings | false,
@@ -69,6 +86,9 @@ export function setupNavree(options: NavreeModuleOptions, nuxt: NuxtLike, kit: N
     apiUrl: settings.apiUrl ?? "",
     workspaceHeader: settings.workspaceHeader,
     sessionGate,
+    pages: { ...(sessionGate === false ? {} : { signIn: sessionGate.loginPath }), ...settings.pages },
+    socialPaths: settings.socialPaths,
+    redirectNavigations: settings.redirectNavigations,
   });
   nuxt.options.runtimeConfig.public.navree = defu(nuxt.options.runtimeConfig.public.navree as object | undefined, {
     authPrefix: `${apiPrefix === false ? "/api" : apiPrefix}/auth`,
@@ -84,6 +104,12 @@ export function setupNavree(options: NavreeModuleOptions, nuxt: NuxtLike, kit: N
   if (apiPrefix !== false) kit.addServerHandler({ route: `${apiPrefix}/**`, handler: bff });
   if (settings.broadcasting) kit.addServerHandler({ route: "/broadcasting/auth", method: "post", handler: bff });
   for (const mount of settings.mounts) kit.addServerHandler({ route: `${mount.replace(/\/+$/, "")}/**`, handler: bff });
+  if (settings.social) {
+    const start = (settings.socialPaths?.start ?? "/auth/social").replace(/\/+$/, "");
+    const callback = (settings.socialPaths?.callback ?? "/auth/callback").replace(/\/+$/, "");
+    kit.addServerHandler({ route: `${start}/**`, method: "get", handler: bff });
+    kit.addServerHandler({ route: `${callback}/**`, method: "get", handler: bff });
+  }
   if (sessionGate !== false) kit.addServerHandler({ middleware: true, handler: runtime("server/session-gate.js") });
 
   kit.addServerImports([
@@ -117,7 +143,10 @@ export function setupNavree(options: NavreeModuleOptions, nuxt: NuxtLike, kit: N
   if (settings.abilities) {
     const abilities = kit.resolve("./vue/abilities.js");
     kit.addPlugin(runtime("plugin-abilities.js"));
-    kit.addImports([{ name: "useAbility", from: abilities }]);
+    kit.addImports([
+      { name: "useAbility", from: abilities },
+      { name: "useAbilityReady", from: abilities },
+    ]);
     kit.addComponent({ name: "Can", export: "Can", filePath: abilities });
   }
 

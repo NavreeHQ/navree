@@ -14,6 +14,9 @@ export const useNavreeBff = bffResolver((event?: H3Event) => {
   return bffOptionsFromEnv(process.env, {
     apiUrl: config.apiUrl || "http://127.0.0.1:8080",
     workspaceHeader: config.workspaceHeader,
+    pages: config.pages,
+    socialPaths: config.socialPaths,
+    redirectNavigations: config.redirectNavigations,
   });
 });
 

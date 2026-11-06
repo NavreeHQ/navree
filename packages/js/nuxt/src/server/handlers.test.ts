@@ -137,6 +137,56 @@ describe("the session gate", () => {
   });
 });
 
+describe("the session gate when the API is down", () => {
+  const page = (path: string, cookies: Record<string, string> = {}, accept = "text/html") =>
+    browserRequest(APP, path, { cookies, headers: { accept } });
+
+  it("serves the page and keeps the cookies when the token can't be refreshed because the API can't be reached", async () => {
+    const navree = fakeNavree({ "POST /api/auth/refresh": () => new Response(null, { status: 503 }) });
+    const { web } = server(navree, {});
+    const stale = unsignedJwt({ sub: "u1", exp: Math.floor(Date.now() / 1000) - 60 });
+
+    const response = await web(page("/deals", { [ACCESS_COOKIE]: stale, [REFRESH_COOKIE]: "RT1" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(((await response.json()) as { page: string }).page).toBe("/deals");
+  });
+
+  it("lets the social sign-in routes through for a browser without a session", async () => {
+    const { web } = server(undefined, { loginPath: "/login" });
+    for (const path of ["/auth/social/github", "/auth/callback/github?code=c&state=s"]) {
+      const response = await web(page(path));
+      expect(response.status, path).toBe(200);
+    }
+  });
+});
+
+describe("social sign-in and the verification link as Nitro routes", () => {
+  it("are answered by the same handler as the rest of the BFF", async () => {
+    const navree = fakeNavree({
+      "GET /api/auth/social/github/redirect": () => Response.json({ url: "https://github.com/login/oauth/authorize?state=S1", state: "S1" }),
+      "GET /api/auth/email/verify/u1/h1": () => new Response(null, { status: 204 }),
+    });
+    const bff = createBff({ apiUrl: API, fetch: navree.fetch });
+    const app = createApp();
+    const router = createRouter();
+    const handler = createBffHandler(() => bff);
+    router.get("/auth/social/**", handler);
+    router.get("/api/**", handler);
+    app.use(router);
+    const web = toWebHandler(app);
+
+    const start = await web(browserRequest(APP, "/auth/social/github?next=/"));
+    expect(start.status).toBe(303);
+    expect(start.headers.get("location")).toBe("https://github.com/login/oauth/authorize?state=S1");
+    expect(readSetCookies(start).navree_social!.value).toBe("S1");
+
+    const verified = await web(browserRequest(APP, "/api/auth/email/verify/u1/h1?signature=s"));
+    expect(verified.headers.get("location")).toBe("/verify-email?status=verified");
+  });
+});
+
 describe("getNavreeSession (server routes and server-side rendering)", () => {
   it("returns the user, token and workspace of a request, or null", async () => {
     const navree = navreeApi();

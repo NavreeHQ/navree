@@ -75,6 +75,33 @@ describe("route handlers", () => {
   });
 });
 
+describe("social sign-in and the verification link", () => {
+  it("are answered by the same handlers, one catch-all route per mount", async () => {
+    const navree = fakeNavree({
+      "GET /api/auth/social/github/redirect": () => Response.json({ url: "https://github.com/login/oauth/authorize?state=S1", state: "S1" }),
+      "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/w/acme" }),
+      "GET /api/auth/email/verify/u1/h1": () => new Response(null, { status: 204 }),
+    });
+    const app = createNavree({ apiUrl: API, fetch: navree.fetch, pages: { signIn: "/sign-in" } });
+
+    const start = await app.handlers.GET(browserRequest(APP, "/auth/social/github?next=/w/acme"));
+    expect(start.status).toBe(303);
+    expect(start.headers.get("location")).toBe("https://github.com/login/oauth/authorize?state=S1");
+
+    const done = await app.handlers.GET(browserRequest(APP, "/auth/callback/github?code=C&state=S1", { cookies: { navree_social: "S1" } }));
+    expect(done.headers.get("location")).toBe("/w/acme");
+    expect(readSetCookies(done)[ACCESS_COOKIE]!.value).toBe("AT1");
+
+    const verified = await app.handlers.GET(browserRequest(APP, "/api/auth/email/verify/u1/h1?signature=s"));
+    expect(verified.headers.get("location")).toBe("/verify-email?status=verified");
+  });
+
+  it("the server entry point exports readCookie for route handlers", async () => {
+    const server = await import("./index.js");
+    expect(server.readCookie(browserRequest(APP, "/", { cookies: { [WORKSPACE_COOKIE]: "acme" } }), WORKSPACE_COOKIE)).toBe("acme");
+  });
+});
+
 describe("auth() in server components", () => {
   it("returns the signed-in user, the token and the workspace", async () => {
     jar.cookies.set(ACCESS_COOKIE, "AT1");
@@ -169,6 +196,40 @@ describe("the proxy (Next.js middleware)", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(`${APP}/login?next=%2Fdeals`);
     expect(readSetCookies(response)[REFRESH_COOKIE]!.attrs).toContain("Max-Age=0");
+  });
+
+  it("serves the page and keeps the cookies when the API can't be reached to refresh the token", async () => {
+    const down = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    const app = createNavree({ apiUrl: API, fetch: down });
+    const stale = unsignedJwt({ sub: "u1", exp: Math.floor(Date.now() / 1000) - 10 });
+
+    const response = await app.proxy()(page("/deals", { [ACCESS_COOKIE]: stale, [REFRESH_COOKIE]: "RT1" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("takes the sign-in page from the BFF settings, and lets the social sign-in routes through", async () => {
+    const app = createNavree({ apiUrl: API, fetch: api().fetch, pages: { signIn: "/sign-in" } });
+    const proxy = app.proxy();
+
+    const guarded = await proxy(page("/deals"));
+    expect(guarded.headers.get("location")).toBe(`${APP}/sign-in?next=%2Fdeals`);
+
+    for (const path of ["/sign-in", "/auth/social/github", "/auth/callback/github?code=c&state=s"]) {
+      const response = await proxy(page(path));
+      expect(response.headers.get("x-middleware-next"), path).toBe("1");
+    }
+
+    const moved = createNavree({ apiUrl: API, fetch: api().fetch, socialPaths: { start: "/oauth/go", callback: "/oauth/back" } });
+    for (const path of ["/oauth/go/github", "/oauth/back/github"]) {
+      const response = await moved.proxy()(page(path));
+      expect(response.headers.get("x-middleware-next"), path).toBe("1");
+    }
+    expect((await moved.proxy()(page("/auth/social/github"))).status).toBe(307);
   });
 
   it("sends a signed-in browser away from the sign-in page when asked to", async () => {

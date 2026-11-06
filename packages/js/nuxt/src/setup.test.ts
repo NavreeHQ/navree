@@ -45,12 +45,37 @@ describe("the Nuxt module", () => {
     expect(kit.addServerHandler.mock.calls.map(([h]) => (h as { route?: string }).route)).toEqual(["/api/**", "/admin/**"]);
   });
 
+  it("mounts the social sign-in routes only when asked, where the app wants them", () => {
+    const off = run().kit.addServerHandler.mock.calls.map(([h]) => (h as { route?: string }).route);
+    expect(off).not.toContain("/auth/social/**");
+
+    const { kit, nuxt } = run({
+      social: true,
+      pages: { verifyEmail: "/check" },
+      socialPaths: { callback: "/oauth/back" },
+      redirectNavigations: true,
+    });
+    const routes = kit.addServerHandler.mock.calls.map(([h]) => h as { route?: string; method?: string });
+    expect(routes).toEqual(
+      expect.arrayContaining([
+        { route: "/auth/social/**", method: "get", handler: "/pkg/dist/runtime/server/bff-handler.js" },
+        { route: "/oauth/back/**", method: "get", handler: "/pkg/dist/runtime/server/bff-handler.js" },
+      ]),
+    );
+    expect(nuxt.options.runtimeConfig.navree).toMatchObject({
+      pages: { signIn: "/login", verifyEmail: "/check" },
+      socialPaths: { callback: "/oauth/back" },
+      redirectNavigations: true,
+    });
+  });
+
   it("puts the settings in runtime config, so NUXT_NAVREE_* variables override them", () => {
     const { nuxt } = run({ apiUrl: "http://127.0.0.1:8092", sessionGate: { loginPath: "/sign-in", publicPaths: ["/"] } });
     expect(nuxt.options.runtimeConfig.navree).toEqual({
       apiUrl: "http://127.0.0.1:8092",
       workspaceHeader: "X-Workspace",
       sessionGate: { loginPath: "/sign-in", publicPaths: ["/"] },
+      pages: { signIn: "/sign-in" },
     });
     expect(nuxt.options.runtimeConfig.public.navree).toEqual({
       authPrefix: "/api/auth",
@@ -83,7 +108,7 @@ describe("the Nuxt module", () => {
     const realtime = { key: "app-key", wsHost: "127.0.0.1", wsPort: 8080 };
     const { kit, nuxt } = run({ realtime, abilities: true });
     const names = kit.addImports.mock.calls.flatMap(([imports]) => (imports as { name: string }[]).map((i) => i.name));
-    expect(names).toEqual(expect.arrayContaining(["useChannel", "useRealtimeState", "useAbility"]));
+    expect(names).toEqual(expect.arrayContaining(["useChannel", "useRealtimeState", "useAbility", "useAbilityReady"]));
     expect(kit.addPlugin.mock.calls.map(([p]) => p)).toEqual([
       "/pkg/dist/runtime/plugin.js",
       { src: "/pkg/dist/runtime/plugin-realtime.js", mode: "client" },

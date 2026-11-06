@@ -6,7 +6,7 @@
 import { fetchAbilities } from "@navree/client/abilities";
 import { defineNuxtPlugin, useNuxtApp } from "#imports";
 import { watch } from "vue";
-import { installAbilities } from "../vue/abilities.js";
+import { installAbilities, provideAbilityReady } from "../vue/abilities.js";
 
 export default defineNuxtPlugin({
   name: "navree-abilities",
@@ -15,16 +15,21 @@ export default defineNuxtPlugin({
     const nuxtApp = useNuxtApp();
     const { auth, workspace, client } = nuxtApp.$navree;
     const ability = installAbilities(nuxtApp.vueApp);
+    const ready = provideAbilityReady(nuxtApp.vueApp);
 
     const load = async () => {
       if (!auth.signedIn.value) {
         ability.update([]);
+        ready.value = true;
         return;
       }
+      ready.value = false;
       try {
         ability.update((await fetchAbilities({ fetch: (path, init) => client.raw(path, init) })) as never);
       } catch {
         ability.update([]);
+      } finally {
+        ready.value = true;
       }
     };
     watch([auth.signedIn, workspace.workspace], () => void load(), { immediate: true });

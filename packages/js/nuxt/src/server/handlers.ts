@@ -43,7 +43,11 @@ export interface SessionGateOptions {
   loginPath?: string;
   /** Pages anyone may open: exact paths, or prefixes ending in `/*`. */
   publicPaths?: string[];
-  /** Path prefixes the gate never touches (default: `/api/`, `/broadcasting/`, `/_nuxt/`, `/__nuxt`, `/_ipx/`). */
+  /**
+   * Path prefixes the gate never touches (default: `/api/`, `/broadcasting/`, `/_nuxt/`, `/__nuxt`,
+   * `/_ipx/`, and the social sign-in routes, `/auth/social/` and `/auth/callback/` unless
+   * `socialPaths` moves them).
+   */
   passThrough?: string[];
 }
 
@@ -64,20 +68,28 @@ function matches(pathname: string, patterns: readonly string[]): boolean {
 export function createSessionGate(source: BffSource, options: SessionGateOptions = {}): EventHandler {
   const loginPath = options.loginPath ?? "/login";
   const publicPaths = [loginPath, ...(options.publicPaths ?? [])];
-  const passThrough = options.passThrough ?? DEFAULT_PASS_THROUGH;
 
   return defineEventHandler(async (event) => {
     if (event.method !== "GET" && event.method !== "HEAD") return;
     const url = getRequestURL(event);
     const { pathname } = url;
+    const bff = source(event);
+    const passThrough = options.passThrough ?? [
+      ...DEFAULT_PASS_THROUGH,
+      `${bff.socialPaths.start}/`,
+      `${bff.socialPaths.callback}/`,
+    ];
     if (passThrough.some((prefix) => pathname.startsWith(prefix)) || /\.[a-z0-9]+$/i.test(pathname)) return;
     if (!(getRequestHeader(event, "accept") ?? "").includes("text/html")) return;
 
-    const session = await source(event).ensureSession(toWebRequest(event));
+    const session = await bff.ensureSession(toWebRequest(event));
     for (const value of session.setCookie) appendResponseHeader(event, "set-cookie", value);
     if (session.status === "refreshed" && session.cookieHeader) {
       event.node.req.headers.cookie = session.cookieHeader;
     }
+    // The API could not be reached to refresh the token, which is not a sign-out: the cookies stay
+    // (nothing was cleared above) and the page is served.
+    if (session.status === "unavailable") return;
     const signedIn = session.status === "active" || session.status === "refreshed";
     if (!signedIn && !matches(pathname, publicPaths)) {
       const target = `${pathname}${url.search}`;

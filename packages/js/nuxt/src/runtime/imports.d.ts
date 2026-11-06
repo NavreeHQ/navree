@@ -9,7 +9,14 @@ declare module "#imports" {
 
   export function defineNuxtPlugin<T>(plugin: T): T;
   export function useRuntimeConfig(event?: H3Event): {
-    navree: { apiUrl: string; workspaceHeader: string; sessionGate: false | { loginPath?: string; publicPaths?: string[] } };
+    navree: {
+      apiUrl: string;
+      workspaceHeader: string;
+      sessionGate: false | { loginPath?: string; publicPaths?: string[] };
+      pages?: { signIn?: string; twoFactor?: string; verifyEmail?: string };
+      socialPaths?: { start?: string; callback?: string };
+      redirectNavigations?: boolean;
+    };
     public: {
       navree: {
         authPrefix: string;

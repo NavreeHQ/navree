@@ -25,11 +25,14 @@ export interface NavreeSession<User> {
 }
 
 export interface NavreeProxyOptions {
-  /** The sign-in page (default `/login`); always public. */
+  /** The sign-in page (default: `pages.signIn` of the BFF settings, else `/login`); always public. */
   loginPath?: string;
   /** Pages anyone may open: exact paths, or prefixes ending in `/*` (`/docs/*`). */
   publicPaths?: string[];
-  /** Path prefixes the proxy never touches (default: `/api/`, `/broadcasting/`, `/_next/`). */
+  /**
+   * Path prefixes the proxy never touches (default: `/api/`, `/broadcasting/`, `/_next/`, and the
+   * social sign-in routes, `/auth/social/` and `/auth/callback/` unless `socialPaths` moves them).
+   */
   passThrough?: string[];
   /** Send a signed-in browser that opens the sign-in page here (off by default). */
   signedInRedirect?: string;
@@ -134,11 +137,17 @@ export function createNavree(options: NavreeNextOptions = {}) {
    * renders, so `auth()` and the browser both get the new tokens.
    */
   function proxy(proxyOptions: NavreeProxyOptions = {}) {
-    const loginPath = proxyOptions.loginPath ?? "/login";
-    const publicPaths = [loginPath, ...(proxyOptions.publicPaths ?? [])];
-    const passThrough = proxyOptions.passThrough ?? DEFAULT_PASS_THROUGH;
-
     return async function navreeProxy(request: NextRequest): Promise<NextResponse> {
+      // The BFF is made here, at the first request, not when proxy.ts loads.
+      const { pages, socialPaths } = bff();
+      const loginPath = proxyOptions.loginPath ?? pages.signIn;
+      const publicPaths = [loginPath, ...(proxyOptions.publicPaths ?? [])];
+      const passThrough = proxyOptions.passThrough ?? [
+        ...DEFAULT_PASS_THROUGH,
+        `${socialPaths.start}/`,
+        `${socialPaths.callback}/`,
+      ];
+
       const { pathname, search } = request.nextUrl;
       if (passThrough.some((prefix) => pathname.startsWith(prefix)) || /\.[a-z0-9]+$/i.test(pathname)) {
         return NextResponse.next();
@@ -152,6 +161,10 @@ export function createNavree(options: NavreeNextOptions = {}) {
       let response: NextResponse;
       if (signedIn && proxyOptions.signedInRedirect && pathname === loginPath) {
         response = NextResponse.redirect(new URL(proxyOptions.signedInRedirect, request.url));
+      } else if (session.status === "unavailable") {
+        // The API could not be reached to refresh the token, which is not a sign-out. The cookies
+        // stay and the page is served; what it shows when its own calls fail is up to it.
+        response = NextResponse.next();
       } else if (!signedIn && !isPublic) {
         const target = new URL(loginPath, request.url);
         target.searchParams.set("next", `${pathname}${search}`);
