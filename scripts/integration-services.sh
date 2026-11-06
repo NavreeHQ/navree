@@ -25,6 +25,7 @@
 #             the Pub/Sub emulator
 #   identity  Keycloak (SAML and OpenID Connect), OpenLDAP
 #   infra     an OpenTelemetry Collector, CoreDNS, a DNS-over-HTTPS server
+#   harbor    an Ubuntu host with systemd and sshd
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -79,11 +80,12 @@ group_services() {
     mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
     identity) echo "keycloak openldap" ;;
     infra) echo "otel-collector coredns doh" ;;
+    harbor) echo "harbor-host" ;;
     *) return 1 ;;
   esac
 }
 
-ALL_GROUPS=(mail identity infra)
+ALL_GROUPS=(mail identity infra harbor)
 COMMAND="${1:-}"
 shift || true
 WANTED_GROUPS=("$@")
@@ -164,6 +166,9 @@ NAVREE_TEST_OTEL_GRPC_URL=http://127.0.0.1:14317
 NAVREE_TEST_OTEL_FILE=$(consumer_path "$STATE/otel/traces.json")
 NAVREE_TEST_DNS_SERVER=127.0.0.1:15353
 NAVREE_TEST_DOH_URL=http://127.0.0.1:18053/dns-query
+NAVREE_TEST_HARBOR_HOST=127.0.0.1
+NAVREE_TEST_HARBOR_PORT=12222
+NAVREE_TEST_HARBOR_KEY=$(consumer_path "$STATE/harbor/id_ed25519")
 EOF
 }
 
@@ -202,6 +207,19 @@ localstack_ready() {
 # GreenMail answers on SMTP, IMAP and POP3.
 greenmail_ready() {
   tcp 13025 && tcp 13143 && tcp 13110
+}
+
+# The host's systemd is up and sshd runs; root's key is installed.
+harbor_ready() {
+  docker exec navree-int-harbor-host systemctl is-active ssh >/dev/null
+}
+
+install_harbor_key() {
+  if ! selected harbor-host; then
+    return 0
+  fi
+  docker exec -i navree-int-harbor-host sh -c 'cat > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' \
+    <"$STATE/harbor/id_ed25519.pub"
 }
 
 # CoreDNS answers over TCP (it answers UDP on the same port).
@@ -260,7 +278,10 @@ pull() {
     fi
     sleep 5
   done
-  compose build --quiet "${SELECTED[@]}"
+  # The services with a Dockerfile of their own.
+  if selected harbor-host; then
+    compose build --quiet harbor-host
+  fi
 }
 
 # A self-signed certificate for localhost and the password file of the Mailpit
@@ -291,6 +312,12 @@ prepare_state() {
 
   # The Collector's file exporter (a user of its own in the container) appends
   # to a file made here, so the tests can read it.
+  # The SSH key Harbor's test logs in with.
+  mkdir -p "$STATE/harbor"
+  if [ ! -s "$STATE/harbor/id_ed25519" ]; then
+    ssh-keygen -q -t ed25519 -N '' -C navree-integration-test -f "$STATE/harbor/id_ed25519"
+  fi
+  chmod 600 "$STATE/harbor/id_ed25519"
   mkdir -p "$STATE/otel"
   : >"$STATE/otel/traces.json"
   chmod a+rwx "$STATE/otel"
@@ -315,6 +342,8 @@ start() {
   ready otel-collector navree-int-otel-collector otel_ready
   ready coredns navree-int-coredns coredns_ready
   ready doh navree-int-doh doh_ready
+  ready harbor-host navree-int-harbor-host harbor_ready
+  install_harbor_key
   load_bulk_people
   # Keycloak answers once the realm is imported.
   ready keycloak navree-int-keycloak curl --fail --silent http://127.0.0.1:18081/realms/navree/.well-known/openid-configuration
