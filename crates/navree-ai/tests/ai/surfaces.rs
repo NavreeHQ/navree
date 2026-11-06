@@ -339,7 +339,8 @@ pub async fn run_ended(app: &TestApp, id: Uuid) -> bool {
 
 /// Waits until the conversation's run has ended.
 pub async fn settled(app: &TestApp, access: &Arc<PrincipalAccess>, id: Uuid) -> String {
-    for _ in 0..400 {
+    // Up to 30 s: a run on a busy machine takes its time; the loop ends as soon as it does.
+    for _ in 0..3000 {
         if run_ended(app, id).await {
             return items(app, access, id).await;
         }

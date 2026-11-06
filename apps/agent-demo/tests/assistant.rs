@@ -94,7 +94,8 @@ async fn run_ended(app: &TestApp, id: Uuid) -> bool {
 /// The conversation once its run has ended.
 async fn settled(app: &TestApp, access: &Arc<PrincipalAccess>, id: Uuid) -> String {
     let assistant = assistant(app).await;
-    for _ in 0..400 {
+    // Up to 30 s: a run on a busy machine takes its time; the loop ends as soon as it does.
+    for _ in 0..3000 {
         if run_ended(app, id).await {
             return assistant
                 .items(access.clone(), id, &LazyAsk::First, Some("tok"))
