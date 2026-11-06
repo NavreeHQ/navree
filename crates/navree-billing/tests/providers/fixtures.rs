@@ -1,5 +1,5 @@
 //! Recorded-shape provider payloads: Stripe objects of API version
-//! `2025-03-31.basil` and Paddle Billing entities (API version 1), as the
+//! `2026-09-30.endive` and Paddle Billing entities (API version 1), as the
 //! providers document them, trimmed to realistic fields.
 
 #![allow(dead_code)]
@@ -220,7 +220,7 @@ pub mod stripe {
         json!({
             "id": "we_1Q8Endpoint",
             "object": "webhook_endpoint",
-            "api_version": "2025-03-31.basil",
+            "api_version": "2026-09-30.endive",
             "enabled_events": ["checkout.session.completed"],
             "secret": "whsec_created_by_api",
             "status": "enabled",
@@ -236,7 +236,7 @@ pub mod stripe {
         json!({
             "id": id,
             "object": "event",
-            "api_version": "2025-03-31.basil",
+            "api_version": "2026-09-30.endive",
             "created": NOW,
             "data": { "object": object },
             "livemode": false,

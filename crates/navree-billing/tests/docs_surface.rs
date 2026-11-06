@@ -344,7 +344,7 @@ fn the_names_the_page_mentions_in_passing() {
     let _ = fake;
 
     // "Configuration" and "Reference".
-    assert_eq!(navree_billing::STRIPE_API_VERSION, "2025-03-31.basil");
+    assert_eq!(navree_billing::STRIPE_API_VERSION, "2026-09-30.endive");
     let options = BillingOptions::default();
     assert_eq!(options.stripe.api_base, "https://api.stripe.com");
     assert_eq!(options.paddle.api_base, None, "the environment's");

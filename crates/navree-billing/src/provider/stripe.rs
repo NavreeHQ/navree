@@ -37,7 +37,7 @@ use crate::subscription::{Proration, SubscriptionStatus};
 /// Webhook endpoints created by `billing:webhook` use it too, so event
 /// payloads have the shape this client reads. The tests' stripe-mock is the
 /// release built from this version (`scripts/services/compose.yml`).
-pub const STRIPE_API_VERSION: &str = "2025-03-31.basil";
+pub const STRIPE_API_VERSION: &str = "2026-09-30.endive";
 
 const NAME: &str = "stripe";
 
@@ -69,6 +69,7 @@ const CAPABILITIES: &[Capability] = &[
     Capability::PaymentLinks,
     Capability::Refunds,
     Capability::PartialRefunds,
+    Capability::Upi,
     Capability::IdempotencyKeys,
 ];
 
@@ -310,19 +311,29 @@ pub(crate) fn sub_key(key: &str, suffix: &str) -> String {
     format!("navree-{}-{suffix}", &digest[..32])
 }
 
-/// Stripe's `payment_method_types` for `methods`: cards only; Navree does
-/// not map Stripe's other method types.
+/// Stripe's names for `methods`: cards and UPI; Navree does not map
+/// Stripe's other method types.
 fn method_types(methods: &[PaymentMethod]) -> Result<Vec<&'static str>, ProviderError> {
     methods
         .iter()
         .map(|method| match method {
             PaymentMethod::Card => Ok("card"),
+            PaymentMethod::Upi => Ok("upi"),
             _ => Err(ProviderError::Unsupported {
                 provider: NAME,
-                operation: "payment methods other than cards (leave `methods` empty to offer the methods set in the Stripe dashboard)",
+                operation: "payment methods other than cards and UPI (leave `methods` empty to offer the methods set in the Stripe dashboard)",
             }),
         })
         .collect()
+}
+
+/// The method Stripe names `name`.
+fn method_of(name: &str) -> PaymentMethod {
+    match name {
+        "card" => PaymentMethod::Card,
+        "upi" => PaymentMethod::Upi,
+        other => PaymentMethod::Other(other.to_owned()),
+    }
 }
 
 /// The Checkout Session form of a one-time payment.
@@ -360,8 +371,15 @@ pub(crate) fn payment_form(request: &PaymentRequest) -> Result<Form, ProviderErr
     if let Some(expires) = request.expires_at {
         push(&mut form, "expires_at", expires.timestamp().to_string());
     }
+    // Since 2026-09-30 a Checkout Session takes the methods as a filter on
+    // the ones Stripe finds eligible (payment links still take
+    // `payment_method_types`).
     for (index, kind) in method_types(&request.methods)?.into_iter().enumerate() {
-        push(&mut form, format!("payment_method_types[{index}]"), kind);
+        push(
+            &mut form,
+            format!("allowed_payment_method_types[{index}]"),
+            kind,
+        );
     }
     let metadata = tagged_metadata(
         &request.metadata,
@@ -965,10 +983,7 @@ pub(crate) fn parse_session_payment(
         .cloned()
         .unwrap_or_default();
     let method = match methods.as_slice() {
-        [only] => only.as_str().map(|name| match name {
-            "card" => PaymentMethod::Card,
-            other => PaymentMethod::Other(other.to_owned()),
-        }),
+        [only] => only.as_str().map(method_of),
         _ => None,
     };
     let next_action = match (status, value["url"].as_str()) {
@@ -1186,13 +1201,18 @@ mod tests {
             );
             assert_eq!(field(&form, &format!("{prefix}[order]")), Some("42"));
         }
-        assert_eq!(field(&form, "payment_method_types[0]"), None);
+        assert_eq!(field(&form, "allowed_payment_method_types[0]"), None);
 
         let mut cards = payment();
-        cards.methods = vec![PaymentMethod::Card];
+        cards.methods = vec![PaymentMethod::Card, PaymentMethod::Upi];
         let form = payment_form(&cards).unwrap();
-        assert_eq!(field(&form, "payment_method_types[0]"), Some("card"));
-        cards.methods = vec![PaymentMethod::Upi];
+        assert_eq!(
+            field(&form, "allowed_payment_method_types[0]"),
+            Some("card")
+        );
+        assert_eq!(field(&form, "allowed_payment_method_types[1]"), Some("upi"));
+        assert_eq!(field(&form, "payment_method_types[0]"), None);
+        cards.methods = vec![PaymentMethod::NetBanking];
         assert!(matches!(
             payment_form(&cards),
             Err(ProviderError::Unsupported { .. })
@@ -1233,6 +1253,38 @@ mod tests {
         assert_eq!(field(&form, "after_completion[type]"), Some("redirect"));
         assert_eq!(field(&form, "metadata[reference]"), Some("SEAT-7"));
         assert_eq!(field(&form, "metadata[navree_kind]"), Some("payment_link"));
+        let upi = PaymentLinkRequest {
+            methods: vec![PaymentMethod::Upi],
+            ..request
+        };
+        let form = link_form(&upi, "price_1").unwrap();
+        assert_eq!(field(&form, "payment_method_types[0]"), Some("upi"));
+    }
+
+    #[test]
+    fn stripe_method_names_map_both_ways() {
+        assert_eq!(
+            method_types(&[PaymentMethod::Card, PaymentMethod::Upi]).unwrap(),
+            ["card", "upi"]
+        );
+        assert_eq!(method_of("upi"), PaymentMethod::Upi);
+        assert_eq!(method_of("card"), PaymentMethod::Card);
+        assert_eq!(
+            method_of("us_bank_account"),
+            PaymentMethod::Other("us_bank_account".into())
+        );
+        let session = serde_json::json!({
+            "id": "cs_test_upi",
+            "status": "complete",
+            "payment_status": "paid",
+            "payment_method_types": ["upi"],
+            "amount_total": 149_900,
+            "currency": "inr",
+        });
+        assert_eq!(
+            parse_session_payment(&session, None).unwrap().method,
+            Some(PaymentMethod::Upi)
+        );
     }
 
     // CONN-101
