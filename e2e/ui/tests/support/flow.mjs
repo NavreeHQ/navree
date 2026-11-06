@@ -90,11 +90,16 @@ export function inBrowsers(body) {
         });
         page.on("pageerror", (error) => problems.push(String(error)));
         if (options.js !== false) {
-          await page.addInitScript(() => {
+          await page.addInitScript((engine) => {
             document.addEventListener("securitypolicyviolation", (e) => {
+              // Playwright's WebKit reports style-src-attr for every native <select> under a policy
+              // without 'unsafe-inline': its own control, not a style attribute in the page (as in
+              // theme.test.mjs). Only that case is passed over.
+              const target = /** @type {Element} */ (e.target);
+              if (engine === "webkit" && e.violatedDirective === "style-src-attr" && target?.localName === "select" && !target.hasAttribute("style")) return;
               (window.__csp ||= []).push(e.violatedDirective + " " + e.blockedURI);
             });
-          });
+          }, browserName);
         }
         if (options.before) await options.before(page);
         await page.goto(BASE + path);
