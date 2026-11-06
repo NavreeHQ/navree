@@ -3,7 +3,7 @@ title: "Choosing a UI"
 description: "Three ways to build the screens of a Navree app: Navree UI in Rust, Next.js with React, or Nuxt with Vue. What each costs and gives."
 ---
 
-A Navree app can draw its screens three ways. Navree UI renders them in Rust, in the same binary as the API. A Next.js (React) or Nuxt (Vue) app can sit beside the API instead, with Navree's packages for sign-in, data and live updates. All three use the same API, the same access rules and the same dark theme.
+A Navree app can draw its screens three ways. Navree UI renders them in Rust, in the same binary as the API. A Next.js (React) or Nuxt (Vue) app can sit beside the API instead, with Navree's packages for sign-in, data and live updates. All three use the same API, the same access rules and the same themes.
 
 <UiChoose name="choosing-a-ui" />
 
@@ -46,6 +46,20 @@ A Nuxt app beside the API, with the backend-for-frontend as Nitro routes.
 - **Gives:** Vue and its libraries. `@navree/nuxt` is a Nuxt module: sign-in, a session gate, auto-imported composables (`useNavreeAuth`, `useListQuery`, `useChannel`) and `<NavreeDataTable>`.
 - **Costs:** As for Next.js: a second app, and Node.js to run it. There is no Nuxt starter kit and `navree new` has no `--ui nuxt`: you create the Nuxt app yourself and add the module.
 - **Start:** [Nuxt](/docs/frontend/nuxt/). The CRM's Nuxt front end, `apps/crm-nuxt`, is a complete example.
+
+## What each front end offers
+
+Navree UI, Next.js and Nuxt call the same API and speak the same list-query format, so a list's address means the same thing in all three. The tables differ in what they do with it.
+
+| | Navree UI | Next.js (`@navree/next`) | Nuxt (`@navree/nuxt`) |
+|---|---|---|---|
+| List query in the address (`filter[...]`, `sort`, `search`, `page`, `cursor`) | yes | yes (`useListQuery`) | yes (`useListQuery`) |
+| Table | `DataTable`: filters, selection, bulk actions, export, stored views, cursors, live refresh | `DataTable`: sort, pages, column visibility | `NavreeDataTable`: sort, pages, column visibility |
+| Themes | seven, in light and dark, and your own from the theme builder | the same, with `@navree/theme/themes.css` | the same |
+| Names for the same job | | `mergeListQuery`, `applyFieldErrors`, `errorMessage`, `localeAttributes`, `NavreeDataTable`, `NavreePagination` | the same names |
+| Sign-in, tokens | `AuthPages`, a session cookie | the backend-for-frontend keeps the tokens in httpOnly cookies | the same |
+
+Filters, selection, bulk actions, export, stored views and live refresh are Navree UI's; in a Next.js or Nuxt app you build them on the list query, or choose Navree UI for that screen.
 
 ## From an existing product or design
 

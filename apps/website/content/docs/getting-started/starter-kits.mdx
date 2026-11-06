@@ -150,7 +150,7 @@ impl ProjectsController {
 
 The `InWorkspace` guard resolves the workspace from the request and checks that the user is a member before the access rules run, so `#[can]` and `Accessible` decide with the user's role in that workspace. The kit uses row isolation: the service reads and writes through `WorkspaceRepo`, so every query on a workspace table is filtered by `workspace_id`, and its migrations add PostgreSQL row-level security policies. `Project` is a [navree-orm](/docs/orm/models/) model declared `#[model(table = "projects", timestamps, workspace, subject)]` with a schema-builder migration, so it is also the access subject the `#[can]` checks name. The module registers `m.model::<Project>()` and `m.workspace_scoped::<Project>()`, so `navree check` verifies all of this. The same holds for the settings module's `notification_settings` model, and for the micro kit's `invoices` model. See [Multi-tenant SaaS](/docs/patterns/multi-tenancy/) and [Workspaces](/docs/workspaces/introduction/).
 
-The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/), which is [`@navree/next`](/docs/frontend/nextjs/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session; `proxy.ts` sends a browser without a session from `/admin` to the sign-in page. The kit writes only what is its own: `lib/navree.ts` (the app's `createNavree()`), the social sign-in and verification-link routes (`lib/social.ts`), live updates (`RealtimeProvider` and `useChannel`) and the abilities (`createAbility`).
+The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/), which is [`@navree/next`](/docs/frontend/nextjs/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session; `proxy.ts` sends a browser without a session from `/admin` to the sign-in page. The kit writes only what is its own: `lib/navree.ts` (the app's `createNavree()`), the social sign-in route (`app/auth/[...path]/route.ts`; `@navree/next` answers the social and verification-link routes), live updates (`RealtimeProvider` and `useChannel`) and the abilities (`createAbility`).
 
 The browser's API types are generated from the API's OpenAPI document: `web/lib/api/schema.d.ts` comes from the committed `openapi.json`. `pnpm gen:api` in `web/` exports the document again and regenerates the types with `navree openapi:client`, so a changed DTO is a TypeScript error before it is a bug.
 
@@ -209,15 +209,14 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
       (app)/
         w/[workspace]/      # dashboard, projects, settings
       api/
-        [...path]/route.ts  # the BFF (navree.handlers): sign-in, refresh, sign-out, and the bearer-token proxy
-        auth/               # the email verification link
+        [...path]/route.ts  # the BFF (navree.handlers): sign-in, refresh, sign-out, the verification link and the bearer-token proxy
       admin/                # Helm, through the BFF
-      auth/                 # social sign-in redirect and callback
+      auth/
+        [...path]/route.ts  # social sign-in: the redirect and the callback
       broadcasting/
         auth/route.ts
     lib/
       navree.ts             # createNavree(): the backend-for-frontend and auth()
-      social.ts             # social sign-in and the verification link, unit-tested
       api/                  # the client, the generated schema and error helpers
     components/
       ui/                   # shadcn/ui components
@@ -420,7 +419,7 @@ The app's live hub (`RealtimeModule`) serves `GET /broadcasting/stream`. `Custom
 - **`dock.toml`** for [Dock](/docs/tools/dock/): `navree dock up` starts the services the kit needs, and `.env` already holds their settings. The CI workflow runs the same database image as a service container.
 - **`harbor.toml`** for [Harbor](/docs/tools/harbor/): `navree harbor:provision` prepares a server and `navree deploy` ships a release with a health check on `/health/ready`. In the SaaS kit, its `[frontend]` section deploys `web/` in the same release as the API, so a page and the API it calls always come from the same build.
 - **A CI workflow** in `.github/workflows/ci.yml`: formatting, clippy, `check` (the module graph), the migrations on PostgreSQL and the Rust tests; for `saas` and `api`, the OpenAPI drift check; for `micro`, `micro:patterns`; for `saas`, the web app's lint, type check, unit tests and build, and the Playwright journeys against the real API.
-- **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue, billing and the message broker. The SaaS kit's social sign-in routes and API client have unit tests (Vitest) against a scripted API, and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member, upgrading a plan through the fake checkout, and what members and viewers may do.
+- **Tests for what it ships.** Rust tests boot the app with `TestApp` on a fresh database and use the fakes for mail, the queue, billing and the message broker. The SaaS kit's API client has unit tests (Vitest) against a scripted API (the social sign-in routes are `@navree/next`'s, tested in that package), and its Playwright journeys cover sign-up, sign-in with two-factor, inviting a member, upgrading a plan through the fake checkout, and what members and viewers may do.
 
 ## Customizing a kit
 

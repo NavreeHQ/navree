@@ -26,6 +26,9 @@ Create one BFF per server process and share it: the refresh map that keeps refre
 | `POST /api/auth/2fa/verify` | `verifyTwoFactor` | Sends `{code}` or `{recovery_code}` with the challenge token from its cookie, then sets the token cookies like `login`. |
 | `POST /api/auth/logout` | `logout` | Revokes the refresh token at the API (`{all: true}` ends every session), clears the cookies, answers 204. |
 | `POST /api/auth/refresh` | `refreshSession` | Rotates the cookies (204), or clears them (401 `session_expired`). |
+| `GET {socialPaths.start}/{provider}?next=` | `socialRedirect` | Starts a social sign-in: asks the API for the provider's address, keeps the state in an httpOnly cookie and sends the browser to the provider. |
+| `GET {socialPaths.callback}/{provider}?code&state` | `socialCallback` | Where the provider sends the browser back. Checks the state, has the API finish the sign-in, sets the token cookies like `login` and redirects to `next` (a two-factor account continues at `pages.twoFactor`). A failure lands on `pages.signIn` with `?error=social_state`, `social_failed`, `social_unavailable` or `api_unreachable`. |
+| `GET {authPrefix}/email/verify/{id}/{hash}` | `verifyEmail` | The link in the verification mail. The API checks it, and the browser lands on `pages.verifyEmail` with `?status=verified`, `invalid` or `unreachable`. |
 | Anything else | `proxy` | Forwards to the API at the same path with the bearer token: `/api/*`, `/broadcasting/auth`, a server-rendered tool mounted at `/admin`. |
 
 ## What the BFF guarantees
@@ -69,7 +72,10 @@ The BFF answers some requests itself, in Navree's error shape:
 | `authPrefix` | `/api/auth` | The API's auth routes. |
 | `mePath` | `/api/auth/me` | The current-user route `me()` calls. |
 | `workspaceHeader` | `X-Workspace` | The API's `workspace.header`. |
-| `cookieNames` | `navree_at`, `navree_rt`, `navree_2fa`, `navree_workspace` | `{access, refresh, challenge, workspace}`, for several apps on one domain. |
+| `cookieNames` | `navree_at`, `navree_rt`, `navree_2fa`, `navree_workspace`, `navree_social` | `{access, refresh, challenge, workspace, social}`, for several apps on one domain. |
+| `pages` | `/login`, `/two-factor`, `/verify-email` | `{signIn, twoFactor, verifyEmail}`: the pages of your app that social sign-in, the verification link and `redirectNavigations` end on. |
+| `socialPaths` | `/auth/social`, `/auth/callback` | `{start, callback}`: where your app mounts the two social sign-in routes. |
+| `redirectNavigations` | `false` | Send a page request that the API refuses with 401 (the session is over) to `pages.signIn?next=`, instead of passing the 401 on. For a server-rendered tool mounted through the BFF, such as the admin panel at `/admin`. A call that doesn't ask for HTML still gets the 401. |
 | `upstreamPath(pathname)` | the same path | Maps a request path to the API path `handle` forwards to. |
 | `fetch` | `globalThis.fetch` | The fetch for upstream calls (tests). |
 
@@ -90,7 +96,7 @@ Server rendering, server routes and middleware need a usable token for the reque
 
 ```ts
 const session = await bff.ensureSession(request);
-// { status: "active" | "refreshed" | "anonymous" | "expired", accessToken?, setCookie: string[], cookieHeader? }
+// { status: "active" | "refreshed" | "anonymous" | "expired" | "unavailable", accessToken?, setCookie: string[], cookieHeader? }
 ```
 
 | `status` | Meaning | What to do |
@@ -98,7 +104,8 @@ const session = await bff.ensureSession(request);
 | `anonymous` | No token cookies. | Send the browser to sign-in. |
 | `active` | The access token is still valid (or opaque, so its expiry can't be read). | Use `accessToken`. |
 | `refreshed` | The access token had expired (or was within `refreshSkewSeconds`), and the refresh worked. | Add `setCookie` to the response, use `cookieHeader` for the rest of this request, use `accessToken`. |
-| `expired` | The refresh failed. | Add `setCookie` (it clears the cookies) and send the browser to sign-in. |
+| `expired` | The API refused the refresh, so the session is over. | Add `setCookie` (it clears the cookies) and send the browser to sign-in. |
+| `unavailable` | The access token had expired and the API could not be reached to refresh it, so nothing is known yet. The cookies are kept. | Serve the page and let it show its own error, or try again. It is not a sign-out. |
 
 `ensureSession` reads the JWT's `exp` without verifying the signature, only to decide whether to refresh; the API verifies every token it receives. It shares the refresh map with the proxy, so a page and its first API call never spend the same refresh token twice. The [Next.js proxy](/docs/frontend/nextjs/#the-proxy) and the [Nuxt session gate](/docs/frontend/nuxt/#the-session-gate) call it for every page.
 
@@ -110,6 +117,8 @@ const response = await bff.api("/api/v1/deals?page=2", { accessToken: session.ac
 ```
 
 `me()` answers `null` for a missing or refused token and throws when the API is down, so a page can tell "signed out" from "unreachable".
+
+`readCookie(request, name)` reads one cookie of a web `Request`, decoded, or `undefined`. The cookie names are exported too (`ACCESS_COOKIE`, `REFRESH_COOKIE`, `CHALLENGE_COOKIE`, `WORKSPACE_COOKIE` and `SOCIAL_COOKIE`).
 
 ## Testing
 

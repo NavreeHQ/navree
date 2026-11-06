@@ -55,9 +55,16 @@ export const dynamic = "force-dynamic";
 export const { POST } = navree.handlers;
 ```
 
+```ts title="web/src/app/auth/[...path]/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { GET } = navree.handlers;
+```
+
 </CodeGroup>
 
-One catch-all serves sign-in, two-factor, sign-out and refresh, and forwards every other `/api/*` call with the bearer token. To reach a server-rendered tool the API serves under a prefix, add the same two lines at `app/admin/[...path]/route.ts`.
+One catch-all serves sign-in, two-factor, sign-out and refresh, and forwards every other `/api/*` call with the bearer token. The `GET` route at `app/auth/[...path]/route.ts` is for social sign-in: `/auth/social/<provider>` starts it and `/auth/callback/<provider>` is where the provider sends the browser back (the API's `social.redirect_base` is that route without the provider). Both end like a password sign-in, with the tokens in httpOnly cookies. The link in the verification mail is answered by the `/api` catch-all. To reach a server-rendered tool the API serves under a prefix, add the same two lines at `app/admin/[...path]/route.ts`.
 
 </Step>
 <Step title="Guard the pages">
@@ -115,13 +122,14 @@ Once the packages are published, none of these settings is needed.
 - A page request without a session goes to `loginPath?next=<path and query>` (307).
 - An access token that has expired is refreshed first: the new cookies go to the browser, and the request continues with the new `Cookie` header, so `auth()` and server components rendering this request already see the new token.
 - An expired session (the refresh failed) clears the cookies and goes to sign-in.
+- When the API can't be reached to refresh an expired token, the cookies stay and the page is served (the session's status is `unavailable`). That is not a sign-out; what the page shows when its own calls fail is up to it.
 - API routes (`/api/`, `/broadcasting/`), `/_next/`, files with an extension and requests that aren't page navigations pass untouched. A page navigation is a `GET` or `HEAD` that accepts `text/html`, or a React Server Components request.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `loginPath` | `/login` | The sign-in page; always public. |
 | `publicPaths` | `[]` | Pages anyone may open: exact paths, or prefixes ending in `/*`. |
-| `passThrough` | `["/api/", "/broadcasting/", "/_next/", "/__nextjs"]` | Path prefixes the proxy never touches. |
+| `passThrough` | `["/api/", "/broadcasting/", "/_next/", "/__nextjs"]` and the social sign-in routes (`/auth/social/`, `/auth/callback/`) | Path prefixes the proxy never touches. |
 | `signedInRedirect` | none | Where a signed-in browser that opens the sign-in page goes. |
 
 Whether a session is still valid is the API's call: the proxy reads the token's expiry, it doesn't verify it. A route the API refuses answers 401, and the client's `onUnauthorized` hook sends the browser to sign-in.
@@ -293,7 +301,7 @@ import { errorMessage } from "@navree/client";
 onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) || toast.error(errorMessage(error));
 ```
 
-`applyFieldErrors` puts a 400's field errors on react-hook-form's fields (any function with `setError`'s signature works) and the messages for fields the form doesn't know on `root.server`.
+`applyFieldErrors` puts a 400's field errors on react-hook-form's fields (any function with `setError`'s signature works) and the messages for fields the form doesn't know on `root.server`. When the API names a field differently from the form, pass an object in place of the list: `applyFieldErrors(error, form.setError, { company_id: "company", owner_id: "owner" })`.
 
 ## Configuration
 
@@ -306,6 +314,8 @@ onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) ||
 | `NAVREE_CLIENT_IP_HEADER` | server | none | A header the proxy sets to the bare client address (`x-real-ip`), read before `X-Forwarded-For`. |
 | `NAVREE_WORKSPACE_HEADER` | server | `X-Workspace` | The API's `workspace.header`. |
 | `NEXT_PUBLIC_PUSHER_KEY`, `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | build | none | The API's real-time server, if you pass them to `RealtimeProvider`. |
+
+Options passed to `createNavree` win over the variables. Besides the ones the table covers, `pages` (`{signIn, twoFactor, verifyEmail}`: where social sign-in, the verification link and `redirectNavigations` end), `socialPaths` (`{start, callback}`: where the two social routes are mounted) and `redirectNavigations` (send a page request the API refuses with 401 to the sign-in page, for a tool mounted at `/admin`) are the [BFF's options](/docs/frontend/auth-and-bff/#options). `@navree/next/server` also exports `readCookie`.
 
 ## Moving an existing app onto the package
 

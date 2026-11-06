@@ -1,9 +1,9 @@
 ---
 title: "Theming"
-description: "`@navree/theme`: navree.com's dark theme as Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts and the tokens as data."
+description: "`@navree/theme`: navree.com's dark theme as Tailwind CSS 4 tokens, six more themes in light and dark, shadcn/ui and shadcn-vue colors, self-hosted fonts and the tokens as data."
 ---
 
-`@navree/theme` is the look of navree.com for your app: near-black ink surfaces with a faint sea-green cast, off-white text in four steps, one green accent, amber for warnings, and three self-hosted faces. It is dark only. shadcn/ui and shadcn-vue components pick it up without changes, so Next.js and Nuxt apps look the same.
+`@navree/theme` is the look of navree.com for your app: near-black ink surfaces with a faint sea-green cast, off-white text in four steps, one green accent, amber for warnings, and three self-hosted faces. `theme.css` alone is dark; `themes.css` adds six more themes and light mode (see [Themes and modes](#themes-and-modes)). shadcn/ui and shadcn-vue components pick it up without changes, so Next.js and Nuxt apps look the same.
 
 ## Setting up
 
@@ -26,10 +26,36 @@ Put `class="dark"` on `<html>`: the theme declares `@custom-variant dark (&:wher
 | File | What it is |
 |---|---|
 | `@navree/theme/theme.css` | The Tailwind CSS 4 preset: `@theme` tokens, the shadcn semantic colors, the radius scale, base styles and utilities. |
+| `@navree/theme/themes.css` | Every built-in theme in light and dark, chosen with `data-theme` and `data-mode` on `<html>`. |
 | `@navree/theme/fonts.css` | `@font-face` rules for the three faces from the @fontsource packages, and the `--font-mona`, `--font-geist` and `--font-monaspace` variables. |
 | `@navree/theme/tokens.css` | The color tokens and font stacks as plain custom properties, for pages without Tailwind. |
 | `@navree/theme/registry/navree.json` | A shadcn registry theme, for the shadcn CLI. |
-| `@navree/theme` | The tokens as data (`colors`, `semanticColors`, `fonts`, `radius`, `themeColor`) and `contrastRatio`. |
+| `@navree/theme` | The tokens as data (`colors`, `semanticColors`, `fonts`, `radius`, `themeColor`), `contrastRatio`, the themes as data (`themes`, `themeIds`) and the functions that choose one (`applyAppearance`, `appearanceScript`, `parseAppearance`, `themeFromBuilderCss`). |
+
+## Themes and modes
+
+`theme.css` on its own is the Navree dark theme. `themes.css` adds the other built-in themes (`neutral`, `ocean`, `violet`, `sunset`, `rose` and `contrast`, beside `navree`), each in light and dark, as the same colour tokens under two attributes:
+
+```css title="web/src/app/globals.css"
+@import "@navree/theme/theme.css";
+@import "@navree/theme/themes.css";
+```
+
+```html
+<html data-theme="ocean" data-mode="light">
+```
+
+`data-theme` is a theme id and `data-mode` is `light`, `dark` or `system` (the visitor's operating system decides). Put the attributes on any element to theme a part of a page. Without them the page stays on the Navree dark theme.
+
+`applyAppearance(root, { theme, mode })` sets both attributes and keeps the `dark` class that shadcn's `dark:` classes read in step. In `system` mode the class follows the visitor's system, and the function it returns stops that. `appearanceScript({ storageKey, defaults })` returns a script for `<head>` that applies a choice stored in `localStorage` (JSON `{theme, mode}` under `navree-appearance` unless you name another key) before the first paint, so it does not flash: inline it with `<script dangerouslySetInnerHTML>` in React or `useHead` in Nuxt. `parseAppearance(text)` reads a stored choice and leaves out anything unknown.
+
+```ts
+import { applyAppearance } from "@navree/theme";
+
+applyAppearance(document.documentElement, { theme: "ocean", mode: "system" });
+```
+
+A theme made in Navree UI's [theme builder](/docs/ui/theme-builder/) reaches a Next.js or Nuxt app through `themeFromBuilderCss(css)`. Give it the builder's CSS (its Copy CSS output, or the stylesheet Navree UI serves for the theme) and add what it returns to your CSS after `themes.css`. It renames the builder's colours to the `--color-*` names Tailwind uses, under `[data-theme="key"]`, and throws when the CSS has no theme in it.
 
 ## The tokens
 
@@ -132,7 +158,7 @@ Add `@fontsource-variable/mona-sans`, `@fontsource-variable/geist` and `@fontsou
 pnpm dlx shadcn@latest add ./node_modules/@navree/theme/registry/navree.json
 ```
 
-It has the same colors in its light and dark variables, because the theme is dark only. A shadcn-vue project can copy the same values from it into its CSS variables, or import `theme.css`.
+It has the same colors in its light and dark variables, because it is the dark theme; `themes.css` has the others. A shadcn-vue project can copy the same values from it into its CSS variables, or import `theme.css`.
 
 ## The tokens in code
 

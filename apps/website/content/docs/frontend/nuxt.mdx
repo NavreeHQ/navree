@@ -83,6 +83,10 @@ overrides:
 | `mounts` | `[]` | More prefixes to forward with the session's token, such as `/admin` for a server-rendered tool. |
 | `sessionGate` | `{ loginPath: "/login" }` | Pages behind sign-in (`loginPath`, `publicPaths`, `passThrough`), or `false` for none. |
 | `workspaceHeader` | `X-Workspace` | The API's `workspace.header`. |
+| `social` | `false` | Mounts the social sign-in routes: `GET /auth/social/{provider}` starts a sign-in and `GET /auth/callback/{provider}` is where the provider sends the browser back. They end like a password sign-in, on `pages.signIn`, `pages.twoFactor` or the page the sign-in started from. |
+| `socialPaths` | `/auth/social`, `/auth/callback` | `{start, callback}`: where the two social routes are mounted. |
+| `pages` | the gate's `loginPath`, `/two-factor`, `/verify-email` | `{signIn, twoFactor, verifyEmail}`: where the BFF's redirects end. `verifyEmail` is where the link in the verification mail lands, with `?status=verified`, `invalid` or `unreachable`. |
+| `redirectNavigations` | `false` | Send a page request the API refuses with 401, such as a tool mounted at `/admin`, to the sign-in page. |
 | `realtime` | `false` | `{ key, wsHost, wsPort, forceTLS? }`: connect pusher-js to the API's real-time server. |
 | `abilities` | `false` | One app-wide CASL ability, loaded after sign-in. |
 
@@ -105,9 +109,10 @@ For every page request (a `GET` or `HEAD` that accepts `text/html`), the gate:
 
 - sends a browser without a session to `loginPath?next=<path and query>` (302);
 - refreshes an expired access token first, for the browser (`Set-Cookie`) and for the rest of the request (the rewritten `Cookie` header that server-side rendering reads);
-- clears an expired session and sends it to sign-in.
+- clears an expired session and sends it to sign-in;
+- serves the page when the API can't be reached to refresh an expired token (the session's status is `unavailable`): the cookies stay, because that is not a sign-out.
 
-`/api/`, `/broadcasting/`, `/_nuxt/`, `/__nuxt` and `/_ipx/` pass untouched, and so do files with an extension, `loginPath` and the `publicPaths` (exact paths, or prefixes ending in `/*`).
+`/api/`, `/broadcasting/`, `/_nuxt/`, `/__nuxt`, `/_ipx/` and the social sign-in routes pass untouched, and so do files with an extension, `loginPath` and the `publicPaths` (exact paths, or prefixes ending in `/*`).
 
 ## Composables
 
@@ -184,7 +189,7 @@ const { operation, finished, cancel } = useOperation(() => props.id);
 </template>
 ```
 
-`applyFieldErrors(error, setFieldError, { fields, onOther })` puts a 400's field errors on vee-validate's fields and hands the rest to `onOther`.
+`applyFieldErrors(error, setFieldError, { fields, onOther })` puts a 400's field errors on vee-validate's fields and hands the rest to `onOther`. `fields` is a list of the form's fields, or an object that maps the API's names to the form's (`{ company_id: "company" }`).
 
 ### Real time
 
@@ -201,7 +206,7 @@ The channel can be a ref or a getter; the listener moves when it changes and sto
 
 ### Abilities
 
-With `abilities: true`, the module installs one CASL ability (`@casl/vue`) and loads the user's rules from `GET /api/me/abilities` after sign-in and after every workspace switch; signed out, every rule is dropped.
+With `abilities: true`, the module installs one CASL ability (`@casl/vue`) and loads the user's rules from `GET /api/me/abilities` after sign-in and after every workspace switch; signed out, every rule is dropped. Until the rules are in, `can(...)` answers from an empty rule set, so a shell that shows or hides screens by ability waits for `useAbilityReady()`: a ref that is `true` once the rules for the current user and workspace are loaded, `false` while they load, and always `true` without `abilities`.
 
 ```html
 <script setup lang="ts">
