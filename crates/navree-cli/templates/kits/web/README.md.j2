@@ -9,9 +9,11 @@ admin panel to the sign-in page.
 
 What lives here, apart from the screens:
 
-- `lib/navree.ts`: the app's `createNavree()`.
-- `lib/social.ts`: the routes only this kit has, social sign-in (`app/auth`) and the verification link
-  (`app/api/auth/email`). They end like a password sign-in.
+- `lib/navree.ts`: the app's `createNavree()`, with the pages its redirects end on (`/sign-in`,
+  `/two-factor`, `/verify-email`).
+- `app/auth/[...path]/route.ts`: social sign-in. `@navree/next` answers `/auth/social/<provider>` and
+  `/auth/callback/<provider>`, and the link in the verification mail (`/api/auth/email/verify/...`,
+  through `app/api`). They end like a password sign-in.
 - `lib/queries.ts`: TanStack Query hooks; the ability of the API's rules comes from `@navree/client/abilities`.
 - `app/(app)/w/[workspace]/layout.tsx`: live updates of a workspace (`RealtimeProvider` and `useChannel` of
   `@navree/next/realtime`).
@@ -44,10 +46,13 @@ The choice, and what it needs:
   `react-dom` and `next`. So `next.config.ts` sets Next's root to the directory that holds both this
   app and the checkout (`turbopack.root`, `outputFileTracingRoot`) and compiles the packages with the
   app (`transpilePackages`). Next resolves `react` and `react-dom` for the whole bundle to its own
-  copy, so the linked components run on one React.
+  copy, so the linked components run on one React. `turbopack.resolveAlias` does the same for `next`,
+  so `next/headers` in the packages is this app's copy and has a request scope.
 - `pnpm-lock.yaml` pins every other package. It does not list the two links, so the first
   `pnpm install` adds them: run it without `--frozen-lockfile` and commit the result.
-- If you move this app or the checkout, change the path in `package.json` and `next.config.ts`.
+- If you move this app or the checkout, change the two paths in `package.json`. `next.config.ts`
+  finds the packages through `node_modules`, so a job that checks Navree out next to the app and points
+  the two links at it needs nothing else.
 
 When the packages are published, replace the two `link:` paths with version ranges
 (`"@navree/next": "{{ navree_js_range }}"`) and delete the `turbopack`, `outputFileTracingRoot` and

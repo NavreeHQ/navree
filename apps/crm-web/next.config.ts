@@ -24,7 +24,12 @@ const nextConfig: NextConfig = {
   cacheComponents: false,
   // Allow the dev server to be opened on 127.0.0.1 as well as localhost.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
-  turbopack: { root: checkout },
+  turbopack: {
+    root: checkout,
+    // The linked packages import `next/headers` and the like, and their own node_modules holds a
+    // second copy of Next, which has no request scope. They get this app's copy.
+    resolveAlias: { next: "./node_modules/next", "next/*": "./node_modules/next/*" },
+  },
   outputFileTracingRoot: checkout,
   transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
 };

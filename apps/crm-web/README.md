@@ -52,7 +52,8 @@ them from the checkout (`"@navree/next": "link:../../packages/js/next"`). Why a 
 - A linked package sits outside this app's directory, and its own `node_modules` holds its own `react`, `react-dom` and
   `next`. So `next.config.ts` sets the root to the checkout (`turbopack.root`, `outputFileTracingRoot`) and compiles
   the packages with the app (`transpilePackages`). Next resolves `react` and `react-dom` for the whole bundle to its
-  own copy, so the linked components run on one React in the browser and on the server.
+  own copy, so the linked components run on one React in the browser and on the server. `turbopack.resolveAlias`
+  does the same for `next`, so `next/headers` in the packages is this app's copy and has a request scope.
 - Vitest does not do that, so `vitest.config.mts` makes `react` and `react-dom` resolve from this app
   (`resolve.dedupe`) and processes `@casl/react`, a dependency of the package, with the app's Vite
   (`server.deps.inline`). Otherwise a linked component fails with "Invalid hook call".

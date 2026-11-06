@@ -1,4 +1,5 @@
 {% if navree_js_dir %}
+import { createRequire } from "node:module";
 import path from "node:path";
 {% endif %}
 import type { NextConfig } from "next";
@@ -15,12 +16,26 @@ function commonDirectory(a: string, b: string): string {
 }
 
 /**
- * The Navree packages (`@navree/next`, `@navree/client`, `@navree/bff`) are linked from the checkout
- * this app was made from, which is outside this directory. Next reads files outside the app only
- * below its root, so the root is the directory that holds both the app and the checkout's
- * `packages/js`, and the packages are compiled with the app. See README.md, "The Navree packages".
+ * Where the linked Navree packages really are (`packages/js` of a checkout): the place `node_modules`
+ * links `@navree/next` to. A job that checked Navree out somewhere else and pointed the links at it
+ * (see README.md) needs no change here. Falls back to the checkout this app was made from.
  */
-const root = commonDirectory(process.cwd(), "{{ navree_js_dir }}");
+function linkedPackages(): string {
+  try {
+    const require = createRequire(path.join(process.cwd(), "package.json"));
+    return path.dirname(path.dirname(require.resolve("@navree/next/package.json")));
+  } catch {
+    return "{{ navree_js_dir }}";
+  }
+}
+
+/**
+ * The Navree packages (`@navree/next`, `@navree/client`, `@navree/bff`) are linked from a checkout of
+ * Navree, which is outside this directory. Next reads files outside the app only below its root, so
+ * the root is the directory that holds both the app and the checkout's `packages/js`, and the
+ * packages are compiled with the app. See README.md, "The Navree packages".
+ */
+const root = commonDirectory(process.cwd(), linkedPackages());
 {% endif %}
 
 /**
@@ -35,7 +50,12 @@ const nextConfig: NextConfig = {
   // Allow the dev server to be opened on 127.0.0.1 as well as localhost.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
 {% if navree_js_dir %}
-  turbopack: { root },
+  turbopack: {
+    root,
+    // The linked packages import `next/headers` and the like, and their own node_modules holds a
+    // second copy of Next, which has no request scope. They get this app's copy.
+    resolveAlias: { next: "./node_modules/next", "next/*": "./node_modules/next/*" },
+  },
   outputFileTracingRoot: root,
   transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
 {% endif %}
