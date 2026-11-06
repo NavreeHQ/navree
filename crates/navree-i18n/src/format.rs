@@ -392,6 +392,10 @@ mod tests {
         assert_eq!(formats("fr").number(1234.5), "1\u{202f}234,5");
         assert_eq!(formats("en").number(2.0 / 3.0), "0.667");
         assert_eq!(formats("en").number(42.0), "42");
+        // Lakhs and crores in India.
+        assert_eq!(formats("en-IN").number(1_234_567.0), "12,34,567");
+        assert_eq!(formats("hi").number(10_000_000.0), "1,00,00,000");
+        assert_eq!(formats("en-IN").number(99_999.0), "99,999");
     }
 
     #[test]
@@ -409,6 +413,9 @@ mod tests {
         assert_eq!(formats("en").money(1999, "CHF"), "CHF\u{a0}19.99");
         assert_eq!(formats("en").money(-1999, "USD"), "-$19.99");
         assert_eq!(formats("en").money(5, "KWD"), "KWD\u{a0}0.005");
+        assert_eq!(formats("en-IN").money(123_456_750, "INR"), "₹12,34,567.50");
+        assert_eq!(formats("en-IN").money(1_000_000_000, "INR"), "₹1,00,00,000.00");
+        assert_eq!(formats("en").money(123_456_750, "INR"), "₹1,234,567.50");
     }
 
     #[test]

@@ -41,6 +41,7 @@
 
 use std::fmt::Write as _;
 
+use crate::charts::Grouping;
 use crate::components::{BadgeVariant, Input, NativeSelect};
 use crate::html::{Href, escape_into};
 use crate::node::{Node, Uses};
@@ -319,6 +320,7 @@ pub trait TableRow {
 pub struct CellWriter<'a> {
     out: &'a mut String,
     uses: Uses,
+    grouping: Grouping,
 }
 
 impl<'a> CellWriter<'a> {
@@ -326,7 +328,20 @@ impl<'a> CellWriter<'a> {
         Self {
             out,
             uses: Uses::NONE,
+            grouping: Grouping::Thousands,
         }
+    }
+
+    /// The table writes its numbers and amounts with this grouping.
+    pub(crate) fn grouped(mut self, grouping: Grouping) -> Self {
+        self.grouping = grouping;
+        self
+    }
+
+    /// How the table groups the digits of a number: a cell that writes an amount
+    /// follows it (`12,34,567.50`, not `1,234,567.50`, in a table of rupees).
+    pub fn grouping(&self) -> Grouping {
+        self.grouping
     }
 
     /// Writes a component: a badge, an avatar, a list of tags. It goes through the
@@ -431,7 +446,8 @@ impl CellValue for bool {
 
 impl CellValue for crate::form::Money {
     fn write_cell(&self, out: &mut CellWriter<'_>) {
-        out.plain(&self.display());
+        let grouping = out.grouping();
+        out.plain(&self.display_in(grouping));
     }
 
     fn write_text(&self, out: &mut String) {

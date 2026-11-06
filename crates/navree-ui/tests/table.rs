@@ -1,9 +1,10 @@
 //! The table without a browser or a database: the URL, the allow-list, what's drawn.
 
+use navree_ui::charts::Grouping;
 use navree_ui::table::{Direction, FilterValue, NoFilter, TableRow as _, ValueKind};
 use navree_ui::{
-    BulkAction, DataTable, FilterBar, Options, Pagination, RowAction, TablePage, TableQuery,
-    TableRow, render,
+    BulkAction, DataTable, FilterBar, Money, Options, Pagination, RowAction, TableLabels, TablePage,
+    TableQuery, TableRow, render,
 };
 use serde::Deserialize;
 
@@ -52,6 +53,18 @@ fn deal(id: i64) -> Deal {
         notes: None,
         owner: "Anu".into(),
     }
+}
+
+/// A table of rupees.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 25)]
+struct Invoice {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, label = "Invoice")]
+    title: String,
+    #[col(numeric, label = "Amount")]
+    amount: Money,
 }
 
 type Q = TableQuery<Deal, NoFilter>;
@@ -918,6 +931,31 @@ fn one_row_says_one_result_and_a_full_page_has_no_links() {
     assert!(!html.contains("pagination-link"), "{html}");
     let html = draw(&q(""), &rows, 1_234_567);
     assert!(html.contains("of 1,234,567 results"), "{html}");
+}
+
+#[test]
+fn counts_and_amounts_are_grouped_as_the_labels_group_them() {
+    let query: TableQuery<Invoice, NoFilter> = TableQuery::parse("/invoices", "");
+    let rows = vec![Invoice {
+        id: 1,
+        title: "INV-1".into(),
+        amount: Money(123_456_750),
+    }];
+    let page = TablePage::new(rows, 1_234_567);
+
+    let thousands = render(&DataTable::new("invoices", &query, &page).into());
+    assert!(thousands.contains("of 1,234,567 results"), "{thousands}");
+    assert!(thousands.contains("1,234,567.50"), "{thousands}");
+
+    // A table of rupees: lakhs and crores, in the count and in the amount.
+    let labels = TableLabels {
+        grouping: Grouping::Indian,
+        ..TableLabels::default()
+    };
+    let lakhs = render(&DataTable::new("invoices", &query, &page).labels(&labels).into());
+    assert!(lakhs.contains("of 12,34,567 results"), "{lakhs}");
+    assert!(lakhs.contains("12,34,567.50"), "{lakhs}");
+    assert!(!lakhs.contains("1,234,567"), "{lakhs}");
 }
 
 #[test]

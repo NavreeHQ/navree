@@ -27,6 +27,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 pub use navree_validation::{FieldRules, RuleTable};
 
+use crate::charts::Grouping;
 use crate::components::{
     Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect,
     RadioGroup, Switch, Textarea,
@@ -599,20 +600,48 @@ impl Money {
 
     /// `1250050` as `12,500.50`.
     pub fn display(self) -> String {
+        self.display_in(Grouping::Thousands)
+    }
+
+    /// The amount with its digits grouped as a reader of a language groups them:
+    /// `123456750` is `1,234,567.50` with [`Grouping::Thousands`] and `12,34,567.50`
+    /// with [`Grouping::Indian`] (lakhs and crores). [`Grouping::None`] writes no commas.
+    /// [`Money::parse`] reads all three back.
+    ///
+    /// ```
+    /// use navree_ui::Money;
+    /// use navree_ui::charts::Grouping;
+    ///
+    /// assert_eq!(Money(123_456_750).display_in(Grouping::Indian), "12,34,567.50");
+    /// assert_eq!(Money(1_000_000_000).display_in(Grouping::Indian), "1,00,00,000.00");
+    /// assert_eq!(Money(123_456_750).display_in(Grouping::Thousands), "1,234,567.50");
+    /// ```
+    pub fn display_in(self, grouping: Grouping) -> String {
         let cents = self.0.unsigned_abs();
         let whole = (cents / 100).to_string();
-        let mut out = String::with_capacity(whole.len() + whole.len() / 3 + 4);
+        let mut out = String::with_capacity(whole.len() + whole.len() / 2 + 4);
         if self.0 < 0 {
             out.push('-');
         }
         for (at, digit) in whole.chars().enumerate() {
-            if at > 0 && (whole.len() - at).is_multiple_of(3) {
+            if at > 0 && starts_group(whole.len() - at, grouping) {
                 out.push(',');
             }
             out.push(digit);
         }
         let _ = write!(out, ".{:02}", cents % 100);
         out
+    }
+}
+
+/// Whether a comma goes before a digit with `left` digits from it to the end of the
+/// whole part (itself included).
+fn starts_group(left: usize, grouping: Grouping) -> bool {
+    match grouping {
+        Grouping::Thousands => left.is_multiple_of(3),
+        // Three digits, then pairs: 12,34,567.
+        Grouping::Indian => left == 3 || (left > 3 && (left - 3).is_multiple_of(2)),
+        _ => false,
     }
 }
 
@@ -2967,6 +2996,28 @@ mod tests {
         assert_eq!(Money(-350).display(), "-3.50");
         assert_eq!(Money(5).display(), "0.05");
         assert_eq!(Money(100_000_000).display(), "1,000,000.00");
+        // Lakhs and crores.
+        assert_eq!(
+            Money(123_456_750).display_in(Grouping::Indian),
+            "12,34,567.50"
+        );
+        assert_eq!(
+            Money(10_000_000).display_in(Grouping::Indian),
+            "1,00,000.00"
+        );
+        assert_eq!(
+            Money(1_000_000_000).display_in(Grouping::Indian),
+            "1,00,00,000.00"
+        );
+        assert_eq!(Money(99_900).display_in(Grouping::Indian), "999.00");
+        assert_eq!(Money(100_000).display_in(Grouping::Indian), "1,000.00");
+        assert_eq!(Money(-123_456_750).display_in(Grouping::Indian), "-12,34,567.50");
+        assert_eq!(Money(5).display_in(Grouping::Indian), "0.05");
+        assert_eq!(Money(123_456_750).display_in(Grouping::None), "1234567.50");
+        for money in [Money(0), Money(99_900), Money(123_456_750), Money(-1_000_000_000)] {
+            assert_eq!(Money::parse(&money.display_in(Grouping::Indian)), Some(money));
+            assert_eq!(Money::parse(&money.display_in(Grouping::Thousands)), Some(money));
+        }
         assert_eq!(
             Money::parse(&Money(i64::MAX).display()),
             Some(Money(i64::MAX))

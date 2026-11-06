@@ -108,6 +108,17 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 
 <UiPreview example="data-table/filter-row" />
 
+## Counts and amounts in lakhs and crores
+
+The count under the table (`Showing 1 to 25 of 12,34,567 results`) and the cells of a `Money` column group their digits as `TableLabels::grouping` says: by thousands (`1,234,567`) by default, in lakhs and crores (`12,34,567`) with `Grouping::Indian`. A table that takes its words from navree-i18n (`TableLabels::from_locale(&locale)`) gets the grouping of the locale: `en-IN` and `hi` group in lakhs, `en` and `de` by thousands. To set it yourself:
+
+```rust
+let labels = TableLabels { grouping: Grouping::Indian, ..TableLabels::default() };
+DataTable::new("deals", &query, &page).labels(&labels)
+```
+
+`Money::display_in(Grouping::Indian)` writes one amount the same way (`12,34,567.50`), and `Money::parse` reads either grouping back.
+
 ## Compact rows
 
 `density=compact` in the URL, set from the table's view options, makes rows shorter.

@@ -17,6 +17,7 @@ use super::{
     Align, CellWriter, Column, Direction, FilterBar, FilterKind, NoFilter, Sticky, TableQuery,
     TableRow, ValueKind,
 };
+use crate::charts::Grouping;
 use crate::components::{
     AlertDialog, Button, ButtonVariant, Empty, Input, NativeSelect, Pagination, PopupAlign, Size,
     Skeleton, SkeletonShape, icon, menu_element,
@@ -440,6 +441,10 @@ pub struct TableLabels {
     pub delete_view: Cow<'static, str>,
     pub make_default: Cow<'static, str>,
     pub default_view: Cow<'static, str>,
+    /// How the digits of counts and amounts are grouped: `1,234,567` or, in a table of
+    /// rupees, `12,34,567`. `Locale::labels::<TableLabels>()` of navree-i18n sets it from
+    /// the locale.
+    pub grouping: Grouping,
 }
 
 impl Default for TableLabels {
@@ -518,16 +523,28 @@ impl Default for TableLabels {
             delete_view: "Delete view {label}".into(),
             make_default: "Open with this view".into(),
             default_view: "Default".into(),
+            grouping: Grouping::Thousands,
         }
     }
 }
 
 /// `1234567` as `1,234,567`.
 pub(crate) fn grouped(value: u64) -> String {
+    grouped_in(value, Grouping::Thousands)
+}
+
+/// `1234567` as `1,234,567`, or as `12,34,567` with [`Grouping::Indian`] (lakhs and crores).
+pub(crate) fn grouped_in(value: u64, grouping: Grouping) -> String {
     let digits = value.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    let mut out = String::with_capacity(digits.len() + digits.len() / 2);
     for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at).is_multiple_of(3) {
+        let left = digits.len() - at;
+        let comma = match grouping {
+            Grouping::Thousands => left.is_multiple_of(3),
+            Grouping::Indian => left == 3 || (left > 3 && (left - 3).is_multiple_of(2)),
+            _ => false,
+        };
+        if at > 0 && comma {
             out.push(',');
         }
         out.push(digit);
@@ -1178,7 +1195,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                                     .flag("checked", selected.contains(&choice.value)),
                                 el("bdi").child(choice.label.clone()),
                                 choice.count.map(|count| {
-                                    el("span").slot("filter-count").child(grouped(count))
+                                    el("span")
+                                        .slot("filter-count")
+                                        .child(grouped_in(count, self.labels.grouping))
                                 }),
                             ))
                         })
@@ -2392,7 +2411,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 }
                 out.push('>');
                 {
-                    let mut writer = CellWriter::new(&mut out);
+                    let mut writer = CellWriter::new(&mut out).grouped(self.labels.grouping);
                     match draw {
                         Some(draw) => writer.node(&draw(row)),
                         None => row.write_cell(*at, &mut writer),
@@ -2533,10 +2552,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             u64::from(self.page().saturating_sub(1)) * per + 1
         };
         let to = from + (shown as u64).saturating_sub(1);
+        let grouping = labels.grouping;
         let base = |template: &str, total: String| {
             template
-                .replace("{from}", &grouped(from))
-                .replace("{to}", &grouped(to))
+                .replace("{from}", &grouped_in(from, grouping))
+                .replace("{to}", &grouped_in(to, grouping))
                 .replace("{total}", &total)
         };
         let count_link = |text: &str| -> Element {
@@ -2546,20 +2566,22 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         };
         let text: Node = match (self.data.total, R::CONFIG.cursor) {
             (Total::Exact(1), _) => labels.one_result.to_string().into(),
-            (Total::Exact(total), false) => base(&labels.showing, grouped(total)).into(),
+            (Total::Exact(total), false) => {
+                base(&labels.showing, grouped_in(total, grouping)).into()
+            }
             (Total::Exact(total), true) => format!(
                 "{} {}",
-                grouped(total),
+                grouped_in(total, grouping),
                 if total == 1 { "result" } else { "results" }
             )
             .into(),
             (Total::AtLeast(total), true) => Node::list((
-                format!("{}+ results", grouped(total)),
+                format!("{}+ results", grouped_in(total, grouping)),
                 " ",
                 count_link(&labels.count_all),
             )),
             (Total::AtLeast(total), false) => Node::list((
-                base(&labels.showing, format!("{}+", grouped(total))),
+                base(&labels.showing, format!("{}+", grouped_in(total, grouping))),
                 " ",
                 count_link(&labels.count_all),
             )),
@@ -2902,4 +2924,28 @@ fn in_region(mut node: Node) -> Node {
     }
     walk(&mut node);
     node
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_are_grouped_by_thousands_or_in_lakhs_and_crores() {
+        assert_eq!(grouped(0), "0");
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(1_000), "1,000");
+        assert_eq!(grouped(1_234_567), "1,234,567");
+        assert_eq!(grouped_in(999, Grouping::Indian), "999");
+        assert_eq!(grouped_in(1_000, Grouping::Indian), "1,000");
+        assert_eq!(grouped_in(99_999, Grouping::Indian), "99,999");
+        assert_eq!(grouped_in(100_000, Grouping::Indian), "1,00,000");
+        assert_eq!(grouped_in(1_234_567, Grouping::Indian), "12,34,567");
+        assert_eq!(grouped_in(10_000_000, Grouping::Indian), "1,00,00,000");
+        assert_eq!(
+            grouped_in(u64::MAX, Grouping::Indian),
+            "1,84,46,74,40,73,70,95,51,615"
+        );
+        assert_eq!(grouped_in(1_234_567, Grouping::None), "1234567");
+    }
 }

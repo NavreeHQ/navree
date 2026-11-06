@@ -5,7 +5,7 @@
 use chrono::NaiveDate;
 use navree_i18n::ui::{FromLocale, LocaleUi, MoneyIn};
 use navree_i18n::{DateStyle, I18n, I18nOptions};
-use navree_ui::charts::ChartLabels;
+use navree_ui::charts::{ChartLabels, Grouping};
 use navree_ui::components::{CarouselLabels, DisplayLabels, LazyLabels};
 use navree_ui::flow::{SliderLabels, StepperLabels, ToolbarLabels, TreeLabels, WizardLabels};
 use navree_ui::form::FORM_MESSAGES;
@@ -173,6 +173,23 @@ fn money_is_grouped_as_the_locale_groups_it() {
         Money(-350).display_in(&i18n.locale("en-IN"), "INR"),
         "-₹3.50"
     );
+}
+
+// A table counts rows as the locale counts: lakhs and crores in India.
+#[test]
+fn a_tables_counts_are_grouped_as_the_locale_groups_numbers() {
+    let i18n = i18n();
+    for (tag, grouping) in [
+        ("en", Grouping::Thousands),
+        ("en-IN", Grouping::Indian),
+        ("hi", Grouping::Indian),
+        ("de", Grouping::Thousands),
+        ("fr", Grouping::Thousands),
+        ("ja", Grouping::Thousands),
+    ] {
+        let labels = TableLabels::from_locale(&i18n.locale(tag));
+        assert_eq!(labels.grouping, grouping, "{tag}");
+    }
 }
 
 // The toolkit keeps its own month names (a page needs no ICU); they must agree with ICU's

@@ -27,7 +27,7 @@ use std::borrow::Cow;
 
 #[cfg(feature = "phone")]
 use navree_ui::PhoneLabels;
-use navree_ui::charts::ChartLabels;
+use navree_ui::charts::{ChartLabels, Grouping};
 use navree_ui::components::{CarouselLabels, DisplayLabels, LazyLabels};
 use navree_ui::dates::DateLocale;
 use navree_ui::flow::{SliderLabels, StepperLabels, ToolbarLabels, TreeLabels, WizardLabels};
@@ -160,13 +160,36 @@ macro_rules! say_all {
     };
 }
 
+/// How `locale` groups the digits of a number: by thousands (`1,234,567`) or in lakhs and
+/// crores (`12,34,567`). Read from the locale's own number formatting, so it follows its data.
+fn grouping_of(locale: &Locale) -> Grouping {
+    let sample = locale.format_number(1_000_000.0);
+    let sizes: Vec<usize> = sample
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|group| !group.is_empty())
+        .map(str::len)
+        .collect();
+    // `10,00,000` has a group of two after the first; `1,000,000` has groups of three.
+    if sizes.len() == 3 && sizes[1] == 2 {
+        Grouping::Indian
+    } else {
+        Grouping::Thousands
+    }
+}
+
+/// A table groups its counts as the locale groups numbers.
+fn table_conventions(labels: &mut TableLabels, locale: &Locale) {
+    labels.grouping = grouping_of(locale);
+}
+
 macro_rules! labels {
-    ($($ty:ty, $group:literal { $($field:ident = $id:literal),* $(,)? })*) => {$(
+    ($($ty:ty, $group:literal { $($field:ident = $id:literal),* $(,)? } $(=> $conventions:ident)?)*) => {$(
         impl FromLocale for $ty {
             fn from_locale(locale: &Locale) -> Self {
                 let blanks = blanks();
                 let mut labels = <$ty>::default();
                 say_all!(locale, blanks, labels, $group { $($field = $id),* });
+                $($conventions(&mut labels, locale);)?
                 labels
             }
         }
@@ -248,7 +271,7 @@ labels! {
         delete_view = "delete-view",
         make_default = "make-default",
         default_view = "default-view",
-    }
+    } => table_conventions
     ChartLabels, "chart" {
         show_table = "show-table",
         chart = "chart",
