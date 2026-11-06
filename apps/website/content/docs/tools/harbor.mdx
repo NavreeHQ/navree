@@ -303,6 +303,8 @@ Deploying crm-api to production (1 server)
 Released 20261026-091512-3f2a9c1 in 1m 53s.
 ```
 
+<Diagram name="harbor-release" />
+
 A release id is the UTC time of the deploy and the short Git commit. Step by step:
 
 1. **Build.** Harbor builds the release binary for your servers' architecture: natively when the machine running the deploy is Linux on the same architecture with a glibc no newer than the servers', otherwise in a container (`build.method`). The container is Harbor's builder image, Ubuntu 22.04 with a stable Rust toolchain, built once on your machine (or the image in `build.image`); its glibc is no newer than the servers', so the binary runs on 22.04 and 24.04 alike. Container builds keep Cargo's registry, the toolchain and the target directory in named volumes (`navree-harbor-*`), so the second build is incremental.

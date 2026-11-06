@@ -5,6 +5,7 @@ import { backendForFrontend } from "./backend-for-frontend";
 import { designToUi } from "./design-to-ui";
 import { eventDriven } from "./event-driven";
 import type { DiagramSpec } from "./figure";
+import { harborRelease } from "./harbor-release";
 import { microservices } from "./microservices";
 import { modularMonolith } from "./modular-monolith";
 import { moduleGraph } from "./module-graph";
@@ -34,6 +35,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "two-ways": twoWays,
   "workspace-resolution": workspaceResolution,
   "workspace-isolation": workspaceIsolation,
+  "harbor-release": harborRelease,
 };
 
 /**
