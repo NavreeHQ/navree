@@ -1,8 +1,9 @@
 //! Input, Textarea, NativeSelect, Checkbox, Switch, RadioGroup, Label, Field,
 //! FieldSet, InputGroup.
 
-use super::root_methods;
-use crate::node::{Attr, AttrValue, Element, IntoNodes, Node, el, into_node};
+use super::{Size, root_methods};
+use crate::icons;
+use crate::node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el, into_node};
 
 /// The kind of an [`Input`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -66,6 +67,8 @@ impl InputKind {
 #[must_use]
 pub struct Input {
     el: Element,
+    size: Size,
+    clear: Option<String>,
 }
 
 impl Input {
@@ -76,7 +79,31 @@ impl Input {
                 .slot("input")
                 .attr("type", kind.as_str())
                 .attr("name", name.into()),
+            size: Size::Md,
+            clear: None,
         }
+    }
+
+    /// Sets the height and type size: the same four sizes as a button. The default
+    /// needs nothing more; the others link the parts stylesheet.
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        if size.as_str().is_some() {
+            self.el = self.el.uses(Uses::PARTS_STYLES);
+        }
+        self
+    }
+
+    /// Adds a button, named `label` for assistive technology, that empties the field and
+    /// puts the caret back in it. It shows while the field holds something, and only
+    /// where a script runs. The field is drawn inside an [`InputGroup`]'s frame.
+    pub fn clearable(mut self, label: impl Into<String>) -> Self {
+        self.clear = Some(label.into());
+        self.el = self
+            .el
+            .flag("data-ui-clearable", true)
+            .uses(Uses::PARTS.with(Uses::PARTS_STYLES));
+        self
     }
 
     /// Lets [`Cmd::value`](crate::Cmd::value) set this field, when it is hidden (see
@@ -175,7 +202,24 @@ impl Input {
     }
 
     fn into_node(self) -> Node {
-        self.el.into()
+        let field = self.el.attr_opt("data-size", self.size.as_str());
+        let Some(label) = self.clear else {
+            return field.into();
+        };
+        let empty = field
+            .get("value")
+            .and_then(AttrValue::as_text)
+            .is_none_or(|value| value.is_empty());
+        let clear = super::Button::icon_only(icons::X, label)
+            .variant(super::ButtonVariant::Ghost)
+            .size(Size::Xs)
+            .attr("data-ui-clear", "");
+        let clear = if empty { clear.attr("hidden", "") } else { clear };
+        el("div")
+            .slot("input-group")
+            .attr_opt("data-size", self.size.as_str())
+            .children((field, super::only_with_script(clear)))
+            .into()
     }
 }
 
@@ -339,6 +383,7 @@ impl NativeSelect {
 pub struct Checkbox {
     el: Element,
     label: Option<Node>,
+    description: Option<Node>,
 }
 
 impl Checkbox {
@@ -351,12 +396,43 @@ impl Checkbox {
                 .attr("name", name.into())
                 .attr("value", "true"),
             label: None,
+            description: None,
         }
     }
 
     /// Starts checked.
     pub fn checked(mut self, checked: bool) -> Self {
         self.el = self.el.flag("checked", checked);
+        self
+    }
+
+    /// Draws it as neither checked nor unchecked: some of what it stands for is chosen.
+    /// A script makes it so (no attribute can), and a click makes it checked. Without a
+    /// script it is drawn unchecked. It posts nothing until it is checked.
+    pub fn indeterminate(mut self, indeterminate: bool) -> Self {
+        if indeterminate {
+            self.el = self
+                .el
+                .flag("data-indeterminate", true)
+                .uses(Uses::PARTS.with(Uses::PARTS_STYLES));
+        }
+        self
+    }
+
+    /// Marks it invalid.
+    pub fn invalid(mut self, invalid: bool) -> Self {
+        if invalid {
+            self.el = self.el.attr("aria-invalid", "true");
+        }
+        self
+    }
+
+    /// Adds a line under the label that says more, and ties it to the box so a screen
+    /// reader reads it after the label. Give the box an id of its own first when
+    /// several share a name.
+    pub fn description(mut self, description: impl Into<Node>) -> Self {
+        self.description = Some(description.into());
+        self.el = self.el.uses(Uses::PARTS_STYLES);
         self
     }
 
@@ -379,14 +455,57 @@ impl Checkbox {
     }
 
     fn into_node(self) -> Node {
-        match self.label {
-            Some(label) => el("label")
+        choice(self.el, self.label, self.description)
+    }
+}
+
+/// A box or a switch in its label, with the description under the label when there is one.
+fn choice(control: Element, label: Option<Node>, description: Option<Node>) -> Node {
+    match (label, description) {
+        (None, _) => control.into(),
+        (Some(label), None) => el("label")
+            .slot("choice")
+            .children((control, el("span").child(label)))
+            .into(),
+        (Some(label), Some(description)) => {
+            let id = description_id(&control);
+            el("label")
                 .slot("choice")
-                .children((self.el, el("span").child(label)))
-                .into(),
-            None => self.el.into(),
+                .children((
+                    control.attr("aria-describedby", id.clone()),
+                    el("span").children((
+                        el("span").slot("choice-label").child(label),
+                        el("span")
+                            .slot("choice-description")
+                            .id(id)
+                            .child(description),
+                    )),
+                ))
+                .into()
         }
     }
+}
+
+/// The id of the description of `control`: made from its id, or else its name, with
+/// anything but letters, digits, `-` and `_` turned into `-`.
+fn description_id(control: &Element) -> String {
+    let base = control
+        .get("id")
+        .or_else(|| control.get("name"))
+        .and_then(AttrValue::as_text)
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or_default();
+    let clean: String = base
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    format!("{clean}-description")
 }
 
 /// An on and off switch: a checkbox with the `switch` role.
@@ -395,6 +514,7 @@ impl Checkbox {
 pub struct Switch {
     el: Element,
     label: Option<Node>,
+    description: Option<Node>,
 }
 
 impl Switch {
@@ -408,7 +528,16 @@ impl Switch {
                 .attr("name", name.into())
                 .attr("value", "true"),
             label: None,
+            description: None,
         }
+    }
+
+    /// Adds a line under the label that says more, tied to the switch so a screen
+    /// reader reads it after the label.
+    pub fn description(mut self, description: impl Into<Node>) -> Self {
+        self.description = Some(description.into());
+        self.el = self.el.uses(Uses::PARTS_STYLES);
+        self
     }
 
     /// Starts on.
@@ -430,13 +559,7 @@ impl Switch {
     }
 
     fn into_node(self) -> Node {
-        match self.label {
-            Some(label) => el("label")
-                .slot("choice")
-                .children((self.el, el("span").child(label)))
-                .into(),
-            None => self.el.into(),
-        }
+        choice(self.el, self.label, self.description)
     }
 }
 

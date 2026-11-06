@@ -282,6 +282,14 @@ impl Uses {
     /// The islands module: imports the script of each [`Island`](crate::Island) on the
     /// page, mounts it, gives it new props and lets it go when it leaves.
     pub const ISLAND: Self = Self(1 << 10);
+    /// The parts module: the colour picker keeping its fields and swatches in step, a
+    /// clear button, a checkbox that is indeterminate and an avatar whose picture did not
+    /// load. Its stylesheet is [`Uses::PARTS_STYLES`].
+    pub const PARTS: Self = Self(1 << 28);
+    /// The parts stylesheet: no script, only the styles of the parts that need none, such
+    /// as an avatar group, a trace, a questionnaire, an alert's close button and actions,
+    /// and a sparkline in a table cell.
+    pub const PARTS_STYLES: Self = Self(1 << 29);
 
     /// Both sets together.
     #[must_use]
@@ -892,6 +900,8 @@ mod tests {
             Uses::OTP,
             Uses::CAROUSEL,
             Uses::MENUBAR,
+            Uses::PARTS,
+            Uses::PARTS_STYLES,
         ];
         for (at, module) in newer.iter().enumerate() {
             assert_eq!(module.0.count_ones(), 1);

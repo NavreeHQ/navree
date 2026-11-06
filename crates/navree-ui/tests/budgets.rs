@@ -369,6 +369,11 @@ fn a_page_with_an_island_loads_the_islands_module_alone() {
     );
 }
 
+#[test]
+fn the_parts_module_is_at_most_2_kb_gzip() {
+    assert!(size("parts") <= 2 * 1024, "{}", size("parts"));
+}
+
 /// Each of these components links a stylesheet of its own instead of growing the one every
 /// page loads, so the one stays where it was. The theme builder's sheet is one of them.
 #[test]
@@ -390,6 +395,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "toolbar-styles",
         "dates-styles",
         "theme-builder",
+        "parts-styles",
     ] {
         assert!(size(name) <= 3 * 1024, "{name}: {}", size(name));
     }
@@ -527,6 +533,8 @@ fn no_two_modules_share_a_bit() {
         Uses::CAROUSEL,
         Uses::MENUBAR,
         Uses::ISLAND,
+        Uses::PARTS,
+        Uses::PARTS_STYLES,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

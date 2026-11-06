@@ -87,6 +87,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CAROUSEL, CAROUSEL_URL),
         (Uses::MENUBAR, MENUBAR_URL),
         (Uses::ISLAND, ISLANDS_URL),
+        (Uses::PARTS, PARTS_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]
@@ -124,6 +125,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CAROUSEL, CAROUSEL_STYLES_URL),
         (Uses::MENUBAR, MENUBAR_STYLES_URL),
         (Uses::CHARTS, CHARTS_STYLES_URL),
+        (Uses::PARTS_STYLES, PARTS_STYLES_URL),
     ]
     .into_iter()
 }

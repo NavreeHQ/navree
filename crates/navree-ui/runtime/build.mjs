@@ -131,6 +131,7 @@ const FILES = [
   ["menubar", "js", "text/javascript; charset=utf-8", await js("menubar.js")],
   ["charts", "js", "text/javascript; charset=utf-8", await js("charts.js")],
   ["islands", "js", "text/javascript; charset=utf-8", await js("islands.js")],
+  ["parts", "js", "text/javascript; charset=utf-8", await js("parts.js")],
   ["phone", "js", "text/javascript; charset=utf-8", await js("phone.js", { PHONE_DATA_FILE }), "phone"],
   // The numbering plans the phone module formats with, written by
   // crates/navree-phone/tools/metadata.mjs.
@@ -147,6 +148,8 @@ const FILES = [
   ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
   ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
   ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
+  // The styles of the parts that need no script, and of the parts module's own.
+  ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
 ];
 // The sheets of `MODULE_STYLES`, each from its sources in `styles`; the phone's ships with its feature.
 for (const [name, sources] of Object.entries(MODULE_STYLES)) {

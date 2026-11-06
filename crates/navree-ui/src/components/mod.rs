@@ -10,6 +10,7 @@ mod actions;
 mod activity;
 mod carousel;
 mod clock;
+mod color_picker;
 mod context_menu;
 mod display;
 mod dropdown;
@@ -23,22 +24,26 @@ mod live;
 mod menubar;
 mod navigation_menu;
 mod overlays;
+mod questionnaire;
 mod split;
 mod tabs;
 mod timeline;
 mod toast;
 mod toggle_group;
 mod tone;
+mod trace;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
 pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
+pub use color_picker::ColorPicker;
 pub use context_menu::ContextMenu;
 pub use display::{
-    Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb,
-    Bubble, BubbleSide, Card, Direction, Empty, Heading, Item, ItemVariant, Kbd, Marker,
-    MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
-    Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
+    Alert, AlertTone, AspectRatio, Attachment, Avatar, AvatarGroup, Badge, BadgeVariant, Bars,
+    Breadcrumb, Bubble, BubbleSide, Card, CardVariant, Direction, Empty, Heading, Item,
+    ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio, Separator,
+    Skeleton, SkeletonShape, Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text,
+    TextVariant,
 };
 pub(crate) use dropdown::menu_element;
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
@@ -63,12 +68,14 @@ pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, ScrollHeight, Sheet, SheetBackdrop, SheetSide, SheetWidth, Side, Tooltip,
 };
+pub use questionnaire::{Question, Questionnaire, QuestionnaireLabels, QuestionnaireMove};
 pub use split::{Pane, SplitHeight, SplitPane, SplitSave, SplitSizes, SplitWidth};
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
 pub use timeline::{Timeline, TimelineEvent, TimelineState};
 pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
 pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
 pub use tone::{DisplayLabels, Meta, Tone};
+pub use trace::{Trace, TraceLabels, TraceState, TraceStep};
 
 use crate::icons::Icon;
 use crate::node::{Node, el};

@@ -2,9 +2,10 @@
 
 use super::tone::Tone;
 use super::{Size, icon, root_methods};
+use crate::cmd::Cmd;
 use crate::html::Href;
 use crate::icons::{self, Icon};
-use crate::node::{AttrValue, Element, IntoNodes, Node, el, into_node};
+use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el, into_node};
 
 /// What an [`Alert`] means.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -29,6 +30,8 @@ pub struct Alert {
     start: Option<Icon>,
     title: Option<Node>,
     body: Vec<Node>,
+    actions: Vec<Node>,
+    close: Option<(String, String)>,
 }
 
 impl Alert {
@@ -55,12 +58,31 @@ impl Alert {
             start: Some(glyph),
             title: None,
             body: Vec::new(),
+            actions: Vec::new(),
+            close: None,
         }
     }
 
     /// Replaces the icon.
     pub fn icon(mut self, glyph: Icon) -> Self {
         self.start = Some(glyph);
+        self
+    }
+
+    /// Adds a close button, named `label` for assistive technology, that hides the alert
+    /// in the browser with no request. The alert takes the id `id`, which the button's
+    /// command names. With no script the button is not drawn and the alert stays.
+    pub fn dismissible(mut self, id: impl Into<String>, label: impl Into<String>) -> Self {
+        let id = id.into();
+        self.el = self.el.id(id.clone()).uses(Uses::PARTS_STYLES);
+        self.close = Some((id, label.into()));
+        self
+    }
+
+    /// Adds buttons or links under the description: what the reader can do about it.
+    pub fn actions(mut self, actions: impl IntoNodes) -> Self {
+        actions.push_into(&mut self.actions);
+        self.el = self.el.uses(Uses::PARTS_STYLES);
         self
     }
 
@@ -77,13 +99,25 @@ impl Alert {
     }
 
     fn into_node(self) -> Node {
+        let close = self.close.map(|(id, label)| {
+            super::only_with_script(
+                super::Button::icon_only(icons::X, label)
+                    .variant(super::ButtonVariant::Ghost)
+                    .size(Size::Xs)
+                    .on_click(Cmd::hide(id)),
+            )
+        });
         self.el
+            .flag("data-closable", close.is_some())
             .children((
                 self.start.map(icon),
                 self.title
                     .map(|title| el("div").slot("alert-title").child(title)),
                 (!self.body.is_empty())
                     .then(|| el("div").slot("alert-description").child(self.body)),
+                (!self.actions.is_empty())
+                    .then(|| el("div").slot("alert-actions").child(self.actions)),
+                close.map(|button| el("div").slot("alert-close").child(button)),
             ))
             .into()
     }
@@ -250,11 +284,110 @@ impl Avatar {
         self
     }
 
+    /// Shows the person icon when the picture does not load. It needs the parts module,
+    /// so a page with one loads a small script; without it a picture that fails shows
+    /// the browser's own broken-image mark, as before.
+    pub fn fallback(mut self) -> Self {
+        self.el = self
+            .el
+            .flag("data-ui-fallback", true)
+            .uses(Uses::PARTS.with(Uses::PARTS_STYLES));
+        self
+    }
+
     fn into_node(self) -> Node {
         self.el
             .attr_opt("data-size", self.size.as_str())
             .child(self.inner)
             .into()
+    }
+}
+
+/// Avatars side by side, each overlapping the one before, with a `+N` tile for the
+/// people left out when there are more than `max`.
+///
+/// ```
+/// use navree_ui::{Avatar, AvatarGroup, render};
+///
+/// let group = AvatarGroup::new("Reviewers").max(2).children((
+///     Avatar::placeholder("Gurpreet Kaur"),
+///     Avatar::placeholder("Harjot Singh"),
+///     Avatar::placeholder("Simran Arora"),
+/// ));
+/// let html = render(&group.into());
+/// assert!(html.contains(r#"role="group""#));
+/// assert!(html.contains("+1"));
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct AvatarGroup {
+    el: Element,
+    people: Vec<Node>,
+    max: usize,
+    total: Option<usize>,
+    size: Size,
+}
+
+impl AvatarGroup {
+    /// A group named `label` (`Reviewers`), which assistive technology reads before
+    /// the people.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            el: el("div")
+                .slot("avatar-group")
+                .attr("role", "group")
+                .attr("aria-label", label.into())
+                .uses(Uses::PARTS_STYLES),
+            people: Vec::new(),
+            max: 5,
+            total: None,
+            size: Size::Md,
+        }
+    }
+
+    /// Adds avatars. Each should be named, as [`Avatar::placeholder`] and
+    /// [`Avatar::image`] require, so the group can be read.
+    pub fn children(mut self, avatars: impl IntoNodes) -> Self {
+        avatars.push_into(&mut self.people);
+        self
+    }
+
+    /// Shows at most `max` avatars (1 or more; 5 by default) and `+N` for the rest.
+    pub fn max(mut self, max: usize) -> Self {
+        self.max = max.max(1);
+        self
+    }
+
+    /// Says how many people there are in all, when the avatars given are only the first
+    /// of a longer list: the tile then counts the rest from `total`.
+    pub fn total(mut self, total: usize) -> Self {
+        self.total = Some(total);
+        self
+    }
+
+    /// Sets the size of the `+N` tile; give each avatar the same size.
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let given = self.people.len();
+        let total = self.total.map_or(given, |total| total.max(given));
+        let shown = self.max.min(given);
+        let left = total.saturating_sub(shown);
+        let mut people = self.people;
+        people.truncate(shown);
+        let more = (left > 0).then(|| {
+            el("span")
+                .slot("avatar")
+                .attr("data-count", "")
+                .attr_opt("data-size", self.size.as_str())
+                .attr("role", "img")
+                .attr("aria-label", format!("{left} more"))
+                .child(format!("+{left}"))
+        });
+        self.el.children((people, more)).into()
     }
 }
 
@@ -403,6 +536,8 @@ pub struct Breadcrumb {
     label: &'static str,
     items: Vec<(Node, Option<Href>)>,
     prefetch: bool,
+    max: usize,
+    hidden_label: &'static str,
 }
 
 impl Breadcrumb {
@@ -413,7 +548,24 @@ impl Breadcrumb {
             label: "Breadcrumb",
             items: Vec::new(),
             prefetch: false,
+            max: usize::MAX,
+            hidden_label: "Show hidden pages",
         }
+    }
+
+    /// Keeps a long trail short: with more than `max` items (3 or more), the first and
+    /// the last `max - 2` show, and the ones between fold into an ellipsis that opens a
+    /// list of them. It opens and closes natively, so it needs no script.
+    pub fn max_items(mut self, max: usize) -> Self {
+        self.max = max.max(3);
+        self.el = self.el.uses(Uses::PARTS_STYLES);
+        self
+    }
+
+    /// Names the ellipsis for assistive technology (`Show hidden pages` by default).
+    pub fn hidden_label(mut self, label: &'static str) -> Self {
+        self.hidden_label = label;
+        self
     }
 
     /// Names it, when a page has more than one: landmarks must differ.
@@ -443,19 +595,37 @@ impl Breadcrumb {
 
     fn into_node(self) -> Node {
         let prefetch = self.prefetch;
-        let items: Vec<Element> = self
-            .items
-            .into_iter()
-            .map(|(label, href)| {
-                el("li").child(match href {
-                    Some(href) => el("a")
-                        .href(href)
-                        .flag("data-ui-prefetch", prefetch)
-                        .child(label),
-                    None => el("span").attr("aria-current", "page").child(label),
-                })
+        let item = |(label, href): (Node, Option<Href>)| {
+            el("li").child(match href {
+                Some(href) => el("a")
+                    .href(href)
+                    .flag("data-ui-prefetch", prefetch)
+                    .child(label),
+                None => el("span").attr("aria-current", "page").child(label),
             })
-            .collect();
+        };
+        let count = self.items.len();
+        let mut items: Vec<Element> = Vec::with_capacity(count.min(self.max) + 1);
+        if count > self.max {
+            // The first one, an ellipsis holding the ones between, then the last few.
+            let tail = self.max - 2;
+            let mut rest = self.items.into_iter();
+            if let Some(first) = rest.next() {
+                items.push(item(first));
+            }
+            let folded: Vec<Element> = rest.by_ref().take(count - 1 - tail).map(item).collect();
+            items.push(el("li").slot("breadcrumb-ellipsis").child(
+                el("details").children((
+                    el("summary")
+                        .attr("aria-label", self.hidden_label)
+                        .child(icon(icons::ELLIPSIS)),
+                    el("ol").slot("breadcrumb-hidden").child(folded),
+                )),
+            ));
+            items.extend(rest.map(item));
+        } else {
+            items.extend(self.items.into_iter().map(item));
+        }
         self.el
             .attr("aria-label", self.label)
             .child(el("ol").child(items))
@@ -514,6 +684,21 @@ impl Bubble {
     }
 }
 
+/// How a [`Card`] is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CardVariant {
+    /// A line around a surface: the default.
+    #[default]
+    Default,
+    /// A filled surface with no line: a quiet group.
+    Muted,
+    /// No line and no fill: only the card's spacing, for content that stands alone.
+    Ghost,
+    /// A dashed line: a place to add something.
+    Dashed,
+}
+
 /// A surface for related content.
 #[derive(Clone, Debug)]
 #[must_use]
@@ -560,6 +745,22 @@ impl Card {
     /// Sets the title.
     pub fn title(mut self, title: impl Into<Node>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Sets how the card is drawn. The default needs nothing more; the others link the
+    /// parts stylesheet.
+    pub fn variant(mut self, variant: CardVariant) -> Self {
+        let name = match variant {
+            CardVariant::Default => None,
+            CardVariant::Muted => Some("muted"),
+            CardVariant::Ghost => Some("ghost"),
+            CardVariant::Dashed => Some("dashed"),
+        };
+        if name.is_some() {
+            self.el = self.el.uses(Uses::PARTS_STYLES);
+        }
+        self.el = self.el.attr_opt("data-variant", name);
         self
     }
 
@@ -1071,17 +1272,22 @@ impl Pagination {
 #[must_use]
 pub struct Progress {
     el: Element,
+    percent: Option<u32>,
+    show: bool,
 }
 
 impl Progress {
     /// `value` out of `max`, named `label`.
     pub fn new(value: u32, max: u32, label: impl Into<String>) -> Self {
+        let percent = u64::from(value.min(max)) * 100 / u64::from(max.max(1));
         Self {
             el: el("progress")
                 .slot("progress")
                 .attr("value", value.min(max))
                 .attr("max", max.max(1))
                 .attr("aria-label", label.into()),
+            percent: Some(u32::try_from(percent).unwrap_or(100)),
+            show: false,
         }
     }
 
@@ -1091,11 +1297,42 @@ impl Progress {
             el: el("progress")
                 .slot("progress")
                 .attr("aria-label", label.into()),
+            percent: None,
+            show: false,
         }
     }
 
+    /// Colours the bar by what it means. The colour never carries the meaning alone:
+    /// the label says it.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        if let Some(name) = tone.value() {
+            self.el = self.el.attr("data-tone", name).uses(Uses::PARTS_STYLES);
+        }
+        self
+    }
+
+    /// Writes the percentage beside the bar. A screen reader gets it from the bar
+    /// itself, so the text is hidden from it. An indeterminate bar has none to write.
+    pub fn show_value(mut self) -> Self {
+        self.show = true;
+        self.el = self.el.uses(Uses::PARTS_STYLES);
+        self
+    }
+
     fn into_node(self) -> Node {
-        self.el.into()
+        match (self.show, self.percent) {
+            (true, Some(percent)) => el("div")
+                .slot("progress-row")
+                .children((
+                    self.el,
+                    el("span")
+                        .slot("progress-value")
+                        .attr("aria-hidden", "true")
+                        .child(format!("{percent}%")),
+                ))
+                .into(),
+            _ => self.el.into(),
+        }
     }
 }
 
@@ -1397,6 +1634,26 @@ impl Heading {
         }
     }
 
+    /// `<h5>`. It links the parts stylesheet, which sizes it.
+    pub fn h5(text: impl Into<Node>) -> Self {
+        Self {
+            el: el("h5")
+                .slot("heading")
+                .uses(Uses::PARTS_STYLES)
+                .child(text.into()),
+        }
+    }
+
+    /// `<h6>`. It links the parts stylesheet, which sizes it.
+    pub fn h6(text: impl Into<Node>) -> Self {
+        Self {
+            el: el("h6")
+                .slot("heading")
+                .uses(Uses::PARTS_STYLES)
+                .child(text.into()),
+        }
+    }
+
     fn into_node(self) -> Node {
         self.el.into()
     }
@@ -1569,6 +1826,7 @@ root_methods!(
     AspectRatio,
     Attachment,
     Avatar,
+    AvatarGroup,
     Badge,
     Breadcrumb,
     Bubble,
@@ -1596,6 +1854,7 @@ into_node!(
     AspectRatio,
     Attachment,
     Avatar,
+    AvatarGroup,
     Badge,
     Breadcrumb,
     Bubble,
