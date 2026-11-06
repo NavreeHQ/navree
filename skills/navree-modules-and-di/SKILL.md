@@ -60,6 +60,7 @@ impl DealsModule {
 | `providers` | `#[injectable]` types, one provider each |
 | `controllers` | controller types (also registered as singleton providers) |
 | `exports` | types visible to importers, trait objects included (`dyn Notifier`) |
+| `config` | `ConfigSection` types (`config = [DealOptions]`): each is read from its section at boot, validated and injectable as `Arc<DealOptions>` |
 | `global` | a flag: exports visible to every module without an import |
 | `register` | `fn(&self, &mut ModuleBuilder)` or a closure, run last |
 
@@ -158,6 +159,8 @@ impl Default for BillingOptions {
 impl ConfigSection for BillingOptions {
     const KEY: &'static str = "billing";
 }
+// Or derive it: `#[derive(ConfigSection)] #[config(key = "billing")]`, which
+// also describes the fields for `config:show`, `config:schema` and the reference.
 
 /// Plain `BillingModule` reads `[billing]`; `BillingModule::for_root(..)` takes the options.
 #[derive(Clone, Copy, Debug, Default)]

@@ -73,7 +73,6 @@ shape:
 navree new acme --kit saas
 cd acme
 navree dock up                 # TimescaleDB and Mailpit (micro: TimescaleDB and NATS)
-navree key:generate            # then set APP_KEY in .env
 navree migrate:fresh --seed    # saas/api: tables and the `demo` workspace (micro: navree migrate)
 pnpm --dir web install         # saas only: the web app's packages
 navree dev                     # API on :8080, web app on :3000
@@ -113,20 +112,21 @@ navree dev                     # API on :8080, web app on :3000
   written through `WorkspaceRepo`; micro handlers copy
   `crates/<service>/src/modules/invoices/handlers.rs`).
 
-## 3. Start the database, set the application key and run
+## 3. Start the database and run
 
 ```sh
 cd blog
 navree dock up               # TimescaleDB on 127.0.0.1:5432 (Docker or Podman)
-navree key:generate          # prints base64:... ; boots the app, so the first run compiles everything
 ```
 
 Every app command boots the app, which connects to the database: start it
 first.
 
-Paste the key into `.env` as `APP_KEY=base64:...`. Without it, tokens and
-signed URLs use a random key per process (every restart signs everyone out)
-and encryption fails.
+`navree new` has already put a generated application key in `.env`
+(`APP_KEY=base64:...`). `navree key:generate` prints another, and
+`navree key:generate --write` fills an empty `APP_KEY` there. Without a key,
+tokens and signed URLs use a random key per process (every restart signs
+everyone out) and encryption fails.
 
 ```sh
 navree dev                   # build, serve on http://127.0.0.1:8080, rebuild on save

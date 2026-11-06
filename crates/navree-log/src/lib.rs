@@ -10,9 +10,11 @@
 //!   When the app runs a command that speaks a protocol on stdout
 //!   (`CommandSpec::stdio`, such as `mcp:serve`), the lines go to stderr;
 //! - **redaction before writing**: any event or span field whose name
-//!   contains a configured key (`password`, `token`, `authorization`,
-//!   `cookie`, `secret` by default; ASCII case-insensitive) is written as
-//!   `[redacted]`, in every format and in the log file;
+//!   contains a configured key (the shared list of secret words by default:
+//!   `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`,
+//!   `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `apikey`,
+//!   `private_key` and `connection_string`; ASCII case-insensitive) is
+//!   written as `[redacted]`, in every format and in the log file;
 //! - **levels per target**, changeable at runtime through [`LogControl`]
 //!   (a reload handle, no restart);
 //! - an optional **rotating log file** ([`FileLog`]: daily, hourly or never,

@@ -1,6 +1,6 @@
 ---
 name: navree-module-conformity
-description: "Audits a Navree module or app for conformity and tenant isolation: `navree check` (module graph, then `conformity:check`: `api.docs` with `api.require_docs` and `api.undocumented`, `workspace.entities`, `workspace.repo` with the `navree:allow(workspace-repo)` marker, `workspace.tables`, `i18n.translations`, `db.migrations`), `TestApp::isolation_suite::<M>()` cross-workspace tests from a module's route table and factories (`IsolationSuiteExt::factory`, `.record`, `.body`, `.skip`, `Tenancy`), custom checks with `ConformityCheck`, and `navree gate` (fmt, clippy, tests, check and the front end under a machine lock). Use when finishing or reviewing a module, before a push or release, when adding a workspace-owned model, entity or route, when `navree check` or an isolation suite fails, or when data might leak between workspaces."
+description: "Audits a Navree module or app for conformity and tenant isolation: `navree check` (module graph, then `conformity:check`: `api.docs` with `api.require_docs` and `api.undocumented`, `workspace.entities`, `workspace.repo` with the `navree:allow(workspace-repo)` marker, `workspace.tables`, `i18n.translations`, `db.migrations`), `TestApp::isolation_suite::<M>()` cross-workspace tests from a module's route table and factories (`IsolationSuiteExt::factory`, `.record`, `.body`, `.skip`, `Tenancy`), custom checks with `ConformityCheck`, and `navree gate` (fmt, clippy, tests, check, config and the front end under a machine lock). Use when finishing or reviewing a module, before a push or release, when adding a workspace-owned model, entity or route, when `navree check` or an isolation suite fails, or when data might leak between workspaces."
 ---
 
 # Module conformity
@@ -15,8 +15,8 @@ workspace's records. Three tools prove it:
   app's modules contribute.
 - **`app.isolation_suite::<M>()`**: cross-workspace tests for every route of
   module `M`, generated from its route table.
-- **`navree gate`**: fmt, clippy, the tests, `navree check` and the front
-  end, in one command.
+- **`navree gate`**: fmt, clippy, the tests, `navree check`, `config:check`
+  and the front end, in one command.
 
 ## Steps: audit a module
 
@@ -165,8 +165,8 @@ then `assert!(report.is_ok(), "{report}")`.
 ## navree gate
 
 ```sh
-navree gate                       # fmt, clippy, test, check, web:typecheck, web:test, web:build
-navree gate --only test,check     # some steps; `web` = every web step
+navree gate                       # fmt, clippy, test, check, config, web:typecheck, web:test, web:build
+navree gate --only test,check     # some steps (`config` runs config:check); `web` = every web step
 navree gate --skip web            # leave steps out (CI with its own front-end job)
 navree gate --keep-going          # every step, even after a failure
 navree gate --web frontend        # the front end's directory (default web/)

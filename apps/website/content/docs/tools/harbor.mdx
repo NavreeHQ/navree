@@ -295,6 +295,7 @@ Deploying crm-api to production (1 server)
   build     crm-api for x86_64-unknown-linux-gnu, in a container (1m 42s)
   upload    app-1  releases/20261026-091512-3f2a9c1, 14.2 MB (3s)
   env       app-1  4 settings, 3 secrets
+  config    app-1  configuration checked
   migrate   app-1  2 migrations ran (1s)
   start     app-1  green on 127.0.0.1:8082
   health    app-1  GET /health/ready 200 after 0.4 s
@@ -312,13 +313,14 @@ A release id is the UTC time of the deploy and the short Git commit. Step by ste
 1. **Build.** Harbor builds the release binary for your servers' architecture: natively when the machine running the deploy is Linux on the same architecture with a glibc no newer than the servers', otherwise in a container (`build.method`). The container is Harbor's builder image, Ubuntu 22.04 with a stable Rust toolchain, built once on your machine (or the image in `build.image`); its glibc is no newer than the servers', so the binary runs on 22.04 and 24.04 alike. Container builds keep Cargo's registry, the toolchain and the target directory in named volumes (`navree-harbor-*`), so the second build is incremental.
 2. **Upload.** The binary, the directories in `deploy.include` (`config` and `resources`, when present) and a `.harbor-release` file naming the commit go to every server in parallel as one compressed archive over SSH, and are unpacked into a new directory under `releases/`. The directories in `deploy.shared` are links to `shared/`, so `storage/` survives releases.
 3. **Environment.** `/etc/<app>/env` is written from the [three sources](#the-environment).
-4. **Migrate.** `migrate` runs once, from the new release, on the first `web` server. If a migration fails, the deploy stops here and nothing else changes.
-5. **Start.** The idle slot (green) is pointed at the new release and started on its own port, next to the live one.
-6. **Health check.** Harbor requests `deploy.health_check` (`/health/ready`) on the new instance until it answers 200, for up to `deploy.health_timeout_secs` (60). [Readiness](/docs/digging-deeper/health-and-metrics/#readiness) runs every health check your modules register, the database included, so a release that can't reach its database never gets traffic. If it doesn't pass, Harbor stops the new instance, prints its last log lines, and the old release goes on serving as if nothing happened.
-7. **Switch.** Caddy is pointed at the new instance and reloads gracefully: connections in flight finish on the old one. The `current` link moves to the new release in one atomic rename.
-8. **Drain.** The old slot gets SIGTERM and finishes its requests in flight (`http.shutdown_grace_secs`, 30 seconds) before it exits.
-9. **Restart workers.** The worker and scheduler processes restart on the new release. Each finishes the jobs it is running first.
-10. **Prune.** Releases beyond `deploy.keep_releases` (5) are removed.
+4. **Check the configuration.** `config:check` runs from the new release on the first `web` server. A failure stops the deploy before anything changes.
+5. **Migrate.** `migrate` runs once, from the new release, on the first `web` server. If a migration fails, the deploy stops here and nothing else changes.
+6. **Start.** The idle slot (green) is pointed at the new release and started on its own port, next to the live one.
+7. **Health check.** Harbor requests `deploy.health_check` (`/health/ready`) on the new instance until it answers 200, for up to `deploy.health_timeout_secs` (60). [Readiness](/docs/digging-deeper/health-and-metrics/#readiness) runs every health check your modules register, the database included, so a release that can't reach its database never gets traffic. If it doesn't pass, Harbor stops the new instance, prints its last log lines, and the old release goes on serving as if nothing happened.
+8. **Switch.** Caddy is pointed at the new instance and reloads gracefully: connections in flight finish on the old one. The `current` link moves to the new release in one atomic rename.
+9. **Drain.** The old slot gets SIGTERM and finishes its requests in flight (`http.shutdown_grace_secs`, 30 seconds) before it exits.
+10. **Restart workers.** The worker and scheduler processes restart on the new release. Each finishes the jobs it is running first.
+11. **Prune.** Releases beyond `deploy.keep_releases` (5) are removed.
 
 <FileTree title="/srv/crm-api/">{`
 releases/

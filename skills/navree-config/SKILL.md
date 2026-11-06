@@ -14,8 +14,11 @@ stops the boot with a message naming the section (never the value).
 `src/main.rs` passes `ConfigSources::defaults()`, which reads, in order:
 
 1. `config/app.toml` (shared settings; committed; no secrets),
-2. `.env` (this machine's secrets; never committed; commit `.env.example`),
-3. the process's `APP_*` environment variables.
+2. `config/<section>.toml`, one file per section, in name order (`config/mail.toml`
+   holds the keys of `[mail]`, without the header),
+3. `config/env/<env>.toml`, the file of the environment the app runs in,
+4. `.env` (this machine's secrets; never committed; commit `.env.example`),
+5. the process's `APP_*` environment variables.
 
 **Later sources win.** So a key in `.env` overrides the same key in
 `config/app.toml`, and a real environment variable overrides both. Set each
@@ -27,12 +30,20 @@ entry and the file, and says the `.env` value is used. Paths are relative to
 the working directory: run the app from its root.
 
 Look at the result with `navree config:show [section] [--defaults]
-[--origin] [--json]` (secrets are masked, there is no option to show them)
-and check it with `navree config:check [--env production]`: all invalid
-sections at once, keys and sections that nothing reads (usually typos; the
-boot warns about them too), keys set in both `.env` and a file, and for production the
-unsafe settings (no `app.key`, a SQLite `database.url`, `mail.transport =
-"log"`). Both run without booting the app.
+[--origin] [--fallbacks] [--json]` (secrets are masked, there is no option to
+show them; `--fallbacks` lists the environment variables a key falls back to,
+such as `REDIS_URL`, and whether each is set) and check it with
+`navree config:check [--env production]`: all invalid sections at once, keys
+and sections that nothing reads (usually typos; the boot warns about them
+too), keys set in both `.env` and a file, and for production the unsafe
+settings (no `app.key`, a SQLite `database.url`, `mail.transport = "log"`).
+Both run without booting the app. `navree config:schema [--out <file>]`
+writes a JSON Schema of the whole tree for the editor, and
+`navree config:publish <section> [--force] [--stdout]` writes
+`config/<section>.toml` with every key commented out beside its default.
+`navree gate` and `navree deploy` run `config:check`, and
+`app.strict_config = true` makes the boot refuse an unknown key or a failed
+setting instead of logging it.
 
 The `app` section is typed (`config.app()`, `AppOptions`): `app.name`,
 `app.url` (an absolute http or https address), `app.version`, `app.env`,
@@ -75,8 +86,13 @@ value came from, and never a string value.
 ## The application key
 
 ```sh
-navree key:generate     # prints base64:<32 random bytes>; put it in .env as APP_KEY
+navree key:generate     # prints base64:<32 random bytes>
 ```
+
+`navree new` already wrote a generated key into the new app's `.env`.
+`key:generate` prints another one, and `key:generate --write` puts it in
+`.env` when `APP_KEY` is empty there (`--force` replaces a key that is set:
+move the old one to `APP_PREVIOUS_KEYS` first).
 
 It encrypts data (AES-256-GCM: two-factor secrets, session cookies) and is
 the base of the derived keys for JWTs (unless `auth.jwt.secret`), signed URLs
@@ -96,11 +112,15 @@ use navree::contracts::Secret;
 use serde::Deserialize;
 
 /// The `billing` section (`[billing]` in config/app.toml, `APP_BILLING__*`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "billing", validate = Self::check)]
 #[serde(default)]                       // a missing section or key takes the defaults
 pub struct BillingOptions {
+    /// The ISO code of the currency of invoices.
     pub currency: String,
+    /// Days of a free trial.
     pub trial_days: u32,
+    /// The payment provider's key.
     pub api_key: Option<Secret<String>>, // APP_BILLING__API_KEY; prints [redacted]
 }
 
@@ -110,10 +130,8 @@ impl Default for BillingOptions {
     }
 }
 
-impl ConfigSection for BillingOptions {
-    const KEY: &'static str = "billing";
-
-    fn validate(&self) -> Result<(), String> { // a failure stops the boot
+impl BillingOptions {
+    fn check(&self) -> Result<(), String> { // a failure stops the boot
         if self.currency.len() == 3 {
             Ok(())
         } else {
@@ -123,9 +141,16 @@ impl ConfigSection for BillingOptions {
 }
 ```
 
-Register it in the module (`m.config::<BillingOptions>()` in `wire`, from
-the prelude's `ModuleBuilderConfigExt`), then inject
-`Arc<BillingOptions>` into the module's providers. Read a secret with
+The derive writes the key, the check, the defaults (with `#[serde(default)]`
+and `Default`) and a description of every field from its doc comment, which
+`config:show --defaults`, `config:schema`, `config:publish` and the
+configuration reference use. Register the section in the module with
+`#[module(config = [BillingOptions])]` (or `m.config::<BillingOptions>()` in
+`wire`, from the prelude's `ModuleBuilderConfigExt`), then inject
+`Arc<BillingOptions>` into the module's providers. A module that builds its
+options itself registers the section with `m.config_section::<T>()` so the
+commands still know its keys, and a module that reads `billing.<provider>`
+claims them with `m.config_claim("billing")`. Read a secret with
 `.expose()`. To let callers pass options in code too, write a configurable
 module (`BillingModule::for_root(options)`; see `navree-modules-and-di`).
 
@@ -134,24 +159,33 @@ module (`BillingModule::for_root(options)`; see `navree-modules-and-di`).
 Inject `Arc<navree::config::Config>`: `config.get_string("app.url")`,
 `config.get_bool("feature.x")`, `config.section::<T>("key")`,
 `config.section_or_default::<T>("key")`, `config.typed::<T>()` (a
-`ConfigSection`, validated). Its `Debug` output masks keys containing
-`password`, `passwd`, `pwd`, `secret`, `token`, `key`, `authorization`,
-`cookie`, `dsn`, `credential` or `connection_string`, URL passwords and
+`ConfigSection`, validated). Its `Debug` output masks keys containing a word
+of the list the whole framework shares (also the logger, Logbook, Lighthouse,
+Fleet and the audit trail: `password`, `passwd`, `pwd`, `passphrase`,
+`secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`,
+`apikey`, `private_key` and `connection_string`) or `key`, URL passwords and
 secret-looking URL parameters (`?token=`): give secrets secret-looking names.
 
 ## Custom sources and environments
 
-`APP_ENV` (or `app.env`) names the environment but does not pick a file.
-Add a per-environment file yourself:
+`ConfigSources::defaults()` already reads a file per environment:
+`config/env/<env>.toml` is a whole tree laid over `config/app.toml` and the
+section files, so it holds what differs in `production`, `staging` or
+`testing`. `<env>` is the first of the real `APP_ENV` variable, `APP_ENV` in
+`.env` and `app.env` in `config/app.toml`; with none of them it is `local`.
+The overlay replaces on purpose, so a key it sets again is not reported as set
+in two places. `.env` and `APP_*` variables still win over it. A file
+`config/<section>.toml` holds the keys of one section without its header.
+
+To read other places, build the sources yourself:
 
 ```rust
 use navree::config::ConfigSources;
 
 pub fn sources() -> ConfigSources {
-    let env = std::env::var("APP_ENV").unwrap_or_else(|_| "local".to_owned());
     ConfigSources::new()
         .file("config/app.toml")
-        .file(format!("config/{env}.toml")) // skipped when missing
+        .section_file("billing", "config/plans.toml") // keys of [billing]
         .dotenv(".env")
         .env()
 }

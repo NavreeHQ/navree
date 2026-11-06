@@ -243,6 +243,7 @@ async fn the_app_passes_its_conformity_checks() {
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | the app |
 | `test` | `cargo test --workspace` | the app |
 | `check` | `navree check` | the app |
+| `config` | `config:check`: every section reads and validates, no key is unknown or set in two places | the app |
 | `web:typecheck` | the `typecheck` script, or `tsc --noEmit` when the front end has a `tsconfig.json` and no such script | `web/` |
 | `web:test` | the `test` script | `web/` |
 | `web:build` | the `build` script | `web/` |
@@ -255,6 +256,7 @@ Gate
   ok    clippy           41.3s  cargo clippy --workspace --all-targets -- -D warnings
   ok    test            1m 12s  cargo test --workspace
   ok    check             3.4s  navree check
+  ok    config            0.4s  config:check
   ok    web:typecheck     9.8s  npm run typecheck
   ok    web:test         14.1s  npm run test
   ok    web:build        52.7s  npm run build

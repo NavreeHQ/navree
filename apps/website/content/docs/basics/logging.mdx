@@ -39,7 +39,10 @@ Every key of the `log` section is optional:
 format = "json"          # "pretty" or "json"; default: pretty in debug builds, json in release builds
 level = "info"           # trace, debug, info, warn, error or off
 levels = { navree_db = "debug", "navree::request" = "warn" }
-redact = ["password", "token", "authorization", "cookie", "secret"]
+redact = [
+  "password", "passwd", "pwd", "passphrase", "secret", "token", "authorization",
+  "cookie", "credential", "dsn", "api_key", "apikey", "private_key", "connection_string",
+]
 slow_query_ms = 200      # read by the database module
 
 [log.file]
@@ -53,7 +56,7 @@ keep_days = 14
 | `log.format` | `pretty` in debug builds, `json` in release builds | the line format on stdout and in the file |
 | `log.level` | `info` | the level of every target without its own entry |
 | `log.levels` | none | levels per target; a target covers its submodules |
-| `log.redact` | `password`, `token`, `authorization`, `cookie`, `secret` | field-name fragments whose values are written as `[redacted]`; a list you set replaces the defaults |
+| `log.redact` | `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `apikey`, `private_key`, `connection_string` (the list shared with configuration, Logbook, Lighthouse, Fleet and the audit trail) | field-name fragments whose values are written as `[redacted]`; a list you set replaces the defaults |
 | `log.file` | none | a rotating log file, written in addition to stdout |
 | `log.file.path` | `storage/logs/navree.log` | the file; the date goes before the extension |
 | `log.file.rotation` | `daily` | when a new file starts (UTC) |
@@ -269,7 +272,11 @@ Setting `log.redact` replaces the default list, so include the defaults you stil
 
 ```toml title="config/app.toml"
 [log]
-redact = ["password", "token", "authorization", "cookie", "secret", "ssn", "iban"]
+redact = [
+  "password", "passwd", "pwd", "passphrase", "secret", "token", "authorization",
+  "cookie", "credential", "dsn", "api_key", "apikey", "private_key", "connection_string",
+  "ssn", "iban",
+]
 ```
 
 <Callout type="warning" title="Redaction goes by field name">

@@ -88,7 +88,7 @@ Every other command runs in the app binary: `navree <command> [args...]` is `car
 `navree new <name>` creates a working app in `./<name>`:
 
 ```sh
-navree new blog
+navree new blog --ui none
 ```
 
 ```text
@@ -98,12 +98,13 @@ It depends on navree at /home/ada/src/navree/crates/navree.
 Next steps:
   cd blog
   navree dock up             # TimescaleDB on 127.0.0.1:5432
-  navree key:generate        # then set APP_KEY in .env
   navree dev                 # http://127.0.0.1:8080/api/docs
 ```
 
+`navree new` has already put a generated application key in the app's `.env`. `navree key:generate` prints another one, and `navree key:generate --write` fills an empty `APP_KEY` there.
+
 <FileTree title="navree new blog">{`
-.env                      # a copy of .env.example (never commit it)
+.env                      # a copy of .env.example with a generated APP_KEY (never commit it)
 .env.example
 .gitignore
 AGENTS.md                 # conventions for coding agents
@@ -276,7 +277,7 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 | Command | Options | What it does |
 |---|---|---|
 | `navree check` | `--graph`, `--json`, `--only <check,...>` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/): routes documented, entities classified, workspace isolation, translations, migrations. `--graph` prints the module tree and stops. `--json` prints the conformity report as JSON. `--only` runs the named checks or prefixes (`api.docs`, `workspace`). |
-| `navree gate` | `--only <step,...>`, `--skip <step,...>`, `--keep-going`, `--no-lock`, `--web <dir>` | Runs fmt, clippy, the tests, `navree check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. The steps are `fmt`, `clippy`, `test`, `check`, `web:typecheck`, `web:test` and `web:build`; `web` selects every web step. |
+| `navree gate` | `--only <step,...>`, `--skip <step,...>`, `--keep-going`, `--no-lock`, `--web <dir>` | Runs fmt, clippy, the tests, `navree check`, `config:check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. The steps are `fmt`, `clippy`, `test`, `check`, `config`, `web:typecheck`, `web:test` and `web:build`; `web` selects every web step. |
 | `navree dock up` | `[service...]` | Starts the app's local services with [Dock](/docs/tools/dock/), or the ones named. |
 | `navree dock down` | `[service...]`, `--volumes` | Stops and removes the containers. `--volumes` also deletes their data. |
 | `navree dock status` | | Each service's state, image and address. |
