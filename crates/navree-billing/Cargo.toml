@@ -22,7 +22,6 @@ mysql = ["navree-db/mysql"]
 bytes = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
-hmac = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-auth = { workspace = true }
@@ -37,6 +36,8 @@ navree-openapi = { workspace = true }
 # The billing tables are models (customers, subscriptions, items, usage, events).
 navree-orm = { workspace = true, features = ["access"] }
 navree-schedule = { workspace = true }
+# Stripe and Paddle webhook signatures are checked by its verifiers.
+navree-webhooks = { workspace = true }
 navree-workspace = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -51,6 +52,7 @@ uuid = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 form_urlencoded = { workspace = true }
+hmac = { workspace = true }
 navree-crypto = { workspace = true }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }

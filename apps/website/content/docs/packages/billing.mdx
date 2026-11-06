@@ -476,7 +476,7 @@ Only three methods are required: `name`, `verify_webhook` and `parse_webhook`. E
 | `Upi`, `Mandates` | UPI payments, and recurring payments against an approved mandate |
 | `IdempotencyKeys` | the provider honours the requests' `idempotency_key` |
 
-Each provider checks its own webhook signature scheme in `verify_webhook`: an HMAC of the timestamp and body for Stripe and Paddle, an HMAC of the body alone for many others. When the provider sends the delivery id in a header rather than the body, return it from `webhook_event_id`, so a redelivery is recognised. `parse_webhook` maps the provider's events to `WebhookAction`s: subscriptions, invoices, `Payment`, `Refund`, and `Mandate` (a UPI AutoPay or e-mandate approved, paused or revoked by the customer in their UPI app, which `Billing` emits as `MandateUpdated`).
+Each provider checks its own webhook signature scheme in `verify_webhook`: an HMAC of the timestamp and body for Stripe and Paddle, an HMAC of the body alone for many others. Stripe's and Paddle's are checked by the `Stripe` and `Paddle` verifiers of [Webhooks](/docs/packages/webhooks/), the ones its incoming routes use, in constant time and within `billing.webhook_tolerance_secs` of now. When the provider sends the delivery id in a header rather than the body, return it from `webhook_event_id`, so a redelivery is recognised. `parse_webhook` maps the provider's events to `WebhookAction`s: subscriptions, invoices, `Payment`, `Refund`, and `Mandate` (a UPI AutoPay or e-mandate approved, paused or revoked by the customer in their UPI app, which `Billing` emits as `MandateUpdated`).
 
 ```rust title="src/billing/upi_pay.rs"
 use navree::billing::{

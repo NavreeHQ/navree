@@ -1,5 +1,7 @@
 //! Webhook signatures: `Stripe-Signature` and `Paddle-Signature`, both
-//! HMAC-SHA256 over a timestamp and the raw body.
+//! HMAC-SHA256 over a timestamp and the raw body, checked by
+//! navree-webhooks' [`Stripe`] and [`Paddle`] verifiers, the ones its
+//! `VerifiedWebhook` routes use.
 //!
 //! - Stripe: `Stripe-Signature: t=<unix>,v1=<hex>[,v1=<hex>...]`, the MAC of
 //!   `"{t}.{body}"` keyed with the endpoint's signing secret (`whsec_...`).
@@ -13,119 +15,43 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use hmac::{Hmac, KeyInit, Mac};
 use http::HeaderMap;
-use sha2::Sha256;
+use navree_webhooks::{Paddle, Stripe, Tolerance, VerifyError};
 
 use crate::provider::WebhookError;
 
 /// The header Stripe signs webhooks in.
-pub const STRIPE_SIGNATURE_HEADER: &str = "stripe-signature";
+pub const STRIPE_SIGNATURE_HEADER: &str = Stripe::SIGNATURE_HEADER;
 /// The header Paddle signs webhooks in.
-pub const PADDLE_SIGNATURE_HEADER: &str = "paddle-signature";
-
-fn mac(secret: &[u8], timestamp: i64, separator: u8, body: &[u8]) -> Hmac<Sha256> {
-    let mut mac =
-        <Hmac<Sha256> as KeyInit>::new_from_slice(secret).expect("HMAC accepts keys of any length");
-    mac.update(timestamp.to_string().as_bytes());
-    mac.update(&[separator]);
-    mac.update(body);
-    mac
-}
+pub const PADDLE_SIGNATURE_HEADER: &str = Paddle::SIGNATURE_HEADER;
 
 /// The `Stripe-Signature` header value for `body` signed at `timestamp`
 /// (Unix seconds) with `secret`. For tests that post webhooks.
 pub fn sign_stripe_webhook(secret: &str, timestamp: i64, body: &[u8]) -> String {
-    let digest = mac(secret.as_bytes(), timestamp, b'.', body)
-        .finalize()
-        .into_bytes();
-    format!("t={timestamp},v1={}", hex::encode(digest))
+    Stripe::sign(secret, timestamp, body)
 }
 
 /// The `Paddle-Signature` header value for `body` signed at `timestamp`
 /// (Unix seconds) with `secret`. For tests that post webhooks.
 pub fn sign_paddle_webhook(secret: &str, timestamp: i64, body: &[u8]) -> String {
-    let digest = mac(secret.as_bytes(), timestamp, b':', body)
-        .finalize()
-        .into_bytes();
-    format!("ts={timestamp};h1={}", hex::encode(digest))
+    Paddle::sign(secret, timestamp, body)
 }
 
-/// A parsed signature header: the timestamp and the candidate MACs.
-struct Signed {
-    timestamp: i64,
-    signatures: Vec<Vec<u8>>,
+/// The window around `now` a signed timestamp must fall in.
+fn window(now: DateTime<Utc>, tolerance: Duration) -> Option<Tolerance> {
+    Some(Tolerance::at(now, tolerance.as_secs()))
 }
 
-fn header<'a>(headers: &'a HeaderMap, name: &'static str) -> Result<&'a str, WebhookError> {
-    headers
-        .get(name)
-        .ok_or(WebhookError::MissingSignature(name))?
-        .to_str()
-        .map_err(|_| WebhookError::MalformedSignature(name))
-}
-
-/// Parses `t=..,v1=..` (Stripe: `,` and `t`/`v1`) or `ts=..;h1=..`
-/// (Paddle: `;` and `ts`/`h1`). Unknown keys (Stripe's `v0`) are ignored.
-fn parse(
-    value: &str,
-    name: &'static str,
-    separator: char,
-    time_key: &str,
-    signature_key: &str,
-) -> Result<Signed, WebhookError> {
-    let mut timestamp = None;
-    let mut signatures = Vec::new();
-    for part in value.split(separator) {
-        let Some((key, val)) = part.trim().split_once('=') else {
-            return Err(WebhookError::MalformedSignature(name));
-        };
-        if key == time_key {
-            timestamp = Some(
-                val.parse::<i64>()
-                    .map_err(|_| WebhookError::MalformedSignature(name))?,
-            );
-        } else if key == signature_key {
-            // A signature that is not hex can never match; skip it.
-            if let Ok(bytes) = hex::decode(val) {
-                signatures.push(bytes);
-            }
-        }
+/// Billing's reason for a refusal by navree-webhooks' verifier. A reason
+/// the two schemes never give is still a refusal.
+fn refusal(error: VerifyError, header: &'static str) -> WebhookError {
+    match error {
+        VerifyError::MissingHeader(_) => WebhookError::MissingSignature(header),
+        VerifyError::MalformedHeader(_) => WebhookError::MalformedSignature(header),
+        VerifyError::TimestampOutOfTolerance { .. } => WebhookError::Expired,
+        VerifyError::MissingSecret => WebhookError::NoSecret,
+        _ => WebhookError::SignatureMismatch,
     }
-    let timestamp = timestamp.ok_or(WebhookError::MalformedSignature(name))?;
-    if signatures.is_empty() {
-        return Err(WebhookError::MalformedSignature(name));
-    }
-    Ok(Signed {
-        timestamp,
-        signatures,
-    })
-}
-
-fn check(
-    signed: &Signed,
-    secret: &str,
-    separator: u8,
-    body: &[u8],
-    now: DateTime<Utc>,
-    tolerance: Duration,
-) -> Result<(), WebhookError> {
-    if secret.is_empty() {
-        return Err(WebhookError::NoSecret);
-    }
-    let matches = signed.signatures.iter().any(|signature| {
-        mac(secret.as_bytes(), signed.timestamp, separator, body)
-            .verify_slice(signature)
-            .is_ok()
-    });
-    if !matches {
-        return Err(WebhookError::SignatureMismatch);
-    }
-    let skew = now.timestamp().abs_diff(signed.timestamp);
-    if skew > tolerance.as_secs() {
-        return Err(WebhookError::Expired);
-    }
-    Ok(())
 }
 
 /// Verifies a Stripe webhook.
@@ -136,9 +62,9 @@ pub(crate) fn verify_stripe(
     now: DateTime<Utc>,
     tolerance: Duration,
 ) -> Result<(), WebhookError> {
-    let value = header(headers, STRIPE_SIGNATURE_HEADER)?;
-    let signed = parse(value, STRIPE_SIGNATURE_HEADER, ',', "t", "v1")?;
-    check(&signed, secret, b'.', body, now, tolerance)
+    Stripe::verify(secret, headers, body, window(now, tolerance))
+        .map(drop)
+        .map_err(|error| refusal(error, STRIPE_SIGNATURE_HEADER))
 }
 
 /// Verifies a Paddle webhook.
@@ -149,15 +75,16 @@ pub(crate) fn verify_paddle(
     now: DateTime<Utc>,
     tolerance: Duration,
 ) -> Result<(), WebhookError> {
-    let value = header(headers, PADDLE_SIGNATURE_HEADER)?;
-    let signed = parse(value, PADDLE_SIGNATURE_HEADER, ';', "ts", "h1")?;
-    check(&signed, secret, b':', body, now, tolerance)
+    Paddle::verify(secret, headers, body, window(now, tolerance))
+        .map(drop)
+        .map_err(|error| refusal(error, PADDLE_SIGNATURE_HEADER))
 }
 
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
     use http::HeaderValue;
+    use sha2::{Digest, Sha256};
 
     use super::*;
 
@@ -176,7 +103,6 @@ mod tests {
     /// An independent HMAC-SHA256 (RFC 2104 by hand over SHA-256), so the
     /// signer is not only checked against itself.
     fn reference_hmac(key: &[u8], message: &[u8]) -> String {
-        use sha2::Digest;
         let mut block = [0u8; 64];
         if key.len() > 64 {
             block[..32].copy_from_slice(&Sha256::digest(key));
@@ -192,21 +118,18 @@ mod tests {
     }
 
     #[test]
-    fn the_rfc_4231_vector_holds() {
+    fn the_reference_hmac_holds_the_rfc_4231_vector() {
         // RFC 4231, test case 2.
-        let digest = <Hmac<Sha256> as KeyInit>::new_from_slice(b"Jefe")
-            .unwrap()
-            .chain_update(b"what do ya want for nothing?")
-            .finalize()
-            .into_bytes();
-        assert_eq!(
-            hex::encode(digest),
-            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
-        );
         assert_eq!(
             reference_hmac(b"Jefe", b"what do ya want for nothing?"),
-            hex::encode(digest)
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
         );
+    }
+
+    #[test]
+    fn the_headers_are_the_ones_navree_webhooks_reads() {
+        assert_eq!(STRIPE_SIGNATURE_HEADER, "stripe-signature");
+        assert_eq!(PADDLE_SIGNATURE_HEADER, "paddle-signature");
     }
 
     #[test]
@@ -257,6 +180,10 @@ mod tests {
             verify_stripe(&headers, BODY, "whsec_other", at(1_700_000_000), tolerance),
             Err(WebhookError::SignatureMismatch)
         );
+        // The edges of the window pass; a second past either is refused.
+        for secs in [1_700_000_300, 1_699_999_700] {
+            verify_stripe(&headers, BODY, "whsec_test", at(secs), tolerance).unwrap();
+        }
         assert_eq!(
             verify_stripe(&headers, BODY, "whsec_test", at(1_700_000_301), tolerance),
             Err(WebhookError::Expired)
@@ -282,11 +209,46 @@ mod tests {
                 "{malformed}"
             );
         }
+        // No secret verifies nothing, however the request is signed.
         assert_eq!(
             verify_stripe(&headers, BODY, "", at(1_700_000_000), tolerance),
             Err(WebhookError::NoSecret)
         );
-        // Paddle's header with Stripe's separator is not Paddle's format.
+        assert_eq!(
+            verify_stripe(
+                &with(STRIPE_SIGNATURE_HEADER, &sign_stripe_webhook("", 1, BODY)),
+                BODY,
+                "",
+                at(1),
+                tolerance
+            ),
+            Err(WebhookError::NoSecret)
+        );
+        // A signature that is not hex never matches.
+        assert_eq!(
+            verify_stripe(
+                &with(STRIPE_SIGNATURE_HEADER, "t=1700000000,v1=not-hex"),
+                BODY,
+                "whsec_test",
+                at(1_700_000_000),
+                tolerance
+            ),
+            Err(WebhookError::SignatureMismatch)
+        );
+        // A signature cut short is no match either.
+        let short = &header[..header.len() - 2];
+        assert_eq!(
+            verify_stripe(
+                &with(STRIPE_SIGNATURE_HEADER, short),
+                BODY,
+                "whsec_test",
+                at(1_700_000_000),
+                tolerance
+            ),
+            Err(WebhookError::SignatureMismatch)
+        );
+        // Stripe's scheme is not Paddle's: Paddle's header with Stripe's
+        // separator does not parse, and Stripe's MAC is not Paddle's.
         let paddle = sign_paddle_webhook("s", 1_700_000_000, BODY);
         assert!(
             verify_paddle(
@@ -297,6 +259,62 @@ mod tests {
                 tolerance
             )
             .is_err()
+        );
+        let stripe_mac = sign_stripe_webhook("s", 1_700_000_000, BODY);
+        let v1 = stripe_mac.split_once("v1=").unwrap().1;
+        assert_eq!(
+            verify_paddle(
+                &with(PADDLE_SIGNATURE_HEADER, &format!("ts=1700000000;h1={v1}")),
+                BODY,
+                "s",
+                at(1_700_000_000),
+                tolerance
+            ),
+            Err(WebhookError::SignatureMismatch)
+        );
+    }
+
+    #[test]
+    fn paddle_refuses_what_stripe_refuses() {
+        let tolerance = Duration::from_secs(5);
+        let header = sign_paddle_webhook("pdl", 1_700_000_000, BODY);
+        let headers = with(PADDLE_SIGNATURE_HEADER, &header);
+        assert_eq!(
+            verify_paddle(&headers, b"{}", "pdl", at(1_700_000_000), tolerance),
+            Err(WebhookError::SignatureMismatch)
+        );
+        assert_eq!(
+            verify_paddle(&headers, BODY, "other", at(1_700_000_000), tolerance),
+            Err(WebhookError::SignatureMismatch)
+        );
+        assert_eq!(
+            verify_paddle(&headers, BODY, "pdl", at(1_700_000_006), tolerance),
+            Err(WebhookError::Expired)
+        );
+        assert_eq!(
+            verify_paddle(&headers, BODY, "pdl", at(1_699_999_994), tolerance),
+            Err(WebhookError::Expired)
+        );
+        assert_eq!(
+            verify_paddle(&HeaderMap::new(), BODY, "pdl", at(1), tolerance),
+            Err(WebhookError::MissingSignature(PADDLE_SIGNATURE_HEADER))
+        );
+        for malformed in ["h1=00", "ts=soon;h1=00", "ts=1", "garbage"] {
+            assert_eq!(
+                verify_paddle(
+                    &with(PADDLE_SIGNATURE_HEADER, malformed),
+                    BODY,
+                    "pdl",
+                    at(1),
+                    tolerance
+                ),
+                Err(WebhookError::MalformedSignature(PADDLE_SIGNATURE_HEADER)),
+                "{malformed}"
+            );
+        }
+        assert_eq!(
+            verify_paddle(&headers, BODY, "", at(1_700_000_000), tolerance),
+            Err(WebhookError::NoSecret)
         );
     }
 
