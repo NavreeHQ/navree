@@ -9,6 +9,7 @@ import crates from "@/generated/crates.json";
 import { site } from "@site";
 
 import { FilmPlayer } from "./film-player";
+import { FilmPressCatcher } from "./film-press-catcher";
 import { PrimaryCta, SecondaryCta } from "./parts";
 
 type Crate = { name: string; layer: number; module: string | null };
@@ -107,6 +108,7 @@ export function Hero() {
               describedBy="hero-film-about"
             />
           </div>
+          <FilmPressCatcher />
           <figcaption id="hero-film-about" className="mt-5 text-sm leading-relaxed text-fg-2">
             <p className="text-pretty">{film.description}</p>
             <details className="group mt-3">

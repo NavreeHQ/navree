@@ -4,64 +4,22 @@
 // page freeing the canvas.
 //
 // The site is the built export in apps/website/out, served here by
-// apps/website/scripts/serve.ts on a free port. ABOUT_URL points at a server
-// that is already running instead (an address of /about/). The live picture
+// apps/website/scripts/serve.ts on a free port (tests/support/serve.mjs).
+// SITE_URL points at a server that is already running instead. The live picture
 // draws with WebGL: headless Chromium gets software WebGL, and
 // ABOUT_CHANNEL=chrome ABOUT_HEADED=1 runs the installed Chrome with a window
 // and the real GPU, which is where the main-thread measurement is calibrated.
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import fs from "node:fs";
-import http from "node:http";
-import net from "node:net";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { serve } from "./support/serve.mjs";
 
-const WEBSITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "website");
 const SHOTS = process.env.ABOUT_SHOTS || "";
 const PAUSE = 'figure button[aria-label$="the animation"]';
 const PICTURE = 'figure [class~="group/picture"]';
-
-/** A port nothing listens on. */
-const freePort = () =>
-  new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address();
-      probe.close(() => resolve(port));
-    });
-  });
-
-/** Whether `url` answers with anything but a server error. */
-const ready = (url) =>
-  new Promise((resolve) => {
-    const request = http
-      .get(url, (res) => {
-        res.resume();
-        resolve((res.statusCode ?? 500) < 500);
-      })
-      .on("error", () => resolve(false));
-    request.setTimeout(2000, () => request.destroy());
-  });
-
-/** The address of /about/ and a function that stops the server this file started, if it started one. */
-async function serve() {
-  if (process.env.ABOUT_URL) return { url: process.env.ABOUT_URL, stop() {} };
-  assert.ok(fs.existsSync(path.join(WEBSITE, "out", "about", "index.html")), "apps/website/out has no /about/: run `pnpm build` in apps/website first");
-  const port = await freePort();
-  const server = spawn(process.execPath, [path.join(WEBSITE, "scripts", "serve.ts")], { env: { ...process.env, PORT: String(port) }, stdio: ["ignore", "ignore", "inherit"] });
-  const base = `http://127.0.0.1:${port}`;
-  for (const end = Date.now() + 120_000; !(await ready(`${base}/`)); ) {
-    assert.ok(Date.now() < end, `the server at ${base} did not answer within 120 s`);
-    assert.equal(server.exitCode, null, "the server stopped before it answered");
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return { url: `${base}/about/`, stop: () => server.kill() };
-}
 
 describe("the About picture", { concurrency: false }, () => {
   let site;
@@ -85,6 +43,7 @@ describe("the About picture", { concurrency: false }, () => {
 
   before(async () => {
     site = await serve();
+    site.url = `${site.origin}/about/`;
     const headed = process.env.ABOUT_HEADED === "1";
     browser = await chromium.launch({
       channel: process.env.ABOUT_CHANNEL || undefined,

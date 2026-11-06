@@ -14,10 +14,11 @@ npm test
 
 | File | Proves |
 |---|---|
+| `tests/film-play.test.mjs` | The homepage film's play button pressed before the page's scripts have loaded: the press is kept, and once the scripts arrive the film is chosen and started (or the failure is shown), not lost. |
 | `tests/about-controls.test.mjs` | The live picture on `/about/`: it starts, hidden from assistive technology, with the still and its description in the page; the opening is marked as seen once per visit; the pause button, and the choice kept in `localStorage`; the main thread's work paused against playing; a paused visitor getting the still after a reload, without the scene's files; play loading them; leaving the page removing the canvas; JavaScript off showing the still with Navree code on its screen. |
 
-Settings: `ABOUT_URL` (the address of `/about/` on a server that is already
-running), `ABOUT_SHOTS` (a folder for a screenshot of the still),
+Settings: `SITE_URL` (the origin of a server that is already running),
+`ABOUT_SHOTS` (a folder for a screenshot of the still),
 `ABOUT_CHANNEL=chrome ABOUT_HEADED=1` (the installed Chrome with a window and
 the real GPU). Headless Chromium draws the picture with software WebGL, which
 is slower than a GPU, so the measurement of the main thread (paused against

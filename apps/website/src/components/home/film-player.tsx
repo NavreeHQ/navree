@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { PRESSED_EARLY } from "./film-press";
+
 export type FilmSource = { readonly src: string; readonly type: string };
 
 type Phase = "idle" | "loading" | "playing" | "failed";
@@ -38,7 +40,15 @@ const DISC = "inline-flex size-8 items-center justify-center rounded-full sm:siz
  *
  * The press, the choice of file and `play()` happen in one go inside the click:
  * Safari only lets a film start with sound when `play()` runs in the gesture.
+ *
+ * A press before the page's scripts have loaded is not lost: `FilmPressCatcher`
+ * (an inline script placed after the player) notes it, and the player starts the
+ * film once it is hydrated. That start is not inside the press, so Safari may
+ * refuse the sound; then the film is loaded with its controls showing, as for
+ * any other refused `play()`.
  */
+
+type EarlyWindow = Window & { [PRESSED_EARLY]?: boolean };
 export function FilmPlayer({
   title,
   poster,
@@ -117,6 +127,15 @@ export function FilmPlayer({
     else setPhase("failed");
   };
 
+  // The button was pressed before the scripts loaded: start the film now. A programmatic click
+  // runs the same `start` as a press, with the same choice of file.
+  useEffect(() => {
+    const early = window as EarlyWindow;
+    if (!early[PRESSED_EARLY]) return;
+    early[PRESSED_EARLY] = false;
+    buttonRef.current?.click();
+  }, []);
+
   // The film starts from the start when the page comes back from the browser's cache.
   useEffect(() => {
     const back = (event: PageTransitionEvent) => {
@@ -176,6 +195,7 @@ export function FilmPlayer({
           <button
             ref={buttonRef}
             type="button"
+            data-film-play=""
             onClick={start}
             aria-label={`${watched ? "Play again: the" : "Play the"} launch film, ${spokenLength}`}
             className={cn(CORNER, "group cursor-pointer text-left outline-offset-[-4px]")}
