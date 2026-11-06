@@ -23,6 +23,8 @@
 #             of its catalog.
 # - harbor:   Harbor provisioning, deploying to and rolling back a real Ubuntu host
 #             (systemd and sshd in a container).
+# - sandbox:  the paid providers' own test and sandbox modes, one request each,
+#             only for the providers whose keys are in the repository's secrets.
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -49,6 +51,10 @@ on:
         default: true
       harbor:
         description: Harbor on a real Ubuntu host
+        type: boolean
+        default: true
+      sandbox:
+        description: Providers' test and sandbox modes (needs their keys in secrets)
         type: boolean
         default: true
 
@@ -266,3 +272,47 @@ jobs:
             docker logs --tail 60 "$name" 2>&1 || true
             echo "::endgroup::"
           done
+
+  sandbox:
+    # Opt in by keys: a test whose provider has no secret here prints SKIPPED
+    # and passes. Tests are named sandbox_* and marked #[ignore]; each sends
+    # one request to the provider's test or sandbox mode (a test token, a
+    # sandbox domain, the mailbox simulator), so nothing is spent beyond a free
+    # tier. A crate that adds one lists its package in the command below.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.sandbox)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      NAVREE_SANDBOX_RESEND_KEY: ${{ secrets.NAVREE_SANDBOX_RESEND_KEY }}
+      NAVREE_SANDBOX_MAILGUN_KEY: ${{ secrets.NAVREE_SANDBOX_MAILGUN_KEY }}
+      NAVREE_SANDBOX_MAILGUN_DOMAIN: ${{ secrets.NAVREE_SANDBOX_MAILGUN_DOMAIN }}
+      NAVREE_SANDBOX_MAILGUN_TO: ${{ secrets.NAVREE_SANDBOX_MAILGUN_TO }}
+      NAVREE_SANDBOX_MAILGUN_REGION: ${{ secrets.NAVREE_SANDBOX_MAILGUN_REGION }}
+      NAVREE_SANDBOX_SES_KEY_ID: ${{ secrets.NAVREE_SANDBOX_SES_KEY_ID }}
+      NAVREE_SANDBOX_SES_SECRET: ${{ secrets.NAVREE_SANDBOX_SES_SECRET }}
+      NAVREE_SANDBOX_SES_REGION: ${{ secrets.NAVREE_SANDBOX_SES_REGION }}
+      NAVREE_SANDBOX_SES_FROM: ${{ secrets.NAVREE_SANDBOX_SES_FROM }}
+      # The payment providers' test modes (navree-billing's opt-in suites).
+      STRIPE_TEST_SECRET: ${{ secrets.STRIPE_TEST_SECRET }}
+      PADDLE_SANDBOX_API_KEY: ${{ secrets.PADDLE_SANDBOX_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Run the sandbox tests
+        shell: bash
+        run: |
+          mkdir -p target/logs
+          cargo test --locked -p navree-mail -p navree-billing -p navree-notify -p navree-integrations -p navree-ai \
+            -- --ignored sandbox_ --nocapture 2>&1 | tee target/logs/sandbox.log
+          echo "Providers skipped for want of a key:"
+          grep -h '^SKIPPED' target/logs/sandbox.log || echo "  none"
