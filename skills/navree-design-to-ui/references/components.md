@@ -55,12 +55,13 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Inline message, banner | `Alert::new(AlertTone::Neutral \| Success \| Warning \| Danger).title(..).body(..)` |
 | Figure with label and change | `Stat::new(label, value).trend(text, good)` |
 | Small bar chart | `Bars::new(description, &[values])`: SVG on the server |
-| Line, area or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
-| Donut, pie | `Donut::new(title).part(name, value)`, `.pie()`, `.center(big, small)` |
+| Line chart, area chart or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
+| Donut chart, pie | `Donut::new(title).part(name, value)`, `.part_tone(name, value, tone)`, `.pie()`, `.center(big, small)` |
 | Funnel | `Funnel::new(title).stage(Stage::new(name, count))` |
 | Trend beside a figure | `Stat::new(..).chart(Sparkline::new(title, values))` |
-| A report over a date window | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
+| A report over a date window (Reports) | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
 | Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile |
+| People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::placeholder(..), ..))` |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
 | File tile | `Attachment::new(name).meta(..).icon(..).href(..).action(..)` |
 | Chat | `Message::new(BubbleSide::Start \| End).avatar(..).header(..).content(..)`, `Bubble`, `Marker` |
@@ -73,6 +74,7 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Session ended notice | `SessionEnded::new()` |
 | Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid` |
 | History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))` |
+| Steps of a run: an agent, an import, a deploy | `Trace::new(title).step(TraceStep::new(title).description(..).state(TraceState::Done \| Running \| Pending \| Failed).detail(..))` |
 | Recent activity feed | `ActivityFeed::new(id, label).summary(..).item(ActivityItem::new(who, what).object(..).tone(..).icon(..).time_text(..))` |
 | Divider | `Separator::horizontal()`, `Separator::vertical()` |
 | Picture held to a shape | `AspectRatio::new(Ratio::Square \| Video \| Photo \| Wide, content)` |
@@ -135,6 +137,7 @@ form can't be a struct.
 | A window of days, for a report | date range picker with presets, its two dates in the address | `DateRangePicker` in a `GET` form, read back with `DateRangeQuery` |
 | A month grid to browse, or to pick days | calendar | `Calendar::new(id)`, `.mode(CalendarMode::Multiple \| Range)`, `.rules(DateRules::new()..)` for days that can't be chosen |
 | A phone number | phone input: a country list and the number, formatted as typed | `PhoneInput::new(name).country("IN")`; a `Phone` or `PhoneNumber` field, or `widget = phone` on a `String` (E.164) |
+| A colour | colour field, with a hex field and swatches when a script runs | `ColorPicker::new(name).value("#ff9933").swatch(hex, name)`; it posts `#rrggbb`, and `ColorPicker::parse` checks what came |
 | A number on a scale, a range | slider | `Slider::new(name).max(100).step(5)`, `Slider::range(name)`; `SliderSpec` holds the post to the same grid |
 | Yes or no | checkbox, or switch | `bool`; `widget = switch` |
 | One of a small fixed set | radio buttons when all of them are worth seeing, else a select | an enum with `#[derive(Options)]`: `widget = radio`; with no hint, the browser's select (`NativeSelect`); `widget = listbox`, the styled `Select` |
@@ -142,8 +145,14 @@ form can't be a struct.
 | One of a large or growing set | combobox, searched on the server | `String` with `widget = combobox`; `FormView::search(field, url)`; the route answers `OptionQuery` with a `ChoiceList` built by `OptionSource` (below) |
 | Several of a set | multi-select, shown as chips | `Many<T>` (a multi-select with no hint); `#[form(max = n)]` limits it; options and search as for a combobox |
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
-| A file | file input | `Input::new(InputKind::File, name)` in a form of your own that posts `multipart/form-data` to an upload route (`navree-storage`): `Submit<T>` reads only urlencoded forms |
+| A file | upload | `String` with `widget = file`: the form posts `multipart/form-data` and `Submit<T>` stores the file through the app's `Uploads`, giving the handler its path; `FormView::upload(field, Upload::new(..).send_to(route))` sends it first |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
+
+A form too long for one screen, one question at a time (an onboarding, a
+survey): `Questionnaire::new(action).question(Question::single(name, text)
+.choice(value, label).required()).step(n).answers(..)`, with
+`Question::multiple` and `Question::text`. The server reads `_step` and
+`_move` (`QuestionnaireMove::parse`) and draws the next question.
 
 By hand, when a form isn't a struct: `Field::new(id, label).help(..)
 .error_opt(..).required().control(..)`, `FieldSet::new(legend)`, `Label`,

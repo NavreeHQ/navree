@@ -752,16 +752,16 @@ come from the component catalog of the docs
 | Group | Components |
 |---|---|
 | Actions | `Button`, `ButtonGroup`, `Toggle`, `ToggleGroup`, `DropdownMenu`, `ContextMenu`, `Menubar` |
-| Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, `InputOtp`, `Upload`, and Forms (`FormView`, `Submit`) |
+| Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, `InputOtp`, `ColorPicker`, `Upload`, `Questionnaire`, and Forms (`FormView`, `Submit`) |
 | Date and time | `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker` |
-| Display | `Card`, `Badge`, `Avatar`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
+| Display | `Card`, `Badge`, `Avatar`, `AvatarGroup`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, `Trace`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
 | Feedback | `Alert`, `Toast`, `Empty`, `EmptyState`, `ErrorPage`, `Forbidden`, `NotFound`, `SignInRequired`, `Progress`, `Skeleton`, `Spinner` |
 | Overlays | `Dialog`, `AlertDialog`, `Sheet`, `Drawer`, `Popover`, `Tooltip`, `HoverCard` |
 | Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction`, `Carousel` |
 | Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command`, `NavigationMenu` |
 | Steps, ranges and trees | `Stepper`, `Wizard`, `Slider`, `TreeView`, `Toolbar` |
 | Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable` |
-| Charts | `Chart` (`Chart::line`, `area`, `bar`), `Donut` (and a pie), `Funnel`, `Sparkline`, and `Report` for a date window; in `navree::ui::charts` |
+| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); in `navree::ui::charts` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
@@ -772,7 +772,11 @@ puts page links under a static list; `Stat` shows a figure with its change
 and `Bars` a small bar chart drawn on the server. A real chart is a
 `Chart` (line, area or bar, with series, stacks and a table of the same
 numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
-reads its window from the address and counts per period.
+reads its window from the address and counts per period. `AvatarGroup`
+overlaps avatars and counts the rest in a `+N` tile; `Trace` lists the steps
+of a run (an agent, an import) with a spoken state each; `ColorPicker` is the
+browser's colour field, posting `#rrggbb`; `Questionnaire` asks one question
+at a time, each drawn again by the server, so it needs no script.
 
 ## Common mistakes
 
