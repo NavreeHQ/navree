@@ -22,6 +22,7 @@ mod menus;
 mod navigation;
 mod otp_carousel;
 mod overlays;
+mod page_layouts;
 mod panes;
 mod patterns;
 mod phone;
@@ -49,6 +50,7 @@ pub fn all() -> Vec<Example> {
     all.extend(states::all());
     all.extend(overlays::all());
     all.extend(layout::all());
+    all.extend(page_layouts::all());
     all.extend(panes::all());
     all.extend(navigation::all());
     all.extend(menus::all());

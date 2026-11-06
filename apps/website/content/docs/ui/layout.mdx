@@ -51,6 +51,28 @@ Items in a row are centred across it. `.wrap()` lets them wrap onto more lines; 
 
 <UiPreview example="layout/container" />
 
+## On a phone
+
+Below 768 px a grid is one column, whatever `Grid::cols` says, and a component that spans columns takes the whole width. The cards of the spanning example above, drawn at 390 px, the width of a phone:
+
+<UiPreview example="layout/span-phone" />
+
+The items stay in the order you wrote them, so put the main content first and the aside after it. A [SplitPane](/docs/components/split-pane/) stacks its panes below the width you choose, and the [app shell](/docs/ui/app-shell/#on-a-phone) turns its sidebar into a sheet.
+
+## Common page layouts
+
+Most pages are one of these. Each is a few of the primitives above, and the previews on this page show them.
+
+- **A main column and an aside.** `Grid::cols(3)` with `.span(2)` on the main component, as in the spanning example. A record with its activity beside it, or a report with its notes.
+- **A row of figures over the content.** `Grid::cols(4)` of [Stat](/docs/components/stat/)s above a [Table](/docs/components/table/) or a [DataTable](/docs/ui/data-table/), as in the grid example.
+- **Two panes.** A list on the left and the open item on the right, in a [SplitPane](/docs/components/split-pane/) whose panes the reader resizes. On a phone the panes stack: `.stack_below(SplitWidth::Md)` sets where.
+
+  <UiPreview example="split-pane/stacked" />
+
+- **A sidebar and a page.** Every page of an app inside the [app shell](/docs/ui/app-shell/), with the sidebar docked on a desktop and off-canvas on a phone.
+- **A list with a drawer.** One record opened over its list in a [Sheet](/docs/components/sheet/), so the reader keeps their place.
+- **A narrow form.** A `Container` at `ContainerSize::Sm`, centred, as in the container example.
+
 ## API
 
 ### Stack
