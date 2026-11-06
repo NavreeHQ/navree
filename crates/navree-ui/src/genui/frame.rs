@@ -103,19 +103,26 @@ struct Walk<'a> {
 }
 
 impl Walk<'_> {
-    fn node(&mut self, node: Node, depth: usize) -> Node {
-        match node {
-            Node::Element(element) => self.element(element, depth),
-            Node::Fragment(nodes) => Node::Fragment(
+    fn node(&mut self, mut node: Node, depth: usize) -> Node {
+        // A node frees its children itself, so they are taken out of it, never moved.
+        if let Node::Element(element) = &mut node {
+            let element = std::mem::replace(element, el("div"));
+            return self.element(element, depth);
+        }
+        if let Node::Fragment(nodes) = &mut node {
+            let nodes = std::mem::take(nodes);
+            return Node::Fragment(
                 nodes
                     .into_iter()
                     .map(|node| self.node(node, depth))
                     .filter(|node| !matches!(node, Node::Empty))
                     .collect(),
-            ),
-            Node::Raw(_) => Node::Empty,
-            other => other,
+            );
         }
+        if matches!(node, Node::Raw(_)) {
+            return Node::Empty;
+        }
+        node
     }
 
     fn element(&mut self, mut element: Element, depth: usize) -> Node {

@@ -519,7 +519,8 @@ async fn a_message_is_checked_before_anything_runs() {
     let dana = user(&app, "Dana", &[]).await;
     let access = access_of(&app, dana).await;
     let assistant = assistant(&app).await;
-    for bad in ["", "   ", &"x".repeat(5000)] {
+    let long = "x".repeat(5000);
+    for bad in ["", "   ", long.as_str()] {
         let error = assistant.start(access.clone(), bad, None).await.unwrap_err();
         assert_eq!(error.status.as_u16(), 400, "{bad:?}");
     }

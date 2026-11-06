@@ -61,6 +61,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-demo"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "http",
+ "navree",
+ "navree-ai",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4314,6 +4328,7 @@ dependencies = [
  "infer",
  "metrics",
  "navree-access",
+ "navree-ai",
  "navree-auth",
  "navree-cache",
  "navree-config",
@@ -4326,8 +4341,11 @@ dependencies = [
  "navree-macros",
  "navree-openapi",
  "navree-orm",
+ "navree-realtime",
+ "navree-session",
  "navree-storage",
  "navree-testing",
+ "navree-ui",
  "navree-validation",
  "serde",
  "serde_json",

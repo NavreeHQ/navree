@@ -18,8 +18,8 @@ use navree_kernel::AppContext;
 use navree_realtime::{Live, Topic};
 use navree_ui::genui::{
     ApprovalCard, ApprovalState, ChatMessage, ChatState, Checker, Conversation, LinkPattern,
-    Prop as _, PromptInput, Props, SurfaceFrame, ThreadList, ToolCallCard, ToolState,
-    approval_notice, chat_notice, writing_key,
+    PromptInput, Props, SurfaceFrame, ThreadList, ToolCallCard, ToolState, approval_notice,
+    chat_notice, writing_key,
 };
 use navree_ui::node::AttrValue;
 use navree_ui::{LazyAsk, LazyItem, LazyPage, LiveStream, LocalHref, Node, Region};
@@ -260,7 +260,7 @@ impl Core {
                     Some(Ok(StreamEvent::ToolCall { id, tool, arguments })) => {
                         self.close(conversation, user, &mut writing).await;
                         if !self.is_page_tool(&tool) {
-                            let label = self.config.tool_label(&tool);
+                            let label = self.config.label_of(&tool);
                             let content = json!({ "call_id": id, "tool": tool, "label": label, "arguments": arguments });
                             if let Ok(item) = self.store.add(conversation, user, kind::TOOL, status::RUNNING, content).await {
                                 tools.insert(id, item);
@@ -291,7 +291,7 @@ impl Core {
                         if let Some(item) = tools.remove(&pending.call_id) {
                             self.log(self.store.change(conversation, user, item, status::EMPTY, None).await);
                         }
-                        let label = self.config.tool_label(&pending.tool);
+                        let label = self.config.label_of(&pending.tool);
                         let content = json!({
                             "call_id": pending.call_id,
                             "tool": pending.tool,
@@ -302,7 +302,6 @@ impl Core {
                         self.nudge(user, conversation).await;
                     }
                     Some(Ok(StreamEvent::Done(_))) => break status::DONE,
-                    Some(Ok(_)) => {}
                     Some(Err(error)) => {
                         tracing::warn!(target: "navree::ai", %error, "an assistant's run failed");
                         break status::FAILED;

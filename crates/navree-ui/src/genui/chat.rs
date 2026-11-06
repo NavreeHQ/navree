@@ -470,7 +470,7 @@ impl ToolCallCard {
                 icons::CIRCLE_X,
             ),
         };
-        let head = Row::gap(2).children((icon(icons::WRENCH), cut(&self.label, 120), badge));
+        let head = Row::gap(2).children((icon(glyph), cut(&self.label, 120), badge));
         let body: Node = match self.arguments {
             Some(arguments) => Collapsible::new(labels.details.clone())
                 .body(arguments_list(&arguments, labels))

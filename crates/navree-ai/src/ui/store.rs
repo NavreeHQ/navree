@@ -16,7 +16,7 @@ use navree_db::navree_schema::{
     Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
 use navree_db::record::{self, Compare, Filter};
-use navree_db::{Db, DbError, ErrorKind, ExecutorExt, Record, Statement, Uow, Value};
+use navree_db::{Db, DbError, ErrorKind, Executor, ExecutorExt, Record, Statement, Uow, Value};
 use serde_json::{Value as Json, json};
 use uuid::Uuid;
 

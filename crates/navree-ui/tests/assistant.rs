@@ -550,9 +550,18 @@ proptest! {
     fn text_never_holds_a_control_or_a_turning_mark(text in "\\PC{0,80}|[\\x00-\\x1f\\u{202a}-\\u{202e}a-z]{0,20}") {
         // UI-GENUI-043
         if let Ok(checked) = UserText::<80>::new(&text) {
-            prop_assert!(!checked.as_str().is_empty());
-            prop_assert!(checked.as_str().chars().all(|c| !c.is_control() || c == '\n' || c == '\t'));
-            prop_assert!(!checked.as_str().chars().any(|c| ('\u{202A}'..='\u{202E}').contains(&c)));
+            let kept = checked.as_str();
+            prop_assert!(!kept.is_empty(), "empty text kept");
+            prop_assert!(
+                kept.chars().all(|c| !c.is_control() || c == '\n' || c == '\t'),
+                "a control character in {:?}",
+                kept
+            );
+            prop_assert!(
+                !kept.chars().any(|c| ('\u{202A}'..='\u{202E}').contains(&c)),
+                "a turning mark in {:?}",
+                kept
+            );
         }
     }
 }

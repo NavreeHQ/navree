@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use navree_access::PrincipalAccess;
-use navree_ui::genui::{Catalog, Checker, LinkPattern, Prop as _, Props};
+use navree_ui::genui::{Catalog, Checker, LinkPattern, Props};
 use serde_json::{Value, json};
 
 use crate::agent::{AgentRun, PageAnswer, PageTool, PageTools};

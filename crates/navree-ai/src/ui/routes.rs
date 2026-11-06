@@ -102,19 +102,22 @@ fn composer_reply<A: Agent>(
     form: &MessageForm,
     error: Option<&AppError>,
 ) -> Reply {
+    let why: Option<String> = error.map(|error| {
+        let body = error.body();
+        let text = body["detail"]
+            .as_str()
+            .or_else(|| body["message"].as_str())
+            .unwrap_or("The message was not sent.");
+        text.to_owned()
+    });
     let composer = assistant.composer_node(
         Some(conversation),
         token,
-        form.context.as_deref().filter(|_| error.is_none_or(|e| e.status.as_u16() != 403)),
+        form.context
+            .as_deref()
+            .filter(|_| error.is_none_or(|e| e.status.as_u16() != 403)),
         error.map(|_| form.message.as_str()),
-        error.map(|error| {
-            error.body()["detail"]
-                .as_str()
-                .or_else(|| error.body()["message"].as_str())
-                .unwrap_or("The message was not sent.")
-                .to_owned()
-        })
-        .as_deref(),
+        why.as_deref(),
     );
     // A refusal is drawn in the composer: the ops still apply, so the answer is a 200.
     Reply::ops_or_redirect(page).morph(COMPOSER_ID, composer)

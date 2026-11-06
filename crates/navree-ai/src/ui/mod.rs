@@ -192,7 +192,7 @@ impl AssistantConfig {
     }
 
     /// The words for tool `tool`.
-    pub(crate) fn tool_label(&self, tool: &str) -> String {
+    pub(crate) fn label_of(&self, tool: &str) -> String {
         if let Some(label) = self.tool_labels.get(tool) {
             return label.clone();
         }
@@ -258,8 +258,8 @@ mod tests {
     #[test]
     fn tools_are_named_in_words() {
         let config = AssistantConfig::at("/assistant").tool_label("refund_order", "Refund an order");
-        assert_eq!(config.tool_label("refund_order"), "Refund an order");
-        assert_eq!(config.tool_label("list_payments"), "List payments");
+        assert_eq!(config.label_of("refund_order"), "Refund an order");
+        assert_eq!(config.label_of("list_payments"), "List payments");
     }
 
     #[test]
