@@ -1,6 +1,6 @@
 ---
 title: "Eager loading"
-description: "Load relationships for a whole result in one query per relation: nested and constrained loads, related counts and sums, loading after the fact, reading loaded relations, and stopping N+1 queries in development."
+description: "Load a relationship for a whole result in one query: nested and constrained loads, related counts and sums, and stopping N+1 queries in development."
 ---
 
 Reading a relation record by record costs one query per record: a page of 50 deals that shows each deal's company runs 51 queries. This is the N+1 problem. Eager loading reads the relation for every record at once, with one batched query per relation:

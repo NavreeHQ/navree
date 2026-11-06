@@ -1,6 +1,6 @@
 ---
 title: "Casts and accessors"
-description: "Store fields in another form (enums, JSON, decimals, dates, encrypted and hashed secrets, vectors, your own casts), and add computed values with accessors and mutators."
+description: "Store fields as enums, JSON, decimals, dates, encrypted or hashed secrets and vectors, add your own casts, and compute values with accessors."
 ---
 
 A field's Rust type and its column don't have to match. A cast converts between them: a `Stage` enum stored as `'won'`, a struct stored as JSON, a token stored encrypted. You choose one with `#[model(cast = ..)]`, and the ORM applies it everywhere the field goes: reading rows, saving, dirty tracking, [mass assignment](/docs/orm/models/#mass-assignment), serialization, and conditions, so `Deal::STAGE.eq(Stage::Won)` binds `'won'`.

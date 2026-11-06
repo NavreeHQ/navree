@@ -1,6 +1,6 @@
 ---
 title: "Workspaces and access"
-description: "Scope models to the current workspace, make them access-control subjects with policies, filter lists and check records from the same rules, and validate with `unique` and `exists`."
+description: "Scope models to the current workspace, make them access-control subjects, filter lists and check records from the same rules."
 ---
 
 Two questions come up for every record a request touches: does it belong to the request's workspace, and may this user act on it? The ORM answers both in the model, so every query and write follows the same rules without each handler remembering them.

@@ -1,6 +1,6 @@
 ---
 title: "Connections and transactions"
-description: "Where ORM operations run: executors, the unit of work, transactions in commands and jobs, named connections, read replicas and reading from the writer, and watching the statements your code runs."
+description: "Where ORM operations run: executors, the unit of work, transactions, named connections, read replicas, and watching the statements your code runs."
 ---
 
 Every ORM method that touches the database takes an **executor** first, and the executor decides where the statement runs. In most code that is the request's unit of work, and you never think about it again; this page is for the rest: commands and jobs, several databases, read replicas.

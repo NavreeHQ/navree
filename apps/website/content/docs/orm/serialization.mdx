@@ -1,6 +1,6 @@
 ---
 title: "Serialization"
-description: "What a record's JSON holds and in what order, hiding fields and appending computed ones, per-record changes, date formats, API resources with a `__type`, OpenAPI schemas from models, and records in queued jobs."
+description: "What a record's JSON holds, hiding and appending fields, date formats, API resources with a `__type`, OpenAPI schemas and records in queued jobs."
 ---
 
 Records serialize to JSON with serde, so a handler returns `Json(record)`, `Json(collection)` or a page as it is. A record's JSON is its model's, plus what the ORM knows about it: extra columns, appended accessors and loaded relations. The model decides what clients see: fields it hides never leave the server.

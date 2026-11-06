@@ -1,6 +1,6 @@
 ---
 title: "Collections"
-description: "`Collection<M>`: the records a query returns, with methods that work by key and by column, loading relations for every record, a query of the same records, and serialization as an array."
+description: "`Collection<M>`: the records a query returns, with methods by key and column, relation loading for every record, and serialization as an array."
 ---
 
 Queries that return several records return a `Collection<M>`. A collection is a list of records in the query's order: it dereferences to a slice of `Record<M>`, so everything a slice does works on it, and it adds methods that know about keys, columns and relations.

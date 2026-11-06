@@ -1,6 +1,6 @@
 ---
 title: "Getting started"
-description: "Navree's ORM: models as plain structs with `#[derive(Model)]`, typed columns, a query builder, relationships and records that track their changes, running in the request's unit of work."
+description: "Navree's ORM: models as plain structs, typed columns, a query builder, relationships and records that track changes, in the request's unit of work."
 ---
 
 The ORM is how a Navree app works with its data. A model is a plain Rust struct with `#[derive(Model)]`; the derive maps it to a table and gives it one typed column constant per field, so conditions are checked by the compiler. Queries chain on a builder and run on the executor you pass them: the request's [unit of work](/docs/database/unit-of-work/) in a handler, the database pool elsewhere. What a query returns are records: your model plus what the ORM knows about it, such as whether it is stored and which fields you changed.
@@ -20,6 +20,8 @@ Around models and queries the ORM has [relationships](/docs/orm/relationships/) 
 It runs on what `navree-db` already owns: the connection pool, the unit of work and its transaction, change events for the [audit log](/docs/security/audit-log/), after-commit hooks, and the actor and workspace settings that triggers and row-level security policies read. A record saved in a handler is part of the request's transaction: it commits when the response succeeds, rolls back when it fails, and shows up in the audit trail.
 
 The same models run on every database Navree supports: **TimescaleDB** and PostgreSQL, **MySQL** (MariaDB connects through the same driver but is [untested](/docs/database/getting-started/#mysql-and-mariadb)), **SQLite**, and **MongoDB** through a [document driver](/docs/orm/mongodb/). SQL is generated per database, with every value bound.
+
+<Diagram name="orm-parts" />
 
 ## Installation
 

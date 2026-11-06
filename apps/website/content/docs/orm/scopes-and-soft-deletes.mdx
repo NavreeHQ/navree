@@ -1,6 +1,6 @@
 ---
 title: "Scopes and soft deletes"
-description: "Local scopes as builder methods, global scopes every query applies, soft deletes with trashing, restoring and force deleting, and pruning old records with `model:prune`."
+description: "Local and global scopes, soft deletes with trashing, restoring and force deleting, and pruning old records with `model:prune`."
 ---
 
 A **scope** is a piece of a query you reuse. Local scopes are conditions you name and call where you need them (`Deal::query().open().owned_by(me)`); global scopes apply to every query of a model unless a query removes them. Soft deletes are a global scope too: trashed records stay in the table and out of your queries.

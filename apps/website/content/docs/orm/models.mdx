@@ -1,6 +1,6 @@
 ---
 title: "Models"
-description: "`#[derive(Model)]`: tables, keys, columns and timestamps; creating, reading, updating and deleting records; dirty tracking; and mass assignment from untyped input."
+description: "`#[derive(Model)]`: tables, keys, columns and timestamps, creating, reading, updating and deleting records, dirty tracking and mass assignment."
 ---
 
 A model maps a table to a Rust struct. `#[derive(Model)]` reads the struct and writes everything the ORM needs: the table and key, a decoder for rows, the values to write, and one typed column constant per field. There is no reflection at runtime and no schema file: the struct is the source of truth.

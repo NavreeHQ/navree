@@ -1,6 +1,6 @@
 ---
 title: "Testing"
-description: "Database assertions on rows and records, counting queries, `#[navree::test]` with a database of its own per test, templates built once and copied, real PostgreSQL and MySQL servers, and seeding test apps."
+description: "Database assertions, counting queries, `#[navree::test]` with a database per test, real PostgreSQL and MySQL servers and seeding test apps."
 ---
 
 Tests of code that uses models need two things: a database of their own, so tests run in parallel without seeing each other's rows, and a way to say what the database should hold afterwards. The ORM's testing helpers live in `navree::orm::testing`, with the test databases under the `testing` feature (on in `full`).

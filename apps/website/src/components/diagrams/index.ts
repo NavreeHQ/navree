@@ -11,6 +11,7 @@ import { modularMonolith } from "./modular-monolith";
 import { moduleGraph } from "./module-graph";
 import { multiTenancy } from "./multi-tenancy";
 import { navreeUi } from "./navree-ui";
+import { ormParts } from "./orm-parts";
 import { requestLifecycle } from "./request-lifecycle";
 import { reverseEngineering } from "./reverse-engineering";
 import { twoWays } from "./two-ways";
@@ -36,6 +37,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "workspace-resolution": workspaceResolution,
   "workspace-isolation": workspaceIsolation,
   "harbor-release": harborRelease,
+  "orm-parts": ormParts,
 };
 
 /**

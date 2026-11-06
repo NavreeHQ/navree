@@ -1,6 +1,6 @@
 ---
 title: "Query builder"
-description: "Typed conditions, groups, JSON and full-text search, selects, joins, aggregates, unions, row locks, mass updates, bulk inserts and upserts, queries without a model and raw SQL."
+description: "Typed conditions, groups, JSON and full-text search, joins, aggregates, unions, row locks, bulk writes, upserts, queries without a model and raw SQL."
 ---
 
 `Deal::query()` returns a `Builder<Deal>`. Every method that shapes the query takes the builder and returns it, so calls chain; the methods that run it take the executor first and are `async`. Nothing touches the database until one of those runs.

@@ -1,6 +1,6 @@
 ---
 title: "Route model binding"
-description: "`Bound<M>` loads the record a route's path names, or answers 404: route keys, custom bindings, soft-deleted records and nested routes with `BoundChild`."
+description: "`Bound<M>` loads the record a route's path names, or answers 404: route keys, custom bindings, soft-deleted records and nested routes."
 ---
 
 Most routes that take an id start by loading that record and answering 404 when it doesn't exist. Route model binding does it for you: a handler argument of type `Bound<M>` loads the record the path names, in the request's unit of work, before your handler runs.
