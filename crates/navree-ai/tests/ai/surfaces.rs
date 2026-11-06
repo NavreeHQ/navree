@@ -385,7 +385,7 @@ pub fn button_urls(html: &str) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
-// UI-GENUI-040: the answer streams into the page
+// The answer streams into the page
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -528,7 +528,7 @@ async fn a_message_is_checked_before_anything_runs() {
 }
 
 // ---------------------------------------------------------------------------
-// UI-GENUI-042: components the model chooses
+// Components the model chooses
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -625,7 +625,7 @@ async fn a_component_the_reader_may_not_see_shows_nothing_of_its_data() {
 }
 
 // ---------------------------------------------------------------------------
-// UI-GENUI-044: a component's buttons act safely
+// A component's buttons act safely
 // ---------------------------------------------------------------------------
 
 /// A conversation in which Dana's note card is drawn: the app, Dana, her access, the
@@ -741,7 +741,7 @@ async fn a_destructive_action_asks_first_and_rechecks_access() {
 }
 
 // ---------------------------------------------------------------------------
-// UI-GENUI-045: approvals in the page's own place
+// Approvals in the page's own place
 // ---------------------------------------------------------------------------
 
 /// A conversation stopped at `rename_note` for Dana's note.
@@ -828,7 +828,7 @@ async fn rejecting_tells_the_model_why() {
 }
 
 // ---------------------------------------------------------------------------
-// UI-GENUI-047: working state and page context
+// Working state and page context
 // ---------------------------------------------------------------------------
 
 #[tokio::test]

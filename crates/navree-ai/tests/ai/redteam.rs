@@ -55,7 +55,6 @@ fn corpus() -> Corpus {
 
 #[test]
 fn recorded_runs_meet_the_validity_targets() {
-    // UI-GENUI-051
     let catalog = catalog();
     let corpus = corpus();
     let runs = corpus.recorded.len() as f64;
@@ -93,7 +92,6 @@ fn recorded_runs_meet_the_validity_targets() {
 
 #[test]
 fn every_probe_the_check_must_refuse_is_refused() {
-    // UI-GENUI-051
     let catalog = catalog();
     let corpus = corpus();
     let mut by_category: BTreeMap<&str, usize> = BTreeMap::new();
@@ -121,7 +119,6 @@ fn every_probe_the_check_must_refuse_is_refused() {
 
 #[tokio::test]
 async fn hostile_text_a_model_chose_is_drawn_as_text_in_a_real_conversation() {
-    // UI-GENUI-051
     let page = page().await;
     let app = &page.app;
     let dana = user(app, "Dana", &[]).await;
@@ -150,7 +147,7 @@ async fn hostile_text_a_model_chose_is_drawn_as_text_in_a_real_conversation() {
 
 #[tokio::test]
 async fn a_tool_result_that_tells_the_model_to_act_changes_nothing_without_the_reader() {
-    // UI-GENUI-051: an injected instruction, the model follows it, and the run still
+    // An injected instruction, the model follows it, and the run still
     // stops for the reader's approval; the managers' tool is never offered.
     let page = page().await;
     let app = &page.app;
@@ -185,7 +182,6 @@ async fn a_tool_result_that_tells_the_model_to_act_changes_nothing_without_the_r
 
 #[tokio::test]
 async fn a_component_outside_the_catalogue_never_reaches_the_page() {
-    // UI-GENUI-051
     let page = page().await;
     let app = &page.app;
     let dana = user(app, "Dana", &[]).await;
@@ -210,7 +206,7 @@ async fn a_component_outside_the_catalogue_never_reaches_the_page() {
 
 #[test]
 fn the_catalogue_costs_what_it_did() {
-    // UI-GENUI-051: the tokens the catalogue adds to every request, recorded; a
+    // The tokens the catalogue adds to every request, recorded; a
     // change that doubles them fails here.
     let tokens = catalog().prompt_tokens();
     println!("catalogue tokens per request: {tokens}");
@@ -224,7 +220,6 @@ fn the_catalogue_costs_what_it_did() {
 #[tokio::test]
 #[ignore = "calls a real model: NAVREE_AI_EVAL=1 with a provider's key"]
 async fn live_models_meet_the_validity_targets() {
-    // UI-GENUI-051
     if std::env::var("NAVREE_AI_EVAL").as_deref() != Ok("1") {
         panic!("set NAVREE_AI_EVAL=1 and the provider's settings to run the live evaluation");
     }

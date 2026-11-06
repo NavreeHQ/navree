@@ -339,7 +339,6 @@ fn every_type() -> Vec<Value> {
 
 #[test]
 fn every_tool_is_named_and_described_from_its_props() {
-    // UI-GENUI-043
     let catalog = catalog();
     let tools = catalog.all_tools();
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -379,7 +378,6 @@ fn every_tool_is_named_and_described_from_its_props() {
 
 #[test]
 fn schema_check_and_example_agree_for_every_component() {
-    // UI-GENUI-043
     let catalog = catalog();
     for tool in catalog.all_tools() {
         let schema = &tool.parameters;
@@ -440,7 +438,6 @@ fn schema_check_and_example_agree_for_every_component() {
 
 #[test]
 fn a_tool_outside_the_catalogue_is_refused() {
-    // UI-GENUI-043
     let catalog = catalog();
     for tool in [
         "show_approval",
@@ -459,7 +456,6 @@ fn a_tool_outside_the_catalogue_is_refused() {
 
 #[test]
 fn the_check_says_what_to_repair() {
-    // UI-GENUI-043
     let catalog = catalog();
     let refusal = catalog
         .check(
@@ -489,7 +485,7 @@ fn the_check_says_what_to_repair() {
 
 #[test]
 fn a_catalogue_costs_a_known_number_of_tokens() {
-    // UI-GENUI-043: the cost of the catalogue in every request is measured, and kept
+    // The cost of the catalogue in every request is measured, and kept
     // small enough that a dozen components fit in a model's tools.
     let tokens = catalog().prompt_tokens();
     println!("catalogue prompt tokens: {tokens}");
@@ -534,7 +530,6 @@ proptest! {
     /// schema the model was given, and checks again to itself.
     #[test]
     fn whatever_is_sent_what_passes_meets_the_schema(value in arbitrary_json()) {
-        // UI-GENUI-043
         let catalog = catalog();
         for tool in catalog.all_tools() {
             if let Ok(checked) = catalog.check(&tool.name, &value) {
@@ -548,7 +543,6 @@ proptest! {
     /// A text prop never holds what the check refuses, whatever the characters.
     #[test]
     fn text_never_holds_a_control_or_a_turning_mark(text in "\\PC{0,80}|[\\x00-\\x1f\\u{202a}-\\u{202e}a-z]{0,20}") {
-        // UI-GENUI-043
         if let Ok(checked) = UserText::<80>::new(&text) {
             let kept = checked.as_str();
             prop_assert!(!kept.is_empty(), "empty text kept");
@@ -568,7 +562,6 @@ proptest! {
 
 #[test]
 fn prop_types_round_trip() {
-    // UI-GENUI-043
     let links = [navree_ui::genui::LinkPattern::parse("/orders/{key}").unwrap()];
     let mut checker = navree_ui::genui::Checker::new(&links);
     let day = Day::check(&json!("2026-11-06"), "since", &mut checker).unwrap();
@@ -623,7 +616,6 @@ fn conversation_html() -> String {
 
 #[test]
 fn a_conversation_is_a_live_list_that_starts_at_the_newest() {
-    // UI-GENUI-046
     let html = conversation_html();
     assert!(html.contains(r#"data-genui="conversation""#), "{html}");
     assert!(html.contains(r#"data-ui-order="asc""#), "{html}");
@@ -644,7 +636,7 @@ fn a_conversation_is_a_live_list_that_starts_at_the_newest() {
 
 #[test]
 fn every_part_works_with_no_script() {
-    // UI-GENUI-046: the parts are links and forms; the composer posts like any form.
+    // The parts are links and forms; the composer posts like any form.
     let composer = render(
         &PromptInput::new("composer", "/assistant/7/messages")
             .csrf("tok")
@@ -671,7 +663,6 @@ fn every_part_works_with_no_script() {
 
 #[test]
 fn hostile_words_from_a_model_stay_words() {
-    // UI-GENUI-046
     let labels = ChatLabels::default();
     for hostile in [
         "<script>alert(1)</script>",
@@ -701,7 +692,6 @@ fn hostile_words_from_a_model_stay_words() {
 
 #[test]
 fn an_approval_card_is_set_apart_and_names_what_it_approves() {
-    // UI-GENUI-045
     let html = render(
         &ApprovalCard::new(
             "call_9",
