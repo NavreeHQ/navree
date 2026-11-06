@@ -108,7 +108,6 @@ enum Body<'a> {
     Json(&'a Value),
 }
 
-// CONN-070
 #[tokio::test]
 async fn stripe_test_mode_takes_what_the_client_sends() {
     let test = "stripe_test_mode_takes_what_the_client_sends";
@@ -354,7 +353,6 @@ async fn stripe_test_mode_takes_what_the_client_sends() {
         .await;
 }
 
-// CONN-071
 #[tokio::test]
 async fn paddle_sandbox_takes_what_the_client_sends() {
     let test = "paddle_sandbox_takes_what_the_client_sends";

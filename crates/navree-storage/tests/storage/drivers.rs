@@ -64,7 +64,7 @@ mod gcs {
     use crate::s3_server::{BUCKET, GCS_EMAIL, GCS_PRIVATE_KEY, S3Server};
     use crate::support::{SIGNING_KEY, single_disk};
 
-    // CONN-052: the driver's writes (uploads, streams through multipart
+    // The driver's writes (uploads, streams through multipart
     // uploads, signed upload links bound to a type and a size) as well as
     // its reads, against a server that checks every signature.
     #[tokio::test]

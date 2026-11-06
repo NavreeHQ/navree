@@ -250,7 +250,6 @@ mod gcs {
         assert_eq!(reply.text().await.unwrap(), "region,total\n");
     }
 
-    // CONN-052
     #[tokio::test]
     async fn a_signed_upload_link_puts_the_file_in_the_bucket() {
         let Some(bucket) = Bucket::open("a_signed_upload_link_puts_the_file_in_the_bucket") else {
