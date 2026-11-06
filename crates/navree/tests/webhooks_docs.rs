@@ -8,7 +8,8 @@ use navree::events::{Event, EventBus};
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::queue::Queue;
-use navree::testing::TestApp;
+use navree::contracts::{Clock, FixedClock};
+use navree::testing::{TestApp, TestAppBuilder};
 use navree::webhooks::{
     AwsSns, GitHub, NewEndpoint, SnsMessage, StandardWebhooks, VerifiedWebhook, WebhookContext,
     WebhookEvent, Webhooks,
@@ -126,6 +127,10 @@ impl SesEventsController {
 pub struct IntegrationsModule;
 
 async fn app(client: HttpClient) -> TestApp {
+    builder(client).build().await
+}
+
+fn builder(client: HttpClient) -> TestAppBuilder {
     TestApp::builder()
         .temp_database()
         .config("queue.driver", "memory")
@@ -143,8 +148,6 @@ async fn app(client: HttpClient) -> TestApp {
         .module(DealsModule)
         .module(IntegrationsModule)
         .override_value(Arc::new(client))
-        .build()
-        .await
 }
 
 fn a_won_deal() -> DealWon {
@@ -283,7 +286,14 @@ async fn ses_events_arrive_verified_through_sns() {
         "https://sns.us-east-1.amazonaws.com/SimpleNotificationService-*.pem",
         FakeResponse::new(200).text(sns_fixture("signer-cert.pem")),
     );
-    let app = app(client).await;
+    // A minute after the fixture's messages were published: an older one is a replay.
+    let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(
+        "2026-10-26T08:00:30Z".parse().unwrap(),
+    ));
+    let app = builder(client)
+        .override_value::<dyn Clock>(clock)
+        .build()
+        .await;
     let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
     let notification = serde_json::to_vec(&messages["notification_v1"]).unwrap();
     let send = |body: Vec<u8>| {
