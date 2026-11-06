@@ -109,6 +109,7 @@ fn a_first_deploy_starts_blue() {
       build     crm-api for x86_64-unknown-linux-gnu, in a container (0s)
       upload    app-1  releases/20261026-091512-3f2a9c1, 14.2 MB (0s)
       env       app-1  7 settings, 3 secrets
+      config    app-1  configuration checked
       migrate   app-1  2 migrations ran (0s)
       start     app-1  blue on 127.0.0.1:8081
       health    app-1  GET /health/ready 200 after 0.4 s
@@ -177,6 +178,7 @@ fn the_next_deploy_starts_the_idle_slot_and_drains_the_live_one() {
     inspect
     upload 20261026-091512-3f2a9c1
     env (10 settings)
+    run config:check from 20261026-091512-3f2a9c1
     run migrate from 20261026-091512-3f2a9c1
     start crm-api-web@green (20261026-091512-3f2a9c1, 127.0.0.1:8082)
     health 8082/health/ready
@@ -298,6 +300,7 @@ fn no_migrate_and_maintenance() {
     assert_eq!(
         runs,
         [
+            format!("run config:check from {NEW}"),
             format!("run down from {R2}"),
             format!("run migrate from {NEW}"),
             format!("switch green {NEW}"),
@@ -430,6 +433,7 @@ fn a_rolling_deploy_switches_web_servers_one_at_a_time() {
       env       web-1  4 settings, 3 secrets
       env       web-2  4 settings, 3 secrets
       env       worker-1  4 settings, 3 secrets
+      config    web-1  configuration checked
       migrate   web-1  2 migrations ran (0s)
       start     web-1  green on 127.0.0.1:8082
       health    web-1  GET /health/ready 200 after 0.4 s

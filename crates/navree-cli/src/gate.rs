@@ -1,6 +1,6 @@
 //! `navree gate`: every check a change must pass before it is pushed, in
 //! one command: `cargo fmt --check`, clippy with warnings as errors, the
-//! tests, `navree check`, and the front end's typecheck, tests and build
+//! tests, `navree check`, `config:check`, and the front end's typecheck, tests and build
 //! (`web/`, when it has a `package.json`). Steps run one after another under
 //! a machine-wide lock, so two gates never compete for the machine, and each
 //! step's time is reported.
@@ -15,14 +15,15 @@ use serde_json::Value;
 
 use crate::check::{CheckOptions, run_check};
 use crate::dev::{node_program, package_manager};
-use crate::forward::{Invocation, Runner};
+use crate::forward::{Invocation, Runner, forward};
 
 /// Every step name, in the order the steps run.
-pub const STEP_NAMES: [&str; 7] = [
+pub const STEP_NAMES: [&str; 8] = [
     "fmt",
     "clippy",
     "test",
     "check",
+    "config",
     "web:typecheck",
     "web:test",
     "web:build",
@@ -63,8 +64,8 @@ pub enum StepKind {
 /// One step of the gate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
-    /// `fmt`, `clippy`, `test`, `check`, `web:typecheck`, `web:test` or
-    /// `web:build`.
+    /// `fmt`, `clippy`, `test`, `check`, `config`, `web:typecheck`,
+    /// `web:test` or `web:build`.
     pub name: &'static str,
     /// What it runs.
     pub kind: StepKind,
@@ -136,6 +137,15 @@ pub fn steps(root: &Path, options: &GateOptions) -> anyhow::Result<Vec<Step>> {
         Step {
             name: "check",
             kind: StepKind::Check,
+        },
+        // The configuration reads and validates, with no unknown key and no
+        // key set in two places, before it reaches a server.
+        Step {
+            name: "config",
+            kind: StepKind::Program(
+                forward("config:check", &[]).with_env(options.env.clone()),
+                root.to_path_buf(),
+            ),
         },
     ];
     let web = options.web.clone().unwrap_or_else(|| root.join("web"));
@@ -483,7 +493,7 @@ mod tests {
     fn the_rust_steps_cover_the_whole_workspace() {
         let dir = app(PACKAGE);
         let steps = steps(dir.path(), &GateOptions::default()).unwrap();
-        assert_eq!(names(&steps), ["fmt", "clippy", "test", "check"]);
+        assert_eq!(names(&steps), ["fmt", "clippy", "test", "check", "config"]);
         let lines: Vec<String> = steps.iter().map(Step::command_line).collect();
         assert_eq!(
             lines,
@@ -492,6 +502,7 @@ mod tests {
                 "cargo clippy --workspace --all-targets -- -D warnings",
                 "cargo test --workspace",
                 "navree check",
+                "cargo run --quiet -- config:check",
             ]
         );
         // A package inside another workspace tests itself only.
@@ -519,15 +530,16 @@ mod tests {
                 "clippy",
                 "test",
                 "check",
+                "config",
                 "web:typecheck",
                 "web:test",
                 "web:build"
             ]
         );
         let pnpm = node_program("pnpm");
-        assert_eq!(steps[4].command_line(), format!("{pnpm} run typecheck"));
-        assert_eq!(steps[6].command_line(), format!("{pnpm} run build"));
-        let StepKind::Program(_, dir_of) = &steps[5].kind else {
+        assert_eq!(steps[5].command_line(), format!("{pnpm} run typecheck"));
+        assert_eq!(steps[7].command_line(), format!("{pnpm} run build"));
+        let StepKind::Program(_, dir_of) = &steps[6].kind else {
             panic!("a program");
         };
         assert_eq!(dir_of, &web);
@@ -537,9 +549,9 @@ mod tests {
         std::fs::remove_file(web.join("pnpm-lock.yaml")).unwrap();
         std::fs::write(web.join("tsconfig.json"), "{}").unwrap();
         let steps = super::steps(dir.path(), &GateOptions::default()).unwrap();
-        assert_eq!(names(&steps)[4..], ["web:typecheck"]);
+        assert_eq!(names(&steps)[5..], ["web:typecheck"]);
         assert_eq!(
-            steps[4].command_line(),
+            steps[5].command_line(),
             format!("{} exec -- tsc --noEmit", node_program("npm"))
         );
     }
@@ -561,7 +573,7 @@ mod tests {
         };
         assert_eq!(
             names(&steps(dir.path(), &options).unwrap()),
-            ["fmt", "test", "check", "web:build"]
+            ["fmt", "test", "check", "config", "web:build"]
         );
         let options = GateOptions {
             web: Some(PathBuf::from("frontend")),

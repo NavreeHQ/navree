@@ -105,7 +105,7 @@ pub enum Command {
     Dev(DevArgs),
     /// Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations).
     Check(CheckArgs),
-    /// Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine.
+    /// Run fmt, clippy, the tests, navree check, config:check and the front end's typecheck, tests and build, one gate at a time on this machine.
     Gate(GateArgs),
     /// Run the app's local services (dock.toml) with Docker or Podman.
     #[command(subcommand)]
@@ -399,7 +399,7 @@ pub struct CheckArgs {
 /// `navree gate [--only <step,...>] [--skip <step,...>] [--keep-going] [--no-lock] [--web <dir>]`.
 #[derive(Debug, Args)]
 pub struct GateArgs {
-    /// Only these steps: fmt, clippy, test, check, web:typecheck, web:test, web:build (`web` = every web step).
+    /// Only these steps: fmt, clippy, test, check, config, web:typecheck, web:test, web:build (`web` = every web step).
     #[arg(long, value_delimiter = ',', value_name = "STEP")]
     pub only: Vec<String>,
     /// Leave these steps out.

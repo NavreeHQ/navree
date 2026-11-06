@@ -572,6 +572,7 @@ fn a_deploy_over_ssh() {
       build     crm-api for x86_64-unknown-linux-gnu, natively (0s)
       upload    app-1  releases/20261026-091512-3f2a9c1, <size> (0s)
       env       app-1  5 settings, 1 secret
+      config    app-1  configuration checked
       migrate   app-1  2 migrations ran (0s)
       start     app-1  green on 127.0.0.1:8082
       health    app-1  GET /health/ready 200 after 0.4 s
@@ -599,6 +600,7 @@ fn a_deploy_over_ssh() {
     cat > '/srv/crm-api/releases/20261026-091512-3f2a9c1.tar.gz'
     unpack 20261026-091512-3f2a9c1 on app-1
     env on app-1
+    config:check on app-1
     migrate on app-1
     start web green on app-1
     health of 127.0.0.1:8082 on app-1
@@ -629,9 +631,9 @@ fn a_deploy_over_ssh() {
     let env_script = ssh[3].stdin_text();
     assert!(env_script.contains("base64 -d > /etc/crm-api/env.new <<'HARBOR_EOF'"));
     assert!(!env_script.contains("APP_KEY"), "{env_script}");
-    insta::assert_snapshot!("deploy_switch_script", ssh[7].stdin_text());
-    insta::assert_snapshot!("deploy_start_script", ssh[5].stdin_text());
-    insta::assert_snapshot!("deploy_prune_script", ssh[10].stdin_text());
+    insta::assert_snapshot!("deploy_switch_script", ssh[8].stdin_text());
+    insta::assert_snapshot!("deploy_start_script", ssh[6].stdin_text());
+    insta::assert_snapshot!("deploy_prune_script", ssh[11].stdin_text());
     insta::assert_snapshot!("deploy_inspect_script", ssh[0].stdin_text());
     insta::assert_snapshot!("deploy_unpack_script", ssh[2].stdin_text());
 }
@@ -658,6 +660,7 @@ fn a_failed_health_check_over_ssh_stops_the_new_slot() {
             "inspect on app-1",
             "unpack 20261026-091512-3f2a9c1 on app-1",
             "env on app-1",
+            "config:check on app-1",
             "start web green on app-1",
             "health of 127.0.0.1:8082 on app-1",
             "logs of crm-api-web@green on app-1",

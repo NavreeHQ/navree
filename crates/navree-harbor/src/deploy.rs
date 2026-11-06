@@ -266,10 +266,21 @@ impl Deployer<'_> {
             );
         }
 
-        // Migrations, once.
+        // The configuration the release boots with, checked where it runs and
+        // before anything changes: a section that does not read, a key
+        // nothing reads, or, in production, an unsafe setting stops the
+        // deploy here.
         let web: Vec<usize> = (0..self.hosts.len())
             .filter(|&i| self.hosts[i].server().has(Role::Web))
             .collect();
+        {
+            let host = &self.hosts[web.first().copied().unwrap_or(0)];
+            self.app_command(host, "config:check", Some(&id))?;
+            self.progress
+                .server_step("config", &host.server().name, "configuration checked");
+        }
+
+        // Migrations, once.
         let migrate = self.config.deploy.migrate && !options.no_migrate;
         let maintenance = options.maintenance && migrate;
         if maintenance {

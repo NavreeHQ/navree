@@ -41,6 +41,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Module graph
         run: cargo run --quiet -- check
+      - name: Configuration
+        run: cargo run --quiet -- config:check
       - name: Migrations on PostgreSQL
         run: cargo run --quiet -- migrate
       - name: Message and event patterns

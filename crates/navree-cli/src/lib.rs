@@ -19,7 +19,7 @@
 //! | `navree make:page <Name> [--module <module>] [--public]`, `make:form <Name>`, `make:table <Name>` (each with `--dry-run` and `--force`) | A Navree UI page (a controller and its test), a form struct with its handlers, or a data table row with its handler ([`make_ui::make_ui_item`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree check [--graph] [--json] [--only <checks>]` | The module graph, then the app's conformity checks ([`check`]) |
-//! | `navree gate [--only <steps>] [--skip <steps>] [--keep-going] [--no-lock]` | fmt, clippy, tests, `navree check` and the front end's typecheck, tests and build, under a machine lock with per-step times ([`gate`]) |
+//! | `navree gate [--only <steps>] [--skip <steps>] [--keep-going] [--no-lock]` | fmt, clippy, tests, `navree check`, `config:check` and the front end's typecheck, tests and build, under a machine lock with per-step times ([`gate`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
 //! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
