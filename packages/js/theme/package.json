@@ -1,7 +1,7 @@
 {
   "name": "@navree/theme",
   "version": "1.0.0",
-  "description": "navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts, and the tokens as data.",
+  "description": "The Navree theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, every built-in theme in light and dark, self-hosted fonts, and the tokens as data.",
   "license": "MIT OR Apache-2.0",
   "author": "Amritpal Singh",
   "homepage": "https://navree.com/docs/frontend/",
@@ -40,6 +40,10 @@
       "style": "./css/theme.css",
       "default": "./css/theme.css"
     },
+    "./themes.css": {
+      "style": "./css/themes.css",
+      "default": "./css/themes.css"
+    },
     "./tokens.css": {
       "style": "./css/tokens.css",
       "default": "./css/tokens.css"
@@ -55,7 +59,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "node scripts/generate-themes.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

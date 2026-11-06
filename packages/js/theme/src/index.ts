@@ -2,7 +2,9 @@
  * `@navree/theme`: navree.com's dark theme as data, for code that can't read
  * CSS variables (charts on a canvas, `<meta name="theme-color">`, emails,
  * PDFs). The CSS lives next to it: `@navree/theme/theme.css` (Tailwind 4),
- * `tokens.css` (plain custom properties) and `fonts.css`.
+ * `tokens.css` (plain custom properties) and `fonts.css`. `themes.css` adds
+ * the other built-in themes and light mode, and `applyAppearance` chooses
+ * among them.
  */
 
 /** The color tokens (Tailwind names without `--color-`). */
@@ -100,3 +102,25 @@ export function contrastRatio(a: string, b: string): number {
   const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (light + 0.05) / (dark + 0.05);
 }
+
+export {
+  applyAppearance,
+  appearanceScript,
+  modes,
+  parseAppearance,
+  resolveMode,
+  type Appearance,
+  type AppearanceRoot,
+  type AppearanceScriptOptions,
+  type Mode,
+} from "./appearance.js";
+export { themeFromBuilderCss } from "./custom-theme.js";
+export {
+  colourTokens,
+  themeIds,
+  themes,
+  type ThemeColourToken,
+  type ThemeId,
+  type ThemeInfo,
+  type ThemePalette,
+} from "./themes.js";
