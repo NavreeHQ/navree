@@ -126,6 +126,16 @@ Region::new("revenue")
 
 A [DataTable](/docs/ui/data-table/) has its own `.live(every)`, `.live_on(live)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks (the [live hub](/docs/ui/live-hub/), or any other), keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook. It shares the stream handling described above.
 
+## Working examples
+
+The previews above are replays. Three apps in the repository run these patterns against a server, and each has a page on this site:
+
+- [The store](/showcase/store/): the dashboard's figures are a region that follows the `stats` topic, the orders table refetches on `orders`, and the inventory on `inventory`.
+- [The inbox](/showcase/inbox/): the open conversation's heading and customer panel are regions on their own topics, and the thread is a [LazyList](/docs/components/lazy-list/) that takes only the messages that are new.
+- [The board](/showcase/board/): the whole board is one region that refetches when anyone moves a card, so other people's moves slide in.
+
+All three use the [live hub](/docs/ui/live-hub/). [The Navree UI example apps](/docs/example-app/ui-apps/) says how to run them.
+
 ## API
 
 ### Region
