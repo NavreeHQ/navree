@@ -1000,6 +1000,10 @@ name = "ui_platform"
 required-features = ["access", "auth", "crypto", "db", "events", "http", "realtime", "session", "sqlite", "testing", "ui", "workspace"]
 
 [[test]]
+name = "ui_report_sheets"
+required-features = ["sheets", "ui"]
+
+[[test]]
 name = "ui_workspace"
 required-features = ["access", "crypto", "db", "http", "orm", "session", "sqlite", "testing", "ui", "workspace"]
 

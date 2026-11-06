@@ -253,6 +253,9 @@ pub use navree_settings as settings;
 /// re-exported whole, with its `Exportable` and `Importable` derives.
 #[cfg(feature = "sheets")]
 pub use navree_sheets as sheets;
+/// A report's table as an Excel file (the `ui` and `sheets` features).
+#[cfg(all(feature = "ui", feature = "sheets"))]
+pub mod reports;
 #[cfg(feature = "sso")]
 pub use navree_sso as sso;
 #[cfg(feature = "webhooks")]
