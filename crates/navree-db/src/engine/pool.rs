@@ -49,6 +49,8 @@ struct PoolInner {
     reporter: Reporter,
     /// Statements and transactions waiting for a connection.
     waiting: Arc<AtomicUsize>,
+    /// The server's MariaDB version, once asked.
+    mariadb: tokio::sync::OnceCell<Option<(u16, u16)>>,
 }
 
 impl Pool {
@@ -88,6 +90,7 @@ impl Pool {
                 driver,
                 reporter,
                 waiting: Arc::new(AtomicUsize::new(0)),
+                mariadb: tokio::sync::OnceCell::new(),
             }),
         })
     }
@@ -111,6 +114,31 @@ impl Pool {
             max,
             waiting: self.inner.waiting.load(Ordering::Relaxed),
         }
+    }
+
+    /// The server's version as `(major, minor)` when it is MariaDB, else
+    /// `None` (MySQL, PostgreSQL, SQLite). The server is asked once, without
+    /// reporting the question to listeners or the query log, and every
+    /// clone of the pool remembers the answer.
+    pub async fn mariadb_version(&self) -> Result<Option<(u16, u16)>, DbError> {
+        if self.backend() != Backend::MySql {
+            return Ok(None);
+        }
+        self.inner
+            .mariadb
+            .get_or_try_init(|| async {
+                let mut conn = self.take_connection().await?;
+                let version = match conn.fetch_optional("SELECT VERSION()", &[]).await? {
+                    Some(row) => row.value(0)?,
+                    None => crate::Value::Null(crate::Kind::String),
+                };
+                Ok(match version {
+                    crate::Value::String(text) => mariadb_version(&text),
+                    _ => None,
+                })
+            })
+            .await
+            .copied()
     }
 
     /// Checks a connection with a round trip to the server.
@@ -241,6 +269,23 @@ impl std::fmt::Debug for Pool {
     }
 }
 
+/// `(major, minor)` of a MariaDB `VERSION()` (`11.4.2-MariaDB-log`), or
+/// `None` for another server's.
+fn mariadb_version(version: &str) -> Option<(u16, u16)> {
+    if !version.to_ascii_lowercase().contains("mariadb") {
+        return None;
+    }
+    let mut parts = version
+        .split(|c: char| !c.is_ascii_digit())
+        .map(|part| part.parse::<u16>().ok());
+    match (parts.next().flatten(), parts.next().flatten()) {
+        (Some(major), Some(minor)) => Some((major, minor)),
+        // A MariaDB whose version cannot be read is taken as the oldest
+        // one supported.
+        _ => Some((10, 6)),
+    }
+}
+
 impl Executor for Pool {
     fn backend(&self) -> Backend {
         self.inner.driver.backend()
@@ -326,5 +371,18 @@ impl Executor for Pool {
             )
             .await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_mariadb_versions() {
+        assert_eq!(mariadb_version("11.4.13-MariaDB-ubu2404"), Some((11, 4)));
+        assert_eq!(mariadb_version("10.6.28-MariaDB-log"), Some((10, 6)));
+        assert_eq!(mariadb_version("8.4.11"), None);
+        assert_eq!(mariadb_version("MariaDB"), Some((10, 6)));
     }
 }

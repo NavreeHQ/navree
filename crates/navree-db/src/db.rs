@@ -532,10 +532,16 @@ impl Db {
 
     /// The number of connections the database server has open (from every
     /// client): `pg_stat_activity` on PostgreSQL, `Threads_connected` on
-    /// MySQL; `None` on SQLite, which has no server. For `db:monitor`.
+    /// MySQL and MariaDB; `None` on SQLite, which has no server. For
+    /// `db:monitor`.
     pub async fn open_connections(&self) -> Result<Option<u64>, DbError> {
         let sql = match self.backend() {
             Backend::Postgres => "SELECT COUNT(*) FROM pg_stat_activity",
+            // MariaDB starts with the performance schema off, and keeps the
+            // status in `information_schema`, which MySQL 8 no longer has.
+            Backend::MySql if self.is_mariadb().await? => {
+                "SELECT CAST(VARIABLE_VALUE AS UNSIGNED) FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME = 'Threads_connected'"
+            }
             Backend::MySql => {
                 "SELECT CAST(VARIABLE_VALUE AS UNSIGNED) FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'"
             }
@@ -575,14 +581,14 @@ impl Db {
 
     /// Whether the server is MariaDB (which speaks MySQL's protocol).
     pub async fn is_mariadb(&self) -> Result<bool, DbError> {
-        if self.backend() != Backend::MySql {
-            return Ok(false);
-        }
-        Ok(self
-            .server_version()
-            .await?
-            .to_ascii_lowercase()
-            .contains("mariadb"))
+        Ok(self.mariadb_version().await?.is_some())
+    }
+
+    /// The server's version as `(major, minor)` when it is MariaDB, else
+    /// `None`: asked once, then remembered (see
+    /// [`Pool::mariadb_version`](crate::Pool::mariadb_version)).
+    pub async fn mariadb_version(&self) -> Result<Option<(u16, u16)>, DbError> {
+        self.pool().mariadb_version().await
     }
 
     /// Whether the database has the TimescaleDB extension installed.
