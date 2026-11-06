@@ -1,6 +1,6 @@
 //! [`SsoOptions`]: the `sso` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The `sso` configuration section. Environment variables:
@@ -16,7 +16,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// allow_idp_initiated = false
 /// clock_skew_secs = 120
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "sso", docs = "/docs/security/single-sign-on/", validate = Self::check_values)]
 #[serde(default)]
 pub struct SsoOptions {
     /// The API's public base URL (`https://api.acme.test`): the assertion
@@ -48,10 +49,13 @@ pub struct SsoOptions {
     /// (default 60).
     pub code_ttl_secs: u64,
     /// Verified email domains.
+    #[config(table)]
     pub domains: DomainOptions,
     /// SAML connections.
+    #[config(table)]
     pub saml: SamlOptions,
     /// OpenID Connect connections.
+    #[config(table)]
     pub oidc: OidcOptions,
 }
 
@@ -74,7 +78,7 @@ impl Default for SsoOptions {
 }
 
 /// `sso.domains`: how a domain proves it belongs to a connection.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DomainOptions {
     /// The TXT record's value is `{txt_prefix}={token}` (default
@@ -95,7 +99,7 @@ impl Default for DomainOptions {
 }
 
 /// `sso.saml`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SamlOptions {
     /// Accept responses the identity provider sends without a request
@@ -124,13 +128,13 @@ impl Default for SamlOptions {
 }
 
 /// `sso.oidc`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct OidcOptions {
     /// The scopes asked for when a connection names none (default
     /// `openid email profile`; a comma-separated string from the
     /// environment).
-    #[serde(deserialize_with = "string_or_list")]
+    #[serde(deserialize_with = "comma_or_space_list")]
     pub scopes: Vec<String>,
     /// How far the provider's clock may be off, in seconds (default 60).
     pub clock_skew_secs: u64,
@@ -149,23 +153,18 @@ impl Default for OidcOptions {
     }
 }
 
-/// A list, or a comma- or space-separated string (environment variables).
-fn string_or_list<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Raw {
-        List(Vec<String>),
-        Text(String),
-    }
-    Ok(match Raw::deserialize(deserializer)? {
-        Raw::List(list) => list,
-        Raw::Text(text) => text
-            .split([',', ' '])
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    })
+/// A list, or a comma- or space-separated string (environment variables):
+/// the comma-separated list of navree-config, with each item split on spaces
+/// too, since scopes are words.
+fn comma_or_space_list<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    let items = navree_config::comma_list(deserializer)?;
+    Ok(items
+        .iter()
+        .flat_map(|item| item.split_whitespace())
+        .map(str::to_owned)
+        .collect())
 }
 
 fn absolute_url(value: &str) -> bool {
@@ -173,6 +172,11 @@ fn absolute_url(value: &str) -> bool {
 }
 
 impl SsoOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Checks the options; the errors name their keys.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -215,16 +219,10 @@ impl SsoOptions {
     }
 }
 
-impl ConfigSection for SsoOptions {
-    const KEY: &'static str = "sso";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
 
     #[test]
@@ -234,6 +232,50 @@ mod tests {
         assert_eq!(options.routes_prefix, "/sso");
         assert!(!options.saml.allow_idp_initiated);
         assert_eq!(options.saml.clock_skew_secs, 120);
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SsoOptions::schema().expect("schema");
+        assert_eq!(schema.key, "sso");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/security/single-sign-on/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("base_url").ty, FieldType::String);
+        assert_eq!(field("routes").ty, FieldType::Bool);
+        assert_eq!(field("state_ttl_secs").ty, FieldType::Integer);
+        for table in ["domains", "saml", "oidc"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+            assert!(!field(table).fields.is_empty(), "{table}");
+        }
+        let oidc = field("oidc");
+        let scopes = oidc.fields.iter().find(|field| field.name == "scopes");
+        assert_eq!(
+            scopes.map(|field| field.ty.clone()),
+            Some(FieldType::list(FieldType::String))
+        );
+        let defaults = SsoOptions::defaults().expect("defaults");
+        assert_eq!(defaults["routes_prefix"], "/sso");
+        assert_eq!(defaults["state_ttl_secs"], 600);
+        assert_eq!(defaults["saml"]["clock_skew_secs"], 120);
+        assert_eq!(
+            defaults["oidc"]["scopes"],
+            serde_json::json!(["openid", "email", "profile"])
+        );
+        assert!(SsoOptions::default().validate().is_ok());
     }
 
     #[test]

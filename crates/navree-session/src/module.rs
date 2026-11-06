@@ -6,7 +6,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::SessionStore;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::controller::CsrfCookieController;
 use crate::database;
@@ -53,40 +53,18 @@ pub struct SessionModule;
 impl SessionModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: SessionOptions) -> impl Module {
-        ConfiguredSessionModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<SessionModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `session` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredSessionModule { options: None }
+        ConfiguredModule::<SessionModule, SessionOptions>::from_config(register)
     }
 }
 
 impl Module for SessionModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `SessionModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredSessionModule {
-    /// `None`: read from configuration.
-    options: Option<SessionOptions>,
-}
-
-impl Module for ConfiguredSessionModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<SessionModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

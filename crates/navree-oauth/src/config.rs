@@ -1,12 +1,10 @@
 //! [`OAuthOptions`]: the `oauth` configuration section.
 
 use std::collections::BTreeMap;
-use std::fmt;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::keys::IdTokenAlgorithm;
 use crate::scope::{BUILT_IN_SCOPES, check_permission, check_scope_name};
@@ -21,7 +19,7 @@ pub struct ScopeOptions {
     /// The permission strings the scope grants (`deals.read`, `deals.*`,
     /// or `*` for everything the user may do). A list, or a comma-separated
     /// string (from an environment variable).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub permissions: Vec<String>,
 }
 
@@ -40,14 +38,16 @@ impl ScopeOptions {
 }
 
 /// Personal access token settings (`oauth.personal_access_tokens`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PersonalAccessTokenOptions {
     /// Whether the module mounts `/api/oauth/personal-access-tokens`
     /// (default true). The `PersonalAccessTokens` service works either way.
+    #[config(public)]
     pub enabled: bool,
     /// The longest lifetime, in days (default 365); `0` allows tokens that
     /// never expire.
+    #[config(public)]
     pub max_days: u32,
 }
 
@@ -62,16 +62,18 @@ impl Default for PersonalAccessTokenOptions {
 
 /// The limits of one protocol endpoint (`oauth.rate_limits.<endpoint>`),
 /// in requests per minute; `0` turns a limit off.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct EndpointLimit {
     /// Requests per minute of one client, counted once it has
     /// authenticated (so requests naming a client with a wrong secret
     /// can't use up its budget). Public clients have no secret, so anyone
     /// can name one: they are limited per IP only.
+    #[config(public)]
     pub per_client: u32,
     /// Requests per minute from one client IP address, counted before
     /// anything is checked (failed client authentications included).
+    #[config(public)]
     pub per_ip: u32,
 }
 
@@ -92,17 +94,21 @@ impl Default for EndpointLimit {
 /// (`oauth.rate_limits`). Each instance of the app counts on its own. A
 /// request over a limit gets 429 with `Retry-After` and the OAuth error
 /// `too_many_requests`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct RateLimitOptions {
     /// `POST {path}/token`: 300 per client, 120 per IP.
+    #[config(table, public)]
     pub token: EndpointLimit,
     /// `POST {path}/introspect`: 1200 per client, 600 per IP (resource
     /// servers introspect on every request they don't cache).
+    #[config(table)]
     pub introspect: EndpointLimit,
     /// `POST {path}/revoke`: 300 per client, 60 per IP.
+    #[config(table)]
     pub revoke: EndpointLimit,
     /// `POST {path}/device_authorization`: 60 per client, 30 per IP.
+    #[config(table)]
     pub device_authorization: EndpointLimit,
 }
 
@@ -155,7 +161,8 @@ impl Default for RateLimitOptions {
 /// `oauth.consent_url`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`,
 /// `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP=600`; lists also accept a
 /// comma-separated string.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "oauth", docs = "/docs/packages/oauth-server/", validate = Self::check_values)]
 #[serde(default)]
 pub struct OAuthOptions {
     /// The `iss` of ID tokens and the base of the discovery URLs. Defaults
@@ -174,8 +181,10 @@ pub struct OAuthOptions {
     /// and `offline_access` are built in.
     pub scopes: BTreeMap<String, ScopeOptions>,
     /// Access token lifetime, in seconds.
+    #[config(public)]
     pub access_token_ttl_secs: u64,
     /// Refresh token lifetime, in seconds; every refresh starts it again.
+    #[config(public)]
     pub refresh_token_ttl_secs: u64,
     /// Authorization request and device code lifetime, in seconds.
     pub request_ttl_secs: u64,
@@ -183,6 +192,7 @@ pub struct OAuthOptions {
     pub code_ttl_secs: u64,
     /// How long each instance caches a token lookup, in seconds (`0`
     /// turns the cache off).
+    #[config(public)]
     pub token_cache_secs: u64,
     /// The key that signs ID tokens: Ed25519 (`ed25519:<base64 PKCS#8 or
     /// seed>`, from `navree oauth:keys`) for EdDSA, or RSA (`rsa:<base64
@@ -192,18 +202,21 @@ pub struct OAuthOptions {
     /// How ID tokens are signed: `EdDSA` or `RS256`. Unset, it follows
     /// `signing_key` (EdDSA without one). Set, it must match the key:
     /// `RS256` needs an RSA `signing_key`.
+    #[config(one_of = "EdDSA, RS256", public)]
     pub id_token_signing_alg: Option<IdTokenAlgorithm>,
     /// Older signing keys, still published in the JWKS so ID tokens issued
     /// before a rotation verify. A list, or a comma-separated string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "secret_list")]
     pub previous_signing_keys: Vec<Secret<String>>,
     /// Personal access tokens.
+    #[config(table, public)]
     pub personal_access_tokens: PersonalAccessTokenOptions,
     /// Whether clients may register themselves (`POST {path}/register`,
     /// RFC 7591). Off by default.
     pub dynamic_registration: bool,
     /// Rate limits of the token, introspection, revocation and device
     /// authorization endpoints, per client and per client IP.
+    #[config(table)]
     pub rate_limits: RateLimitOptions,
 }
 
@@ -231,6 +244,12 @@ impl Default for OAuthOptions {
 }
 
 impl OAuthOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check()
+            .map_err(|errors| format!("invalid oauth options: {}", errors.join("; ")))
+    }
+
     /// Adds the scope `name` (builder style, for `for_root`).
     pub fn scope(mut self, name: impl Into<String>, scope: ScopeOptions) -> Self {
         self.scopes.insert(name.into(), scope);
@@ -305,15 +324,6 @@ impl OAuthOptions {
     }
 }
 
-impl ConfigSection for OAuthOptions {
-    const KEY: &'static str = "oauth";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check()
-            .map_err(|errors| format!("invalid oauth options: {}", errors.join("; ")))
-    }
-}
-
 /// Whether `url` is an absolute `http://` or `https://` URL with a host.
 pub(crate) fn is_http_url(url: &str) -> bool {
     url::Url::parse(url)
@@ -321,48 +331,85 @@ pub(crate) fn is_http_url(url: &str) -> bool {
         .is_some_and(|parsed| matches!(parsed.scheme(), "http" | "https") && parsed.has_host())
 }
 
-/// Deserializes a list from a sequence or from a comma-separated string.
-fn list_or_csv<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    struct ListOrCsv<T>(std::marker::PhantomData<T>);
-
-    impl<'de, T: Deserialize<'de>> Visitor<'de> for ListOrCsv<T> {
-        type Value = Vec<T>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<Vec<T>, E> {
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(|item| T::deserialize(de::value::StrDeserializer::<E>::new(item)))
-                .collect()
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<T>, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-    }
-
-    deserializer.deserialize_any(ListOrCsv(std::marker::PhantomData))
+/// A list of secrets from a list, or from one comma-separated string.
+fn secret_list<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Secret<String>>, D::Error> {
+    Ok(navree_config::comma_list(deserializer)?
+        .into_iter()
+        .map(Secret::new)
+        .collect())
 }
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
 
     fn scope(description: &str, permissions: &[&str]) -> ScopeOptions {
         ScopeOptions::new(description, permissions.iter().copied())
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = OAuthOptions::schema().expect("schema");
+        assert_eq!(schema.key, "oauth");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/oauth-server/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert_eq!(
+            schema.secret_paths(),
+            ["oauth.signing_key", "oauth.previous_signing_keys"]
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("path").ty, FieldType::String);
+        assert_eq!(field("access_token_ttl_secs").ty, FieldType::Integer);
+        assert_eq!(
+            field("id_token_signing_alg").ty,
+            FieldType::choice(&["EdDSA", "RS256"])
+        );
+        assert_eq!(
+            field("scopes").ty,
+            FieldType::map(FieldType::other("ScopeOptions"))
+        );
+        assert_eq!(field("personal_access_tokens").ty, FieldType::Table);
+        let limits = field("rate_limits");
+        assert_eq!(limits.ty, FieldType::Table);
+        let token = limits
+            .fields
+            .iter()
+            .find(|field| field.name == "token")
+            .expect("rate_limits.token");
+        assert_eq!(token.ty, FieldType::Table);
+        assert_eq!(token.fields.len(), 2);
+        let defaults = OAuthOptions::defaults().expect("defaults");
+        assert_eq!(defaults["path"], "/oauth");
+        assert_eq!(defaults["access_token_ttl_secs"], 3600);
+        assert_eq!(defaults["signing_key"], serde_json::Value::Null);
+        assert_eq!(defaults["rate_limits"]["token"]["per_client"], 300);
+        assert_eq!(defaults["personal_access_tokens"]["max_days"], 365);
+    }
+
+    #[test]
+    fn signing_keys_never_print() {
+        let options = OAuthOptions {
+            signing_key: Some(Secret::new("ed25519:top-secret-key".to_owned())),
+            previous_signing_keys: vec![Secret::new("ed25519:older-secret-key".to_owned())],
+            ..OAuthOptions::default()
+        };
+        let text = format!("{options:?}");
+        assert!(!text.contains("top-secret-key"), "{text}");
+        assert!(!text.contains("older-secret-key"), "{text}");
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! [`SessionOptions`]: the `session` configuration section.
 
 use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 /// Where session records are kept.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -50,12 +50,15 @@ pub enum SameSite {
 /// From the environment: `APP_SESSION__STORE=database`,
 /// `APP_SESSION__SECURE=false`, and `APP_SESSION__CSRF_EXCEPT` as a
 /// comma-separated list.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "session", docs = "/docs/basics/sessions-and-csrf/", validate = Self::check_values)]
 #[serde(default)]
 pub struct SessionOptions {
     /// Where records are kept (default memory).
+    #[config(one_of = "memory, database, redis")]
     pub store: SessionStoreKind,
     /// The session cookie name (default `navree_session`).
+    #[config(public)]
     pub cookie: String,
     /// How long an idle session lives, in minutes (default 120). Requests
     /// extend it (at most one store write per minute when nothing else
@@ -65,6 +68,7 @@ pub struct SessionOptions {
     /// develop over plain HTTP on a host other than `localhost`).
     pub secure: bool,
     /// The `SameSite` cookie attribute (default lax).
+    #[config(one_of = "strict, lax, none")]
     pub same_site: SameSite,
     /// The `Domain` cookie attribute (default none: the API host only). Set
     /// the shared parent domain when the SPA and the API are sibling hosts,
@@ -79,7 +83,7 @@ pub struct SessionOptions {
     /// Request paths exempt from the CSRF check, as globs (`*` matches any
     /// characters, `?` one), e.g. `/webhooks/*`. A pattern without a
     /// leading `/` gets one.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub csrf_except: Vec<String>,
 }
 
@@ -98,15 +102,12 @@ impl Default for SessionOptions {
     }
 }
 
-impl ConfigSection for SessionOptions {
-    const KEY: &'static str = "session";
-
-    fn validate(&self) -> Result<(), String> {
+impl SessionOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
-}
 
-impl SessionOptions {
     /// Every problem with these options (empty when valid).
     pub(crate) fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -211,36 +212,52 @@ fn is_domain_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.')
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Entries {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let entries = match Entries::deserialize(deserializer)? {
-        Entries::List(entries) => entries,
-        Entries::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(entries
-        .into_iter()
-        .map(|entry| entry.trim().to_owned())
-        .filter(|entry| !entry.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
 
     use super::*;
 
     fn from(sources: ConfigSources) -> Result<SessionOptions, navree_config::ConfigError> {
         Config::load(&sources).unwrap().typed::<SessionOptions>()
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SessionOptions::schema().expect("schema");
+        assert_eq!(schema.key, "session");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/basics/sessions-and-csrf/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(
+            field("store").ty,
+            FieldType::choice(&["memory", "database", "redis"])
+        );
+        assert_eq!(
+            field("same_site").ty,
+            FieldType::choice(&["strict", "lax", "none"])
+        );
+        assert_eq!(field("lifetime_minutes").ty, FieldType::Integer);
+        assert_eq!(field("csrf_except").ty, FieldType::list(FieldType::String));
+        let defaults = SessionOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], "memory");
+        assert_eq!(defaults["same_site"], "lax");
+        assert_eq!(defaults["cookie"], "navree_session");
+        assert_eq!(defaults["lifetime_minutes"], 120);
+        assert_eq!(defaults["secure"], true);
     }
 
     #[test]
@@ -258,7 +275,7 @@ mod tests {
         assert_eq!(options.lifetime(), chrono::TimeDelta::minutes(120));
     }
 
-    // MOD-001: the session cookie carries the `__Host-` prefix whenever
+    // The session cookie carries the `__Host-` prefix whenever
     // browsers allow it (Secure, no Domain), so no sibling host can plant one.
     #[test]
     fn the_cookie_name_carries_the_host_prefix_when_it_can() {

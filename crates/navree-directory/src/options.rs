@@ -1,6 +1,6 @@
 //! [`DirectoryOptions`]: the `directory` configuration section.
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_integrations::Level;
 use serde::Deserialize;
 
@@ -21,7 +21,8 @@ use serde::Deserialize;
 ///
 /// Every key also comes from the environment:
 /// `APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT=10`.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "directory", docs = "/docs/packages/directory-sync/", validate = Self::check_values)]
 #[serde(default)]
 pub struct DirectoryOptions {
     /// Mount the `{http.api_prefix}/directory` routes (default true;
@@ -30,12 +31,16 @@ pub struct DirectoryOptions {
     /// Whose connections the routes manage: the request's workspace
     /// (default), its organization, or the app's own. Without
     /// `WorkspaceModule` in the app, `workspace` means the app's own.
+    #[config(one_of = "workspace, organization, app")]
     pub level: Level,
     /// The SCIM server.
+    #[config(table)]
     pub scim: ScimOptions,
     /// Sync runs.
+    #[config(table)]
     pub sync: SyncSettings,
     /// Which hosts LDAP connections may reach.
+    #[config(table)]
     pub ldap: LdapPolicy,
 }
 
@@ -55,7 +60,7 @@ impl Default for DirectoryOptions {
 /// is typed by a customer's admin, so by default it may not point at the
 /// app's own network: loopback, private, link-local and shared addresses
 /// are refused after the host name is resolved.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct LdapPolicy {
     /// Refuse hosts that resolve to loopback, private, link-local or
@@ -64,7 +69,7 @@ pub struct LdapPolicy {
     /// Hosts (names or addresses) allowed anyway: a directory on your own
     /// network (`["dc1.corp.internal"]`; a list, or a comma-separated
     /// string from the environment).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allow_hosts: Vec<String>,
 }
 
@@ -77,28 +82,8 @@ impl Default for LdapPolicy {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrCsv {
-        List(Vec<String>),
-        Csv(String),
-    }
-    Ok(match ListOrCsv::deserialize(deserializer)? {
-        ListOrCsv::List(items) => items,
-        ListOrCsv::Csv(text) => text
-            .split(',')
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    })
-}
-
 /// The SCIM server (`directory.scim`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ScimOptions {
     /// Serve SCIM (default true).
@@ -125,7 +110,7 @@ impl Default for ScimOptions {
 }
 
 /// Sync runs (`directory.sync`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SyncSettings {
     /// Minutes between a new connection's scheduled syncs (default 60;
@@ -166,6 +151,11 @@ impl Default for SyncSettings {
 }
 
 impl DirectoryOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Every problem with these options, each naming its key.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -205,19 +195,55 @@ impl DirectoryOptions {
     }
 }
 
-impl ConfigSection for DirectoryOptions {
-    const KEY: &'static str = "directory";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = DirectoryOptions::schema().expect("schema");
+        assert_eq!(schema.key, "directory");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/packages/directory-sync/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("routes").ty, FieldType::Bool);
+        assert_eq!(
+            field("level").ty,
+            FieldType::choice(&["workspace", "organization", "app"])
+        );
+        for table in ["scim", "sync", "ldap"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+            assert!(!field(table).fields.is_empty(), "{table}");
+        }
+        let allow = field("ldap")
+            .fields
+            .iter()
+            .find(|field| field.name == "allow_hosts")
+            .map(|field| field.ty.clone());
+        assert_eq!(allow, Some(FieldType::list(FieldType::String)));
+        let defaults = DirectoryOptions::defaults().expect("defaults");
+        assert_eq!(defaults["level"], "workspace");
+        assert_eq!(defaults["scim"]["path"], "/scim/v2");
+        assert_eq!(defaults["sync"]["chunk_size"], 100);
+        assert_eq!(defaults["ldap"]["block_private"], true);
+        assert!(DirectoryOptions::default().validate().is_ok());
+    }
 
     #[test]
     fn defaults_are_the_documented_ones() {

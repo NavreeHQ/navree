@@ -10,8 +10,8 @@ use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_integrations::{ModuleBuilderIntegrationsExt, Owner, ScopeSet};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::{OrganizationDeleted, WorkspaceDeleted};
@@ -82,15 +82,13 @@ impl DirectoryModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: DirectoryOptions) -> impl Module {
-        ConfiguredDirectoryModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<DirectoryModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `directory` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredDirectoryModule { options: None }
+        ConfiguredModule::<DirectoryModule, DirectoryOptions>::from_config(register)
     }
 
     /// Registers sink `S` (import it in the feature module that owns your
@@ -103,25 +101,6 @@ impl DirectoryModule {
 impl Module for DirectoryModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `DirectoryModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredDirectoryModule {
-    options: Option<DirectoryOptions>,
-}
-
-impl Module for ConfiguredDirectoryModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<DirectoryModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

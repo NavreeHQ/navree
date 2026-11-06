@@ -2,13 +2,14 @@
 
 use std::sync::Arc;
 
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{HealthCheck, HealthStatus};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Factory as ProviderFactory, Injectable,
-    Lifecycle, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver, Scope,
+    AppContext, BoxError, BoxFuture, CommandSpec, ConfiguredModule, Factory as ProviderFactory,
+    Injectable, Lifecycle, Module, ModuleBuilder, ProviderKey, Resolver, Scope,
 };
+use navree_schema::SchemaOptions;
 use navree_telemetry::Telemetry;
 
 use crate::events::publish;
@@ -58,14 +59,12 @@ pub struct DatabaseModule;
 impl DatabaseModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: DbOptions) -> impl Module {
-        ConfiguredDatabaseModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<DatabaseModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `database` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredDatabaseModule { options: None }
+        ConfiguredModule::<DatabaseModule, DbOptions>::from_config(register)
     }
 }
 
@@ -75,27 +74,11 @@ impl Module for DatabaseModule {
     }
 }
 
-/// `DatabaseModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredDatabaseModule {
-    options: Option<DbOptions>,
-}
-
-impl Module for ConfiguredDatabaseModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<DatabaseModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
-    }
-}
-
 fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
     m.global();
+    // The migrator reads the `schema` section itself, not through
+    // `m.config::<T>()`.
+    m.config_section::<SchemaOptions>();
     // Each connection is also a named `Db` provider: `default` always, the
     // named ones when the options are given in code (configured ones are
     // known only at boot; `DbConnections` reaches them). Transient, so a
@@ -124,13 +107,18 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
     }
     match options {
         Some(options) => m.value(options),
-        None => m.factory(
-            ProviderFactory::<DbOptions>::new(|r: Resolver| async move {
-                let config = r.get::<Config>().await?;
-                Ok(Arc::new(DbOptions::from_config(&config)?))
-            })
-            .deps(vec![ProviderKey::of::<Config>()]),
-        ),
+        None => {
+            // `DbOptions::from_config` reads the section itself (it also
+            // applies the logger's `slow_query_ms`).
+            m.config_section::<DbOptions>();
+            m.factory(
+                ProviderFactory::<DbOptions>::new(|r: Resolver| async move {
+                    let config = r.get::<Config>().await?;
+                    Ok(Arc::new(DbOptions::from_config(&config)?))
+                })
+                .deps(vec![ProviderKey::of::<Config>()]),
+            )
+        }
     };
     m.exports::<DbOptions>()
         .factory(

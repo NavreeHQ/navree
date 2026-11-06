@@ -8,7 +8,9 @@ use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::Encrypter;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::api::OAuthApiController;
 use crate::commands::commands;
@@ -79,41 +81,18 @@ impl OAuthServerModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: OAuthOptions) -> impl Module {
-        ConfiguredOAuthServerModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<OAuthServerModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `oauth` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredOAuthServerModule { options: None }
+        ConfiguredModule::<OAuthServerModule, OAuthOptions>::from_config(register)
     }
 }
 
 impl Module for OAuthServerModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `OAuthServerModule::for_root` / `from_config`: same module id,
-/// configured.
-struct ConfiguredOAuthServerModule {
-    /// `None`: read from configuration.
-    options: Option<OAuthOptions>,
-}
-
-impl Module for ConfiguredOAuthServerModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<OAuthServerModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
@@ -295,7 +274,6 @@ mod tests {
         assert_ne!(random.current().kid(), derived.current().kid());
     }
 
-    // CONN-105
     #[test]
     fn rs256_needs_an_rsa_key_and_the_algorithm_follows_the_key() {
         let rsa = include_str!("../tests/fixtures/rsa-2048.pem");

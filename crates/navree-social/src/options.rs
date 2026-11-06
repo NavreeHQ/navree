@@ -5,7 +5,7 @@ use std::fmt;
 
 use navree_config::ConfigSection;
 use navree_contracts::Secret;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 use crate::provider::{Kind, apple_key};
 
@@ -51,7 +51,8 @@ pub enum TwoFactorPolicy {
 /// client_id = "Iv1.8a61f9b3a7aba766"
 /// # client_secret from APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "social", docs = "/docs/packages/social-sign-in/", validate = Self::check_values)]
 #[serde(default)]
 pub struct SocialOptions {
     /// The front end's callback page: each provider's redirect URI is
@@ -63,17 +64,20 @@ pub struct SocialOptions {
     /// `auth.registration`.
     pub registration: Option<bool>,
     /// Whether a verified provider email links to the user with that email.
+    #[config(one_of = "verified, never")]
     pub link_by_email: LinkByEmail,
     /// When not empty, only these email domains may sign in or sign up
     /// (with a verified address). A list, or a comma-separated string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allowed_email_domains: Vec<String>,
     /// Two-factor authentication on social sign-ins.
+    #[config(one_of = "require, skip")]
     pub two_factor: TwoFactorPolicy,
     /// The lifetime of a sealed state, in seconds.
     pub state_ttl_secs: u64,
     /// Whether provider tokens are stored (encrypted) for
     /// [`Social::token`](crate::Social::token).
+    #[config(public)]
     pub store_tokens: bool,
     /// The providers, by key (`github`, `okta`).
     pub providers: BTreeMap<String, ProviderConfig>,
@@ -96,6 +100,11 @@ impl Default for SocialOptions {
 }
 
 impl SocialOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Every problem with the options, naming the configuration keys (never
     /// a secret value).
     pub fn check(&self) -> Result<(), Vec<String>> {
@@ -135,14 +144,6 @@ impl SocialOptions {
     }
 }
 
-impl ConfigSection for SocialOptions {
-    const KEY: &'static str = "social";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 /// One provider (`social.providers.<key>`).
 ///
 /// Every provider takes `client_id`, `client_secret` (from the
@@ -178,7 +179,7 @@ pub struct ProviderConfig {
     /// from `private_key`.
     pub client_secret: Option<Secret<String>>,
     /// Extra scopes, requested in addition to the provider's defaults.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub scopes: Vec<String>,
     /// Extra authorization URL parameters (`prompt = "consent"`).
     pub params: BTreeMap<String, String>,
@@ -188,7 +189,7 @@ pub struct ProviderConfig {
     pub issuer: Option<String>,
     /// When not empty, only these email domains may sign in or sign up with
     /// this provider.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allowed_email_domains: Vec<String>,
     /// Whether to send a PKCE challenge (S256).
     pub pkce: bool,
@@ -392,29 +393,9 @@ pub(crate) fn is_http_url(value: &str) -> bool {
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Items {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let items = match Items::deserialize(deserializer)? {
-        Items::List(items) => items,
-        Items::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde_json::json;
 
     use super::*;
@@ -423,6 +404,72 @@ mod tests {
         let config = Config::load(&ConfigSources::new().set("social", value))
             .map_err(|error| error.to_string())?;
         config.typed::<SocialOptions>().map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SocialOptions::schema().expect("schema");
+        assert_eq!(schema.key, "social");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/packages/social-sign-in/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("redirect_base").ty, FieldType::String);
+        assert_eq!(field("routes").ty, FieldType::Bool);
+        assert_eq!(field("state_ttl_secs").ty, FieldType::Integer);
+        assert_eq!(
+            field("link_by_email").ty,
+            FieldType::choice(&["verified", "never"])
+        );
+        assert_eq!(
+            field("two_factor").ty,
+            FieldType::choice(&["require", "skip"])
+        );
+        assert_eq!(
+            field("allowed_email_domains").ty,
+            FieldType::list(FieldType::String)
+        );
+        let defaults = SocialOptions::defaults().expect("defaults");
+        assert_eq!(defaults["routes"], true);
+        assert_eq!(defaults["link_by_email"], "verified");
+        assert_eq!(defaults["two_factor"], "require");
+        assert_eq!(defaults["state_ttl_secs"], 600);
+    }
+
+    #[test]
+    fn provider_credentials_never_print() {
+        let options: SocialOptions = serde_json::from_value(json!({
+            "redirect_base": "https://app.acme.test/cb",
+            "providers": {
+                "github": { "client_id": "abc", "client_secret": "s3cret-value" },
+                "apple": { "client_id": "a", "private_key": "-----BEGIN PRIVATE KEY-----" }
+            }
+        }))
+        .unwrap();
+        assert_eq!(options.providers.len(), 2);
+        let text = format!("{options:?}");
+        assert!(!text.contains("s3cret-value"), "{text}");
+        assert!(!text.contains("BEGIN PRIVATE KEY"), "{text}");
+        let provider = ProviderConfig {
+            client_secret: Some(Secret::new("s3cret-value".to_owned())),
+            private_key: Some(Secret::new("-----BEGIN PRIVATE KEY-----".to_owned())),
+            ..ProviderConfig::default()
+        };
+        let text = format!("{provider:?}");
+        assert!(!text.contains("s3cret-value"), "{text}");
+        assert!(!text.contains("BEGIN PRIVATE KEY"), "{text}");
     }
 
     #[test]

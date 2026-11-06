@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
 use serde::Deserialize;
 
@@ -84,10 +84,12 @@ pub const MIN_SECRET_LEN: usize = 32;
 /// lifetime_hours = 24             # the longest a sign-in lasts without "remember me"
 /// remember_days = 30              # how long "remember me" keeps a browser signed in
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "auth", docs = "/docs/security/authentication/", validate = Self::check_values)]
 #[serde(default)]
 pub struct AuthOptions {
     /// JWT access tokens and refresh tokens.
+    #[config(table)]
     pub jwt: JwtOptions,
     /// Whether `POST /auth/register` is mounted (public sign-up).
     pub registration: bool,
@@ -97,33 +99,43 @@ pub struct AuthOptions {
     /// (`http.rate_limit_ipv6_prefix`, a /64 by default).
     pub login_throttle_per_minute: u32,
     /// The shortest accepted password, in characters.
+    #[config(public)]
     pub password_min_length: usize,
     /// The path of the auth routes under the API prefix (`/auth` mounts
     /// `/api/auth/login`).
     pub routes_prefix: String,
     /// Password reset (`POST /auth/forgot-password`, `POST
     /// /auth/reset-password`).
+    #[config(table, public)]
     pub password_reset: PasswordResetOptions,
     /// Email verification (`POST /auth/email/verification`, `GET
     /// /auth/email/verify/{id}/{hash}`).
+    #[config(table)]
     pub verification: VerificationOptions,
     /// TOTP two-factor authentication (`/auth/2fa/*`).
+    #[config(table)]
     pub two_factor: TwoFactorOptions,
     /// Impersonation (`POST /auth/impersonate/{user}`).
+    #[config(table)]
     pub impersonation: ImpersonationOptions,
     /// Magic links (`POST /auth/magic-link`).
+    #[config(table)]
     pub magic_link: MagicLinkOptions,
     /// Emailed sign-in codes (`POST /auth/otp`).
+    #[config(table)]
     pub otp: OtpOptions,
     /// The platform audience for platform administrators
     /// (`POST /auth/platform/login`).
+    #[config(table)]
     pub platform: PlatformOptions,
     /// Sibling systems whose signed tokens `POST /auth/exchange` accepts,
     /// by name.
     pub trusted_issuers: BTreeMap<String, TrustedIssuerOptions>,
     /// Passkeys (WebAuthn, `/auth/passkeys/*`).
+    #[config(table)]
     pub passkeys: PasskeyOptions,
     /// Browsers signed in on the session cookie (the `session` feature).
+    #[config(table)]
     pub session: SessionAuthOptions,
 }
 
@@ -156,7 +168,7 @@ impl Default for AuthOptions {
 /// A sign-in also ends when the session itself ends: after
 /// `session.lifetime_minutes` without a request, unless the person ticked
 /// "remember me".
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SessionAuthOptions {
     /// The longest a sign-in lasts without "remember me", however busy the
@@ -194,6 +206,11 @@ impl SessionAuthOptions {
 const MAX_SESSION_HOURS: u64 = 366 * 24;
 
 impl AuthOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Every problem with the options, naming the configuration keys (never
     /// a secret value).
     pub fn check(&self) -> Result<(), Vec<String>> {
@@ -361,16 +378,8 @@ fn is_http_url(url: &str) -> bool {
         .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
 }
 
-impl ConfigSection for AuthOptions {
-    const KEY: &'static str = "auth";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 /// JWT options (configuration section `auth.jwt`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct JwtOptions {
     /// The HS256 signing secret (at least [`MIN_SECRET_LEN`] bytes). When
@@ -404,22 +413,26 @@ impl Default for JwtOptions {
 pub const MAX_RECOVERY_CODES: usize = 32;
 
 /// Password reset options (configuration section `auth.password_reset`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PasswordResetOptions {
     /// How long a reset token is valid, in seconds.
+    #[config(public)]
     pub ttl_secs: u64,
     /// The shortest time between two reset mails to the same address, in
     /// seconds (requests in between are accepted but send nothing); `0`
     /// sends a mail for every request.
+    #[config(public)]
     pub throttle_secs: u64,
     /// The front-end page the mail links to, as `{url}?token=..&email=..`;
     /// the page posts the new password to `POST /auth/reset-password`.
     /// Without it the mail carries the token alone (API and mobile clients).
+    #[config(public)]
     pub url: Option<String>,
     /// A navree-view template pair (`{template}.html` / `.txt`) for the mail,
     /// rendered with `{name, email, token, url, expires_in_minutes}` (`url`
     /// is empty without [`url`](Self::url)); built-in text when unset.
+    #[config(public)]
     pub mail_template: Option<String>,
 }
 
@@ -435,7 +448,7 @@ impl Default for PasswordResetOptions {
 }
 
 /// Email verification options (configuration section `auth.verification`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct VerificationOptions {
     /// How long a verification link is valid, in seconds.
@@ -461,7 +474,7 @@ impl Default for VerificationOptions {
 }
 
 /// TOTP two-factor options (configuration section `auth.two_factor`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TwoFactorOptions {
     /// The issuer shown in authenticator apps (`otpauth://totp/{issuer}:{email}`).
@@ -494,7 +507,7 @@ impl Default for TwoFactorOptions {
 }
 
 /// Impersonation options (configuration section `auth.impersonation`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ImpersonationOptions {
     /// Whether `POST /auth/impersonate/{user}` and `DELETE
@@ -519,7 +532,7 @@ impl Default for ImpersonationOptions {
 }
 
 /// Magic link options (configuration section `auth.magic_link`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MagicLinkOptions {
     /// Whether `POST /auth/magic-link` and `POST /auth/magic-link/verify`
@@ -553,7 +566,7 @@ impl Default for MagicLinkOptions {
 }
 
 /// Emailed sign-in code options (configuration section `auth.otp`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct OtpOptions {
     /// Whether `POST /auth/otp` and `POST /auth/otp/verify` are mounted.
@@ -587,7 +600,7 @@ impl Default for OtpOptions {
 /// Platform audience options (configuration section `auth.platform`):
 /// platform administrators sign in apart from the app, with two-factor
 /// authentication always.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PlatformOptions {
     /// Whether `POST /auth/platform/login` and `POST
@@ -689,7 +702,7 @@ impl TrustedIssuerOptions {
 }
 
 /// Passkey options (configuration section `auth.passkeys`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PasskeyOptions {
     /// Whether the `/auth/passkeys/*` routes are mounted.
@@ -706,6 +719,7 @@ pub struct PasskeyOptions {
     pub timeout_secs: u64,
     /// `required`, `preferred` or `discouraged`: whether authenticators
     /// must verify the user (PIN, biometrics).
+    #[config(one_of = "required, preferred, discouraged")]
     pub user_verification: String,
 }
 
@@ -724,13 +738,71 @@ impl Default for PasskeyOptions {
 
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde_json::json;
 
     use super::*;
 
     fn load(sources: ConfigSources) -> Result<AuthOptions, navree_config::ConfigError> {
         Config::load(&sources).unwrap().typed::<AuthOptions>()
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = AuthOptions::schema().expect("schema");
+        assert_eq!(schema.key, "auth");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/security/authentication/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert_eq!(schema.secret_paths(), ["auth.jwt.secret"]);
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("registration").ty, FieldType::Bool);
+        assert_eq!(field("routes_prefix").ty, FieldType::String);
+        assert_eq!(field("password_min_length").ty, FieldType::Integer);
+        for table in [
+            "jwt",
+            "password_reset",
+            "verification",
+            "two_factor",
+            "impersonation",
+            "magic_link",
+            "otp",
+            "platform",
+            "passkeys",
+            "session",
+        ] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+            assert!(!field(table).fields.is_empty(), "{table}");
+        }
+        let verification = field("passkeys")
+            .fields
+            .iter()
+            .find(|field| field.name == "user_verification")
+            .map(|field| field.ty.clone());
+        assert_eq!(
+            verification,
+            Some(FieldType::choice(&["required", "preferred", "discouraged"]))
+        );
+        let defaults = AuthOptions::defaults().expect("defaults");
+        assert_eq!(defaults["registration"], true);
+        assert_eq!(defaults["routes_prefix"], "/auth");
+        assert_eq!(defaults["jwt"]["issuer"], "navree");
+        assert_eq!(defaults["jwt"]["secret"], serde_json::Value::Null);
+        assert_eq!(defaults["jwt"]["access_ttl_secs"], 900);
+        assert_eq!(defaults["platform"]["roles"], json!(["platform-admin"]));
+        assert_eq!(defaults["session"]["remember_days"], 30);
     }
 
     #[test]
@@ -935,8 +1007,7 @@ mod tests {
         assert!(error.contains("auth.platform.roles"), "{error}");
     }
 
-    // How long a browser stays signed in, with and without
-    // "remember me".
+    // How long a browser stays signed in, with and without "remember me".
     #[test]
     fn browser_sign_in_lifetimes_are_read_and_checked() {
         let options = load(ConfigSources::new()).unwrap();

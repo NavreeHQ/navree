@@ -42,7 +42,8 @@ pub const DEFAULT_CONNECTION: &str = "default";
 /// `APP_DATABASE__MONGODB__DATABASE`, ... The URL's own options
 /// (`?replicaSet=rs0&tls=true&authSource=admin`) apply too; the keys above
 /// win over them. `Debug` masks URL passwords.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "database.mongodb", docs = "/docs/orm/mongodb/", validate = Self::check_values)]
 #[serde(default)]
 pub struct MongoOptions {
     /// The connection string (default `mongodb://127.0.0.1:27017/navree`):
@@ -312,10 +313,9 @@ impl MongoOptions {
     }
 }
 
-impl ConfigSection for MongoOptions {
-    const KEY: &'static str = "database.mongodb";
-
-    fn validate(&self) -> Result<(), String> {
+impl MongoOptions {
+    /// Checks the values and joins the problems (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|problems| problems.join("; "))
     }
 }
@@ -444,12 +444,50 @@ fn acknowledgment(w: &str) -> Acknowledgment {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
 
     #[test]
     fn defaults_are_valid() {
         assert!(MongoOptions::default().check().is_ok());
         assert_eq!(MongoOptions::new("mongodb://h/x").url, "mongodb://h/x");
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = MongoOptions::schema().expect("schema");
+        assert_eq!(schema.key, "database.mongodb");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/orm/mongodb/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("url").ty, FieldType::String);
+        assert_eq!(field("max_pool_size").ty, FieldType::Integer);
+        assert_eq!(field("journal").ty, FieldType::Bool);
+        assert_eq!(
+            field("connections").ty,
+            FieldType::map(FieldType::other("MongoConnectionOptions"))
+        );
+        let defaults = MongoOptions::defaults().expect("defaults");
+        assert_eq!(defaults["url"], "mongodb://127.0.0.1:27017/navree");
+        assert_eq!(defaults["connect_timeout_ms"], 10_000);
+        assert_eq!(defaults["sequences"], "navree_sequences");
+        // The check the boot runs is the one the section names.
+        let bad = MongoOptions {
+            connect_timeout_ms: 0,
+            ..MongoOptions::default()
+        };
+        assert!(bad.validate().unwrap_err().contains("connect_timeout_ms"));
     }
 
     #[test]

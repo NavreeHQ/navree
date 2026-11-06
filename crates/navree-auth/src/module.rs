@@ -7,7 +7,9 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_crypto::{Encrypter, random_token};
 use navree_db::ModuleBuilderDbExt;
 use navree_http::{Authenticator, HttpOptions, ModuleBuilderHttpExt};
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::account_controller::AccountController;
 use crate::controller::AuthController;
@@ -78,40 +80,18 @@ pub struct AuthModule;
 impl AuthModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: AuthOptions) -> impl Module {
-        ConfiguredAuthModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<AuthModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `auth` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredAuthModule { options: None }
+        ConfiguredModule::<AuthModule, AuthOptions>::from_config(register)
     }
 }
 
 impl Module for AuthModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `AuthModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredAuthModule {
-    /// `None`: read from configuration.
-    options: Option<AuthOptions>,
-}
-
-impl Module for ConfiguredAuthModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<AuthModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
-use navree_config::{Config, ConfigError, ConfigSection};
+use navree_config::{Config, ConfigError, ConfigSection, ConfigTable};
 use serde::{Deserialize, Deserializer};
 
 /// The settings of `DatabaseModule`: the `database` configuration section.
@@ -69,7 +69,8 @@ use serde::{Deserialize, Deserializer};
 /// assert!(options.mysql.strict);
 /// assert_eq!(options.redacted_url(), "mysql://crm:***@db.internal:3306/crm");
 /// ```
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "database", docs = "/docs/database/getting-started/", validate = Self::check_values)]
 #[serde(default)]
 pub struct DbOptions {
     /// The connection URL (`postgres://...` for TimescaleDB or PostgreSQL,
@@ -82,7 +83,7 @@ pub struct DbOptions {
     /// Read replicas of the database at `url`: reads outside a
     /// transaction go to them in turn, writes and transactions to `url`.
     /// From the environment, a comma-separated list.
-    #[serde(deserialize_with = "list_from_list_or_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub read_urls: Vec<String>,
     /// After a unit of work wrote, its task reads from the writer, so a
     /// request sees its own writes while replicas catch up (default
@@ -127,11 +128,14 @@ pub struct DbOptions {
     pub transaction_settings: bool,
     /// MySQL and MariaDB settings (`database.mysql`); other databases
     /// ignore them.
+    #[config(table)]
     pub mysql: MySqlOptions,
     /// PostgreSQL settings (`database.postgres`); other databases ignore
     /// them.
+    #[config(table)]
     pub postgres: PostgresOptions,
     /// SQLite settings (`database.sqlite`); other databases ignore them.
+    #[config(table)]
     pub sqlite: SqliteOptions,
     /// Further databases by name (`[database.connections.analytics]`), each
     /// with options of its own, connected on first use through
@@ -177,12 +181,12 @@ impl Default for DbOptions {
 /// isolation_level = "read_committed"
 /// ssl_mode = "prefer"
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PostgresOptions {
     /// The schemas unqualified names resolve in, in order (`search_path`).
     /// From the environment, a comma-separated list.
-    #[serde(deserialize_with = "list_from_list_or_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub search_path: Vec<String>,
     /// The session's time zone (`TimeZone`), e.g. `UTC` or
     /// `Europe/Berlin`.
@@ -192,12 +196,15 @@ pub struct PostgresOptions {
     pub application_name: Option<String>,
     /// `synchronous_commit`: `on`, `off`, `local`, `remote_write` or
     /// `remote_apply`.
+    #[config(one_of = "on, off, local, remote_write, remote_apply")]
     pub synchronous_commit: Option<String>,
     /// The isolation level transactions start with
     /// (`default_transaction_isolation`).
+    #[config(one_of = "read_uncommitted, read_committed, repeatable_read, serializable")]
     pub isolation_level: Option<IsolationLevel>,
     /// TLS: `disable`, `allow`, `prefer` (the default), `require`,
     /// `verify-ca` or `verify-full`; overrides the URL's `sslmode`.
+    #[config(one_of = "disable, allow, prefer, require, verify-ca, verify-full")]
     pub ssl_mode: Option<String>,
 }
 
@@ -297,7 +304,7 @@ impl PostgresOptions {
 /// In-memory databases are URLs (`sqlite::memory:` for one connection,
 /// `sqlite:file:name?mode=memory&cache=shared` for a shared one); `mode=rwc`
 /// creates the file (and navree-db its directory).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SqliteOptions {
     /// The journal mode (default `wal`).
@@ -406,7 +413,7 @@ fn is_name(name: &str) -> bool {
 /// };
 /// assert_eq!(legacy.modes, None);
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MySqlOptions {
     /// Strict SQL mode for every connection (default `true`): the session
@@ -427,12 +434,13 @@ pub struct MySqlOptions {
     /// list clears the SQL mode. `None` (the default) leaves the mode to
     /// [`strict`](MySqlOptions::strict). Each entry must be a mode name:
     /// letters, digits and underscores.
-    #[serde(deserialize_with = "modes_from_list_or_string")]
+    #[serde(deserialize_with = "navree_config::comma_list_opt")]
     pub modes: Option<Vec<String>>,
     /// The transaction isolation level of every connection
     /// (`"read_committed"`, `"REPEATABLE READ"`, ...). `None` (the default)
     /// keeps the server's, which is `REPEATABLE READ` unless configured
     /// otherwise.
+    #[config(one_of = "read_uncommitted, read_committed, repeatable_read, serializable")]
     pub isolation_level: Option<IsolationLevel>,
 }
 
@@ -467,62 +475,6 @@ impl MySqlOptions {
 fn is_mode_name(mode: &str) -> bool {
     mode.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
         && mode.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// `modes` as a list (`["A", "B"]`) or a comma-separated string (`"A,B"`,
-/// the form an environment variable takes); entries are trimmed and empty
-/// ones dropped.
-fn modes_from_list_or_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Modes {
-        List(Vec<String>),
-        Text(String),
-    }
-
-    let modes = match Option::<Modes>::deserialize(deserializer)? {
-        None => return Ok(None),
-        Some(Modes::List(list)) => list,
-        Some(Modes::Text(text)) => text.split(',').map(str::to_owned).collect(),
-    };
-    Ok(Some(
-        modes
-            .iter()
-            .map(|mode| mode.trim())
-            .filter(|mode| !mode.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    ))
-}
-
-/// A list given as a list (`["a", "b"]`) or as a comma-separated string
-/// (`"a,b"`, the form an environment variable takes); entries are trimmed
-/// and empty ones dropped.
-fn list_from_list_or_string<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum List {
-        Items(Vec<String>),
-        Text(String),
-    }
-
-    let items = match Option::<List>::deserialize(deserializer)? {
-        None => return Ok(Vec::new()),
-        Some(List::Items(items)) => items,
-        Some(List::Text(text)) => text
-            .split(',')
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    };
-    Ok(items)
 }
 
 /// A transaction isolation level: what one transaction sees of others'
@@ -664,10 +616,9 @@ impl DbOptions {
     }
 }
 
-impl ConfigSection for DbOptions {
-    const KEY: &'static str = "database";
-
-    fn validate(&self) -> Result<(), String> {
+impl DbOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         let mut problems = Vec::new();
         if self.url.trim().is_empty() {
             problems.push("url must not be empty".to_owned());
@@ -706,7 +657,7 @@ impl ConfigSection for DbOptions {
             if !connection.connections.is_empty() {
                 problems.push(format!("connections.{name}: connections cannot be nested"));
             }
-            if let Err(nested) = connection.validate() {
+            if let Err(nested) = connection.check_values() {
                 problems.push(format!("connections.{name}: {nested}"));
             }
         }
@@ -818,6 +769,8 @@ fn password_range(url: &str) -> Option<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
 
     #[test]
@@ -1015,5 +968,60 @@ mod tests {
             ..DbOptions::default()
         };
         assert!(options.validate().unwrap_err().contains("min_connections"));
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = DbOptions::schema().expect("schema");
+        assert_eq!(schema.key, "database");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/database/getting-started/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("no field {name}"))
+        };
+        assert_eq!(field("url").ty, FieldType::String);
+        assert_eq!(field("read_urls").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("max_connections").ty, FieldType::Integer);
+        assert_eq!(
+            field("connections").ty,
+            FieldType::map(FieldType::other("DbOptions"))
+        );
+        for table in ["mysql", "postgres", "sqlite"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+            assert!(!field(table).fields.is_empty(), "{table}");
+        }
+        let levels = FieldType::choice(&[
+            "read_uncommitted",
+            "read_committed",
+            "repeatable_read",
+            "serializable",
+        ]);
+        let isolation = |table: &str| {
+            field(table)
+                .fields
+                .iter()
+                .find(|field| field.name == "isolation_level")
+                .map(|field| field.ty.clone())
+        };
+        assert_eq!(isolation("mysql"), Some(levels.clone()));
+        assert_eq!(isolation("postgres"), Some(levels));
+
+        let defaults = DbOptions::defaults().expect("defaults");
+        assert_eq!(defaults["url"], "sqlite://storage/app.db?mode=rwc");
+        assert_eq!(defaults["max_connections"], 10);
+        assert_eq!(defaults["read_urls"], serde_json::json!([]));
+        assert_eq!(defaults["mysql"]["strict"], true);
+        assert_eq!(defaults["sqlite"]["journal_mode"], "wal");
     }
 }

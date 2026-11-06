@@ -8,7 +8,9 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_crypto::{Encrypter, Hasher};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::controller::SocialController;
 use crate::error::map_social_error;
@@ -66,14 +68,12 @@ impl SocialModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: SocialOptions) -> impl Module {
-        ConfiguredSocialModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<SocialModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `social` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredSocialModule { options: None }
+        ConfiguredModule::<SocialModule, SocialOptions>::from_config(register)
     }
 
     /// Registers the provider `P` (configured as
@@ -86,26 +86,6 @@ impl SocialModule {
 impl Module for SocialModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `SocialModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredSocialModule {
-    /// `None`: read from configuration.
-    options: Option<SocialOptions>,
-}
-
-impl Module for ConfiguredSocialModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<SocialModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
