@@ -9,13 +9,21 @@ use navree_kernel::{AppContext, BoxError, CommandSpec};
 use crate::check::{CheckOptions, CheckReport};
 use crate::publish::{PublishOptions, run as publish_section};
 use crate::show::{ShowOptions, render_fallbacks, render_with};
-use crate::{Config, ConfigRegistry, ConfigSources, SectionRegistration};
+use crate::{Config, ConfigClaim, ConfigRegistry, ConfigSources, SectionRegistration};
 
 /// The sections the app registered, without booting it.
 fn registrations(ctx: &AppContext) -> Vec<SectionRegistration> {
     ctx.contributions::<SectionRegistration>()
         .into_iter()
         .map(|contributed| (*contributed.value).clone())
+        .collect()
+}
+
+/// The keys the modules claimed.
+fn claims(ctx: &AppContext) -> Vec<String> {
+    ctx.contributions::<ConfigClaim>()
+        .into_iter()
+        .map(|contributed| contributed.value.key().to_owned())
         .collect()
 }
 
@@ -96,7 +104,12 @@ pub(crate) fn check() -> CommandSpec {
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
             let sources = ctx.get::<ConfigSources>().await?;
-            let report = CheckReport::run(&sources, &registrations(&ctx), &options)?;
+            let report = CheckReport::run_with_claims(
+                &sources,
+                &registrations(&ctx),
+                &claims(&ctx),
+                &options,
+            )?;
             print!("{}", report.render());
             if report.is_ok() {
                 Ok(())

@@ -72,6 +72,36 @@ impl SectionRegistration {
     }
 }
 
+/// A key, and everything below it, that a module reads by itself in a way
+/// the notes of the configuration cannot see (a billing provider that reads
+/// `billing.<name>` when it is built). `config:check` and the boot do not
+/// report such keys as unknown.
+///
+/// A module contributes it with
+/// [`ModuleBuilderConfigExt::config_claim`](crate::ModuleBuilderConfigExt::config_claim).
+///
+/// ```
+/// use navree_config::ConfigClaim;
+///
+/// assert_eq!(ConfigClaim::new("billing.razorpay").key(), "billing.razorpay");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfigClaim {
+    key: String,
+}
+
+impl ConfigClaim {
+    /// A claim on `key`.
+    pub fn new(key: impl Into<String>) -> Self {
+        ConfigClaim { key: key.into() }
+    }
+
+    /// The claimed key.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+}
+
 /// One section in a [`ConfigRegistry`].
 #[derive(Clone, Debug)]
 pub struct SectionInfo {

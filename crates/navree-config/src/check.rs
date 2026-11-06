@@ -86,13 +86,27 @@ impl CheckReport {
         registrations: &[SectionRegistration],
         options: &CheckOptions,
     ) -> Result<CheckReport, ConfigError> {
+        Self::run_with_claims(sources, registrations, &[], options)
+    }
+
+    /// Like [`run`](CheckReport::run), with `claims`: keys, and the keys
+    /// below them, that modules read by themselves (see
+    /// [`ConfigClaim`](crate::ConfigClaim)) and that are not unknown.
+    pub fn run_with_claims(
+        sources: &ConfigSources,
+        registrations: &[SectionRegistration],
+        claims: &[String],
+        options: &CheckOptions,
+    ) -> Result<CheckReport, ConfigError> {
         let sources = match &options.environment {
             Some(name) => sources.clone().set("app.env", name.as_str()),
             None => sources.clone(),
         };
         let config = Config::load(&sources)?;
         let errors = problems(&config, registrations);
-        let unknown = config.unused_with(FRAMEWORK_SECTIONS);
+        let mut known: Vec<&str> = FRAMEWORK_SECTIONS.to_vec();
+        known.extend(claims.iter().map(String::as_str));
+        let unknown = config.unused_with(&known);
         let shadowed = config.shadowed().to_vec();
         let environment = config.environment();
         let profile = if environment

@@ -142,17 +142,19 @@ impl BillingModule {
             let built = factory(context);
             async move { Ok(Arc::new(built.await?) as Arc<dyn BillingProvider>) }
         });
-        ProviderFeature::<P>(registration, PhantomData)
+        ProviderFeature::<P>(registration, name.to_owned(), PhantomData)
     }
 }
 
 /// `BillingModule::provider::<P>(name, factory)`: one module per provider
 /// type.
-struct ProviderFeature<P>(ProviderRegistration, PhantomData<fn() -> P>);
+struct ProviderFeature<P>(ProviderRegistration, String, PhantomData<fn() -> P>);
 
 impl<P: BillingProvider> Module for ProviderFeature<P> {
     fn register(&self, m: &mut ModuleBuilder) {
         m.contribute(self.0.clone());
+        // The provider reads `billing.<name>` when it is built.
+        m.config_claim(&format!("billing.{}", self.1));
     }
 }
 

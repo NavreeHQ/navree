@@ -8,7 +8,7 @@ use navree_kernel::{
 };
 use serde::de::DeserializeOwned;
 
-use crate::registry::{SectionRegistration, boot_error};
+use crate::registry::{ConfigClaim, SectionRegistration, boot_error};
 use crate::schema::SectionSchema;
 use crate::{AppOptions, Config, ConfigSources, commands};
 
@@ -86,13 +86,19 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
         .factory(
             Factory::<ConfigDiagnostics>::new(|r: Resolver| async move {
                 // A registered section is never a typo, also when an app
-                // replaced the provider that reads it (a test's fake).
-                let claims = r
-                    .app()
+                // replaced the provider that reads it (a test's fake); nor
+                // is a key a module claimed.
+                let app = r.app();
+                let mut claims: Vec<String> = app
                     .contributions::<SectionRegistration>()
                     .into_iter()
-                    .map(|contributed| contributed.value.key())
+                    .map(|contributed| contributed.value.key().to_owned())
                     .collect();
+                claims.extend(
+                    app.contributions::<ConfigClaim>()
+                        .into_iter()
+                        .map(|contributed| contributed.value.key().to_owned()),
+                );
                 Ok(Arc::new(ConfigDiagnostics {
                     config: r.get::<Config>().await?,
                     claims,
@@ -122,8 +128,9 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
 /// the boot instead of being logged.
 struct ConfigDiagnostics {
     config: Arc<Config>,
-    /// The keys of the sections the modules registered.
-    claims: Vec<&'static str>,
+    /// The keys of the sections the modules registered, and the keys they
+    /// claimed.
+    claims: Vec<String>,
 }
 
 impl Lifecycle for ConfigDiagnostics {
@@ -141,7 +148,8 @@ impl Lifecycle for ConfigDiagnostics {
                     shadow.message()
                 );
             }
-            for unused in self.config.unused_with(&self.claims) {
+            let claims: Vec<&str> = self.claims.iter().map(String::as_str).collect();
+            for unused in self.config.unused_with(&claims) {
                 tracing::warn!(
                     target: "navree::config",
                     key = %unused.key,
@@ -306,6 +314,12 @@ pub trait ModuleBuilderConfigExt {
     /// from [`Config::typed`], or from code), so `config:check`,
     /// `config:show` and the reference still know the section and its keys.
     fn config_section<T: ConfigSection>(&mut self) -> &mut Self;
+
+    /// Claims `key` and the keys below it: the module reads them in a way
+    /// the configuration cannot see, so `config:check` and the boot leave
+    /// them out of the report on unknown keys. For a key that is not a
+    /// registered section, such as `billing.<provider>`.
+    fn config_claim(&mut self, key: &str) -> &mut Self;
 }
 
 impl ModuleBuilderConfigExt for ModuleBuilder {
@@ -333,6 +347,11 @@ impl ModuleBuilderConfigExt for ModuleBuilder {
 
     fn config_section<T: ConfigSection>(&mut self) -> &mut Self {
         self.contribute(SectionRegistration::of::<T>());
+        self
+    }
+
+    fn config_claim(&mut self, key: &str) -> &mut Self {
+        self.contribute(ConfigClaim::new(key));
         self
     }
 }

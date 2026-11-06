@@ -3,6 +3,7 @@
 
 mod app_section;
 mod check;
+mod claims;
 mod collected_errors;
 mod environment;
 mod environments;
