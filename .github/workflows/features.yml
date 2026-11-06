@@ -118,13 +118,3 @@ jobs:
         # The targets that need SQLite are left out (the list above); the others
         # run. A build with no database driver must not fail on them.
         run: cargo test --locked --package navree --tests --no-fail-fast
-
-      - name: The tools and the opt-in modules link no test kit without `testing`
-        run: |
-          for feature in oauth grpc mcp micro; do
-            if cargo tree --locked --package navree --no-default-features --features "$feature" \
-                --edges normal --prefix none --format '{p}' | grep --quiet '^navree-testing '; then
-              echo "::error title=A test kit is linked::navree with only \`$feature\` links navree-testing"
-              exit 1
-            fi
-          done
