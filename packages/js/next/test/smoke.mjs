@@ -26,11 +26,20 @@ if (!process.argv.includes("--no-build")) {
 
 const api = await serveFakeNavree({
   "POST /api/auth/login": () => Response.json({ user, ...tokenPair(1) }),
-  "POST /api/auth/refresh": (call) => (JSON.parse(call.body).refresh_token === "RT0" ? Response.json(tokenPair(1)) : unauthorized()),
+  "POST /api/auth/refresh": (call) => {
+    const token = JSON.parse(call.body).refresh_token;
+    // RT-DOWN: an API that is up but failing, which says nothing about the session.
+    if (token === "RT-DOWN") return new Response(null, { status: 503 });
+    return token === "RT0" ? Response.json(tokenPair(1)) : unauthorized();
+  },
   "GET /api/auth/me": (call) => (call.headers.get("authorization") === "Bearer AT1" ? Response.json(user) : unauthorized()),
   "GET /api/v1/deals": (call) => Response.json({ auth: call.headers.get("authorization"), workspace: call.headers.get("x-workspace") }),
   "GET /admin/users": () =>
     new Response("<h1>Users</h1>", { headers: { "content-type": "text/html", "content-security-policy": "default-src 'self'" } }),
+  "GET /api/auth/social/github/redirect": () =>
+    Response.json({ url: "https://github.com/login/oauth/authorize?state=S1", state: "S1" }),
+  "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/?from=github" }),
+  "GET /api/auth/email/verify/u1/h1": () => new Response(null, { status: 204 }),
   "POST /broadcasting/auth": () => Response.json({ auth: "app-key:sig" }),
 });
 
@@ -131,6 +140,39 @@ check("channel authorization goes through the BFF", async () => {
   });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { auth: "app-key:sig" });
+});
+
+check("social sign-in starts at the provider, comes back with the state and signs in", async () => {
+  const start = await fetch(`${base}/auth/social/github?next=/`, { headers: html, redirect: "manual" });
+  assert.equal(start.status, 303);
+  assert.equal(start.headers.get("location"), "https://github.com/login/oauth/authorize?state=S1");
+  const state = readSetCookies(start).navree_social;
+  assert.equal(state.value, "S1");
+  assert.ok(state.attrs.includes("Path=/auth/callback") && state.attrs.includes("HttpOnly"));
+
+  const back = await fetch(`${base}/auth/callback/github?code=C1&state=S1`, {
+    headers: { ...html, cookie: "navree_social=S1" },
+    redirect: "manual",
+  });
+  assert.equal(back.status, 303);
+  assert.equal(back.headers.get("location"), "/?from=github");
+  assert.equal(readSetCookies(back).navree_at.value, "AT1");
+
+  const forged = await fetch(`${base}/auth/callback/github?code=C1&state=S1`, { headers: html, redirect: "manual" });
+  assert.equal(forged.headers.get("location"), "/login?error=social_state");
+});
+
+check("the link in the verification mail ends on the verify-email page", async () => {
+  const response = await fetch(`${base}/api/auth/email/verify/u1/h1?expires=1&signature=s`, { headers: html, redirect: "manual" });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/verify-email?status=verified");
+});
+
+check("a token that can't be refreshed because the API is down keeps its cookies and serves the page", async () => {
+  const stale = unsignedJwt({ sub: "u1", exp: Math.floor(Date.now() / 1000) - 60 });
+  const response = await fetch(`${base}/about`, { headers: { ...html, cookie: `navree_at=${stale}; navree_rt=RT-DOWN` } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.headers.getSetCookie(), []);
 });
 
 let failed = 0;

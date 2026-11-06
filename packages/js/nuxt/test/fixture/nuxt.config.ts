@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   navree: {
     apiUrl: "http://127.0.0.1:9",
     mounts: ["/admin"],
+    social: true,
     sessionGate: { loginPath: "/login", publicPaths: ["/about"] },
     realtime: { key: "app-key", wsHost: "127.0.0.1", wsPort: 9 },
     abilities: true,
