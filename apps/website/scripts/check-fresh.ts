@@ -143,7 +143,9 @@ const architecture = all.find((p) => p.url === "/architecture/");
 if (architecture) {
   // Repository paths of the sources: the website's own are under apps/website, the others are named with `../../`.
   const sources = infoFor("/architecture/").sources.map((source) => path.posix.normalize(path.posix.join("apps/website", source.split(path.sep).join("/"))));
-  const proofs = new Set([...architecture.body.matchAll(/github\.com\/NavreeHQ\/navree\/blob\/main\/([^"#]+)"/g)].map((m) => m[1]));
+  // The page's own content: the footer's links (the security policy) are on every page and prove no rule.
+  const main = architecture.body.match(/<main[\s>][\s\S]*<\/main>/)?.[0] ?? architecture.body;
+  const proofs = new Set([...main.matchAll(/github\.com\/NavreeHQ\/navree\/blob\/main\/([^"#]+)"/g)].map((m) => m[1]));
   if (!proofs.size) problems.push("/architecture/ links no proof files");
   for (const file of proofs) {
     if (file.startsWith("apps/website/")) continue;
