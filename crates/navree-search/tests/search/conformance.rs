@@ -31,6 +31,7 @@ fn settings() -> IndexSettings {
         .sort("amount")
         .filter("closes")
         .sort("closes")
+        .sort("signed_on")
 }
 
 fn doc(id: &str, title: &str, company: &str, stage: &str, amount: i64) -> Document {
@@ -64,12 +65,16 @@ async fn seed(engine: &dyn SearchEngine, index: &str) {
             12_000,
         )
         .field("closes", 3_000)
+        .field("signed_on", "2026-01-15")
         .workspace("w1"),
         doc("3", "Hopper <migration>", "Navy & Co", "negotiation", 900).workspace("w1"),
         doc("4", "Turing audit", "Bletchley", "lost", 2_000)
             .field("closes", 2_000)
+            .field("signed_on", "2025-12-31")
             .workspace("w2"),
-        doc("5", "Lovelace pilot", "Bletchley", "won", 7_000).workspace("w2"),
+        doc("5", "Lovelace pilot", "Bletchley", "won", 7_000)
+            .field("signed_on", "2026-03-01")
+            .workspace("w2"),
     ];
     engine.upsert(index, &settings, docs).await.unwrap();
 }
@@ -275,6 +280,16 @@ pub async fn suite(engine: Arc<dyn SearchEngine>, caps: Caps) {
     )
     .await;
     assert_eq!(ids(&by_close), ["1", "4", "2"]);
+    // Dates are text: sorted as text, and documents without one still go
+    // last when sorting down.
+    for (descending, expected) in [(false, ["4", "2", "5"]), (true, ["5", "2", "4"])] {
+        let sort = [SortBy {
+            field: "signed_on".into(),
+            descending,
+        }];
+        let by_signing = search(engine, index, "", Filter::Const(true), &sort, 0, 3).await;
+        assert_eq!(ids(&by_signing), expected, "descending: {descending}");
+    }
 
     // Pages.
     let sort = [SortBy {

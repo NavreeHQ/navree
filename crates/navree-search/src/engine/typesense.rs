@@ -23,6 +23,11 @@ use crate::{Document, IndexSettings, SearchError};
 ///
 /// Typesense does not index null values: `filter_null` is not supported,
 /// and `filter_not` does not match records without a value.
+///
+/// Typesense sorts only on fields declared with a type, and a sort field
+/// may hold numbers, dates or text. Each sort field is therefore sorted by
+/// a string field next to it (`_sort_<field>`) that holds a key ordering
+/// its values as the other engines do ([`sort_key`]).
 pub struct TypesenseEngine {
     api: Api,
     /// The settings each index was prepared with (new collections need
@@ -136,23 +141,64 @@ impl std::fmt::Debug for TypesenseEngine {
 }
 
 /// The collection schema for `settings`: text fields as optional strings,
-/// filter and sort fields typed by Typesense from the first document.
+/// filter fields typed by Typesense from the first document, and a string
+/// sort key for each sort field. (Typesense refuses to sort on a field of
+/// type `auto`, and one it types as a string from a document can never be
+/// sorted.)
 pub(crate) fn collection_schema(name: &str, settings: &IndexSettings) -> Value {
     let mut fields = vec![json!({
         "name": WORKSPACE_FIELD, "type": "string", "optional": true, "facet": false
     })];
     for field in settings.fields() {
         if field.is_text() {
+            fields.push(json!({ "name": field.name, "type": "string", "optional": true }));
+        } else if field.filter {
+            fields.push(json!({ "name": field.name, "type": "auto", "optional": true }));
+        }
+        if field.sort {
             fields.push(json!({
-                "name": field.name, "type": "string", "optional": true, "sort": field.sort
-            }));
-        } else if field.filter || field.sort {
-            fields.push(json!({
-                "name": field.name, "type": "auto", "optional": true, "sort": field.sort
+                "name": sort_field(&field.name), "type": "string", "optional": true, "sort": true
             }));
         }
     }
     json!({ "name": name, "fields": fields })
+}
+
+/// The field holding the sort key of sort field `field`. Index fields
+/// never start with `_` ([`IndexSettings::validate`]), so it cannot clash
+/// with one.
+pub(crate) fn sort_field(field: &str) -> String {
+    format!("_sort_{field}")
+}
+
+/// The string Typesense sorts a value of a sort field by: flags, then
+/// numbers, then text, each in its own order, as the other engines compare
+/// them. `None` for a missing value (sorted last in both directions).
+///
+/// Typesense lower-cases a sort string and drops its punctuation before it
+/// compares, so the key's own parts are digits and lower-case hex: a type
+/// digit, then for a number the bits of its 64-bit float, flipped so that
+/// they order as the numbers do (exact up to 2^53), and for text the text
+/// itself (which Typesense compares lower-cased, without punctuation).
+pub(crate) fn sort_key(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::Bool(flag) => Some(if *flag { "11" } else { "10" }.to_owned()),
+        Value::Number(number) => {
+            let number = number.as_f64()?;
+            // -0.0 and 0.0 are the same number.
+            let bits = if number == 0.0 { 0 } else { number.to_bits() };
+            let ordered = if bits >> 63 == 1 {
+                !bits
+            } else {
+                bits | (1 << 63)
+            };
+            Some(format!("2{ordered:016x}"))
+        }
+        Value::String(text) => Some(format!("3{text}")),
+        Value::Array(_) => Some("4".to_owned()),
+        Value::Object(_) => Some("5".to_owned()),
+    }
 }
 
 /// A filter (normalized) in Typesense's `filter_by` syntax.
@@ -212,8 +258,9 @@ fn literal(value: &Value) -> Result<String, SearchError> {
     }
 }
 
-/// The JSON Typesense stores for `document` (null fields left out).
-fn document_json(document: &Document) -> Value {
+/// The JSON Typesense stores for `document` (null fields left out), with
+/// the sort keys of the sort fields `settings` declares.
+pub(crate) fn document_json(document: &Document, settings: &IndexSettings) -> Value {
     let mut object = serde_json::Map::new();
     object.insert("id".to_owned(), Value::from(document.id()));
     if let Some(workspace) = document.workspace_id() {
@@ -222,6 +269,11 @@ fn document_json(document: &Document) -> Value {
     for (name, value) in document.fields() {
         if !value.is_null() {
             object.insert(name.clone(), value.clone());
+        }
+        if settings.is_sortable(name)
+            && let Some(key) = sort_key(value)
+        {
+            object.insert(sort_field(name), Value::from(key));
         }
     }
     Value::Object(object)
@@ -275,13 +327,13 @@ impl SearchEngine for TypesenseEngine {
     fn upsert<'a>(
         &'a self,
         index: &'a str,
-        _settings: &'a IndexSettings,
+        settings: &'a IndexSettings,
         documents: Vec<Document>,
     ) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             let lines: Vec<String> = documents
                 .iter()
-                .map(|d| document_json(d).to_string())
+                .map(|d| document_json(d, settings).to_string())
                 .collect();
             let response = self
                 .api
@@ -426,10 +478,19 @@ impl SearchEngine for TypesenseEngine {
             if !filter.is_empty() {
                 params.push(("filter_by".into(), filter));
             }
+            // Documents without a value go last in both directions, as on
+            // the other engines (Typesense puts missing text first when
+            // sorting down).
             let mut sort: Vec<String> = query
                 .sort
                 .iter()
-                .map(|s| format!("{}:{}", s.field, if s.descending { "desc" } else { "asc" }))
+                .map(|s| {
+                    format!(
+                        "{}(missing_values: last):{}",
+                        sort_field(&s.field),
+                        if s.descending { "desc" } else { "asc" }
+                    )
+                })
                 .collect();
             if !text.is_empty() && sort.len() < 3 {
                 sort.push("_text_match:desc".into());
@@ -617,18 +678,93 @@ mod tests {
     }
 
     #[test]
-    fn schemas_type_text_as_strings() {
+    fn schemas_type_text_as_strings_and_sort_on_typed_keys() {
         let settings = IndexSettings::new("Deal", "deals")
             .text("title", 3)
             .filter("stage")
-            .sort("amount");
+            .filter("amount")
+            .sort("amount")
+            .sort("closes_on");
         let schema = collection_schema("crm_deals_1", &settings);
         assert_eq!(schema["name"], "crm_deals_1");
-        let fields = schema["fields"].as_array().unwrap();
-        assert_eq!(fields[0]["name"], "_workspace");
-        assert_eq!(fields[1]["type"], "string");
-        assert_eq!(fields[2]["type"], "auto");
-        assert_eq!(fields[3]["sort"], true);
+        assert_eq!(
+            schema["fields"],
+            json!([
+                { "name": "_workspace", "type": "string", "optional": true, "facet": false },
+                { "name": "title", "type": "string", "optional": true },
+                { "name": "stage", "type": "auto", "optional": true },
+                { "name": "amount", "type": "auto", "optional": true },
+                { "name": "_sort_amount", "type": "string", "optional": true, "sort": true },
+                { "name": "_sort_closes_on", "type": "string", "optional": true, "sort": true },
+            ])
+        );
+        // Typesense 30 refuses `sort` on a field of type `auto`.
+        for field in schema["fields"].as_array().unwrap() {
+            assert!(
+                !(field["type"] == "auto" && field.get("sort").is_some()),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn sort_keys_order_values_as_the_other_engines_do() {
+        let values = [
+            json!(false),
+            json!(true),
+            json!(-1.0e300),
+            json!(-12_000),
+            json!(-1.5),
+            json!(0),
+            json!(0.25),
+            json!(900),
+            json!(5_000),
+            json!(1.0e300),
+            json!("2025-12-31"),
+            json!("2026-01-15"),
+            json!("2026-11-05T06:18:21.000000Z"),
+            json!("2026-11-05T06:18:22.000000Z"),
+        ];
+        let keys: Vec<String> = values.iter().map(|v| sort_key(v).unwrap()).collect();
+        for pair in keys.windows(2) {
+            assert!(pair[0] < pair[1], "{} < {}", pair[0], pair[1]);
+        }
+        assert_eq!(sort_key(&json!(-0.0)), sort_key(&json!(0)));
+        assert_eq!(sort_key(&json!(7)), sort_key(&json!(7.0)));
+        assert_eq!(sort_key(&Value::Null), None);
+        // Typesense compares lower-cased text without punctuation: the
+        // keys of flags and numbers must not change under that.
+        for key in &keys[..10] {
+            assert!(
+                key.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn documents_carry_the_sort_keys_of_their_sort_fields() {
+        let settings = IndexSettings::new("Deal", "deals")
+            .text("title", 3)
+            .filter("amount")
+            .sort("amount")
+            .sort("closes_on");
+        let document = Document::new("7")
+            .field("title", "Renewal")
+            .field("amount", 900)
+            .field("closes_on", None::<String>)
+            .workspace("w1");
+        assert_eq!(
+            document_json(&document, &settings),
+            json!({
+                "id": "7",
+                "_workspace": "w1",
+                "title": "Renewal",
+                "amount": 900,
+                "_sort_amount": sort_key(&json!(900)).unwrap(),
+            })
+        );
     }
 
     #[test]

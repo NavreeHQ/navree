@@ -610,7 +610,11 @@ async fn typesense_searches_and_fails_over_between_nodes() {
     assert_eq!(params["query_by"], "title,company_name");
     assert_eq!(params["query_by_weights"], "3,2");
     assert_eq!(params["filter_by"], "(stage:=`won` && amount:>=100)");
-    assert_eq!(params["sort_by"], "amount:asc,_text_match:desc");
+    // Sorted by the typed key next to the field, missing values last.
+    assert_eq!(
+        params["sort_by"],
+        "_sort_amount(missing_values: last):asc,_text_match:desc"
+    );
     assert_eq!(
         (params["page"].as_str(), params["per_page"].as_str()),
         ("1", "2")
