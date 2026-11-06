@@ -208,7 +208,8 @@ async fn every_route_is_documented_with_its_schemas() {
         }
     }
     // ... and the operations carry them as parameters too: `filter` (written
-    // `filter[field]=value`), `sort`, `search` and the paging.
+    // `filter[field]=value`), `sort` (companies only: contacts keep one order),
+    // `search` and the paging.
     let parameter_names = |path: &str| -> Vec<String> {
         paths[path]["get"]["parameters"]
             .as_array()
@@ -220,12 +221,25 @@ async fn every_route_is_documented_with_its_schemas() {
             })
             .unwrap_or_default()
     };
-    for path in ["/api/v1/companies", "/api/v1/contacts"] {
+    for (path, expected) in [
+        (
+            "/api/v1/companies",
+            ["filter", "sort", "search", "page", "per_page"].as_slice(),
+        ),
+        (
+            "/api/v1/contacts",
+            ["filter", "search", "page", "per_page"].as_slice(),
+        ),
+    ] {
         let names = parameter_names(path);
-        for expected in ["filter", "sort", "search", "page", "per_page"] {
+        for expected in expected {
             assert!(names.iter().any(|n| n == expected), "{path}: {names:?}");
         }
     }
+    assert!(
+        !parameter_names("/api/v1/contacts").iter().any(|n| n == "sort"),
+        "contacts are listed in one order"
+    );
     let companies_filter = paths["/api/v1/companies"]["get"]["parameters"]
         .as_array()
         .and_then(|list| list.iter().find(|p| p["name"] == "filter"))
@@ -235,7 +249,7 @@ async fn every_route_is_documented_with_its_schemas() {
     // The export reads the filters but is not paged, and answers with a CSV file.
     assert_eq!(
         parameter_names("/api/v1/contacts/export"),
-        ["filter", "sort", "search"].map(str::to_owned)
+        ["filter", "search"].map(str::to_owned)
     );
     assert!(
         paths["/api/v1/contacts/export"]["get"]["responses"]["200"]["content"]["text/csv"]
