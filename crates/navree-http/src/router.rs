@@ -66,7 +66,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     // Audit actions, and security events (rate limiting, denials no
     // `RouteAuthorizer` saw).
     let audit = ctx.try_get::<dyn AuditSink>().await;
-    let rate_limits = rate_limit_store(ctx).await?;
+    let rate_limits = rate_limit_store(ctx, options).await?;
 
     let shared = Shared {
         authorizer,
@@ -179,11 +179,11 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
 /// The store `http.rate_limit_store` names, where the per-IP limit and route
 /// throttles count when every process must count them together. Unset, or
 /// `memory`, each process counts on its own.
-async fn rate_limit_store(ctx: &AppContext) -> Result<Option<Arc<dyn RateLimitStore>>, BoxError> {
-    let Some(config) = ctx.try_get::<Config>().await else {
-        return Ok(None);
-    };
-    let Some(name) = config.get_string("http.rate_limit_store") else {
+async fn rate_limit_store(
+    ctx: &AppContext,
+    options: &HttpOptions,
+) -> Result<Option<Arc<dyn RateLimitStore>>, BoxError> {
+    let Some(name) = options.rate_limit_store.as_deref() else {
         return Ok(None);
     };
     let name = name.trim();

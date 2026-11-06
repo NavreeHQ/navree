@@ -38,7 +38,14 @@ pub struct HttpOptions {
     /// The default request body limit (default 2 MiB); routes may override it.
     pub body_limit_bytes: usize,
     /// Requests per minute per client IP (default `Some(600)`; `None` disables).
+    /// Counted in each process, and also in the store `http.rate_limit_store`
+    /// names when every process shares one (`"redis"` with RedisModule).
     pub per_ip_rate_limit: Option<u32>,
+    /// Where the per-IP limit and route throttles also count: unset or
+    /// `"memory"`, only in each process; else in the `dyn RateLimitStore`
+    /// registered under this name (`"redis"` with RedisModule) too, so every
+    /// process counts them together. A name nothing registered stops the boot.
+    pub rate_limit_store: Option<String>,
     /// How much of an IPv6 address names a client for every per-IP limit
     /// (this one, route throttles for guests, the sign-in throttles, the
     /// OAuth endpoint limits): the first `rate_limit_ipv6_prefix` bits, so
@@ -169,9 +176,14 @@ pub struct ServerOptions {
     pub max_connections: Option<usize>,
     /// The most connections open at once from one client address (default
     /// 256), counted like `http.per_ip_rate_limit`: per IPv4 address, or per
-    /// IPv6 network of `http.rate_limit_ipv6_prefix` bits. A connection over
-    /// it is closed at once; it cannot wait, because the address is only
-    /// known after the accept.
+    /// IPv6 network of `http.rate_limit_ipv6_prefix` bits. At the limit a new
+    /// connection takes the place of the address's own connection idle the
+    /// longest, closed as at its idle timeout. That one counts until its
+    /// socket has closed, and at most 8 of an address's connections (no more
+    /// than the limit) close for newer ones at a time, so one address holds
+    /// at most the limit and those. When none of its connections is idle, or
+    /// that many are closing, the new one is closed at once; it cannot wait,
+    /// because the address is only known after the accept.
     ///
     /// This limits what one address can hold. It does not stop a client with
     /// many addresses, which `max_connections` is then the limit for.
@@ -327,6 +339,7 @@ impl Default for HttpOptions {
             timeout_secs: 30,
             body_limit_bytes: 2 * 1024 * 1024,
             per_ip_rate_limit: Some(600),
+            rate_limit_store: None,
             rate_limit_ipv6_prefix: crate::network::DEFAULT_IPV6_PREFIX,
             security_headers: true,
             compression: true,
