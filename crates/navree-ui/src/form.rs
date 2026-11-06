@@ -1714,6 +1714,8 @@ async fn read_multipart<T: Form>(
         return Err(Ok(StatusCode::BAD_REQUEST));
     };
     let mut pairs = Vec::with_capacity(T::FIELDS.len());
+    // Only an upload adds to it, and an upload needs the `storage` feature.
+    #[cfg_attr(not(feature = "storage"), allow(unused_mut))]
     let mut posted = Posted::default();
     #[cfg(feature = "storage")]
     let mut kept: Vec<(Arc<crate::Uploads>, navree_storage::StoredFile)> = Vec::new();
