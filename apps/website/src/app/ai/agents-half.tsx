@@ -50,6 +50,13 @@ const navigatorTools: { group: string; tools: [string, string][] }[] = [
       ["read_doc", "One docs page as Markdown"],
     ],
   },
+  {
+    group: "The screens",
+    tools: [
+      ["list_components", "Navree UI components: group, summary, types, docs page"],
+      ["render_page", "What a page draws: headings, links, buttons, forms, components"],
+    ],
+  },
 ];
 
 const setup: { n: string; title: string; command: string; prompt?: string; text: string }[] = [

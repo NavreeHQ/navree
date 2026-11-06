@@ -336,6 +336,8 @@ export const navigatorTools = [
   "read_config",
   "search_docs",
   "read_doc",
+  "list_components",
+  "render_page",
 ];
 
 /** The exchange from the Navigator docs. */
