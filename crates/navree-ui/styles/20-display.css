@@ -91,7 +91,7 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 }
 
 /* Tables */
-[data-slot=table-container]{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1)}
+[data-slot=table-container]{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1);&:focus-visible{outline:2px solid var(--ring);outline-offset:1px}}
 [data-slot=table]{width:100%;border-collapse:collapse;font-size:14px;
   & caption{padding:.5rem .75rem;color:var(--fg-2);font-size:13px;text-align:start}
   & thead{border-bottom:1px solid var(--line)}

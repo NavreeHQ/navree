@@ -1537,11 +1537,14 @@ impl TableRowEl {
     }
 }
 
-/// A table of data. The wrapper scrolls on narrow screens.
+/// A table of data. The wrapper scrolls on narrow screens, and a keyboard can
+/// reach it to scroll it: it is a tab stop, a region named by [`Table::label`]
+/// ("Table" until one is given).
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Table {
     el: Element,
+    label: String,
     caption: Option<Node>,
     head: Vec<Node>,
     rows: Vec<Node>,
@@ -1553,11 +1556,18 @@ impl Table {
     pub fn new() -> Self {
         Self {
             el: el("table").slot("table"),
+            label: "Table".to_owned(),
             caption: None,
             head: Vec::new(),
             rows: Vec::new(),
             body_id: None,
         }
+    }
+
+    /// The name a screen reader gives the scrolling region around the table.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
     }
 
     /// Gives the body an id, so [`Region::feed`](crate::Region::feed) can add rows to it.
@@ -1590,7 +1600,13 @@ impl Table {
             el("thead").child(el("tr").child(self.head)),
             el("tbody").attr_opt("id", self.body_id).child(self.rows),
         ));
-        el("div").slot("table-container").child(table).into()
+        el("div")
+            .slot("table-container")
+            .attr("tabindex", 0_i64)
+            .attr("role", "region")
+            .attr("aria-label", self.label)
+            .child(table)
+            .into()
     }
 }
 
