@@ -826,13 +826,13 @@ async fn cloning_copies_an_item_into_the_workspace() {
         .await
         .assert_status(200)
         .assert_json_path("name", json!("Group handbook (copy)"));
-    let indrani_clones = navree_orm::workspace::scope(
+    let ilaichi_clones = navree_orm::workspace::scope(
         lib.ilaichi.id,
         LibraryRepo::<Template>::clones_of(lib.handbook).count(db.as_ref()),
     )
     .await
     .unwrap();
-    assert_eq!(indrani_clones, 1);
+    assert_eq!(ilaichi_clones, 1);
     assert_eq!(
         LibraryRepo::<Template>::clones_of(lib.welcome)
             .without_global_scope::<LibraryVisibility>()

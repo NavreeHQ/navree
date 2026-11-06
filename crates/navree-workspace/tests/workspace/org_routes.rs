@@ -84,15 +84,15 @@ async fn organization_routes_follow_the_organization_role() {
     let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     world.attach(agra.id, de.id).await;
     world
         .grant(agra.id, grace, "admin", WorkspaceSelector::All)
         .await;
     world
-        .grant(agra.id, linus, "member", WorkspaceSelector::only([uk.id]))
+        .grant(agra.id, linus, "member", WorkspaceSelector::only([pune.id]))
         .await;
 
     // Non-members get a 403; members read.
@@ -109,7 +109,7 @@ async fn organization_routes_follow_the_organization_role() {
         .await
         .assert_status(200)
         .assert_json_path("role", json!("member"))
-        .assert_json_path("workspaces", json!([uk.id]));
+        .assert_json_path("workspaces", json!([pune.id]));
     member
         .get("/api/organizations/agra/members")
         .send()
@@ -122,7 +122,7 @@ async fn organization_routes_follow_the_organization_role() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.0.slug", json!("agra-uk"))
+        .assert_json_path("data.0.slug", json!("agra-pune"))
         .assert_json_path("data.0.role", json!("member"))
         .assert_json_path("data.0.organization_id", json!(agra.id));
     member
@@ -220,12 +220,12 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     world.attach(agra.id, de.id).await;
     world
-        .grant(agra.id, grace, "admin", WorkspaceSelector::only([uk.id]))
+        .grant(agra.id, grace, "admin", WorkspaceSelector::only([pune.id]))
         .await;
     let admin = world.as_user(grace);
 
@@ -253,7 +253,7 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
         .assert_error_code(403, "workspace_grant_forbidden");
     admin
         .post("/api/organizations/agra/members")
-        .json(&json!({ "user_id": ken, "workspaces": [uk.id] }))
+        .json(&json!({ "user_id": ken, "workspaces": [pune.id] }))
         .send()
         .await
         .assert_status(201);
@@ -271,7 +271,7 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
         .await
         .assert_status(200)
         .assert_json_path("data.0.__type", json!("Workspace"))
-        .assert_json_path("data.0.id", json!(uk.id))
+        .assert_json_path("data.0.id", json!(pune.id))
         .assert_json_path("data.0.organization_id", json!(agra.id))
         .assert_json_path("data.0.role", json!("admin"))
         .json_value();
@@ -298,7 +298,7 @@ async fn workspaces_are_attached_and_detached_over_http() {
 
     owner
         .post("/api/organizations/agra/workspaces")
-        .json(&json!({ "workspace": "agra-uk" }))
+        .json(&json!({ "workspace": "agra-pune" }))
         .send()
         .await
         .assert_status(200)
@@ -339,7 +339,7 @@ async fn workspaces_are_attached_and_detached_over_http() {
         .await
         .assert_status(204);
     owner
-        .delete("/api/organizations/agra/workspaces/agra-uk")
+        .delete("/api/organizations/agra/workspaces/agra-pune")
         .send()
         .await
         .assert_error(404, "The workspace is not part of this organization.");
@@ -352,13 +352,13 @@ async fn access_requests_over_http() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
-    world.attach(agra.id, uk.id).await;
+    let pune = world.workspace(ada, "Agra Pune").await;
+    world.attach(agra.id, pune.id).await;
 
     let asking = world.as_user(grace);
     let request = asking
         .post("/api/organizations/agra/access-requests")
-        .json(&json!({ "workspace_id": uk.id, "message": "UK lead" }))
+        .json(&json!({ "workspace_id": pune.id, "message": "Pune lead" }))
         .send()
         .await
         .assert_status(201)
@@ -386,7 +386,7 @@ async fn access_requests_over_http() {
         .await
         .assert_status(200)
         .assert_json_path("data.0.user.email", json!("gauri@example.com"))
-        .assert_json_path("data.0.message", json!("UK lead"));
+        .assert_json_path("data.0.message", json!("Pune lead"));
     owner
         .post(&format!(
             "/api/organizations/agra/access-requests/{id}/approve"
@@ -396,7 +396,7 @@ async fn access_requests_over_http() {
         .assert_status(200)
         .assert_json_path("request.status", json!("approved"))
         .assert_json_path("member.role", json!("member"))
-        .assert_json_path("member.workspaces", json!([uk.id]));
+        .assert_json_path("member.workspaces", json!([pune.id]));
     owner
         .post(&format!(
             "/api/organizations/agra/access-requests/{id}/decline"
@@ -405,7 +405,7 @@ async fn access_requests_over_http() {
         .await
         .assert_error(409, "The access request has already been decided.");
     asking
-        .get("/api/workspaces/agra-uk")
+        .get("/api/workspaces/agra-pune")
         .send()
         .await
         .assert_status(200)

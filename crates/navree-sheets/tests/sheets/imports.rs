@@ -68,7 +68,7 @@ async fn error_file(client: &TestClient, id: Uuid) -> TestResponse {
 async fn an_upload_is_staged_previewed_and_applied() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
-    let file = b"Email,Name,Age,VIP\nada@example.com,Anu Lakhotia,36,yes\nnot-an-email,Bal,x,no\nalan@example.com,Arun Tiwari,,0\n";
+    let file = b"Email,Name,Age,VIP\nanu@example.com,Anu Lakhotia,36,yes\nnot-an-email,Bal,x,no\narun@example.com,Arun Tiwari,,0\n";
     let uploaded = upload(&admin, "contacts.csv", file, &[])
         .await
         .assert_status(202)
@@ -309,7 +309,7 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
         &app,
         &admin,
         "export.csv",
-        b"Mail;Full name\nada@example.com;Anu\nalan@example.com;Arun\n",
+        b"Mail;Full name\nanu@example.com;Anu\narun@example.com;Arun\n",
         &[],
     )
     .await;
@@ -362,7 +362,7 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
         &app,
         &admin,
         "export.csv",
-        b"FULL NAME;mail\nGrace;gauri@example.com\n",
+        b"FULL NAME;mail\nGauri;gauri@example.com\n",
         &[],
     )
     .await;
@@ -381,7 +381,7 @@ async fn a_mapping_can_come_with_the_upload() {
         &app,
         &admin,
         "x.csv",
-        b"A,B\nada@example.com,Anu\n",
+        b"A,B\nanu@example.com,Anu\n",
         &[("mapping", r#"{"email": "A", "name": "B"}"#)],
     )
     .await;
@@ -398,7 +398,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
     seed(&app, &[("anu@example.com", "Anu", Some(30), false)]).await;
     let admin = app.acting_as(principal(ADMIN));
     let file =
-        b"Email,Name\nADA@example.com,Anu Bains\nbob@example.com,Bal\nbob@example.com,Bobby\n";
+        b"Email,Name\nANU@example.com,Anu Bains\nbal@example.com,Bal\nbal@example.com,Balbir\n";
     let record = staged(&app, &admin, "c.csv", file, &[]).await;
     assert_eq!(record["counts"]["valid"], 1, "{record}");
     assert_eq!(record["counts"]["duplicate"], 1);
@@ -447,7 +447,7 @@ async fn duplicates_are_updated_skipped_or_refused() {
             "Row,Email,Name,Errors",
             "2,ANU@example.com,Anu Bains,A record with this key already exists",
             "3,bal@example.com,Bal,A record with this key already exists",
-            "4,bal@example.com,Bobby,Repeats row 3",
+            "4,bal@example.com,Balbir,Repeats row 3",
         ]
     );
 }
@@ -889,7 +889,7 @@ async fn imports_run_from_code() {
         .upload(
             &uow,
             "contacts",
-            Upload::new("c.csv", "Mail,Who\nada@example.com,Anu\n"),
+            Upload::new("c.csv", "Mail,Who\nanu@example.com,Anu\n"),
             UploadOptions::default()
                 .owner(ADMIN)
                 .mapping(Mapping::new().map("email", "Mail").map("name", "Who")),

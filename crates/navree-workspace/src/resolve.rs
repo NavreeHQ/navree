@@ -371,7 +371,7 @@ mod tests {
             Some("agra")
         );
         assert_eq!(
-            from_subdomain("ACME.App.Example.com:8443", base).as_deref(),
+            from_subdomain("AGRA.App.Example.com:8443", base).as_deref(),
             Some("agra")
         );
         assert_eq!(from_subdomain("app.example.com", base), None);

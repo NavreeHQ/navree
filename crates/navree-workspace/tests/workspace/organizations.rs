@@ -188,7 +188,7 @@ async fn workspaces_are_attached_and_detached() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let other = world.organization(ada, "Other").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     let organizations = world.organizations().await;
     let mut events = world
@@ -198,13 +198,13 @@ async fn workspaces_are_attached_and_detached() {
         ])
         .await;
 
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     world.attach(agra.id, de.id).await;
     // Attaching again is a no-op; attaching to another organization a 409.
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     let service = organizations.clone();
     let taken = world
-        .work(|uow| async move { service.attach(&uow, other.id, uk.id).await })
+        .work(|uow| async move { service.attach(&uow, other.id, pune.id).await })
         .await;
     assert!(matches!(taken, Err(WorkspaceError::AlreadyAttached)));
     assert_eq!(
@@ -215,14 +215,20 @@ async fn workspaces_are_attached_and_detached() {
             .iter()
             .map(|w| w.slug.as_str())
             .collect::<Vec<_>>(),
-        ["agra-de", "agra-uk"]
+        ["agra-de", "agra-pune"]
     );
-    let attached = world.workspaces().await.find(uk.id).await.unwrap().unwrap();
+    let attached = world
+        .workspaces()
+        .await
+        .find(pune.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(attached.organization_id, Some(agra.id));
     // Mail sent for the workspace uses its organization's transport too.
     assert_eq!(
         navree_mail::MailScope::from(&attached),
-        navree_mail::MailScope::workspace(uk.id).with_organization(agra.id)
+        navree_mail::MailScope::workspace(pune.id).with_organization(agra.id)
     );
 
     // Detaching drops the grants that named the workspace.
@@ -231,12 +237,12 @@ async fn workspaces_are_attached_and_detached() {
             agra.id,
             grace,
             "member",
-            WorkspaceSelector::only([uk.id, de.id]),
+            WorkspaceSelector::only([pune.id, de.id]),
         )
         .await;
     let service = organizations.clone();
     world
-        .work(|uow| async move { service.detach(&uow, agra.id, uk.id).await })
+        .work(|uow| async move { service.detach(&uow, agra.id, pune.id).await })
         .await
         .unwrap();
     assert_eq!(
@@ -250,7 +256,7 @@ async fn workspaces_are_attached_and_detached() {
     );
     let service = organizations.clone();
     let missing = world
-        .work(|uow| async move { service.detach(&uow, agra.id, uk.id).await })
+        .work(|uow| async move { service.detach(&uow, agra.id, pune.id).await })
         .await;
     assert!(matches!(missing, Err(WorkspaceError::NotAttached)));
     assert_eq!(
@@ -271,10 +277,10 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
     let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     let outside = world.workspace(ada, "Outside").await;
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     world.attach(agra.id, de.id).await;
     let workspaces = world.workspaces().await;
 
@@ -282,7 +288,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
         .grant(agra.id, grace, "admin", WorkspaceSelector::All)
         .await;
     world
-        .grant(agra.id, linus, "member", WorkspaceSelector::only([uk.id]))
+        .grant(agra.id, linus, "member", WorkspaceSelector::only([pune.id]))
         .await;
     world
         .grant(agra.id, ken, "partner", WorkspaceSelector::All)
@@ -293,7 +299,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
         role,
     };
     assert_eq!(
-        workspaces.role_of(uk.id, grace).await.unwrap(),
+        workspaces.role_of(pune.id, grace).await.unwrap(),
         Some((WorkspaceRole::Admin, via(OrgRole::Admin)))
     );
     assert_eq!(
@@ -301,7 +307,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
         Some((WorkspaceRole::Admin, via(OrgRole::Admin)))
     );
     assert_eq!(
-        workspaces.role_of(uk.id, linus).await.unwrap(),
+        workspaces.role_of(pune.id, linus).await.unwrap(),
         Some((WorkspaceRole::Member, via(OrgRole::Member)))
     );
     assert_eq!(workspaces.role_of(de.id, linus).await.unwrap(), None);
@@ -324,7 +330,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
     // `for_user` lists the workspaces either way.
     let listed = workspaces.for_user(linus).await.unwrap();
     assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].workspace.id, uk.id);
+    assert_eq!(listed[0].workspace.id, pune.id);
     assert_eq!(listed[0].role, WorkspaceRole::Member);
     assert_eq!(listed[0].granted_by, via(OrgRole::Member));
     let grace_sees: Vec<_> = workspaces
@@ -338,7 +344,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
         grace_sees,
         [
             ("agra-de".to_owned(), WorkspaceRole::Viewer),
-            ("agra-uk".to_owned(), WorkspaceRole::Admin)
+            ("agra-pune".to_owned(), WorkspaceRole::Admin)
         ]
     );
     assert_eq!(
@@ -351,7 +357,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
             .iter()
             .map(|w| w.id)
             .collect::<Vec<_>>(),
-        [uk.id]
+        [pune.id]
     );
 
     // Removing the member removes the reach.
@@ -360,7 +366,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
         .work(|uow| async move { members.remove(&uow, agra.id, linus).await })
         .await
         .unwrap();
-    assert_eq!(workspaces.role_of(uk.id, linus).await.unwrap(), None);
+    assert_eq!(workspaces.role_of(pune.id, linus).await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -369,14 +375,14 @@ async fn organization_grants_do_nothing_while_organizations_are_off() {
     let ada = on.user("Anu", "anu@example.com").await;
     let grace = on.user("Gauri", "gauri@example.com").await;
     let agra = on.organization(ada, "Agra").await;
-    let uk = on.workspace(ada, "Agra Pune").await;
-    on.attach(agra.id, uk.id).await;
+    let pune = on.workspace(ada, "Agra Pune").await;
+    on.attach(agra.id, pune.id).await;
     on.grant(agra.id, grace, "admin", WorkspaceSelector::All)
         .await;
     assert!(
         on.workspaces()
             .await
-            .role_of(uk.id, grace)
+            .role_of(pune.id, grace)
             .await
             .unwrap()
             .is_some()
@@ -414,9 +420,9 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let outside = world.workspace(ada, "Outside").await;
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     let members = world.org_members().await;
     let mut events = world
         .events(&[
@@ -470,7 +476,7 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
                     agra.id,
                     grace,
                     Some(OrgRole::Admin),
-                    Some(WorkspaceSelector::only([uk.id])),
+                    Some(WorkspaceSelector::only([pune.id])),
                 )
                 .await
         })
@@ -482,7 +488,7 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].member.user_id, ada);
     assert_eq!(listed[0].user.as_ref().unwrap().name, "Anu");
-    assert_eq!(listed[1].workspaces, Selector::Only(vec![uk.id]));
+    assert_eq!(listed[1].workspaces, Selector::Only(vec![pune.id]));
 
     // Bad input.
     for (role, selector, field) in [
@@ -510,7 +516,7 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     // The owner can't be removed, demoted or limited.
     for (role, selector) in [
         (Some(OrgRole::Admin), None),
-        (None, Some(WorkspaceSelector::only([uk.id]))),
+        (None, Some(WorkspaceSelector::only([pune.id]))),
     ] {
         let service = members.clone();
         let result = world
@@ -573,9 +579,9 @@ async fn access_requests_are_requested_approved_and_declined() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra Pune").await;
+    let pune = world.workspace(ada, "Agra Pune").await;
     let outside = world.workspace(ada, "Outside").await;
-    world.attach(agra.id, uk.id).await;
+    world.attach(agra.id, pune.id).await;
     let requests = world.access_requests().await;
     let mut events = world
         .events(&[
@@ -595,8 +601,8 @@ async fn access_requests_are_requested_approved_and_declined() {
                     agra.id,
                     grace,
                     NewAccessRequest {
-                        workspace_id: Some(uk.id),
-                        message: Some("  I run the UK team.  ".into()),
+                        workspace_id: Some(pune.id),
+                        message: Some("  I run the Pune team.  ".into()),
                     },
                 )
                 .await
@@ -604,7 +610,7 @@ async fn access_requests_are_requested_approved_and_declined() {
         .await
         .unwrap();
     assert_eq!(asked.status(), AccessRequestStatus::Pending);
-    assert_eq!(asked.message.as_deref(), Some("I run the UK team."));
+    assert_eq!(asked.message.as_deref(), Some("I run the Pune team."));
 
     // One pending request per user; members and other workspaces refused.
     for (user, input, expected) in [
@@ -663,7 +669,7 @@ async fn access_requests_are_requested_approved_and_declined() {
             .selector(agra.id, grace)
             .await
             .unwrap(),
-        Some(Selector::Only(vec![uk.id]))
+        Some(Selector::Only(vec![pune.id]))
     );
     let service = requests.clone();
     let again = world
