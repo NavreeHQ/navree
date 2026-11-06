@@ -42,8 +42,9 @@ impl Embeddings for navree_ai::Embeddings {
 /// cosine similarity `s` scores `(s + 1) / 2`, a dot product `p` scores
 /// `1 / (1 + e^-p)`, and a Euclidean distance keeps navree-ai's
 /// `1 / (1 + d)`. A filter navree-ai cannot run as search does (a null
-/// test, a null operand, a range on booleans, a field with a `.`) is run
-/// on the closest records' metadata after a wider search.
+/// test, a null operand, a range on booleans, equality on a float, a list
+/// of booleans, a field with a `.`) is run on the closest records' metadata
+/// after a wider search.
 #[derive(Clone)]
 pub struct AiVectorStore {
     store: AiStore,
@@ -119,6 +120,12 @@ fn plain_value(value: &Value, ordered: bool) -> bool {
     }
 }
 
+/// Whether every navree-ai store matches `value` in a list as search does
+/// (Qdrant's `match any` takes strings and integers).
+fn listable(value: &Value) -> bool {
+    plain_value(value, false) && !value.is_boolean()
+}
+
 /// `filter` (normalized) as navree-ai's filter, and whether that one is
 /// the same filter (`false`: it lets through more records, and `filter`
 /// runs on the results). `None` lets every record through.
@@ -179,7 +186,7 @@ pub(crate) fn translate(filter: &Filter) -> (Option<navree_ai::Filter>, bool) {
             (Some(filter), true)
         }
         Filter::In { field, values } => {
-            if !plain_field(field) || !values.iter().all(|v| plain_value(v, false)) {
+            if !plain_field(field) || !values.iter().all(listable) {
                 return (None, false);
             }
             (
@@ -188,7 +195,7 @@ pub(crate) fn translate(filter: &Filter) -> (Option<navree_ai::Filter>, bool) {
             )
         }
         Filter::NotIn { field, values } => {
-            if !plain_field(field) || !values.iter().all(|v| plain_value(v, false)) {
+            if !plain_field(field) || !values.iter().all(listable) {
                 return (None, false);
             }
             (
@@ -409,6 +416,8 @@ mod tests {
         assert!(ai(Filter::range("score", 1.5..)).1);
         assert!(!ai(Filter::eq("score", 2.25)).1);
         assert!(!ai(Filter::is_in("score", [1.5])).1);
+        assert!(!ai(Filter::is_in("flag", [true])).1);
+        assert!(ai(Filter::is_in("score", [1, 2])).1);
     }
 
     #[test]
