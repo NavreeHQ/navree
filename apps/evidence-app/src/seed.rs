@@ -89,15 +89,15 @@ pub const OPS_VIEWER_PERMISSIONS: &[&str] = &[
 /// The seeded workspaces: slug and name. The load profiles work in the
 /// first.
 pub const WORKSPACES: &[(&str, &str)] = &[
-    ("acme", "Acme Logistics"),
-    ("globex", "Globex Research"),
-    ("initech", "Initech Software"),
+    ("agra", "Agra Logistics"),
+    ("gulati", "Gulati Research"),
+    ("indrani", "Indrani Software"),
 ];
 
 /// How many projects each workspace gets, in [`WORKSPACES`] order.
 const PROJECT_COUNTS: [usize; 3] = [30, 22, 16];
 
-/// How many load-test accounts the seeder creates (members of `acme`).
+/// How many load-test accounts the seeder creates (members of `agra`).
 pub const LOAD_USERS: usize = 200;
 
 /// How many days back creation times reach.
@@ -129,46 +129,46 @@ impl Person {
 /// The forty people.
 #[rustfmt::skip]
 pub const PEOPLE: &[Person] = &[
-    Person { name: "Priya Raman", memberships: &[("acme", "admin"), ("globex", "viewer")] },
-    Person { name: "Marcus Webb", memberships: &[("acme", "admin")] },
-    Person { name: "Elena Voss", memberships: &[("acme", "admin")] },
-    Person { name: "Tomas Herrera", memberships: &[("acme", "member")] },
-    Person { name: "Aisha Karim", memberships: &[("acme", "member")] },
-    Person { name: "Daniel Okoye", memberships: &[("acme", "member")] },
-    Person { name: "Sofia Lindgren", memberships: &[("acme", "member")] },
-    Person { name: "Ravi Menon", memberships: &[("acme", "member")] },
-    Person { name: "Hannah Becker", memberships: &[("acme", "member")] },
-    Person { name: "Jamal Carter", memberships: &[("acme", "member"), ("initech", "viewer")] },
-    Person { name: "Mei Tanaka", memberships: &[("acme", "member")] },
-    Person { name: "Lucas Ferreira", memberships: &[("acme", "member")] },
-    Person { name: "Nora Haddad", memberships: &[("acme", "member")] },
-    Person { name: "Chloe Martin", memberships: &[("acme", "viewer")] },
-    Person { name: "Wei Zhang", memberships: &[("acme", "viewer")] },
-    Person { name: "Ingrid Solberg", memberships: &[("globex", "admin"), ("initech", "member")] },
-    Person { name: "Kofi Mensah", memberships: &[("globex", "admin")] },
-    Person { name: "Beatriz Lopes", memberships: &[("globex", "member"), ("acme", "member")] },
-    Person { name: "Anton Petrov", memberships: &[("globex", "member")] },
-    Person { name: "Yasmin Farouk", memberships: &[("globex", "member")] },
-    Person { name: "Callum Reid", memberships: &[("globex", "member")] },
-    Person { name: "Farah Siddiqui", memberships: &[("globex", "member")] },
-    Person { name: "Mateo Rossi", memberships: &[("globex", "member")] },
-    Person { name: "Lena Fischer", memberships: &[("globex", "member")] },
-    Person { name: "Grace Nwosu", memberships: &[("globex", "viewer")] },
-    Person { name: "Ivan Kovac", memberships: &[("globex", "viewer")] },
-    Person { name: "Naomi Brooks", memberships: &[("initech", "admin"), ("acme", "member")] },
-    Person { name: "Rahul Deshmukh", memberships: &[("initech", "admin")] },
-    Person { name: "Julia Santos", memberships: &[("initech", "member")] },
-    Person { name: "Pavel Novak", memberships: &[("initech", "member"), ("globex", "viewer")] },
-    Person { name: "Amara Diallo", memberships: &[("initech", "member")] },
-    Person { name: "Ethan Cole", memberships: &[("initech", "member")] },
-    Person { name: "Keiko Watanabe", memberships: &[("initech", "member")] },
-    Person { name: "Samir Aziz", memberships: &[("initech", "member")] },
-    Person { name: "Greta Lindholm", memberships: &[("initech", "member")] },
-    Person { name: "Diego Morales", memberships: &[("initech", "member")] },
-    Person { name: "Hana Kim", memberships: &[("initech", "viewer")] },
-    Person { name: "Oscar Bell", memberships: &[("initech", "viewer")] },
-    Person { name: "Tessa Quinn", memberships: &[("acme", "member"), ("globex", "member")] },
-    Person { name: "Viktor Hale", memberships: &[("globex", "member")] },
+    Person { name: "Priya Raman", memberships: &[("agra", "admin"), ("gulati", "viewer")] },
+    Person { name: "Marcus Webb", memberships: &[("agra", "admin")] },
+    Person { name: "Elena Voss", memberships: &[("agra", "admin")] },
+    Person { name: "Tomas Herrera", memberships: &[("agra", "member")] },
+    Person { name: "Aisha Karim", memberships: &[("agra", "member")] },
+    Person { name: "Daniel Okoye", memberships: &[("agra", "member")] },
+    Person { name: "Sofia Lindgren", memberships: &[("agra", "member")] },
+    Person { name: "Ravi Menon", memberships: &[("agra", "member")] },
+    Person { name: "Hannah Becker", memberships: &[("agra", "member")] },
+    Person { name: "Jamal Carter", memberships: &[("agra", "member"), ("indrani", "viewer")] },
+    Person { name: "Mei Tanaka", memberships: &[("agra", "member")] },
+    Person { name: "Lucas Ferreira", memberships: &[("agra", "member")] },
+    Person { name: "Nora Haddad", memberships: &[("agra", "member")] },
+    Person { name: "Chloe Martin", memberships: &[("agra", "viewer")] },
+    Person { name: "Wei Zhang", memberships: &[("agra", "viewer")] },
+    Person { name: "Ingrid Solberg", memberships: &[("gulati", "admin"), ("indrani", "member")] },
+    Person { name: "Kofi Mensah", memberships: &[("gulati", "admin")] },
+    Person { name: "Beatriz Lopes", memberships: &[("gulati", "member"), ("agra", "member")] },
+    Person { name: "Anton Petrov", memberships: &[("gulati", "member")] },
+    Person { name: "Yasmin Farouk", memberships: &[("gulati", "member")] },
+    Person { name: "Callum Reid", memberships: &[("gulati", "member")] },
+    Person { name: "Farah Siddiqui", memberships: &[("gulati", "member")] },
+    Person { name: "Mateo Rossi", memberships: &[("gulati", "member")] },
+    Person { name: "Lena Fischer", memberships: &[("gulati", "member")] },
+    Person { name: "Grace Nwosu", memberships: &[("gulati", "viewer")] },
+    Person { name: "Ivan Kovac", memberships: &[("gulati", "viewer")] },
+    Person { name: "Naomi Brooks", memberships: &[("indrani", "admin"), ("agra", "member")] },
+    Person { name: "Rahul Deshmukh", memberships: &[("indrani", "admin")] },
+    Person { name: "Julia Santos", memberships: &[("indrani", "member")] },
+    Person { name: "Pavel Novak", memberships: &[("indrani", "member"), ("gulati", "viewer")] },
+    Person { name: "Amara Diallo", memberships: &[("indrani", "member")] },
+    Person { name: "Ethan Cole", memberships: &[("indrani", "member")] },
+    Person { name: "Keiko Watanabe", memberships: &[("indrani", "member")] },
+    Person { name: "Samir Aziz", memberships: &[("indrani", "member")] },
+    Person { name: "Greta Lindholm", memberships: &[("indrani", "member")] },
+    Person { name: "Diego Morales", memberships: &[("indrani", "member")] },
+    Person { name: "Hana Kim", memberships: &[("indrani", "viewer")] },
+    Person { name: "Oscar Bell", memberships: &[("indrani", "viewer")] },
+    Person { name: "Tessa Quinn", memberships: &[("agra", "member"), ("gulati", "member")] },
+    Person { name: "Viktor Hale", memberships: &[("gulati", "member")] },
 ];
 
 /// Project names and what they are about; each workspace takes a run of
@@ -681,7 +681,7 @@ fn make_report(workspace: Uuid, totals: [u64; 3], calendar: &Calendar, rng: &mut
 /// a rollout, an override for a workspace, a kill switch.
 async fn seed_flags(ctx: &AppContext, workspaces: &[Workspace]) -> Result<(), BoxError> {
     let flags = ctx.get::<Flags>().await?;
-    let (acme, initech) = (workspaces[0].id, workspaces[2].id);
+    let (agra, indrani) = (workspaces[0].id, workspaces[2].id);
 
     // The board view reaches half of the workspaces.
     if flags.state::<BoardView>().await?.rollout.is_none() {
@@ -689,36 +689,36 @@ async fn seed_flags(ctx: &AppContext, workspaces: &[Workspace]) -> Result<(), Bo
             .rollout::<BoardView>(Rollout::percent(50).of_workspaces())
             .await?;
     }
-    // Inline editing: a quarter of users, and Acme for everyone.
+    // Inline editing: a quarter of users, and Agra for everyone.
     if flags.state::<InlineEditing>().await?.rollout.is_none() {
         flags
             .rollout::<InlineEditing>(Rollout::percent(25).of_users())
             .await?;
     }
     if !flags
-        .active::<InlineEditing>(FlagScope::workspace(acme))
+        .active::<InlineEditing>(FlagScope::workspace(agra))
         .await?
     {
         flags
-            .activate::<InlineEditing>(FlagScope::workspace(acme))
+            .activate::<InlineEditing>(FlagScope::workspace(agra))
             .await?;
     }
-    // Report schedules: on for Acme only.
+    // Report schedules: on for Agra only.
     if !flags
-        .active::<ReportSchedules>(FlagScope::workspace(acme))
+        .active::<ReportSchedules>(FlagScope::workspace(agra))
         .await?
     {
         flags
-            .activate::<ReportSchedules>(FlagScope::workspace(acme))
+            .activate::<ReportSchedules>(FlagScope::workspace(agra))
             .await?;
     }
-    // The export is on by default; Initech has it off.
+    // The export is on by default; Indrani has it off.
     if flags
-        .active::<TaskExport>(FlagScope::workspace(initech))
+        .active::<TaskExport>(FlagScope::workspace(indrani))
         .await?
     {
         flags
-            .deactivate::<TaskExport>(FlagScope::workspace(initech))
+            .deactivate::<TaskExport>(FlagScope::workspace(indrani))
             .await?;
     }
     // The old importer is switched off for everyone.
@@ -802,7 +802,7 @@ async fn seed_settings(
     workspaces: &[Workspace],
 ) -> Result<(), BoxError> {
     let settings = ctx.get::<Settings>().await?;
-    let (acme, globex) = (workspaces[0].id, workspaces[1].id);
+    let (agra, gulati) = (workspaces[0].id, workspaces[1].id);
     if !settings
         .stored::<TaskDefaults>(Scope::global())
         .await?
@@ -821,12 +821,12 @@ async fn seed_settings(
         settings
             .update::<TaskDefaults>(
                 &uow,
-                Scope::workspace(acme),
+                Scope::workspace(agra),
                 json!({ "default_priority": 2, "require_assignee": true }),
             )
             .await?;
         settings
-            .update::<TaskDefaults>(&uow, Scope::workspace(globex), json!({ "default_due_days": 7 }))
+            .update::<TaskDefaults>(&uow, Scope::workspace(gulati), json!({ "default_due_days": 7 }))
             .await?;
         settings
             .update::<Branding>(
@@ -838,11 +838,11 @@ async fn seed_settings(
         settings
             .update::<Branding>(
                 &uow,
-                Scope::workspace(acme),
+                Scope::workspace(agra),
                 json!({
-                    "product_name": "Acme Logistics Tasks",
+                    "product_name": "Agra Logistics Tasks",
                     "accent_color": "#ff8a3d",
-                    "mail_footer": "Acme Logistics, 14 Dock Road. Sent by the operations team.",
+                    "mail_footer": "Agra Logistics, 14 Dock Road. Sent by the operations team.",
                     "show_beta_badge": true
                 }),
             )

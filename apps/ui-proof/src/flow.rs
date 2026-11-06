@@ -356,8 +356,8 @@ fn single_tree() -> Tree {
                 "sales",
                 "Sales",
                 [
-                    TreeNode::leaf("sales/ada", "Ada"),
-                    TreeNode::leaf("sales/grace", "Grace").selected(true),
+                    TreeNode::leaf("sales/anu", "Anu"),
+                    TreeNode::leaf("sales/gauri", "Gauri").selected(true),
                 ],
             )
             .open(true),
@@ -365,7 +365,7 @@ fn single_tree() -> Tree {
         .node(TreeNode::branch(
             "support",
             "Support",
-            [TreeNode::leaf("support/alan", "Alan")],
+            [TreeNode::leaf("support/arun", "Arun")],
         ))
 }
 
@@ -854,7 +854,7 @@ pub struct Basics {
 pub struct Contact {
     /// Email
     #[validate(email)]
-    #[form(widget = email, error = "Enter an email address like ada@example.com.")]
+    #[form(widget = email, error = "Enter an email address like anu@example.com.")]
     pub email: String,
     /// Access code
     #[validate(length(min = 6))]

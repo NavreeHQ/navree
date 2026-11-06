@@ -50,7 +50,7 @@ pub const TEMPLATES: &[(&str, &str)] = &[
 ];
 
 const FIRST_NAMES: [&str; 30] = [
-    "Aiko", "Bruno", "Carla", "Dmitri", "Elena", "Farid", "Grace", "Hamza", "Ines", "Jonas",
+    "Aiko", "Bruno", "Carla", "Dmitri", "Elena", "Farid", "Gauri", "Hamza", "Ines", "Jonas",
     "Kavya", "Liam", "Mei", "Nadia", "Omar", "Priya", "Quentin", "Rosa", "Sven", "Tariq", "Uma",
     "Viktor", "Wen", "Ximena", "Yusuf", "Zoe", "Amara", "Bea", "Callum", "Dalia",
 ];
@@ -88,7 +88,7 @@ const LAST_NAMES: [&str; 30] = [
     "Demir",
 ];
 
-const WORKSPACES: [&str; 3] = ["Acme Logistics", "Globex Research", "Initech Software"];
+const WORKSPACES: [&str; 3] = ["Agra Logistics", "Gulati Research", "Indrani Software"];
 
 const SERVICES: [&str; 4] = [
     "Platform seats",

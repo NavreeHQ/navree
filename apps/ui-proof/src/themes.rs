@@ -16,12 +16,12 @@ use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::theme::{Appearance, BuilderDraft, Mode, Theme, ThemeBuilder, ThemeSetting};
 use navree::ui::*;
 
-use crate::acme_theme::acme_theme;
+use crate::agra_theme::agra_theme;
 
 /// The themes a reader may choose here: every built-in and the app's own.
 fn offered() -> Vec<Theme> {
     let mut themes = Theme::BUILT_IN.to_vec();
-    themes.push(acme_theme());
+    themes.push(agra_theme());
     themes
 }
 
@@ -174,9 +174,9 @@ fn layout_page(headers: &HeaderMap, layout: &str, query: Option<&str>) -> Respon
                     ))
                     .rows(
                         [
-                            ("Acme renewal", "Ada", "Won", "$12,000"),
-                            ("Globex expansion", "Grace", "Proposal", "$48,500"),
-                            ("Initech pilot", "Linus", "Lead", "$3,200"),
+                            ("Agra renewal", "Anu", "Won", "$12,000"),
+                            ("Gulati expansion", "Gauri", "Proposal", "$48,500"),
+                            ("Indrani pilot", "Linus", "Lead", "$3,200"),
                         ]
                         .into_iter()
                         .map(|(deal, owner, stage, amount)| {

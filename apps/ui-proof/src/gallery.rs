@@ -112,7 +112,7 @@ fn display() -> Element {
                     Badge::new("Danger").variant(BadgeVariant::Danger),
                     Kbd::new("K"),
                     Spinner::new("Loading"),
-                    Avatar::placeholder("Ada Lovelace"),
+                    Avatar::placeholder("Anu Lakhotia"),
                     Avatar::placeholder("Small").size(Size::Sm),
                 )),
                 Alert::new(AlertTone::Neutral)
@@ -149,7 +149,7 @@ fn display() -> Element {
                 Breadcrumb::new()
                     .label("Example trail")
                     .link("Deals", "/deals")
-                    .current("Acme"),
+                    .current("Agra"),
                 Pagination::new(5, 10, |page| format!("/gallery?page={page}")),
                 Progress::new(40, 100, "Upload"),
                 Progress::indeterminate("Working"),
@@ -164,8 +164,8 @@ fn display() -> Element {
                 Marker::new(MarkerVariant::Separator, "Today"),
                 Marker::new(MarkerVariant::Border, "Earlier"),
                 Message::new(BubbleSide::Start)
-                    .avatar(Avatar::placeholder("Ada"))
-                    .header("Ada")
+                    .avatar(Avatar::placeholder("Anu"))
+                    .header("Anu")
                     .content(Bubble::new(BubbleSide::Start, "Hello"))
                     .footer("10:42"),
                 Message::new(BubbleSide::End).content(Bubble::new(BubbleSide::End, "Hi there")),
@@ -182,11 +182,11 @@ fn display() -> Element {
                     .head((TableHead::new("Name"), TableHead::new("Amount").numeric()))
                     .rows((
                         TableRowEl::new((
-                            TableCell::new("Acme"),
+                            TableCell::new("Agra"),
                             TableCell::new("1,200.00").numeric(),
                         )),
                         TableRowEl::new((
-                            TableCell::new("Globex"),
+                            TableCell::new("Gulati"),
                             TableCell::new("3,400.00").numeric(),
                         ))
                         .selected(true),
@@ -263,8 +263,8 @@ fn commands_fill() -> (Table, Dialog) {
                 el("th").child(el("span").attr("data-ui-sr", "").child("Actions")),
             ))
             .rows((
-                row("7", "Acme renewal", "12,500"),
-                row("8", "Globex expansion", "48,000"),
+                row("7", "Agra renewal", "12,500"),
+                row("8", "Gulati expansion", "48,000"),
             )),
         Dialog::new("g-fill", "Deal").body(
             el("form").attr("method", "dialog").children((

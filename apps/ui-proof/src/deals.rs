@@ -27,12 +27,12 @@ pub enum StageFilter {
 
 const STAGES: [&str; 5] = ["Lead", "Qualified", "Proposal", "Negotiation", "Won"];
 const OWNERS: [&str; 4] = [
-    "Ada Lovelace",
-    "Alan Turing",
-    "Grace Hopper",
+    "Anu Lakhotia",
+    "Arun Tiwari",
+    "Gauri Hundal",
     "Edsger Dijkstra",
 ];
-const COMPANIES: [&str; 6] = ["Acme", "Globex", "Initech", "Umbrella", "Hooli", "Stark"];
+const COMPANIES: [&str; 6] = ["Agra", "Gulati", "Indrani", "Umbrella", "Hariyali", "Stark"];
 
 fn tone(stage: &&'static str) -> BadgeVariant {
     match *stage {

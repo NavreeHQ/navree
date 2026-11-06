@@ -46,7 +46,7 @@ use navree::logbook::{LogbookOptions, StoreKind};
 use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, icons};
 
-mod acme_theme;
+mod agra_theme;
 mod bench;
 mod charts;
 mod compare;
@@ -110,7 +110,7 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Report", "/charts/report").icon(icons::CHART_COLUMN)),
         )
         .user(
-            UserMenu::new("Ada Lovelace", "ada@navree.test")
+            UserMenu::new("Anu Lakhotia", "anu@navree.test")
                 .link("Settings", "/plain")
                 .action("Sign out", "/sign-out"),
         )

@@ -47,8 +47,8 @@ fn revenue() -> Node {
 fn activity() -> Node {
     Stack::gap(1)
         .children((
-            Text::muted("Ada moved Acme renewal to Proposal"),
-            Text::muted("Alan created Globex renewal"),
+            Text::muted("Anu moved Agra renewal to Proposal"),
+            Text::muted("Arun created Gulati renewal"),
         ))
         .into()
 }

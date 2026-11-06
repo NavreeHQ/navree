@@ -13,7 +13,7 @@ use navree::testing::TestApp;
 use navree::ui::{Reply, UiModule};
 
 async fn login(session: Session) -> Reply {
-    let _ = session.insert("user", &"ada");
+    let _ = session.insert("user", &"anu");
     session.regenerate();
     Reply::redirect("/home")
 }
@@ -110,7 +110,7 @@ async fn signing_in_and_out_through_the_runtime_works_in_either_order() {
         );
         assert_eq!(
             client.get("/who").send().await.text(),
-            "Some(\"ada\")",
+            "Some(\"anu\")",
             "ui_first={ui_first}"
         );
 

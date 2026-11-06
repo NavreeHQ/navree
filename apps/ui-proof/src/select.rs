@@ -18,9 +18,9 @@ use serde::Deserialize;
 const PICTURE: &str = navree::ui::assets::FAVICON_URL;
 
 const FIRST: [&str; 20] = [
-    "Ada",
-    "Alan",
-    "Grace",
+    "Anu",
+    "Arun",
+    "Gauri",
     "Edsger",
     "Barbara",
     "Donald",
@@ -30,7 +30,7 @@ const FIRST: [&str; 20] = [
     "Ken",
     "Dennis",
     "Hedy",
-    "Katherine",
+    "Kavita",
     "Tim",
     "Vint",
     "Frances",
@@ -40,9 +40,9 @@ const FIRST: [&str; 20] = [
     "Shafi",
 ];
 const LAST: [&str; 20] = [
-    "Lovelace",
-    "Turing",
-    "Hopper",
+    "Lakhotia",
+    "Tiwari",
+    "Hundal",
     "Dijkstra",
     "Liskov",
     "Knuth",
@@ -52,7 +52,7 @@ const LAST: [&str; 20] = [
     "Thompson",
     "Ritchie",
     "Lamarr",
-    "Johnson",
+    "Joshi",
     "Berners-Lee",
     "Cerf",
     "Allen",
@@ -208,17 +208,17 @@ fn selects() -> Element {
                     .id("select-rich")
                     .placeholder("Choose an owner")
                     .choice(
-                        Choice::new("ada", "Ada Lovelace")
+                        Choice::new("anu", "Anu Lakhotia")
                             .description("Engineering")
                             .avatar(PICTURE)
-                            .selected_label("Ada"),
+                            .selected_label("Anu"),
                     )
                     .choice(
-                        Choice::new("alan", "Alan Turing")
+                        Choice::new("arun", "Arun Tiwari")
                             .description("Research")
                             .icon(icons::CHECK),
                     )
-                    .choice(Choice::new("grace", "Grace Hopper").description("Compilers")),
+                    .choice(Choice::new("gauri", "Gauri Hundal").description("Compilers")),
             ),
             field(
                 "f-select-clearable",
@@ -347,7 +347,7 @@ fn comboboxes() -> Element {
                     .id("combo-search")
                     .placeholder("Search people")
                     .search("/select/people")
-                    .selected_choice(Choice::new("3", "Grace Hopper 3")),
+                    .selected_choice(Choice::new("3", "Gauri Hundal 3")),
             ),
             field(
                 "f-combo-min",
@@ -476,7 +476,7 @@ fn multis() -> Element {
                     .id("multi-search")
                     .placeholder("Search people")
                     .search("/select/people")
-                    .selected_choices([Choice::new("1", "Ada Lovelace 1")]),
+                    .selected_choices([Choice::new("1", "Anu Lakhotia 1")]),
             ),
             field(
                 "f-multi-cap",
@@ -487,7 +487,7 @@ fn multis() -> Element {
                     .search("/select/people-off")
                     .create_url("/select/teams")
                     .max(2)
-                    .selected_choices([Choice::new("1", "Ada Lovelace 1")]),
+                    .selected_choices([Choice::new("1", "Anu Lakhotia 1")]),
             ),
             field(
                 "f-multi-cap-free",

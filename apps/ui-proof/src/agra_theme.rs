@@ -1,10 +1,10 @@
-//! The "Acme" theme: the theme builder's Rust export, used as it comes. A
+//! The "Agra" theme: the theme builder's Rust export, used as it comes. A
 //! test in navree-ui writes it and keeps it current.
 
 use navree::ui::theme::{Density, Font, Palette, Radius, Rgb, Theme, ThemeId, ThemeSpec};
 
-/// The "Acme" theme.
-pub fn acme_theme() -> Theme {
+/// The "Agra" theme.
+pub fn agra_theme() -> Theme {
     let rgb = Rgb::hex;
     let spec = ThemeSpec {
         dark: Palette::from_array([
@@ -77,6 +77,6 @@ pub fn acme_theme() -> Theme {
         density: Density::Default,
         font: Font::System,
     };
-    Theme::custom(ThemeId::parse("acme").expect("a theme id"), "Acme", spec)
+    Theme::custom(ThemeId::parse("agra").expect("a theme id"), "Agra", spec)
         .expect("every text pair reaches WCAG AA")
 }

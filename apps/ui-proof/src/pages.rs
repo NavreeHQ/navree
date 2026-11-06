@@ -234,12 +234,12 @@ fn table() -> Node {
         .caption("Deals, one of which you can no longer open")
         .head((TableHead::new("Name"), TableHead::new("Amount").numeric()))
         .rows((
-            row("Acme", "1,200.00"),
+            row("Agra", "1,200.00"),
             Forbidden::new().row(2),
-            row("Globex", "3,400.00"),
+            row("Gulati", "3,400.00"),
             NotFound::new().what("deal").row(2),
             EmptyState::no_results().row(2),
-            row("Initech", "9,900.00"),
+            row("Indrani", "9,900.00"),
         ))
         .into()
 }
@@ -451,7 +451,7 @@ fn sign_in(shell: &AppShell, next: Option<&str>, ended: bool) -> AppPage {
         .child(
             Stack::gap(3).children((
                 ended.then(SessionEnded::new),
-                Field::new("name", "Name").control(Input::text("name").value("Ada").required()),
+                Field::new("name", "Name").control(Input::text("name").value("Anu").required()),
                 el("input")
                     .attr("type", "hidden")
                     .attr("name", "next")

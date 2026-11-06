@@ -46,14 +46,14 @@ fn no_preview_shows_dollars_or_western_demo_names() {
         .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
     {
         for word in [
-            "Ada Lovelace",
-            "Grace Hopper",
-            "Acme",
-            "Globex",
-            ">Ada<",
-            ">Grace<",
-            ">Alan<",
-            "ada@",
+            "Anu Lakhotia",
+            "Gauri Hundal",
+            "Agra",
+            "Gulati",
+            ">Anu<",
+            ">Gauri<",
+            ">Arun<",
+            "anu@",
         ] {
             assert!(!html.contains(word), "{name} shows {word}");
         }

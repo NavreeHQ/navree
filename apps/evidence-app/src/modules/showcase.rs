@@ -108,7 +108,7 @@ impl EvidenceResolver {
 /// The arguments of `workspace_summary`.
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct SummaryArgs {
-    /// The workspace's slug, such as `acme`.
+    /// The workspace's slug, such as `agra`.
     #[validate(length(min = 1, max = 64))]
     pub workspace: String,
 }

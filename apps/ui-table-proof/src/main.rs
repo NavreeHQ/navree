@@ -583,7 +583,7 @@ pub struct RichRow {
 }
 
 fn owner_cell(row: &RichRow) -> Node {
-    let names = ["Ada Lovelace", "Alan Turing", "<b>Grace</b> Hopper"];
+    let names = ["Anu Lakhotia", "Arun Tiwari", "<b>Gauri</b> Hundal"];
     let name = names[usize::try_from(row.id % 3).unwrap_or(0)];
     let tags = ["vip", "renewal", "eu", "q3", "new"];
     let count = usize::try_from(row.id % 5).unwrap_or(0) + 1;

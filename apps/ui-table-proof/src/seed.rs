@@ -11,7 +11,7 @@ pub const DEALS: i64 = 137;
 /// Rows that have to survive: Unicode, right-to-left, hostile, very long.
 fn title(id: i64) -> String {
     match id {
-        1 => "Acme renewal".to_owned(),
+        1 => "Agra renewal".to_owned(),
         2 => "مرحبا بالعالم صفقة كبيرة جدا".to_owned(),
         3 => "<img src=x onerror=alert(1)><script>alert(2)</script>".to_owned(),
         4 => "\"'&amp; --; DROP TABLE dt_deals".to_owned(),
@@ -19,7 +19,7 @@ fn title(id: i64) -> String {
         6 => "A very long deal title that goes on and on and on and on and on and on and on, far past what any column should show on one line, and then some more".to_owned(),
         7 => "Averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylongunbrokenword".to_owned(),
         8 => "=HYPERLINK(\"http://evil.example\",\"click\")".to_owned(),
-        _ => format!("{} renewal {id}", ["Globex", "Initech", "Umbrella", "Hooli", "Stark"][usize::try_from(id % 5).unwrap_or(0)]),
+        _ => format!("{} renewal {id}", ["Gulati", "Indrani", "Umbrella", "Hariyali", "Stark"][usize::try_from(id % 5).unwrap_or(0)]),
     }
 }
 
@@ -83,12 +83,12 @@ pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
         db.pool().execute_script(&statement).await?;
     }
     let names = [
-        "Acme",
-        "Globex",
-        "Initech",
+        "Agra",
+        "Gulati",
+        "Indrani",
         "Umbrella",
         "شركة الخليج",
-        "Hooli",
+        "Hariyali",
         "Stark",
         "Wayne",
         "Tyrell",
