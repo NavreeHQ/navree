@@ -10,4 +10,5 @@ mod retrieval;
 mod servers;
 mod streaming;
 mod support;
+mod surfaces;
 mod text;

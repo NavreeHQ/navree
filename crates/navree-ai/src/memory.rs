@@ -70,10 +70,14 @@ pub(crate) mod message {
 /// `VARCHAR` without a length on PostgreSQL and SQLite and `VARCHAR(255)`
 /// on MySQL.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(AI_MIGRATIONS).migration(SchemaMigration::new(
+    let set = MigrationSet::new(AI_MIGRATIONS).migration(SchemaMigration::new(
         "m20261026_000001_create_ai_conversations",
         CreateConversationTables,
-    ))
+    ));
+    // The assistant's items, runs and button posts, with the `ui` feature.
+    #[cfg(feature = "ui")]
+    let set = set.migration(crate::ui::store::migration());
+    set
 }
 
 /// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
@@ -365,6 +369,20 @@ impl Conversations {
             .map_err(db_error)?
             .filter(|row| row.user_id == user_id)
             .ok_or_else(not_found)
+    }
+
+    /// Whether conversation `id` is `user_id`'s, with agent `agent`: a 404 otherwise.
+    pub(crate) async fn check_owner(
+        &self,
+        user_id: Uuid,
+        agent: &str,
+        id: Uuid,
+    ) -> Result<(), AiError> {
+        let row = self.owned(user_id, id).await?;
+        if row.agent != agent {
+            return Err(not_found());
+        }
+        Ok(())
     }
 
     /// Loads `user_id`'s conversation `id` with agent `agent`.

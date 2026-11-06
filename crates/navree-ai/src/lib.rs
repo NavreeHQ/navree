@@ -58,11 +58,13 @@ mod rerank;
 mod response;
 mod schema;
 mod stream;
+#[cfg(feature = "ui")]
+pub mod ui;
 mod vectors;
 
 pub use agent::{
     Agent, AgentOptions, AgentReply, AgentRun, AgentRunBuilder, AgentStep, AgentStream, Memory,
-    PendingApproval, ToolAccess, ToolSpec,
+    PageAnswer, PageTool, PageTools, PendingApproval, ToolAccess, ToolSpec,
 };
 pub use ai::Ai;
 pub use chunker::{Chunk, Chunker};
