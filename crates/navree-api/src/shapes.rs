@@ -40,11 +40,15 @@ pub struct AbilityRule {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(schema_with = text_or_list)]
     pub fields: Option<Vec<String>>,
-    /// Whether the rule takes the ability away (`cannot`).
+    /// Whether the rule takes the ability away (`cannot`). Left out, never null, when it
+    /// doesn't.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub inverted: Option<bool>,
-    /// Why the rule exists, for the message of a refusal.
+    /// Why the rule exists, for the message of a refusal. Left out, never null, when
+    /// there is none.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub reason: Option<String>,
 }
 

@@ -598,12 +598,6 @@ impl Store {
         }
     }
 
-    /// The working state, as JSON.
-    pub(crate) async fn state(&self, conversation: Uuid, user: Uuid) -> Result<Option<Json>, AppError> {
-        let row = self.owned(conversation, user).await?;
-        Ok(row.state.and_then(|text| serde_json::from_str(&text).ok()))
-    }
-
     /// Replaces the working state, at the conversation's next revision.
     pub(crate) async fn set_state(
         &self,

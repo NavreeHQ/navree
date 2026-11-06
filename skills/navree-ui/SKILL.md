@@ -668,7 +668,7 @@ A browser signs in on the session cookie, through the same steps as a token
 client (the throttle, two-factor authentication, the sign-in policies, the
 audit trail). Add the pages to the app root:
 
-```rust
+```rust,ignore
 use navree::auth::{AuthModule, AuthPages};
 use navree::session::SessionModule;
 

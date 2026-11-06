@@ -907,7 +907,9 @@ impl<T: Form> FormView<T> {
     ///
     /// #[derive(Deserialize, Validate, Form)]
     /// struct Claim {
+    ///     #[validate(length(min = 1))]
     ///     title: String,
+    ///     #[validate(skip)]
     ///     #[form(widget = file)]
     ///     receipt: String,
     /// }

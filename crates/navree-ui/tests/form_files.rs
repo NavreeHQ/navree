@@ -30,6 +30,7 @@ struct Claim {
     #[validate(length(min = 1))]
     title: String,
     /// Receipt
+    #[validate(skip)]
     #[form(widget = file)]
     receipt: String,
 }
