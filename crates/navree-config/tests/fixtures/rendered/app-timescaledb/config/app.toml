@@ -38,6 +38,11 @@ driver = "database"
 # Public sign-up at POST /api/auth/register.
 registration = true
 
+[workspace]
+# Where a request's workspace comes from: the X-Workspace header. Create the
+# first workspace with POST /api/workspaces (the signed-in user owns it).
+resolvers = ["header"]
+
 [api]
 title = "Acme cloud API"
 # The Lighthouse and Logbook dashboards are pages, not API routes:

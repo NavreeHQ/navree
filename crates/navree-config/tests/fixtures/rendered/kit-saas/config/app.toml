@@ -14,7 +14,11 @@ url = "http://localhost:3000"
 addr = "127.0.0.1:8080"
 api_prefix = "/api"
 # The web app's backend-for-frontend calls the API from loopback for every
-# browser and names the browser in X-Forwarded-For.
+# browser and names the browser in X-Forwarded-For. The API believes that
+# header from this peer and no other, so each browser has its own rate limit
+# and sign-in throttle. Trust exactly the address the web app calls from: when
+# it runs on another host or in a container, set APP_HTTP__TRUSTED_PROXIES
+# (see .env.example) to that address.
 trusted_proxies = ["127.0.0.1", "::1"]
 
 [http.cors]

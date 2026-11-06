@@ -27,5 +27,10 @@
   },
   "queue": {
     "driver": "database"
+  },
+  "workspace": {
+    "resolvers": [
+      "header"
+    ]
   }
 }
