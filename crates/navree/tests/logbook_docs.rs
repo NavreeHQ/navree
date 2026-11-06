@@ -249,3 +249,90 @@ async fn the_board_loads_in_three_queries() {
     assert!(batch.duplicate_queries().is_empty());
     app.shutdown().await.unwrap();
 }
+
+// ---------------------------------------------------------------------------
+// The platform watchers: what a module reports about model calls, sign-ins
+// and the rest shows in the request that made it.
+// ---------------------------------------------------------------------------
+
+#[injectable]
+struct AssistantController;
+
+#[controller("/assistant", version = "1")]
+impl AssistantController {
+    #[post("/ask")]
+    #[public]
+    async fn ask(&self) -> Result<Json<Value>> {
+        let telemetry = navree::telemetry::Telemetry::current();
+        telemetry.ai_call(|| {
+            navree::telemetry::AiCall::new(
+                "anthropic",
+                "claude-sonnet-4-5",
+                "generate",
+                std::time::Duration::from_millis(900),
+            )
+            .tokens(1200, 340)
+        });
+        Ok(Json(json!({ "answer": "Three deals closed in Ludhiana." })))
+    }
+}
+
+#[module(controllers = [AssistantController])]
+struct AssistantModule;
+
+#[tokio::test]
+async fn a_model_call_shows_in_the_request_that_made_it() {
+    let app = TestApp::builder()
+        .config("logbook.enabled", true)
+        .config("logbook.store", "memory")
+        .module(LogbookModule::from_config())
+        .module(AssistantModule)
+        .build()
+        .await;
+    app.client()
+        .post("/api/v1/assistant/ask")
+        .send()
+        .await
+        .assert_status(200);
+    let logbook = app.get::<Logbook>().await;
+    let batch = logbook.last_request().await.unwrap();
+    let call = &batch.ai_calls()[0];
+    assert_eq!(call.model, "claude-sonnet-4-5");
+    assert_eq!(call.input_tokens, Some(1200));
+    assert_eq!(batch.request().unwrap().summary.ai_calls, 1);
+
+    let ai = logbook
+        .entries(&navree::logbook::ListQuery::new(
+            navree::logbook::Filter::parse("type:ai").unwrap(),
+            10,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ai.len(), 1);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_watcher_can_be_turned_off() {
+    let app = TestApp::builder()
+        .config("logbook.enabled", true)
+        .config("logbook.store", "memory")
+        .config("logbook.watchers.ai", false)
+        .module(LogbookModule::from_config())
+        .module(AssistantModule)
+        .build()
+        .await;
+    app.client()
+        .post("/api/v1/assistant/ask")
+        .send()
+        .await
+        .assert_status(200);
+    let batch = app
+        .get::<Logbook>()
+        .await
+        .last_request()
+        .await
+        .unwrap();
+    assert!(batch.ai_calls().is_empty());
+    app.shutdown().await.unwrap();
+}

@@ -795,7 +795,7 @@ pub struct AiEntry {
     pub provider: String,
     /// The model.
     pub model: String,
-    /// `generate`, `stream`, `embed` or `rerank`.
+    /// `generate`, `stream` or `embed`.
     pub operation: String,
     /// The input tokens, when the provider said.
     pub input_tokens: Option<u64>,

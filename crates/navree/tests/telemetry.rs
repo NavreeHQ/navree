@@ -9,8 +9,8 @@ use navree::http_client::{FakeResponse, FakeServer, HttpClient};
 use navree::observe::testing::SpanRecorder;
 use navree::prelude::*;
 use navree::telemetry::{
-    EventKind, Interest, Telemetry, TelemetryEvent, TelemetryRecord, TelemetryRecorder,
-    TelemetrySink,
+    AiCall, EventKind, Interest, Outcome, Telemetry, TelemetryEvent, TelemetryRecord,
+    TelemetryRecorder, TelemetrySink,
 };
 use navree::testing::TestApp;
 use serde_json::{Value, json};
@@ -164,6 +164,32 @@ impl CalendarController {
 /// The calendar routes.
 #[module(controllers = [CalendarController])]
 pub struct CalendarModule;
+
+// ---------------------------------------------------------------------------
+// Emitting a platform event of the app's own, as in telemetry.mdx.
+
+/// `POST /api/v1/summaries/draft` asks a model and reports the call.
+#[injectable]
+pub struct SummariesController;
+
+#[controller("/summaries", version = "1")]
+impl SummariesController {
+    #[post("/draft")]
+    #[public]
+    async fn create(&self) -> Result<Json<Value>> {
+        let started = std::time::Instant::now();
+        // ... call the model ...
+        Telemetry::current().ai_call(|| {
+            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", started.elapsed())
+                .tokens(1200, 340)
+        });
+        Ok(Json(json!({ "summary": "Three deals closed in Ludhiana." })))
+    }
+}
+
+/// The summaries routes.
+#[module(controllers = [SummariesController])]
+pub struct SummariesModule;
 
 const TRACEPARENT: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
@@ -374,4 +400,52 @@ async fn the_outgoing_call_joins_the_callers_trace() {
         "{traceparent}"
     );
     app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_handler_reports_a_model_call_and_a_test_reads_it() {
+    let recorder = TelemetryRecorder::new();
+    let app = TestApp::builder()
+        .module(SummariesModule)
+        .module(recorder.module())
+        .build()
+        .await;
+
+    app.client()
+        .post("/api/v1/summaries/draft")
+        .send()
+        .await
+        .assert_status(200);
+
+    let call = &recorder.ai_calls()[0];
+    assert_eq!(call.model, "claude-sonnet-4-5");
+    assert_eq!(call.input_tokens, Some(1200));
+    assert_eq!(call.output_tokens, Some(340));
+    assert_eq!(call.outcome, Outcome::Success);
+    let record = &recorder.of_kind(EventKind::AiCall)[0];
+    assert_eq!(
+        record.context.request_id.as_deref(),
+        Some(recorder.requests()[0].request_id.as_str()),
+        "reported inside the request"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_platform_kinds_are_in_the_facades_telemetry() {
+    assert_eq!(EventKind::ALL.len(), 19);
+    for name in [
+        "ai_call",
+        "broadcast",
+        "storage_op",
+        "webhook_delivery",
+        "search",
+        "sign_in",
+        "ui_operation",
+    ] {
+        assert!(
+            EventKind::ALL.iter().any(|kind| kind.as_str() == name),
+            "{name}"
+        );
+    }
 }

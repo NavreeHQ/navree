@@ -40,7 +40,7 @@ impl Outcome {
 }
 
 /// A call to a model provider finished (navree-ai): text, structured
-/// output, a stream, an embedding or a rerank.
+/// output, a stream or an embedding.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AiCall {
     /// The provider (`anthropic`, `openai`, `gemini`, `mistral`, `ollama`,
@@ -48,7 +48,7 @@ pub struct AiCall {
     pub provider: String,
     /// The model the call named.
     pub model: String,
-    /// What was asked: `generate`, `stream`, `embed` or `rerank`.
+    /// What was asked: `generate`, `stream` or `embed`.
     pub operation: String,
     /// The input tokens the provider counted, when it said.
     pub input_tokens: Option<u64>,
