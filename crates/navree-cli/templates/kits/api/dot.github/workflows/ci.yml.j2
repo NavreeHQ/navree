@@ -64,7 +64,21 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+{% if navree_js_dir %}
+      # Until the Navree packages are on npm: build them from Navree's repository
+      # and point the links at that copy.
+      - uses: actions/checkout@v4
+        with:
+          repository: NavreeHQ/navree
+          path: .navree
+      - run: pnpm --dir .navree/packages/js install --frozen-lockfile
+        working-directory: .
+      - run: pnpm --dir .navree/packages/js build
+        working-directory: .
+      - run: sed -i -E 's#"link:[^"]*/packages/js/#"link:../.navree/packages/js/#' package.json
+{% endif %}
+      # The lockfile lists the Navree packages once an install has added them.
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
@@ -104,7 +118,17 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: cargo build
       - run: cargo run --quiet -- migrate:fresh --seed
-      - run: pnpm install --frozen-lockfile
+{% if navree_js_dir %}
+      - uses: actions/checkout@v4
+        with:
+          repository: NavreeHQ/navree
+          path: .navree
+      - run: pnpm --dir .navree/packages/js install --frozen-lockfile
+      - run: pnpm --dir .navree/packages/js build
+      - run: sed -i -E 's#"link:[^"]*/packages/js/#"link:../.navree/packages/js/#' package.json
+        working-directory: web
+{% endif %}
+      - run: pnpm install --no-frozen-lockfile
         working-directory: web
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: web
