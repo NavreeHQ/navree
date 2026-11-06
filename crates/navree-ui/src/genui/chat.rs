@@ -98,6 +98,10 @@ pub struct ChatLabels {
     pub more_arguments: String,
     /// The link at the start of a long conversation.
     pub earlier: String,
+    /// The list of a reader's conversations.
+    pub threads: String,
+    /// A conversation with no title yet.
+    pub untitled: String,
 }
 
 impl Default for ChatLabels {
@@ -132,6 +136,8 @@ impl Default for ChatLabels {
             rejected: "Rejected".to_owned(),
             more_arguments: "and {n} more".to_owned(),
             earlier: "Show earlier messages".to_owned(),
+            threads: "Conversations".to_owned(),
+            untitled: "New conversation".to_owned(),
         }
     }
 }
@@ -1075,7 +1081,66 @@ impl Conversation {
     }
 }
 
-into_node!(Conversation, PromptInput, ApprovalCard, Suggestions, Sources, Citation, Reasoning);
+/// A reader's conversations, newest first, each a link to its page; the open one is
+/// marked as the current page.
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct ThreadList {
+    label: String,
+    threads: Vec<(String, LocalHref, bool)>,
+}
+
+impl ThreadList {
+    /// A list named `label` for assistive technology.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            threads: Vec::new(),
+        }
+    }
+
+    /// Adds a conversation called `title`, whose page is `href`; `current` when it is the
+    /// one open.
+    pub fn thread(
+        mut self,
+        title: impl Into<String>,
+        href: impl Into<LocalHref>,
+        current: bool,
+    ) -> Self {
+        self.threads.push((title.into(), href.into(), current));
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let items: Vec<Node> = self
+            .threads
+            .into_iter()
+            .map(|(title, href, current)| {
+                let link = el("a")
+                    .attr("href", href.as_str().to_owned())
+                    .attr_opt("aria-current", current.then_some("page"))
+                    .child(cut(&title, 80));
+                el("li").child(link).into()
+            })
+            .collect();
+        el("nav")
+            .attr("data-genui", "threads")
+            .attr("aria-label", self.label)
+            .child(el("ul").attr("role", "list").child(items))
+            .into()
+    }
+}
+
+into_node!(
+    Conversation,
+    PromptInput,
+    ApprovalCard,
+    Suggestions,
+    Sources,
+    Citation,
+    Reasoning,
+    ThreadList
+);
 
 #[cfg(test)]
 mod tests {

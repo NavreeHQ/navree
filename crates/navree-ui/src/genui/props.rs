@@ -794,13 +794,14 @@ pub mod __private {
         Value::Object(schema)
     }
 
-    /// The object at `path`, after refusing any property that isn't one of `names`.
+    /// The object at `path`, and whether it holds only properties of `names` (each other
+    /// one is a problem). Its fields are checked either way, so every problem is told.
     pub fn object_of<'v>(
         value: &'v Value,
         path: &str,
         names: &[&str],
         checker: &mut Checker<'_>,
-    ) -> Option<&'v Map<String, Value>> {
+    ) -> Option<(&'v Map<String, Value>, bool)> {
         let Some(object) = value.as_object() else {
             checker.problem(path, "must be an object");
             return None;
@@ -816,7 +817,7 @@ pub mod __private {
                 );
             }
         }
-        clean.then_some(object)
+        Some((object, clean))
     }
 
     /// `path.name`, or `name` at the top.
@@ -1040,7 +1041,7 @@ macro_rules! props {
                 path: &str,
                 checker: &mut $crate::genui::Checker<'_>,
             ) -> ::std::option::Option<Self> {
-                let object = $crate::genui::__private::object_of(
+                let (object, clean) = $crate::genui::__private::object_of(
                     value,
                     path,
                     &[$(stringify!($field)),*],
@@ -1054,6 +1055,9 @@ macro_rules! props {
                         checker,
                     );
                 )*
+                if !clean {
+                    return ::std::option::Option::None;
+                }
                 ::std::option::Option::Some(Self { $( $field: $field? ),* })
             }
 

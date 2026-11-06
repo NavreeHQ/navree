@@ -21,16 +21,21 @@
 //!   and the [`ApprovalCard`] only the page draws. With no script each is a plain link,
 //!   form or list; the `genui` runtime module adds Enter to send and keeps a reader who
 //!   is at the end of a conversation there while an answer grows.
+//! - [`SurfaceFrame`]: where a chosen component is drawn, set apart and named, with its
+//!   buttons drawn by the toolkit, and everything that could act taken out of what the
+//!   component drew ([`defuse`]).
 
 pub mod catalog;
 pub mod chat;
+pub mod frame;
 pub mod props;
 
 pub use chat::{
     ApprovalCard, ApprovalState, ChatLabels, ChatMessage, ChatRole, ChatState, Citation,
-    Conversation, MAX_MESSAGE, PromptInput, Reasoning, Sources, Suggestions, ToolCallCard,
-    ToolState, approval_notice, chat_notice, writing_key,
+    Conversation, MAX_MESSAGE, PromptInput, Reasoning, Sources, Suggestions, ThreadList,
+    ToolCallCard, ToolState, approval_notice, chat_notice, writing_key,
 };
+pub use frame::{FrameLabels, SurfaceFrame, defuse};
 pub use catalog::{
     Action, ActionButton, ActionDone, ActionRefusal, Catalog, CatalogTool, Checked, Confirm,
     Limits, Refusal, RunAction, Surface, SurfaceCx, SurfaceView, TOOL_PREFIX,
