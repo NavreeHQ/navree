@@ -181,7 +181,8 @@ pub struct LazyList {
     after: Option<Href>,
     max: u32,
     since: Option<String>,
-    live: Option<(Href, Option<String>, LazyEnd)>,
+    /// The stream, its event names, where new items go, and whether it catches up.
+    live: Option<(Href, Option<String>, LazyEnd, bool)>,
     empty: Option<Node>,
     labels: LazyLabels,
     gap: u8,
@@ -311,7 +312,7 @@ impl LazyList {
         let event = event
             .filter(|name| valid_event_name(name))
             .map(str::to_owned);
-        self.live = Some((url.into(), event, new_at));
+        self.live = Some((url.into(), event, new_at, false));
         self
     }
 
@@ -320,7 +321,12 @@ impl LazyList {
     /// site. See [`live_from`](Self::live_from).
     pub fn live_on(mut self, live: impl Into<super::Live>, new_at: LazyEnd) -> Self {
         let live = live.into();
-        self.live = Some((live.src().clone(), live.event_attr(), new_at));
+        self.live = Some((
+            live.src().clone(),
+            live.event_attr(),
+            new_at,
+            live.catches_up(),
+        ));
         self
     }
 
@@ -373,10 +379,11 @@ impl LazyList {
         if let Some((many, one)) = self.announce {
             root = root.attr("data-l-new", many).attr("data-l-new-one", one);
         }
-        if let Some((url, event, new_at)) = self.live {
+        if let Some((url, event, new_at, catch_up)) = self.live {
             root = root
                 .attr("data-ui-live-src", url)
                 .attr_opt("data-ui-live-event", event)
+                .flag("data-ui-live-catch-up", catch_up)
                 .attr(
                     "data-ui-live-at",
                     if new_at == LazyEnd::End {

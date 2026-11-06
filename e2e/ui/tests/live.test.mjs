@@ -785,6 +785,27 @@ for (const name of NAMES) {
       });
     });
 
+    test("a region drawn while it was changing asks once when its stream opens; one drawn beside it does not", async () => {
+      await scenario(async ({ srv, page }) => {
+        const changing = `<div id="r" data-ui-region data-ui-src="/frag-r" data-ui-live-src="/sse" data-ui-live-event="r" data-ui-live-catch-up>r0</div>`;
+        const still = `<div id="s" data-ui-region data-ui-src="/frag-s" data-ui-live-src="/sse" data-ui-live-event="s">s0</div>`;
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(changing + still)));
+        srv.routes.set("/frag-r", (req, res) => srv.html(res, "r" + srv.count("/frag-r")));
+        srv.routes.set("/frag-s", (req, res) => srv.html(res, "s1"));
+        hub(srv, () => "");
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        await page.waitForFunction(() => document.getElementById("r").textContent === "r1");
+        await sleep(800);
+        assert.equal(srv.count("/frag-r"), 1, "what was said before the stream opened, asked for once");
+        assert.equal(srv.count("/frag-s"), 0, "drawn as nothing changed, it asks only when it hears something");
+        // From then on it is like any other region: an event, a fetch.
+        srv.say("id: 2-0\nevent: r\ndata: changed\n\n");
+        await page.waitForFunction(() => document.getElementById("r").textContent === "r2");
+        assert.equal(srv.count("/frag-s"), 0);
+      });
+    });
+
     test("a stream that is not the hub is caught up at once, ids or not, and never asked to resume", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));

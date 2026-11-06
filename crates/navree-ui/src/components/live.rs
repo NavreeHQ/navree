@@ -155,6 +155,7 @@ impl LiveStream {
 pub struct Live {
     src: Href,
     events: Vec<String>,
+    catch_up: bool,
 }
 
 impl Live {
@@ -163,6 +164,7 @@ impl Live {
         Self {
             src: src.into(),
             events: Vec::new(),
+            catch_up: false,
         }
     }
 
@@ -175,6 +177,30 @@ impl Live {
             self.events.push(name);
         }
         self
+    }
+
+    /// Says that what the part shows was still changing when the server drew it (an
+    /// answer being written, a job under way): what was said before its stream was
+    /// open can't reach it, so it fetches itself once when its stream opens, or at
+    /// once when it joins a stream that is open already. A part drawn when nothing is
+    /// changing needs none of this, and fetches only when it hears something.
+    ///
+    /// ```
+    /// use navree_ui::{LiveStream, Region, render};
+    ///
+    /// let stream = LiveStream::topics(["export.7"]);
+    /// let html = render(&Region::new("export").src("/exports/7").live_on(stream.on("export.7").catch_up()).into());
+    /// assert!(html.contains("data-ui-live-catch-up"));
+    /// ```
+    pub fn catch_up(mut self) -> Self {
+        self.catch_up = true;
+        self
+    }
+
+    /// Whether the part fetches itself when its stream opens (see
+    /// [`catch_up`](Self::catch_up)).
+    pub fn catches_up(&self) -> bool {
+        self.catch_up
     }
 
     /// The stream's address.
@@ -259,5 +285,7 @@ mod tests {
             .event("a b");
         assert!(live.events().is_empty());
         assert_eq!(live.event_attr(), None);
+        assert!(!live.catches_up());
+        assert!(live.catch_up().catches_up());
     }
 }

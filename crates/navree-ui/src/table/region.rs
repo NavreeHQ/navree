@@ -165,6 +165,7 @@ impl Region {
             .el
             .attr("data-ui-live-src", live.src().clone())
             .attr_opt("data-ui-live-event", live.event_attr())
+            .flag("data-ui-live-catch-up", live.catches_up())
             .uses(Uses::LIVE);
         self
     }

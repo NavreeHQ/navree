@@ -20,6 +20,10 @@
 // headers); the hub answers `ui:resumed` and says again only what was missed, so no region
 // fetches unless it missed something. When it answers `ui:live`, or nothing within 2.5 s,
 // every region catches up as with any other stream. Only an event's name and id are read.
+//
+// A region the server drew while what it shows was still changing (`data-ui-live-catch-up`)
+// can't hear what was said before its stream opened: it fetches once when the stream opens,
+// or at once when it joins one that is open. Any other region drawn with the page doesn't.
 import { cookies, every, hidden, on, sameOrigin } from "./dom.js";
 
 /**
@@ -58,7 +62,7 @@ const RESUMED = "ui:resumed";
 const FINAL = new Set([204, 401, 403]);
 
 /**
- * @typedef {{names: string[], key: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number}} Sub
+ * @typedef {{names: string[], key: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number, owed: boolean}} Sub
  * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string, changed: number, last: string, hub: boolean, resuming: boolean}} Stream
  */
 
@@ -130,6 +134,7 @@ function catchUp(s) {
   clearTimeout(s.wait);
   for (const [el, sub] of s.subs) {
     clearTimeout(sub.timer);
+    sub.owed = false;
     fire(s, el);
   }
 }
@@ -221,7 +226,14 @@ function open(s) {
     const owed = s.failed > 0 || s.missed;
     clearTimeout(s.steady);
     s.steady = /** @type {any} */ (setTimeout(() => (s.failed = 0), STEADY));
-    if (!owed) return;
+    if (!owed) {
+      // A region drawn while it was changing catches up even so: it wasn't listening.
+      for (const [el, sub] of s.subs) if (sub.owed) {
+        sub.owed = false;
+        fire(s, el);
+      }
+      return;
+    }
     if (!s.resuming) {
       catchUp(s);
       return;
@@ -324,7 +336,11 @@ function scanLive() {
       s = { url, es: null, subs: new Map(), failed: 0, retry: 0, steady: 0, wait: 0, listening: new Set(), state: "connecting", missed: false, opened: false, probed: false, stopped: false, token: token(), changed: -Infinity, last: "", hub: false, resuming: false };
       streams.set(url, s);
     }
-    if (!s.subs.has(el)) s.subs.set(el, { names, key, timer: 0, busy: false, dirty: false, since: 0, run: 0 });
+    if (!s.subs.has(el)) {
+      const owed = el.hasAttribute("data-ui-live-catch-up");
+      s.subs.set(el, { names, key, timer: 0, busy: false, dirty: false, since: 0, run: 0, owed: owed && !s.opened });
+      if (owed && s.opened) fire(s, el);
+    }
     el.setAttribute("data-live", hidden() ? "paused" : s.state);
     open(s);
     listen(s);

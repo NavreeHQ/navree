@@ -335,6 +335,7 @@ struct GroupLive {
     src: Href,
     stream: Href,
     event: Option<String>,
+    catch_up: bool,
 }
 
 impl NavGroup {
@@ -383,6 +384,7 @@ impl NavGroup {
             event: event
                 .filter(|name| crate::table::region::valid_event_name(name))
                 .map(str::to_owned),
+            catch_up: false,
         });
         self
     }
@@ -403,6 +405,7 @@ impl NavGroup {
             src: src.into(),
             stream: live.src().clone(),
             event: live.event_attr(),
+            catch_up: live.catches_up(),
         });
         self
     }
@@ -750,6 +753,7 @@ impl Shell {
                         .attr("data-ui-src", live.src.clone())
                         .attr("data-ui-live-src", live.stream.clone())
                         .attr_opt("data-ui-live-event", live.event.clone())
+                        .flag("data-ui-live-catch-up", live.catch_up)
                         .uses(Uses::CORE.with(Uses::LIVE));
                 }
                 div.children((

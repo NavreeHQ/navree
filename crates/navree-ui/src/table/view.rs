@@ -596,6 +596,7 @@ pub struct DataTable<'a, R, F = NoFilter> {
     live: Option<Duration>,
     live_from: Option<Href>,
     live_event: Option<String>,
+    live_catch_up: bool,
     refreshable: bool,
     debounce: Option<u32>,
     prefetch: bool,
@@ -647,6 +648,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             live: None,
             live_from: None,
             live_event: None,
+            live_catch_up: false,
             refreshable: false,
             debounce: None,
             prefetch: false,
@@ -713,6 +715,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     pub fn live_on(mut self, live: impl Into<crate::components::Live>) -> Self {
         let live = live.into();
         self.live_event = live.event_attr();
+        self.live_catch_up = live.catches_up();
         self.live_from = Some(live.src().clone());
         self.refreshable = true;
         self
@@ -2786,6 +2789,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             )
             .attr_opt("data-ui-live-src", self.live_from.clone())
             .attr_opt("data-ui-live-event", self.live_event.clone())
+            .flag("data-ui-live-catch-up", self.live_catch_up)
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
         if self.live_from.is_some() {
