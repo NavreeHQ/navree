@@ -59,14 +59,18 @@ import { flagWeightsText } from "./weights";
 const PHONE_HEIGHT = 640;
 
 /**
- * `<UiPreview example="button/variants" />`. With `defer`, the frame loads only
- * after the page has, as it nears the screen: for a whole page drawn below the fold.
+ * `<UiPreview example="button/variants" />`. The frame loads only after the page
+ * has, as it nears the screen (`defer`, on unless `defer={false}`), so the
+ * requests of a page's previews never start while the page itself is still
+ * painting. They used to start about 100 ms in, as the first paint happened, and
+ * Lighthouse's estimate of that paint on a phone moved with the order they came
+ * in: the same build of /docs/components/button/ scored 77 or 99.
  * With `live`, an address under `/demo/ui/`, the frame shows that page of the live
  * demo app when the demo answers, and the example's picture when it doesn't.
  */
 export async function UiPreview({
   example: id,
-  defer = false,
+  defer = true,
   live,
 }: {
   example: string;

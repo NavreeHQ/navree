@@ -24,6 +24,14 @@ import { serveOut } from "./lib/serve-out.ts";
 import { requireOut } from "./lib/site-html.ts";
 
 const DEFAULT_PAGES = ["/", "/about/", "/docs/ai/mcp-servers/", "/ui/"];
+
+/**
+ * How long a page may take to load and go quiet. The server is already
+ * answering by then (`serveOut` waits for it, as long as it needs), but its
+ * first answer for each file is compressed on the way out, and a cold machine
+ * takes a while over the larger pages.
+ */
+const NAVIGATION_TIMEOUT_MS = 90_000;
 const pagesToCheck = (process.env.PAGES ?? DEFAULT_PAGES.join(",")).split(",").map((p) => p.trim()).filter(Boolean);
 
 const EMAIL = /[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/gi;
@@ -73,6 +81,7 @@ async function main() {
         });
       }
       const page: Page = await context.newPage();
+      page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
       let current = "";
       const label = () => `${current}${rewritten ? " (addresses rewritten by the CDN)" : ""}`;
       page.on("pageerror", (error) => problems.push(`${label()}: ${error.message.split("\n")[0]}`));

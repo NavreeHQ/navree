@@ -18,9 +18,13 @@
  * slow 4G connection and a 4x slower CPU). The floors are for catching a
  * collapse, not for setting a goal: SEO and accessibility must stay at or
  * above 0.95, best practices at or above 0.9, layout shift at or below 0.1,
- * and performance at or above 0.25 (CI runners are slow and vary run to
- * run). The scores, LCP, blocking time and transfer size of every page are
- * printed and written to `report/lighthouse.md`.
+ * and performance at or above 0.8. The pages score 97 to 99 on the pinned
+ * Lighthouse, which estimates a phone's load from the trace of one run, so the
+ * floor sits well under that and above the 77 that /docs/components/button/
+ * scored when its previews' requests began just as the page first painted
+ * (they now wait for the page to load, `UiPreview`). The scores, LCP, blocking
+ * time and transfer size of every page are printed and written to
+ * `report/lighthouse.md`.
  */
 import { spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -33,7 +37,7 @@ import { WEBSITE, finish } from "./lib/site-html.ts";
 /** Lighthouse version, pinned. Update it on purpose, not by a floating tag. */
 const LIGHTHOUSE = "lighthouse@13.5.0";
 const DEFAULT_PAGES = ["/", "/ui/", "/docs/getting-started/installation/", "/docs/components/button/"];
-const FLOOR = { performance: 0.25, accessibility: 0.95, "best-practices": 0.9, seo: 0.95 } as const;
+const FLOOR = { performance: 0.8, accessibility: 0.95, "best-practices": 0.9, seo: 0.95 } as const;
 const MAX_CLS = 0.1;
 
 const pagesToCheck = (process.env.PAGES ?? DEFAULT_PAGES.join(",")).split(",").map((p) => p.trim()).filter(Boolean);
