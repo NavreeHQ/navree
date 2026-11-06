@@ -217,6 +217,7 @@ macro_rules! route {
         })
         .can($ability, LighthouseSubject::SUBJECT, None)
         .name($name)
+        .json_only()
         .api(api($summary))
     }};
 }

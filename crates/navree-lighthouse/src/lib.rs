@@ -30,12 +30,14 @@
 //!   webhooks (Standard Webhooks) and your own [`AlertChannel`]s, sent as
 //!   `lighthouse.alert` jobs when the app has a queue, with a cooldown per
 //!   issue and kind.
-//! - **The dashboard** is server-rendered (navree-view templates compiled
-//!   into the crate, its own small stylesheet and script) and protected by
-//!   the `view` and `resolve` abilities on the subject `Lighthouse`
-//!   (permissions `lighthouse.view` and `lighthouse.resolve`). Its JSON API
+//! - **The dashboard** is server-rendered with Navree UI, in a shell of its
+//!   own, and protected by the `view`, `resolve` and `configure` abilities
+//!   on the subject `Lighthouse` (permissions `lighthouse.view`,
+//!   `lighthouse.resolve` and `lighthouse.configure`). People sign in to it
+//!   as they sign in to the rest of the app, on the browser session
+//!   (navree-auth's `AuthPages`); it has no sign-in of its own. Its JSON API
 //!   ([`LighthouseApiController`]) serves the same data to scripts and
-//!   agents with an access token.
+//!   agents with an access token, or to a signed-in browser.
 //! - **MCP** (feature `mcp`): with navree-mcp's `McpModule` in the app,
 //!   `LighthouseMcp` offers the same reads and status changes as tools
 //!   (`lighthouse_list_issues`, `lighthouse_get_issue`,
@@ -73,7 +75,6 @@ mod api;
 mod chart;
 mod commands;
 mod config_api;
-mod config_pages;
 mod config_store;
 mod dashboard;
 mod dispatch;
@@ -87,11 +88,11 @@ mod module;
 mod normalize;
 mod options;
 mod overview;
+mod pages;
 mod redact;
 mod release;
 mod report;
 mod service;
-mod session;
 mod settings;
 mod settings_view;
 mod store;
@@ -105,9 +106,7 @@ pub use api::{
 };
 pub use config_api::LighthouseConfigController;
 pub use config_store::{AlertCounts, AlertHistoryRow, StoredSetting};
-pub use dashboard::{
-    CONTENT_SECURITY_POLICY, DASHBOARD_CSS, DASHBOARD_JS, LighthouseDashboardController,
-};
+pub use dashboard::LighthouseDashboardController;
 pub use dispatch::ChannelResult;
 pub use engine::Span;
 pub use fake::{LighthouseFake, Reported};

@@ -26,7 +26,6 @@ mysql = ["navree-db/mysql"]
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-cookie = { workspace = true }
 form_urlencoded = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
@@ -36,7 +35,6 @@ navree-access = { workspace = true }
 navree-auth = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
-navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
@@ -47,10 +45,13 @@ navree-openapi = { workspace = true }
 # The Lighthouse tables are models (issues, occurrences, samples, aggregates, alerts).
 navree-orm = { workspace = true }
 navree-schedule = { workspace = true }
+# The browser's session: the dashboard's forms carry its CSRF token.
+navree-session = { workspace = true }
 navree-telemetry = { workspace = true }
+# The dashboard is drawn with Navree UI.
+navree-ui = { workspace = true }
 # The MCP tools' arguments derive `Validate` (feature `mcp`).
 navree-validation = { workspace = true, optional = true }
-navree-view = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -60,9 +61,14 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests sign browsers in on the session and draw the sign-in pages.
+navree-auth = { workspace = true, features = ["session", "ui"] }
+navree-crypto = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }
+# Tests of the alert mails boot MailModule, which needs ViewModule.
+navree-view = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

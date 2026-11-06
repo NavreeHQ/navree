@@ -18,7 +18,7 @@ use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 use crate::alert::DeliverAlert;
 use crate::api::LighthouseApiController;
 use crate::commands::commands;
-use crate::config_api::LighthouseConfigController;
+use crate::config_api::{Configure, LighthouseConfigController};
 use crate::dashboard::LighthouseDashboardController;
 use crate::dispatch::Alerter;
 use crate::engine::{Engine, Labels};
@@ -61,10 +61,10 @@ pub const CONFIGURE: &str = "configure";
 /// - the `lighthouse` migration set (`lighthouse_issues`,
 ///   `lighthouse_occurrences`, `lighthouse_samples`,
 ///   `lighthouse_aggregates`, `lighthouse_alerts`);
-/// - the dashboard at `lighthouse.path` (`/_lighthouse`) and its JSON API
-///   under `{path}/api`, behind the `view` and `resolve` abilities on the
-///   subject `Lighthouse` (registered with the permission prefix
-///   `lighthouse`);
+/// - the dashboard at `lighthouse.path` (`/_lighthouse`), drawn with Navree
+///   UI, and its JSON API under `{path}/api`, behind the `view`, `resolve`
+///   and `configure` abilities on the subject `Lighthouse` (registered with
+///   the permission prefix `lighthouse`);
 /// - the `lighthouse.alert` job, the `lighthouse:prune` and
 ///   `lighthouse:test-alerts` commands, and the daily `lighthouse:prune`
 ///   task for the scheduler;
@@ -72,8 +72,10 @@ pub const CONFIGURE: &str = "configure";
 ///   prompt on the app's MCP server when it has `McpModule`.
 ///
 /// It needs `DatabaseModule` (unless `lighthouse.store = "off"`); the
-/// dashboard needs `AccessModule` (and `AuthModule` and `CryptoModule` for
-/// its sign-in); email alerts need `MailModule`.
+/// dashboard needs `AccessModule`, and people sign in to it on the app's
+/// session: `SessionModule`, `AuthModule`, `UiModule` and `AuthPages`, the
+/// same sign-in as every other page of the app. Email alerts need
+/// `MailModule`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LighthouseModule;
 
@@ -136,6 +138,18 @@ fn register(m: &mut ModuleBuilder, options: Option<LighthouseOptions>) {
         .import(AccessModule::for_subject::<LighthouseSubject>())
         .migrations(migrations())
         .job::<DeliverAlert>()
+        .provider::<Configure>()
+        // The dashboard is drawn with Navree UI: its files and layer are
+        // there while the dashboard is on.
+        .import(navree_ui::UiOnDemand)
+        .contribute(navree_ui::UiNeed::when(|ctx: AppContext| async move {
+            ctx.get::<Lighthouse>().await.is_ok_and(|lighthouse| {
+                let options = lighthouse.options();
+                options.dashboard
+                    && options.store != StoreKind::Off
+                    && lighthouse.store().is_some()
+            })
+        }))
         .controller::<LighthouseDashboardController>()
         .controller::<LighthouseApiController>()
         .controller::<LighthouseConfigController>()
