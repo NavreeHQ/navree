@@ -396,6 +396,7 @@ validation-form-amount = { $attribute }: enter an amount, like 12,500.50.
 validation-form-choice = { $attribute }: choose one of the options.
 validation-form-date = { $attribute }: enter a date.
 validation-form-decimal_places = { $attribute }: use at most 28 decimal places.
+validation-form-file = { $attribute }: choose the file again.
 validation-form-invalid = { $attribute } is not valid.
 validation-form-max_choices = Choose at most { $max }.
 validation-form-moment = { $attribute }: enter a date and time.

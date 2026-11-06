@@ -395,6 +395,7 @@ validation-form-amount = { $attribute }: राशि लिखें, जैस
 validation-form-choice = { $attribute }: विकल्पों में से एक चुनें।
 validation-form-date = { $attribute }: तारीख़ लिखें।
 validation-form-decimal_places = { $attribute }: अधिकतम 28 दशमलव स्थान लिखें।
+validation-form-file = { $attribute }: फ़ाइल फिर से चुनें।
 validation-form-invalid = { $attribute } सही नहीं है।
 validation-form-max_choices = अधिकतम { $max } चुनें।
 validation-form-moment = { $attribute }: तारीख़ और समय लिखें।

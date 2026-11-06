@@ -9,6 +9,8 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
+#[cfg(feature = "storage")]
+use std::sync::Arc;
 
 use chrono::{NaiveDate, NaiveTime};
 use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
@@ -85,6 +87,14 @@ pub enum Widget {
     /// is the field's `slider` function, or the field's `range` rule (0 to 100 without
     /// one) in steps of 1, and [`decode`] refuses a value off the grid.
     Slider,
+    /// A file, drawn as an [`Upload`](crate::Upload) (`#[form(widget = file)]` on a
+    /// `String` or an `Option<String>`): the field gets the stored file's path on its
+    /// disk. With [`FormView::upload`] and [`Upload::send_to`](crate::Upload::send_to)
+    /// the module sends a chosen file at once and the form posts its key
+    /// ([`file_key`](crate::upload::file_key)); with no script the form is a multipart
+    /// form and [`Submit`] stores the file through the app's `Uploads`. A key that was
+    /// not signed by the app, or has expired, is refused.
+    File,
 }
 
 impl Widget {
@@ -722,6 +732,7 @@ pub struct FormView<T> {
     options: BTreeMap<&'static str, Vec<(String, String)>>,
     rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
     searches: BTreeMap<&'static str, Href>,
+    uploads: BTreeMap<&'static str, crate::Upload>,
     columns: bool,
     csrf: Option<String>,
     date_locale: DateLocale,
@@ -747,6 +758,7 @@ impl<T: Form> FormView<T> {
             options: BTreeMap::new(),
             rich: BTreeMap::new(),
             searches: BTreeMap::new(),
+            uploads: BTreeMap::new(),
             columns: true,
             csrf: None,
             date_locale: DateLocale::english(),
@@ -881,6 +893,35 @@ impl<T: Form> FormView<T> {
     /// show their labels.
     pub fn search(mut self, field: &'static str, url: impl Into<Href>) -> Self {
         self.searches.insert(field, url.into());
+        self
+    }
+
+    /// How the file field `field` is drawn: an [`Upload`](crate::Upload) with its limits,
+    /// its words and, with [`send_to`](crate::Upload::send_to), the route the module sends
+    /// a chosen file to at once. The form gives it the field's name, label, error and key.
+    ///
+    /// ```
+    /// use navree_ui::form::FormView;
+    /// use navree_ui::{Form, Upload, UploadLimits, Validate, render};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct Claim {
+    ///     title: String,
+    ///     #[form(widget = file)]
+    ///     receipt: String,
+    /// }
+    ///
+    /// let limits = UploadLimits::new(2 * 1024 * 1024).accept(["application/pdf"]);
+    /// let form = FormView::<Claim>::new()
+    ///     .post("/claims")
+    ///     .upload("receipt", Upload::new("receipt", "Receipt").limits(limits).send_to("/claims/receipt"));
+    /// let html = render(&form.into());
+    /// assert!(html.contains(r#"enctype="multipart/form-data""#));
+    /// assert!(html.contains(r#"data-send="/claims/receipt""#));
+    /// ```
+    pub fn upload(mut self, field: &'static str, upload: crate::Upload) -> Self {
+        self.uploads.insert(field, upload);
         self
     }
 
@@ -1100,6 +1141,26 @@ impl<T: Form> FormView<T> {
                     .invalid(invalid)
                     .into()
             }
+            Widget::File => {
+                let mut upload = self.uploads.get(field.name).cloned().map_or_else(
+                    || crate::Upload::new(field.name, field.label),
+                    |upload| upload.named(field.name),
+                );
+                // The value a refused form posts back is the key of the file it already sent.
+                if let Some(key) = value {
+                    upload = upload.key(key);
+                }
+                if let Some(error) = self.errors.get(field.name) {
+                    upload = upload.error(error.join(" "));
+                }
+                if let Some(help) = field.help {
+                    upload = upload.hint(help);
+                }
+                if rules.required {
+                    upload = upload.required();
+                }
+                upload.into()
+            }
         }
     }
 
@@ -1243,6 +1304,11 @@ impl<T: Form> FormView<T> {
                     .child(self.control(field));
                 box_el.child(error.map(|text| el("p").slot("field-error").child(text)))
             }
+            // The upload draws its own label, hint and error.
+            Widget::File => el("div")
+                .slot("field")
+                .flag("data-invalid", error.is_some())
+                .child(self.control(field)),
             _ => {
                 let mut control = self.control(field);
                 if let Some(addon) = field
@@ -1313,6 +1379,7 @@ impl<T: Form> FormView<T> {
                 !matches!(
                     field.widget,
                     Widget::Input(InputKind::Hidden | InputKind::Password | InputKind::File)
+                        | Widget::File
                 )
             })
             .map(|field| {
@@ -1352,11 +1419,14 @@ impl<T: Form> FormView<T> {
 
     fn into_node(self) -> Node {
         let fields = self.fields_node();
+        // A file goes with the form when no script sent it first.
+        let files = T::FIELDS.iter().any(|field| field.widget == Widget::File);
         el("form")
             .slot("form")
             .attr("id", T::ID)
             .attr("method", self.method)
             .attr_opt("action", self.action.map(AttrHref))
+            .attr_opt("enctype", files.then_some("multipart/form-data"))
             .flag("data-ui-form", true)
             .uses(Uses::CORE)
             .children((
@@ -1470,6 +1540,7 @@ pub const FORM_MESSAGES: &[(&str, &str)] = &[
         "form.decimal_places",
         ":attribute: use at most 28 decimal places.",
     ),
+    ("form.file", ":attribute: choose the file again."),
     ("form.invalid", ":attribute is not valid."),
     ("form.max_choices", "Choose at most :max."),
     ("form.moment", ":attribute: enter a date and time."),
@@ -1602,6 +1673,197 @@ fn read_pairs<T: Form>(bytes: &[u8]) -> Option<Vec<(String, String)>> {
         }
     }
     Some(kept)
+}
+
+/// Whether `T` has a file field.
+fn has_files<T: Form>() -> bool {
+    T::FIELDS.iter().any(|field| field.widget == Widget::File)
+}
+
+/// Whether the request's body is a multipart form.
+fn is_multipart(parts: &Parts) -> bool {
+    parts
+        .headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .trim_start()
+                .get(..19)
+                .is_some_and(|kind| kind.eq_ignore_ascii_case("multipart/form-data"))
+        })
+}
+
+/// The files a post brought for a form's file fields: each field's name and the stored file's
+/// path.
+#[derive(Default)]
+struct Posted {
+    files: Vec<(String, String)>,
+}
+
+/// The pairs of a multipart post, and the files of its file fields, each stored through the
+/// app's `Uploads` (the one registered under the field's name, else the app's one). A file
+/// the upload refuses is a field error, under the field, in the upload's words. When the post
+/// cannot be read, the status to answer; when no upload can store a file, the error.
+async fn read_multipart<T: Form>(
+    request: Request,
+    ctx: Option<&AppContext>,
+) -> Result<(Vec<(String, String)>, Posted), Result<StatusCode, AppError>> {
+    let Ok(mut form) = <navree_http::extract::Multipart as FromRequest>::from_request(request).await
+    else {
+        return Err(Ok(StatusCode::BAD_REQUEST));
+    };
+    let mut pairs = Vec::with_capacity(T::FIELDS.len());
+    let mut posted = Posted::default();
+    #[cfg(feature = "storage")]
+    let mut kept: Vec<(Arc<crate::Uploads>, navree_storage::StoredFile)> = Vec::new();
+    let mut parts = 0_usize;
+    let outcome: Result<(), Result<StatusCode, AppError>> = loop {
+        let field = match form.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break Ok(()),
+            Err(error) => break Err(Ok(error.to_app_error().status)),
+        };
+        parts += 1;
+        if parts > MAX_PAIRS {
+            break Err(Ok(StatusCode::PAYLOAD_TOO_LARGE));
+        }
+        let Some(name) = field.name().map(str::to_owned) else {
+            continue;
+        };
+        let is_file = T::FIELDS
+            .iter()
+            .any(|f| f.name == name && f.widget == Widget::File);
+        match field.file_name().map(str::to_owned) {
+            // A file name of nothing is a browser saying no file was chosen.
+            Some(raw) if is_file && !raw.trim().is_empty() => {
+                #[cfg(feature = "storage")]
+                {
+                    let Some(uploads) = uploads_for(ctx, &name).await else {
+                        break Err(Err(AppError::internal(format!(
+                            "the form's file field `{name}` needs an `Uploads` in the app (registered under `{name}`, or one for the app)"
+                        ))));
+                    };
+                    match uploads.store_field(field, &raw).await {
+                        Ok(Ok(stored)) => {
+                            posted.files.push((name.clone(), stored.path.clone()));
+                            kept.push((uploads, stored));
+                        }
+                        Ok(Err(refused)) => pairs.push((format!("{FILE_REFUSED}{name}"), refused.message)),
+                        Err(error) => break Err(Err(error)),
+                    }
+                }
+                #[cfg(not(feature = "storage"))]
+                {
+                    let _ = (field, raw, ctx);
+                    break Err(Err(AppError::internal(format!(
+                        "the form's file field `{name}` needs navree-ui's `storage` feature to store a posted file"
+                    ))));
+                }
+            }
+            Some(_) => {}
+            None => {
+                if !(T::FIELDS.iter().any(|f| f.name == name) || is_phone_country::<T>(&name)) {
+                    continue;
+                }
+                match field.text().await {
+                    Ok(text) => pairs.push((name, text)),
+                    Err(error) => break Err(Ok(error.to_app_error().status)),
+                }
+            }
+        }
+    };
+    match outcome {
+        Ok(()) => Ok((pairs, posted)),
+        Err(failure) => {
+            // A post that failed half way keeps none of its files.
+            #[cfg(feature = "storage")]
+            for (uploads, stored) in kept {
+                uploads.forget(std::slice::from_ref(&stored)).await;
+            }
+            Err(failure)
+        }
+    }
+}
+
+/// The upload a file field stores its files with: the one registered under its name, else the
+/// app's one.
+#[cfg(feature = "storage")]
+async fn uploads_for(ctx: Option<&AppContext>, name: &str) -> Option<Arc<crate::Uploads>> {
+    let ctx = ctx?;
+    match ctx.get_named::<crate::Uploads>(name).await {
+        Ok(uploads) => Some(uploads),
+        Err(_) => ctx.try_get::<crate::Uploads>().await,
+    }
+}
+
+/// The prefix of the pair that carries why the upload refused a file field's file.
+const FILE_REFUSED: &str = "\0refused:";
+
+/// Each file field's value as the form reads it, and as a refused form shows it again, and the
+/// errors of the file fields. The value is the path of the file the post brought; else of the
+/// file its key names ([`file_key`](crate::upload::file_key), signed by the app): a key that
+/// does not read is no file, and an error. A refused form shows the key of each file, so it is
+/// not chosen again.
+fn file_values<T: Form>(
+    pairs: Vec<(String, String)>,
+    posted: Posted,
+    signer: Option<&navree_http::UrlSigner>,
+    words: &AppMessages,
+) -> (Vec<(String, String)>, Vec<(String, String)>, FieldErrors) {
+    let mut errors = FieldErrors::new();
+    let mut read = Vec::with_capacity(pairs.len());
+    let mut shown = Vec::with_capacity(pairs.len());
+    let mut keys: BTreeMap<String, String> = BTreeMap::new();
+    for (name, value) in pairs {
+        if let Some(field) = name.strip_prefix(FILE_REFUSED) {
+            errors.entry(field.to_owned()).or_default().push(value);
+            continue;
+        }
+        let is_file = T::FIELDS
+            .iter()
+            .any(|f| f.name == name && f.widget == Widget::File);
+        if is_file {
+            // The first key wins: a form posts one per field.
+            if !value.trim().is_empty() {
+                keys.entry(name).or_insert(value);
+            }
+            continue;
+        }
+        read.push((name.clone(), value.clone()));
+        shown.push((name, value));
+    }
+    for field in T::FIELDS.iter().filter(|f| f.widget == Widget::File) {
+        let name = field.name;
+        if errors.contains_key(name) {
+            continue;
+        }
+        let brought = posted
+            .files
+            .iter()
+            .find(|(field, _)| field == name)
+            .map(|(_, path)| path.clone());
+        let path = match brought {
+            Some(path) => Some(path),
+            None => match keys.get(name) {
+                Some(key) => match signer.and_then(|signer| crate::upload::file_path(signer, key)) {
+                    Some(path) => Some(path),
+                    None => {
+                        errors.insert(name.to_owned(), vec![words.render(name, "form.file", &[])]);
+                        None
+                    }
+                },
+                None => None,
+            },
+        };
+        if let Some(path) = path {
+            if let Some(signer) = signer {
+                shown.push((name.to_owned(), crate::upload::file_key(signer, &path)));
+            }
+            read.push((name.to_owned(), path));
+        }
+    }
+    (read, shown, errors)
 }
 
 /// Whether `name` is the country posted with one of `T`'s phone fields.
@@ -2043,7 +2305,8 @@ where
             | Widget::Money
             | Widget::Phone
             | Widget::PhoneText
-            | Widget::Slider => kept.push((field.name, "")),
+            | Widget::Slider
+            | Widget::File => kept.push((field.name, "")),
             // Read above, with the values it has.
             Widget::Multi => {}
         }
@@ -2562,16 +2825,49 @@ where
         if let Some(status) = refusal(&parts).await {
             return Err(refuse(status, action));
         }
-        let limit = BodyLimit::of(&parts.extensions);
-        let Ok(bytes) = read_body(body, limit).await else {
-            return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
-        };
-        let Some(values) = read_pairs::<T>(&bytes) else {
-            return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
+        let ctx = parts.extensions.get::<AppContext>().cloned();
+        let files = has_files::<T>();
+        // A form with a file field is a multipart form when no script sent its files first.
+        let (values, stored) = if files && is_multipart(&parts) {
+            let request = Request::from_parts(parts.clone(), body);
+            match read_multipart::<T>(request, ctx.as_ref()).await {
+                Ok(read) => read,
+                Err(Ok(status)) => return Err(refuse(status, action)),
+                Err(Err(error)) => {
+                    let mut failed = refuse(StatusCode::INTERNAL_SERVER_ERROR, action);
+                    failed.refused = None;
+                    failed.failed = Some(error);
+                    return Err(failed);
+                }
+            }
+        } else {
+            let limit = BodyLimit::of(&parts.extensions);
+            let Ok(bytes) = read_body(body, limit).await else {
+                return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
+            };
+            let Some(values) = read_pairs::<T>(&bytes) else {
+                return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
+            };
+            (values, Posted::default())
         };
         // The app's messages and its translator, and the reader's words: the reader's language.
-        let ctx = parts.extensions.get::<AppContext>().cloned();
         let language = Language::of(ctx.as_ref()).await;
+        // A file field's value is the path of its file, and a refused form shows its key.
+        let (values, echoed, file_errors) = if files {
+            let signer = match &ctx {
+                Some(ctx) => ctx.try_get::<navree_http::UrlSigner>().await,
+                None => None,
+            };
+            let (values, echoed, errors) = file_values::<T>(
+                values,
+                stored,
+                signer.as_deref(),
+                &words::<T>(&language.messages),
+            );
+            (values, Some(echoed), errors)
+        } else {
+            (values, None, FieldErrors::new())
+        };
         let rejected =
             |values: Vec<(String, String)>, errors: FieldErrors, action: String| Rejected {
                 values: echo::<T>(values),
@@ -2586,10 +2882,20 @@ where
                 reader: language.words.clone(),
                 marker: PhantomData,
             };
-        let value = match decode_for::<T>(&values, &language) {
+        let decoded = match decode_for::<T>(&values, &language) {
+            Ok(value) if file_errors.is_empty() => Ok(value),
+            Ok(_) => Err(file_errors),
+            Err(mut errors) => {
+                // What is wrong with a file is what its field says.
+                errors.extend(file_errors);
+                Err(errors)
+            }
+        };
+        let value = match decoded {
             Ok(value) => value,
             Err(errors) => {
-                let mut refused = rejected(values, errors, action);
+                let shown = echoed.unwrap_or(values);
+                let mut refused = rejected(shown, errors, action);
                 // Only a post that gets its page back needs the shell.
                 if !from_runtime {
                     refused.shell = shell_of_request(&parts).await;
@@ -2606,7 +2912,7 @@ where
             Ok(violations) if violations.is_empty() => Ok(Self(value)),
             Ok(violations) => {
                 let errors = rule_errors::<T>(&violations, &words::<T>(&language.messages));
-                let mut refused = rejected(values, errors, action);
+                let mut refused = rejected(echoed.unwrap_or(values), errors, action);
                 if !from_runtime {
                     refused.shell = shell_of_request(&parts).await;
                 }

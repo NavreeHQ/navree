@@ -132,6 +132,47 @@ Set the part route's body limit with `uploads.chunk_body_limit()`. The size of a
 
 Without an action the upload is a field. The files the person chooses are listed, each with a Remove button, and they go with the form when it is sent. Give the form `enctype="multipart/form-data"`.
 
+## A file field in a derived form
+
+`#[form(widget = file)]` on a `String` (or an `Option<String>`) draws the field as an upload, and the form becomes a multipart form. The handler's `Submit<T>` gets the stored file's path on its disk, not the file:
+
+```rust
+#[derive(Deserialize, Validate, Form)]
+struct Claim {
+    /// Title
+    #[validate(length(min = 1))]
+    title: String,
+    /// Receipt
+    #[form(widget = file)]
+    receipt: String,
+}
+
+async fn save(Submit(claim): Submit<Claim>) -> Reply {
+    // claim.receipt is a path such as "receipts/k3v9q….pdf" on the upload's disk.
+    Reply::redirect("/claims")
+}
+```
+
+With no script, the file goes with the form and `Submit` stores it through the app's `Uploads`: the one registered under the field's name (`m.factory(Factory::<Uploads>::new(..).named("receipt"))`), else the app's one (`m.value(Uploads::new(disk, "receipts", limits))`). The route's body limit must take the file: `.body_limit(uploads.body_limit())`. A file the upload refuses is an error under its field, in the upload's words.
+
+With the `upload` module, the file can go first, as soon as it is chosen. Give the field an upload that sends it, and a route that stores it and answers with its key:
+
+```rust
+let form = FormView::<Claim>::new()
+    .post("/claims")
+    .upload("receipt", Upload::new("receipt", "Receipt").limits(limits).send_to("/claims/receipt"));
+
+// POST /claims/receipt
+async fn receipt(uploads: Inject<Uploads>, signer: Inject<UrlSigner>, mut form: Multipart) -> Response {
+    match uploads.receive(&mut form).await {
+        Ok(received) => received.into_keyed_response(&signer),
+        Err(error) => error.into_response(),
+    }
+}
+```
+
+The module puts the key in a hidden field, and the form posts it in place of the file; `Submit` reads it back as the path. A key is the path signed with the app's key (`navree_ui::upload::file_key`) and good for a day, so a path a browser makes up, or a key it changes, is refused ("choose the file again"). A form that is refused for another reason comes back with the key of the file it already stored, so the person does not choose it twice. The form waits to be sent while a file is still on its way.
+
 ## States
 
 <UiPreview example="upload/states" />

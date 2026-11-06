@@ -160,6 +160,25 @@ impl Received {
         json_response(self.status(), &self.json())
     }
 
+    /// [`json`](Self::json) with each stored file's `key` ([`file_key`](crate::upload::file_key)):
+    /// the answer of the route a form's file field sends its file to
+    /// ([`FormView::upload`](crate::form::FormView::upload)), whose key the module puts in the
+    /// form in place of the file.
+    pub fn json_with_keys(&self, signer: &navree_http::UrlSigner) -> Value {
+        let mut json = self.json();
+        if let Some(stored) = json.get_mut("stored").and_then(Value::as_array_mut) {
+            for (entry, file) in stored.iter_mut().zip(&self.stored) {
+                entry["key"] = Value::String(crate::upload::file_key(signer, &file.path));
+            }
+        }
+        json
+    }
+
+    /// [`json_with_keys`](Self::json_with_keys) as a response, with [`status`](Self::status).
+    pub fn into_keyed_response(self, signer: &navree_http::UrlSigner) -> Response {
+        json_response(self.status(), &self.json_with_keys(signer))
+    }
+
     /// A toast's tone and text for a person who sent the form with no script: how many files
     /// were kept, and why the others were not.
     pub fn summary(&self, labels: &UploadLabels) -> (ToastTone, String) {
@@ -532,6 +551,31 @@ impl Uploads {
     }
 
     /// Takes back what a failed request stored.
+    /// Stores the one file `field` holds, called `raw` by the browser, for a form's file
+    /// field: the stored file, or why it was refused.
+    pub(crate) async fn store_field(
+        &self,
+        field: navree_http::extract::Field<'_>,
+        raw: &str,
+    ) -> Result<Result<StoredFile, Refused>, AppError> {
+        let name = clean_name(raw);
+        match store_upload(field, &self.disk, &self.dir, self.limits.rules()).await {
+            Ok(stored) => Ok(Ok(StoredFile {
+                original_name: Some(name),
+                ..stored
+            })),
+            Err(error) => self.refusal(&name, error).map(Err),
+        }
+    }
+
+    /// Takes back files this upload stored for a post that then failed.
+    pub(crate) async fn forget(&self, files: &[StoredFile]) {
+        for file in files {
+            // A file that cannot be removed now is found by whatever sweeps the disk.
+            let _ = self.disk.delete(&file.path).await;
+        }
+    }
+
     async fn undo(&self, received: Received, error: AppError) -> AppError {
         for file in &received.stored {
             // A file that cannot be removed now is found by whatever sweeps the disk.

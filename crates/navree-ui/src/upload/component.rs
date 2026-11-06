@@ -179,6 +179,8 @@ pub struct Upload {
     compact: bool,
     previews: bool,
     files: Vec<UploadedFile>,
+    send: Option<String>,
+    key: Option<String>,
 }
 
 impl Upload {
@@ -203,7 +205,15 @@ impl Upload {
             compact: false,
             previews: false,
             files: Vec::new(),
+            send: None,
+            key: None,
         }
+    }
+
+    /// The same upload posting as `name`: a form's file field takes the field's name.
+    pub(crate) fn named(mut self, name: &str) -> Self {
+        name.clone_into(&mut self.name);
+        self
     }
 
     /// Sets the id (`upload-{name}` otherwise). The file input's is `{id}-input`.
@@ -251,6 +261,27 @@ impl Upload {
         self.chunks = LocalHref::parse(url.as_ref())
             .ok()
             .map(|href| href.as_str().to_owned());
+        self
+    }
+
+    /// Inside a form of yours: the module sends each chosen file at once to `url`, an
+    /// address on this site whose route stores it and answers with its key
+    /// ([`Received::into_keyed_response`](crate::Received::into_keyed_response)), and puts the
+    /// key in a hidden field named like the upload, which the form posts in place of the
+    /// file. With no script the file goes with the form, which must be a multipart form.
+    /// Anything that is not an address on this site is ignored.
+    pub fn send_to(mut self, url: impl AsRef<str>) -> Self {
+        self.send = LocalHref::parse(url.as_ref())
+            .ok()
+            .map(|href| href.as_str().to_owned());
+        self
+    }
+
+    /// The key of a file already sent ([`file_key`](crate::upload::file_key)), which the
+    /// form posts again: for a form drawn again after it was refused, so the file is not
+    /// chosen twice. The field is then not required in the browser.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into()).filter(|key| !key.is_empty());
         self
     }
 
@@ -346,7 +377,7 @@ impl Upload {
             .attr("name", self.name.clone())
             .attr_opt("accept", (!accept.is_empty()).then_some(accept))
             .flag("multiple", several)
-            .flag("required", self.required)
+            .flag("required", self.required && self.key.is_none())
             .flag("disabled", self.disabled)
             .attr("aria-labelledby", label_id.clone())
             .attr("aria-describedby", described)
@@ -416,6 +447,15 @@ impl Upload {
         } else {
             None
         };
+        // In a form of yours, the key of the file the module sent goes in its place.
+        let send = self.send.clone().filter(|_| !standalone);
+        let key = (!standalone && (send.is_some() || self.key.is_some())).then(|| {
+            el("input")
+                .slot("upload-key")
+                .attr("type", "hidden")
+                .attr("name", self.name.clone())
+                .attr("value", self.key.clone().unwrap_or_default())
+        });
 
         let mut root = el(if standalone { "form" } else { "div" })
             .slot("upload")
@@ -435,6 +475,8 @@ impl Upload {
                 self.chunks.as_ref().map(|_| number(self.chunk_from)),
             )
             .attr_opt("data-refresh", self.refresh.clone())
+            .attr_opt("data-send", send)
+            .flag("data-required", self.required)
             .flag("data-manual", self.manual && standalone)
             .flag("data-compact", self.compact)
             .flag("data-previews", self.previews)
@@ -445,6 +487,7 @@ impl Upload {
             .uses(Uses::UPLOAD)
             .children((
                 csrf,
+                key,
                 label,
                 zone,
                 error,

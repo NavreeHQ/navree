@@ -8,6 +8,9 @@
 //! - [`UploadLimits`] says what is accepted. The page shows it as a hint; the server holds
 //!   every file to it.
 //! - [`UploadedFile`] is a file the server already has, as a row of the list.
+//! - [`file_key`] signs a stored file's path, so a form's file field
+//!   (`#[form(widget = file)]`) can post the key of a file the module already sent, and
+//!   [`file_path`] reads it back.
 //! - `Uploads` (with the `storage` feature) receives the files into a navree-storage disk. It
 //!   counts a file's size while the bytes arrive, reads its kind from its first bytes, treats
 //!   its name as text to show, and puts the parts of a large file together only when every
@@ -18,12 +21,14 @@
 //! Once the server has stored an image, show it from its own address.
 
 mod component;
+mod key;
 mod labels;
 mod limits;
 #[cfg(feature = "storage")]
 mod server;
 
 pub use component::{Upload, UploadedFile};
+pub use key::{file_key, file_path};
 pub use labels::UploadLabels;
 pub use limits::UploadLimits;
 #[cfg(feature = "storage")]

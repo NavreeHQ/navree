@@ -15,8 +15,13 @@ const part = (root, name) => all(root, "[data-slot=" + name + "]")[0];
 const field = (root) => /** @type {any} */ (all(root, "input[type=file]")[0]);
 /** @param {Element} root @param {string} name */
 const num = (root, name) => Number(attr(root, name)) || 0;
+/** Where a root sends its files: its own form's action, or, in a form of the page's, the route
+ * that stores a file and answers with its key. @param {Element} root */
+const target = (root) => attr(root, "action") || attr(root, "data-send") || "";
 /** @param {Element} root */
-const auto = (root) => !!attr(root, "action") && !has(root, "data-manual");
+const auto = (root) => !!target(root) && !has(root, "data-manual");
+/** The hidden field that carries the key of the file a form's upload sent. @param {Element} root */
+const keyField = (root) => /** @type {HTMLInputElement | undefined} */ (/** @type {any} */ (part(root, "upload-key")));
 /** @param {number} n */
 const size = (n) => {
   const unit = (v, u) => v.toFixed(1).replace(/\.0$/, "") + " " + u;
@@ -122,7 +127,7 @@ function whole(job) {
   data.append(attr(field(job.root), "name") || "file", job.file);
   const token = /** @type {HTMLInputElement | undefined} */ (/** @type {any} */ (all(job.root, "input[name=_csrf]")[0]));
   if (token) data.append("_csrf", token.value);
-  return req(job, "POST", attr(job.root, "action") || "", data, "", (n) => progress(job, n));
+  return req(job, "POST", target(job.root), data, "", (n) => progress(job, n));
 }
 
 /** The file in parts, each tried three times, then put together by the server. @param {Job} job */
@@ -161,6 +166,15 @@ async function run(job) {
     tell(root, words);
     try {
       const r = await (attr(root, "data-chunks") && file.size >= num(root, "data-chunk-from") ? chunked(job) : whole(job));
+      // In a form of the page's, the form posts the stored file's key in its place.
+      const key = attr(root, "data-send") ? keyField(root) : undefined;
+      const sent = r.json?.stored?.[0]?.key;
+      if (r.status < 300 && key) {
+        if (typeof sent === "string" && sent) {
+          key.value = sent;
+          field(root).required = false;
+        } else r.status = 500;
+      }
       if (r.status < 300) {
         const done = say(root, "done");
         show(job, "done", size(file.size) + " · " + done);
@@ -232,6 +246,12 @@ function leave(job) {
     for (const file of input.files || []) if (file !== job.file) kept.items.add(file);
     input.files = kept.files;
   }
+  // A file a form's upload sent is no longer the form's.
+  const key = keyField(root);
+  if (key && attr(root, "data-send") && job.state === "done") {
+    key.value = "";
+    if (input) input.required = has(root, "data-required");
+  }
   job.li.remove();
   tell(root, say(root, "removed", { name: job.file.name }));
   input?.focus();
@@ -255,6 +275,20 @@ on(document, "submit", (e) => {
   for (const li of all(root, "[data-state=chosen]")) li.remove();
   input.value = "";
   start(root, files);
+}, true);
+
+// A form of the page's waits while one of its uploads is still sending: its key isn't there yet.
+on(document, "submit", (e) => {
+  const form = /** @type {Element} */ (e.target);
+  for (const root of all(form, ROOT + "[data-send]")) {
+    const busy = all(root, ROW + "[data-state=sending]," + ROW + "[data-state=queued]")[0];
+    const job = busy && jobs.get(busy);
+    if (job) {
+      e.preventDefault();
+      tell(root, say(root, "sending", { name: job.file.name }));
+      return;
+    }
+  }
 }, true);
 
 on(document, "click", (e) => {

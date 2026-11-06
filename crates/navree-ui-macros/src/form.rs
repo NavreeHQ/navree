@@ -95,11 +95,12 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         "money" => quote!(#ui::form::Widget::Money),
         "phone" => quote!(#ui::form::Widget::Phone),
         "slider" => quote!(#ui::form::Widget::Slider),
+        "file" | "upload" => quote!(#ui::form::Widget::File),
         other => {
             return Err(syn::Error::new(
                 widget.span(),
                 format!(
-                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch, money, phone or slider"
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch, money, phone, slider or file"
                 ),
             ));
         }
