@@ -4,10 +4,10 @@
 //! cargo run -p navree-lighthouse --example dashboard
 //! ```
 //!
-//! Then open <http://127.0.0.1:8099/_lighthouse> and sign in as
-//! `ops@demo.test` (may view, resolve and configure), `viewer@demo.test`
-//! (may only view) or `nobody@demo.test` (may not open it); the password is
-//! `demo-password-1`.
+//! Then open <http://127.0.0.1:8099/_lighthouse>: it sends you to the app's
+//! sign-in page. Sign in as `ops@demo.test` (may view, resolve and
+//! configure), `viewer@demo.test` (may only view) or `nobody@demo.test` (may
+//! not open it); the password is `demo-password-1`.
 //!
 //! The app is a small CRM API with a few routes that fail, panic, run slow
 //! or call an upstream that fails, and a queue worker with jobs that
@@ -29,7 +29,7 @@ use std::time::Duration;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
-use navree_auth::{AuthModule, AuthService};
+use navree_auth::{AuthModule, AuthPages, AuthService};
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Backoff, BoxError, Job, JobContext, JobOptions,
@@ -49,6 +49,8 @@ use navree_lighthouse::{
 };
 use navree_orm::Model as _;
 use navree_queue::{Queue, QueueModule, WorkOptions};
+use navree_session::{SessionModule, SessionOptions};
+use navree_ui::UiModule;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -506,7 +508,14 @@ async fn main() -> Result<(), BoxError> {
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
         .module(HttpClientModule::from_config())
+        // The demo serves plain HTTP on this machine: no `Secure` cookie.
+        .module(SessionModule::for_root(SessionOptions {
+            secure: false,
+            ..SessionOptions::default()
+        }))
         .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("crm-api"))
         .module(navree_view::ViewModule::from_config())
         .module(navree_mail::MailModule::from_config())
         .module(QueueModule::from_config())

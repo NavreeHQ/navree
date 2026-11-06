@@ -34,7 +34,7 @@ navree access:grant manager lighthouse.view
 </Step>
 <Step title="Open the dashboard">
 
-Open `http://127.0.0.1:8080/_lighthouse` and sign in with your app's account. Issues appear as the app records exceptions, slow requests and failed jobs. See [The dashboard](#the-dashboard).
+Open `http://127.0.0.1:8080/_lighthouse`. It sends you to your app's sign-in page; sign in with your app's account. Issues appear as the app records exceptions, slow requests and failed jobs. See [The dashboard](#the-dashboard).
 
 </Step>
 </Steps>
@@ -61,8 +61,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 | Module | Why |
 |---|---|
 | `DatabaseModule` | Lighthouse stores issues, occurrences and samples in the app's database (or in [its own](#storage)). |
-| `AuthModule` and `AccessModule` | The dashboard signs users in and checks their abilities. Turn the dashboard off with `lighthouse.dashboard = false` in an app without them. |
-| `CryptoModule` | The dashboard's session cookie is encrypted with the application key. |
+| `AccessModule` | The dashboard checks the user's abilities. Turn the dashboard off with `lighthouse.dashboard = false` in an app without it. |
+| `SessionModule`, `AuthModule`, `UiModule` and `AuthPages` | A browser signs in to the dashboard the way it signs in to the rest of your app, on the [session](/docs/security/sessions/), through the app's sign-in page. An app made with `navree new` has them all. |
 | `MailModule` | Only for [email alerts](#email). |
 | `QueueModule` | Optional. Alerts are sent as `lighthouse.alert` jobs when the app has a queue, and at once from the background writer otherwise. |
 | `ScheduleModule` | Optional. Lighthouse schedules its own [pruning](#retention-and-pruning) when the app has a scheduler. |
@@ -211,13 +211,13 @@ The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets 
 
 ## The dashboard
 
-The dashboard is served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix: server-rendered pages from templates compiled into the crate, with a small stylesheet and script of its own. No Node.js, no CDN and no separate process. The overview refreshes its figures and its feed every ten seconds while you watch.
+The dashboard is served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix: server-rendered pages drawn with [Navree UI](/docs/ui/overview/), in a shell of their own, so they look and behave like the rest of your app's screens. Every page and form works with JavaScript off. No Node.js, no CDN and no separate process. The overview refreshes its figures and its feed every ten seconds while you watch.
 
 The sidebar has two groups: **Monitor** (Overview, Issues, Requests, Queries, Jobs, Outgoing) and **Configure** (Alerts, Releases, Settings).
 
-- **Overview.** The release the app is at and when it was deployed, then a row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute (with the median latency), the error rate, the 95th percentile latency, failed jobs, open issues (with how many began in the period) and the details [sampled out](#under-load) because the database was not keeping up. The first four carry a sparkline of the period. Below them, a chart of requests and exceptions with its time labels (UTC) and a line where each release was deployed, and the five most recent open issues. At the right, **New occurrences** is a live panel: the latest occurrences, newest on top, each with its kind, how long ago it happened, its title and where; new ones slide in at the top as the page polls the overview's JSON every ten seconds, and the panel says **Paused** while the tab is hidden and **Reconnecting** when the app does not answer.
-- **Issues.** One line per issue (open ones by default): its title (the first line of the message), the route or job it comes from, a sparkline of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag (`key:value`), user or workspace, search titles, and sort by last seen, first seen or count.
-- **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences per hour over seven days, and a list shows recent occurrences with a link to each trace. Buttons resolve, resolve in the next release, ignore (forever, for an hour, a day or 100 more events) or reopen it, and a table shows the alerts sent about it.
+- **Overview.** The release the app is at and when it was deployed, then a row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute (with the median latency), the error rate, the 95th percentile latency, failed jobs, open issues (with how many began in the period) and the details [sampled out](#under-load) because the database was not keeping up. The first four carry a sparkline of the period. Above them, a chart of requests and exceptions with its time labels (UTC) and a line where each release was deployed. Below them, the five most recent open issues, and **New occurrences**, the latest occurrences, newest on top, each with its kind, how long ago it happened, its title and where. The figures and the two lists are one region that the page fetches again every ten seconds while the tab is visible.
+- **Issues.** One line per issue (open ones by default): its title (the first line of the message), the route or job it comes from, a small bar chart of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag (`key:value`), user or workspace, search titles, and sort by last seen, first seen or count.
+- **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences per hour over seven days, and a list shows recent occurrences with a link to each trace. With the `resolve` ability, forms resolve it (now or in the next release), ignore it (forever, for an hour, a day or 100 more events) or reopen it, each with an optional comment, and a table shows the alerts sent about it.
 - **Requests.** Every route with its throughput, error rate and p50, p95 and p99 latency, slowest first. A route's page lists its slowest traces, each drawn as a waterfall of spans.
 - **Pool wait.** On the overview: the 95th percentile of how long statements waited for a database connection, how many waited, and how many never got one. A wait here with fast statements means the pool (`database.max_connections`) is too small for the load. A trace draws the wait as a span of its own.
 - **Queries.** Normalized statements with how often they ran, their total, average and p95 time, and the routes and jobs that ran them.
@@ -231,9 +231,9 @@ When `observe.tracing.trace_url` is set, each trace id links to the trace in you
 
 ### Signing in and access
 
-The dashboard's sign-in screen uses your app's own users: an email and password through `AuthService`, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/) on. It is subject to the same login throttle as `POST /api/auth/login`. Signing in starts no API session (the refresh token the sign-in creates is revoked at once): the dashboard session lives in an encrypted, httpOnly, `SameSite=Strict` cookie scoped to `/_lighthouse` for twelve hours, so the rest of your API never sees it, and every change the dashboard makes carries a CSRF token.
+The dashboard has no sign-in of its own. A browser signs in on your app's sign-in page (`AuthPages`), and the same session opens the dashboard, [Fleet](/docs/tools/fleet/), [Helm](/docs/tools/helm/) and every other page of the app: one sign-in, with the two-factor step, the login throttle, the sign-in policies and the audit trail that [account flows](/docs/security/account-flows/) describe. Signing out, ending the session from another device, or changing the password ends the dashboard's access at once. A guest who opens a dashboard page is sent to the sign-in page and brought back. Every form on the dashboard carries the session's CSRF token, and a post without it is refused.
 
-Its JSON API, under `/_lighthouse/api`, also accepts an access token in `Authorization: Bearer`, for scripts, agents and tests.
+Its JSON API, under `/_lighthouse/api`, also accepts an access token in `Authorization: Bearer`, for scripts, agents and tests; a browser's session works there too, with the token in the `X-CSRF-Token` header for changes.
 
 Every route of the dashboard and its API checks an [ability](/docs/security/authorization/) on the subject `Lighthouse`:
 
@@ -259,7 +259,7 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 }
 ```
 
-A signed-in user without `view` gets a 403 page; a guest goes to the sign-in screen. The API answers 401 and 403 in the usual JSON error shape.
+A signed-in user without `view` gets a 403 page; a guest is sent to the sign-in page. The API answers 401 and 403 in the usual JSON error shape.
 
 ## Releases
 
@@ -285,7 +285,7 @@ The release in the dashboard's header and on the overview is the newest deploy i
 
 The **Settings** page has two parts.
 
-**Changeable while the app runs**, with the `configure` ability: the four slow thresholds, the three [sample](#sampling) rates, the retention in days, the alert cooldown and the spike thresholds. Each shows the value in use, the configured value and when it was changed. A change is checked (a rate between 0 and 1, whole numbers within a range; one bad value refuses the whole change), stored in the `lighthouse_settings` table, applied at once by the process that took it and read by every other process within fifteen seconds. Returning a setting to the configured value removes the change. Every change is written to the [audit log](/docs/security/audit-log/) when the app has one, with who made it and the old and new values, and through the dashboard's cookie it needs the CSRF token. Without `lighthouse.configure` the page is read-only and says what is missing.
+**Changeable while the app runs**, with the `configure` ability: the four slow thresholds, the three [sample](#sampling) rates, the retention in days, the alert cooldown and the spike thresholds. Each shows the value in use, the configured value and when it was changed. A change is checked (a rate between 0 and 1, whole numbers within a range; one bad value refuses the whole change), stored in the `lighthouse_settings` table, applied at once by the process that took it and read by every other process within fifteen seconds. Returning a setting to the configured value removes the change. Every change is written to the [audit log](/docs/security/audit-log/) when the app has one, with who made it and the old and new values, and through a browser's session it needs the CSRF token. Without `lighthouse.configure` the page is read-only and says what is missing.
 
 **Set in code or configuration**, read-only: where it runs (recording, store, a separate database, the path, the URL, the environment, the release and server labels), what is recorded (the buffer, the prune time, what is captured, the masked names, the ignored routes and jobs) and the alert channels. They are read when the app boots; change them in configuration or in `LighthouseOptions`. A secret (a separate database URL, the Slack webhook URL, the webhook's signing secret) shows only whether it is set, and a webhook shows its host and nothing else.
 
@@ -316,7 +316,7 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 | `GET /api/settings` | The settings that can change, with the value in use, the configured value and who changed it, and the options that cannot change | `view` |
 | `PUT /api/settings` | `{"values": {"thresholds.slow_request_ms": 500, "sample.requests": null}}`; `null` returns a setting to the configured value; one bad value refuses the whole change | `configure` |
 
-A change made through the dashboard's cookie must carry its CSRF token (`X-CSRF-Token`); one made with an access token does not need it.
+A change made through a browser's session must carry its CSRF token (`X-CSRF-Token`); one made with an access token does not need it.
 
 A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues. On your own machine, [Navigator](/docs/ai/navigator/#lighthouses-tools) (`navree mcp`) gives the agent the same issues and figures without a token, read-only, straight from your local database.
 
@@ -568,7 +568,7 @@ Lighthouse stores what your app handles, so it treats it with care:
 - **Secrets are masked.** Header values, report context values and JSON body fields whose names contain a fragment of `log.redact` (`password`, `token`, `authorization`, `cookie`, `secret` by default) are stored as `[redacted]`, plus any fragment you add to `lighthouse.redact`. `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers are always masked. Queries are stored as SQL with placeholders, never their bound values.
 - **No bodies by default.** Request bodies are not recorded unless you set `lighthouse.capture.request_body = true`, and then only JSON bodies up to 16 KiB, with the same masking. Response bodies are never recorded.
 - **Client addresses.** The client IP is stored with each request sample. Set `lighthouse.capture.ip = false` to leave it out.
-- **The dashboard denies by default.** Nobody sees it without the `view` ability, sign-in attempts are throttled, the cookie is encrypted and scoped to the dashboard's path, and its pages are served with a strict Content Security Policy (only the dashboard's own stylesheet, script and API).
+- **The dashboard denies by default.** Nobody sees it without the `view` ability, sign-in is the app's own (throttled, with two-factor authentication, and ended on the server), its forms need the session's CSRF token, and its pages are served with Navree UI's strict Content Security Policy (scripts and styles only from your own app, none inline).
 - **Data stays with you.** Nothing leaves your servers except the alerts and exports you configure.
 
 Lighthouse's own routes are left out of its recordings, as are the paths in `lighthouse.ignore.routes` (`/health/*` and `/metrics` by default) and the `lighthouse.alert` jobs. Ignore noisy jobs with `lighthouse.ignore.jobs`.
