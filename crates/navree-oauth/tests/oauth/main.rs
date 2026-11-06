@@ -21,4 +21,6 @@ mod registration;
 mod secrets;
 mod throttle;
 mod tokens;
+#[cfg(feature = "ui")]
+mod ui;
 mod workspace;

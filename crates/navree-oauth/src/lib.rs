@@ -83,6 +83,8 @@ mod scope;
 mod strategy;
 mod throttle;
 mod token;
+#[cfg(feature = "ui")]
+pub mod ui;
 
 pub use api::{CreatePersonalAccessTokenInput, DataList, OAuthApiController};
 pub use clients::{

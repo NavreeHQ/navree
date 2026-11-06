@@ -192,6 +192,7 @@ ui = [
     "navree-auth?/ui",
     "navree-i18n?/ui",
     "navree-notify?/ui",
+    "navree-oauth?/ui",
     "navree-queue?/ui",
     "navree-workspace?/ui",
 ]

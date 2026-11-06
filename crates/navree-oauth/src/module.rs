@@ -176,6 +176,8 @@ fn register(m: &mut ModuleBuilder, options: Option<OAuthOptions>) {
         .migrations(migrations())
         .http_layer(insufficient_scope_layer())
         .map_error::<OAuthError>(map_oauth_error);
+    #[cfg(feature = "ui")]
+    m.controller::<crate::ui::ConsentController>();
     for command in commands() {
         m.command(command);
     }

@@ -323,6 +323,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-access", "navree-auth", "navree-workspace", "navree-orm",
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
+        // The consent page (optional feature `ui`).
+        "navree-ui",
     ]),
     // Feature flags: user ids come from the request's `Principal`; navree-auth
     // only gives `From<&User> for FlagScope` (the crate's default `auth`
