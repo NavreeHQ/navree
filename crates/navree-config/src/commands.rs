@@ -6,8 +6,8 @@
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 
 use crate::check::{CheckOptions, CheckReport};
-use crate::show::{ShowOptions, defaults_tree, render};
-use crate::{Config, ConfigSources, SectionRegistration};
+use crate::show::{ShowOptions, render_with};
+use crate::{Config, ConfigRegistry, ConfigSources, SectionRegistration};
 
 /// The sections the app registered, without booting it.
 fn registrations(ctx: &AppContext) -> Vec<SectionRegistration> {
@@ -25,8 +25,12 @@ pub(crate) fn show() -> CommandSpec {
         |ctx: AppContext, args: Vec<String>| async move {
             let options = ShowOptions::parse(&args)?;
             let config = ctx.get::<Config>().await?;
-            let defaults = defaults_tree(&registrations(&ctx));
-            print!("{}", render(&config, &defaults, &options));
+            let registry = ConfigRegistry::new(&registrations(&ctx));
+            let defaults = registry.defaults_tree();
+            print!(
+                "{}",
+                render_with(&config, &defaults, &options, &registry.redactor())
+            );
             Ok::<(), BoxError>(())
         },
     )

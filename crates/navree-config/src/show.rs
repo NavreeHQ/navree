@@ -11,9 +11,11 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value as Json};
 
+use navree_contracts::Redactor;
+
 use crate::Config;
 use crate::origin::ValueOrigin;
-use crate::redact::{REDACTED, is_secret_key, mask_urls, redacted_json};
+use crate::redact::{REDACTED, mask_urls, redacted_json, redactor};
 use crate::value::Value;
 
 /// What `config:show` prints.
@@ -91,9 +93,23 @@ struct Row {
 
 /// Renders the effective configuration of `config`, with `defaults` (a JSON
 /// object by section key, empty when none are published) under the keys no
-/// source sets when `options.defaults` is on.
+/// source sets when `options.defaults` is on. Secrets are found by the name
+/// of the key; [`render_with`] takes a redactor that also knows the
+/// credentials of the sections by their types.
 pub fn render(config: &Config, defaults: &Json, options: &ShowOptions) -> String {
-    let rows = rows(config, defaults, options);
+    render_with(config, defaults, options, redactor())
+}
+
+/// Like [`render`], with `redactor` deciding which keys are secrets. Build
+/// one from the app's sections with
+/// [`ConfigRegistry::redactor`](crate::ConfigRegistry::redactor).
+pub fn render_with(
+    config: &Config,
+    defaults: &Json,
+    options: &ShowOptions,
+    redactor: &Redactor,
+) -> String {
+    let rows = rows(config, defaults, options, redactor);
     if options.json {
         return render_json(&rows, options);
     }
@@ -167,7 +183,12 @@ pub(crate) fn insert(tree: &mut Json, path: &str, value: Json) {
 
 /// Every key to show, by key: the tree's leaves, then the defaults that no
 /// source overrides.
-fn rows(config: &Config, defaults: &Json, options: &ShowOptions) -> BTreeMap<String, Row> {
+fn rows(
+    config: &Config,
+    defaults: &Json,
+    options: &ShowOptions,
+    redactor: &Redactor,
+) -> BTreeMap<String, Row> {
     let wanted = |key: &str| match &options.section {
         Some(section) => key == section || key.starts_with(&format!("{section}.")),
         None => true,
@@ -179,7 +200,7 @@ fn rows(config: &Config, defaults: &Json, options: &ShowOptions) -> BTreeMap<Str
             rows.insert(
                 key.to_owned(),
                 Row {
-                    shown: shown_leaf(key, leaf),
+                    shown: shown_leaf(redactor, key, leaf),
                     origin: leaf
                         .origin
                         .as_ref()
@@ -194,7 +215,7 @@ fn rows(config: &Config, defaults: &Json, options: &ShowOptions) -> BTreeMap<Str
                 rows.insert(
                     key.to_owned(),
                     Row {
-                        shown: shown_default(key, value),
+                        shown: shown_default(redactor, key, value),
                         origin: ValueOrigin::Default,
                     },
                 );
@@ -221,8 +242,8 @@ fn below_a_set_key(rows: &BTreeMap<String, Row>, key: &str) -> bool {
 }
 
 /// A value of the tree, masked.
-fn shown_leaf(key: &str, leaf: &Value) -> Shown {
-    if is_secret_key(key) {
+fn shown_leaf(redactor: &Redactor, key: &str, leaf: &Value) -> Shown {
+    if redactor.is_secret_path(key) {
         return match redacted_json(leaf) {
             Json::Null => Shown::Unset,
             _ => Shown::SecretSet,
@@ -232,29 +253,29 @@ fn shown_leaf(key: &str, leaf: &Value) -> Shown {
 }
 
 /// A default, masked.
-fn shown_default(key: &str, value: &Json) -> Shown {
-    if is_secret_key(key) {
+fn shown_default(redactor: &Redactor, key: &str, value: &Json) -> Shown {
+    if redactor.is_secret_path(key) {
         return if value.is_null() {
             Shown::Unset
         } else {
             Shown::SecretSet
         };
     }
-    Shown::Value(mask_json(value))
+    Shown::Value(mask_json(redactor, value))
 }
 
 /// Masks the URL passwords in the strings of `value`.
-fn mask_json(value: &Json) -> Json {
+fn mask_json(redactor: &Redactor, value: &Json) -> Json {
     match value {
         Json::String(text) => Json::String(mask_urls(text, None)),
-        Json::Array(items) => Json::Array(items.iter().map(mask_json).collect()),
+        Json::Array(items) => Json::Array(items.iter().map(|v| mask_json(redactor, v)).collect()),
         Json::Object(map) => Json::Object(
             map.iter()
                 .map(|(key, value)| {
-                    let value = if is_secret_key(key) {
+                    let value = if redactor.is_secret(key) {
                         Json::String(REDACTED.to_owned())
                     } else {
-                        mask_json(value)
+                        mask_json(redactor, value)
                     };
                     (key.clone(), value)
                 })

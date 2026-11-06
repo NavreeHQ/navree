@@ -160,6 +160,32 @@ impl ConfigRegistry {
             .collect()
     }
 
+    /// The keys of the fields that are public though their names look like
+    /// a credential's (`#[config(public)]`).
+    pub fn public_paths(&self) -> Vec<String> {
+        self.schemas()
+            .flat_map(|schema| {
+                schema
+                    .leaves()
+                    .into_iter()
+                    .filter(|(_, field)| field.public)
+                    .map(|(path, _)| path)
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// The redactor of this app's configuration: the framework's list of
+    /// secret words and `key`, then what the sections know about their own
+    /// fields. A field typed as a secret is masked whatever its name, and a
+    /// field marked public (`realtime.key`) is not masked because of it.
+    pub fn redactor(&self) -> navree_contracts::Redactor {
+        crate::redact::redactor()
+            .clone()
+            .with_secret_paths(self.secret_paths())
+            .with_public_paths(self.public_paths())
+    }
+
     /// The text fields named like a credential that are not marked as one
     /// (see [`SectionSchema::unmarked_secrets`]).
     pub fn unmarked_secrets(&self) -> Vec<String> {

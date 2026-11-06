@@ -83,6 +83,7 @@ mod de;
 mod dotenv;
 mod error;
 mod layers;
+mod lists;
 mod module;
 mod origin;
 mod redact;
@@ -97,6 +98,7 @@ pub use app::{AppOptions, Environment};
 pub use config::Config;
 pub use dotenv::{DotenvEntryExists, parse_dotenv, set_dotenv_value};
 pub use error::ConfigError;
+pub use lists::{comma_list, comma_list_of, comma_list_opt};
 pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt, defaults_of};
 // The derives share the names of the traits, as serde's do.
 pub use navree_macros::{ConfigSection, ConfigTable};

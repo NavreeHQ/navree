@@ -24,6 +24,7 @@ mod health;
 mod jobs;
 mod permissions;
 mod principal;
+mod redactor;
 mod request_id;
 mod revocation;
 mod secret;
@@ -47,6 +48,7 @@ pub use jobs::{
 pub use navree_kernel::{BoxError, BoxFuture};
 pub use permissions::{PermissionCheck, permitted};
 pub use principal::{AuthState, AuthVia, Impersonator, Principal};
+pub use redactor::Redactor;
 pub use request_id::RequestId;
 pub use revocation::{CredentialRevoker, ModuleBuilderRevocationExt, RevokedByKind};
 pub use secret::Secret;

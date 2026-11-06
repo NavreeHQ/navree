@@ -4,33 +4,30 @@
 //! it is the password of a URL. The redacted view of the tree masks those
 //! values; error messages are scrubbed of them.
 
+use std::sync::OnceLock;
+
+use navree_contracts::Redactor;
+
 use crate::value::{Kind, Value};
 
 /// What masked values are replaced with.
-pub(crate) const REDACTED: &str = "[redacted]";
+pub(crate) const REDACTED: &str = Redactor::REDACTED;
 
-/// Key fragments that mark a value as secret (matched case-insensitively
-/// anywhere in the key).
-const SECRET_KEY_PARTS: [&str; 11] = [
-    "password",
-    "passwd",
-    "pwd",
-    "secret",
-    "token",
-    "key",
-    "authorization",
-    "cookie",
-    "dsn",
-    "credential",
-    "connection_string",
-];
+/// The redactor of configuration: the framework's shared list of secret
+/// words, and `key`, since a configuration key called `key` or ending in
+/// `_key` is nearly always one. A section that describes itself (see
+/// `ConfigRegistry::redactor`) says which of its keys are credentials and
+/// which are public, and that beats these words.
+pub(crate) fn redactor() -> &'static Redactor {
+    static REDACTOR: OnceLock<Redactor> = OnceLock::new();
+    REDACTOR.get_or_init(|| Redactor::new().with_fragments(["key"]))
+}
 
-/// Whether a key (or a dotted path) names a secret: it contains one of
-/// `password`, `passwd`, `pwd`, `secret`, `token`, `key`, `authorization`,
-/// `cookie`, `dsn`, `credential` or `connection_string`, in any case.
+/// Whether a key (or a dotted path) names a secret: it contains one of the
+/// words of the shared list (`password`, `secret`, `token`, `authorization`,
+/// `cookie`, ...) or `key`, in any case.
 pub(crate) fn is_secret_key(key: &str) -> bool {
-    let key = key.to_lowercase();
-    SECRET_KEY_PARTS.iter().any(|part| key.contains(part))
+    redactor().is_secret(key)
 }
 
 /// The tree as JSON with every secret masked: the subtree of a secret-looking

@@ -216,9 +216,11 @@ impl Config {
     }
 
     /// The whole tree as JSON, safe to log: the value of every key whose name
-    /// contains (case-insensitively) `password`, `passwd`, `pwd`, `secret`,
-    /// `token`, `key`, `authorization`, `cookie`, `dsn`, `credential` or
-    /// `connection_string` is replaced, subtree and all, by `"[redacted]"`;
+    /// contains (case-insensitively) one of the words of the framework's
+    /// shared list of secrets (`password`, `passwd`, `pwd`, `passphrase`,
+    /// `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`,
+    /// `api_key`, `private_key`, `connection_string`) or `key` is replaced,
+    /// subtree and all, by `"[redacted]"`;
     /// the password of any `scheme://user:password@host` URL is masked, and
     /// so is the value of a secret-looking query parameter
     /// (`?token=...`). Other values are shown as they are, so keep secrets
