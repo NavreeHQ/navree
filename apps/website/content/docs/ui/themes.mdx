@@ -55,10 +55,16 @@ pub fn shell() -> Shell {
 A locked workspace keeps its theme; the reader still picks light or dark, and the theme menu offers only that. A cookie or a URL can only pick a theme the shell offers: every built-in by default, or the list you give `Shell::themes`.
 
 ```rust title="src/deals/pages.rs"
-async fn show(shell: AppShell, user: CurrentUser) -> AppPage {
+/// An extractor of the app's own, reading its own store.
+struct Prefs {
+    workspace_theme: Theme,
+    appearance: String, // `Appearance::to_value()`, such as "light.ocean"
+}
+
+async fn show(shell: AppShell, prefs: Prefs) -> AppPage {
     shell
-        .workspace(ThemeSetting::theme(user.workspace.theme()).locked())
-        .user(ThemeSetting::parse(&user.appearance).unwrap_or_default())
+        .workspace(ThemeSetting::theme(prefs.workspace_theme).locked())
+        .user(ThemeSetting::parse(&prefs.appearance).unwrap_or_default())
         .page("Deals")
 }
 ```

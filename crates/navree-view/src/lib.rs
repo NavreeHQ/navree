@@ -1,8 +1,8 @@
 //! # navree-view
 //!
-//! `ViewModule`: templates for mail and other text output (Navree renders no
-//! web pages), on [navree-template](navree_template), re-exported as
-//! [`template`].
+//! `ViewModule`: templates for mail and other text output (pages are drawn by
+//! Navree UI, not by templates), on [navree-template](navree_template),
+//! re-exported as [`template`].
 //!
 //! - [`ViewModule`] is global: it provides and exports [`Views`], built at
 //!   boot from the template directories in [`ViewOptions`] (section `view`)

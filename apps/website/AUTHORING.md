@@ -334,12 +334,27 @@ where a picture explains the page better than a paragraph:
 
 The names are `modular-monolith`, `microservices`, `multi-tenancy`,
 `event-driven`, `api-first`, `backend-for-frontend`, `request-lifecycle`,
-`module-graph`, `navree-ui`, `reverse-engineering`, `design-to-ui` and
-`two-ways`. The diagrams live in `src/components/diagrams/`, each
+`module-graph`, `navree-ui`, `reverse-engineering`, `design-to-ui`,
+`two-ways`, `workspace-resolution`, `workspace-isolation`, `harbor-release`,
+`orm-parts`, `jobs-and-events`, `transport-choice`, `token-and-session`,
+`request-to-pixels` and `server-rendered-app`. The diagrams live in `src/components/diagrams/`, each
 with a title and a text description for screen readers; to add one, add a
 component there and its name to `src/components/mdx/diagram.tsx`. Put the
 tag on its own line with blank lines around it, and don't repeat in prose
 what the diagram already labels.
+
+### ToolMock
+
+A picture of one of the ecosystem tools, drawn from the same mock data as the
+ecosystem page:
+
+```mdx
+<ToolMock name="fleet" />
+```
+
+The names are `fleet`, `harbor`, `helm`, `lighthouse` and `logbook`. The mocks
+live in `src/components/ecosystem/`, and the list of names is in
+`src/components/mdx/tool-mock.tsx`.
 
 ### The UI docs' components
 
@@ -459,7 +474,7 @@ to get something done.
 - **Limits are behaviour.** On pages about built code, state what a
   feature doesn't do as plainly as what it does ("counters are kept per
   process"). Point forward-looking work at the matching section of the
-  roadmap, such as `/docs/prologue/roadmap/#more-drivers`. Packages that
+  roadmap, such as `/docs/prologue/roadmap/#long-term-support`. Packages that
   aren't built yet get a `status: "planned"` page (see
   [Front-matter](#pages-for-packages-in-development)), not a caveat.
 

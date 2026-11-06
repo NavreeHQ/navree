@@ -40,6 +40,7 @@ export function Screens() {
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               <ArrowLink href="/ui/">See Navree UI</ArrowLink>
               <ArrowLink href="/docs/ui/choosing-a-ui/">Choosing a UI</ArrowLink>
+              <ArrowLink href="/docs/patterns/server-rendered-app/">Server-rendered app</ArrowLink>
             </div>
           }
         />
