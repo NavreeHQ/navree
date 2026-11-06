@@ -582,7 +582,7 @@ The page is served at `/admin/pages/pipeline` and appears in the menu for users 
 - **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.
 - **Rate limits.** The panel and its API are subject to your app's per-IP [rate limit](/docs/basics/rate-limiting/).
 
-The panel and its JSON API also accept an access token in `Authorization: Bearer`, which needs no CSRF token. That is how you test it, and how a [backend-for-frontend](/docs/patterns/backend-for-frontend/) serves it: when the BFF forwards `/admin` with the signed-in user's token, as the [SaaS starter kit](/docs/getting-started/starter-kits/) does, Helm opens on the web app's origin with the same session and its sign-in screen never appears.
+The panel and its JSON API also accept an access token in `Authorization: Bearer`, which needs no CSRF token. That is how you test it, and how a [backend-for-frontend](/docs/patterns/backend-for-frontend/) serves it: when the BFF forwards `/admin` with the signed-in user's token, as the [SaaS starter kit](/docs/getting-started/starter-kits/) does, Helm opens on the web app's origin with the same session and nobody is sent to a sign-in page.
 
 ## Testing
 
