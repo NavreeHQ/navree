@@ -220,6 +220,7 @@ export const sections: DocsSection[] = [
       "views",
       "openapi",
       "health-and-metrics",
+      "telemetry",
       "cli",
       "maintenance-mode",
     ],

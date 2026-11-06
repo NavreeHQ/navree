@@ -67,9 +67,9 @@ The first line reads `recording to memory` when Logbook keeps its entries in mem
 
 The pages are drawn with [Navree UI](/docs/ui/overview/) and served by your app. The page is a shell with the entry types down the side, the list in a pane, and the open entry in the pane beside it.
 
-- **The entry types.** The sidebar lists every type (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps), each with how many entries of it there are, and **All** for the default list. A type keeps the text of the search box. The sidebar collapses to its icons.
+- **The entry types.** The sidebar lists every type (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps, AI calls, broadcasts, storage, webhooks, searches, sign-ins, UI operations), each with how many entries of it there are, and **All** for the default list. A type keeps the text of the search box. The sidebar collapses to its icons.
 - **The list.** Entries, newest first, arriving live. Requests, jobs and scheduled tasks are **batches**: one row each, with the method and path or the job type, the status or outcome, the duration, and small counters for the queries, events, jobs, mail, cache calls, log lines, exceptions and outgoing calls inside. Failed batches are marked in amber, and so are batches with slow or [duplicate queries](#duplicate-queries). The search box in the top bar takes [filter terms](#filtering).
-- **The entry.** Opening a row shows its summary first: the method, path, route template, status, duration, request id, client address, user, workspace and trace. Below, one card each for the request (headers, query string, body), the response, the queries, the events, the jobs, the mail, the cache calls, the log lines, the exceptions, the outgoing calls, the data changes, the dumps, the **timeline** (a waterfall of everything the request did, in order, drawn against the request's duration) and [Replay](#replaying-requests). A row of links above the cards jumps to each, with how many it holds.
+- **The entry.** Opening a row shows its summary first: the method, path, route template, status, duration, request id, client address, user, workspace and trace. Below, one card each for the request (headers, query string, body), the response, the queries, the events, the jobs, the mail, the cache calls, the log lines, the exceptions, the outgoing calls, the data changes, the dumps, the AI calls, broadcasts, file operations, webhook attempts, searches, sign-ins and UI operations, the **timeline** (a waterfall of everything the request did, in order, drawn against the request's duration) and [Replay](#replaying-requests). A row of links above the cards jumps to each, with how many it holds.
 
 On a wide screen the entry opens beside the list and the list stays where it is. On a phone one of them has the page at a time: the list, and an entry when you open one, with the breadcrumb and the back button to return. Every entry has an address of its own, `/_logbook/entries/<id>`, which carries the type and the search text of the list it was opened from, so a link, a new tab and the back button all show what you saw. The page is dark whatever the system asks for, like the app's other tools.
 
@@ -93,8 +93,17 @@ Each kind of entry comes from a **watcher**. Every watcher is on by default; tur
 | `notifications` | Every notification, one entry per channel | Type, notifiable, channel, notification id |
 | `models` | Every insert, update and delete a model makes in a unit of work | Table, id, the changed columns with old and new values |
 | `schedule` | Every scheduled task that runs | Task, the minute it was due, error, duration |
+| `ai` | Every call to a model provider | Provider, model, operation, input, output and cached tokens, cost when the app prices its models, duration, error; never the prompt or the answer |
+| `broadcasts` | Every event pushed to real-time channels | Channels, event name, how many subscribers it reached, duration; never the data |
+| `storage` | Every read, write, delete and listing on a storage disk | Disk, driver, operation, path, bytes, duration, error; never the contents |
+| `webhooks` | Every attempt to deliver a webhook | Endpoint, event, attempt, the status it answered, duration, error; never the payload |
+| `search` | Every search | Engine, index, mode, the length of the term (never the term), hits, duration, error |
+| `sign_ins` | Every sign-in attempt, and every refusal | Method, provider, outcome, the reason code, and the user when it worked; never the email address or a secret |
+| `ui` | Every operation Navree UI's runtime asks of the server | Route, kind (form post, action, region, fragment), how many ops the answer held, status, duration; never the values |
 
 A job's error is part of its entry; the `exceptions` watcher records errors of requests and your own reports.
+
+The last seven watchers show what the platform modules report: see [Telemetry](/docs/digging-deeper/telemetry/) for each event and what it leaves out. They are entries in the request, job or task that made them, counted on its row (`ai`, `bcast`, `file`, `hook`, `srch`, `auth`, `ui`) and listed in a card of their own when it is open.
 
 Log lines reach Logbook after the [log filter](/docs/basics/logging/): Logbook keeps the lines that pass `log.level` and are at `logbook.log_level` or above. To see `debug` lines in Logbook, set `log.level` (or the target in `log.levels`) to `debug` as well.
 
@@ -112,9 +121,9 @@ The search box takes free text, which matches paths, routes, SQL, job types, eve
 | `tag:deal:0199c1d2` | Entries whose batch has a tag starting with this |
 | `status:500`, `status:4xx` | Requests by status or status class |
 | `route:/api/v1/deals/{id}` | Requests to one route |
-| `type:query` | One kind of entry, like the buttons (several `type:` terms show any of them) |
+| `type:query` | One kind of entry, like the buttons: `request`, `query`, `job`, `mail`, `event`, `cache`, `log`, `exception`, `http_client`, `notification`, `model`, `schedule`, `dump`, `ai`, `broadcast`, `storage`, `webhook`, `search`, `sign_in`, `ui` (plurals work too; several `type:` terms show any of them) |
 | `slow` | Slow queries, and the batches that ran one |
-| `failed` | Failed requests (5xx), jobs, queries, outgoing calls and scheduled tasks |
+| `failed` | Failed requests (5xx), jobs, queries, outgoing calls, scheduled tasks, and AI calls, file operations, webhook attempts, searches and sign-ins that did not work |
 | `duration>200`, `duration<5` | Entries that took longer (or shorter) than this many milliseconds |
 | `batch:01a17749…` | Everything inside one batch, by request id or job id (a prefix is enough) |
 | `trace:4bf92f35…` | Everything in one trace: a request and the jobs it queued |
@@ -275,7 +284,7 @@ async fn the_board_loads_in_three_queries() {
 
 On PostgreSQL and MySQL, a unit of work also runs a statement of its own that makes `navree.actor` and `navree.request_id` readable in SQL (`database.transaction_settings`, on by default). Logbook lists it like any other query, so a test on those databases that counts queries leaves it out or sets `database.transaction_settings` to `false`.
 
-A `Batch` has `queries()`, `duplicate_queries()`, `events()`, `jobs()`, `mail()`, `cache_calls()`, `logs()`, `exceptions()`, `http_calls()`, `notifications()`, `models()`, `dumps()`, `tags()`, its own entry as `head()` (with `request()` for a request) and `entries()` for everything, in order. `last_request()`, `last_job()`, `last_schedule()` and `batch(id)` find one; `entries(&ListQuery)` takes a [filter](#filtering); `clear()` empties the store between steps of a test. `Logbook::in_memory(options)` gives a recording Logbook outside an app.
+A `Batch` has `queries()`, `duplicate_queries()`, `events()`, `jobs()`, `mail()`, `cache_calls()`, `logs()`, `exceptions()`, `http_calls()`, `notifications()`, `models()`, `dumps()`, `ai_calls()`, `broadcasts()`, `storage_ops()`, `webhooks()`, `searches()`, `sign_ins()`, `ui_operations()`, `tags()`, its own entry as `head()` (with `request()` for a request) and `entries()` for everything, in order. `last_request()`, `last_job()`, `last_schedule()` and `batch(id)` find one; `entries(&ListQuery)` takes a [filter](#filtering); `clear()` empties the store between steps of a test. `Logbook::in_memory(options)` gives a recording Logbook outside an app.
 
 ## Configuration
 
@@ -299,7 +308,7 @@ Every key of the `logbook` section is optional. From the environment: `APP_LOGBO
 | `logbook.replay` | `true` | Allow replaying requests. |
 | `logbook.ignore.routes` | `["/health/*", "/metrics"]` | Paths never recorded (`*` matches anything). |
 | `logbook.ignore.framework` | `true` | Leave out the framework's own polling and the toolkit's files, as [above](#what-logbook-records). |
-| `logbook.watchers.<name>` | `true` | Each [watcher](#what-logbook-records): `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule`. |
+| `logbook.watchers.<name>` | `true` | Each [watcher](#what-logbook-records): `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule`, `ai`, `broadcasts`, `storage`, `webhooks`, `search`, `sign_ins`, `ui`. |
 
 A bad value fails the boot with an error naming the key.
 

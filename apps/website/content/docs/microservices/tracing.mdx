@@ -129,7 +129,7 @@ Messages and events are not spans of their own: they carry the trace context (se
 - An outgoing call is one span for all its attempts: `http.request.resend_count` says how many retries it took.
 - A job attempt is one span. The queries and calls of the handler are its children, and the job itself is a child of the span that dispatched it (see [context propagation](#context-propagation)).
 - Each scheduled task run starts a new trace.
-- Notifications, exceptions and log lines are telemetry events but not spans.
+- Notifications, exceptions, log lines, AI calls, broadcasts, file operations, webhook attempts, searches, sign-ins and UI operations are telemetry events but not spans.
 
 Some rules hold for every span:
 
