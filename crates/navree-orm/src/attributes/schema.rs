@@ -9,8 +9,8 @@
 //! names its exact schema with `#[model(schema = Type)]` /
 //! `#[accessor(schema = Type)]` (an enum's values, a nested object).
 //!
-//! Pages: [`SimplePage`] and [`CursorPage`] of any `ToSchema` type
-//! implement `ToSchema`; navree-db's `Page` gets [`page_schema`] (a
+//! Pages: [`SimplePage`] and navree-db's [`CursorPage`] of any `ToSchema`
+//! type implement `ToSchema`; navree-db's `Page` gets [`page_schema`] (a
 //! `navree_http::SchemaFn`).
 //!
 //! ```
@@ -31,7 +31,9 @@ use serde_json::{Map, Value as Json, json};
 
 use crate::attributes::serialize::output_key;
 use crate::model::Model;
-use crate::pagination::{CursorPage, SimplePage};
+#[cfg(doc)]
+use crate::pagination::CursorPage;
+use crate::pagination::SimplePage;
 use crate::record::Record;
 use crate::value::FieldKind;
 
@@ -339,21 +341,6 @@ impl<T: ToSchema> ToSchema for SimplePage<T> {
 
     fn schema() -> Schema {
         to_schema(simple_page_json::<T>())
-    }
-
-    fn schemas(schemas: &mut Vec<(String, Schema)>) {
-        page_components::<T>(schemas);
-    }
-}
-
-/// `{data: [T], next_cursor, prev_cursor}`, named `<T>CursorPage`.
-impl<T: ToSchema> ToSchema for CursorPage<T> {
-    fn name() -> Cow<'static, str> {
-        Cow::Owned(format!("{}CursorPage", T::name()))
-    }
-
-    fn schema() -> Schema {
-        to_schema(cursor_page_json::<T>())
     }
 
     fn schemas(schemas: &mut Vec<(String, Schema)>) {

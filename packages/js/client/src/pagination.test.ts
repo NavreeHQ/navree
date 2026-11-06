@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { collectAll, facetCounts, hasNextPage, isCursorPage, isPage, pageRange, pages, type Page } from "./pagination.js";
+import {
+  collectAll,
+  facetCounts,
+  hasNextPage,
+  hasPreviousPage,
+  isCursorPage,
+  isPage,
+  nextPageQuery,
+  pageRange,
+  pages,
+  previousPageQuery,
+  type Page,
+} from "./pagination.js";
 
 const page = <T>(data: T[], current_page: number, last_page: number, per_page = 2, total = 5): Page<T> => ({
   data,
@@ -20,6 +32,38 @@ describe("page shapes", () => {
     expect(hasNextPage(page([5], 3, 3))).toBe(false);
     expect(hasNextPage({ data: [1], next_cursor: "abc" })).toBe(true);
     expect(hasNextPage({ data: [1], next_cursor: null })).toBe(false);
+  });
+
+  it("knows whether a page comes before", () => {
+    expect(hasPreviousPage(page([1, 2], 1, 3))).toBe(false);
+    expect(hasPreviousPage(page([3, 4], 2, 3))).toBe(true);
+    expect(hasPreviousPage({ data: [1], next_cursor: "n", prev_cursor: "p" })).toBe(true);
+    expect(hasPreviousPage({ data: [1], next_cursor: "n", prev_cursor: null })).toBe(false);
+    expect(hasPreviousPage({ data: [1], next_cursor: "n", prev_cursor: "" })).toBe(false);
+    // A page that only goes forward has no prev_cursor at all.
+    expect(hasPreviousPage({ data: [1], next_cursor: "n" })).toBe(false);
+    expect(isCursorPage({ data: [1], next_cursor: null, prev_cursor: "p" })).toBe(true);
+  });
+
+  it("builds the query of the page after and the page before", () => {
+    const cursorPage = { data: [3, 4], next_cursor: "n2", prev_cursor: "p2" };
+    expect(nextPageQuery(cursorPage, { search: "x", limit: 2, before: "old", page: 4 })).toEqual({
+      search: "x",
+      limit: 2,
+      cursor: "n2",
+    });
+    expect(previousPageQuery(cursorPage, { search: "x", limit: 2, cursor: "c" })).toEqual({
+      search: "x",
+      limit: 2,
+      cursor: "p2",
+    });
+    expect(previousPageQuery({ data: [1], next_cursor: "n", prev_cursor: null })).toBeUndefined();
+    expect(nextPageQuery({ data: [1], next_cursor: null, prev_cursor: "p" })).toBeUndefined();
+
+    expect(nextPageQuery(page([3, 4], 2, 3), { per_page: 2, cursor: "c" })).toEqual({ per_page: 2, page: 3 });
+    expect(previousPageQuery(page([3, 4], 2, 3), { per_page: 2 })).toEqual({ per_page: 2, page: 1 });
+    expect(previousPageQuery(page([1, 2], 1, 3))).toBeUndefined();
+    expect(nextPageQuery(page([5], 3, 3))).toBeUndefined();
   });
 
   it("gives the rows a page shows, counting from 1", () => {

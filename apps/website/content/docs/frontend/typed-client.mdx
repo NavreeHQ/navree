@@ -317,13 +317,16 @@ List endpoints answer offset pages or cursor pages:
 
 ```json
 {"data": [...], "meta": {"current_page": 2, "per_page": 25, "total": 60, "last_page": 3}}
-{"data": [...], "next_cursor": "eyJpZCI6NDJ9"}
+{"data": [...], "next_cursor": "eyJpZCI6NDJ9", "prev_cursor": "eyJpZCI6MTd9"}
 ```
+
+A cursor page's `next_cursor` and `prev_cursor` go back as `?cursor=` for the page after and the page before; `null` means there is none (a Navree cursor says which way it goes). Every Rust cursor page is the same `CursorPage`, so every endpoint sends both keys; a page that only goes forward sends `"prev_cursor": null`.
 
 | Helper | Returns |
 |---|---|
 | `isPage(value)`, `isCursorPage(value)` | Which shape a value has. |
-| `hasNextPage(page)` | Whether another page follows. |
+| `hasNextPage(page)`, `hasPreviousPage(page)` | Whether a page follows, or comes before. |
+| `nextPageQuery(page, query)`, `previousPageQuery(page, query)` | The query of that page (the page number, or `cursor` set to `next_cursor` or `prev_cursor`, the other paging parameters dropped), or `undefined` when there is none. |
 | `pageRange(meta)` | `{from, to}`: the rows the page shows, counting from 1 (`26`–`50`). |
 | `facetCounts(meta, field)` | `[{value, count, label?}]` from `meta.facets`, whether the API sends a map of counts or a list. |
 | `pages(fetchPage, query)` | An async iterator over every page, by page number or by cursor. |

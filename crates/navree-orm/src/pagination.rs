@@ -4,7 +4,7 @@
 //! |---|---|---|---|
 //! | [`paginate`](Builder::paginate) | [`Page`] (navree-db's) | a count and a page | `{"data", "meta": {"current_page", "per_page", "total", "last_page"}}` |
 //! | [`simple_paginate`](Builder::simple_paginate) | [`SimplePage`] | one (a row more than the page) | `{"data", "meta": {"current_page", "per_page", "has_more"}}` |
-//! | [`cursor_paginate`](Builder::cursor_paginate) | [`CursorPage`] | one, by the query's order | `{"data", "next_cursor", "prev_cursor"}` |
+//! | [`cursor_paginate`](Builder::cursor_paginate) | [`CursorPage`] (navree-db's) | one, by the query's order | `{"data", "next_cursor", "prev_cursor"}` |
 //!
 //! Handlers take the page from the request with navree-db's
 //! [`PageQuery`] (`?page=&per_page=`) or this module's [`CursorRequest`]
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-pub use navree_db::{MAX_PER_PAGE, Page, PageMeta, PageQuery};
+pub use navree_db::{CursorPage, MAX_PER_PAGE, Page, PageMeta, PageQuery};
 
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor};
@@ -130,36 +130,6 @@ impl<T> SimplePage<T> {
 }
 
 impl<T: Serialize> IntoResponse for SimplePage<T> {
-    fn into_response(self) -> Response {
-        Json(self).into_response()
-    }
-}
-
-/// A page of a cursor-paginated query: `{"data": [...], "next_cursor",
-/// "prev_cursor"}`. Pass a cursor back as `?cursor=` for the next or the
-/// previous page; `null` means there is none.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct CursorPage<T> {
-    /// The items.
-    pub data: Vec<T>,
-    /// The cursor of the next page.
-    pub next_cursor: Option<String>,
-    /// The cursor of the previous page.
-    pub prev_cursor: Option<String>,
-}
-
-impl<T> CursorPage<T> {
-    /// Converts every item, keeping the cursors.
-    pub fn map<U>(self, f: impl FnMut(T) -> U) -> CursorPage<U> {
-        CursorPage {
-            data: self.data.into_iter().map(f).collect(),
-            next_cursor: self.next_cursor,
-            prev_cursor: self.prev_cursor,
-        }
-    }
-}
-
-impl<T: Serialize> IntoResponse for CursorPage<T> {
     fn into_response(self) -> Response {
         Json(self).into_response()
     }

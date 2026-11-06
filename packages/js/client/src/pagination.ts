@@ -5,10 +5,11 @@
  * {"data": [...], "meta": {"current_page": 2, "per_page": 25, "total": 60, "last_page": 3}}
  * ```
  *
- * and cursor pages (`?cursor=&limit=`):
+ * and cursor pages (`?cursor=&limit=`), whose cursors go back as `?cursor=`
+ * for the page after or the page before:
  *
  * ```json
- * {"data": [...], "next_cursor": "eyJpZCI6NDJ9"}
+ * {"data": [...], "next_cursor": "eyJpZCI6NDJ9", "prev_cursor": null}
  * ```
  */
 import type { ListQuery } from "./list-query.js";
@@ -45,7 +46,10 @@ export interface Page<T> {
 /** One cursor page. */
 export interface CursorPage<T> {
   data: T[];
+  /** The cursor of the page after; `null` on the last page. */
   next_cursor: string | null;
+  /** The cursor of the page before; `null` on the first page. A page that only goes forward may leave it out. */
+  prev_cursor?: string | null;
 }
 
 export type AnyPage<T> = Page<T> | CursorPage<T>;
@@ -69,6 +73,44 @@ export function isCursorPage<T = unknown>(value: unknown): value is CursorPage<T
 export function hasNextPage(page: AnyPage<unknown>): boolean {
   if (isPage(page)) return page.meta.current_page < page.meta.last_page;
   return typeof page.next_cursor === "string" && page.next_cursor !== "";
+}
+
+/** True when a page comes before `page`. */
+export function hasPreviousPage(page: AnyPage<unknown>): boolean {
+  if (isPage(page)) return page.meta.current_page > 1;
+  return typeof page.prev_cursor === "string" && page.prev_cursor !== "";
+}
+
+/**
+ * The query of the page after `page`, or `undefined` on the last one: the
+ * next page number, or `cursor` set to `next_cursor`. The other paging
+ * parameters are dropped, as the list query builder drops them.
+ */
+export function nextPageQuery(page: AnyPage<unknown>, query: ListQuery = {}): ListQuery | undefined {
+  if (!hasNextPage(page)) return undefined;
+  if (isPage(page)) return numbered(query, page.meta.current_page + 1);
+  return cursored(query, (page as CursorPage<unknown>).next_cursor as string);
+}
+
+/**
+ * The query of the page before `page`, or `undefined` on the first one: the
+ * page number before, or `cursor` set to `prev_cursor` (a Navree cursor says
+ * which way it goes).
+ */
+export function previousPageQuery(page: AnyPage<unknown>, query: ListQuery = {}): ListQuery | undefined {
+  if (!hasPreviousPage(page)) return undefined;
+  if (isPage(page)) return numbered(query, page.meta.current_page - 1);
+  return cursored(query, (page as CursorPage<unknown>).prev_cursor as string);
+}
+
+function numbered(query: ListQuery, page: number): ListQuery {
+  const { cursor: _c, before: _b, limit: _l, ...rest } = query;
+  return { ...rest, page };
+}
+
+function cursored(query: ListQuery, cursor: string): ListQuery {
+  const { page: _p, per_page: _pp, before: _b, ...rest } = query;
+  return { ...rest, cursor };
 }
 
 /** The rows a page shows, counting from 1 (`26`–`50` of 60); `0`–`0` for an empty page. */

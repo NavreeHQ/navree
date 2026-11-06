@@ -240,7 +240,8 @@ function lazyByDefault(): Built {
   const id = "lazy-by-default";
   const docs = { href: "/docs/orm/pagination-and-streaming/#cursor-pagination", label: "Cursor pagination" };
   const missing = first(
-    () => lacking("crates/navree-orm/src/pagination.rs", "pub async fn cursor_paginate<", "pub struct CursorPage<", "no count and no offset"),
+    () => lacking("crates/navree-orm/src/pagination.rs", "pub async fn cursor_paginate<", "no count and no offset"),
+    () => lacking("crates/navree-db/src/paginate.rs", "pub struct CursorPage<", "pub prev_cursor"),
     () => lacking("crates/navree-orm/tests/orm/pagination.rs", "async fn cursor_pages_walk_forward_and_back()"),
     () => lacking("crates/navree-ui/src/table/orm.rs", "fn keyset("),
     () => lacking("crates/navree-ui/src/table/mod.rs", "pub cursor: bool"),

@@ -73,7 +73,7 @@ async fn feed(&self, uow: Uow, cursor: CursorRequest) -> Result<CursorPage<Recor
 }
 ```
 
-The client passes a cursor back as `?cursor=` for the next or the previous page; `null` means there is none. `CursorRequest` reads `?cursor=` and `?limit=` (default: the model's page size, at most 100), and answers a malformed cursor or limit with a 400. In code, `CursorRequest::first().limit(20)` and `CursorRequest::after(cursor)` build one.
+The client passes a cursor back as `?cursor=` for the next or the previous page; `null` means there is none. `CursorPage` is the one cursor page of every Navree API (`navree::db::CursorPage`, re-exported by the ORM), and the [typed client](/docs/frontend/typed-client/#pages) reads both cursors with `nextPageQuery` and `previousPageQuery`. `CursorRequest` reads `?cursor=` and `?limit=` (default: the model's page size, at most 100), and answers a malformed cursor or limit with a 400. In code, `CursorRequest::first().limit(20)` and `CursorRequest::after(cursor)` build one.
 
 The order can be any mix of directions over plain, non-`NULL` columns; the key is added as a tie-breaker, and an unordered query pages by key. A cursor encodes the order's columns and the last row's values, and a cursor that doesn't match the query is refused.
 

@@ -190,10 +190,7 @@ async fn page_renders_as_json() {
 
 #[tokio::test]
 async fn cursor_pages_render_as_json() {
-    let page = CursorPage {
-        data: vec!["a", "b"],
-        next_cursor: Some("AZoAAAAAcAAAgAAAAAAAAA".to_owned()),
-    };
+    let page = CursorPage::forward(vec!["a", "b"], Some("AZoAAAAAcAAAgAAAAAAAAA".to_owned()));
     let mapped = page.map(str::to_uppercase);
     assert_eq!(mapped.data, ["A", "B"]);
     let response = mapped.into_response();
@@ -202,7 +199,43 @@ async fn cursor_pages_render_as_json() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(
         json,
-        json!({"data": ["A", "B"], "next_cursor": "AZoAAAAAcAAAgAAAAAAAAA"})
+        json!({"data": ["A", "B"], "next_cursor": "AZoAAAAAcAAAgAAAAAAAAA", "prev_cursor": null})
+    );
+
+    // Both cursors survive `map`, and a page without `prev_cursor` reads
+    // as one with `null`.
+    let both = CursorPage {
+        data: vec![1, 2],
+        next_cursor: Some("n".to_owned()),
+        prev_cursor: Some("p".to_owned()),
+    }
+    .map(|n| n * 10);
+    assert_eq!(
+        serde_json::to_value(&both).unwrap(),
+        json!({"data": [10, 20], "next_cursor": "n", "prev_cursor": "p"})
+    );
+    let old: CursorPage<u8> =
+        serde_json::from_value(json!({"data": [1], "next_cursor": null})).unwrap();
+    assert_eq!(old, CursorPage::forward(vec![1], None));
+}
+
+#[test]
+fn a_cursor_page_has_one_schema() {
+    use navree_openapi::ToSchema;
+
+    assert_eq!(CursorPage::<String>::name(), "StringCursorPage");
+    let schema = serde_json::to_value(CursorPage::<String>::schema()).unwrap();
+    assert_eq!(
+        schema["required"],
+        json!(["data", "next_cursor", "prev_cursor"])
+    );
+    assert_eq!(
+        schema["properties"]["prev_cursor"],
+        json!({"type": ["string", "null"]})
+    );
+    assert_eq!(
+        schema["properties"]["data"]["items"]["$ref"],
+        "#/components/schemas/String"
     );
 }
 

@@ -81,7 +81,7 @@ A table reads and writes the same list-query names as the API, so a link to a ta
 | empty | `filter[owner][null]=true` |
 
 - **Search and order.** `search=text` is the box above the table. `sort=-amount,title` sorts by up to four columns, and `-` means descending. `sort=` with nothing after it asks for no order.
-- **Pages.** A numbered table reads `page` and `per_page`; a `#[table(cursor)]` table reads `cursor`, `before` and `limit`. Each table ignores the other's names. The page size is always one the table offers.
+- **Pages.** A numbered table reads `page` and `per_page`; a `#[table(cursor)]` table reads `cursor`, `before` and `limit`. Each table ignores the other's names. The page size is always one the table offers. A cursor table's `cursor` and `before` are its own page state in the page's URL, written by its paging links: they are not the `next_cursor` and `prev_cursor` of a JSON `CursorPage`, and the two need not match.
 - **Its own state.** `cols`, `w`, `fb`, `density`, `open` and `count` belong to the table and are not part of the list query.
 - **Forgiving.** A table shows a page whatever the URL says. A value of the wrong kind, a column the definition doesn't list, or an operator a filter doesn't take is left out. The API answers the same mistakes with a 400 that names the parameter.
 

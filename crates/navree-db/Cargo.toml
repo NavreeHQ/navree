@@ -34,6 +34,8 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The OpenAPI schema of `CursorPage` (`ToSchema`).
+navree-openapi = { workspace = true }
 navree-schema = { workspace = true }
 navree-telemetry = { workspace = true }
 # Exact decimals (`Value::Decimal`).

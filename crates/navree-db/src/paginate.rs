@@ -1,10 +1,11 @@
 //! The shapes of pagination: offset pages ([`PageQuery`], [`Page`]) and
 //! cursor pages ([`CursorQuery`], [`CursorPage`]), as extractors and
 //! responses. navree-orm's `Builder::paginate` fills the offset page; its
-//! `cursor_paginate` answers with navree-orm's own `CursorPage` and reads a
-//! `CursorRequest`. A [`Record`](crate::Record) select has
-//! [`page`](crate::Select::page).
+//! `cursor_paginate` reads a `CursorRequest` and answers with this
+//! [`CursorPage`], the one cursor page of every Navree API. A
+//! [`Record`](crate::Record) select has [`page`](crate::Select::page).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use base64::Engine;
@@ -13,7 +14,9 @@ use http::request::Parts;
 use navree_http::extract::FromRequestParts;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Json, Query};
+use navree_openapi::{Schema, ToSchema};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use uuid::Uuid;
 
 /// The default page size.
@@ -233,22 +236,71 @@ impl FromRequestParts for CursorQuery {
     }
 }
 
-/// One page of cursor-paginated results: `{"data": [...], "next_cursor"}`.
+/// One page of cursor-paginated results: `{"data": [...], "next_cursor",
+/// "prev_cursor"}`, what navree-orm's `cursor_paginate` answers. Pass a
+/// cursor back as `?cursor=` for the next or the previous page; `null`
+/// means there is none. A page that only goes forward (a [`CursorQuery`]
+/// over a UUID v7 key) has no `prev_cursor`.
+///
+/// A JSON page without `prev_cursor` reads as one with `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CursorPage<T> {
     /// The items.
     pub data: Vec<T>,
-    /// Pass as `cursor` to get the next page; `None` on the last page.
+    /// The cursor of the next page; `None` on the last page.
     pub next_cursor: Option<String>,
+    /// The cursor of the previous page; `None` on the first page.
+    #[serde(default)]
+    pub prev_cursor: Option<String>,
 }
 
 impl<T> CursorPage<T> {
-    /// Converts every item, keeping the cursor.
+    /// A page that only goes forward: `data`, then the page at
+    /// `next_cursor`.
+    pub fn forward(data: Vec<T>, next_cursor: Option<String>) -> Self {
+        CursorPage {
+            data,
+            next_cursor,
+            prev_cursor: None,
+        }
+    }
+
+    /// Converts every item, keeping the cursors.
     pub fn map<U>(self, f: impl FnMut(T) -> U) -> CursorPage<U> {
         CursorPage {
             data: self.data.into_iter().map(f).collect(),
             next_cursor: self.next_cursor,
+            prev_cursor: self.prev_cursor,
         }
+    }
+}
+
+/// `{data: [T], next_cursor, prev_cursor}`, named `<T>CursorPage`; `T` is
+/// referred to as a component.
+impl<T: ToSchema> ToSchema for CursorPage<T> {
+    fn name() -> Cow<'static, str> {
+        Cow::Owned(format!("{}CursorPage", T::name()))
+    }
+
+    fn schema() -> Schema {
+        Schema::from_value(json!({
+            "type": "object",
+            "required": ["data", "next_cursor", "prev_cursor"],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {"$ref": format!("#/components/schemas/{}", T::name())},
+                },
+                "next_cursor": {"type": ["string", "null"]},
+                "prev_cursor": {"type": ["string", "null"]},
+            },
+        }))
+        .unwrap_or_default()
+    }
+
+    fn schemas(schemas: &mut Vec<(String, Schema)>) {
+        schemas.push((T::name().into_owned(), T::schema()));
+        T::schemas(schemas);
     }
 }
 

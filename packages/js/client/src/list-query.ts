@@ -52,7 +52,7 @@ export interface ListQuery {
   page?: number;
   /** The page size (numbered pages). */
   per_page?: number;
-  /** The page after this position: the `next_cursor` of the page before (cursor pages). */
+  /** The page a cursor points to: the `next_cursor` or `prev_cursor` of another page (cursor pages). */
   cursor?: string;
   /** The page before this position (cursor pages that go both ways). */
   before?: string;
@@ -680,7 +680,7 @@ export class ListQueryBuilder {
     return new ListQueryBuilder({ ...rest, per_page: perPage });
   }
 
-  /** Cursor paging: the `next_cursor` of the previous page. Drops `page`, `per_page` and `before`. */
+  /** Cursor paging: a page's `next_cursor` or `prev_cursor`. Drops `page`, `per_page` and `before`. */
   cursor(cursor: string): ListQueryBuilder {
     const { page: _p, per_page: _pp, before: _b, ...rest } = this.query;
     return new ListQueryBuilder({ ...rest, cursor });
