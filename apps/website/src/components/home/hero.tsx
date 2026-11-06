@@ -77,7 +77,7 @@ export function Hero() {
             />
           </Link>
 
-          <h1 id="hero-title" className="mt-8 text-display-2xl font-semibold text-balance text-fg sm:mt-10">
+          <h1 id="hero-title" className="mt-8 text-display-lg font-semibold text-balance text-fg sm:mt-10">
             {headlineLines(site.headline).map((line, i) => (
               <span key={line} className="xl:block">
                 {i > 0 ? " " : null}

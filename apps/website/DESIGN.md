@@ -58,9 +58,9 @@ tracking come together):
 
 | Class | Size | Use |
 |---|---|---|
-| `text-display-2xl` | 44 to 80 px | The homepage H1 only |
+| `text-display-2xl` | 44 to 80 px | Kept in the theme; no page uses it now |
 | `text-display-xl` | 38 to 60 px | Page H1 (Ecosystem, Architecture, AI, Performance) |
-| `text-display-lg` | 32 to 48 px | Section H2 |
+| `text-display-lg` | 32 to 48 px | Section H2, and the homepage H1 beside the film |
 | `text-display-md` | 24 to 32 px | Sub-section heading, big card title |
 | `text-display-sm` | 20 px | Card title in display face |
 | `text-eyebrow` | 12 px, +0.14em | Use the `.eyebrow` class |
