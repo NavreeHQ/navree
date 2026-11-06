@@ -150,3 +150,28 @@ services:
     volumes:
       - ./integrations/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
       - ${NAVREE_INT_STATE:-./state}/otel:/out
+
+  # CoreDNS serving the zone acme.test (scripts/services/integrations/coredns):
+  # UDP and TCP on 15353. Any other zone is refused.
+  coredns:
+    image: ${COREDNS_IMAGE:-coredns/coredns:1.12.1}
+    container_name: navree-int-coredns
+    ports: ["127.0.0.1:15353:1053/udp", "127.0.0.1:15353:1053/tcp"]
+    volumes:
+      - ./integrations/coredns:/etc/coredns:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+
+  # A DNS-over-HTTPS server (m13253/dns-over-https) in front of CoreDNS, with
+  # the JSON API (application/dns-json) the single sign-on domain proof uses.
+  doh:
+    image: ${DOH_IMAGE:-satishweb/doh-server:latest}
+    container_name: navree-int-doh
+    ports: ["127.0.0.1:18053:8053"]
+    environment:
+      UPSTREAM_DNS_SERVER: "udp:coredns:1053"
+      DOH_HTTP_PREFIX: /dns-query
+      DOH_SERVER_LISTEN: ":8053"
+      DOH_SERVER_TIMEOUT: "10"
+      DOH_SERVER_TRIES: "3"
+      DOH_SERVER_VERBOSE: "false"
+    depends_on: [coredns]

@@ -1,0 +1,28 @@
+; The zone acme.test, served by the CoreDNS of scripts/services/integrations.yml.
+; The records are the ones the domain, mail and single sign-on suites look up.
+$ORIGIN acme.test.
+$TTL 60
+@                        IN SOA ns.acme.test. hostmaster.acme.test. 1 7200 3600 1209600 60
+@                        IN NS  ns.acme.test.
+ns                       IN A   192.0.2.53
+
+; Where a custom domain points: crm.acme.test is a CNAME to the app's host,
+; which has an IPv4 and an IPv6 address.
+domains                  IN A     203.0.113.10
+domains                  IN AAAA  2001:db8::10
+crm                      IN CNAME domains.acme.test.
+
+; Proof of ownership.
+_domain-verification.crm IN TXT   "navree-verification=4f9c2b7d"
+_navree-sso              IN TXT   "navree-sso-verification=a1b2c3d4e5f6"
+
+; A sending domain: two TXT records at the apex (only one is SPF), a DKIM key
+; of 2048 bits (longer than the 255 bytes of one string, so two strings) and
+; a DMARC policy.
+@                        IN TXT   "google-site-verification=abc"
+@                        IN TXT   "v=spf1 include:amazonses.com ~all"
+mail._domainkey          IN TXT   "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyFr9rrFanzp9dU3/KcjrFBylxgyZtsjY1iCtGJ0IB1lKdV/UZzrelUU2TqndtZu3+VfsO7WYNZu2hXo20Qb7j81clcedFJZReyyE3I+7+nKLrP0+5yJ/Ax1W24P1LFhBv5q21Gb2IiAWblGOchaHZHcJlxTfRaugVGX+e68859LWviRwbgaaAHLYYqyaeNDMH" "j9m+tGTQOnUI8yghmi5Bq8hzo4pkOXsw55yaOgEUFdcxNJkSDq6zSE0V0E0ecaZvsHybg+9n3buAiAK3i8REt/tX1EeLD8IGZz0uKd2qdVTh9UCr7Ny17jZlQj9nA0YuPz9ugtjGd6tIxYHcC32IwIDAQAB"
+_dmarc                   IN TXT   "v=DMARC1; p=reject; rua=mailto:dmarc@acme.test"
+
+; A record of two strings, to be read as one.
+split                    IN TXT   "part one, " "part two"

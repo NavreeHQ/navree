@@ -24,7 +24,7 @@
 #   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3),
 #             the Pub/Sub emulator
 #   identity  Keycloak (SAML and OpenID Connect), OpenLDAP
-#   infra     an OpenTelemetry Collector
+#   infra     an OpenTelemetry Collector, CoreDNS, a DNS-over-HTTPS server
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -78,7 +78,7 @@ group_services() {
   case "$1" in
     mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
     identity) echo "keycloak openldap" ;;
-    infra) echo "otel-collector" ;;
+    infra) echo "otel-collector coredns doh" ;;
     *) return 1 ;;
   esac
 }
@@ -162,6 +162,8 @@ NAVREE_TEST_LDAP_PASSWORD=$LDAP_ADMIN_PASSWORD
 NAVREE_TEST_OTEL_HTTP_URL=http://127.0.0.1:14318
 NAVREE_TEST_OTEL_GRPC_URL=http://127.0.0.1:14317
 NAVREE_TEST_OTEL_FILE=$(consumer_path "$STATE/otel/traces.json")
+NAVREE_TEST_DNS_SERVER=127.0.0.1:15353
+NAVREE_TEST_DOH_URL=http://127.0.0.1:18053/dns-query
 EOF
 }
 
@@ -200,6 +202,17 @@ localstack_ready() {
 # GreenMail answers on SMTP, IMAP and POP3.
 greenmail_ready() {
   tcp 13025 && tcp 13143 && tcp 13110
+}
+
+# CoreDNS answers over TCP (it answers UDP on the same port).
+coredns_ready() {
+  tcp 15353
+}
+
+# The DoH server answers the JSON API with a record of the zone.
+doh_ready() {
+  curl --fail --silent --header 'accept: application/dns-json' \
+    'http://127.0.0.1:18053/dns-query?name=split.acme.test&type=TXT' | grep -q 'part one'
 }
 
 # The Collector accepts OTLP on both ports.
@@ -300,6 +313,8 @@ start() {
   ready pubsub navree-int-pubsub curl --fail --silent http://127.0.0.1:18085/
   ready openldap navree-int-openldap openldap_ready
   ready otel-collector navree-int-otel-collector otel_ready
+  ready coredns navree-int-coredns coredns_ready
+  ready doh navree-int-doh doh_ready
   load_bulk_people
   # Keycloak answers once the realm is imported.
   ready keycloak navree-int-keycloak curl --fail --silent http://127.0.0.1:18081/realms/navree/.well-known/openid-configuration

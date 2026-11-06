@@ -3,10 +3,13 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
+use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ResolverConfig};
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use navree_kernel::BoxFuture;
 use navree_openapi::ToSchema;
 use serde::Serialize;
@@ -24,16 +27,28 @@ pub trait DnsResolver: Send + Sync + 'static {
 }
 
 /// Asks the system's DNS resolvers (hickory-resolver with the system
-/// configuration), created on first use.
+/// configuration), created on first use, or the one name server given to
+/// [`with_nameserver`](SystemResolver::with_nameserver).
 #[derive(Default)]
 pub struct SystemResolver {
     inner: OnceCell<hickory_resolver::TokioResolver>,
+    server: Option<SocketAddr>,
 }
 
 impl SystemResolver {
     /// A resolver using the system configuration.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A resolver asking only the name server at `address` (UDP, and TCP for
+    /// answers that do not fit), whatever the system's configuration says:
+    /// for a private resolver on a port other than 53, or a test server.
+    pub fn with_nameserver(address: SocketAddr) -> Self {
+        Self {
+            inner: OnceCell::new(),
+            server: Some(address),
+        }
     }
 }
 
@@ -53,9 +68,23 @@ impl DnsResolver for SystemResolver {
             let resolver = self
                 .inner
                 .get_or_try_init(|| async {
-                    hickory_resolver::TokioResolver::builder_tokio()
-                        .and_then(|builder| builder.build())
-                        .map_err(|error| dns_error(error.to_string()))
+                    let built = match self.server {
+                        None => hickory_resolver::TokioResolver::builder_tokio()
+                            .and_then(|builder| builder.build()),
+                        Some(address) => {
+                            let mut udp = ConnectionConfig::udp();
+                            udp.port = address.port();
+                            let mut tcp = ConnectionConfig::tcp();
+                            tcp.port = address.port();
+                            let server = NameServerConfig::new(address.ip(), true, vec![udp, tcp]);
+                            hickory_resolver::TokioResolver::builder_with_config(
+                                ResolverConfig::from_name_servers(vec![server]),
+                                TokioRuntimeProvider::default(),
+                            )
+                            .build()
+                        }
+                    };
+                    built.map_err(|error| dns_error(error.to_string()))
                 })
                 .await?;
             let fqdn = format!("{}.", name.trim_end_matches('.'));

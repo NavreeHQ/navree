@@ -18,7 +18,8 @@
 # - identity: SAML and OpenID Connect sign-in against Keycloak, the LDAP source
 #             against OpenLDAP, the SCIM server driven by an independent SCIM
 #             client (scim2-cli).
-# - infra:    spans exported to an OpenTelemetry Collector.
+# - infra:    spans exported to an OpenTelemetry Collector, DNS lookups against
+#             CoreDNS and a DNS-over-HTTPS server.
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -40,7 +41,7 @@ on:
         type: boolean
         default: true
       infra:
-        description: Infrastructure (OpenTelemetry Collector)
+        description: Infrastructure (OpenTelemetry Collector, DNS)
         type: boolean
         default: true
 
@@ -187,6 +188,9 @@ jobs:
           scripts/integration-services.sh pull infra &
           pulling=$!
           cargo test --locked -p navree-observe --features otel --test observe --no-run
+          cargo test --locked -p navree-domains --test domains --no-run
+          cargo test --locked -p navree-mail --test mail --no-run
+          cargo test --locked -p navree-sso --test sso --no-run
           wait "$pulling"
 
       - name: Start the servers
@@ -194,6 +198,12 @@ jobs:
 
       - name: Spans exported to an OpenTelemetry Collector
         run: cargo test --locked -p navree-observe --features otel --test observe collector -- --ignored --nocapture
+
+      - name: DNS lookups against CoreDNS and a DNS-over-HTTPS server
+        run: |
+          cargo test --locked -p navree-domains --test domains coredns -- --ignored --nocapture
+          cargo test --locked -p navree-mail --test mail coredns -- --ignored --nocapture
+          cargo test --locked -p navree-sso --test sso doh -- --ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}

@@ -4,6 +4,7 @@
 mod api;
 mod attachments;
 mod commands;
+mod coredns;
 mod delivery;
 mod dkim;
 mod domains;
