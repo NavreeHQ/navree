@@ -790,15 +790,13 @@ async fn sign_ins_name_the_user_only_when_they_worked() {
         TelemetryEvent::SignIn(SignInEvent::refused(
             SignInMethod::Password,
             "invalid_credentials",
-            ms(80),
         )),
     );
     feed(
         &logbook,
         &context,
         TelemetryEvent::SignIn(
-            SignInEvent::succeeded(SignInMethod::Social, "0199c1d2-user", ms(120))
-                .provider("github"),
+            SignInEvent::succeeded(SignInMethod::Social, "0199c1d2-user").provider("github"),
         ),
     );
     feed(
@@ -899,7 +897,6 @@ async fn the_new_kinds_filter_by_type_and_by_text() {
         TelemetryEvent::SignIn(SignInEvent::refused(
             SignInMethod::Passkey,
             "policy_refused",
-            ms(1),
         )),
     );
     feed(

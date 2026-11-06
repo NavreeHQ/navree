@@ -132,11 +132,7 @@ fn every_event() -> Vec<TelemetryEvent> {
         TelemetryEvent::Search(
             SearchQueried::new("memory", "deals", SearchMode::Text, "Ludhiana", ms(2)).hits(7),
         ),
-        TelemetryEvent::SignIn(SignInEvent::succeeded(
-            SignInMethod::Password,
-            "u-1",
-            ms(90),
-        )),
+        TelemetryEvent::SignIn(SignInEvent::succeeded(SignInMethod::Password, "u-1")),
         TelemetryEvent::UiOperation(UiOperation::new(
             "/deals/{id}/stage",
             UiOperationKind::FormPost,

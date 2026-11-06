@@ -183,12 +183,9 @@ pub enum StorageOperation {
     Delete,
     /// A directory was listed.
     List,
-    /// A file was copied.
+    /// A file was copied (navree-storage reports reads and writes; an app
+    /// that copies between disks may report the copy itself).
     Copy,
-    /// A file was moved or renamed.
-    Move,
-    /// A file's existence, size or modification time was asked for.
-    Stat,
 }
 
 impl StorageOperation {
@@ -200,8 +197,6 @@ impl StorageOperation {
             StorageOperation::Delete => "delete",
             StorageOperation::List => "list",
             StorageOperation::Copy => "copy",
-            StorageOperation::Move => "move",
-            StorageOperation::Stat => "stat",
         }
     }
 }
@@ -479,39 +474,31 @@ pub struct SignInEvent {
     /// The user's id; only when the sign-in worked.
     pub user_id: Option<String>,
     /// Why it failed, as a code (`invalid_credentials`, `throttled`,
-    /// `two_factor_required`, `policy_refused`); `None` when it worked.
+    /// `invalid_code`, or the code of the sign-in policy that refused it);
+    /// `None` when it worked.
     pub reason: Option<String>,
-    /// How long it took.
-    #[serde(with = "millis")]
-    pub duration: Duration,
 }
 
 impl SignInEvent {
     /// `user_id` signed in with `method`.
-    pub fn succeeded(
-        method: SignInMethod,
-        user_id: impl Into<String>,
-        duration: Duration,
-    ) -> Self {
+    pub fn succeeded(method: SignInMethod, user_id: impl Into<String>) -> Self {
         Self {
             method,
             provider: None,
             outcome: Outcome::Success,
             user_id: Some(user_id.into()),
             reason: None,
-            duration,
         }
     }
 
     /// A sign-in with `method` was refused for `reason`.
-    pub fn refused(method: SignInMethod, reason: impl Into<String>, duration: Duration) -> Self {
+    pub fn refused(method: SignInMethod, reason: impl Into<String>) -> Self {
         Self {
             method,
             provider: None,
             outcome: Outcome::Failure,
             user_id: None,
             reason: Some(reason.into()),
-            duration,
         }
     }
 
@@ -691,15 +678,10 @@ mod tests {
 
     #[test]
     fn a_refused_sign_in_names_no_user() {
-        let refused = SignInEvent::refused(
-            SignInMethod::Password,
-            "invalid_credentials",
-            Duration::from_millis(80),
-        );
+        let refused = SignInEvent::refused(SignInMethod::Password, "invalid_credentials");
         assert_eq!(refused.user_id, None);
         assert_eq!(refused.reason.as_deref(), Some("invalid_credentials"));
-        let worked = SignInEvent::succeeded(SignInMethod::Social, "u-1", Duration::ZERO)
-            .provider("github");
+        let worked = SignInEvent::succeeded(SignInMethod::Social, "u-1").provider("github");
         assert_eq!(worked.user_id.as_deref(), Some("u-1"));
         assert_eq!(worked.provider.as_deref(), Some("github"));
         assert_eq!(worked.reason, None);

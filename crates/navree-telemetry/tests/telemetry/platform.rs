@@ -61,11 +61,7 @@ fn each_kind_has_its_own_name_and_serializes_with_a_type_tag() {
             "search",
         ),
         (
-            TelemetryEvent::SignIn(SignInEvent::succeeded(
-                SignInMethod::Passkey,
-                "u-1",
-                ms(1),
-            )),
+            TelemetryEvent::SignIn(SignInEvent::succeeded(SignInMethod::Passkey, "u-1")),
             EventKind::SignIn,
             "sign_in",
         ),
@@ -151,8 +147,6 @@ fn storage_operations_use_their_snake_case_names() {
         (StorageOperation::Delete, "delete"),
         (StorageOperation::List, "list"),
         (StorageOperation::Copy, "copy"),
-        (StorageOperation::Move, "move"),
-        (StorageOperation::Stat, "stat"),
     ] {
         assert_eq!(operation.as_str(), name);
         assert_eq!(serde_json::to_value(operation).unwrap(), name);
@@ -204,9 +198,9 @@ fn a_search_records_the_length_of_the_term_never_the_term() {
 
 #[test]
 fn a_sign_in_never_holds_an_email_or_a_secret() {
-    let worked = SignInEvent::succeeded(SignInMethod::Social, "0199c1d2", ms(120)).provider("github");
-    let refused = SignInEvent::refused(SignInMethod::Password, "invalid_credentials", ms(80));
-    let throttled = SignInEvent::refused(SignInMethod::TwoFactor, "throttled", ms(1));
+    let worked = SignInEvent::succeeded(SignInMethod::Social, "0199c1d2").provider("github");
+    let refused = SignInEvent::refused(SignInMethod::Password, "invalid_credentials");
+    let throttled = SignInEvent::refused(SignInMethod::TwoFactor, "throttled");
 
     let worked_json = serde_json::to_string(&TelemetryEvent::SignIn(worked.clone())).unwrap();
     assert!(worked_json.contains("\"user_id\":\"0199c1d2\""), "{worked_json}");
@@ -226,7 +220,7 @@ fn a_sign_in_never_holds_an_email_or_a_secret() {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["duration", "method", "outcome", "provider", "reason", "user_id"]
+            ["method", "outcome", "provider", "reason", "user_id"]
         );
     }
 
@@ -291,7 +285,7 @@ fn the_one_line_emits_reach_a_recorder() {
     });
     telemetry.webhook_delivery(|| WebhookDelivery::new("ep", "e", 1, 500, ms(9)));
     telemetry.search(|| SearchQueried::new("memory", "deals", SearchMode::Across, "x", ms(1)));
-    telemetry.sign_in(|| SignInEvent::refused(SignInMethod::MagicLink, "expired", ms(1)));
+    telemetry.sign_in(|| SignInEvent::refused(SignInMethod::MagicLink, "expired"));
     telemetry.ui_operation(|| UiOperation::new("/x", UiOperationKind::LiveRegion, 200, 1, ms(1)));
 
     assert_eq!(recorder.len(), 7);
@@ -320,7 +314,7 @@ fn the_one_line_emits_build_nothing_for_a_sink_that_does_not_want_them() {
     });
     off.sign_in(|| {
         count();
-        SignInEvent::refused(SignInMethod::Password, "x", ms(1))
+        SignInEvent::refused(SignInMethod::Password, "x")
     });
 
     // A registry whose only sink wants requests.
@@ -356,7 +350,7 @@ fn the_one_line_emits_build_nothing_for_a_sink_that_does_not_want_them() {
 fn a_recorder_can_ask_for_only_the_new_kinds() {
     let recorder = TelemetryRecorder::only([EventKind::SignIn, EventKind::AiCall]);
     let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
-    telemetry.sign_in(|| SignInEvent::succeeded(SignInMethod::Sso, "u-9", ms(3)).provider("okta-1"));
+    telemetry.sign_in(|| SignInEvent::succeeded(SignInMethod::Sso, "u-9").provider("okta-1"));
     telemetry.search(|| SearchQueried::new("memory", "i", SearchMode::Text, "t", ms(1)));
     telemetry.ai_call(|| AiCall::new("fake", "fake", "generate", ms(1)));
     assert_eq!(recorder.len(), 2);

@@ -1450,7 +1450,6 @@ fn item(base: &str, entry: &Entry, selected: bool, link: bool) -> Item {
                 s.provider.clone(),
                 s.reason.clone(),
                 entry.user_id.as_ref().map(|user| format!("user {user}")),
-                Some(duration.clone()),
             ]
             .into_iter()
             .flatten()

@@ -619,7 +619,6 @@ async fn the_newer_kinds_show_in_the_list_and_in_the_request_that_made_them() {
         TelemetryEvent::SignIn(SignInEvent::refused(
             SignInMethod::Password,
             "invalid_credentials",
-            Duration::from_millis(80),
         )),
     );
     feed(

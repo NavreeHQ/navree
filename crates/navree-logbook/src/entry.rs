@@ -829,7 +829,7 @@ pub struct StorageEntry {
     pub disk: String,
     /// The disk's driver (`local`, `s3`).
     pub driver: String,
-    /// `read`, `write`, `delete`, `list`, `copy`, `move` or `stat`.
+    /// `read`, `write`, `delete`, `list` or `copy`.
     pub operation: String,
     /// The path, or the directory listed.
     pub path: String,

@@ -438,8 +438,7 @@ impl Active {
                         reason: e.reason.clone(),
                     }),
                     at,
-                )
-                .lasting(at, e.duration);
+                );
                 recorded.failed = is_failure(e.outcome);
                 recorded
             }
