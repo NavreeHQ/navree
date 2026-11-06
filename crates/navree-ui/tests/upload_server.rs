@@ -863,3 +863,158 @@ async fn an_error_is_json_with_a_message() {
         "{json}"
     );
 }
+
+// ---- Chunked uploads under load ------------------------------------------------------------
+
+/// A local disk in a directory of its own, removed when the test ends. Its reads and writes
+/// wait on the file system, so uploads that run at the same time really do.
+struct LocalDisk {
+    disk: Disk,
+    root: std::path::PathBuf,
+}
+
+impl Drop for LocalDisk {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+fn local_disk() -> LocalDisk {
+    let root = std::env::temp_dir().join(format!(
+        "navree-ui-uploads-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    std::fs::create_dir_all(&root).expect("a directory for the disk");
+    let mut options = StorageOptions {
+        default: "scratch".into(),
+        ..StorageOptions::default()
+    };
+    options.disks.clear();
+    options
+        .disks
+        .insert("scratch".into(), DiskConfig::local(root.clone()));
+    let disk = Storage::new(&options, b"signing key")
+        .expect("a local storage")
+        .default_disk();
+    LocalDisk { disk, root }
+}
+
+/// A retry that overtakes the first `finish`, or a page that sends it twice: the parts are put
+/// together and stored once, and every other call finds the upload finished.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn finishes_at_the_same_moment_store_the_file_once() {
+    let local = local_disk();
+    let uploads = Arc::new(
+        Uploads::new(local.disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64),
+    );
+    let data = png(3 * PART + 7);
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
+    put_all(&uploads, "u", &ticket.id, &data, &[0, 1, 2, 3], PART).await;
+
+    let barrier = Arc::new(tokio::sync::Barrier::new(8));
+    let finishes: Vec<_> = (0..8)
+        .map(|_| {
+            let (uploads, barrier, id) = (uploads.clone(), barrier.clone(), ticket.id.clone());
+            tokio::spawn(async move {
+                barrier.wait().await;
+                uploads.finish("u", &id).await
+            })
+        })
+        .collect();
+    let mut stored = Vec::new();
+    for finish in finishes {
+        match finish.await.unwrap() {
+            Ok(file) => stored.push(file),
+            Err(error) => assert_eq!(error.code, UploadCode::Unknown, "{}", error.message),
+        }
+    }
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    assert_eq!(
+        local.disk.list("photos").await.unwrap(),
+        vec![stored[0].path.clone()],
+        "one file, and no parts or notes left"
+    );
+    assert_eq!(
+        local.disk.get(&stored[0].path).await.unwrap().as_ref(),
+        data.as_slice()
+    );
+}
+
+/// Nobody fills the disk with the parts of files that never end: an owner has so many
+/// unfinished uploads at once, and finishing or stopping one makes room.
+#[tokio::test]
+async fn an_owner_has_only_so_many_unfinished_uploads() {
+    let disk = memory_disk();
+    let uploads = Uploads::new(disk, "photos", images(MB, 1))
+        .chunk_bytes(PART as u64)
+        .chunk_sessions(2);
+    let first = uploads.begin("u", start("a.png", PART)).await.unwrap();
+    let _second = uploads.begin("u", start("b.png", PART)).await.unwrap();
+    let refused = uploads.begin("u", start("c.png", PART)).await.unwrap_err();
+    assert_eq!(refused.code, UploadCode::TooMany);
+    assert_eq!(refused.code.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused.message, "You can send up to 2 files.");
+
+    uploads
+        .begin("v", start("a.png", PART))
+        .await
+        .expect("another owner has room of its own");
+
+    uploads.abort("u", &first.id).await.unwrap();
+    let third = uploads.begin("u", start("c.png", PART)).await.unwrap();
+    put_all(&uploads, "u", &third.id, &png(PART), &[0], PART).await;
+    uploads.finish("u", &third.id).await.unwrap();
+    uploads
+        .begin("u", start("d.png", PART))
+        .await
+        .expect("a finished upload is not counted");
+}
+
+/// An upload that ran out of time counts for nothing.
+#[tokio::test]
+async fn an_expired_upload_leaves_its_owner_room() {
+    let disk = memory_disk();
+    let uploads = Uploads::new(disk.clone(), "photos", images(MB, 1))
+        .chunk_bytes(PART as u64)
+        .chunk_ttl(Duration::ZERO)
+        .chunk_sessions(1);
+    uploads.begin("u", start("a.png", PART)).await.unwrap();
+    uploads.begin("u", start("b.png", PART)).await.unwrap();
+    assert_eq!(
+        disk.list("photos").await.unwrap().len(),
+        1,
+        "the expired one was removed"
+    );
+}
+
+/// The begins of one owner take turns: a burst of them opens no more than the limit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_burst_of_begins_opens_no_more_than_the_limit() {
+    let local = local_disk();
+    let uploads = Arc::new(
+        Uploads::new(local.disk.clone(), "photos", images(MB, 1))
+            .chunk_bytes(PART as u64)
+            .chunk_sessions(3),
+    );
+    let barrier = Arc::new(tokio::sync::Barrier::new(10));
+    let begins: Vec<_> = (0..10)
+        .map(|n| {
+            let (uploads, barrier) = (uploads.clone(), barrier.clone());
+            tokio::spawn(async move {
+                barrier.wait().await;
+                uploads.begin("u", start(&format!("{n}.png"), PART)).await
+            })
+        })
+        .collect();
+    let mut opened = 0;
+    for begin in begins {
+        match begin.await.unwrap() {
+            Ok(_) => opened += 1,
+            Err(error) => assert_eq!(error.code, UploadCode::TooMany, "{}", error.message),
+        }
+    }
+    assert_eq!(opened, 3);
+}

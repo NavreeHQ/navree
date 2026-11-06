@@ -5,8 +5,8 @@
 //! from the first bytes of the file, the name is text to show and never a path, and the two
 //! ways in, a plain post and chunks, run the same checks on the same sniffer.
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError, Weak};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
@@ -20,6 +20,8 @@ use navree_storage::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 use super::labels::{UploadLabels, fill};
@@ -43,6 +45,9 @@ const PARTS: &str = "_parts";
 const SWEEP_AT_MOST: usize = 200;
 /// The longest file name kept, in characters: the tail, so the extension stays.
 const NAME_AT_MOST: usize = 255;
+/// How many chunked uploads one owner may have unfinished at once, unless an app says
+/// otherwise.
+const DEFAULT_OPEN: usize = 16;
 
 /// Why a file was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -294,6 +299,10 @@ struct Session {
 /// Ok(received.respond(&headers, "/profile"))
 /// # }
 /// ```
+///
+/// Chunked uploads are held in check too: one owner has at most
+/// [`chunk_sessions`](Self::chunk_sessions) unfinished at once, and an upload is put together
+/// once, however many `finish` calls arrive for it at the same moment.
 #[derive(Clone)]
 pub struct Uploads {
     disk: Disk,
@@ -302,6 +311,7 @@ pub struct Uploads {
     labels: UploadLabels,
     chunk_bytes: u64,
     ttl: Duration,
+    open: usize,
 }
 
 impl Uploads {
@@ -314,6 +324,7 @@ impl Uploads {
             labels: UploadLabels::default(),
             chunk_bytes: DEFAULT_CHUNK,
             ttl: DEFAULT_TTL,
+            open: DEFAULT_OPEN,
         };
         uploads.chunk_bytes = uploads.fit_chunk(DEFAULT_CHUNK);
         uploads
@@ -335,6 +346,14 @@ impl Uploads {
     /// Sets how long an unfinished chunked upload is kept (a day by default).
     pub fn chunk_ttl(mut self, ttl: Duration) -> Self {
         self.ttl = ttl;
+        self
+    }
+
+    /// Sets how many chunked uploads one owner may have unfinished at once: at least one, 16
+    /// by default. [`begin`](Self::begin) refuses another (`too_many`) until one is finished,
+    /// aborted or has expired, so nobody fills the disk with parts of files that never end.
+    pub fn chunk_sessions(mut self, open: usize) -> Self {
+        self.open = open.max(1);
         self
     }
 
@@ -372,9 +391,14 @@ impl Uploads {
         }
     }
 
-    /// A file of the session `id`.
-    fn part(&self, id: &str, file: &str) -> String {
-        self.at(&format!("{PARTS}/{id}/{file}"))
+    /// A file of the session `id` of the owner `key` ([`owner_key`]).
+    fn part(&self, key: &str, id: &str, file: &str) -> String {
+        self.at(&format!("{PARTS}/{key}/{id}/{file}"))
+    }
+
+    /// The turn of `what` of this upload directory, in this process.
+    fn turn_key(&self, what: &str) -> String {
+        format!("{}\0{}\0{what}", self.disk.name(), self.dir)
     }
 
     // ---- A plain post --------------------------------------------------------------------
@@ -520,10 +544,13 @@ impl Uploads {
 
     /// Starts a chunked upload for `owner`, who is whoever the app says is sending: a user's id.
     /// Only that owner can send its parts and finish it. The file's size is held to the limit
-    /// here, before a byte is sent.
+    /// here, before a byte is sent, and the owner to its
+    /// [`chunk_sessions`](Self::chunk_sessions): the begins of one owner take turns, so a burst
+    /// of them cannot open more.
     ///
     /// # Errors
-    /// The file is empty or larger than the limit, or the storage fails.
+    /// The file is empty or larger than the limit, the owner has as many unfinished uploads as
+    /// it may, or the storage fails.
     pub async fn begin(&self, owner: &str, start: ChunkStart) -> Result<ChunkTicket, UploadError> {
         let name = clean_name(&start.name);
         let shown = if name.is_empty() {
@@ -539,6 +566,16 @@ impl Uploads {
             return Err(self.error(UploadCode::TooLarge, &shown));
         }
         self.sweep().await;
+        let key = owner_key(owner);
+        let _turn = turn(self.turn_key(&format!("owner\0{key}"))).await;
+        let failed = || self.error(UploadCode::Failed, &shown);
+        if self.unfinished(owner, &key).await.map_err(|_| failed())? >= self.open {
+            let open = self.open.to_string();
+            return Err(UploadError {
+                code: UploadCode::TooMany,
+                message: fill(&self.labels.too_many, &[("count", open.as_str())]),
+            });
+        }
         let id = Uuid::new_v4().simple().to_string();
         let session = Session {
             owner: owner.to_owned(),
@@ -547,10 +584,9 @@ impl Uploads {
             chunk: self.chunk_bytes,
             at: now(),
         };
-        let failed = || self.error(UploadCode::Failed, &shown);
         let note = serde_json::to_vec(&session).map_err(|_| failed())?;
         self.disk
-            .put(&self.part(&id, "note"), note)
+            .put(&self.part(&key, &id, "note"), note)
             .await
             .map_err(|_| failed())?;
         Ok(ChunkTicket {
@@ -587,7 +623,10 @@ impl Uploads {
             return Err(self.error(UploadCode::BadChunk, &session.name));
         }
         self.disk
-            .put(&self.part(id, &format!("{index:08}")), body)
+            .put(
+                &self.part(&owner_key(owner), id, &format!("{index:08}")),
+                body,
+            )
             .await
             .map_err(|_| self.error(UploadCode::Failed, &session.name))
     }
@@ -596,18 +635,26 @@ impl Uploads {
     /// The kind is read from the file's first bytes with the sniffer a plain post uses, and a
     /// file of a kind that is not accepted is thrown away with its parts.
     ///
+    /// The finishes of one upload take turns: one sent at the same moment as another waits for
+    /// it, then finds the upload finished, so the file is put together and stored once.
+    ///
     /// # Errors
     /// The upload is not this owner's or is gone, a part is missing, the kind is not accepted,
     /// or the storage fails. After a missing part, the upload stays and can be finished once the
     /// part is sent.
     pub async fn finish(&self, owner: &str, id: &str) -> Result<StoredFile, UploadError> {
+        if !valid_id(id) {
+            return Err(self.error(UploadCode::Unknown, ""));
+        }
+        let _turn = turn(self.turn_key(id)).await;
         let session = self.session(owner, id).await?;
+        let key = owner_key(owner);
         let failed = || self.error(UploadCode::Failed, &session.name);
         let bad = || self.error(UploadCode::BadChunk, &session.name);
         let chunks = session.size.div_ceil(session.chunk);
         let mut paths: Vec<String> = Vec::new();
         for index in 0..chunks {
-            let path = self.part(id, &format!("{index:08}"));
+            let path = self.part(&key, id, &format!("{index:08}"));
             match self.disk.size(&path).await {
                 Ok(size) if size == part_size(&session, index) => paths.push(path),
                 Ok(_) | Err(StorageError::NotFound { .. }) => return Err(bad()),
@@ -619,7 +666,7 @@ impl Uploads {
         let head = &first[..first.len().min(SNIFF_BYTES)];
         let sniffed = sniff_type(head, Some(session.name.as_str()));
         if !self.limits.allows(&sniffed.mime) {
-            self.discard(id).await;
+            self.discard(&key, id).await;
             return Err(self.error(UploadCode::WrongType, &session.name));
         }
         let path = upload_path(&self.dir, &sniffed.mime);
@@ -647,7 +694,7 @@ impl Uploads {
             let _ = self.disk.delete(&path).await;
             return Err(bad());
         }
-        self.discard(id).await;
+        self.discard(&key, id).await;
         Ok(StoredFile {
             disk: self.disk.name().to_owned(),
             path,
@@ -657,13 +704,18 @@ impl Uploads {
         })
     }
 
-    /// Stops the upload `id` and removes its parts.
+    /// Stops the upload `id` and removes its parts. It waits for a `finish` of the same upload
+    /// that is under way.
     ///
     /// # Errors
     /// The upload is not this owner's or is gone.
     pub async fn abort(&self, owner: &str, id: &str) -> Result<(), UploadError> {
+        if !valid_id(id) {
+            return Err(self.error(UploadCode::Unknown, ""));
+        }
+        let _turn = turn(self.turn_key(id)).await;
         self.session(owner, id).await?;
-        self.discard(id).await;
+        self.discard(&owner_key(owner), id).await;
         Ok(())
     }
 
@@ -676,30 +728,63 @@ impl Uploads {
             return 0;
         };
         let lead = format!("{root}/");
-        let mut ids: BTreeSet<String> = BTreeSet::new();
+        let mut ids: BTreeSet<(String, String)> = BTreeSet::new();
         for file in files {
-            if let Some(id) = file
-                .strip_prefix(&lead)
-                .and_then(|rest| rest.split('/').next())
+            let mut steps = file.strip_prefix(&lead).unwrap_or_default().split('/');
+            if let (Some(key), Some(id)) = (steps.next(), steps.next())
+                && valid_id(key)
                 && valid_id(id)
             {
-                ids.insert(id.to_owned());
+                ids.insert((key.to_owned(), id.to_owned()));
             }
         }
         let mut removed = 0;
-        for id in ids.into_iter().take(SWEEP_AT_MOST) {
-            let old = match self.disk.get(&self.part(&id, "note")).await {
-                Ok(bytes) => serde_json::from_slice::<Session>(&bytes)
-                    .map(|session| self.expired(session.at))
-                    .unwrap_or(true),
-                Err(_) => true,
-            };
-            if old {
-                self.discard(&id).await;
+        for (key, id) in ids.into_iter().take(SWEEP_AT_MOST) {
+            if self.stale(&key, &id).await {
+                self.discard(&key, &id).await;
                 removed += 1;
             }
         }
         removed
+    }
+
+    /// How many uploads `owner` (whose key is `key`) has unfinished: the ones that expired are
+    /// removed instead of counted.
+    async fn unfinished(&self, owner: &str, key: &str) -> Result<usize, StorageError> {
+        let root = self.at(&format!("{PARTS}/{key}"));
+        let lead = format!("{root}/");
+        let ids: BTreeSet<String> = self
+            .disk
+            .list(&root)
+            .await?
+            .iter()
+            .filter_map(|file| file.strip_prefix(&lead)?.split('/').next())
+            .filter(|id| valid_id(id))
+            .map(str::to_owned)
+            .collect();
+        let mut open = 0;
+        for id in ids {
+            match self.note(key, &id).await {
+                Some(session) if !self.expired(session.at) => {
+                    open += usize::from(session.owner == owner);
+                }
+                _ => self.discard(key, &id).await,
+            }
+        }
+        Ok(open)
+    }
+
+    /// Whether the session `id` of the owner `key` is past its time, or has no note to say.
+    async fn stale(&self, key: &str, id: &str) -> bool {
+        self.note(key, id)
+            .await
+            .is_none_or(|session| self.expired(session.at))
+    }
+
+    /// The note of the session `id` of the owner `key`, if it can be read.
+    async fn note(&self, key: &str, id: &str) -> Option<Session> {
+        let bytes = self.disk.get(&self.part(key, id, "note")).await.ok()?;
+        serde_json::from_slice(&bytes).ok()
     }
 
     /// The session `id` of `owner`: not found for a made-up id, another owner's, an expired
@@ -709,7 +794,11 @@ impl Uploads {
         if !valid_id(id) {
             return Err(unknown());
         }
-        let bytes = match self.disk.get(&self.part(id, "note")).await {
+        let bytes = match self
+            .disk
+            .get(&self.part(&owner_key(owner), id, "note"))
+            .await
+        {
             Ok(bytes) => bytes,
             Err(StorageError::NotFound { .. }) => return Err(unknown()),
             Err(_) => return Err(self.error(UploadCode::Failed, "")),
@@ -725,9 +814,9 @@ impl Uploads {
         now().saturating_sub(at) >= self.ttl.as_secs()
     }
 
-    /// Removes every file of the session `id`.
-    async fn discard(&self, id: &str) {
-        let prefix = self.at(&format!("{PARTS}/{id}"));
+    /// Removes every file of the session `id` of the owner `key`.
+    async fn discard(&self, key: &str, id: &str) {
+        let prefix = self.at(&format!("{PARTS}/{key}/{id}"));
         if let Ok(files) = self.disk.list(&prefix).await {
             for file in files {
                 let _ = self.disk.delete(&file).await;
@@ -744,6 +833,37 @@ fn part_size(session: &Session, index: u64) -> u64 {
     } else {
         session.chunk
     }
+}
+
+/// Where an owner's sessions are kept: 32 hexadecimal digits of the SHA-256 of `owner`, so
+/// an owner's uploads are counted by listing one directory, and no owner names a path.
+fn owner_key(owner: &str) -> String {
+    Sha256::digest(owner.as_bytes())[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Locks by name, held while an upload is begun for an owner or finished: one at a time each,
+/// in this process. An entry lives as long as somebody holds or waits for its lock.
+static TURNS: LazyLock<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(Mutex::default);
+
+/// Waits for the turn of `key`, held until the guard is dropped.
+async fn turn(key: String) -> OwnedMutexGuard<()> {
+    let lock = {
+        let mut turns = TURNS.lock().unwrap_or_else(PoisonError::into_inner);
+        turns.retain(|_, lock| lock.strong_count() > 0);
+        match turns.get(&key).and_then(Weak::upgrade) {
+            Some(lock) => lock,
+            None => {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                turns.insert(key, Arc::downgrade(&lock));
+                lock
+            }
+        }
+    };
+    lock.lock_owned().await
 }
 
 /// Whether `id` is one this module makes: 32 lower-case hexadecimal digits.
