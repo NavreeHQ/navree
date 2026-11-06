@@ -546,7 +546,9 @@ impl Uploads {
     /// Only that owner can send its parts and finish it. The file's size is held to the limit
     /// here, before a byte is sent, and the owner to its
     /// [`chunk_sessions`](Self::chunk_sessions): the begins of one owner take turns, so a burst
-    /// of them cannot open more.
+    /// of them cannot open more. The owner is one person: for a guest, pass something of that
+    /// guest's own (its session's id), never one name for every guest, who would then share
+    /// those uploads.
     ///
     /// # Errors
     /// The file is empty or larger than the limit, the owner has as many unfinished uploads as
@@ -693,6 +695,16 @@ impl Uploads {
         if written != session.size {
             let _ = self.disk.delete(&path).await;
             return Err(bad());
+        }
+        // The note goes first: once it has, no other finish finds the upload, so the file is
+        // stored once. When it cannot go, the file does not stay either, and the upload can be
+        // finished again.
+        match self.disk.delete(&self.part(&key, id, "note")).await {
+            Ok(()) | Err(StorageError::NotFound { .. }) => {}
+            Err(_) => {
+                let _ = self.disk.delete(&path).await;
+                return Err(failed());
+            }
         }
         self.discard(&key, id).await;
         Ok(StoredFile {

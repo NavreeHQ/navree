@@ -1064,3 +1064,53 @@ async fn an_upload_whose_note_cannot_be_read_for_now_is_kept_and_counted() {
         .expect("the upload was kept whole");
     assert_eq!(stored.size, data.len() as u64);
 }
+
+/// A finish that stored its file and then cannot remove the upload's note keeps no file: the
+/// upload is still there, and a finish after it would store the file a second time.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_finish_that_cannot_remove_its_note_keeps_no_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let local = local_disk();
+    let uploads =
+        Uploads::new(local.disk.clone(), "photos", images(MB, 1)).chunk_bytes(PART as u64);
+    let data = png(PART + 7);
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
+    put_all(&uploads, "u", &ticket.id, &data, &[0, 1], PART).await;
+    let parts = local.disk.list("photos").await.unwrap();
+    let note = parts
+        .iter()
+        .find(|path| path.ends_with(&format!("{}/note", ticket.id)))
+        .expect("the upload's note");
+    let session = local.root.join(note).parent().unwrap().to_path_buf();
+    std::fs::set_permissions(&session, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::write(session.join("probe"), b"").is_ok() {
+        println!("this user writes anywhere, so the note can always be removed");
+        std::fs::remove_file(session.join("probe")).unwrap();
+        std::fs::set_permissions(&session, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+
+    let failed = uploads.finish("u", &ticket.id).await.unwrap_err();
+    assert_eq!(failed.code, UploadCode::Failed, "{}", failed.message);
+    assert_eq!(
+        local.disk.list("photos").await.unwrap(),
+        parts,
+        "no file was kept"
+    );
+
+    std::fs::set_permissions(&session, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let stored = uploads
+        .finish("u", &ticket.id)
+        .await
+        .expect("finished on a retry");
+    assert_eq!(
+        local.disk.list("photos").await.unwrap(),
+        vec![stored.path],
+        "stored once"
+    );
+}
