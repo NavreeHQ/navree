@@ -10,7 +10,7 @@ use std::time::Duration;
 use http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use http::{HeaderValue, Method};
 use navree_http::extract::Query;
-use navree_http::{AppError, IntoResponse, Json, RouteDef};
+use navree_http::{ApiMeta, AppError, IntoResponse, Json, RouteDef};
 use navree_session::Session;
 use navree_ui::html::{SafeHtml, escape_into};
 use navree_ui::pages::ReturnTo;
@@ -19,7 +19,7 @@ use navree_validation::{Valid, Validate};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{PagesController, Paths, link, page, signed_in_target};
+use super::{PagesController, Paths, api, link, page, signed_in_target};
 use crate::{AuthError, ClientMeta, PasskeyLoginOptionsInput, SessionSignIn};
 
 /// The script of the page.
@@ -115,7 +115,8 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.passkey"),
+            .name("auth.pages.passkey")
+            .api(api("The passkey sign-in page", &[])),
         );
 
         // GET passkey.js
@@ -138,7 +139,8 @@ impl PagesController {
                 },
             )
             .public()
-            .name("auth.pages.passkey.script"),
+            .name("auth.pages.passkey.script")
+            .api(api("The passkey page's script", &[])),
         );
 
         // POST passkey/options
@@ -160,7 +162,14 @@ impl PagesController {
             )
             .public()
             .throttle(CEREMONIES_PER_MINUTE, Duration::from_secs(60))
-            .name("auth.pages.passkey.options"),
+            .name("auth.pages.passkey.options")
+            .api(ApiMeta {
+                description: Some(
+                    "JSON for the page's script: the WebAuthn request options as `{publicKey}`."
+                        .to_owned(),
+                ),
+                ..api("Starts signing in with a passkey", &[400, 403, 429])
+            }),
         );
 
         // POST passkey/verify
@@ -204,7 +213,15 @@ impl PagesController {
             )
             .public()
             .throttle(CEREMONIES_PER_MINUTE, Duration::from_secs(60))
-            .name("auth.pages.passkey.verify"),
+            .name("auth.pages.passkey.verify")
+            .api(ApiMeta {
+                description: Some(
+                    "JSON for the page's script: the assertion the browser made. Answers \
+                     `{status, next}`, `status` being `signed_in` or `two_factor`."
+                        .to_owned(),
+                ),
+                ..api("Signs in with a passkey", &[400, 401, 403, 429])
+            }),
         );
         routes
     }

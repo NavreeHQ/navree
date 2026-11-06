@@ -7,14 +7,14 @@
 
 use http::Method;
 use navree_http::extract::Query;
-use navree_http::{AppError, CurrentPrincipal, IntoResponse, RouteDef};
+use navree_http::{ApiMeta, AppError, CurrentPrincipal, IntoResponse, RouteDef};
 use navree_session::Session;
 use navree_ui::form::{FormView, Rejected};
 use navree_ui::html::SafeHtml;
 use navree_ui::{Alert, AlertTone, Form, Node, Reply, Stack, Submit, Text, Validate, el};
 use serde::Deserialize;
 
-use super::{PagesController, Paths, link, page};
+use super::{PagesController, Paths, api, link, page};
 use crate::session_auth::{
     STOP_IMPERSONATING_PATH, TWO_FACTOR_CONFIRM_PATH, TWO_FACTOR_SETUP_PATH,
 };
@@ -191,7 +191,15 @@ impl PagesController {
             .authenticated()
             .page()
             .guard(not_while_impersonating())
-            .name("auth.pages.two_factor_setup"),
+            .name("auth.pages.two_factor_setup")
+            .api(ApiMeta {
+                description: Some(
+                    "Whether two-factor authentication is on, with a button to set it up. Not \
+                     while impersonating (403)."
+                        .to_owned(),
+                ),
+                ..api("The two-factor setup page", &[403])
+            }),
         );
 
         // POST two-factor setup: a new secret
@@ -242,7 +250,14 @@ impl PagesController {
             .authenticated()
             .page()
             .guard(not_while_impersonating())
-            .name("auth.pages.two_factor_setup.start"),
+            .name("auth.pages.two_factor_setup.start")
+            .api(ApiMeta {
+                description: Some(
+                    "Draws a new secret as a picture and a key, with the form for the first code."
+                        .to_owned(),
+                ),
+                ..api("Starts setting two-factor authentication up", &[303, 403, 422])
+            }),
         );
 
         // POST two-factor setup: the first code
@@ -310,7 +325,15 @@ impl PagesController {
             .authenticated()
             .page()
             .guard(not_while_impersonating())
-            .name("auth.pages.two_factor_setup.confirm"),
+            .name("auth.pages.two_factor_setup.confirm")
+            .api(ApiMeta {
+                description: Some(
+                    "Shows the recovery codes once. A wrong code starts the setup again with a \
+                     new key (422)."
+                        .to_owned(),
+                ),
+                ..api("Turns two-factor authentication on with the first code", &[303, 403, 422])
+            }),
         );
 
         // POST impersonate/stop
@@ -335,7 +358,15 @@ impl PagesController {
             )
             .authenticated()
             .page()
-            .name("auth.pages.impersonation.stop"),
+            .name("auth.pages.impersonation.stop")
+            .api(ApiMeta {
+                description: Some(
+                    "The administrator is signed in as themselves again, then goes to the home \
+                     page (303). A browser that is not impersonating answers 400."
+                        .to_owned(),
+                ),
+                ..api("Stops impersonating a user", &[303, 400, 403])
+            }),
         );
         routes
     }

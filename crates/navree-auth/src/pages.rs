@@ -14,7 +14,7 @@ use http::{HeaderValue, Method, StatusCode};
 use navree_contracts::AuthState;
 use navree_http::ModuleBuilderHttpExt;
 use navree_http::extract::{Query, RawQuery};
-use navree_http::{AppError, Controller, IntoResponse, Response, RouteDef};
+use navree_http::{ApiMeta, AppError, Controller, IntoResponse, Response, RouteDef};
 use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
@@ -481,6 +481,17 @@ fn wait_text(retry_after: Duration) -> String {
     )
 }
 
+/// The documentation of a route of the pages. They answer HTML (or a
+/// redirect), so a page has no response schema.
+fn api(summary: &str, responses: &[u16]) -> ApiMeta {
+    ApiMeta {
+        summary: Some(summary.to_owned()),
+        tags: vec!["Auth pages".to_owned()],
+        responses: responses.to_vec(),
+        ..ApiMeta::default()
+    }
+}
+
 /// Whether the request is already signed in.
 fn signed_in(parts: &Parts) -> bool {
     parts
@@ -570,7 +581,15 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.sign_in"),
+            .name("auth.pages.sign_in")
+            .api(ApiMeta {
+                description: Some(
+                    "The form, with \"remember me\"; a browser already signed in goes on to \
+                     `next` (303)."
+                        .to_owned(),
+                ),
+                ..api("The sign-in page", &[303])
+            }),
         );
 
         // POST sign-in
@@ -651,7 +670,16 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.sign_in.submit"),
+            .name("auth.pages.sign_in.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "Goes on to `next`, or to the second factor when the account uses it (303). \
+                     Details that don't match an account draw the form again with the error \
+                     (422); a sign-in policy that refuses the account answers 403."
+                        .to_owned(),
+                ),
+                ..api("Signs in with an email and a password", &[303, 403, 422, 429])
+            }),
         );
 
         // GET two-factor
@@ -687,7 +715,15 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.two_factor"),
+            .name("auth.pages.two_factor")
+            .api(ApiMeta {
+                description: Some(
+                    "Asks for the code from the authenticator app, or a recovery code; with no \
+                     sign-in waiting for one, goes back to the sign-in page (303)."
+                        .to_owned(),
+                ),
+                ..api("The second-factor page", &[303])
+            }),
         );
 
         // POST two-factor
@@ -778,7 +814,15 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.two_factor.submit"),
+            .name("auth.pages.two_factor.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "A code from the authenticator app, or a recovery code. Goes on to `next` \
+                     (303); a code that didn't work draws the form again (422)."
+                        .to_owned(),
+                ),
+                ..api("Finishes signing in with a two-factor code", &[303, 403, 422, 429])
+            }),
         );
 
         // GET forgot-password
@@ -799,7 +843,8 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.forgot_password"),
+            .name("auth.pages.forgot_password")
+            .api(api("The forgotten-password page", &[])),
         );
 
         // POST forgot-password
@@ -837,7 +882,15 @@ impl Controller for PagesController {
             .public()
             .page()
             .throttle(FORGOT_PER_MINUTE, Duration::from_secs(60))
-            .name("auth.pages.forgot_password.submit"),
+            .name("auth.pages.forgot_password.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "The same answer for every address, so the page never says whether an account \
+                     uses it."
+                        .to_owned(),
+                ),
+                ..api("Mails a link to choose a new password", &[403, 422, 429])
+            }),
         );
 
         // GET reset-password
@@ -864,7 +917,15 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.reset_password"),
+            .name("auth.pages.reset_password")
+            .api(ApiMeta {
+                description: Some(
+                    "The form for a new password, filled from the mailed link's `token` and \
+                     `email`."
+                        .to_owned(),
+                ),
+                ..api("The reset-password page", &[])
+            }),
         );
 
         // POST reset-password
@@ -936,7 +997,15 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.reset_password.submit"),
+            .name("auth.pages.reset_password.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "Signs every session of the user out, then goes to the sign-in page (303). A \
+                     link that is no longer good answers 400."
+                        .to_owned(),
+                ),
+                ..api("Sets a new password", &[303, 400, 403, 422])
+            }),
         );
 
         // POST sign-out
@@ -959,7 +1028,13 @@ impl Controller for PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.sign_out"),
+            .name("auth.pages.sign_out")
+            .api(ApiMeta {
+                description: Some(
+                    "Ends the browser's sign-in, then goes to the sign-in page.".to_owned(),
+                ),
+                ..api("Signs out", &[303, 403])
+            }),
         );
         if paths.has_magic_link {
             routes.extend(self.link_routes());

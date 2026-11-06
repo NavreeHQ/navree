@@ -792,3 +792,40 @@ async fn the_json_session_routes_exist_only_with_the_session_layer() {
         .await
         .assert_status(200);
 }
+
+// `navree check` asks every route for its API documentation: so is every
+// route of the pages, the passwordless and passkey ones too.
+#[tokio::test]
+async fn every_route_of_the_pages_is_documented() {
+    let clock = support::clock();
+    let app = with_pages(
+        support::mail_builder()
+            .override_value::<dyn navree_contracts::Clock>(clock)
+            .config("auth.magic_link.enabled", true)
+            .config(
+                "auth.magic_link.url",
+                "https://app.example.com/sign-in/link/verify",
+            )
+            .config("auth.otp.enabled", true)
+            .config("auth.passkeys.enabled", true)
+            .config("auth.passkeys.rp_id", RP_ID)
+            .config("auth.passkeys.origins", json!([ORIGIN])),
+    )
+    .build()
+    .await;
+    let routes = navree_http::route_table(app.ctx()).await.unwrap();
+    let mut pages = 0;
+    for route in routes.iter().filter(|route| {
+        route
+            .name
+            .as_deref()
+            .is_some_and(|name| name.starts_with("auth.pages."))
+    }) {
+        pages += 1;
+        let label = format!("{} {}", route.method, route.full_path);
+        let api = route.api.as_ref().unwrap_or_else(|| panic!("{label}"));
+        assert!(api.summary.is_some(), "{label}");
+        assert_eq!(api.tags, ["Auth pages"], "{label}");
+    }
+    assert_eq!(pages, 24);
+}

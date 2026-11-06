@@ -8,7 +8,7 @@ use http::Method;
 use http::StatusCode;
 use http::request::Parts;
 use navree_http::extract::Query;
-use navree_http::{AppError, IntoResponse, Response, RouteDef};
+use navree_http::{ApiMeta, AppError, IntoResponse, Response, RouteDef};
 use navree_session::Session;
 use navree_ui::form::{FormView, Rejected};
 use navree_ui::pages::ReturnTo;
@@ -16,7 +16,7 @@ use navree_ui::{Alert, AlertTone, Form, Node, Reply, Stack, Submit, Validate};
 use serde::Deserialize;
 
 use super::{
-    PagesController, Paths, field_error, link, page, signed_in_redirect, too_many, wait_text,
+    PagesController, Paths, api, field_error, link, page, signed_in_redirect, too_many, wait_text,
 };
 use crate::{AuthError, ClientMeta, SessionSignIn};
 
@@ -251,7 +251,8 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.magic_link"),
+            .name("auth.pages.magic_link")
+            .api(api("The page that mails a sign-in link", &[])),
         );
 
         // POST link
@@ -303,7 +304,15 @@ impl PagesController {
             .public()
             .page()
             .throttle(MAILS_PER_MINUTE, Duration::from_secs(60))
-            .name("auth.pages.magic_link.submit"),
+            .name("auth.pages.magic_link.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "The same answer for every address; a sign-in policy that refuses the account \
+                     answers 403."
+                        .to_owned(),
+                ),
+                ..api("Mails a sign-in link", &[403, 422, 429])
+            }),
         );
 
         // GET link/verify: the page the mailed link opens
@@ -329,7 +338,11 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.magic_link.verify"),
+            .name("auth.pages.magic_link.verify")
+            .api(ApiMeta {
+                description: Some("One button that signs in with the link's `token`.".to_owned()),
+                ..api("The page a mailed sign-in link opens", &[])
+            }),
         );
 
         // POST link/verify
@@ -410,7 +423,15 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.magic_link.verify.submit"),
+            .name("auth.pages.magic_link.verify.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "Goes on to `next`, or to the second factor when the account uses it (303). A \
+                     link that is used or expired answers 400."
+                        .to_owned(),
+                ),
+                ..api("Signs in with a mailed link", &[303, 400, 403, 422])
+            }),
         );
         routes
     }
@@ -444,7 +465,8 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.code"),
+            .name("auth.pages.code")
+            .api(api("The page that mails a sign-in code", &[])),
         );
 
         // POST code: mails the code, then asks for it
@@ -499,7 +521,15 @@ impl PagesController {
             .public()
             .page()
             .throttle(MAILS_PER_MINUTE, Duration::from_secs(60))
-            .name("auth.pages.code.submit"),
+            .name("auth.pages.code.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "Then asks for the code. The same answer for every address; a sign-in policy \
+                     that refuses the account answers 403."
+                        .to_owned(),
+                ),
+                ..api("Mails a sign-in code", &[403, 422, 429])
+            }),
         );
 
         // POST code/verify
@@ -578,7 +608,15 @@ impl PagesController {
             )
             .public()
             .page()
-            .name("auth.pages.code.verify"),
+            .name("auth.pages.code.verify")
+            .api(ApiMeta {
+                description: Some(
+                    "Goes on to `next`, or to the second factor when the account uses it (303). A \
+                     code that didn't work draws the form again (422)."
+                        .to_owned(),
+                ),
+                ..api("Signs in with a mailed code", &[303, 403, 422, 429])
+            }),
         );
         routes
     }
