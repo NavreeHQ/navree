@@ -326,8 +326,9 @@ async fn a_handler_can_lift_the_limit_for_its_request() {
     assert!(response.ends_with("hello"), "{response}");
 }
 
-/// A route that reads no body is not held to the limit, and the unread
-/// body does not keep the connection for the next client.
+/// A route that reads no body is not held to the limit: its answer goes out
+/// at once, and the rest of the body, which never comes, is given up at the
+/// body's pace, so it does not keep the connection.
 #[tokio::test]
 async fn a_body_nobody_reads_ends_with_its_response() {
     let server = start(echo_app(), body_timeout(Some(1_000_000))).await;

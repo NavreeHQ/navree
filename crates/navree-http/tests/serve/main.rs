@@ -6,6 +6,7 @@
 mod attacks;
 mod compression;
 mod connections;
+mod early_answers;
 mod http2;
 mod multipart;
 mod requests;

@@ -44,14 +44,22 @@
 //!   a conversation rather than an upload lifts this with [`BodyReadLimit`]:
 //!   gRPC does for client and bidirectional streams, once a call has passed
 //!   its access check.
-//! - **A body over its route's limit.** An HTTP/1 request that declares more
-//!   than its route's body limit is answered 413 before any handler runs. A
-//!   body of at most 8 MiB is first read and thrown away, so a client that
-//!   sends it whole before reading gets the 413 and not a reset: for at most
-//!   5 s, and never past the request's own timeout (`http.timeout_secs`, or the
-//!   route's) less 250 ms. No more bytes are read than the request declares;
-//!   a body not read to its end gets `Connection: close` on the 413. A larger
-//!   body, and one from a client waiting on `100 Continue`, is answered at once.
+//! - **A body its answer did not wait for.** A 401, a 404, a 413 for a body
+//!   declared over its route's limit, or a handler that does not need the
+//!   body answers before the body has arrived, and a client sends its whole
+//!   body before it reads the answer. On HTTP/1 the answer goes out first and
+//!   the server then reads the rest of the body and throws it away, so the
+//!   connection can take the next request: at most the route's body limit
+//!   (`http.body_limit_bytes` outside a route), for at most 5 s, at the pace
+//!   above. A body that declares more, one not read to its end in time and one
+//!   from a client waiting on `100 Continue` close the connection after the
+//!   answer (`Connection: close`, when the answer has not gone out yet). That
+//!   close lingers, so the client reads the answer and not a reset: the server
+//!   ends its side, then reads what the client is still sending, until the
+//!   client closes its side, sends nothing for 2 s, or 5 s have passed. What
+//!   has already arrived is thrown away at no cost, so a body hyper has read
+//!   whole leaves the connection open whatever its size. On HTTP/2 the answer
+//!   ends the stream, and the connection goes on.
 //! - **Heads.** [`max_header_bytes`](ServerOptions::max_header_bytes) and
 //!   [`max_headers`](ServerOptions::max_headers) (431).
 //! - **Responses.** A response its client stops taking ends after
@@ -98,7 +106,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use http::{Method, Request, Response, StatusCode, Version};
+use http::header::CONNECTION;
+use http::{HeaderValue, Method, Request, Response, StatusCode, Version};
 use http_body::Body as HttpBody;
 use hyper::body::Incoming;
 use hyper::service::service_fn;
@@ -109,7 +118,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tower::{Service, ServiceExt as _};
 
-use crate::body::Body;
+use crate::body::{Body, DEFAULT_BODY_LIMIT};
 use crate::extract::rejection::ExtensionRejection;
 use crate::extract::{FromRequestParts, ProxyTrust};
 use crate::network::DEFAULT_IPV6_PREFIX;
@@ -121,14 +130,17 @@ mod frames;
 mod gate;
 mod listener;
 mod streams;
+mod unread;
 
 pub use body::{BodyReadLimit, BodyReadTimeout};
 pub use listener::{Listener, poll_tcp_sent};
+pub(crate) use unread::UnreadLimit;
 
 use body::{Pace, PacedBody, ResponseBody};
 use clock::{Clock, InFlight, Timer, Watched};
 use gate::{Gate, Slot};
 use streams::{Progress, Streams};
+use unread::{Drain, Kept, Unread, waits_to_continue};
 
 /// The smallest `http.server.max_header_bytes`: hyper's smallest HTTP/1
 /// buffer.
@@ -182,6 +194,7 @@ where
         grace: Duration::from_secs(HttpOptions::default().shutdown_grace_secs),
         proxies: ProxyTrust::none(),
         ipv6_prefix: DEFAULT_IPV6_PREFIX,
+        body_limit: DEFAULT_BODY_LIMIT,
         signal: None,
     }
 }
@@ -195,19 +208,23 @@ pub struct Serve<L, S> {
     grace: Duration,
     proxies: ProxyTrust,
     ipv6_prefix: u8,
+    body_limit: usize,
     signal: Option<BoxFuture<'static, ()>>,
 }
 
 impl<L, S> Serve<L, S> {
-    /// The limits of `options.server`, `options.shutdown_grace_secs`, and
-    /// what `http.server.max_connections_per_ip` goes by: who is a proxy
+    /// The limits of `options.server`, `options.shutdown_grace_secs`, what
+    /// `http.server.max_connections_per_ip` goes by: who is a proxy
     /// (`options.trusted_proxies`, `options.trust_proxy`) and how much of an
-    /// IPv6 address names a client (`options.rate_limit_ipv6_prefix`).
+    /// IPv6 address names a client (`options.rate_limit_ipv6_prefix`), and
+    /// the most of a body read after an answer outside a route
+    /// (`options.body_limit_bytes`).
     pub fn options(mut self, options: &HttpOptions) -> Self {
         self.options = options.server.clone();
         self.grace = Duration::from_secs(options.shutdown_grace_secs);
         self.proxies = ProxyTrust::new(options.trust_proxy, &options.trusted_proxies);
         self.ipv6_prefix = options.rate_limit_ipv6_prefix;
+        self.body_limit = options.body_limit_bytes;
         self
     }
 
@@ -270,10 +287,11 @@ where
             grace,
             proxies,
             ipv6_prefix,
+            body_limit,
             signal,
         } = self;
         let mut gate = Gate::new(&options, proxies, ipv6_prefix);
-        let limits = Arc::new(Limits::new(options));
+        let limits = Arc::new(Limits::new(options, body_limit));
         let mut signal = signal.unwrap_or_else(|| Box::pin(std::future::pending()));
         let stopping = CancellationToken::new();
         let mut connections = JoinSet::new();
@@ -321,10 +339,12 @@ struct Limits {
     body: Option<Pace>,
     write_stall: Option<Duration>,
     upgraded_idle: Option<Duration>,
+    /// The most of a body read after an answer outside a route.
+    body_limit: usize,
 }
 
 impl Limits {
-    fn new(server: ServerOptions) -> Self {
+    fn new(server: ServerOptions, body_limit: usize) -> Self {
         Self {
             header_read: server.header_read_timeout_ms.map(limit),
             idle: server.idle_timeout_ms.map(limit),
@@ -333,6 +353,7 @@ impl Limits {
                 .map(|timeout| Pace::new(limit(timeout), server.body_min_bytes_per_sec)),
             write_stall: server.write_stall_timeout_ms.map(limit),
             upgraded_idle: server.upgraded_idle_timeout_ms.map(limit),
+            body_limit,
             server,
         }
     }
@@ -406,6 +427,8 @@ async fn connection<H, I, A, S, B>(
     };
 
     clock.handshaken();
+    let unread = Arc::new(Unread::new(clock.clone(), limits.body_limit));
+    let mut drain = Drain::new(unread.clone());
     let hyper_service = {
         let clock = clock.clone();
         let remote = remote.clone();
@@ -418,15 +441,27 @@ async fn connection<H, I, A, S, B>(
             let upgrades = request.method() == Method::CONNECT;
             // hyper holds HTTP/1 to this itself.
             let refused = progress.is_some() && request.headers().len() > max_headers;
-            let served =
-                (!refused).then(|| service.clone().oneshot(prepare(request, &remote, pace)));
+            // One request at a time on HTTP/1: what the last one left is settled.
+            let unread = progress.is_none().then(|| {
+                unread.next_request();
+                unread.clone()
+            });
+            let served = (!refused).then(|| {
+                let request = prepare(request, &remote, pace, unread.as_ref());
+                service.clone().oneshot(request)
+            });
             async move {
                 let Some(served) = served else {
                     let mut response = Response::new(None);
                     *response.status_mut() = StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE;
                     return Ok(finishing(response, in_flight, progress));
                 };
-                let response = served.await?;
+                let mut response = served.await?;
+                if unread.is_some_and(|unread| unread.closes()) {
+                    response
+                        .headers_mut()
+                        .insert(CONNECTION, HeaderValue::from_static("close"));
+                }
                 if upgraded(upgrades, response.status()) {
                     in_flight.upgraded();
                 }
@@ -461,6 +496,7 @@ async fn connection<H, I, A, S, B>(
             }
             () = stopping.cancelled(), if !closing => {
                 closing = true;
+                drain.give_up();
                 conn.as_mut().graceful_shutdown();
                 clock.close_soon();
             }
@@ -475,6 +511,7 @@ async fn connection<H, I, A, S, B>(
                 conn.as_mut().graceful_shutdown();
                 clock.say_goodbye();
             }
+            () = poll_fn(|cx| drain.poll(cx)) => {}
         }
     }
 }
@@ -492,20 +529,39 @@ async fn within<T>(
     }
 }
 
-/// The request as a service sees it: its peer, and its body at a pace.
-fn prepare<A>(request: Request<Incoming>, remote: &A, pace: Option<Pace>) -> Request<Body>
+/// The request as a service sees it: its peer, its body at a pace, and on
+/// HTTP/1 (with `unread`) a body that hands what is not read back to the
+/// connection.
+fn prepare<A>(
+    request: Request<Incoming>,
+    remote: &A,
+    pace: Option<Pace>,
+    unread: Option<&Arc<Unread<Body>>>,
+) -> Request<Body>
 where
     A: Clone + Send + Sync + 'static,
 {
     let (mut parts, incoming) = request.into_parts();
     parts.extensions.insert(ConnectInfo(remote.clone()));
+    if HttpBody::is_end_stream(&incoming) {
+        return Request::from_parts(parts, Body::new(incoming));
+    }
     let body = match pace {
-        Some(pace) if !HttpBody::is_end_stream(&incoming) => {
+        Some(pace) => {
             let limit = BodyReadLimit::default();
             parts.extensions.insert(limit.clone());
             Body::new(PacedBody::new(incoming, pace, limit))
         }
-        _ => Body::new(incoming),
+        None => Body::new(incoming),
+    };
+    let body = match unread {
+        Some(unread) => {
+            let limit = unread.limit();
+            parts.extensions.insert(limit.clone());
+            let waits = waits_to_continue(&parts);
+            Body::new(Kept::new(body, unread.clone(), limit, waits))
+        }
+        None => body,
     };
     Request::from_parts(parts, body)
 }

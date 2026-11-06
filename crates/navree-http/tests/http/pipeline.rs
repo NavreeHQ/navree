@@ -675,39 +675,30 @@ async fn body_limit_returns_413() {
     assert_eq!(app.send(upload).await.text(), "100");
 }
 
-// ---- A body over the limit, read and thrown away before the 413 ------------
+// ---- A body over the limit is answered at once ------------------------------
 
-/// An app whose bodies may be 16 bytes, with the app timeout `timeout_secs`: `/api/ignore`
-/// never reads its body, and `/api/quick` has a route timeout of `quick`.
-async fn small_limit(timeout_secs: u64, quick: Duration) -> TestApp {
+/// An app whose bodies may be 16 bytes: `/api/ignore` never reads its body.
+async fn small_limit() -> TestApp {
     Setup::new(vec![
         RouteDef::on(Method::POST, "/ignore", || async { "ignored the body" }).public(),
-        RouteDef::on(Method::POST, "/quick", || async { "ignored the body" })
-            .public()
-            .timeout(quick),
     ])
     .options(HttpOptions {
         body_limit_bytes: 16,
-        timeout_secs,
         ..options()
     })
     .boot()
     .await
 }
 
-/// A body of `chunks` that counts the ones the server reads; with `stall`, it then sends
-/// nothing more and never ends.
-fn counted(chunks: Vec<Result<Bytes, std::io::Error>>, stall: bool) -> (Body, Arc<AtomicUsize>) {
+/// A body of `chunks` that counts the ones the app reads, then sends nothing more and never
+/// ends.
+fn counted(chunks: Vec<Result<Bytes, std::io::Error>>) -> (Body, Arc<AtomicUsize>) {
     let read = Arc::new(AtomicUsize::new(0));
     let seen = read.clone();
     let sent = futures_util::stream::iter(chunks).inspect(move |_| {
         seen.fetch_add(1, Ordering::SeqCst);
     });
-    let body = if stall {
-        Body::from_stream(sent.chain(futures_util::stream::pending()))
-    } else {
-        Body::from_stream(sent)
-    };
+    let body = Body::from_stream(sent.chain(futures_util::stream::pending()));
     (body, read)
 }
 
@@ -721,229 +712,32 @@ fn declaring(path: &str, length: &str) -> http::request::Builder {
     Request::post(path).header("content-length", length)
 }
 
-#[tokio::test]
-async fn a_body_a_little_over_the_limit_is_read_and_thrown_away_before_the_413() {
-    let app = small_limit(30, Duration::from_secs(30)).await;
-
-    // Over the limit: still answered 413, after the body was read to its end, and the
-    // connection can carry the next request.
-    let (body, read) = counted(tens(10), false);
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    assert_eq!(response.assert_error(413)["code"], "payload_too_large");
-    assert_eq!(read.load(Ordering::SeqCst), 10, "the whole body was read");
-    assert_eq!(response.header("connection"), None);
-
-    // No more than it declares: the bytes after the declared hundred are not read.
-    let (body, read) = counted(tens(20), false);
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        10,
-        "stopped at the declared length"
-    );
-    assert_eq!(response.header("connection"), None);
-
-    // A body that ends short of what it declares was not read to its end.
-    let (body, read) = counted(tens(3), false);
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(read.load(Ordering::SeqCst), 3);
-    assert_eq!(response.header("connection"), Some("close"));
-
-    // Waiting on 100 Continue, or on HTTP/2: answered without a byte read.
-    let (body, read) = counted(tens(10), false);
-    let waiting = declaring("/api/ignore", "100")
-        .header("expect", "100-continue")
-        .body(body)
-        .unwrap();
-    let response = app.send(waiting).await;
-    response.assert_error(413);
-    assert_eq!(read.load(Ordering::SeqCst), 0, "waiting on 100 Continue");
-    assert_eq!(response.header("connection"), Some("close"));
-    let (body, read) = counted(tens(10), false);
-    let two = declaring("/api/ignore", "100")
-        .version(http::Version::HTTP_2)
-        .body(body)
-        .unwrap();
-    let response = app.send(two).await;
-    response.assert_error(413);
-    assert_eq!(read.load(Ordering::SeqCst), 0, "HTTP/2");
-    assert_eq!(
-        response.header("connection"),
-        None,
-        "HTTP/2 has no Connection header"
-    );
-}
-
-#[tokio::test]
-async fn the_drain_reads_a_body_of_8_mib_and_not_one_byte_more() {
-    let app = small_limit(30, Duration::from_secs(30)).await;
-    let mib = Bytes::from(vec![0_u8; 1 << 20]);
-    let eight = || (0..8).map(|_| Ok(mib.clone())).collect::<Vec<_>>();
-
-    let (body, read) = counted(eight(), false);
-    let response = app
-        .send(declaring("/api/ignore", "8388608").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(read.load(Ordering::SeqCst), 8, "8,388,608 bytes are read");
-    assert_eq!(response.header("connection"), None);
-
-    let (body, read) = counted(eight(), false);
-    let response = app
-        .send(declaring("/api/ignore", "8388609").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        0,
-        "one byte more is answered at once"
-    );
-    assert_eq!(response.header("connection"), Some("close"));
-}
-
+/// The app reads nothing of a body it refuses: the server reads what is left after the answer
+/// has gone, and decides whether the connection goes on (tests/serve/early_answers.rs).
 #[tokio::test(start_paused = true)]
-async fn a_stalled_body_gets_its_413_when_the_drain_gives_up() {
-    let app = small_limit(30, Duration::from_secs(30)).await;
-    let (body, read) = counted(tens(1), true);
-    let began = Instant::now();
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    let waited = began.elapsed();
-    assert!(
-        waited >= Duration::from_secs(5) && waited < Duration::from_secs(6),
-        "the drain's 5 s, not the app's 30: {waited:?}"
-    );
-    assert_eq!(read.load(Ordering::SeqCst), 1);
-    assert_eq!(response.header("connection"), Some("close"));
-}
-
-#[tokio::test]
-async fn a_body_that_is_always_ready_and_never_ends_is_still_cut_off() {
-    // Empty frames for ever, never waiting: the drain gives way to its timer, here the app's
-    // timeout of 1 s less the margin.
-    let app = small_limit(1, Duration::from_secs(1)).await;
-    let endless = Body::from_stream(futures_util::stream::repeat_with(|| {
-        Ok::<_, std::io::Error>(Bytes::new())
-    }));
-    let response = app
-        .send(declaring("/api/ignore", "100").body(endless).unwrap())
-        .await;
-    assert_eq!(
-        response.assert_error(413)["code"],
-        "payload_too_large",
-        "not the timeout's 503"
-    );
-    assert_eq!(response.header("connection"), Some("close"));
-}
-
-#[tokio::test(start_paused = true)]
-async fn a_short_timeout_still_answers_413_and_the_drain_stops_before_it() {
-    // The app's own timeout of 1 s: the drain stops a margin before it.
-    let app = small_limit(1, Duration::from_millis(400)).await;
-    let (body, _) = counted(tens(1), true);
-    let began = Instant::now();
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    let body = response.assert_error(413);
-    assert_eq!(body["code"], "payload_too_large", "not the timeout's 503");
-    assert!(
-        began.elapsed() < Duration::from_secs(1),
-        "{:?}",
-        began.elapsed()
-    );
-    assert_eq!(response.header("connection"), Some("close"));
-
-    // A route's own timeout of 400 ms is the earlier deadline.
-    let (body, _) = counted(tens(1), true);
-    let began = Instant::now();
-    let response = app
-        .send(declaring("/api/quick", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert!(
-        began.elapsed() < Duration::from_millis(400),
-        "{:?}",
-        began.elapsed()
-    );
-
-    // With less time left than the margin, nothing is read at all.
-    let tight = small_limit(1, Duration::from_millis(200)).await;
-    let (body, read) = counted(tens(10), false);
-    let response = tight
-        .send(declaring("/api/quick", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(read.load(Ordering::SeqCst), 0, "no time to read in");
-    assert_eq!(response.header("connection"), Some("close"));
-}
-
-#[tokio::test]
-async fn an_error_in_the_body_ends_the_drain() {
-    let app = small_limit(30, Duration::from_secs(30)).await;
-    let broken = vec![
-        Ok(bytes(10)),
-        Err(std::io::Error::other("the client went away")),
-        Ok(bytes(10)),
-    ];
-    let (body, read) = counted(broken, false);
-    let response = app
-        .send(declaring("/api/ignore", "100").body(body).unwrap())
-        .await;
-    response.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        2,
-        "nothing after the error is read"
-    );
-    assert_eq!(response.header("connection"), Some("close"));
-}
-
-#[tokio::test]
-async fn the_last_expect_header_counts_and_only_from_http_1_1_as_hyper_reads_it() {
-    let app = small_limit(30, Duration::from_secs(30)).await;
-    let send = |expects: &[&str], version: http::Version| {
-        let (body, read) = counted(tens(10), false);
+async fn a_body_over_the_limit_is_answered_at_once_and_none_of_it_is_read() {
+    let app = small_limit().await;
+    for (version, expect) in [
+        (http::Version::HTTP_11, None),
+        (http::Version::HTTP_11, Some("100-continue")),
+        (http::Version::HTTP_2, None),
+    ] {
+        let (body, read) = counted(tens(10));
         let mut request = declaring("/api/ignore", "100").version(version);
-        for expect in expects {
-            request = request.header("expect", *expect);
+        if let Some(expect) = expect {
+            request = request.header("expect", expect);
         }
-        (request.body(body).unwrap(), read)
-    };
-
-    let (request, read) = send(&["100-continue", "something-else"], http::Version::HTTP_11);
-    app.send(request).await.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        10,
-        "the last Expect is not 100-continue"
-    );
-
-    let (request, read) = send(&["something-else", "100-Continue"], http::Version::HTTP_11);
-    app.send(request).await.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        0,
-        "the last Expect is 100-continue"
-    );
-
-    let (request, read) = send(&["100-continue"], http::Version::HTTP_10);
-    app.send(request).await.assert_error(413);
-    assert_eq!(
-        read.load(Ordering::SeqCst),
-        10,
-        "an HTTP/1.0 client is never waiting"
-    );
+        let began = Instant::now();
+        let response = app.send(request.body(body).unwrap()).await;
+        assert_eq!(response.assert_error(413)["code"], "payload_too_large");
+        assert_eq!(began.elapsed(), Duration::ZERO, "{version:?}: no wait for the body");
+        assert_eq!(read.load(Ordering::SeqCst), 0, "{version:?}");
+        assert_eq!(
+            response.header("connection"),
+            None,
+            "{version:?}: the server decides whether the connection goes on"
+        );
+    }
 }
 
 #[test]

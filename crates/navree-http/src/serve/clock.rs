@@ -29,6 +29,9 @@
 //! - An HTTP/2 upgrade (a WebSocket) is one stream of the connection, in
 //!   flight until that stream ends, whatever the response said. The clock
 //!   runs again then.
+//! - While the connection reads the rest of a body its handler let go of
+//!   (see [`unread`](super::unread)), what it reads is that body's, not the
+//!   next head: `idle` stands until the body has ended.
 //!
 //! The state changes on the connection's task, in the middle of polling
 //! hyper, which is why [`Clock::poll_expired`] is polled right after hyper:
@@ -52,6 +55,7 @@ use tokio::time::{Instant, Sleep};
 
 use super::frames::Frames;
 use super::gate::Slot;
+use super::unread::Linger;
 
 /// How long a connection with nothing in flight lives once it is closing:
 /// enough for an HTTP/2 GOAWAY to go out, or for a head already on its way
@@ -112,6 +116,12 @@ struct State {
     /// A client that waits took this connection's slot and it has not heard
     /// yet: a request that arrives first does not undo that.
     reclaimed: bool,
+    /// The connection is reading the rest of an HTTP/1 body its handler let
+    /// go of.
+    draining: bool,
+    /// Part of such a body may still be on its way: closing the connection
+    /// reads it first.
+    lingers: bool,
     /// The connection's task, for what happens on a task of its own.
     waker: Option<Waker>,
 }
@@ -146,6 +156,8 @@ impl Clock {
                 closing: false,
                 farewell: false,
                 reclaimed: false,
+                draining: false,
+                lingers: false,
                 waker: None,
             }),
         }
@@ -185,6 +197,7 @@ impl Clock {
         }
         state.reclaimable_since = None;
         state.bodiless = bodiless;
+        state.lingers = false;
         state.multiplexed |= version == Version::HTTP_2;
         if state.tunnels > 0 {
             self.only_upgraded.store(false, Ordering::Relaxed);
@@ -245,8 +258,10 @@ impl Clock {
         }
         let head_started =
             !state.multiplexed && state.bodiless && !self.read_a_whole_head.load(Ordering::Relaxed);
-        self.between_requests
-            .store(!state.multiplexed && !head_started, Ordering::Relaxed);
+        self.between_requests.store(
+            !state.multiplexed && !head_started && !state.draining,
+            Ordering::Relaxed,
+        );
         state.reclaimable_since = (!state.closing).then_some(now);
         state.deadline = if state.closing {
             let linger = now + LINGER;
@@ -260,6 +275,42 @@ impl Clock {
         } else {
             self.idle.map(|limit| now + limit)
         };
+    }
+
+    /// A handler let go of a request body before its end: the connection
+    /// reads the rest of it (`draining`), or closes after the answer. Either
+    /// way, a close reads what the client is still sending first.
+    pub(super) fn left_unread(&self, draining: bool) {
+        let mut state = self.lock();
+        state.lingers = true;
+        state.draining = draining;
+    }
+
+    /// The rest of such a body has been read: `to_its_end`, or given up. A
+    /// body read to its end leaves the connection between requests again.
+    pub(super) fn drained(&self, to_its_end: bool) {
+        let mut state = self.lock();
+        state.draining = false;
+        if to_its_end {
+            state.lingers = false;
+            if state.in_flight == 0 && !state.multiplexed && !state.upgraded {
+                self.between_requests.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Whether a close of this connection reads what the client still sends.
+    pub(super) fn lingers(&self) -> bool {
+        let state = self.lock();
+        state.lingers && !state.upgraded
+    }
+
+    /// Wakes the connection's task, for what changed on another.
+    pub(super) fn wake(&self) {
+        let waker = self.lock().waker.take();
+        if let Some(waker) = waker {
+            waker.wake();
+        }
     }
 
     /// The server is shutting down: with nothing in flight the connection
@@ -481,8 +532,9 @@ impl Alarm {
 
 /// A connection's bytes on their way to hyper. It tells the [`Clock`] when
 /// bytes arrive, times what only the socket can see (a write that does not
-/// move, an upgrade gone quiet), and holds the connection's [`Slot`], so the
-/// slot follows the socket through an upgrade and is freed when the socket
+/// move, an upgrade gone quiet), lingers on a close while the client may
+/// still be sending a body, and holds the connection's [`Slot`], so the slot
+/// follows the socket through an upgrade and is freed when the socket
 /// closes.
 #[derive(Debug)]
 pub(super) struct Watched<I> {
@@ -490,6 +542,8 @@ pub(super) struct Watched<I> {
     clock: Arc<Clock>,
     write_stall: Option<Alarm>,
     upgraded_idle: Option<Quiet>,
+    /// The server has ended its side, and reads what the client still sends.
+    linger: Option<Linger>,
     _slot: Slot,
 }
 
@@ -516,6 +570,7 @@ impl<I> Watched<I> {
                 alarm: Alarm::new(limit),
                 frames: Frames::new(),
             }),
+            linger: None,
             _slot: slot,
         }
     }
@@ -600,7 +655,7 @@ impl<I: AsyncRead + Unpin> AsyncRead for Watched<I> {
     }
 }
 
-impl<I: AsyncWrite + Unpin> AsyncWrite for Watched<I> {
+impl<I: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Watched<I> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -629,11 +684,22 @@ impl<I: AsyncWrite + Unpin> AsyncWrite for Watched<I> {
         }
     }
 
+    /// Ends the server's side. While the client may still be sending a body
+    /// its answer did not wait for, what it sends is read and thrown away
+    /// first, so the socket does not close with bytes unread and reset the
+    /// connection under the answer.
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-        match Pin::new(&mut this.io).poll_shutdown(cx) {
-            Poll::Pending => this.poll_stall(cx).map(Err),
-            ready => ready,
+        if this.linger.is_none() {
+            match Pin::new(&mut this.io).poll_shutdown(cx) {
+                Poll::Pending => return this.poll_stall(cx).map(Err),
+                Poll::Ready(Ok(())) if this.clock.lingers() => this.linger = Some(Linger::new()),
+                ready => return ready,
+            }
+        }
+        match &mut this.linger {
+            Some(linger) => linger.poll_read(&mut this.io, cx).map(Ok),
+            None => Poll::Ready(Ok(())),
         }
     }
 
@@ -1060,6 +1126,44 @@ mod tests {
         );
     }
 
+    /// What a connection reads while it reads the rest of a body is that
+    /// body's, not the next head: once the body has ended, the next byte
+    /// starts a head.
+    #[tokio::test(start_paused = true)]
+    async fn the_rest_of_a_body_is_not_the_next_head() {
+        let clock = clock();
+        clock.read(b"POST / HTTP/1.1\r\nContent-Length: 100\r\n\r\n");
+        let request = clock.request(Version::HTTP_11, false);
+        clock.left_unread(true);
+        drop(request);
+        clock.flushed();
+        clock.read(b"xxxx");
+        tokio::time::advance(HEADER * 2).await;
+        assert!(pending(&clock), "the idle timeout stands");
+        clock.drained(true);
+        assert!(!clock.lingers(), "read to its end");
+        clock.read(b"G");
+        assert_eq!(runs_for(&clock).await, HEADER);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_body_given_up_lingers_until_the_next_request() {
+        let clock = clock();
+        let request = clock.request(Version::HTTP_11, false);
+        clock.left_unread(true);
+        drop(request);
+        clock.drained(false);
+        assert!(clock.lingers(), "a body given up");
+        drop(clock.request(Version::HTTP_11, true));
+        assert!(!clock.lingers(), "a request that came after all");
+
+        // An upgrade takes the socket, and its close is the upgrade's.
+        let request = clock.request(Version::HTTP_11, false);
+        clock.left_unread(false);
+        request.upgraded();
+        assert!(!clock.lingers());
+    }
+
     fn watched<I>(
         io: I,
         clock: &Arc<Clock>,
@@ -1123,6 +1227,39 @@ mod tests {
         });
         socket.write_all(&[7; 64 * 1024]).await.unwrap();
         reader.await.unwrap();
+    }
+
+    /// A client still sending a body when the server closes reads the answer
+    /// and the close: what it sends is read first.
+    #[tokio::test(start_paused = true)]
+    async fn a_close_reads_what_a_client_still_sends_first() {
+        let clock = clock();
+        let (socket, mut peer) = duplex(64);
+        let mut socket = watched(socket, &clock, None, None);
+        clock.left_unread(false);
+        let client = tokio::spawn(async move {
+            peer.write_all(&[b'x'; 4096]).await.unwrap();
+            let mut answer = Vec::new();
+            peer.read_to_end(&mut answer).await.unwrap();
+            answer
+        });
+        socket.write_all(b"answer").await.unwrap();
+        let started = Instant::now();
+        socket.shutdown().await.unwrap();
+        assert!(started.elapsed() < LINGER, "it ended when the client closed");
+        assert_eq!(client.await.unwrap(), b"answer");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn with_no_body_on_its_way_a_close_does_not_wait() {
+        let clock = clock();
+        let (socket, mut peer) = duplex(64);
+        let mut socket = watched(socket, &clock, None, None);
+        socket.write_all(b"answer").await.unwrap();
+        socket.shutdown().await.unwrap();
+        let mut answer = Vec::new();
+        peer.read_to_end(&mut answer).await.unwrap();
+        assert_eq!(answer, b"answer");
     }
 
     #[tokio::test(start_paused = true)]

@@ -230,10 +230,11 @@ pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
 /// pipeline sets the route's (`RouteDef::body_limit`) or the app's
 /// (`http.body_limit_bytes`). [`Json`](crate::Json), [`Form`](crate::Form)
 /// and [`read_body`] stop reading past it (413); a `Content-Length` above it
-/// is refused before authentication. Such a body, on HTTP/1, is read and
-/// thrown away first when it is at most 8 MiB, for at most 5 s and never past
-/// the request's own timeout, so a client that sends it whole before it reads
-/// still reads the 413.
+/// is refused before authentication, at once. On HTTP/1 the server then
+/// reads what is left of a body its answer did not wait for, up to this
+/// limit, and closes the connection with a lingering close past it, so a
+/// client that sends its body whole before it reads still reads the answer
+/// (see [`serve`](mod@crate::serve#what-a-client-can-hold)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BodyLimit(pub usize);
 

@@ -176,6 +176,8 @@ async fn a_client_that_sends_a_body_over_the_limit_reads_the_413_not_a_reset() {
     assert!(answer.contains("payload_too_large"), "{answer}");
 }
 
+/// hyper has read the whole body with its head: throwing it away costs nothing, so the
+/// connection goes on whatever the body's size.
 #[tokio::test]
 async fn after_a_refused_body_is_read_the_connection_answers_the_next_request() {
     let answer = against(photo_routes(), options(), |addr| async move {
@@ -199,13 +201,8 @@ async fn after_a_refused_body_is_read_the_connection_answers_the_next_request() 
 }
 
 #[tokio::test]
-async fn a_stalled_body_gets_the_413_and_then_the_connection_closes() {
-    // An app timeout of 1 s: the drain stops short of it, and the answer is still the 413.
-    let short = HttpOptions {
-        timeout_secs: 1,
-        ..options()
-    };
-    let (answer, waited) = against(photo_routes(), short, |addr| async move {
+async fn a_stalled_body_gets_the_413_at_once_and_the_connection_closes() {
+    let (answer, waited) = against(photo_routes(), options(), |addr| async move {
         // A hundred bytes of the 2,048 it declares, and then nothing.
         let mut request = photo_head(2048, "");
         request.extend(vec![b'x'; 100]);
@@ -217,13 +214,13 @@ async fn a_stalled_body_gets_the_413_and_then_the_connection_closes() {
     assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
     assert!(answer.contains("connection: close"), "{answer}");
     assert!(
-        waited < Duration::from_secs(5),
-        "the app's timeout bounds the drain, not its own 5 s: {waited:?}"
+        waited < Duration::from_secs(2),
+        "the answer and the close do not wait for the body: {waited:?}"
     );
 }
 
 #[tokio::test]
-async fn a_body_declared_over_8_mib_is_answered_at_once() {
+async fn a_body_declared_far_over_the_limit_is_answered_at_once() {
     let (answer, waited) = against(photo_routes(), options(), |addr| async move {
         let began = std::time::Instant::now();
         // Nine megabytes declared and none sent: the server does not wait for them.
@@ -234,9 +231,83 @@ async fn a_body_declared_over_8_mib_is_answered_at_once() {
     assert!(answer.starts_with("HTTP/1.1 413"), "{answer}");
     assert!(answer.contains("connection: close"), "{answer}");
     assert!(
-        waited < Duration::from_secs(4),
+        waited < Duration::from_secs(2),
         "answered without waiting for the body: {waited:?}"
     );
+}
+
+/// What is left of a body after an early answer is read up to the route's own limit (1 KB for
+/// the photo, which does not read its body), and up to `http.body_limit_bytes` outside a route.
+#[tokio::test]
+async fn the_rest_of_a_body_is_read_up_to_its_routes_limit() {
+    let answers = against(photo_routes(), options(), |addr| async move {
+        let mut answers = Vec::new();
+        for (head, length) in [
+            ("POST /api/photo", 1024),
+            ("POST /api/photo", 1025),
+            ("POST /api/nowhere", 4096),
+        ] {
+            let mut stream = TcpStream::connect(addr).await.expect("connects");
+            let head = format!("{head} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {length}\r\n\r\n");
+            stream.write_all(head.as_bytes()).await.unwrap();
+            // The answer comes before the body.
+            let answer = read_answer(&mut stream).await;
+            stream.write_all(&vec![b'x'; length]).await.unwrap();
+            stream
+                .write_all(b"GET /api/fast HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .await
+                .ok();
+            let mut rest = Vec::new();
+            tokio::time::timeout(Duration::from_secs(20), stream.read_to_end(&mut rest))
+                .await
+                .expect("the server closes the connection")
+                .expect("a clean close, not a reset");
+            answers.push((answer, String::from_utf8_lossy(&rest).into_owned()));
+        }
+        answers
+    })
+    .await;
+    let [(within, next), (over, after), (outside, beyond)] = &answers[..] else {
+        panic!("{answers:?}");
+    };
+    assert!(within.starts_with("HTTP/1.1 200") && within.ends_with("kept"), "{within}");
+    assert!(!within.contains("connection: close"), "{within}");
+    assert!(next.contains("HTTP/1.1 200") && next.ends_with("fast"), "{next}");
+
+    assert!(over.starts_with("HTTP/1.1 413"), "{over}");
+    assert!(over.contains("connection: close"), "{over}");
+    assert!(!after.contains("HTTP/1.1"), "the connection closed: {after}");
+
+    assert!(outside.starts_with("HTTP/1.1 404"), "{outside}");
+    assert!(!outside.contains("connection: close"), "{outside}");
+    assert!(beyond.ends_with("fast"), "{beyond}");
+}
+
+/// Reads one answer, up to the end of its `content-length` body.
+async fn read_answer(stream: &mut TcpStream) -> String {
+    let mut seen = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    loop {
+        let text = String::from_utf8_lossy(&seen).into_owned();
+        if let Some(end) = text.find("\r\n\r\n") {
+            let length = text[..end]
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length: "))
+                .and_then(|length| length.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            if seen.len() >= end + 4 + length {
+                return text;
+            }
+        }
+        let read = tokio::time::timeout(Duration::from_secs(20), stream.read(&mut chunk))
+            .await
+            .expect("the answer comes before the body")
+            .unwrap();
+        if read == 0 {
+            return text;
+        }
+        seen.extend_from_slice(&chunk[..read]);
+    }
 }
 
 #[tokio::test]
