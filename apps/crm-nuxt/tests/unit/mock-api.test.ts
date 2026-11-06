@@ -89,7 +89,6 @@ async function getPage<T>(path: string) {
   return { status: response.status, body };
 }
 
-// MOD-013
 describe("mock API lists read the one list grammar", () => {
   beforeEach(() => {
     resetDatabase();

@@ -537,7 +537,7 @@ async fn soft_deleted_hidden() {
     crm.shutdown().await;
 }
 
-// MOD-013: the list query of companies, in the list-query grammar.
+// The list query of companies, in the list-query grammar.
 
 /// Four companies, created a minute apart in this order: Sutlej Supply
 /// (rep 1, Software), Beas Traders (rep 2, Logistics), Ravi Foods (rep 2,

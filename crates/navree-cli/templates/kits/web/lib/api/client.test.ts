@@ -89,7 +89,6 @@ describe("the API client", () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
-  // MOD-013
   it("sends a list request with filter[name]=value and no flat filter", async () => {
     const { fetch, calls } = recording(Response.json({ data: [], meta: { total: 0 } }));
     setWorkspace("acme");

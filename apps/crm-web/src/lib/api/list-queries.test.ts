@@ -25,7 +25,6 @@ function sentQuery(requests: Request[]): Record<string, string> {
   return Object.fromEntries(new URL(requests[0]!.url).searchParams);
 }
 
-// MOD-013
 describe("list requests", () => {
   it("send every filter as filter[name]=value, never as a flat parameter", async () => {
     const { client, requests } = recordingClient();

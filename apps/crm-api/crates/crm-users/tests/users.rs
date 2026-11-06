@@ -429,7 +429,7 @@ async fn user_search_takes_wildcards_literally() {
     crm.shutdown().await;
 }
 
-// MOD-013: the list query of users, in the list-query grammar.
+// The list query of users, in the list-query grammar.
 
 /// The names on a page of users, in order.
 fn user_names(page: &Value) -> Vec<String> {

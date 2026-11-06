@@ -1,6 +1,5 @@
 //! `GET /api/v1/deals` in the list-query grammar: `filter[..]` with its
 //! operators, `search`, `sort` and `per_page`, and what is refused.
-// MOD-013
 
 use crm_testkit::{CrmClient, Role};
 use serde_json::{Value, json};

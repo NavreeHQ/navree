@@ -525,7 +525,7 @@ async fn rep_cannot_export() {
     crm.shutdown().await;
 }
 
-// MOD-013: the list query of contacts, in the list-query grammar.
+// The list query of contacts, in the list-query grammar.
 
 /// Four contacts, by last name: Grace Hopper (Globex, lead, rep 2),
 /// Katherine Johnson (Acme, prospect, rep 2), Ada Lovelace (Acme, customer,

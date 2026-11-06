@@ -3,7 +3,6 @@ import { requireRealApi, signIn } from "./support";
 
 test.beforeEach(() => requireRealApi());
 
-// MOD-013
 test("the contacts list sends its status filter as filter[status], and the API applies it", async ({ page }) => {
   await signIn(page, "manager");
   await page.goto("/contacts");

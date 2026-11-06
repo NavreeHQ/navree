@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./support";
 
-// MOD-013
 test("the contacts list sends its status filter as filter[status], and the API applies it", async ({ page }) => {
   await signIn(page, "manager");
   await page.goto("/contacts");

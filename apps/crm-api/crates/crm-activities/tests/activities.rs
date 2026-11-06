@@ -798,7 +798,7 @@ async fn activity_changes_are_audited() {
     crm.shutdown().await;
 }
 
-// MOD-013: the list query of activities, in the list-query grammar.
+// The list query of activities, in the list-query grammar.
 
 /// `GET /api/v1/activities` with `query` as `client`, answering 200.
 async fn list_with(client: &crm_testkit::CrmClient, query: &[(&str, &str)]) -> Value {

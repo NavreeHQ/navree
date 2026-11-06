@@ -1,4 +1,3 @@
-// MOD-013
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { checkListQuery, listQuery, serializeListQuery } from "./list-query.js";

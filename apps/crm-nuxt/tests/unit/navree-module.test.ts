@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { navreeOptions } from "../../navree.options";
 
-// MOD-012
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const repoRoot = join(root, "../..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
