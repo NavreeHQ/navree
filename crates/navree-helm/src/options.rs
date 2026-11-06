@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 /// per_page = 25                 # rows per page on lists
 /// metrics_cache_secs = 60       # metric results cached per user and range
 /// dashboard = true              # metric cards on the home page
-/// session_minutes = 480         # how long a panel sign-in lasts
 /// export_max_secs = 1800        # how long a list's CSV file may take to send
 /// ```
 ///
@@ -29,7 +28,7 @@ pub struct HelmOptions {
     pub path: String,
     /// The name in the header and the browser tab (`Admin`).
     pub title: String,
-    /// A logo URL for the header and the sign-in screen: a path on your app
+    /// A logo URL for the sidebar's header: a path on your app
     /// or an `https://` URL.
     pub logo: Option<String>,
     /// The accent color of buttons and links, `#rgb` or `#rrggbb`
@@ -43,8 +42,6 @@ pub struct HelmOptions {
     /// Whether the home page shows the metric cards marked `on_dashboard`
     /// (true).
     pub dashboard: bool,
-    /// How long a sign-in to the panel lasts, in minutes (480).
-    pub session_minutes: u64,
     /// How long a list's CSV file may take to send, in seconds (1800): however
     /// slowly a client reads, no more rows are read for it after this.
     pub export_max_secs: u64,
@@ -60,7 +57,6 @@ impl Default for HelmOptions {
             per_page: 25,
             metrics_cache_secs: 60,
             dashboard: true,
-            session_minutes: 480,
             export_max_secs: 1800,
         }
     }
@@ -114,9 +110,6 @@ impl HelmOptions {
                 navree_db::MAX_PER_PAGE
             ));
         }
-        if self.session_minutes == 0 {
-            errors.push("helm.session_minutes must be at least 1".to_owned());
-        }
         if self.export_max_secs == 0 {
             errors.push("helm.export_max_secs must be at least 1".to_owned());
         }
@@ -167,7 +160,6 @@ mod tests {
             "per_page",
             "metrics_cache_secs",
             "dashboard",
-            "session_minutes",
             "export_max_secs",
         ] {
             let field = schema.fields.iter().find(|field| field.name == name);

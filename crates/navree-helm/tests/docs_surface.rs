@@ -16,7 +16,7 @@ use navree_contracts::Job;
 use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
-    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SESSION_COOKIE, SaveContext,
+    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SaveContext,
     StaffEntry, StaffOrganizationEntry, VIEW, WORKSPACE_COOKIE, Workspaces,
 };
 use navree_http::AppError;
@@ -223,7 +223,6 @@ fn the_documented_api_exists() {
         per_page,
         metrics_cache_secs,
         dashboard,
-        session_minutes,
         export_max_secs,
     } = HelmOptions::default();
     assert_eq!(path, "/admin");
@@ -233,14 +232,12 @@ fn the_documented_api_exists() {
     assert_eq!(per_page, 25);
     assert_eq!(metrics_cache_secs, 60);
     assert!(dashboard);
-    assert_eq!(session_minutes, 480);
     assert_eq!(export_max_secs, 1800);
 
-    // The subject, its permission and the cookie.
+    // The subject, its permission and the workspace cookie.
     assert_eq!(Helm::SUBJECT, HELM_SUBJECT);
     assert_eq!(Helm::PERMISSION_PREFIX, "helm");
     assert_eq!(VIEW, "view");
-    assert_eq!(SESSION_COOKIE, "navree_helm");
     assert_eq!(WORKSPACE_COOKIE, "navree_helm_workspace");
     assert_eq!(Workspaces::default(), Workspaces::Current);
     assert_eq!(<DealResource as Resource>::WORKSPACES, Workspaces::Current);
@@ -333,13 +330,18 @@ async fn the_documented_routes_answer() {
         .send()
         .await
         .assert_status(204);
-    // The sign-in screen is public.
-    app.client()
-        .get("/admin/login")
+    // A guest is sent to the app's sign-in page.
+    let response = app
+        .client()
+        .get("/admin")
         .header("accept", "text/html")
         .send()
         .await
-        .assert_status(200);
+        .assert_status(303);
+    assert_eq!(
+        response.header("location"),
+        Some("/sign-in?next=%2Fadmin")
+    );
 }
 
 #[allow(dead_code)]

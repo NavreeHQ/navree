@@ -32,13 +32,17 @@ impl Subject for Helm {
 ///
 /// Global; provides and exports [`HelmOptions`], registers the subject
 /// [`Helm`] (prefix `helm`), the panel's routes, its request layer (the
-/// sign-in cookie, CSRF, error pages and a strict Content Security Policy)
-/// and the `helm.action` job of queued actions. It has no tables.
+/// CSRF token of the browser's session, error pages and a strict Content
+/// Security Policy) and the `helm.action` job of queued actions. It has no
+/// tables.
 ///
-/// The app needs `DatabaseModule`, `AccessModule` (every check), an
-/// authenticator (`AuthModule`, whose users sign in to the panel) and
-/// `CryptoModule` (the encrypted session cookie). Resources and pages are
-/// registered by feature modules with [`ModuleBuilderHelmExt`].
+/// The app needs `DatabaseModule`, `AccessModule` (every check) and
+/// `CryptoModule`. People sign in to the panel the way they sign in to the
+/// rest of the app, on the app's browser session: `SessionModule`,
+/// `AuthModule`, `UiModule` and `AuthPages` (the sign-in pages). A guest is
+/// sent to the sign-in page, and comes back to the page they asked for.
+/// Resources and pages are registered by feature modules with
+/// [`ModuleBuilderHelmExt`].
 ///
 /// ```no_run
 /// use navree_access::{AccessModule, AccessOptions};
@@ -54,7 +58,8 @@ impl Subject for Helm {
 ///     .module(HttpModule::from_config())
 ///     .module(DatabaseModule::from_config())
 ///     .module(AccessModule::for_root(AccessOptions::default()))
-///     // CryptoModule, AuthModule, your feature modules ...
+///     // CryptoModule, SessionModule, AuthModule, UiModule, AuthPages,
+///     // your feature modules ...
 ///     .module(HelmModule::from_config()) // section `helm`
 ///     .run()
 /// # }
@@ -96,6 +101,8 @@ fn register(m: &mut ModuleBuilder, options: Option<HelmOptions>) {
     };
     m.exports::<HelmOptions>()
         .imports(AccessModule::for_subject::<Helm>())
+        // The sign-in page's address (`ui.sign_in`) is the toolkit's setting.
+        .import(navree_ui::UiOnDemand)
         .factory(
             Factory::<Core>::new(|r: Resolver| async move {
                 let options = r.get::<HelmOptions>().await?;

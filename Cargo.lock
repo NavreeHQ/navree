@@ -5002,6 +5002,7 @@ dependencies = [
  "navree-kernel",
  "navree-orm",
  "navree-queue",
+ "navree-session",
  "navree-settings",
  "navree-storage",
  "navree-testing",

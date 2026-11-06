@@ -5,7 +5,7 @@ use std::sync::Arc;
 use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_access::{CurrentAccess, PinnedWorkspace, WorkspaceGate};
-use navree_contracts::{AuthState, Principal, RequestId};
+use navree_contracts::{AuthState, AuthVia, Principal, RequestId};
 use navree_crypto::Encrypter;
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -23,6 +23,23 @@ pub(crate) struct Panel {
     pub(crate) session: PanelSession,
     /// Who signed in, with what their credential allows.
     pub(crate) principal: Principal,
+}
+
+impl Panel {
+    /// The id of the browser sign-in this request is made with, which the
+    /// workspace cookie is sealed to. `None` for a bearer token and the like:
+    /// they keep no cookie.
+    pub(crate) fn sign_in_token(&self) -> Option<&str> {
+        sign_in_of(&self.principal)
+    }
+}
+
+/// The id of the browser sign-in `principal` is made with (its server-side
+/// session), if it signed in on the browser session.
+fn sign_in_of(principal: &Principal) -> Option<&str> {
+    (principal.via == AuthVia::Session)
+        .then_some(principal.session_id.as_deref())
+        .flatten()
 }
 
 /// A [`Panel`] that doesn't enter the workspace the request names, for the
@@ -77,10 +94,7 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
         // only if the user may work in it.
         if enter_named && uow.workspace().is_none() {
             let encrypter = app.try_get::<Encrypter>().await;
-            let panel_session = parts.extensions.get::<PanelSession>();
-            let sign_in = panel_session
-                .and_then(|session| session.csrf.as_deref())
-                .map(|token| (token, encrypter.as_deref()));
+            let sign_in = sign_in_of(&principal).map(|token| (token, encrypter.as_deref()));
             let named = workspace::requested(
                 &parts.headers,
                 workspace::header_of(&app).await.as_deref(),

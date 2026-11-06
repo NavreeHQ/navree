@@ -428,6 +428,36 @@
       });
     });
 
+    // A form with files is sent by the script, so that the session's CSRF
+    // token goes in a header (a plain multipart post has no place for it that
+    // the session layer reads). The page that answers replaces this one.
+    document.querySelectorAll('form[enctype="multipart/form-data"]').forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        if (!window.fetch || !window.FormData) return;
+        event.preventDefault();
+        var data = new FormData(form);
+        if (event.submitter && event.submitter.name) data.append(event.submitter.name, event.submitter.value);
+        fetch(form.getAttribute("action") || location.href, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "text/html", "X-CSRF-Token": csrf },
+          body: data
+        })
+          .then(function (r) {
+            return r.text().then(function (html) {
+              // The answer is one of the panel's own pages, rendered by the server.
+              // nosemgrep: navree-raw-html
+              document.open();
+              // nosemgrep: navree-raw-html
+              document.write(html);
+              document.close();
+              if (r.url) history.replaceState(null, "", r.url);
+            });
+          })
+          .catch(function () { form.submit(); });
+      });
+    });
+
     // Markdown previews, rendered by the server without raw HTML.
     document.querySelectorAll("button[data-preview]").forEach(function (button) {
       var area = document.getElementById(button.getAttribute("data-preview"));

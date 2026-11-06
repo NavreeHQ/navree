@@ -30,7 +30,8 @@ futures = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-audit = { workspace = true }
-navree-auth = { workspace = true }
+# Browsers sign in on the shared session (`SessionStrategy`, `AuthPages`).
+navree-auth = { workspace = true, features = ["session"] }
 navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -40,6 +41,7 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # Resources are navree-orm models (access filters and subjects included).
 navree-orm = { workspace = true, features = ["access"] }
+navree-session = { workspace = true }
 navree-settings = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-ui = { workspace = true }
@@ -54,6 +56,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The sign-in pages the tests sign in through (`AuthPages`).
+navree-auth = { workspace = true, features = ["ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-queue = { workspace = true }

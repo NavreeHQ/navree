@@ -4,10 +4,9 @@
 use navree_view::{ViewError, Views};
 
 /// Every template, by name.
-const TEMPLATES: [(&str, &str); 10] = [
+const TEMPLATES: [(&str, &str); 9] = [
     ("helm/layout.html", include_str!("templates/layout.html")),
     ("helm/macros.html", include_str!("templates/macros.html")),
-    ("helm/login.html", include_str!("templates/login.html")),
     ("helm/error.html", include_str!("templates/error.html")),
     (
         "helm/dashboard.html",

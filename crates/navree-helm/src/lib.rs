@@ -25,12 +25,14 @@
 //!   against the user's abilities on the resource's subject (navree-access),
 //!   with the same SQL filters the API uses. Hiding a button is never the
 //!   only protection: the JSON API checks the same rules.
-//! - **Sign-in.** The panel's sign-in screen uses the app's users through
-//!   navree-auth's `AuthService` (password, then a two-factor code; the
-//!   login throttle and sign-in policies of `POST /api/auth/login`). The
-//!   session is an encrypted, httpOnly, `SameSite=Strict` cookie scoped to
-//!   the panel's path; every change it makes carries a CSRF token. Bearer
-//!   tokens work too (tests, or a backend-for-frontend).
+//! - **Sign-in.** People sign in to the panel the way they sign in to the
+//!   rest of the app: on the app's browser session (navree-session, with
+//!   navree-auth's `AuthPages` for the sign-in, two-factor and sign-out pages).
+//!   A guest is sent to the sign-in page and comes back to the page they
+//!   asked for; signing out, changing the password and offboarding end the
+//!   sign-in at once, here and everywhere. Every change a browser makes
+//!   carries the session's CSRF token. Bearer tokens work too (tests, or a
+//!   backend-for-frontend).
 //! - **Pages.** Server-rendered with navree-view templates and a small
 //!   stylesheet and script embedded in the crate, under a strict Content
 //!   Security Policy (no inline scripts or styles).
@@ -98,7 +100,6 @@ pub use module::{Helm, HelmModule, ModuleBuilderHelmExt};
 pub use options::HelmOptions;
 pub use page::HelmPage;
 pub use resource::{FormData, ModelOf, RecordOf, Resource};
-pub use session::SESSION_COOKIE;
 pub use workspace::{StaffEntry, StaffOrganizationEntry, WORKSPACE_COOKIE, Workspaces};
 
 /// The action that lets a user into the panel: `view` on [`Helm`].

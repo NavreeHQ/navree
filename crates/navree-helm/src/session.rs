@@ -1,34 +1,30 @@
-//! The panel's sign-in session (an encrypted cookie scoped to the panel's
-//! path), its CSRF check, and the request layer that also turns errors
-//! into pages for browsers and sets the pages' security headers.
+//! The panel's request layer: it hands each page the CSRF token of the
+//! browser's session, turns errors into pages for browsers (a guest goes
+//! to the app's sign-in page) and sets the pages' security headers.
+//!
+//! Who is signed in is not decided here. A browser signs in on the app's
+//! session (navree-session, navree-auth's `SessionStrategy` and
+//! `AuthPages`), the same session every tool and page of the app uses; an API
+//! client sends a bearer token. Both reach the panel as the request's
+//! `AuthState`.
 
-use chrono::Utc;
 use cookie::{Cookie, SameSite};
 use http::header::{
-    ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE, HOST,
-    LOCATION, SET_COOKIE,
+    ACCEPT, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE, HOST, LOCATION,
 };
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
-use navree_contracts::{AuthState, AuthVia, Principal};
-use navree_crypto::{Encrypter, constant_time_eq, random_token};
-use navree_http::body::{Body, to_bytes};
+use navree_contracts::{AuthState, AuthVia};
+use navree_http::body::to_bytes;
 use navree_http::extract::Request;
 use navree_http::middleware::Next;
 use navree_http::response::{IntoResponse, Response};
-use navree_http::{AppError, GlobalLayer, LayerSlot};
+use navree_http::{GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use navree_session::Session;
+use navree_ui::{PagesOptions, ReturnTo};
 
 use crate::core::Core;
 use crate::ui;
-
-/// The session cookie.
-pub const SESSION_COOKIE: &str = "navree_helm";
-
-/// The sign-in form's CSRF cookie (double submit, before there is a
-/// session).
-pub(crate) const LOGIN_COOKIE: &str = "navree_helm_login";
 
 /// The one-time message shown after a redirect.
 pub(crate) const FLASH_COOKIE: &str = "navree_helm_flash";
@@ -38,43 +34,18 @@ pub(crate) const FLASH_COOKIE: &str = "navree_helm_flash";
 /// renders the same way.
 pub(crate) const SIDEBAR_COOKIE: &str = "navree_helm_sidebar";
 
+/// Where the sign-in page is when the app has not said (`ui.sign_in`).
+const DEFAULT_SIGN_IN: &str = "/sign-in";
+
 /// The Content Security Policy of every panel response: scripts, styles
 /// and connections from the app's origin only, nothing inline, no framing.
 pub(crate) const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
-/// What the session cookie holds (encrypted with the app key).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct SessionData {
-    /// The user.
-    pub(crate) u: Uuid,
-    /// The CSRF token.
-    pub(crate) c: String,
-    /// Issued at (Unix seconds).
-    pub(crate) i: i64,
-    /// Expires at (Unix seconds).
-    pub(crate) e: i64,
-    /// The refresh token of the sign-in (revoked at sign-out).
-    pub(crate) r: Option<String>,
-}
-
-impl SessionData {
-    /// A new session for `user`, lasting `minutes`.
-    pub(crate) fn new(user: Uuid, refresh_token: Option<String>, minutes: u64) -> Self {
-        let now = Utc::now().timestamp();
-        Self {
-            u: user,
-            c: random_token(40),
-            i: now,
-            e: now.saturating_add(i64::try_from(minutes.saturating_mul(60)).unwrap_or(i64::MAX)),
-            r: refresh_token,
-        }
-    }
-}
-
-/// The panel session of the request, if it signed in with the cookie.
+/// The panel session of the request, if it signed in on the browser
+/// session.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PanelSession {
-    /// The CSRF token forms send back (`None` without a cookie session:
+    /// The CSRF token forms send back (`None` without a browser session:
     /// bearer tokens need none).
     pub(crate) csrf: Option<String>,
 }
@@ -108,95 +79,61 @@ async fn panel_layer(mut request: Request, next: Next) -> Response {
         .map(|pq| pq.as_str().to_owned())
         .unwrap_or_else(|| path.clone());
 
-    let mut session = None;
-    let guest = request
+    // A browser signed in on the session gets the session's token for its
+    // forms; the session layer checks it on every change.
+    let browser = request
         .extensions()
         .get::<AuthState>()
-        .is_none_or(|state| state.0.is_none());
-    if guest
-        && !request.headers().contains_key(AUTHORIZATION)
-        && let Some(encrypter) = app.try_get::<Encrypter>().await
-        && let Some(data) = read_session(request.headers(), &encrypter)
-    {
-        request.extensions_mut().insert(AuthState(Some(Principal {
-            user_id: data.u,
-            via: AuthVia::Session,
-            token_abilities: None,
-            session_id: Some(data.c.clone()),
-        })));
-        session = Some(data);
-    }
+        .and_then(|state| state.0.as_ref())
+        .is_some_and(|principal| principal.via == AuthVia::Session);
+    let csrf = if browser {
+        request
+            .extensions()
+            .get::<Session>()
+            .map(Session::csrf_token)
+    } else {
+        None
+    };
+    request.extensions_mut().insert(PanelSession { csrf });
 
-    // The sign-in forms carry their own token (a double submit), as there
-    // may be no session yet.
-    let sign_in = path == format!("{base}/login") || path == format!("{base}/login/two-factor");
-    if let Some(data) = &session
-        && !is_safe(&method)
-        && !sign_in
-    {
-        let (checked, ok) = check_csrf(request, &data.c).await;
-        request = checked;
-        if !ok {
-            let error = AppError::csrf_mismatch();
-            let response = if html {
-                ui::status_page(&core, error.status, Some("Your session expired or the form is stale. Go back, reload the page and try again.".to_owned()))
-            } else {
-                error.into_response()
-            };
-            return finish(response, &core, assets, None, &request_host(&request));
-        }
-    }
-    request.extensions_mut().insert(PanelSession {
-        csrf: session.as_ref().map(|s| s.c.clone()),
-    });
-    let host = request_host(&request);
     let response = next.run(request).await;
     let response = if html {
-        browser_errors(response, &core, &method, &target).await
+        let sign_in = sign_in_path(&app).await;
+        browser_errors(response, &core, &method, &target, &sign_in).await
     } else {
         response
     };
-    let renew = session.filter(|data| {
-        let half = (data.e - data.i) / 2;
-        method == Method::GET && html && Utc::now().timestamp() - data.i > half
-    });
-    let renewal = match renew {
-        Some(data) => match app.try_get::<Encrypter>().await {
-            Some(encrypter) => {
-                let renewed = SessionData {
-                    i: Utc::now().timestamp(),
-                    e: Utc::now().timestamp()
-                        + i64::try_from(core.options.session_minutes.saturating_mul(60))
-                            .unwrap_or(i64::MAX),
-                    ..data
-                };
-                session_cookie(&core, &encrypter, &renewed, &host)
-            }
-            None => None,
-        },
-        None => None,
-    };
-    finish(response, &core, assets, renewal, &host)
+    finish(response, assets)
 }
 
-/// Sets the panel's headers: CSP, no caching for anything but assets, and
-/// a renewed session cookie.
-fn finish(
-    mut response: Response,
-    _core: &Core,
-    assets: bool,
-    renewal: Option<HeaderValue>,
-    _host: &str,
-) -> Response {
+/// Sets the panel's headers: the Content Security Policy, and no caching
+/// for anything but assets.
+fn finish(mut response: Response, assets: bool) -> Response {
     let headers = response.headers_mut();
     headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP));
     if !assets {
         headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     }
-    if let Some(cookie) = renewal {
-        headers.append(SET_COOKIE, cookie);
-    }
     response
+}
+
+/// Where the app's sign-in page is: `ui.sign_in`, else `/sign-in`.
+async fn sign_in_path(app: &AppContext) -> String {
+    match app.try_get::<PagesOptions>().await {
+        Some(options) => options.sign_in.clone(),
+        None => DEFAULT_SIGN_IN.to_owned(),
+    }
+}
+
+/// The sign-in page, asking to come back to `next` (the panel's home when
+/// `next` is not a page of this site).
+pub(crate) fn sign_in_location(sign_in: &str, next: &str, home: &str) -> String {
+    ReturnTo::parse(next)
+        .or_else(|| ReturnTo::parse(home))
+        .map_or_else(
+            || sign_in.to_owned(),
+            |back| back.sign_in_href(sign_in).as_str().to_owned(),
+        )
 }
 
 /// For browsers: client errors in the JSON shape (from the framework's
@@ -208,6 +145,7 @@ async fn browser_errors(
     core: &Core,
     method: &Method,
     target: &str,
+    sign_in: &str,
 ) -> Response {
     let status = response.status();
     let json = response
@@ -221,11 +159,7 @@ async fn browser_errors(
     if status == StatusCode::UNAUTHORIZED {
         let base = core.options.base();
         let next = if *method == Method::GET { target } else { base };
-        let location = format!(
-            "{base}/login?next={}",
-            form_urlencoded::byte_serialize(next.as_bytes()).collect::<String>()
-        );
-        return redirect(&location);
+        return redirect(&sign_in_location(sign_in, next, base));
     }
     let (parts, body) = response.into_parts();
     let bytes = to_bytes(body, 64 * 1024).await.unwrap_or_default();
@@ -268,13 +202,6 @@ fn accepts_html(headers: &HeaderMap) -> bool {
         .is_some_and(|v| v.contains("text/html"))
 }
 
-fn is_safe(method: &Method) -> bool {
-    matches!(
-        *method,
-        Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
-    )
-}
-
 /// The value of cookie `name` in the request.
 pub(crate) fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
@@ -285,13 +212,6 @@ pub(crate) fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
         .filter_map(|pair| Cookie::parse_encoded(pair.trim().to_owned()).ok())
         .find(|c| c.name() == name)
         .map(|c| c.value().to_owned())
-}
-
-/// The valid, unexpired session in the request's cookie.
-fn read_session(headers: &HeaderMap, encrypter: &Encrypter) -> Option<SessionData> {
-    let value = cookie(headers, SESSION_COOKIE)?;
-    let data: SessionData = encrypter.decrypt_json(&value).ok()?;
-    (data.e > Utc::now().timestamp()).then_some(data)
 }
 
 /// The request's host, without the port.
@@ -340,64 +260,9 @@ pub(crate) fn build_cookie(
     HeaderValue::from_str(&cookie.encoded().to_string()).ok()
 }
 
-/// The `Set-Cookie` header of `data`.
-pub(crate) fn session_cookie(
-    core: &Core,
-    encrypter: &Encrypter,
-    data: &SessionData,
-    host: &str,
-) -> Option<HeaderValue> {
-    let value = encrypter.encrypt_json(data).ok()?;
-    build_cookie(
-        SESSION_COOKIE,
-        value,
-        core.options.base(),
-        data.e - Utc::now().timestamp(),
-        host,
-    )
-}
-
 /// The `Set-Cookie` header that removes cookie `name` at `path`.
 pub(crate) fn clear_cookie(name: &str, path: &str, host: &str) -> Option<HeaderValue> {
     build_cookie(name, String::new(), path, 0, host)
-}
-
-/// Checks the CSRF token of a state-changing request: the `X-CSRF-Token`
-/// header, a `_csrf` query parameter (multipart forms) or a `_csrf` form
-/// field. Returns the request (its body put back) and whether it matched.
-async fn check_csrf(request: Request, expected: &str) -> (Request, bool) {
-    let matches = |token: &str| constant_time_eq(token.as_bytes(), expected.as_bytes());
-    if let Some(token) = request
-        .headers()
-        .get("x-csrf-token")
-        .and_then(|v| v.to_str().ok())
-    {
-        let ok = matches(token.trim());
-        return (request, ok);
-    }
-    if let Some(query) = request.uri().query()
-        && let Some((_, token)) =
-            form_urlencoded::parse(query.as_bytes()).find(|(k, _)| k == "_csrf")
-    {
-        let ok = matches(&token);
-        return (request, ok);
-    }
-    let form = request
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.starts_with("application/x-www-form-urlencoded"));
-    if !form {
-        return (request, false);
-    }
-    let (parts, body) = request.into_parts();
-    let Ok(bytes) = to_bytes(body, 16 * 1024 * 1024).await else {
-        return (Request::from_parts(parts, Body::empty()), false);
-    };
-    let ok = form_urlencoded::parse(&bytes)
-        .find(|(k, _)| k == "_csrf")
-        .is_some_and(|(_, token)| matches(&token));
-    (Request::from_parts(parts, Body::from(bytes)), ok)
 }
 
 #[cfg(test)]
@@ -406,11 +271,17 @@ mod tests {
 
     #[test]
     fn cookies_are_strict_and_secure_off_loopback() {
-        let header =
-            build_cookie("navree_helm", "v".into(), "/admin", 60, "admin.example.com").unwrap();
+        let header = build_cookie(
+            FLASH_COOKIE,
+            "v".into(),
+            "/admin",
+            60,
+            "admin.example.com",
+        )
+        .unwrap();
         let text = header.to_str().unwrap();
         for part in [
-            "navree_helm=v",
+            "navree_helm_flash=v",
             "Path=/admin",
             "HttpOnly",
             "SameSite=Strict",
@@ -419,7 +290,7 @@ mod tests {
         ] {
             assert!(text.contains(part), "{text}");
         }
-        let local = build_cookie("navree_helm", "v".into(), "/admin", 60, "127.0.0.1").unwrap();
+        let local = build_cookie(FLASH_COOKIE, "v".into(), "/admin", 60, "127.0.0.1").unwrap();
         assert!(!local.to_str().unwrap().contains("Secure"));
     }
 
@@ -443,9 +314,22 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             COOKIE,
-            HeaderValue::from_static("a=1; navree_helm=abc%3D; b=2"),
+            HeaderValue::from_static("a=1; navree_helm_flash=abc%3D; b=2"),
         );
-        assert_eq!(cookie(&headers, SESSION_COOKIE).as_deref(), Some("abc="));
+        assert_eq!(cookie(&headers, FLASH_COOKIE).as_deref(), Some("abc="));
         assert_eq!(cookie(&headers, "missing"), None);
+    }
+
+    #[test]
+    fn the_sign_in_page_gets_the_page_to_come_back_to() {
+        assert_eq!(
+            sign_in_location("/sign-in", "/admin/resources/deals?page=2", "/admin"),
+            "/sign-in?next=%2Fadmin%2Fresources%2Fdeals%3Fpage%3D2"
+        );
+        // An address that leads off the site comes back to the panel's home.
+        assert_eq!(
+            sign_in_location("/login", "//evil.example/x", "/admin"),
+            "/login?next=%2Fadmin"
+        );
     }
 }

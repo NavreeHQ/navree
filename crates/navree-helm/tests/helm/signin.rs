@@ -1,23 +1,30 @@
-//! Signing in to the panel with the app's users: the session cookie, CSRF,
-//! two-factor codes, the login throttle and signing out.
+//! Signing in to the panel on the app's browser session: the sign-in pages
+//! are the app's (`AuthPages`), the panel sends guests there and takes
+//! whoever signed in, with the session's CSRF token on every change.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use navree_access::AccessModule;
-use navree_auth::{AuthModule, AuthService, ClientMeta};
+use navree_auth::{AuthModule, AuthPages, AuthService, ClientMeta};
 use navree_contracts::{Clock, FixedClock};
 use navree_crypto::CryptoModule;
 use navree_crypto::totp::{Secret, Totp};
 use navree_helm::HelmModule;
+use navree_session::{SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestClient, TestResponse};
+use navree_ui::UiModule;
 use serde_json::{Value, json};
 
 use crate::support::*;
 
 const PASSWORD: &str = "correct horse battery";
 
-/// An app with real sign-in (AuthModule, CryptoModule) and its clock.
+/// The session cookie of a browser that signs in.
+const SESSION_COOKIE: &str = "__Host-navree_session";
+
+/// An app with real sign-in: the session, the auth module and its pages, and
+/// the clock.
 async fn signin_app() -> (TestApp, Arc<FixedClock>) {
     let clock = Arc::new(FixedClock::new(now()));
     let app = crate::servers::database(TestApp::builder())
@@ -28,7 +35,10 @@ async fn signin_app() -> (TestApp, Arc<FixedClock>) {
         .override_value::<dyn Clock>(clock.clone())
         .module(CryptoModule::from_config())
         .module(navree_db::DatabaseModule)
+        .module(SessionModule::for_root(SessionOptions::default()))
         .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Acme CRM"))
         .module(AccessModule::for_root(options()))
         .module(CrmModule)
         .module(HelmModule::from_config())
@@ -48,101 +58,88 @@ async fn account(app: &TestApp, email: &str, role: &str) -> uuid::Uuid {
     user.id
 }
 
-/// The value of `name="{name}" value="..."` in a page.
-fn hidden(html: &str, name: &str) -> String {
-    let marker = format!("name=\"{name}\" value=\"");
-    let start = html
-        .find(&marker)
-        .unwrap_or_else(|| panic!("no {name} in {html}"))
-        + marker.len();
-    html[start..].split('"').next().unwrap().to_owned()
+async fn get(client: &TestClient, path: &str) -> TestResponse {
+    client.get(path).header("accept", "text/html").send().await
 }
 
-/// The CSRF token of a panel page.
+/// Posts `form` with the session's CSRF token, as a page without JavaScript
+/// does.
+async fn post(client: &TestClient, path: &str, form: &[(&str, &str)]) -> TestResponse {
+    let token = client
+        .cookie("XSRF-TOKEN")
+        .expect("a page handed out the token");
+    let mut form = form.to_vec();
+    form.push(("_csrf", token.as_str()));
+    client
+        .post(path)
+        .header("accept", "text/html")
+        .form(&form)
+        .send()
+        .await
+}
+
+/// Signs `client` in on the app's sign-in page, landing on `next`.
+async fn sign_in(client: &TestClient, email: &str, next: &str) -> TestResponse {
+    get(client, "/sign-in").await.assert_status(200);
+    post(
+        client,
+        "/sign-in",
+        &[("email", email), ("password", PASSWORD), ("next", next)],
+    )
+    .await
+}
+
+/// The CSRF token a panel page carries.
 fn csrf(html: &str) -> String {
     let marker = "<meta name=\"csrf-token\" content=\"";
     let start = html.find(marker).unwrap() + marker.len();
     html[start..].split('"').next().unwrap().to_owned()
 }
 
-async fn sign_in_form(client: &TestClient) -> String {
-    let response = client
-        .get("/admin/login")
-        .header("accept", "text/html")
-        .send()
-        .await
-        .assert_status(200);
-    hidden(&response.text(), "_login")
-}
-
-async fn sign_in(client: &TestClient, email: &str, password: &str, next: &str) -> TestResponse {
-    let token = sign_in_form(client).await;
-    client
-        .post("/admin/login")
-        .header("accept", "text/html")
-        .form(&[
-            ("email", email),
-            ("password", password),
-            ("_login", &token),
-            ("next", next),
-        ])
-        .send()
-        .await
-}
-
 #[tokio::test]
-async fn signing_in_sets_a_strict_cookie_scoped_to_the_panel() {
+async fn a_guest_signs_in_on_the_apps_page_and_comes_back() {
     let (app, _) = signin_app().await;
     account(&app, "priya@example.com", "rep").await;
     let client = app.client();
-    let response = sign_in(
-        &client,
-        "priya@example.com",
-        PASSWORD,
-        "/admin/resources/deals",
-    )
-    .await
-    .assert_status(303);
-    assert_eq!(response.header("location"), Some("/admin/resources/deals"));
-    let cookie = response
-        .set_cookie("navree_helm")
-        .expect("a session cookie");
-    assert_eq!(cookie.path(), Some("/admin"));
-    assert_eq!(cookie.http_only(), Some(true));
-    assert_eq!(cookie.same_site(), Some(cookie::SameSite::Strict));
 
-    let html = client
-        .get("/admin/resources/deals")
-        .header("accept", "text/html")
+    // The panel sends a guest to the app's sign-in page, and keeps the page.
+    let response = get(&client, "/admin/resources/deals?page=2")
+        .await
+        .assert_status(303);
+    assert_eq!(
+        response.header("location"),
+        Some("/sign-in?next=%2Fadmin%2Fresources%2Fdeals%3Fpage%3D2")
+    );
+    // API clients get the JSON error instead.
+    client
+        .get("/admin/api/resources")
         .send()
+        .await
+        .assert_error(401, None);
+
+    let response = sign_in(&client, "priya@example.com", "/admin/resources/deals")
+        .await
+        .assert_status(303);
+    assert_eq!(response.header("location"), Some("/admin/resources/deals"));
+    // The cookie is the app's session: no cookie of the panel's own.
+    let cookie = response.set_cookie(SESSION_COOKIE).expect("the session");
+    assert_eq!(cookie.http_only(), Some(true));
+    assert!(response.set_cookie("navree_helm").is_none());
+
+    let html = get(&client, "/admin/resources/deals")
         .await
         .assert_status(200)
         .text();
     assert!(html.contains("Priya Patel"));
     assert!(html.contains("Sign out"));
-
-    // The API under the panel accepts it too.
+    // The sign-out form posts to the app's sign-out route.
+    assert!(html.contains("action=\"/sign-out\""), "{html}");
+    // The panel's API takes the same session.
     client
         .get("/admin/api/resources")
         .send()
         .await
         .assert_status(200);
-    // The app's own API never does.
-    let value = cookie.value().to_owned();
-    app.client()
-        .get("/api/auth/me")
-        .header("cookie", format!("navree_helm={value}"))
-        .send()
-        .await
-        .assert_error(401, None);
-    // Signed in, the sign-in screen sends you on.
-    let response = client
-        .get("/admin/login")
-        .header("accept", "text/html")
-        .send()
-        .await
-        .assert_status(303);
-    assert_eq!(response.header("location"), Some("/admin"));
 }
 
 #[tokio::test]
@@ -150,17 +147,14 @@ async fn changes_need_the_csrf_token() {
     let (app, _) = signin_app().await;
     account(&app, "priya@example.com", "rep").await;
     let client = app.client();
-    sign_in(&client, "priya@example.com", PASSWORD, "/admin")
+    sign_in(&client, "priya@example.com", "/admin")
         .await
         .assert_status(303);
-    let html = client
-        .get("/admin")
-        .header("accept", "text/html")
-        .send()
-        .await
-        .text();
+    let html = get(&client, "/admin").await.text();
     let token = csrf(&html);
     assert!(!token.is_empty());
+    // It is the session's token, the one the `XSRF-TOKEN` cookie holds.
+    assert_eq!(client.cookie("XSRF-TOKEN").as_deref(), Some(token.as_str()));
 
     client
         .post("/admin/api/resources/deals")
@@ -204,65 +198,29 @@ async fn changes_need_the_csrf_token() {
 }
 
 #[tokio::test]
-async fn wrong_passwords_and_stale_forms_are_refused() {
+async fn a_user_without_the_panel_gets_the_error_page() {
     let (app, _) = signin_app().await;
-    account(&app, "priya@example.com", "rep").await;
-    let client = app.client();
-    let response = sign_in(&client, "priya@example.com", "wrong password", "/admin")
+    // Signed in, but `helm.view` was never given.
+    let auth = app.get::<AuthService>().await;
+    auth.create_user("Priya Patel", "priya@example.com", PASSWORD)
         .await
-        .assert_status(401);
+        .unwrap();
+    let client = app.client();
+    sign_in(&client, "priya@example.com", "/admin")
+        .await
+        .assert_status(303);
+    let response = get(&client, "/admin").await.assert_status(403);
     assert!(
         response
-            .text()
-            .contains("These credentials do not match our records.")
+            .header("content-type")
+            .unwrap()
+            .starts_with("text/html")
     );
-    assert!(response.set_cookie("navree_helm").is_none());
-
-    let response = client
-        .post("/admin/login")
-        .header("accept", "text/html")
-        .form(&[
-            ("email", "priya@example.com"),
-            ("password", PASSWORD),
-            ("_login", "stale"),
-        ])
-        .send()
-        .await
-        .assert_status(403);
-    assert!(response.text().contains("The sign-in form expired"));
-
-    // The login throttle of `POST /api/auth/login`: 5 failures a minute.
-    for _ in 0..4 {
-        sign_in(&client, "priya@example.com", "wrong", "/admin")
-            .await
-            .assert_status(401);
-    }
-    let response = sign_in(&client, "priya@example.com", "wrong", "/admin")
-        .await
-        .assert_status(429);
-    assert!(response.text().contains("Too many attempts"));
-    assert!(response.header("retry-after").is_some());
+    assert!(response.text().contains("Forbidden"));
 }
 
 #[tokio::test]
-async fn next_never_leaves_the_panel() {
-    let (app, _) = signin_app().await;
-    account(&app, "priya@example.com", "rep").await;
-    let response = sign_in(
-        &app.client(),
-        "priya@example.com",
-        PASSWORD,
-        "https://evil.example/admin",
-    )
-    .await;
-    assert_eq!(
-        response.assert_status(303).header("location"),
-        Some("/admin")
-    );
-}
-
-#[tokio::test]
-async fn accounts_with_two_factor_enter_a_code() {
+async fn accounts_with_two_factor_enter_a_code_on_the_apps_page() {
     let (app, clock) = signin_app().await;
     let id = account(&app, "priya@example.com", "rep").await;
     let auth = app.get::<AuthService>().await;
@@ -282,47 +240,26 @@ async fn accounts_with_two_factor_enter_a_code() {
     clock.advance(Duration::from_secs(30));
 
     let client = app.client();
-    let response = sign_in(&client, "priya@example.com", PASSWORD, "/admin")
-        .await
-        .assert_status(200);
-    assert!(response.set_cookie("navree_helm").is_none());
-    let html = response.text();
-    assert!(html.contains("Enter the code from your authenticator app."));
-    let challenge = hidden(&html, "challenge_token");
-    let login = hidden(&html, "_login");
-
-    let wrong = client
-        .post("/admin/login/two-factor")
-        .header("accept", "text/html")
-        .form(&[
-            ("challenge_token", challenge.as_str()),
-            ("code", "000000"),
-            ("_login", login.as_str()),
-        ])
-        .send()
-        .await;
-    if wrong.status().as_u16() == 401 {
-        assert!(wrong.text().contains("That code is not valid."));
-    }
-    let html = wrong.text();
-    let login = hidden(&html, "_login");
-    let response = client
-        .post("/admin/login/two-factor")
-        .header("accept", "text/html")
-        .form(&[
-            ("challenge_token", challenge.as_str()),
-            ("code", code(&clock).as_str()),
-            ("_login", login.as_str()),
-            ("next", "/admin/resources/companies"),
-        ])
-        .send()
+    let response = sign_in(&client, "priya@example.com", "/admin")
         .await
         .assert_status(303);
     assert_eq!(
         response.header("location"),
-        Some("/admin/resources/companies")
+        Some("/sign-in/two-factor?next=%2Fadmin")
     );
-    assert!(response.set_cookie("navree_helm").is_some());
+    // The password alone opens nothing.
+    get(&client, "/admin").await.assert_status(303);
+    get(&client, "/sign-in/two-factor?next=%2Fadmin")
+        .await
+        .assert_status(200);
+    let response = post(
+        &client,
+        "/sign-in/two-factor",
+        &[("code", code(&clock).as_str()), ("next", "/admin")],
+    )
+    .await
+    .assert_status(303);
+    assert_eq!(response.header("location"), Some("/admin"));
     client
         .get("/admin/api/resources")
         .send()
@@ -331,39 +268,46 @@ async fn accounts_with_two_factor_enter_a_code() {
 }
 
 #[tokio::test]
-async fn signing_out_ends_the_session() {
+async fn signing_out_ends_a_copied_session_cookie() {
     let (app, _) = signin_app().await;
     account(&app, "priya@example.com", "rep").await;
     let client = app.client();
-    sign_in(&client, "priya@example.com", PASSWORD, "/admin")
+    let response = sign_in(&client, "priya@example.com", "/admin")
         .await
         .assert_status(303);
-    let html = client
-        .get("/admin")
-        .header("accept", "text/html")
+    let copied = response
+        .set_cookie(SESSION_COOKIE)
+        .expect("the session")
+        .value()
+        .to_owned();
+    let with_copy = |path: &str| {
+        app.client()
+            .get(path)
+            .header("cookie", format!("{SESSION_COOKIE}={copied}"))
+    };
+    with_copy("/admin/api/resources")
         .send()
         .await
-        .text();
+        .assert_status(200);
+
+    let html = get(&client, "/admin").await.text();
     let response = client
-        .post("/admin/logout")
+        .post("/sign-out")
         .header("accept", "text/html")
         .form(&[("_csrf", csrf(&html).as_str())])
         .send()
         .await
         .assert_status(303);
-    assert_eq!(response.header("location"), Some("/admin/login"));
-    let cleared = response.set_cookie("navree_helm").unwrap();
-    assert_eq!(cleared.value(), "");
-    let response = client
-        .get("/admin")
-        .header("accept", "text/html")
-        .send()
-        .await
-        .assert_status(303);
     assert_eq!(
         response.header("location"),
-        Some("/admin/login?next=%2Fadmin")
+        Some("/sign-in?status=signed-out")
     );
+    get(&client, "/admin").await.assert_status(303);
+    // The sign-in ended on the server, so the copy no longer opens the panel.
+    with_copy("/admin/api/resources")
+        .send()
+        .await
+        .assert_error(401, None);
 }
 
 #[tokio::test]

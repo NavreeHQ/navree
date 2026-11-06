@@ -56,6 +56,11 @@ use crate::session::cookie;
 /// another sign-in, names nothing.
 pub const WORKSPACE_COOKIE: &str = "navree_helm_workspace";
 
+/// How long the browser keeps the workspace cookie (30 days). A sign-in ends
+/// sooner or later and the cookie, sealed to it, then names nothing, so this
+/// only bounds how long a stale one stays in the browser.
+pub(crate) const WORKSPACE_COOKIE_SECS: i64 = 30 * 24 * 60 * 60;
+
 /// The header an API client names its workspace with, in an app without
 /// `WorkspaceModule` (whose `workspace.header` it is otherwise).
 pub(crate) const WORKSPACE_HEADER: &str = "x-workspace";

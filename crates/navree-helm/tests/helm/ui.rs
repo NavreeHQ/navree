@@ -35,7 +35,7 @@ async fn guests_are_sent_to_the_sign_in_page() {
     // The next page is kept.
     assert_eq!(
         location(&response),
-        "/admin/login?next=%2Fadmin%2Fresources%2Fdeals%3Fpage%3D2"
+        "/sign-in?next=%2Fadmin%2Fresources%2Fdeals%3Fpage%3D2"
     );
     // API clients get the JSON error instead.
     app.client()

@@ -2,16 +2,14 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
-use std::sync::Arc;
 
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use navree_access::{CREATE, PinnedWorkspace, READ};
-use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorProof};
-use navree_contracts::{AuthState, AuthVia};
-use navree_crypto::{Encrypter, constant_time_eq, random_token};
-use navree_http::body::{Bytes, to_bytes};
-use navree_http::extract::{FromRequest, FromRequestParts, Multipart, Request};
+use navree_auth::AuthService;
+use navree_crypto::Encrypter;
+use navree_http::body::to_bytes;
+use navree_http::extract::{FromRequest, Multipart, Request};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Path, RawQuery};
 use navree_kernel::AppContext;
@@ -30,11 +28,11 @@ use crate::panel::PanelOutside;
 use crate::present::{Item, Screen, encode, present, screen_fields};
 use crate::query::ListQuery;
 use crate::session::{
-    FLASH_COOKIE, LOGIN_COOKIE, PanelSession, SESSION_COOKIE, SIDEBAR_COOKIE, SessionData,
-    build_cookie, clear_cookie, cookie, redirect, request_host, session_cookie,
+    FLASH_COOKIE, PanelSession, SIDEBAR_COOKIE, build_cookie, clear_cookie, cookie, redirect,
+    request_host,
 };
 use crate::values::key_text;
-use crate::workspace::{self, WORKSPACE_COOKIE};
+use crate::workspace::{self, WORKSPACE_COOKIE, WORKSPACE_COOKIE_SECS};
 use crate::{ActionResult, icons, money};
 
 /// The Settings screens (feature `settings`).
@@ -77,6 +75,7 @@ fn panel_json(core: &Core, csrf: &str) -> Value {
         "base": core.options.base(),
         "version": core.assets.version,
         "csrf": csrf,
+        "sign_out": navree_auth::SIGN_OUT_PATH,
         "collapsed": false,
         "icons": icons::ui(),
     })
@@ -401,269 +400,9 @@ pub(crate) async fn asset(Path(file): Path<String>, request: Request) -> Respons
     response
 }
 
-// ---------------------------------------------------------------------------
-// Sign-in
-// ---------------------------------------------------------------------------
-
-/// Where to go after signing in: `next` when it is a page of the panel.
-fn safe_next(next: Option<&str>, base: &str) -> String {
-    match next {
-        Some(next)
-            if (next == base
-                || next.starts_with(&format!("{base}/"))
-                || next.starts_with(&format!("{base}?")))
-                && !next.contains("//")
-                && !next.contains('\\')
-                && !next.starts_with(&format!("{base}/login"))
-                && !next.starts_with(&format!("{base}/logout")) =>
-        {
-            next.to_owned()
-        }
-        _ => base.to_owned(),
-    }
-}
-
-/// The parts of a sign-in request.
-struct SignIn {
-    app: AppContext,
-    core: Arc<Core>,
-    host: String,
-    headers: HeaderMap,
-    meta: ClientMeta,
-    signed_in: bool,
-}
-
-impl SignIn {
-    /// The parts of `request` and its body; `None` outside the panel.
-    async fn from(request: Request) -> Option<(SignIn, Bytes)> {
-        let (mut parts, body) = request.into_parts();
-        let app = parts.extensions.get::<AppContext>().cloned()?;
-        let core = app.get::<Core>().await.ok()?;
-        let host = request_host(&http::Request::from_parts(parts.clone(), ()));
-        let meta = ClientMeta::from_request_parts(&mut parts)
-            .await
-            .unwrap_or_else(|never| match never {});
-        let signed_in = parts
-            .extensions
-            .get::<AuthState>()
-            .and_then(|s| s.0.as_ref())
-            .is_some_and(|p| p.via == AuthVia::Session);
-        let bytes = to_bytes(body, 64 * 1024).await.unwrap_or_default();
-        Some((
-            SignIn {
-                app,
-                core,
-                host,
-                headers: parts.headers,
-                meta,
-                signed_in,
-            },
-            bytes,
-        ))
-    }
-
-    /// The sign-in screen, with a fresh form token.
-    fn screen(&self, status: StatusCode, extra: Value, available: bool) -> Response {
-        let token = random_token(32);
-        let mut ctx = json!({
-            "panel": panel_json(&self.core, ""),
-            "step": "password",
-            "email": "",
-            "next": self.core.options.base(),
-            "error": Value::Null,
-            "challenge": "",
-            "unavailable": !available,
-            "login_token": token,
-        });
-        if let (Value::Object(ctx), Value::Object(extra)) = (&mut ctx, extra) {
-            ctx.extend(extra);
-        }
-        let mut response = render(&self.core, status, "helm/login.html", ctx);
-        let path = format!("{}/login", self.core.options.base());
-        if let Some(header) = build_cookie(LOGIN_COOKIE, token, &path, 3600, &self.host) {
-            response.headers_mut().append(SET_COOKIE, header);
-        }
-        response
-    }
-
-    /// Whether the form's token matches the sign-in cookie.
-    fn token_ok(&self, form: &HashMap<String, String>) -> bool {
-        match (cookie(&self.headers, LOGIN_COOKIE), form.get("_login")) {
-            (Some(expected), Some(given)) => {
-                !expected.is_empty() && constant_time_eq(expected.as_bytes(), given.as_bytes())
-            }
-            _ => false,
-        }
-    }
-
-    async fn services(&self) -> Option<(Arc<AuthService>, Arc<Encrypter>)> {
-        let auth = self.app.try_get::<AuthService>().await?;
-        let encrypter = self.app.try_get::<Encrypter>().await?;
-        encrypter.encrypt_string("probe").ok()?;
-        Some((auth, encrypter))
-    }
-
-    /// Signs `user` in: the session cookie, then `next`.
-    fn start(
-        &self,
-        encrypter: &Encrypter,
-        user: uuid::Uuid,
-        refresh_token: String,
-        next: Option<&str>,
-    ) -> Response {
-        let data = SessionData::new(user, Some(refresh_token), self.core.options.session_minutes);
-        let mut response = redirect(&safe_next(next, self.core.options.base()));
-        if let Some(header) = session_cookie(&self.core, encrypter, &data, &self.host) {
-            response.headers_mut().append(SET_COOKIE, header);
-        }
-        // A session that ran out left the last user's workspace in the browser.
-        if let Some(header) = clear_cookie(WORKSPACE_COOKIE, self.core.options.base(), &self.host) {
-            response.headers_mut().append(SET_COOKIE, header);
-        }
-        let path = format!("{}/login", self.core.options.base());
-        if let Some(header) = clear_cookie(LOGIN_COOKIE, &path, &self.host) {
-            response.headers_mut().append(SET_COOKIE, header);
-        }
-        response
-    }
-
-    fn auth_error(&self, error: AuthError, step: Value) -> Response {
-        let app_error = error.into_app_error();
-        let message = match app_error.status.as_u16() {
-            401 => "These credentials do not match our records.".to_owned(),
-            429 => {
-                let wait = app_error
-                    .headers
-                    .get(http::header::RETRY_AFTER)
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("60")
-                    .to_owned();
-                format!("Too many attempts. Try again in {wait} seconds.")
-            }
-            _ => return page_error(&self.core, app_error),
-        };
-        let mut extra = json!({ "error": message });
-        if let (Value::Object(extra), Value::Object(step)) = (&mut extra, step) {
-            extra.extend(step);
-        }
-        let mut response = self.screen(app_error.status, extra, true);
-        if let Some(retry) = app_error.headers.get(http::header::RETRY_AFTER) {
-            response
-                .headers_mut()
-                .insert(http::header::RETRY_AFTER, retry.clone());
-        }
-        response
-    }
-}
-
-/// The fields of a urlencoded form (the last value of each name).
-fn form_fields(bytes: &[u8]) -> HashMap<String, String> {
-    form_urlencoded::parse(bytes).into_owned().collect()
-}
-
-/// `GET {path}/login`: the sign-in screen.
-pub(crate) async fn login_form(RawQuery(query): RawQuery, request: Request) -> Response {
-    let Some((signin, _)) = SignIn::from(request).await else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let next = form_urlencoded::parse(query.unwrap_or_default().as_bytes())
-        .find(|(k, _)| k == "next")
-        .map(|(_, v)| v.into_owned());
-    let base = signin.core.options.base().to_owned();
-    if signin.signed_in {
-        return redirect(&safe_next(next.as_deref(), &base));
-    }
-    let available = signin.services().await.is_some();
-    signin.screen(
-        StatusCode::OK,
-        json!({ "next": safe_next(next.as_deref(), &base) }),
-        available,
-    )
-}
-
-/// `POST {path}/login`: checks the password (with the login throttle of
-/// `POST /api/auth/login`), then signs in or asks for the second factor.
-pub(crate) async fn login(request: Request) -> Response {
-    let Some((signin, body)) = SignIn::from(request).await else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let form = form_fields(&body);
-    let base = signin.core.options.base().to_owned();
-    let next = safe_next(form.get("next").map(String::as_str), &base);
-    if !signin.token_ok(&form) {
-        return signin.screen(
-            StatusCode::FORBIDDEN,
-            json!({ "error": "The sign-in form expired. Try again.", "next": next }),
-            true,
-        );
-    }
-    let Some((auth, encrypter)) = signin.services().await else {
-        return signin.screen(StatusCode::SERVICE_UNAVAILABLE, json!({}), false);
-    };
-    let email = form.get("email").cloned().unwrap_or_default();
-    let password = form.get("password").cloned().unwrap_or_default();
-    match auth.attempt_login(&email, &password, &signin.meta).await {
-        Ok(LoginOutcome::Authenticated { user, tokens }) => {
-            signin.start(&encrypter, user.id, tokens.refresh_token, Some(&next))
-        }
-        Ok(LoginOutcome::TwoFactorRequired {
-            challenge_token, ..
-        }) => signin.screen(
-            StatusCode::OK,
-            json!({ "step": "two_factor", "challenge": challenge_token, "next": next }),
-            true,
-        ),
-        Err(error) => signin.auth_error(error, json!({ "email": email, "next": next })),
-    }
-}
-
-/// `POST {path}/login/two-factor`: the second factor of a sign-in.
-pub(crate) async fn two_factor(request: Request) -> Response {
-    let Some((signin, body)) = SignIn::from(request).await else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let form = form_fields(&body);
-    let base = signin.core.options.base().to_owned();
-    let next = safe_next(form.get("next").map(String::as_str), &base);
-    let challenge = form.get("challenge_token").cloned().unwrap_or_default();
-    let step = json!({ "step": "two_factor", "challenge": challenge, "next": next });
-    if !signin.token_ok(&form) {
-        return signin.screen(
-            StatusCode::FORBIDDEN,
-            json!({ "error": "The sign-in form expired. Sign in again.", "next": next }),
-            true,
-        );
-    }
-    let Some((auth, encrypter)) = signin.services().await else {
-        return signin.screen(StatusCode::SERVICE_UNAVAILABLE, json!({}), false);
-    };
-    let code = form
-        .get("code")
-        .map(|c| c.replace(' ', ""))
-        .unwrap_or_default();
-    let recovery = form.get("recovery_code").cloned().unwrap_or_default();
-    let proof = if !code.is_empty() {
-        TwoFactorProof::Code(code)
-    } else {
-        TwoFactorProof::RecoveryCode(recovery.trim().to_owned())
-    };
-    match auth
-        .verify_two_factor(&challenge, proof, &signin.meta)
-        .await
-    {
-        Ok((user, tokens)) => signin.start(&encrypter, user.id, tokens.refresh_token, Some(&next)),
-        Err(AuthError::InvalidTwoFactorCode) => {
-            let mut extra = step;
-            extra["error"] = json!("That code is not valid. Try again.");
-            signin.screen(StatusCode::UNAUTHORIZED, extra, true)
-        }
-        Err(error) => signin.auth_error(error, step),
-    }
-}
-
 /// `POST {path}/workspace`: works in the workspace named by the form's
-/// `workspace` field, if the user may, for as long as a sign-in lasts (a cookie
-/// that signing in and out clear), or in none when it is empty.
+/// `workspace` field, if the user may, for as long as the sign-in it was chosen
+/// in (a cookie sealed to that sign-in), or in none when it is empty.
 pub(crate) async fn choose_workspace(
     PanelOutside(panel): PanelOutside,
     request: Request,
@@ -722,7 +461,7 @@ pub(crate) async fn choose_workspace(
         let message = error.detail.as_deref().unwrap_or(&error.title).to_owned();
         return redirect_with(&base, &message, "error", &core, &host);
     }
-    let value = match &panel.session.csrf {
+    let value = match panel.sign_in_token() {
         Some(sign_in) => match panel.cx.app.try_get::<Encrypter>().await {
             Some(encrypter) => workspace::sealed(&encrypter, workspace, sign_in),
             None => None,
@@ -743,33 +482,10 @@ pub(crate) async fn choose_workspace(
         WORKSPACE_COOKIE,
         value,
         &base,
-        i64::try_from(core.options.session_minutes.saturating_mul(60)).unwrap_or(i64::MAX),
+        WORKSPACE_COOKIE_SECS,
         &host,
     ) {
         response.headers_mut().append(SET_COOKIE, header);
-    }
-    response
-}
-
-/// `POST {path}/logout`: ends the panel session (and its refresh token).
-pub(crate) async fn logout(request: Request) -> Response {
-    let Some((signin, _)) = SignIn::from(request).await else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let base = signin.core.options.base().to_owned();
-    if let Some(encrypter) = signin.app.try_get::<Encrypter>().await
-        && let Some(value) = cookie(&signin.headers, SESSION_COOKIE)
-        && let Ok(data) = encrypter.decrypt_json::<SessionData>(&value)
-        && let Some(auth) = signin.app.try_get::<AuthService>().await
-        && let Err(error) = auth.logout(data.r.as_deref(), data.u, false).await
-    {
-        tracing::warn!(target: "navree::helm", %error, "could not revoke the panel session's refresh token");
-    }
-    let mut response = redirect(&format!("{base}/login"));
-    for name in [SESSION_COOKIE, WORKSPACE_COOKIE] {
-        if let Some(header) = clear_cookie(name, &base, &signin.host) {
-            response.headers_mut().append(SET_COOKIE, header);
-        }
     }
     response
 }
@@ -2365,19 +2081,6 @@ pub(crate) async fn custom_page(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn next_stays_inside_the_panel() {
-        assert_eq!(
-            safe_next(Some("/admin/resources/deals?page=2"), "/admin"),
-            "/admin/resources/deals?page=2"
-        );
-        assert_eq!(safe_next(Some("https://evil.example"), "/admin"), "/admin");
-        assert_eq!(safe_next(Some("//evil.example"), "/admin"), "/admin");
-        assert_eq!(safe_next(Some("/administrator"), "/admin"), "/admin");
-        assert_eq!(safe_next(Some("/admin/login"), "/admin"), "/admin");
-        assert_eq!(safe_next(None, "/admin"), "/admin");
-    }
 
     #[test]
     fn submissions_split_values_ids_and_internal_fields() {

@@ -16,7 +16,7 @@
   {% elif general_error %}
   <div class="flash flash-error" role="alert">{{ general_error }}</div>
   {% endif %}
-  <form method="post" action="{{ action }}{% if multipart %}?_csrf={{ panel.csrf|urlencode }}{% endif %}"{% if multipart %} enctype="multipart/form-data"{% endif %} class="stack" novalidate>
+  <form method="post" action="{{ action }}"{% if multipart %} enctype="multipart/form-data"{% endif %} class="stack" novalidate>
     <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
     <input type="hidden" name="_tz_offset" value="" data-tz-offset>
     {% for f in fields %}{{ m.input(f) }}{% endfor %}

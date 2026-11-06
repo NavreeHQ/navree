@@ -10,9 +10,8 @@ use crate::core::Core;
 use crate::{HELM_SUBJECT, VIEW, api, export, sidebar, ui};
 
 /// The panel's routes (the pages and the JSON API under `{helm.path}/api`).
-/// Every route but the sign-in screen and the assets requires `view` on
-/// `Helm`; each handler then checks the user's abilities on the resource
-/// and the record.
+/// Every route but the assets requires `view` on `Helm`; each handler then
+/// checks the user's abilities on the resource and the record.
 pub struct HelmController {
     core: Arc<Core>,
 }
@@ -41,22 +40,10 @@ impl Controller for HelmController {
         let at = |path: &str| format!("!{base}{path}");
         let view = |route: RouteDef| route.can(VIEW, HELM_SUBJECT, None);
         vec![
-            // Assets and sign-in.
+            // Assets. Signing in and out is the app's (`AuthPages`).
             RouteDef::on(Method::GET, at("/assets/{file}"), ui::asset)
                 .public()
                 .name("helm.assets"),
-            RouteDef::on(Method::GET, at("/login"), ui::login_form)
-                .public()
-                .name("helm.login"),
-            RouteDef::on(Method::POST, at("/login"), ui::login)
-                .public()
-                .name("helm.login.attempt"),
-            RouteDef::on(Method::POST, at("/login/two-factor"), ui::two_factor)
-                .public()
-                .name("helm.login.two_factor"),
-            RouteDef::on(Method::POST, at("/logout"), ui::logout)
-                .authenticated()
-                .name("helm.logout"),
             // Pages.
             view(RouteDef::on(Method::GET, at(""), ui::dashboard).name("helm.dashboard")),
             view(

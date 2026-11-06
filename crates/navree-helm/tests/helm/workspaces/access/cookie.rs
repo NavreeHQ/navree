@@ -1,7 +1,9 @@
 //! The workspace cookie of a signed-in browser is the panel's own: one it finds
 //! at another path, or from another sign-in, names nothing.
 
-use navree_auth::{AuthModule, AuthService};
+use navree_auth::{AuthModule, AuthPages, AuthService};
+use navree_session::{SessionModule, SessionOptions};
+use navree_ui::UiModule;
 
 use super::*;
 
@@ -34,7 +36,10 @@ async fn signed_in_app() -> TestApp {
         .config("workspace.routes", false)
         .module(navree_crypto::CryptoModule::from_config())
         .module(navree_db::DatabaseModule)
+        .module(SessionModule::for_root(SessionOptions::default()))
         .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new())
         .module(navree_access::AccessModule::for_root(options()))
         .module(WorkspaceModule::from_config())
         .module(AuthedNotesModule)
@@ -43,35 +48,32 @@ async fn signed_in_app() -> TestApp {
         .await
 }
 
-fn hidden(html: &str, name: &str) -> String {
-    let marker = format!("name=\"{name}\" value=\"");
-    let start = html.find(&marker).unwrap_or_else(|| panic!("no {name}")) + marker.len();
-    html[start..].split('"').next().unwrap().to_owned()
-}
-
 fn csrf(html: &str) -> String {
     let marker = "<meta name=\"csrf-token\" content=\"";
     let start = html.find(marker).unwrap() + marker.len();
     html[start..].split('"').next().unwrap().to_owned()
 }
 
-/// Signs `email` in, and returns the page's token for forms.
+/// Signs `email` in on the app's sign-in page, and returns the panel page's
+/// token for forms.
 async fn sign_in(client: &TestClient, email: &str) -> String {
-    let html = client
-        .get("/admin/login")
+    client
+        .get("/sign-in")
         .header("accept", "text/html")
         .send()
         .await
-        .text();
-    let token = hidden(&html, "_login");
+        .assert_status(200);
+    let xsrf = client
+        .cookie("XSRF-TOKEN")
+        .expect("the sign-in page handed out the token");
     client
-        .post("/admin/login")
+        .post("/sign-in")
         .header("accept", "text/html")
         .form(&[
             ("email", email),
             ("password", PASSWORD),
-            ("_login", token.as_str()),
             ("next", "/admin"),
+            ("_csrf", xsrf.as_str()),
         ])
         .send()
         .await
