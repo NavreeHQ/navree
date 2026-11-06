@@ -97,7 +97,7 @@ Generate a model in a module, with the migration that creates its table:
 navree make:model deals Deal --migration
 ```
 
-This writes `src/modules/deals/models/deal.rs`, a `create_deals_table` migration, and registers the model in the module's `wire` (`m.model::<Deal>()`). The generated model has an `id`, a `name` and the two timestamps, and the migration creates the same columns: change both to your fields. `--migration` is `-m`. `--factory` (`-f`), `--seeder` (`-s`), `--controller` (`-c`) and `--policy` add the companions, which refer to each other, and `--all` (`-a`) adds every one of them. `--pivot` (`-p`) makes the [pivot model](/docs/orm/relationships/#pivot-models) of a many-to-many, such as `deal_tag`.
+This writes `src/modules/deals/models/deal.rs`, a `create_deals_table` migration, and registers the model in the module's `wire` (`m.model::<Deal>()`, and `global_entity::<Deal>()`: one set of rows shared by every [workspace](/docs/workspaces/introduction/), until you make it `#[model(workspace)]`). The generated model has an `id`, a `name` and the two timestamps, and the migration creates the same columns: change both to your fields. `--migration` is `-m`. `--factory` (`-f`), `--seeder` (`-s`), `--controller` (`-c`) and `--policy` add the companions, which refer to each other, and `--all` (`-a`) adds every one of them. `--pivot` (`-p`) makes the [pivot model](/docs/orm/relationships/#pivot-models) of a many-to-many, such as `deal_tag`.
 
 A model is a struct with named fields. This one has a title and an amount instead of a name:
 
