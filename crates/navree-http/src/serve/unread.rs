@@ -459,57 +459,44 @@ fn expired(deadline: Instant, timer: &mut Timer, cx: &mut Context<'_>) -> Poll<(
 mod tests {
     use std::future::poll_fn;
 
-    use futures_util::Stream;
-    use http_body_util::{BodyExt, StreamBody};
+    use http_body_util::BodyExt;
     use tokio::io::{AsyncWriteExt, duplex};
     use tokio::sync::mpsc;
 
     use super::*;
 
-    /// A body fed by hand, with the length it declares, if any.
-    struct Fed {
+    /// A body fed by hand, with the length it still declares, if any.
+    struct FedBody {
         chunks: mpsc::UnboundedReceiver<Result<Bytes, &'static str>>,
         declared: Option<u64>,
         polled: Arc<AtomicBool>,
     }
-
-    impl Stream for Fed {
-        type Item = Result<Frame<Bytes>, &'static str>;
-
-        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            self.polled.store(true, Ordering::SeqCst);
-            let polled = self.chunks.poll_recv(cx);
-            if let Poll::Ready(Some(Ok(chunk))) = &polled
-                && let Some(declared) = &mut self.declared
-            {
-                *declared = declared.saturating_sub(chunk.len() as u64);
-            }
-            polled.map(|chunk| chunk.map(|chunk| chunk.map(Frame::data)))
-        }
-    }
-
-    /// `Fed` as a body: its size is what it still declares.
-    struct FedBody(StreamBody<Fed>);
 
     impl HttpBody for FedBody {
         type Data = Bytes;
         type Error = &'static str;
 
         fn poll_frame(
-            mut self: Pin<&mut Self>,
+            self: Pin<&mut Self>,
             cx: &mut Context<'_>,
         ) -> Poll<Option<Result<Frame<Bytes>, &'static str>>> {
-            Pin::new(&mut self.0).poll_frame(cx)
+            let this = self.get_mut();
+            this.polled.store(true, Ordering::SeqCst);
+            let polled = this.chunks.poll_recv(cx);
+            if let Poll::Ready(Some(Ok(chunk))) = &polled
+                && let Some(declared) = &mut this.declared
+            {
+                *declared = declared.saturating_sub(chunk.len() as u64);
+            }
+            polled.map(|chunk| chunk.map(|chunk| chunk.map(Frame::data)))
         }
 
         fn is_end_stream(&self) -> bool {
-            self.0.get_ref().declared == Some(0)
+            self.declared == Some(0)
         }
 
         fn size_hint(&self) -> SizeHint {
-            self.0
-                .get_ref()
-                .declared
+            self.declared
                 .map_or_else(SizeHint::default, SizeHint::with_exact)
         }
     }
@@ -530,11 +517,11 @@ mod tests {
     fn fed(declared: Option<u64>) -> (Feed, FedBody) {
         let (sender, chunks) = mpsc::unbounded_channel();
         let polled = Arc::new(AtomicBool::new(false));
-        let body = FedBody(StreamBody::new(Fed {
+        let body = FedBody {
             chunks,
             declared,
             polled: polled.clone(),
-        }));
+        };
         (Feed { sender, polled }, body)
     }
 

@@ -352,6 +352,8 @@ mod tests {
 
     use super::*;
 
+    // Fields serde reads and the rules do not.
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize, Validate)]
     struct Product {
         #[validate(length(min = 1))]
@@ -411,6 +413,7 @@ mod tests {
         sorted(&every_failure::<Flat, _>(&input, stop))
     }
 
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize, Validate)]
     struct Flat {
         #[validate(length(min = 1))]
@@ -502,6 +505,7 @@ mod tests {
 
     #[test]
     fn the_stops_are_bounded() {
+        #[allow(dead_code)]
         #[derive(Debug, Deserialize, Validate)]
         struct Many {
             #[validate(skip)]
