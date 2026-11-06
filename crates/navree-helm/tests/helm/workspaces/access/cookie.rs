@@ -134,3 +134,56 @@ async fn a_cookie_planted_at_another_path_names_nothing_after_sign_in() {
     other.set_cookie(WORKSPACE_COOKIE, &chosen);
     other.get(NOTES).send().await.assert_status(400);
 }
+
+// The browser keeps the cookie for up to 30 days, but it ends with the sign-in it
+// was chosen in: signed out and in again, the browser's old one names nothing.
+#[tokio::test]
+async fn the_cookie_lasts_a_sign_in_and_does_not_outlive_it() {
+    let app = signed_in_app().await;
+    let auth = app.get::<AuthService>().await;
+    let user = auth
+        .create_user("One", "one@navree.test", PASSWORD)
+        .await
+        .unwrap()
+        .id;
+    let agra = workspace(&app, user, "Agra").await.id;
+    give_role(&app, user, "editor", &["helm.view", "notes.*"]).await;
+    seed(&app, agra, "Agra secret").await;
+    let client = app.client();
+    let token = sign_in(&client, "one@navree.test").await;
+    let response = client
+        .post("/admin/workspace")
+        .header("accept", "text/html")
+        .form(&[
+            ("workspace", agra.to_string().as_str()),
+            ("_csrf", token.as_str()),
+        ])
+        .send()
+        .await
+        .assert_status(303);
+    let cookie = response.set_cookie(WORKSPACE_COOKIE).expect("a cookie");
+    assert_eq!(
+        cookie.max_age().map(|age| age.whole_seconds()),
+        Some(30 * 24 * 60 * 60)
+    );
+    let chosen = cookie.value().to_owned();
+    client
+        .get(NOTES)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(1));
+
+    client
+        .post("/sign-out")
+        .header("accept", "text/html")
+        .form(&[("_csrf", token.as_str())])
+        .send()
+        .await
+        .assert_status(303);
+    sign_in(&client, "one@navree.test").await;
+    // The cookie the browser kept, put back in case anything cleared it.
+    client.set_cookie(WORKSPACE_COOKIE, &chosen);
+    let response = client.get(NOTES).send().await.assert_status(400);
+    assert!(response.text().contains("Choose a workspace first"));
+}

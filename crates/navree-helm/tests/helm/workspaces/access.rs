@@ -358,35 +358,6 @@ async fn the_cookie_is_checked_like_the_header_and_a_stale_one_locks_nobody_out(
 }
 
 #[tokio::test]
-async fn the_cookie_lasts_a_sign_in_and_does_not_outlive_it() {
-    let world = world(app_with_members().await).await;
-    let response = world
-        .member
-        .post("/admin/workspace")
-        .header("accept", "text/html")
-        .form(&[("workspace", world.agra.to_string().as_str())])
-        .send()
-        .await
-        .assert_status(303);
-    let cookie = response.set_cookie(WORKSPACE_COOKIE).expect("a cookie");
-    assert_eq!(
-        cookie.max_age().map(|age| age.whole_seconds()),
-        Some(480 * 60)
-    );
-    let response = world
-        .member
-        .post("/admin/logout")
-        .header("accept", "text/html")
-        .send()
-        .await
-        .assert_status(303);
-    let cleared = response.set_cookie(WORKSPACE_COOKIE).expect("cleared");
-    assert_eq!(cleared.value(), "");
-    assert_eq!(cleared.max_age().map(|age| age.whole_seconds()), Some(0));
-    assert_eq!(world.member.cookie(WORKSPACE_COOKIE), None);
-}
-
-#[tokio::test]
 async fn the_panel_reads_the_header_the_app_configured() {
     let app = with_members(crate::servers::database(TestApp::builder()))
         .config("workspace.header", "X-Tenant")
