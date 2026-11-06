@@ -63,9 +63,10 @@ export const sections: DocsSection[] = [
   {
     slug: "architecture",
     title: "Architecture concepts",
-    description: "How a request travels through a Navree app, and how modules, providers, lifecycle hooks and crates fit together.",
+    description: "How a request travels through a Navree app to the screen, and how modules, providers, lifecycle hooks and crates fit together.",
     pages: [
       "request-lifecycle",
+      "ui-runtime",
       "modules",
       "providers",
       "lifecycle-hooks",

@@ -1,0 +1,77 @@
+---
+title: "The UI runtime"
+description: "How a Navree UI page gets from a handler to the screen: one rendered tree, the few modules a page needs, and live regions that update in place."
+---
+
+## Introduction
+
+Navree UI has a server side and a small browser side. The server draws every page. The browser side, the **runtime**, adds only what a page can't do with plain HTML and CSS: placing a popup, moving through a menu with the arrow keys, fetching part of a page again. This page follows one page from the request to the pixels. [Navree UI](/docs/ui/overview/) is the guide to using the toolkit.
+
+<Diagram name="request-to-pixels" />
+
+## On the server
+
+A handler returns components. Each one is a plain struct that turns into one `Node`, and `render` writes the whole tree to HTML in one pass. No template engine is involved, and nothing runs in the browser to build the page: the first bytes the browser reads are the page.
+
+The response carries a strict content security policy. Scripts, styles, fonts and requests may come from the page's own origin only, and there is no inline script, no inline style and no framing. That is why the runtime is always a file, never a snippet in the page.
+
+While it renders, the toolkit works out which modules the page needs from the tree itself. The set is a few bits, so finding it out allocates nothing. The head of the page then links the one stylesheet and a `<script type="module">` for each module the tree needs, and nothing else.
+
+## In the browser
+
+### Modules
+
+A page with nothing interactive ships no script at all. A dialog is a `<dialog>`, an accordion is `<details>` and a switch is a checkbox, so none of them needs one. The rest is split into modules by what they do:
+
+- `core`: commands, ops, morphing, boosted links and pending states.
+- `overlay`: placing a tooltip, a hover card or a popover where CSS can't.
+- `select`, `table`, `dates`, `menus`, `charts` and the other component modules: the keys, the search and the state of one kind of component.
+- `live`: regions and tables that follow an event stream.
+
+A page loads the modules its markup uses and nothing more. A page with a select loads `select` and `overlay`. A page with a chart loads `charts` alone. [What ships to the browser](/docs/ui/overview/#what-ships-to-the-browser) lists the module or modules each component brings.
+
+The files are built from the runtime's sources and committed, so `cargo build` never needs Node. They are embedded in your binary and served under `/_navree/ui/` at addresses that carry the file's content hash, with `Cache-Control: public, max-age=31536000, immutable`. A file that changes gets a new address, so a cached copy is never stale and an unchanged file is never fetched again.
+
+The runtime is built for Chrome 135, Firefox 144 and Safari 26 and later.
+
+### Budgets
+
+Every module has a size ceiling in the crate's tests, and a change that crosses one fails the build. The same tests check that a page loads exactly the modules it uses. The ceilings, and how much room each module has now, are read from the tests when the site is built:
+
+<UiBudgets />
+
+### Links and actions
+
+When a page loads `core`, its `<body>` carries `data-ui-boost`. A click on a link to the same site then fetches the next page and morphs what changed into the one on screen, so the shell stays in place. If the fetch fails, the browser navigates as it would without the runtime. Nothing is fetched ahead of a click unless a link says so with `prefetch`.
+
+A form or a command posts to a handler. The handler answers with a `Reply`: a list of ops for the runtime (morph this element, show a toast, close this dialog), or a redirect or a full page for a browser with JavaScript off. [Commands and ops](/docs/ui/commands-and-ops/) covers the ops.
+
+The morph turns the old element into the new one and keeps what the person is doing. Focus, the caret, the selection, an input method composition and typed values survive, and an element with an `id` keeps its identity even when it moves.
+
+### Live regions
+
+A `Region` is a named part of a page with its own source. Name an event stream for it with `live_from`, or a topic of the [live hub](/docs/ui/live-hub/) with `live_on`, and the `live` module takes over:
+
+- **An event is a nudge.** The runtime reads an event's name and id and nothing else, so nothing a stream says can become markup, a URL or a selector. The region fetches its own source, which is what the server meant to show, drawn for the reader under their own access.
+- **A burst costs one fetch.** The region waits a short quiet time after an event, and never has more than one fetch of its own in flight.
+- **One connection serves every region** that names the same stream, and a hidden page holds none.
+- **A dropped connection comes back** after 1 s, 2 s, 4 s and so on up to 30 s. The app's [live hub](/docs/ui/live-hub/) numbers its events, so a page that comes back is told only what it missed.
+
+The new HTML morphs into the region in place. [Regions and live updates](/docs/ui/regions/) shows how to build one.
+
+### Limits
+
+- A control that needs a script to work is shown only once `core` has run. Without JavaScript the page still reads, links navigate and forms post, and the answer is a redirect or a full page.
+- A region's fetch is given up on after 15 seconds.
+
+<LinkCards>
+  <LinkCard href="/docs/ui/overview/" title="Navree UI">
+    Components, the budgets and the security rules, from the guide's side.
+  </LinkCard>
+  <LinkCard href="/docs/ui/regions/" title="Regions and live updates">
+    Lazy, polled and live parts of a page.
+  </LinkCard>
+  <LinkCard href="/docs/ui/live-hub/" title="Live hub">
+    Tell every page that shows something that it changed.
+  </LinkCard>
+</LinkCards>

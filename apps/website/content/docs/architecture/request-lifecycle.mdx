@@ -206,6 +206,8 @@ The response retraces the pipeline in reverse:
 4. Compression, security headers and CORS headers are added.
 5. The request context layer sets `X-Request-Id`, writes the request log line and records the metrics.
 
+A [Navree UI](/docs/ui/overview/) handler returns components instead of JSON, and its response takes the same way out. What the browser does with the page next is the subject of [the UI runtime](/docs/architecture/ui-runtime/).
+
 ## Testing the whole pipeline
 
 `TestClient` from `navree::testing` sends requests through this same router in-process, with every layer above, so a test sees exactly what a client would: the request id, the error format, authentication and the unit of work. See [HTTP tests](/docs/testing/http-tests/).

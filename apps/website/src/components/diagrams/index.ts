@@ -14,6 +14,7 @@ import { multiTenancy } from "./multi-tenancy";
 import { navreeUi } from "./navree-ui";
 import { ormParts } from "./orm-parts";
 import { requestLifecycle } from "./request-lifecycle";
+import { requestToPixels } from "./request-to-pixels";
 import { reverseEngineering } from "./reverse-engineering";
 import { tokenAndSession } from "./token-and-session";
 import { transportChoice } from "./transport-choice";
@@ -44,6 +45,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "jobs-and-events": jobsAndEvents,
   "transport-choice": transportChoice,
   "token-and-session": tokenAndSession,
+  "request-to-pixels": requestToPixels,
 };
 
 /**
