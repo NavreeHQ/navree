@@ -40,6 +40,9 @@ for (const width of WIDTHS) {
     const entry = (out.tools[tool] ||= { shots: [] });
     try {
       await block.scrollIntoViewIfNeeded({ timeout: 8000 });
+      // On a phone a tool's mock is behind a button ("Show the Fleet screen"): open it to photograph it.
+      const open = block.getByRole('button', { name: /^Show the .+ screen$/ });
+      if (await open.count()) await open.first().click();
       await page.waitForTimeout(1200);
       if (width === WIDTHS[0]) {
         entry.title = (await page.locator(`#${tool}-title`).first().innerText().catch(() => '')).trim();
