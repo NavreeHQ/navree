@@ -265,9 +265,11 @@ mod tests {
             }
         }
         impl ConfigSection for ByHand {
-            const KEY: &'static str = "hand";
+            // A key the framework reads, so the list of framework sections
+            // stays true.
+            const KEY: &'static str = "mail";
         }
         let registry = ConfigRegistry::new(&[SectionRegistration::of::<ByHand>()]);
-        assert!(!reference_markdown(&registry).contains("## `hand`"));
+        assert!(!reference_markdown(&registry).contains("## `mail`"));
     }
 }

@@ -155,7 +155,8 @@ mod tests {
 
     #[test]
     fn an_optional_list_is_none_until_it_is_set() {
-        assert_eq!(holder(&[]).expect("valid").maybe, None);
+        // The section is there, without `maybe`.
+        assert_eq!(holder(&[("APP_H__NAMES", "a")]).expect("valid").maybe, None);
         let h = holder(&[("APP_H__MAYBE", "x, y")]).expect("valid");
         assert_eq!(h.maybe, Some(vec!["x".to_owned(), "y".to_owned()]));
     }
