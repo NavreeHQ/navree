@@ -16,12 +16,13 @@ s3 = ["object_store/aws-base", "__cloud"]
 ## Google Cloud Storage disks.
 gcs = ["object_store/gcp-base", "__cloud"]
 ## Azure Blob Storage disks.
-azure = ["object_store/azure-base", "__cloud"]
+azure = ["object_store/azure-base", "__cloud", "dep:base64"]
 # Shared by the cloud drivers: HTTPS on reqwest with rustls and ring (never
 # object_store's `aws`, `gcp` or `azure` features, which turn on aws-lc).
 __cloud = ["dep:object_store", "object_store/ring", "object_store/reqwest", "dep:reqwest", "dep:rustls"]
 
 [dependencies]
+base64 = { workspace = true, optional = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }

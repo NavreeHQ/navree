@@ -280,7 +280,9 @@ mod cloud {
     /// An Azure Blob Storage store.
     #[cfg(feature = "azure")]
     pub(super) fn azure(name: &str, config: &AzureConfig) -> Result<Backend, StorageError> {
-        use object_store::azure::MicrosoftAzureBuilder;
+        use object_store::azure::{AzureConfigKey, MicrosoftAzureBuilder};
+
+        use crate::azure_sas::SharedKeySas;
 
         install_crypto_provider();
         let mut builder = MicrosoftAzureBuilder::from_env()
@@ -295,10 +297,31 @@ mod cloud {
         if let Some(endpoint) = &config.endpoint {
             builder = builder.with_endpoint(endpoint.trim_end_matches('/').to_owned());
         }
+        // Links are signed here with the account key when there is one
+        // (object_store signs the encoded name, Azure the decoded one; see
+        // `azure_sas`). Without a key (a managed identity, say) object_store
+        // signs them with a user delegation key.
+        let shared_key = match (
+            builder.get_config_value(&AzureConfigKey::AccountName),
+            builder.get_config_value(&AzureConfigKey::AccessKey),
+        ) {
+            (Some(account), Some(key)) => {
+                Some(SharedKeySas::new(&account, &key).map_err(|error| {
+                    StorageError::InvalidOptions(format!(
+                        "storage.disks.{name}.access_key is not a base64 account key: {error}"
+                    ))
+                })?)
+            }
+            _ => None,
+        };
         let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
+        let mut provider = Provider::new(ProviderKind::Azure, store.clone());
+        if let Some(shared_key) = shared_key {
+            provider = provider.with_shared_key(shared_key);
+        }
         Ok(Backend {
-            store: Arc::new(Cloud::new(store.clone())),
-            provider: Some(Provider::new(ProviderKind::Azure, store)),
+            store: Arc::new(Cloud::new(store)),
+            provider: Some(provider),
         })
     }
 

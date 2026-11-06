@@ -6081,6 +6081,7 @@ dependencies = [
 name = "navree-storage"
 version = "1.0.0"
 dependencies = [
+ "base64 0.23.1",
  "bytes",
  "chrono",
  "futures-util",

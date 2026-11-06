@@ -59,6 +59,8 @@
 //! ```
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "azure")]
+mod azure_sas;
 mod disk;
 mod drivers;
 mod error;

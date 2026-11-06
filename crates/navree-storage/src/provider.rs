@@ -41,6 +41,10 @@ mod cloud {
         signer: Arc<dyn Signer>,
         /// The disk's key prefix (normalised), prepended to every path.
         prefix: Option<String>,
+        /// Signs Azure links with the account key (object_store signs the
+        /// blob's encoded name, which Azure refuses; see `azure_sas`).
+        #[cfg(feature = "azure")]
+        shared_key: Option<crate::azure_sas::SharedKeySas>,
     }
 
     impl Provider {
@@ -49,7 +53,39 @@ mod cloud {
                 kind,
                 signer,
                 prefix: None,
+                #[cfg(feature = "azure")]
+                shared_key: None,
             }
+        }
+
+        /// The same provider, signing Azure links with `shared_key`.
+        #[cfg(feature = "azure")]
+        pub(crate) fn with_shared_key(
+            mut self,
+            shared_key: crate::azure_sas::SharedKeySas,
+        ) -> Self {
+            self.shared_key = Some(shared_key);
+            self
+        }
+
+        /// `url`, as object_store signed it for `permissions` and `ttl`,
+        /// signed again with the account key on an Azure disk that has one.
+        #[cfg_attr(not(feature = "azure"), allow(unused_variables, unused_mut))]
+        fn finish(
+            &self,
+            mut url: object_store::signer::Url,
+            permissions: &str,
+            ttl: Duration,
+        ) -> Result<String, BoxError> {
+            #[cfg(feature = "azure")]
+            if let Some(shared_key) = &self.shared_key {
+                let start = chrono::Utc::now();
+                let expiry = start
+                    .checked_add_signed(chrono::Duration::from_std(ttl)?)
+                    .ok_or("the link would expire too far in the future")?;
+                shared_key.sign(&mut url, permissions, start, expiry);
+            }
+            Ok(url.into())
         }
 
         /// The same provider for a disk whose keys live under `prefix`.
@@ -81,7 +117,7 @@ mod cloud {
         pub(crate) async fn get_url(&self, path: &str, ttl: Duration) -> Result<String, BoxError> {
             let location = self.location(path)?;
             let url = self.signer.signed_url(Method::GET, &location, ttl).await?;
-            Ok(url.into())
+            self.finish(url, "r", ttl)
         }
 
         /// A link that uploads `path` for `ttl`, and the headers the client
@@ -126,7 +162,8 @@ mod cloud {
                 }
                 ProviderKind::Azure => {
                     headers.insert("x-ms-blob-type".to_owned(), "BlockBlob".to_owned());
-                    self.signer.signed_url(Method::PUT, &location, ttl).await?
+                    let url = self.signer.signed_url(Method::PUT, &location, ttl).await?;
+                    return Ok((self.finish(url, "w", ttl)?, headers));
                 }
             };
             Ok((url.into(), headers))
