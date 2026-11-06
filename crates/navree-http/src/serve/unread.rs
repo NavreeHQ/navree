@@ -145,8 +145,11 @@ impl<B: HttpBody<Data = Bytes> + Unpin> Unread<B> {
     /// (a client waiting on `100 Continue` that has not been asked for it, or
     /// a body that failed) is not read any further.
     fn let_go(&self, mut body: B, readable: bool, limit: u64) {
-        // Without a runtime a body's pace cannot be timed: nothing is read.
-        let rest = if readable && tokio::runtime::Handle::try_current().is_ok() {
+        // Without a runtime a body's pace cannot be timed, and while a panic
+        // unwinds no timer may start, as a panic of its own would abort: then
+        // nothing is read.
+        let timed = !std::thread::panicking() && tokio::runtime::Handle::try_current().is_ok();
+        let rest = if readable && timed {
             rest(&mut body, limit)
         } else {
             Rest::Unread
@@ -626,6 +629,24 @@ mod tests {
         assert!(!unread.closes());
         assert!(unread.take().is_none());
         assert!(!clock.lingers());
+    }
+
+    /// A body dropped while its handler unwinds from a panic is not read
+    /// there: reading starts the body's timer, and a panic in that would
+    /// abort. The connection closes after the answer instead.
+    #[tokio::test]
+    async fn a_body_let_go_of_in_a_panic_is_not_read() {
+        let (clock, unread) = connection();
+        let (feed, body) = fed(Some(1000));
+        let body = kept(&unread, body, false);
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _body = body;
+            panic!("a handler panics");
+        }));
+        assert!(unwound.is_err());
+        assert!(!feed.polled.load(Ordering::SeqCst), "not read");
+        assert!(unread.closes());
+        assert!(clock.lingers());
     }
 
     #[tokio::test]
