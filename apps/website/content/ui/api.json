@@ -330,6 +330,18 @@
         "doc": "Replaces the icon."
       },
       {
+        "name": "dismissible",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a close button, named `label` for assistive technology, that hides the alert in the browser with no request. The alert takes the id `id`, which the button's command names. With no script the button is not drawn and the alert stays."
+      },
+      {
+        "name": "actions",
+        "generics": "",
+        "args": "actions: impl IntoNodes",
+        "doc": "Adds buttons or links under the description: what the reader can do about it."
+      },
+      {
         "name": "title",
         "generics": "",
         "args": "title: impl Into<Node>",
@@ -917,6 +929,91 @@
         "generics": "",
         "args": "size: Size",
         "doc": "Sets the size."
+      },
+      {
+        "name": "fallback",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the person icon when the picture does not load. It needs the parts module, so a page with one loads a small script; without it a picture that fails shows the browser's own broken-image mark, as before."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "AvatarGroup": {
+    "name": "AvatarGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/display.rs",
+    "summary": "Avatars side by side, each overlapping the one before, with a `+N` tile for the people left out when there are more than `max`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "A group named `label` (`Reviewers`), which assistive technology reads before the people."
+      }
+    ],
+    "methods": [
+      {
+        "name": "children",
+        "generics": "",
+        "args": "avatars: impl IntoNodes",
+        "doc": "Adds avatars. Each should be named, as `Avatar::placeholder` and `Avatar::image` require, so the group can be read."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: usize",
+        "doc": "Shows at most `max` avatars (1 or more; 5 by default) and `+N` for the rest."
+      },
+      {
+        "name": "total",
+        "generics": "",
+        "args": "total: usize",
+        "doc": "Says how many people there are in all, when the avatars given are only the first of a longer list: the tile then counts the rest from `total`."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size of the `+N` tile; give each avatar the same size."
       }
     ],
     "variants": [],
@@ -1160,6 +1257,18 @@
       }
     ],
     "methods": [
+      {
+        "name": "max_items",
+        "generics": "",
+        "args": "max: usize",
+        "doc": "Keeps a long trail short: with more than `max` items (3 or more), the first and the last `max - 2` show, and the ones between fold into an ellipsis that opens a list of them. It opens and closes natively, so it needs no script."
+      },
+      {
+        "name": "hidden_label",
+        "generics": "",
+        "args": "label: &'static str",
+        "doc": "Names the ellipsis for assistive technology (`Show hidden pages` by default)."
+      },
       {
         "name": "label",
         "generics": "",
@@ -2056,6 +2165,12 @@
         "doc": "Sets the title."
       },
       {
+        "name": "variant",
+        "generics": "",
+        "args": "variant: CardVariant",
+        "doc": "Sets how the card is drawn. The default needs nothing more; the others link the parts stylesheet."
+      },
+      {
         "name": "description",
         "generics": "",
         "args": "description: impl Into<Node>",
@@ -2411,6 +2526,12 @@
         "doc": "How merged bars combine."
       },
       {
+        "name": "drill",
+        "generics": "<S: Into<String>>",
+        "args": "links: impl IntoIterator<Item = S>",
+        "doc": "Makes each category or period a link, `links[i]` for the i-th: where its rows are listed, such as a `DataTable` filtered to that day. Each bar of a vertical bar chart is a link named by its series and its period, and the name of the period in the chart's table is one too, which a keyboard and a screen reader reach. When bars are merged or a line is thinned, a row stands for several values and has no link. A link must stay on this site; a `Report::drill_links` builds the links for a report's periods."
+      },
+      {
         "name": "toggles",
         "generics": "",
         "args": "",
@@ -2561,6 +2682,24 @@
         "doc": "Starts checked."
       },
       {
+        "name": "indeterminate",
+        "generics": "",
+        "args": "indeterminate: bool",
+        "doc": "Draws it as neither checked nor unchecked: some of what it stands for is chosen. A script makes it so (no attribute can), and a click makes it checked. Without a script it is drawn unchecked. It posts nothing until it is checked."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Adds a line under the label that says more, and ties it to the box so a screen reader reads it after the label. Give the box an id of its own first when several share a name."
+      },
+      {
         "name": "disabled",
         "generics": "",
         "args": "disabled: bool",
@@ -2650,6 +2789,18 @@
         "generics": "",
         "args": "icon: Icon",
         "doc": "An icon before the label, in the list and in the control."
+      },
+      {
+        "name": "lead",
+        "generics": "",
+        "args": "node: impl Into<Node>",
+        "doc": "Any small node before the label, in the list and in the control: a flag, a coloured dot, a logo. It is hidden from assistive technology, so what it shows must be in the label. The page links the parts stylesheet for it. A reply that a remote list sends is checked down to the elements a list is drawn with, so a node that is only shapes in a `svg` survives it and anything else does not."
+      },
+      {
+        "name": "flag",
+        "generics": "",
+        "args": "code: crate::flags::CountryCode",
+        "doc": "A country's flag before the label, in the list and in the control. The flag is hidden from assistive technology: the label should be the country's name."
       },
       {
         "name": "avatar",
@@ -3133,6 +3284,103 @@
       }
     ]
   },
+  "ColorPicker": {
+    "name": "ColorPicker",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/color_picker.rs",
+    "summary": "A colour field. The colour is the browser's own `<input type=\"color\">`, which posts `#rrggbb` and has the platform's picker, its keys and its screen reader support. With a script, a hex field and a row of swatches sit beside it and move in step with it; without one, the colour field alone is drawn, and it posts all the same.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A colour field posting as `name`, black until `value` says otherwise."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads a colour the way the field posts it: `#rrggbb`, `#rgb` or either without the `#`, in any case, as lowercase `#rrggbb`. Anything else, such as a colour name or an alpha value, is `None`. A server reads what a form sent with this."
+      }
+    ],
+    "methods": [
+      {
+        "name": "value",
+        "generics": "",
+        "args": "value: impl AsRef<str>",
+        "doc": "Sets the colour. Text that is not a colour (see `parse`) is ignored."
+      },
+      {
+        "name": "swatches",
+        "generics": "<S: AsRef<str>>",
+        "args": "colors: impl IntoIterator<Item = S>",
+        "doc": "Adds swatches to choose from, named by their hex code. Text that is not a colour is left out."
+      },
+      {
+        "name": "swatch",
+        "generics": "",
+        "args": "color: impl AsRef<str>, name: impl Into<String>",
+        "doc": "Adds one swatch with a name a reader hears (`Saffron`) in place of its hex code. Text that is not a colour is left out."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "hex: impl Into<String>, swatches: impl Into<String>",
+        "doc": "Names the hex field and the group of swatches for assistive technology (`Hex value` and `Swatches` by default)."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
   "Combobox": {
     "name": "Combobox",
     "kind": "struct",
@@ -3158,6 +3406,156 @@
         "generics": "",
         "args": "choice: impl Into<Choice>",
         "doc": "Sets the chosen value when it isn't among the options in the page: the one a search found earlier, for an edit form."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the root element's `id`. The popup and list ids follow from it."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice that posts `value` and shows `label`."
+      },
+      {
+        "name": "choice",
+        "generics": "",
+        "args": "choice: Choice",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "options",
+        "generics": "<C: Into<Choice>>",
+        "args": "options: impl IntoIterator<Item = C>",
+        "doc": "Adds choices: `Choice`s, `(value, label)` pairs or `OptionItem`s."
+      },
+      {
+        "name": "group",
+        "generics": "<C: Into<Choice>>",
+        "args": "label: impl Into<String>, choices: impl IntoIterator<Item = C>",
+        "doc": "Adds a labelled group of choices."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a divider."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<String>",
+        "doc": "Sets the hint shown while nothing is chosen."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it. A disabled control posts nothing."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the value and refuses changes, but still posts it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a choice."
+      },
+      {
+        "name": "required_if",
+        "generics": "",
+        "args": "required: bool",
+        "doc": "Requires a choice when `required` is true."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "aria_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the control for assistive technology, when no `Field` label does."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &SelectLabels",
+        "doc": "Sets the words, for another language."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side the popup opens on."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "Sets how the popup lines up along that side."
+      },
+      {
+        "name": "search",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Searches on the server. The runtime asks `url` with `?q=text` and shows the answer, an `ChoiceList`, as the options. Requests are debounced, a slower earlier answer is dropped, and a failed one shows a way to try again."
+      },
+      {
+        "name": "min_chars",
+        "generics": "",
+        "args": "n: u32",
+        "doc": "Waits for this many characters before searching (0 by default: the list opens with the server's first options)."
+      },
+      {
+        "name": "debounce",
+        "generics": "",
+        "args": "milliseconds: u32",
+        "doc": "Waits this many milliseconds after the last key before searching: 100 by default, 0 for no wait. Choosing an option never waits."
+      },
+      {
+        "name": "creatable",
+        "generics": "",
+        "args": "",
+        "doc": "Offers to use the typed text as a new value when no option matches it. The text, trimmed, is posted as the value."
+      },
+      {
+        "name": "create_url",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Offers to create the typed text on the server: the runtime posts `name=text` to `url` and the answer, an `ChoiceList` holding the new option, is chosen. The route must check that the caller may create, and what the text is, as any post: a browser can send to it whatever the row shows."
+      },
+      {
+        "name": "create_denied",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Shows the create row switched off, with the reason, for someone who may not create. It is a hint to the person and stops nobody: the route behind `create_url` must check permission itself."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a clear button, and clears on `Esc` when the list is closed."
       }
     ],
     "variants": [],
@@ -4899,6 +5297,12 @@
         "doc": "A step read into the struct that is its form, with its rules run."
       },
       {
+        "name": "read_for",
+        "generics": "<T>",
+        "args": "step: &str, language: &crate::form::Language",
+        "doc": "`read` in the reader's language: the app's validation messages and the reader's date, time and slider words."
+      },
+      {
         "name": "bytes",
         "generics": "",
         "args": "",
@@ -5806,6 +6210,12 @@
         "doc": "Hides the flag from assistive technology, for when the country's name is written beside it."
       },
       {
+        "name": "sprite",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the flag as a pointer to a definition made once on the page by a `FlagSprite`, not as its own artwork. A heavy flag is tens of kilobytes (Serbia's is 179 KB), and a table of a hundred rows would repeat it a hundred times; the pointer is about a hundred bytes. The page must hold a `FlagSprite` with this code in it, or the flag is drawn empty. A flag of a code the toolkit does not know is drawn in full, as always."
+      },
+      {
         "name": "scope",
         "generics": "",
         "args": "scope: &'static str",
@@ -6099,6 +6509,18 @@
         "doc": "Names the days and times of the form's date and time pickers after a language and region, and says what today is. Without a day, today is the day in UTC."
       },
       {
+        "name": "dates_in",
+        "generics": "",
+        "args": "locale: DateLocale, zone: &navree_time::CurrentZone",
+        "doc": "`dates` with today counted in the reader's zone (navree-time's `CurrentZone`), on the app's clock."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: &ReaderWords",
+        "doc": "Draws the form in the reader's language: the date pickers' names and words, the sliders' words and the submit button's text (set `submit` after it for a button of your own). `ReaderWords::of` reads them for the request."
+      },
+      {
         "name": "submit",
         "generics": "",
         "args": "label: impl Into<Node>",
@@ -6145,6 +6567,12 @@
         "generics": "",
         "args": "field: &'static str, url: impl Into<Href>",
         "doc": "Searches a combobox or multi-select field on the server: the runtime asks `url` with `?q=text` and shows the answer, a `ChoiceList`. Give the field's current choices with `options`, so an edit form can show their labels."
+      },
+      {
+        "name": "upload",
+        "generics": "",
+        "args": "field: &'static str, upload: crate::Upload",
+        "doc": "How the file field `field` is drawn: an `Upload` with its limits, its words and, with `send_to`, the route the module sends a chosen file to at once. The form gives it the field's name, label, error and key."
       },
       {
         "name": "one_column",
@@ -6468,6 +6896,18 @@
         "generics": "",
         "args": "text: impl Into<Node>",
         "doc": "`<h4>`."
+      },
+      {
+        "name": "h5",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "`<h5>`. It links the parts stylesheet, which sizes it."
+      },
+      {
+        "name": "h6",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "`<h6>`. It links the parts stylesheet, which sizes it."
       }
     ],
     "methods": [],
@@ -6652,6 +7092,18 @@
       }
     ],
     "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the height and type size: the same four sizes as a button. The default needs nothing more; the others link the parts stylesheet."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Adds a button, named `label` for assistive technology, that empties the field and puts the caret back in it. It shows while the field holds something, and only where a script runs. The field is drawn inside an `InputGroup`'s frame."
+      },
       {
         "name": "settable",
         "generics": "",
@@ -8484,6 +8936,156 @@
         "generics": "",
         "args": "",
         "doc": "Adds \"Select all\" and \"Deselect all\" for the options the text matches. For lists in the page: a searched list is never all there."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the root element's `id`. The popup and list ids follow from it."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice that posts `value` and shows `label`."
+      },
+      {
+        "name": "choice",
+        "generics": "",
+        "args": "choice: Choice",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "options",
+        "generics": "<C: Into<Choice>>",
+        "args": "options: impl IntoIterator<Item = C>",
+        "doc": "Adds choices: `Choice`s, `(value, label)` pairs or `OptionItem`s."
+      },
+      {
+        "name": "group",
+        "generics": "<C: Into<Choice>>",
+        "args": "label: impl Into<String>, choices: impl IntoIterator<Item = C>",
+        "doc": "Adds a labelled group of choices."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a divider."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<String>",
+        "doc": "Sets the hint shown while nothing is chosen."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it. A disabled control posts nothing."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the value and refuses changes, but still posts it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a choice."
+      },
+      {
+        "name": "required_if",
+        "generics": "",
+        "args": "required: bool",
+        "doc": "Requires a choice when `required` is true."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "aria_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the control for assistive technology, when no `Field` label does."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &SelectLabels",
+        "doc": "Sets the words, for another language."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side the popup opens on."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "Sets how the popup lines up along that side."
+      },
+      {
+        "name": "search",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Searches on the server. The runtime asks `url` with `?q=text` and shows the answer, an `ChoiceList`, as the options. Requests are debounced, a slower earlier answer is dropped, and a failed one shows a way to try again."
+      },
+      {
+        "name": "min_chars",
+        "generics": "",
+        "args": "n: u32",
+        "doc": "Waits for this many characters before searching (0 by default: the list opens with the server's first options)."
+      },
+      {
+        "name": "debounce",
+        "generics": "",
+        "args": "milliseconds: u32",
+        "doc": "Waits this many milliseconds after the last key before searching: 100 by default, 0 for no wait. Choosing an option never waits."
+      },
+      {
+        "name": "creatable",
+        "generics": "",
+        "args": "",
+        "doc": "Offers to use the typed text as a new value when no option matches it. The text, trimmed, is posted as the value."
+      },
+      {
+        "name": "create_url",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Offers to create the typed text on the server: the runtime posts `name=text` to `url` and the answer, an `ChoiceList` holding the new option, is chosen. The route must check that the caller may create, and what the text is, as any post: a browser can send to it whatever the row shows."
+      },
+      {
+        "name": "create_denied",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Shows the create row switched off, with the reason, for someone who may not create. It is a hint to the person and stops nobody: the route behind `create_url` must check permission itself."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a clear button, and clears on `Esc` when the list is closed."
       }
     ],
     "variants": [],
@@ -9298,7 +9900,13 @@
         "name": "configured",
         "generics": "",
         "args": "config: &Config",
-        "doc": "These options with the `ui` section of `config` applied. A value that is not a usable address is ignored."
+        "doc": "These options with the `ui` section of `config` applied. A `ui` section that is not valid (an address that is not usable, a value of the wrong type) is ignored; the boot uses `try_configured`, which reports it."
+      },
+      {
+        "name": "try_configured",
+        "generics": "",
+        "args": "config: &Config",
+        "doc": "These options with the `ui` section of `config` applied. A `ui` section that is not valid is an error that names the key."
       }
     ],
     "variants": [],
@@ -9795,7 +10403,20 @@
         "doc": "Going, with no known end."
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the bar by what it means. The colour never carries the meaning alone: the label says it."
+      },
+      {
+        "name": "show_value",
+        "generics": "",
+        "args": "",
+        "doc": "Writes the percentage beside the bar. A screen reader gets it from the bar itself, so the text is hidden from it. An indeterminate bar has none to write."
+      }
+    ],
     "variants": [],
     "shared": [
       {
@@ -9835,6 +10456,189 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Question": {
+    "name": "Question",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/questionnaire.rs",
+    "summary": "One question of a `Questionnaire`.",
+    "constructors": [
+      {
+        "name": "single",
+        "generics": "",
+        "args": "name: impl Into<String>, text: impl Into<Node>",
+        "doc": "A question with one answer out of the choices added with `choice`, posted as `name`."
+      },
+      {
+        "name": "multiple",
+        "generics": "",
+        "args": "name: impl Into<String>, text: impl Into<Node>",
+        "doc": "A question with any number of answers out of the choices, posted as `name` once for each."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "name: impl Into<String>, text: impl Into<Node>",
+        "doc": "A question answered in a line of text, posted as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "choice",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice: `value` is posted, `label` is shown."
+      },
+      {
+        "name": "help",
+        "generics": "",
+        "args": "help: impl Into<Node>",
+        "doc": "Adds a line of help under the question."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Needs an answer: the browser checks it before Next, and Skip is not offered."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Questionnaire": {
+    "name": "Questionnaire",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/questionnaire.rs",
+    "summary": "A form that asks one question at a time. It is server-driven and needs no script: each press of a button posts the page to `action` with the answers so far kept in hidden fields, the posted `_step` (the question counted from 0) and `_move` (see `QuestionnaireMove`), and the server draws the question to show next. The checks are the app's, as for any form; the browser's own check of a required answer runs before Next.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "action: impl Into<String>",
+        "doc": "A questionnaire posting to `action`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "question",
+        "generics": "",
+        "args": "question: Question",
+        "doc": "Adds a question."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: usize",
+        "doc": "Shows question `step`, counted from 0. A number past the last shows the last."
+      },
+      {
+        "name": "answers",
+        "generics": "<N: Into<String>, V: Into<String>>",
+        "args": "answers: impl IntoIterator<Item =(N, V)>",
+        "doc": "The answers so far, as `(name, value)`: the ones to the question shown fill it in, and the rest are kept in hidden fields."
+      },
+      {
+        "name": "error",
+        "generics": "",
+        "args": "error: impl Into<String>",
+        "doc": "Says what is wrong with the answer to the question shown."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: QuestionnaireLabels",
+        "doc": "Sets the words it writes."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "QuestionnaireLabels": {
+    "name": "QuestionnaireLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/questionnaire.rs",
+    "summary": "The words a questionnaire writes, in English by default. `{n}` and `{total}` in the progress text are the question's number and how many there are.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "QuestionnaireMove": {
+    "name": "QuestionnaireMove",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/questionnaire.rs",
+    "summary": "Which button of a `Questionnaire` was pressed: the form posts it as `_move`.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Reads the posted `_move`; anything but the three words is `None`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "target",
+        "generics": "",
+        "args": "step: usize, total: usize",
+        "doc": "The question to show after this move from question `step` of `total`: counted from 0, never before the first, and `total` when the last was answered or skipped (the questionnaire is finished)."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Back",
+        "doc": "Go back one question, keeping what was answered.",
+        "default": false
+      },
+      {
+        "name": "Skip",
+        "doc": "Go on without answering.",
+        "default": false
+      },
+      {
+        "name": "Next",
+        "doc": "Save the answer and go on.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "RadioGroup": {
     "name": "RadioGroup",
@@ -10385,6 +11189,36 @@
         "generics": "<M, E>",
         "args": "query: Builder<M>, time: impl Into<TimeColumn>, group: &'static str, groups: &[&str], metric: Metric, exec: &E",
         "doc": "`metric` per value of `group` in each period: one series per name in `groups`, in that order, and one more for every other value, NULL included (Other). At most seven names are counted on their own, as a chart draws eight series: the rest are counted in Other. On an SQL database this is one grouped query."
+      },
+      {
+        "name": "measure_rows",
+        "generics": "<M, E>",
+        "args": "query: Builder<M>, time: impl Into<TimeColumn>, key: &'static str, keys: &[Value], metric: Metric, exec: &E",
+        "doc": "`metric` in each period for each of `keys`, a value of the column `key`: one series per key, in that order, from one grouped query. This is how a page of a table gets the series behind a `Sparkline::cell` in each row without a query per row: give the ids on the page, as the `Value` the column holds (`Value::I64(id)` for a bigint, `Value::String(..)` for a text or uuid column). Rows of any other key count nowhere. At most 500 keys are taken; more is an error, as a page is never longer."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "period_header: impl Into<String>, series: &[(&str, &[Option<f64>])]",
+        "doc": "The report's numbers as a table. `period_header` heads the first column; each of `series` is a name and its values, one for each period, in the order the report's `measure` gives them. A series shorter than the report is filled with gaps, and a longer one is cut."
+      },
+      {
+        "name": "drill_links",
+        "generics": "",
+        "args": "path: &str, column: &str",
+        "doc": "A link for each period to the page that lists the rows behind it: `path` with a range filter on `column` for the days the period covers, in the grammar a `DataTable` reads (`filter[created_at][gte]=2026-11-02&filter[created_at][lte]=2026-11-08`). An hour or a minute is listed with its whole day. Give them to `Chart::drill`. A column that is not a plain name (letters, digits and `_`) gives no links."
+      },
+      {
+        "name": "previous",
+        "generics": "<Tz: ReportZone>",
+        "args": "zone: &Tz",
+        "doc": "The window just before this one, as many days long, in the same zone and grain: the period to compare with. A window of seven days from the 8th has the seven days from the 1st. Pass the zone this report was cut in."
+      },
+      {
+        "name": "previous_series",
+        "generics": "",
+        "args": "name: impl Into<String>, previous_values: &[Option<f64>]",
+        "doc": "The previous window's figures as a series of this report's periods, drawn in the quiet ink: the period before, beside the one on show. `previous_values` are what `measure` gave for `previous`; they are laid on this report's periods by position (the first period against the first), a shorter run leaving gaps and a longer one cut."
       }
     ],
     "variants": [],
@@ -10841,6 +11675,114 @@
         "generics": "",
         "args": "",
         "doc": "Adds a clear button, and lets `Delete` and `Backspace` clear the choice."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the root element's `id`. The popup and list ids follow from it."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds a choice that posts `value` and shows `label`."
+      },
+      {
+        "name": "choice",
+        "generics": "",
+        "args": "choice: Choice",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "options",
+        "generics": "<C: Into<Choice>>",
+        "args": "options: impl IntoIterator<Item = C>",
+        "doc": "Adds choices: `Choice`s, `(value, label)` pairs or `OptionItem`s."
+      },
+      {
+        "name": "group",
+        "generics": "<C: Into<Choice>>",
+        "args": "label: impl Into<String>, choices: impl IntoIterator<Item = C>",
+        "doc": "Adds a labelled group of choices."
+      },
+      {
+        "name": "separator",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a divider."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<String>",
+        "doc": "Sets the hint shown while nothing is chosen."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Disables it. A disabled control posts nothing."
+      },
+      {
+        "name": "readonly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the value and refuses changes, but still posts it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a choice."
+      },
+      {
+        "name": "required_if",
+        "generics": "",
+        "args": "required: bool",
+        "doc": "Requires a choice when `required` is true."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "aria_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the control for assistive technology, when no `Field` label does."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &SelectLabels",
+        "doc": "Sets the words, for another language."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "Sets the side the popup opens on."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "Sets how the popup lines up along that side."
       }
     ],
     "variants": [],
@@ -10935,6 +11877,12 @@
         "generics": "",
         "args": "tone: Tone",
         "doc": "Colours the series by what it means: `Tone::Success` for a good outcome, `Tone::Danger` for failures. The legend adds the tone's icon."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the series in the quiet ink the chart uses for what is not the subject: the period before, beside the one on show (`Report::previous_series`)."
       },
       {
         "name": "color",
@@ -12020,6 +12968,12 @@
     ],
     "methods": [
       {
+        "name": "cell",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it for a table cell: the picture alone in a small box, named by its summary, with no figure, no heading and no table behind it, so fifty rows hold fifty small pictures and no nested tables. A reader hears the summary (first, last, highest and lowest value); the full values are the page's own table. It keeps at most 16 points and is 24 pixels high unless `height` says otherwise. It links the parts stylesheet and no script."
+      },
+      {
         "name": "names",
         "generics": "<S: Into<String>>",
         "args": "names: impl IntoIterator<Item = S>",
@@ -13086,6 +14040,12 @@
       }
     ],
     "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Adds a line under the label that says more, tied to the switch so a screen reader reads it after the label."
+      },
       {
         "name": "checked",
         "generics": "",
@@ -15489,6 +16449,168 @@
       }
     ]
   },
+  "Trace": {
+    "name": "Trace",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/trace.rs",
+    "summary": "The steps of something that happened, or is happening, down a line: what an agent did, how an import went, where a deploy is. Each step has a mark for its state, which is spoken too, a title, a line of description and detail that opens by itself.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "A trace named `label`, which assistive technology reads before the steps."
+      }
+    ],
+    "methods": [
+      {
+        "name": "step",
+        "generics": "",
+        "args": "step: TraceStep",
+        "doc": "Adds a step."
+      },
+      {
+        "name": "steps",
+        "generics": "",
+        "args": "steps: impl IntoIterator<Item = TraceStep>",
+        "doc": "Adds steps."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: TraceLabels",
+        "doc": "Sets the words it says."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "TraceLabels": {
+    "name": "TraceLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/trace.rs",
+    "summary": "The words a trace says to assistive technology, in English by default: the state of a step is spoken before its title, because the mark that shows it is only a picture.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "TraceState": {
+    "name": "TraceState",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/trace.rs",
+    "summary": "Where a step of a `Trace` stands.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Done",
+        "doc": "It finished: a check.",
+        "default": true
+      },
+      {
+        "name": "Running",
+        "doc": "It is going on now: a turning mark, and the step is the current one.",
+        "default": false
+      },
+      {
+        "name": "Pending",
+        "doc": "It has not started: a dashed ring.",
+        "default": false
+      },
+      {
+        "name": "Failed",
+        "doc": "It stopped with an error: a cross.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "TraceStep": {
+    "name": "TraceStep",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/trace.rs",
+    "summary": "One step of a `Trace`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A step called `title`, done unless `state` says otherwise."
+      }
+    ],
+    "methods": [
+      {
+        "name": "state",
+        "generics": "",
+        "args": "state: TraceState",
+        "doc": "Sets where the step stands."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<Node>",
+        "doc": "Adds a line under the title: what it did, in a few words."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl IntoNodes",
+        "doc": "Adds detail that opens and closes under the step, with no script: the output of a command, the reasoning, a list of what was found."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "summary: impl Into<Node>",
+        "doc": "Names the control that opens the detail (`Details` by default)."
+      },
+      {
+        "name": "open",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the detail open."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Tree": {
     "name": "Tree",
     "kind": "struct",
@@ -15850,6 +16972,18 @@
         "doc": "Sends large files in chunks through `url`, an address on this site that is served by `Uploads::begin` and its companions. Anything that is not an address on this site is ignored."
       },
       {
+        "name": "send_to",
+        "generics": "",
+        "args": "url: impl AsRef<str>",
+        "doc": "Inside a form of yours: the module sends each chosen file at once to `url`, an address on this site whose route stores it and answers with its key (`Received::into_keyed_response`), and puts the key in a hidden field named like the upload, which the form posts in place of the file. With no script the file goes with the form, which must be a multipart form. Anything that is not an address on this site is ignored."
+      },
+      {
+        "name": "key",
+        "generics": "",
+        "args": "key: impl Into<String>",
+        "doc": "The key of a file already sent (`file_key`), which the form posts again: for a form drawn again after it was refused, so the file is not chosen twice. The field is then not required in the browser."
+      },
+      {
         "name": "chunk_from",
         "generics": "",
         "args": "bytes: u64",
@@ -15890,6 +17024,12 @@
         "generics": "",
         "args": "",
         "doc": "A smaller drop area, for a form with little room."
+      },
+      {
+        "name": "previews",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a small picture of each chosen file that is a picture (PNG, JPEG, GIF, WebP or AVIF, up to 2 MB), before it is sent. The browser reads the file into a `data:` address, which the page's content security policy allows where it allows no `blob:`; a file that is larger, or another kind, is listed with its name only. A file the server already has gets its picture from `UploadedFile::thumbnail`."
       },
       {
         "name": "file",
@@ -16022,6 +17162,12 @@
         "doc": "Links the name to the file."
       },
       {
+        "name": "thumbnail",
+        "generics": "",
+        "args": "src: impl AsRef<str>",
+        "doc": "Shows a small picture of the file before its name: an address on this site that serves a picture (the page's content security policy allows no other). Anything that is not an address on this site is ignored. The picture has no description: the name beside it says what the file is."
+      },
+      {
         "name": "remove",
         "generics": "",
         "args": "href: impl Into<Href>",
@@ -16070,6 +17216,12 @@
         "doc": "Sets how long an unfinished chunked upload is kept (a day by default)."
       },
       {
+        "name": "chunk_sessions",
+        "generics": "",
+        "args": "open: usize",
+        "doc": "Sets how many chunked uploads one owner may have unfinished at once: at least one, 16 by default. `begin` refuses another (`too_many`) until one is finished, aborted or has expired, so nobody fills the disk with parts of files that never end."
+      },
+      {
         "name": "limits",
         "generics": "",
         "args": "",
@@ -16109,7 +17261,7 @@
         "name": "begin",
         "generics": "",
         "args": "owner: &str, start: ChunkStart",
-        "doc": "Starts a chunked upload for `owner`, who is whoever the app says is sending: a user's id. Only that owner can send its parts and finish it. The file's size is held to the limit here, before a byte is sent."
+        "doc": "Starts a chunked upload for `owner`, who is whoever the app says is sending: a user's id. Only that owner can send its parts and finish it. The file's size is held to the limit here, before a byte is sent, and the owner to its `chunk_sessions`: the begins of one owner take turns, so a burst of them cannot open more. The owner is one person: for a guest, pass something of that guest's own (its session's id), never one name for every guest, who would then share those uploads."
       },
       {
         "name": "put_chunk",
@@ -16127,7 +17279,7 @@
         "name": "abort",
         "generics": "",
         "args": "owner: &str, id: &str",
-        "doc": "Stops the upload `id` and removes its parts."
+        "doc": "Stops the upload `id` and removes its parts. It waits for a `finish` of the same upload that is under way."
       },
       {
         "name": "sweep",
@@ -16230,6 +17382,12 @@
         "generics": "",
         "args": "labels: StepperLabels",
         "doc": "Sets the words of the stepper."
+      },
+      {
+        "name": "language",
+        "generics": "",
+        "args": "language: Language",
+        "doc": "Sets the language the steps are checked in: the app's validation messages and the reader's date, time and slider words (`Language::of(ctx)` reads both for a request). Without it the steps say their errors in English. The wizard is cheap to build, so an app builds it for each request."
       },
       {
         "name": "url",

@@ -31,6 +31,8 @@
         "radio-group",
         "phone-input",
         "input-otp",
+        "color-picker",
+        "questionnaire",
         "upload",
         "forms"
       ]
@@ -52,6 +54,8 @@
         "card",
         "badge",
         "avatar",
+        "avatar-group",
+        "trace",
         "item",
         "typography",
         "kbd",
@@ -345,7 +349,8 @@
       "examples": [
         "input/default",
         "input/kinds",
-        "input/states"
+        "input/states",
+        "input/sizes"
       ]
     },
     {
@@ -471,7 +476,8 @@
       "anatomy": "checkbox/default",
       "examples": [
         "checkbox/default",
-        "checkbox/states"
+        "checkbox/states",
+        "checkbox/described"
       ]
     },
     {
@@ -600,6 +606,76 @@
       ]
     },
     {
+      "id": "color-picker",
+      "name": "ColorPicker",
+      "url": "/docs/components/color-picker/",
+      "summary": "A colour field. The colour is the browser's own `<input type=\"color\">`, which posts `#rrggbb` and has the platform's picker, its keys and its screen reader support. With a script, a hex field and a row of swatches sit beside it and move in step with it; without one, the colour field alone is drawn, and it posts all the same.",
+      "group": "inputs",
+      "types": [
+        "ColorPicker"
+      ],
+      "thumb": "color-picker/default",
+      "anatomy": null,
+      "examples": [
+        "color-picker/default",
+        "color-picker/swatches"
+      ]
+    },
+    {
+      "id": "questionnaire",
+      "name": "Questionnaire",
+      "url": "/docs/components/questionnaire/",
+      "summary": "A form that asks one question at a time. It is server-driven and needs no script: each press of a button posts the page to `action` with the answers so far kept in hidden fields, the posted `_step` (the question counted from 0) and `_move` (see `QuestionnaireMove`), and the server draws the question to show next. The checks are the app's, as for any form; the browser's own check of a required answer runs before Next.",
+      "group": "inputs",
+      "types": [
+        "Questionnaire",
+        "Question",
+        "QuestionnaireMove",
+        "QuestionnaireLabels"
+      ],
+      "thumb": "questionnaire/default",
+      "anatomy": null,
+      "examples": [
+        "questionnaire/default",
+        "questionnaire/text"
+      ]
+    },
+    {
+      "id": "avatar-group",
+      "name": "AvatarGroup",
+      "url": "/docs/components/avatar-group/",
+      "summary": "Avatars side by side, each overlapping the one before, with a `+N` tile for the people left out when there are more than `max`.",
+      "group": "display",
+      "types": [
+        "AvatarGroup"
+      ],
+      "thumb": "avatar-group/default",
+      "anatomy": null,
+      "examples": [
+        "avatar-group/default",
+        "avatar-group/more"
+      ]
+    },
+    {
+      "id": "trace",
+      "name": "Trace",
+      "url": "/docs/components/trace/",
+      "summary": "The steps of something that happened, or is happening, down a line: what an agent did, how an import went, where a deploy is. Each step has a mark for its state, which is spoken too, a title, a line of description and detail that opens by itself.",
+      "group": "display",
+      "types": [
+        "Trace",
+        "TraceStep",
+        "TraceState",
+        "TraceLabels"
+      ],
+      "thumb": "trace/default",
+      "anatomy": null,
+      "examples": [
+        "trace/default",
+        "trace/detail"
+      ]
+    },
+    {
       "id": "calendar",
       "name": "Calendar",
       "url": "/docs/components/calendar/",
@@ -706,6 +782,7 @@
       "thumb": "card/thumb",
       "anatomy": "card/default",
       "examples": [
+        "card/variants",
         "card/thumb",
         "card/default",
         "card/stats",
@@ -959,6 +1036,7 @@
       "thumb": "alert/default",
       "anatomy": "alert/default",
       "examples": [
+        "alert/actions",
         "alert/default",
         "alert/tones",
         "alert/title-only"
@@ -1110,6 +1188,7 @@
       "thumb": "progress/thumb",
       "anatomy": "progress/default",
       "examples": [
+        "progress/tone",
         "progress/thumb",
         "progress/default",
         "progress/states"
@@ -1292,7 +1371,8 @@
         "layout/justify",
         "layout/grid",
         "layout/span",
-        "layout/container"
+        "layout/container",
+        "layout/span-phone"
       ]
     },
     {
@@ -1456,6 +1536,7 @@
       "thumb": "app-shell/default",
       "anatomy": "app-shell/default",
       "examples": [
+        "app-shell/phone",
         "app-shell/default",
         "app-shell/full"
       ]
@@ -1517,6 +1598,7 @@
       "thumb": "breadcrumb/default",
       "anatomy": "breadcrumb/default",
       "examples": [
+        "breadcrumb/folded",
         "breadcrumb/default"
       ]
     },
@@ -3637,7 +3719,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -3808,7 +3890,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -3979,7 +4061,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -4150,7 +4232,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [
         "Two kinds of image",
@@ -4176,7 +4258,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -4400,7 +4482,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -4571,7 +4653,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -4761,7 +4843,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [
         "Disabled",
@@ -4787,7 +4869,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "upload-72e99f2b1e00.js"
+        "upload-7be3fb9ac3f5.js"
       ],
       "captions": [],
       "slots": [
@@ -6123,6 +6205,914 @@
       ]
     },
     {
+      "id": "color-picker/default",
+      "component": "color-picker",
+      "slug": "default",
+      "title": "A colour field",
+      "kind": "single",
+      "code": "Field::new(\"accent-colour\", \"Accent colour\")\n    .control(ColorPicker::new(\"accent\").value(\"#d97706\"))",
+      "src": "/ui-preview/color-picker/default.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "parts-0a62ee012bee.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "color-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "color-native",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "color-hex",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "color-picker/swatches",
+      "component": "color-picker",
+      "slug": "swatches",
+      "title": "With swatches",
+      "kind": "single",
+      "code": "Field::new(\"brand-colour\", \"Brand colour\")\n    .help(\"Choose one, or type a hex code.\")\n    .control(\n        ColorPicker::new(\"brand\")\n            .value(\"#ff9933\")\n            .swatch(\"#ff9933\", \"Saffron\")\n            .swatch(\"#138808\", \"Green\")\n            .swatch(\"#000080\", \"Navy\")\n            .swatch(\"#800000\", \"Maroon\")\n            .swatch(\"#e1ad01\", \"Turmeric\")\n            .swatch(\"#5b3a29\", \"Walnut\"),\n    )",
+      "src": "/ui-preview/color-picker/swatches.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "parts-0a62ee012bee.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "color-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "color-native",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "color-hex",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "color-swatches",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "color-swatch",
+                      "tag": "button",
+                      "count": 6,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "avatar-group/default",
+      "component": "avatar-group",
+      "slug": "default",
+      "title": "Reviewers",
+      "kind": "single",
+      "code": "AvatarGroup::new(\"Reviewers\").children((\n    Avatar::placeholder(\"Gurpreet Kaur\"),\n    Avatar::placeholder(\"Harjot Singh\"),\n    Avatar::placeholder(\"Simran Arora\"),\n))",
+      "src": "/ui-preview/avatar-group/default.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "avatar-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "avatar",
+              "tag": "span",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "avatar-group/more",
+      "component": "avatar-group",
+      "slug": "more",
+      "title": "More than fit",
+      "kind": "single",
+      "code": "AvatarGroup::new(\"Members of the Ludhiana branch\")\n    .max(3)\n    .total(48)\n    .children((\n        Avatar::placeholder(\"Jaspreet Dhillon\"),\n        Avatar::placeholder(\"Navdeep Grewal\"),\n        Avatar::placeholder(\"Rajveer Brar\"),\n        Avatar::placeholder(\"Harleen Kaur\"),\n    ))",
+      "src": "/ui-preview/avatar-group/more.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "avatar-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "avatar",
+              "tag": "span",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trace/default",
+      "component": "trace",
+      "slug": "default",
+      "title": "The steps of a run",
+      "kind": "single",
+      "code": "Trace::new(\"Reconciling the March ledger\")\n    .step(TraceStep::new(\"Read 4,812 entries\").description(\"From the Pune branch\"))\n    .step(\n        TraceStep::new(\"Matched with bank lines\")\n            .description(\"2,904 of 4,812 so far\")\n            .state(TraceState::Running),\n    )\n    .step(TraceStep::new(\"Write the report\").state(TraceState::Pending))",
+      "src": "/ui-preview/trace/default.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "trace",
+          "tag": "ol",
+          "count": 1,
+          "children": [
+            {
+              "slot": "trace-step",
+              "tag": "li",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "trace-marker",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "trace-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "trace-title",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "trace-state",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "trace-description",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trace/detail",
+      "component": "trace",
+      "slug": "detail",
+      "title": "With detail that opens",
+      "kind": "single",
+      "code": "Trace::new(\"Importing the customer list\")\n    .step(\n        TraceStep::new(\"Checked the columns\")\n            .description(\"All six were found\")\n            .detail(Text::code(\"name, phone, city, gstin, credit_limit, joined_on\")),\n    )\n    .step(\n        TraceStep::new(\"Read the rows\")\n            .state(TraceState::Failed)\n            .description(\"Row 212 was not read\")\n            .detail(Text::new(\n                \"The phone number on row 212 has nine digits. Fix it and send the file again.\",\n            ))\n            .open(),\n    )\n    .step(TraceStep::new(\"Saved the customers\").state(TraceState::Pending))",
+      "src": "/ui-preview/trace/detail.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "trace",
+          "tag": "ol",
+          "count": 1,
+          "children": [
+            {
+              "slot": "trace-step",
+              "tag": "li",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "trace-marker",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "trace-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "trace-title",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "trace-state",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "trace-description",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "trace-detail",
+                      "tag": "details",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "trace-detail-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "code",
+                              "tag": "code",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "questionnaire/default",
+      "component": "questionnaire",
+      "slug": "default",
+      "title": "One question at a time",
+      "kind": "single",
+      "code": "questionnaire().step(1).answers([(\"team\", \"small\")])",
+      "src": "/ui-preview/questionnaire/default.html",
+      "height": 360,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "questionnaire",
+          "tag": "form",
+          "count": 1,
+          "children": [
+            {
+              "slot": "questionnaire-progress",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "progress",
+                  "tag": "progress",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "questionnaire-count",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "questionnaire-question",
+              "tag": "fieldset",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "questionnaire-text",
+                  "tag": "legend",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "questionnaire-help",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "questionnaire-answers",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "questionnaire-choice",
+                      "tag": "label",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "checkbox",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "questionnaire-actions",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "questionnaire/text",
+      "component": "questionnaire",
+      "slug": "text",
+      "title": "A question in words",
+      "kind": "single",
+      "code": "questionnaire().step(2).answers([(\"team\", \"small\"), (\"tools\", \"tally\")])",
+      "src": "/ui-preview/questionnaire/text.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "questionnaire",
+          "tag": "form",
+          "count": 1,
+          "children": [
+            {
+              "slot": "questionnaire-progress",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "progress",
+                  "tag": "progress",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "questionnaire-count",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "questionnaire-question",
+              "tag": "fieldset",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "questionnaire-text",
+                  "tag": "legend",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "questionnaire-answers",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "questionnaire-actions",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alert/actions",
+      "component": "alert",
+      "slug": "actions",
+      "title": "Actions and a close button",
+      "kind": "single",
+      "code": "Alert::new(AlertTone::Warning)\n    .title(\"Your trial ends in 3 days\")\n    .body(\"Add a payment method to keep your workspace.\")\n    .actions((\n        Button::primary(\"Add payment\").href(\"/billing\"),\n        Button::ghost(\"Remind me later\"),\n    ))\n    .dismissible(\"trial-notice\", \"Dismiss this notice\")",
+      "src": "/ui-preview/alert/actions.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "alert",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "icon",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "alert-title",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "alert-description",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "alert-actions",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "a",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "alert-close",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "progress/tone",
+      "component": "progress",
+      "slug": "tone",
+      "title": "A tone and a figure",
+      "kind": "single",
+      "code": "Stack::gap(3).children((\n    Progress::new(72, 100, \"Storage used\")\n        .tone(Tone::Warning)\n        .show_value(),\n    Progress::new(100, 100, \"Import finished\")\n        .tone(Tone::Success)\n        .show_value(),\n    Progress::new(18, 100, \"Deliveries failed\")\n        .tone(Tone::Danger)\n        .show_value(),\n))",
+      "src": "/ui-preview/progress/tone.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "progress-row",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "progress",
+                  "tag": "progress",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "progress-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "card/variants",
+      "component": "card",
+      "slug": "variants",
+      "title": "Variants",
+      "kind": "single",
+      "code": "Stack::gap(3).children((\n    Card::titled(\"Default\").body(\"A line around a surface.\"),\n    Card::titled(\"Muted\")\n        .variant(CardVariant::Muted)\n        .body(\"A filled surface with no line.\"),\n    Card::titled(\"Ghost\")\n        .variant(CardVariant::Ghost)\n        .body(\"Only the spacing.\"),\n    Card::titled(\"Add a branch\")\n        .variant(CardVariant::Dashed)\n        .body(\"A place to add something.\"),\n))",
+      "src": "/ui-preview/card/variants.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "card-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "card-title",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "card-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "breadcrumb/folded",
+      "component": "breadcrumb",
+      "slug": "folded",
+      "title": "A long trail folded",
+      "kind": "single",
+      "code": "Breadcrumb::new()\n    .max_items(4)\n    .link(\"Home\", \"/\")\n    .link(\"Customers\", \"/customers\")\n    .link(\"Punjab\", \"/customers/punjab\")\n    .link(\"Ludhiana\", \"/customers/punjab/ludhiana\")\n    .link(\"Dhillon Traders\", \"/customers/punjab/ludhiana/dhillon\")\n    .current(\"Invoices\")",
+      "src": "/ui-preview/breadcrumb/folded.html",
+      "height": 110,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "breadcrumb",
+          "tag": "nav",
+          "count": 1,
+          "children": [
+            {
+              "slot": "breadcrumb-ellipsis",
+              "tag": "li",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "breadcrumb-hidden",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checkbox/described",
+      "component": "checkbox",
+      "slug": "described",
+      "title": "With a description",
+      "kind": "single",
+      "code": "Stack::gap(4).children((\n    Checkbox::new(\"news\")\n        .label(\"Product news\")\n        .description(\"A message a month at most.\")\n        .checked(true),\n    Checkbox::new(\"everything\")\n        .label(\"All notifications\")\n        .indeterminate(true),\n    Switch::new(\"alerts\")\n        .label(\"Payment alerts\")\n        .description(\"An email when a payment fails.\"),\n))",
+      "src": "/ui-preview/checkbox/described.html",
+      "height": 210,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "parts-0a62ee012bee.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "choice",
+              "tag": "label",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "checkbox",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "choice-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "choice-description",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "input/sizes",
+      "component": "input",
+      "slug": "sizes",
+      "title": "Sizes and a clear button",
+      "kind": "single",
+      "code": "Stack::gap(3).children((\n    Input::text(\"small\").size(Size::Sm).placeholder(\"Small\"),\n    Input::text(\"default\").placeholder(\"Default\"),\n    Input::search(\"q\")\n        .clearable(\"Clear the search\")\n        .value(\"kurta\")\n        .placeholder(\"Search the catalogue\"),\n))",
+      "src": "/ui-preview/input/sizes.html",
+      "height": 190,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "parts-0a62ee012bee.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 2,
+              "children": []
+            },
+            {
+              "slot": "input-group",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "select/thumb",
       "component": "select",
       "slug": "thumb",
@@ -6140,7 +7130,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6235,7 +7225,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6343,7 +7333,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6451,7 +7441,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6566,7 +7556,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6725,7 +7715,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [
         "Clearable",
@@ -6754,7 +7744,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6849,7 +7839,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -6970,7 +7960,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7078,7 +8068,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7192,7 +8182,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [
         "Invalid",
@@ -7219,7 +8209,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7380,7 +8370,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7554,7 +8544,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7728,7 +8718,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [
         "At most three",
@@ -7755,7 +8745,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -7875,7 +8865,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -19377,6 +20367,384 @@
       ]
     },
     {
+      "id": "layout/span-phone",
+      "component": "layout",
+      "slug": "span-phone",
+      "title": "The same page on a phone",
+      "kind": "single",
+      "code": "Grid::cols(3).gap(3).children((\n    Card::titled(\"Revenue\").span(2).body(Bars::new(\n        \"Revenue by month, rising from 12 to 61\",\n        &[12, 18, 15, 24, 31, 28, 36, 41, 39, 48, 55, 61],\n    )),\n    Card::titled(\"Activity\").body(Text::muted(\n        \"Gurpreet moved Sutlej Supply renewal to Proposal\",\n    )),\n))",
+      "src": "/ui-preview/layout/span-phone.html",
+      "height": 520,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 390,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "card-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "card-title",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "card-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "bars",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "app-shell/phone",
+      "component": "app-shell",
+      "slug": "phone",
+      "title": "The shell on a phone",
+      "kind": "single",
+      "code": "let shell = Shell::new(\"Sutlej CRM\")\n    .group(\n        NavGroup::new(\"Sales\")\n            .item(\n                NavItem::new(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .count(\"312\"),\n            )\n            .item(NavItem::new(\"Contacts\", \"/contacts\").icon(icons::USERS)),\n    )\n    .user(\n        UserMenu::new(\"Gurpreet Singh\", \"gurpreet@example.com\")\n            .link(\"Profile\", \"/profile\")\n            .action(\"Sign out\", \"/sign-out\"),\n    );\nshell\n    .page(\"Deals\", \"/deals\")\n    .actions(\n        Button::primary(\"New deal\")\n            .icon(icons::PLUS)\n            .href(\"/deals/new\"),\n    )\n    .body(Stack::gap(4).children((\n        Stat::new(\"Open deals\", \"312\").trend(\"+12 this week\", true),\n        Stat::new(\"Pipeline value\", \"₹4.2 crore\").trend(\"+3.1%\", true),\n    )))",
+      "src": "/ui-preview/app-shell/phone.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 390,
+      "fit": false,
+      "scripts": [
+        "sidebar-4e91853b1fde.js",
+        "overlay-f8832385aa7b.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-count",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "a",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stat",
+                          "tag": "div",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "stat-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "stat-trend",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
       "id": "split-pane/thumb",
       "component": "split-pane",
       "slug": "thumb",
@@ -20439,7 +21807,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -21684,7 +23052,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -23247,7 +24615,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23303,7 +24671,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23359,7 +24727,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23415,7 +24783,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23471,7 +24839,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [
         "Small",
@@ -23497,7 +24865,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23566,7 +24934,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23622,7 +24990,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23658,7 +25026,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23701,7 +25069,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23737,7 +25105,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [
         "Default",
@@ -23764,7 +25132,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23807,7 +25175,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23843,7 +25211,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [
         "One item off",
@@ -23869,7 +25237,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -23919,7 +25287,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24007,7 +25375,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24120,7 +25488,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24228,7 +25596,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24349,7 +25717,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24418,7 +25786,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js"
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -24672,7 +26040,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -24708,7 +26076,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -24771,7 +26139,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -24886,7 +26254,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25029,7 +26397,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25139,7 +26507,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25248,7 +26616,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25333,7 +26701,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25398,7 +26766,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25488,7 +26856,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25578,7 +26946,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -25695,7 +27063,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "menubar-028fc9f298d6.js"
       ],
       "captions": [],
@@ -28638,7 +30006,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "toolbar-a98f42624d23.js"
       ],
       "captions": [],
@@ -28743,7 +30111,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "toolbar-a98f42624d23.js"
       ],
       "captions": [],
@@ -28918,7 +30286,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "toolbar-a98f42624d23.js"
       ],
       "captions": [],
@@ -29073,7 +30441,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "toolbar-a98f42624d23.js"
       ],
       "captions": [],
@@ -29365,7 +30733,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -29997,7 +31365,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -30681,8 +32049,8 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js",
-        "menus-dffd26363290.js"
+        "table-e5f4f1ed877b.js",
+        "menus-ee8886fb1f12.js"
       ],
       "captions": [],
       "slots": [
@@ -31469,7 +32837,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -32153,7 +33521,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -32785,7 +34153,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [
         "No rows",
@@ -33128,7 +34496,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js",
+        "core-1eda0837195f.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -33293,7 +34661,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js",
+        "core-1eda0837195f.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -33478,7 +34846,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js",
+        "core-1eda0837195f.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -33643,7 +35011,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js",
+        "core-1eda0837195f.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -41728,7 +43096,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -41770,7 +43138,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -41858,7 +43226,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -41907,7 +43275,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -41962,7 +43330,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-0538966b6d61.js"
+        "core-1eda0837195f.js"
       ],
       "captions": [],
       "slots": [
@@ -50152,7 +51520,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -51909,7 +53277,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -54013,7 +55381,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "table-b44af55d0043.js"
+        "table-e5f4f1ed877b.js"
       ],
       "captions": [],
       "slots": [
@@ -55085,9 +56453,9 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js",
+        "select-fb6868775411.js",
         "dates-5ffd94240418.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "split-7b3fb3271fc2.js",
         "keys-fc973c7a22b1.js",
         "lazy-3f1d3edb24f6.js"
@@ -57026,9 +58394,9 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js",
+        "select-fb6868775411.js",
         "dates-5ffd94240418.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "split-7b3fb3271fc2.js",
         "keys-fc973c7a22b1.js",
         "lazy-3f1d3edb24f6.js"
@@ -58597,9 +59965,9 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js",
+        "select-fb6868775411.js",
         "dates-5ffd94240418.js",
-        "menus-dffd26363290.js",
+        "menus-ee8886fb1f12.js",
         "split-7b3fb3271fc2.js",
         "keys-fc973c7a22b1.js",
         "lazy-3f1d3edb24f6.js"
@@ -60537,7 +61905,7 @@
       "fit": true,
       "scripts": [
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js"
+        "select-fb6868775411.js"
       ],
       "captions": [],
       "slots": [
@@ -60734,8 +62102,8 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-f8832385aa7b.js",
-        "select-fe52a1ca13b0.js",
-        "menus-dffd26363290.js",
+        "select-fb6868775411.js",
+        "menus-ee8886fb1f12.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
