@@ -133,7 +133,10 @@ async fn a_guest_signs_in_on_the_apps_page_and_comes_back() {
     assert!(html.contains("Priya Patel"));
     assert!(html.contains("Sign out"));
     // The sign-out form posts to the app's sign-out route.
-    assert!(html.contains("action=\"/sign-out\""), "{html}");
+    assert!(
+        html.replace("&#x2f;", "/").contains("action=\"/sign-out\""),
+        "{html}"
+    );
     // The panel's API takes the same session.
     client
         .get("/admin/api/resources")
