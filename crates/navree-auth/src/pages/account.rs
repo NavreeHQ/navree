@@ -18,7 +18,9 @@ use super::{PagesController, Paths, link, page};
 use crate::session_auth::{
     STOP_IMPERSONATING_PATH, TWO_FACTOR_CONFIRM_PATH, TWO_FACTOR_SETUP_PATH,
 };
-use crate::{AuthError, ClientMeta, TwoFactorSetup, not_while_impersonating, two_factor_enabled};
+use crate::{
+    AuthError, AuthService, ClientMeta, TwoFactorSetup, not_while_impersonating, two_factor_enabled,
+};
 
 /// The button that starts the setup.
 #[derive(Debug, Deserialize, Validate, Form)]
@@ -81,6 +83,21 @@ fn status_page(paths: &Paths, enabled: bool, form: FormView<SetupStartForm>) -> 
             ))
             .into(),
     )
+}
+
+/// A new key for a setup that starts again after a refused code. The page that shows it
+/// answers 422, and the request's own unit of work rolls back with a 4xx answer, so the
+/// key is written in a unit of work of its own: the code typed from it next is checked
+/// against it.
+async fn new_key(
+    service: &AuthService,
+    user: uuid::Uuid,
+    meta: &ClientMeta,
+) -> Result<TwoFactorSetup, AppError> {
+    service
+        .own(Some(user), None, |_| service.enable_two_factor(user, meta))
+        .await
+        .map_err(AuthError::into_app_error)
 }
 
 /// The page with the secret to scan or type, and the form for the first code.
@@ -246,10 +263,7 @@ impl PagesController {
                             Err(rejected) => {
                                 // The secret is not on this page any more: a
                                 // new one starts the setup again.
-                                let setup = service
-                                    .enable_two_factor(me.user_id, &meta)
-                                    .await
-                                    .map_err(AuthError::into_app_error)?;
+                                let setup = new_key(&service, me.user_id, &meta).await?;
                                 return Ok(rejected.respond(move |form| {
                                     setup_page(&paths, &setup, form.csrf(token), false)
                                 }));
@@ -268,10 +282,7 @@ impl PagesController {
                             }
                             // A wrong code: the setup begins again with a new key.
                             Err(AuthError::Invalid { .. }) => {
-                                let setup = service
-                                    .enable_two_factor(me.user_id, &meta)
-                                    .await
-                                    .map_err(AuthError::into_app_error)?;
+                                let setup = new_key(&service, me.user_id, &meta).await?;
                                 let form = FormView::<SetupConfirmForm>::new()
                                     .post(TWO_FACTOR_CONFIRM_PATH)
                                     .csrf(token)
