@@ -62,6 +62,8 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Kafka error codes the broker answers with.
 const UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
+const LEADER_NOT_AVAILABLE: i16 = 5;
+const NOT_LEADER_OR_FOLLOWER: i16 = 6;
 const OFFSET_OUT_OF_RANGE: i16 = 1;
 const CORRUPT_MESSAGE: i16 = 2;
 const UNKNOWN_MEMBER_ID: i16 = 25;
@@ -287,6 +289,14 @@ impl MiniKafka {
         self.state.lock().list_offsets_delay = delay;
     }
 
+    /// A topic created from now on has no leader in its first `answers`
+    /// metadata answers, and then refuses its first `answers` ListOffsets
+    /// requests with `NotLeaderOrFollower`: what a real cluster does while
+    /// it elects a new topic's leader and the leader loads the partitions.
+    pub fn settle_new_topics(&self, answers: usize) {
+        self.state.lock().settle = answers;
+    }
+
     /// Requests the broker did not understand, or refused to serve.
     pub fn problems(&self) -> Vec<String> {
         self.state.lock().problems.clone()
@@ -322,6 +332,8 @@ struct Inner {
     problems: Vec<String>,
     /// How late ListOffsets is answered.
     list_offsets_delay: Duration,
+    /// How many answers a new topic takes to settle.
+    settle: usize,
 }
 
 struct Topic {
@@ -329,6 +341,10 @@ struct Topic {
     partitions: Vec<Vec<Record>>,
     replication_factor: i16,
     retention_ms: Option<String>,
+    /// Metadata answers left without a leader.
+    leaderless: usize,
+    /// ListOffsets answers left refused with `NotLeaderOrFollower`.
+    loading: usize,
 }
 
 #[derive(Default)]
@@ -500,7 +516,7 @@ async fn handle(
 }
 
 fn metadata(state: &State, addr: SocketAddr, request: MetadataRequest) -> MetadataResponse {
-    let inner = state.lock();
+    let mut inner = state.lock();
     let names: Vec<String> = match request.topics {
         None => inner.topics.keys().cloned().collect(),
         Some(topics) => topics
@@ -510,21 +526,31 @@ fn metadata(state: &State, addr: SocketAddr, request: MetadataRequest) -> Metada
     };
     let topics = names
         .into_iter()
-        .map(|topic_name| match inner.topics.get(&topic_name) {
-            Some(topic) => MetadataResponseTopic::default()
-                .with_name(Some(name(&topic_name)))
-                .with_topic_id(topic.id)
-                .with_partitions(
-                    (0..topic.partitions.len())
-                        .map(|partition| {
-                            MetadataResponsePartition::default()
-                                .with_partition_index(len_i32(partition))
-                                .with_leader_id(BrokerId(NODE))
-                                .with_replica_nodes(vec![BrokerId(NODE)])
-                                .with_isr_nodes(vec![BrokerId(NODE)])
-                        })
-                        .collect(),
-                ),
+        .map(|topic_name| match inner.topics.get_mut(&topic_name) {
+            Some(topic) => {
+                let elected = topic.leaderless == 0;
+                topic.leaderless = topic.leaderless.saturating_sub(1);
+                MetadataResponseTopic::default()
+                    .with_name(Some(name(&topic_name)))
+                    .with_topic_id(topic.id)
+                    .with_partitions(
+                        (0..topic.partitions.len())
+                            .map(|partition| {
+                                let answer = MetadataResponsePartition::default()
+                                    .with_partition_index(len_i32(partition))
+                                    .with_replica_nodes(vec![BrokerId(NODE)])
+                                    .with_isr_nodes(vec![BrokerId(NODE)]);
+                                if elected {
+                                    answer.with_leader_id(BrokerId(NODE))
+                                } else {
+                                    answer
+                                        .with_error_code(LEADER_NOT_AVAILABLE)
+                                        .with_leader_id(BrokerId(-1))
+                                }
+                            })
+                            .collect(),
+                    )
+            }
             None => MetadataResponseTopic::default()
                 .with_error_code(UNKNOWN_TOPIC_OR_PARTITION)
                 .with_name(Some(name(&topic_name))),
@@ -565,6 +591,7 @@ fn create_topics(state: &State, request: CreateTopicsRequest) -> CreateTopicsRes
                 .iter()
                 .find(|config| config.name.as_str() == "retention.ms")
                 .and_then(|config| config.value.as_ref().map(ToString::to_string));
+            let settle = inner.settle;
             inner.topics.insert(
                 topic_name,
                 Topic {
@@ -572,6 +599,8 @@ fn create_topics(state: &State, request: CreateTopicsRequest) -> CreateTopicsRes
                     partitions: (0..partitions).map(|_| Vec::new()).collect(),
                     replication_factor: topic.replication_factor,
                     retention_ms,
+                    leaderless: settle,
+                    loading: settle,
                 },
             );
             CreatableTopicResult::default()
@@ -642,11 +671,19 @@ fn produce(state: &State, request: ProduceRequest) -> ProduceResponse {
 }
 
 fn list_offsets(state: &State, request: ListOffsetsRequest) -> ListOffsetsResponse {
-    let inner = state.lock();
+    let mut inner = state.lock();
     let topics = request
         .topics
         .into_iter()
         .map(|topic| {
+            let loading = inner
+                .topics
+                .get_mut(topic.name.0.as_str())
+                .is_some_and(|log| {
+                    let loading = log.loading > 0;
+                    log.loading = log.loading.saturating_sub(1);
+                    loading
+                });
             let log = inner.topics.get(topic.name.0.as_str());
             let partitions = topic
                 .partitions
@@ -655,6 +692,11 @@ fn list_offsets(state: &State, request: ListOffsetsRequest) -> ListOffsetsRespon
                     let response = ListOffsetsPartitionResponse::default()
                         .with_partition_index(asked.partition_index)
                         .with_timestamp(-1);
+                    if loading {
+                        return response
+                            .with_error_code(NOT_LEADER_OR_FOLLOWER)
+                            .with_offset(-1);
+                    }
                     let len = log.and_then(|topic| {
                         usize::try_from(asked.partition_index)
                             .ok()
@@ -1000,6 +1042,8 @@ fn a_partition_moves_only_once_its_owner_released_it() {
             partitions: vec![Vec::new(), Vec::new()],
             replication_factor: 1,
             retention_ms: None,
+            leaderless: 0,
+            loading: 0,
         },
     );
     let beat = |member: &str, epoch: i32, owned: &[i32]| {

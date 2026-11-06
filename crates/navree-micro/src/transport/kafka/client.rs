@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
@@ -63,6 +63,7 @@ pub(crate) mod code {
     pub(crate) const NOT_COORDINATOR: i16 = 16;
     pub(crate) const UNKNOWN_MEMBER_ID: i16 = 25;
     pub(crate) const TOPIC_ALREADY_EXISTS: i16 = 36;
+    pub(crate) const OFFSET_NOT_AVAILABLE: i16 = 78;
     pub(crate) const FENCED_MEMBER_EPOCH: i16 = 110;
     pub(crate) const STALE_MEMBER_EPOCH: i16 = 113;
 }
@@ -77,6 +78,29 @@ const MAX_FRAME: usize = 128 * 1024 * 1024;
 /// How long one request may wait for its response (beyond a fetch's own
 /// wait).
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long a request waits for a partition's leader: a topic just created
+/// has none for a moment, and its leader then answers `NotLeaderOrFollower`
+/// until it has loaded the partition (the same happens while a leader
+/// moves).
+const LEADER_WAIT: Duration = Duration::from_secs(10);
+
+/// The pause before asking again for a leader that is not ready.
+fn leader_backoff(attempt: u32) -> Duration {
+    Duration::from_millis(u64::from(attempt.min(10)) * 50)
+}
+
+/// Whether Kafka's answer `code` means the partition's leader is not ready
+/// yet (or has moved), so the same request succeeds a moment later.
+fn leader_not_ready(code: i16) -> bool {
+    matches!(
+        code,
+        code::NOT_LEADER_OR_FOLLOWER
+            | code::LEADER_NOT_AVAILABLE
+            | code::UNKNOWN_TOPIC_OR_PARTITION
+            | code::OFFSET_NOT_AVAILABLE
+    )
+}
 
 /// The text of a Kafka error code.
 pub(crate) fn describe(code: i16) -> String {
@@ -249,7 +273,7 @@ pub(crate) struct ConnSettings {
     pub(crate) connect_timeout: Duration,
 }
 
-/// A partition's leader.
+/// A partition's leader (`-1` while none is elected).
 #[derive(Clone, Debug)]
 pub(crate) struct PartitionMeta {
     pub(crate) partition: i32,
@@ -261,6 +285,13 @@ pub(crate) struct PartitionMeta {
 pub(crate) struct TopicMeta {
     pub(crate) id: Uuid,
     pub(crate) partitions: Vec<PartitionMeta>,
+}
+
+impl TopicMeta {
+    /// Whether every partition has a leader.
+    pub(crate) fn has_leaders(&self) -> bool {
+        !self.partitions.is_empty() && self.partitions.iter().all(|p| p.leader >= 0)
+    }
 }
 
 #[derive(Default)]
@@ -389,7 +420,13 @@ impl Cluster {
                 .iter()
                 .map(|partition| PartitionMeta {
                     partition: partition.partition_index,
-                    leader: partition.leader_id.0,
+                    // A partition without a leader yet answers
+                    // `LeaderNotAvailable` (and may still name one).
+                    leader: if partition.error_code == code::LEADER_NOT_AVAILABLE {
+                        -1
+                    } else {
+                        partition.leader_id.0
+                    },
                 })
                 .collect();
             partitions.sort_by_key(|partition| partition.partition);
@@ -421,29 +458,43 @@ impl Cluster {
             .map(|(name, _)| name.clone())
     }
 
-    /// A connection to the leader of `topic`/`partition`.
+    /// A connection to the leader of `topic`/`partition`. While the
+    /// partition has no leader (a topic just created), asks the cluster
+    /// again, for up to [`LEADER_WAIT`].
     pub(crate) async fn leader(
         &self,
         topic: &str,
         partition: i32,
     ) -> Result<(i32, Arc<Conn>), MicroError> {
-        let meta = self.topic(topic).await?.ok_or_else(|| {
-            MicroError::transport(format!("the Kafka topic {topic} does not exist"))
-        })?;
-        let leader = meta
-            .partitions
-            .iter()
-            .find(|p| p.partition == partition)
-            .map(|p| p.leader)
-            .ok_or_else(|| {
-                MicroError::transport(format!("{topic} has no partition {partition}"))
+        let deadline = Instant::now() + LEADER_WAIT;
+        let mut attempt = 0;
+        loop {
+            let meta = self.topic(topic).await?.ok_or_else(|| {
+                MicroError::transport(format!("the Kafka topic {topic} does not exist"))
             })?;
-        let addr = lock(&self.meta)
-            .brokers
-            .get(&leader)
-            .cloned()
-            .ok_or_else(|| MicroError::transport(format!("Kafka broker {leader} is unknown")))?;
-        Ok((leader, self.conn(&addr).await?))
+            let leader = meta
+                .partitions
+                .iter()
+                .find(|p| p.partition == partition)
+                .map(|p| p.leader)
+                .ok_or_else(|| {
+                    MicroError::transport(format!("{topic} has no partition {partition}"))
+                })?;
+            let addr = lock(&self.meta).brokers.get(&leader).cloned();
+            if let Some(addr) = addr {
+                return Ok((leader, self.conn(&addr).await?));
+            }
+            if Instant::now() >= deadline {
+                return Err(MicroError::transport(if leader < 0 {
+                    format!("partition {partition} of {topic} has no leader")
+                } else {
+                    format!("Kafka broker {leader} is unknown")
+                }));
+            }
+            attempt += 1;
+            self.forget(topic);
+            tokio::time::sleep(leader_backoff(attempt)).await;
+        }
     }
 
     /// A connection to broker `node`.
@@ -462,12 +513,15 @@ impl Cluster {
     }
 
     /// Produces one record; returns its partition and offset. Fails with
-    /// [`ProduceError::NoTopic`] when the topic does not exist.
+    /// [`ProduceError::NoTopic`] when the topic does not exist. A leader
+    /// that is not ready (or moved) is asked again for up to
+    /// [`LEADER_WAIT`]: it wrote nothing.
     pub(crate) async fn produce(
         &self,
         topic: &str,
         record: OutRecord,
     ) -> Result<(i32, i64), ProduceError> {
+        let deadline = Instant::now() + LEADER_WAIT;
         let mut attempt = 0;
         loop {
             attempt += 1;
@@ -519,14 +573,15 @@ impl Cluster {
                 Some((code::UNKNOWN_TOPIC_OR_PARTITION, _)) if attempt >= 3 => {
                     return Err(ProduceError::NoTopic);
                 }
-                Some((
-                    code::NOT_LEADER_OR_FOLLOWER
-                    | code::LEADER_NOT_AVAILABLE
-                    | code::UNKNOWN_TOPIC_OR_PARTITION,
-                    _,
-                )) if attempt < 3 => {
+                Some((code::UNKNOWN_TOPIC_OR_PARTITION, _)) => {
                     self.forget(topic);
-                    tokio::time::sleep(Duration::from_millis(100 * attempt)).await;
+                    tokio::time::sleep(Duration::from_millis(100 * u64::from(attempt))).await;
+                }
+                Some((code::NOT_LEADER_OR_FOLLOWER | code::LEADER_NOT_AVAILABLE, _))
+                    if Instant::now() < deadline =>
+                {
+                    self.forget(topic);
+                    tokio::time::sleep(leader_backoff(attempt)).await;
                 }
                 Some((error, _)) => {
                     return Err(MicroError::transport(format!(
@@ -546,13 +601,42 @@ impl Cluster {
     }
 
     /// The offset at `timestamp` ([`LATEST`] or [`EARLIEST`]) of each
-    /// partition of `topic`.
+    /// partition of `topic`. A leader that is not ready yet (a topic just
+    /// created) or has moved is asked again, for up to [`LEADER_WAIT`].
     pub(crate) async fn offsets(
         &self,
         topic: &str,
         partitions: &[i32],
         timestamp: i64,
     ) -> Result<HashMap<i32, i64>, MicroError> {
+        let deadline = Instant::now() + LEADER_WAIT;
+        let mut attempt = 0;
+        loop {
+            match self.offsets_once(topic, partitions, timestamp).await? {
+                Ok(offsets) => return Ok(offsets),
+                Err(error) if leader_not_ready(error) && Instant::now() < deadline => {
+                    attempt += 1;
+                    self.forget(topic);
+                    tokio::time::sleep(leader_backoff(attempt)).await;
+                }
+                Err(error) => {
+                    return Err(MicroError::transport(format!(
+                        "listing the offsets of {topic} failed: {}",
+                        describe(error)
+                    )));
+                }
+            }
+        }
+    }
+
+    /// One try of [`offsets`](Cluster::offsets): the offsets, or the first
+    /// error code a leader answered with.
+    async fn offsets_once(
+        &self,
+        topic: &str,
+        partitions: &[i32],
+        timestamp: i64,
+    ) -> Result<Result<HashMap<i32, i64>, i16>, MicroError> {
         let mut by_leader: HashMap<i32, Vec<i32>> = HashMap::new();
         for &partition in partitions {
             let (leader, _) = self.leader(topic, partition).await?;
@@ -583,20 +667,14 @@ impl Cluster {
                 .await?;
             for topic in response.topics {
                 for partition in topic.partitions {
-                    if partition.error_code == 0 {
-                        offsets.insert(partition.partition_index, partition.offset);
-                    } else {
-                        self.forget(topic.name.0.as_str());
-                        return Err(MicroError::transport(format!(
-                            "listing the offsets of {} failed: {}",
-                            topic.name.0.as_str(),
-                            describe(partition.error_code)
-                        )));
+                    if partition.error_code != 0 {
+                        return Ok(Err(partition.error_code));
                     }
+                    offsets.insert(partition.partition_index, partition.offset);
                 }
             }
         }
-        Ok(offsets)
+        Ok(Ok(offsets))
     }
 
     /// Fetches from one leader, on a connection of `lane`: `positions`

@@ -121,6 +121,18 @@ async fn kafka_conforms() {
     assert!(broker.problems().is_empty(), "{:?}", broker.problems());
 }
 
+/// A topic just created has no leader for a moment, and its leader then
+/// refuses to list offsets until it has loaded the partitions (Kafka 4.0
+/// does both): the listener and the asking side's reply reader wait for it
+/// instead of failing.
+#[tokio::test]
+async fn new_topics_are_used_once_their_leaders_are_ready() {
+    let broker = MiniKafka::start().await;
+    broker.settle_new_topics(3);
+    conformance::request_reply(&KafkaHarness::new(broker.url(), options())).await;
+    assert!(broker.problems().is_empty(), "{:?}", broker.problems());
+}
+
 #[tokio::test]
 async fn two_apps_talk_over_kafka() {
     let broker = MiniKafka::start().await;

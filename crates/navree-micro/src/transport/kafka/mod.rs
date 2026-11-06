@@ -29,8 +29,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use self::client::{
-    Cluster, Conn, ConnSettings, EARLIEST, InRecord, LATEST, OutRecord, ProduceError, code,
-    describe, lock, records, topic_name, version,
+    Cluster, Conn, ConnSettings, EARLIEST, InRecord, LATEST, OutRecord, ProduceError, TopicMeta,
+    code, describe, lock, records, topic_name, version,
 };
 use crate::envelope::headers;
 use crate::options::KafkaOptions;
@@ -52,6 +52,13 @@ const REVOKE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The rebalance timeout sent to the coordinator.
 const REBALANCE_TIMEOUT_MS: i32 = 60_000;
+
+/// For this long after a listener starts, a member the coordinator has not
+/// given a partition yet heartbeats every [`EARLY_HEARTBEAT`] instead of
+/// the group's interval (5 seconds by default): the coordinator may not
+/// know a topic created a moment ago when the member first joins.
+const EARLY: Duration = Duration::from_secs(10);
+const EARLY_HEARTBEAT: Duration = Duration::from_millis(500);
 
 /// The header of a retried event: when it is due, in Unix milliseconds.
 const DUE: &str = "navree-due";
@@ -211,14 +218,16 @@ impl KafkaTransport {
             .collect();
         lines.extend(created);
         if !missing.is_empty() {
-            // Wait for the new topics' leaders.
-            for _ in 0..50 {
+            // Wait for the new topics' leaders: until every partition has
+            // one, the topics cannot be read or written. (A leader may still
+            // answer `NotLeaderOrFollower` for a moment after that; the
+            // client asks again.)
+            for _ in 0..100 {
                 let known = self.cluster.refresh(topics).await?;
-                if topics.iter().all(|topic| {
-                    known
-                        .get(topic)
-                        .is_some_and(|meta| !meta.partitions.is_empty())
-                }) {
+                if topics
+                    .iter()
+                    .all(|topic| known.get(topic).is_some_and(TopicMeta::has_leaders))
+                {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -750,6 +759,8 @@ struct GroupConsumer {
     state: Mutex<GroupState>,
     /// The connections this consumer fetches on.
     lane: u64,
+    /// When the listener started.
+    started: Instant,
 }
 
 impl GroupConsumer {
@@ -797,6 +808,7 @@ impl GroupConsumer {
                 ..GroupState::default()
             }),
             lane: transport.cluster.lane(),
+            started: Instant::now(),
         })
     }
 
@@ -969,8 +981,13 @@ impl GroupConsumer {
             }
             self.assign(target).await?;
         }
-        let every = u64::try_from(response.heartbeat_interval_ms.max(100)).unwrap_or(3_000);
-        Ok(Some(Duration::from_millis(every)))
+        let every = Duration::from_millis(
+            u64::try_from(response.heartbeat_interval_ms.max(100)).unwrap_or(3_000),
+        );
+        if self.started.elapsed() < EARLY && lock(&self.state).parts.is_empty() {
+            return Ok(Some(every.min(EARLY_HEARTBEAT)));
+        }
+        Ok(Some(every))
     }
 
     /// Follows a new assignment: revokes what left it, starts what joined.
