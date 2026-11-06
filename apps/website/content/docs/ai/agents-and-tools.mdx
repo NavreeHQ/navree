@@ -669,7 +669,8 @@ Test what your code decides (access, validation, which tool writes what) with th
 | `AgentRunBuilder` | What `ai.agent::<A>()` returns. |
 | `AgentOptions`, `Memory` | Model, steps, memory. |
 | `AgentReply`, `AgentStep`, `PendingApproval` | A finished run: its text, its tool calls and a call waiting for the user. |
-| `AgentStream` | A streamed run, and a server-sent events response. |
+| `AgentStream` | A streamed run, and a server-sent events response: from `.stream`, `.approve_stream` and `.reject_stream`. |
+| `PageTools`, `PageTool`, `PageAnswer` | Tools a page adds to a streamed run and answers itself, with `.page(..)`; `.note(..)` tells the model what the page says, as data. See [generative UI](/docs/ai/generative-ui/). |
 | `Conversations`, `ConversationSummary`, `StoredMessage` | Stored conversations, per user; `prune(days, now)` is what `ai:prune` runs. |
 | `ToolSpec`, `ToolAccess` | A tool as `#[agent]` describes it, and its access rules. |
 | `m.agent::<A>()` | Registers an agent in a module. |
