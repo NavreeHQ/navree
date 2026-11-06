@@ -42,6 +42,7 @@ const CAPABILITIES: &[Capability] = &[
     Capability::PaymentLinks,
     Capability::Refunds,
     Capability::PartialRefunds,
+    Capability::Upi,
     Capability::IdempotencyKeys,
 ];
 

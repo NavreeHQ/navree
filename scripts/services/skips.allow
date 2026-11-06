@@ -19,6 +19,10 @@ SKIPPED: set NAVREE_TEST_DOCKER=1
 # Opt-in builds of generated apps (tests marked #[ignore]).
 SKIPPED: set NAVREE_TEST_KIT_WEB=1
 
+# Opt-in runs on paid providers' own test environments, which need keys
+# kept in CI secrets (the Stripe test mode, the Paddle sandbox).
+SKIPPED [a-z_]+: set (STRIPE_TEST_SECRET|PADDLE_SANDBOX_KEY)
+
 # The docs and skills are not next to a crate that is built from a package.
 SKIPPED: the (docs page|skill)
 

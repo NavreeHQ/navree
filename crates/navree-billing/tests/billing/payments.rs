@@ -265,10 +265,10 @@ async fn bad_payment_input_is_a_validation_error() {
         );
         assert_eq!(error.to_app_error().status.as_u16(), 400);
     }
-    // The fake checks methods as Stripe does: cards only.
+    // The fake checks methods as Stripe does: cards and UPI.
     let error = billing
         .payment(Money::inr(100), "Chai")
-        .methods([PaymentMethod::Upi])
+        .methods([PaymentMethod::NetBanking])
         .create()
         .await
         .unwrap_err();

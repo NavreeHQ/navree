@@ -292,6 +292,16 @@ jobs:
           npm ci --prefix e2e/mcp-sdk --ignore-scripts
           cargo test --locked --workspace --all-features --test sdk_conformance -- --ignored --nocapture
 
+      - name: Test billing on the Stripe test mode and the Paddle sandbox
+        # Opt-in: runs only when the repository has the secrets (a Stripe
+        # test-mode key, a Paddle sandbox API key); without them each test
+        # says so and passes. Nothing is charged in either environment.
+        if: ${{ !cancelled() }}
+        env:
+          STRIPE_TEST_SECRET: ${{ secrets.STRIPE_TEST_SECRET }}
+          PADDLE_SANDBOX_KEY: ${{ secrets.PADDLE_SANDBOX_KEY }}
+        run: cargo test --locked --all-features --package navree-billing --test sandboxes -- --nocapture
+
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}
         run: |
