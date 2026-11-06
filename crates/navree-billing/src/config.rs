@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
 use serde::{Deserialize, Deserializer};
 
@@ -67,7 +67,7 @@ impl fmt::Display for ProviderKind {
 
 /// Stripe settings (`billing.stripe`). Put the secrets in `.env`
 /// (`APP_BILLING__STRIPE__SECRET_KEY`, `APP_BILLING__STRIPE__WEBHOOK_SECRET`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct StripeOptions {
     /// The secret API key (`sk_live_...`, `sk_test_...`).
@@ -112,7 +112,7 @@ impl PaddleEnvironment {
 
 /// Paddle settings (`billing.paddle`). Put the secrets in `.env`
 /// (`APP_BILLING__PADDLE__API_KEY`, `APP_BILLING__PADDLE__WEBHOOK_SECRET`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PaddleOptions {
     /// The API key (`pdl_live_apikey_...`, `pdl_sdbx_apikey_...`).
@@ -120,6 +120,7 @@ pub struct PaddleOptions {
     /// The secret key of the notification destination (`pdl_ntfset_...`).
     pub webhook_secret: Option<Secret<String>>,
     /// `sandbox` (the default) or `production`.
+    #[config(one_of = "sandbox, production")]
     pub environment: PaddleEnvironment,
     /// Overrides the environment's API base URL (a mock server or a proxy).
     pub api_base: Option<String>,
@@ -181,10 +182,12 @@ pub struct PlanOptions {
 /// `APP_BILLING__STRIPE__WEBHOOK_SECRET`, `APP_BILLING__PADDLE__API_KEY`,
 /// `APP_BILLING__PADDLE__WEBHOOK_SECRET`. [`check`](Self::check) names the
 /// key of every problem and never prints a secret.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "billing", docs = "/docs/packages/billing/", validate = Self::check_values)]
 #[serde(default)]
 pub struct BillingOptions {
-    /// The payment provider.
+    /// The payment provider: `stripe` (the default), `paddle`, `fake`, or the
+    /// name of a provider registered with `BillingModule::provider`.
     pub provider: ProviderKind,
     /// The currency of the fake provider's invoices (lower-case ISO code).
     /// Stripe and Paddle take the currency from the price.
@@ -211,8 +214,10 @@ pub struct BillingOptions {
     /// Accepted clock skew of webhook signatures, in seconds.
     pub webhook_tolerance_secs: u64,
     /// Stripe settings.
+    #[config(table)]
     pub stripe: StripeOptions,
     /// Paddle settings.
+    #[config(table)]
     pub paddle: PaddleOptions,
     /// The plans, by key.
     pub plans: BTreeMap<String, PlanOptions>,
@@ -369,10 +374,10 @@ impl BillingOptions {
     }
 }
 
-impl ConfigSection for BillingOptions {
-    const KEY: &'static str = "billing";
-
-    fn validate(&self) -> Result<(), String> {
+impl BillingOptions {
+    /// Checks the values for the configuration section: every problem, in
+    /// one message (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
 }
@@ -406,6 +411,61 @@ mod tests {
 
     fn fake() -> ConfigSources {
         ConfigSources::new().set("billing.provider", "fake")
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = BillingOptions::schema().expect("schema");
+        assert_eq!(schema.key, "billing");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/billing/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let mut secrets = schema.secret_paths();
+        secrets.sort();
+        assert_eq!(
+            secrets,
+            [
+                "billing.paddle.api_key",
+                "billing.paddle.webhook_secret",
+                "billing.stripe.secret_key",
+                "billing.stripe.webhook_secret",
+            ]
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("stripe").ty, navree_config::FieldType::Table);
+        assert_eq!(field("paddle").ty, navree_config::FieldType::Table);
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        for path in ["billing.paddle.environment", "billing.stripe.api_base"] {
+            assert!(leaves.contains(&path.to_owned()), "{path}: {leaves:?}");
+        }
+        let defaults = BillingOptions::defaults().expect("defaults");
+        assert_eq!(defaults["provider"], "stripe");
+        assert_eq!(defaults["currency"], "usd");
+        assert_eq!(defaults["stripe"]["api_base"], "https://api.stripe.com");
+        assert!(defaults["stripe"]["secret_key"].is_null());
+        assert_eq!(defaults["paddle"]["environment"], "sandbox");
+    }
+
+    #[test]
+    fn debug_never_prints_the_keys() {
+        let options = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_BILLING__STRIPE__SECRET_KEY", "sk_test_hunter2"),
+                ("APP_BILLING__STRIPE__WEBHOOK_SECRET", "whsec_hunter2"),
+            ],
+        ))
+        .unwrap();
+        assert!(!format!("{options:?}").contains("hunter2"));
     }
 
     #[test]
@@ -555,7 +615,6 @@ mod tests {
         assert!(!error.contains("Brain Tree"), "{error}");
     }
 
-    // CONN-101
     #[test]
     fn any_other_name_selects_a_registered_provider() {
         let options = load(

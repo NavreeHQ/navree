@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use navree_config::{Config, ConfigError, ConfigSources};
+use navree_contracts::Redactor;
 use navree_log::{FileLog, LogFormat, LogOptions, Rotation};
 use serde_json::json;
 
@@ -25,10 +26,7 @@ fn defaults_match_documentation() {
     assert_eq!(options.level, "info");
     assert!(options.levels.is_empty());
     assert_eq!(options.file, None);
-    assert_eq!(
-        options.redact,
-        ["password", "token", "authorization", "cookie", "secret"]
-    );
+    assert_eq!(options.redact, Redactor::DEFAULT_FRAGMENTS);
     assert_eq!(options.slow_query_ms, 200);
     assert_eq!(
         FileLog::default(),

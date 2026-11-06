@@ -8,7 +8,9 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, SystemClock};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::commands::commands;
 use crate::controller::{FlagsAdminController, FlagsController};
@@ -69,14 +71,12 @@ impl FlagsModule {
     /// The module with explicit options (configure it once, in the app
     /// root).
     pub fn for_root(options: FlagsOptions) -> impl Module {
-        ConfiguredFlagsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<FlagsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `flags` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredFlagsModule { options: None }
+        ConfiguredModule::<FlagsModule, FlagsOptions>::from_config(register)
     }
 
     /// Registers flag `F`. Import it in the module that owns the flag:
@@ -95,26 +95,6 @@ impl FlagsModule {
 impl Module for FlagsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `FlagsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredFlagsModule {
-    /// `None`: read from configuration.
-    options: Option<FlagsOptions>,
-}
-
-impl Module for ConfiguredFlagsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<FlagsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

@@ -7,8 +7,8 @@ use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_db::ChangeObserver;
 use navree_http::{HttpOptions, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Lifecycle, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, ConfiguredModule, Factory, Lifecycle, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 
@@ -61,39 +61,18 @@ pub struct LogbookModule;
 impl LogbookModule {
     /// The module with explicit options.
     pub fn for_root(options: LogbookOptions) -> impl Module {
-        ConfiguredLogbookModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<LogbookModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `logbook` section at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredLogbookModule { options: None }
+        ConfiguredModule::<LogbookModule, LogbookOptions>::from_config(register)
     }
 }
 
 impl Module for LogbookModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `LogbookModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredLogbookModule {
-    options: Option<LogbookOptions>,
-}
-
-impl Module for ConfiguredLogbookModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<LogbookModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

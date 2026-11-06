@@ -11,7 +11,12 @@ use serde::Deserialize;
 /// metrics = true
 /// metrics_token = "a-long-random-string"   # or APP_OBSERVE__METRICS_TOKEN
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(
+    key = "observe",
+    docs = "/docs/digging-deeper/health-and-metrics/",
+    validate = Self::check
+)]
 #[serde(default)]
 pub struct ObserveOptions {
     /// Install the Prometheus recorder and serve `GET /metrics` (default `true`).
@@ -29,14 +34,6 @@ impl Default for ObserveOptions {
     }
 }
 
-impl ConfigSection for ObserveOptions {
-    const KEY: &'static str = "observe";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check()
-    }
-}
-
 impl ObserveOptions {
     /// Checks the options; the message never echoes the token.
     pub(crate) fn check(&self) -> Result<(), String> {
@@ -47,5 +44,35 @@ impl ObserveOptions {
             ),
             _ => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = ObserveOptions::schema().expect("schema");
+        assert_eq!(schema.key, "observe");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert_eq!(schema.secret_paths(), ["observe.metrics_token"]);
+        assert!(schema.fields.iter().any(|f| f.name == "metrics"));
+        let defaults = ObserveOptions::defaults().expect("defaults");
+        assert_eq!(defaults["metrics"], true);
+        assert!(defaults["metrics_token"].is_null());
+    }
+
+    #[test]
+    fn debug_never_prints_the_token() {
+        let options = ObserveOptions {
+            metrics_token: Some(Secret::new("scrape-me-not".to_owned())),
+            ..ObserveOptions::default()
+        };
+        assert!(!format!("{options:?}").contains("scrape-me-not"));
     }
 }

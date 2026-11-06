@@ -1,9 +1,6 @@
 //! [`TimeOptions`]: the `time` configuration section.
 
-use std::fmt;
-
-use navree_config::ConfigSection;
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
+use navree_config::{ConfigSection, ConfigTable};
 use serde::{Deserialize, Serialize};
 
 use crate::{Holidays, LocalDay, Zone};
@@ -24,7 +21,8 @@ use crate::{Holidays, LocalDay, Zone};
 /// From the environment: `APP_TIME__DEFAULT_ZONE=Asia/Kolkata`,
 /// `APP_TIME__HOLIDAYS__COUNTRY=IN`,
 /// `APP_TIME__HOLIDAYS__DAYS=2026-12-24,2026-12-31`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "time", docs = "/docs/digging-deeper/time-zones/", validate = Self::check)]
 #[serde(default)]
 pub struct TimeOptions {
     /// The app's zone: the zone of requests and owners no source gives one
@@ -34,11 +32,12 @@ pub struct TimeOptions {
     /// Mount `GET {api_prefix}/time/zones` (default `true`).
     pub routes: bool,
     /// The app's holidays.
+    #[config(table)]
     pub holidays: HolidayOptions,
 }
 
 /// The `time.holidays` section.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct HolidayOptions {
     /// The country whose public holidays the app observes, an ISO 3166-1
@@ -46,7 +45,7 @@ pub struct HolidayOptions {
     pub country: Option<String>,
     /// Extra closing days (`yyyy-MM-dd`): a list, or a comma-separated
     /// string from an environment variable.
-    #[serde(deserialize_with = "days_list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub days: Vec<LocalDay>,
 }
 
@@ -105,42 +104,37 @@ impl HolidayOptions {
     }
 }
 
-impl ConfigSection for TimeOptions {
-    const KEY: &'static str = "time";
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    fn validate(&self) -> Result<(), String> {
-        self.check()
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = TimeOptions::schema().expect("schema");
+        assert_eq!(schema.key, "time");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/time-zones/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in ["default_zone", "routes", "holidays"] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        assert!(
+            leaves.contains(&"time.holidays.country".to_owned()),
+            "{leaves:?}"
+        );
+        assert!(
+            leaves.contains(&"time.holidays.days".to_owned()),
+            "{leaves:?}"
+        );
+        let defaults = TimeOptions::defaults().expect("defaults");
+        assert_eq!(defaults["default_zone"], "UTC");
+        assert_eq!(defaults["routes"], true);
     }
-}
-
-/// A list of days, or one comma-separated string.
-fn days_list_or_csv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<LocalDay>, D::Error> {
-    struct Days;
-
-    impl<'de> Visitor<'de> for Days {
-        type Value = Vec<LocalDay>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list of yyyy-MM-dd days or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|day| !day.is_empty())
-                .map(|day| LocalDay::parse(day).map_err(E::custom))
-                .collect()
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-            let mut days = Vec::new();
-            while let Some(day) = seq.next_element::<LocalDay>()? {
-                days.push(day);
-            }
-            Ok(days)
-        }
-    }
-
-    deserializer.deserialize_any(Days)
 }

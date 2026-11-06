@@ -17,12 +17,9 @@ const NEVER_STORED: [&str; 4] = [
     "proxy-authorization",
 ];
 
-/// The fragments `log.redact` defaults to.
-pub(crate) const DEFAULT_FRAGMENTS: [&str; 5] =
-    ["password", "token", "authorization", "cookie", "secret"];
-
 /// Masks values whose names contain a fragment of `log.redact`
-/// (ASCII case-insensitively).
+/// (ASCII case-insensitively); without one, the shared list of secret words
+/// (`navree_contracts::Redactor::DEFAULT_FRAGMENTS`).
 #[derive(Clone, Debug)]
 pub(crate) struct Redactor {
     fragments: Vec<String>,
@@ -30,7 +27,12 @@ pub(crate) struct Redactor {
 
 impl Default for Redactor {
     fn default() -> Self {
-        Redactor::new(DEFAULT_FRAGMENTS.iter().map(|f| (*f).to_owned()).collect())
+        Redactor::new(
+            navree_contracts::Redactor::DEFAULT_FRAGMENTS
+                .iter()
+                .map(|f| (*f).to_owned())
+                .collect(),
+        )
     }
 }
 
@@ -199,6 +201,19 @@ mod tests {
             redactor.body(Some("text/plain"), "password=x"),
             "password=x"
         );
+    }
+
+    #[test]
+    fn the_defaults_are_the_shared_list_of_secret_words() {
+        let redactor = Redactor::default();
+        assert_eq!(
+            redactor.fragments.len(),
+            navree_contracts::Redactor::DEFAULT_FRAGMENTS.len()
+        );
+        for name in ["db_password", "api_key", "connection_string", "private_key"] {
+            assert!(redactor.is_secret(name), "{name}");
+        }
+        assert!(!redactor.is_secret("email"));
     }
 
     #[test]

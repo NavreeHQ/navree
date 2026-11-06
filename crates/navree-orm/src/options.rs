@@ -22,7 +22,8 @@ pub const DEFAULT_PRUNE_CHUNK: u64 = 1000;
 /// set on its own wins over it. Unset, `strict` is on, except when the
 /// app's environment (top-level `env`, `APP_ENV`, or `app.env`) is
 /// `production`: development and tests are strict, production lenient.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ConfigSection)]
+#[config(key = "orm", docs = "/docs/orm/getting-started/", validate = Self::check)]
 #[serde(default)]
 pub struct OrmOptions {
     /// Every strict mode at once; unset: on unless the environment is
@@ -86,10 +87,9 @@ impl OrmOptions {
     }
 }
 
-impl ConfigSection for OrmOptions {
-    const KEY: &'static str = "orm";
-
-    fn validate(&self) -> Result<(), String> {
+impl OrmOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         if self.prune_chunk == 0 {
             return Err("prune_chunk must be at least 1".to_owned());
         }
@@ -100,6 +100,30 @@ impl ConfigSection for OrmOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = OrmOptions::schema().expect("schema");
+        assert_eq!(schema.key, "orm");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "strict",
+            "prevent_missing_attributes",
+            "prevent_discarding_attributes",
+            "prevent_lazy_loading",
+            "auto_eager_load",
+            "prune_chunk",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let defaults = OrmOptions::defaults().expect("defaults");
+        assert_eq!(defaults["prune_chunk"], DEFAULT_PRUNE_CHUNK);
+        assert!(defaults["strict"].is_null());
+    }
 
     #[test]
     fn strict_by_default_except_in_production() {

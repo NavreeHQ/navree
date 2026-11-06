@@ -7,8 +7,8 @@ use navree_contracts::{AuditSink, Clock, SystemClock};
 use navree_db::{ChangeObserver, Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
-    Resolver,
+    AppContext, BoxError, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder,
+    ProviderKey, Resolver,
 };
 
 use crate::controller::AuditController;
@@ -53,40 +53,18 @@ pub struct AuditModule;
 impl AuditModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: AuditOptions) -> impl Module {
-        ConfiguredAuditModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<AuditModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `audit` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredAuditModule { options: None }
+        ConfiguredModule::<AuditModule, AuditOptions>::from_config(register)
     }
 }
 
 impl Module for AuditModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `AuditModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredAuditModule {
-    /// `None`: read from configuration.
-    options: Option<AuditOptions>,
-}
-
-impl Module for ConfiguredAuditModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<AuditModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

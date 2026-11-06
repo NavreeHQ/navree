@@ -5,9 +5,10 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
+use navree_contracts::Redactor;
 use serde::Deserialize;
-use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, Deserializer, MapAccess, Visitor};
 
 use crate::LogError;
 use crate::filter::Levels;
@@ -21,7 +22,7 @@ use crate::filter::Levels;
 /// level = "info"
 /// levels = { navree_queue = "debug" }
 /// file = { path = "storage/logs/navree.log", rotation = "daily", keep_days = 14 }
-/// redact = ["password", "token", "authorization", "cookie", "secret"]
+/// redact = ["password", "token", "ssn"]   # replaces the shared list of secret words
 /// slow_query_ms = 200
 /// ```
 ///
@@ -30,10 +31,12 @@ use crate::filter::Levels;
 /// directive list (`APP_LOG__LEVELS=navree::request=debug,sqlx=warn`);
 /// `APP_LOG__LEVELS__NAVREE_QUEUE=debug` sets a single target. Level and
 /// format names are case-insensitive.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "log", docs = "/docs/basics/logging/", validate = Self::check_values)]
 #[serde(default)]
 pub struct LogOptions {
     /// How lines are written; [`LogFormat::default`] depends on the build.
+    #[config(one_of = "pretty, json")]
     pub format: LogFormat,
     /// The level of every target without its own entry in `levels`:
     /// `trace`, `debug`, `info` (default), `warn`, `error` or `off`.
@@ -43,11 +46,13 @@ pub struct LogOptions {
     #[serde(deserialize_with = "levels_map_or_string")]
     pub levels: BTreeMap<String, String>,
     /// A rotating log file written in addition to stdout (none by default).
+    #[config(table)]
     pub file: Option<FileLog>,
     /// Field names containing any of these fragments (ASCII
     /// case-insensitively) are written as `[redacted]`. Replaces the
-    /// defaults: `password`, `token`, `authorization`, `cookie`, `secret`.
-    #[serde(deserialize_with = "list_or_comma_string")]
+    /// defaults, the shared list of secret words
+    /// ([`Redactor::DEFAULT_FRAGMENTS`]).
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub redact: Vec<String>,
     /// Queries slower than this are logged (read by the database module).
     pub slow_query_ms: u64,
@@ -60,9 +65,7 @@ impl Default for LogOptions {
             level: "info".to_owned(),
             levels: BTreeMap::new(),
             file: None,
-            redact: ["password", "token", "authorization", "cookie", "secret"]
-                .map(String::from)
-                .to_vec(),
+            redact: Redactor::DEFAULT_FRAGMENTS.map(String::from).to_vec(),
             slow_query_ms: 200,
         }
     }
@@ -79,10 +82,9 @@ impl LogOptions {
     }
 }
 
-impl ConfigSection for LogOptions {
-    const KEY: &'static str = "log";
-
-    fn validate(&self) -> Result<(), String> {
+impl LogOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map(drop).map_err(|error| error.to_string())
     }
 }
@@ -136,12 +138,13 @@ impl<'de> Deserialize<'de> for LogFormat {
 /// `storage/logs/navree.2026-10-25.log`; with [`Rotation::Never`] it writes
 /// `storage/logs/navree.log`. Relative paths are relative to the working
 /// directory; the directory is created when missing.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct FileLog {
     /// The file path; the date is inserted before the extension.
     pub path: PathBuf,
     /// When a new file is started.
+    #[config(one_of = "daily, hourly, never")]
     pub rotation: Rotation,
     /// How many days of rotated files are kept (at least 1); older files
     /// are deleted when a new one starts.
@@ -210,41 +213,6 @@ impl<'de> Deserialize<'de> for Rotation {
     }
 }
 
-/// A list of strings, or one comma-separated string (blank items dropped).
-fn list_or_comma_string<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    struct ListVisitor;
-
-    impl<'de> Visitor<'de> for ListVisitor {
-        type Value = Vec<String>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list of strings or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
-            Ok(s.split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(str::to_owned)
-                .collect())
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element::<String>()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-
-        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-            Ok(Vec::new())
-        }
-    }
-
-    d.deserialize_any(ListVisitor)
-}
-
 /// A `target = level` table, or a `target=level,target=level` string.
 fn levels_map_or_string<'de, D: Deserializer<'de>>(
     d: D,
@@ -283,4 +251,52 @@ fn levels_map_or_string<'de, D: Deserializer<'de>>(
     }
 
     d.deserialize_any(LevelsVisitor)
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_config::FieldType;
+
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = LogOptions::schema().expect("schema");
+        assert_eq!(schema.key, "log");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/basics/logging/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("format").ty, FieldType::choice(&["pretty", "json"]));
+        assert_eq!(field("redact").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("file").ty, FieldType::Table);
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        assert!(
+            leaves.contains(&"log.file.keep_days".to_owned()),
+            "{leaves:?}"
+        );
+        let defaults = LogOptions::defaults().expect("defaults");
+        assert_eq!(defaults["level"], "info");
+        assert_eq!(defaults["slow_query_ms"], 200);
+    }
+
+    #[test]
+    fn redaction_starts_from_the_shared_list_of_secret_words() {
+        let defaults = LogOptions::default();
+        assert_eq!(defaults.redact, Redactor::DEFAULT_FRAGMENTS);
+        let published = LogOptions::defaults().expect("defaults");
+        assert_eq!(
+            published["redact"].as_array().map(Vec::len),
+            Some(Redactor::DEFAULT_FRAGMENTS.len())
+        );
+    }
 }

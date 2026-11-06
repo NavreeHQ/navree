@@ -4,9 +4,9 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use http::HeaderValue;
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_contracts::Secret;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 use crate::extract::MultipartLimits;
 
@@ -21,7 +21,8 @@ use crate::extract::MultipartLimits;
 /// errors = { code = true }
 /// server = { max_connections = 10000 }
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigSection)]
+#[config(key = "http", docs = "/docs/basics/routing/", validate = Self::check_values)]
 #[serde(default)]
 pub struct HttpOptions {
     /// The address `serve` binds (default `127.0.0.1:8080`).
@@ -30,6 +31,7 @@ pub struct HttpOptions {
     /// path starts with `!` ignore it.
     pub api_prefix: String,
     /// Cross-origin settings.
+    #[config(table)]
     pub cors: CorsOptions,
     /// The request timeout (default 30 s); routes may override it.
     pub timeout_secs: u64,
@@ -59,7 +61,7 @@ pub struct HttpOptions {
     /// scrapes keep working and an orchestrator does not restart instances
     /// that are only down for maintenance). From the environment, a
     /// comma-separated list (`APP_HTTP__MAINTENANCE_EXCEPT=/health/live,/up`).
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub maintenance_except: Vec<String>,
     /// Take the client IP from `X-Forwarded-For` / `X-Real-IP` sent by any
     /// peer (default `false`; enable only when every request comes through
@@ -73,7 +75,7 @@ pub struct HttpOptions {
     /// is the first address from the right that is not a listed proxy.
     /// When set, it replaces `trust_proxy`. From the environment, a
     /// comma-separated list (`APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`).
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub trusted_proxies: Vec<String>,
     /// The key for signed URLs. When unset, a key derived from the app key
     /// (`app.key`, or `APP_KEY`) is used; with no app key either, a random
@@ -83,8 +85,10 @@ pub struct HttpOptions {
     /// (default 30 s).
     pub shutdown_grace_secs: u64,
     /// How error bodies are rendered (`http.errors`).
+    #[config(table)]
     pub errors: ErrorOptions,
     /// The limits on connections (`http.server`).
+    #[config(table)]
     pub server: ServerOptions,
     /// The limits on `multipart/form-data` forms (`http.multipart`).
     pub multipart: MultipartLimits,
@@ -114,7 +118,7 @@ pub struct HttpOptions {
 /// max_headers = 100
 /// write_stall_timeout_ms = 60000
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ServerOptions {
     /// How long a client has to send a request head, from the moment it
@@ -299,7 +303,7 @@ impl ServerOptions {
 /// [http.errors]
 /// code = true
 /// ```
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ErrorOptions {
     /// Send the machine-readable `code` member in every error body (default
@@ -344,14 +348,14 @@ impl Default for HttpOptions {
 /// and explicitly listed request and exposed headers (no wildcards). Applied
 /// by [`CorsLayer`](crate::CorsLayer); an origin that is not listed gets no
 /// CORS headers.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CorsOptions {
     /// Exact origins allowed to call the API, e.g. `http://localhost:3000`.
     /// Empty (the default) disables CORS. `*` is rejected. From the
     /// environment, a comma-separated list
     /// (`APP_HTTP__CORS__ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com`).
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allowed_origins: Vec<String>,
     /// Allow cookies on cross-origin requests (default `true`).
     pub allow_credentials: bool,
@@ -369,37 +373,13 @@ impl Default for CorsOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Origins {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let origins = match Origins::deserialize(deserializer)? {
-        Origins::List(origins) => origins,
-        Origins::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(origins
-        .into_iter()
-        .map(|origin| origin.trim().to_owned())
-        .filter(|origin| !origin.is_empty())
-        .collect())
-}
-
-impl ConfigSection for HttpOptions {
-    const KEY: &'static str = "http";
-
-    fn validate(&self) -> Result<(), String> {
+impl HttpOptions {
+    /// Checks the values for the configuration section: every problem, in
+    /// one message (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
-}
 
-impl HttpOptions {
     /// The key a client's per-IP limits are counted under: its IPv4 address,
     /// or the network of its IPv6 address (`rate_limit_ipv6_prefix`).
     pub fn rate_limit_key(&self, ip: std::net::IpAddr) -> std::net::IpAddr {
@@ -463,7 +443,58 @@ impl HttpOptions {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = HttpOptions::schema().expect("schema");
+        assert_eq!(schema.key, "http");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/basics/routing/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert_eq!(schema.secret_paths(), ["http.signing_key"]);
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        for table in ["cors", "errors", "server"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+        }
+        assert_eq!(
+            field("trusted_proxies").ty,
+            FieldType::list(FieldType::String)
+        );
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        for path in [
+            "http.cors.allowed_origins",
+            "http.errors.code",
+            "http.server.max_connections",
+        ] {
+            assert!(leaves.contains(&path.to_owned()), "{path}: {leaves:?}");
+        }
+        let defaults = HttpOptions::defaults().expect("defaults");
+        assert_eq!(defaults["addr"], "127.0.0.1:8080");
+        assert_eq!(defaults["per_ip_rate_limit"], 600);
+        assert_eq!(defaults["server"]["max_connections"], 10_000);
+        assert!(defaults["signing_key"].is_null());
+    }
+
+    #[test]
+    fn the_signing_key_never_shows_in_debug() {
+        let options = HttpOptions {
+            signing_key: Some(Secret::new("url-signing-key-value".to_owned())),
+            ..HttpOptions::default()
+        };
+        assert!(!format!("{options:?}").contains("url-signing-key-value"));
+    }
 
     #[test]
     fn defaults_match_the_plan() {

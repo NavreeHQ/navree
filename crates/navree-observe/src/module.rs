@@ -7,7 +7,7 @@ use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::HealthCheck;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 
@@ -55,40 +55,18 @@ pub struct ObserveModule;
 impl ObserveModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: ObserveOptions) -> impl Module {
-        ConfiguredObserveModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<ObserveModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `observe` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredObserveModule { options: None }
+        ConfiguredModule::<ObserveModule, ObserveOptions>::from_config(register)
     }
 }
 
 impl Module for ObserveModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `ObserveModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredObserveModule {
-    /// `None`: read from configuration.
-    options: Option<ObserveOptions>,
-}
-
-impl Module for ConfiguredObserveModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<ObserveModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 
@@ -104,6 +82,9 @@ fn register(m: &mut ModuleBuilder, options: Option<ObserveOptions>) {
         })),
         None => m.config::<ObserveOptions>(),
     };
+    // The factory below reads the tracing options (and the `OTEL_*`
+    // variables) however the module was configured.
+    m.config_section::<TracingOptions>();
     m.exports::<ObserveOptions>()
         .factory(Factory::<Health>::new(|r: Resolver| async move {
             let checks = r.get_all::<dyn HealthCheck>().await?;

@@ -1,7 +1,7 @@
 //! [`ApiOptions`]: the `api` configuration section.
 
 use navree_config::{ConfigSection, Environment};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 /// OpenAPI document and docs UI settings (configuration section `api`;
 /// every key optional).
@@ -16,7 +16,8 @@ use serde::{Deserialize, Deserializer};
 /// require_docs = true            # an undocumented route stops the boot
 /// undocumented = ["GET /storage/*"]
 /// ```
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, ConfigSection)]
+#[config(key = "api", docs = "/docs/digging-deeper/openapi/", validate = Self::check_values)]
 #[serde(default)]
 pub struct ApiOptions {
     /// The document title, `info.title` (default `Navree API`).
@@ -26,7 +27,7 @@ pub struct ApiOptions {
     /// Server URLs listed in the document (default none: clients use the
     /// URL they loaded the document from). From the environment, a
     /// comma-separated list (`APP_API__SERVERS=https://a.example,https://b.example`).
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub servers: Vec<String>,
     /// Serve the API reference page at `{api_prefix}/docs`, when
     /// [`openapi_json`](Self::openapi_json) is on too: the page shows what the
@@ -47,7 +48,7 @@ pub struct ApiOptions {
     /// (every method), with a trailing `*` matching any rest of the path
     /// (`"GET /storage/*"`). The path is the mounted one, prefix and
     /// version included. From the environment, a comma-separated list.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub undocumented: Vec<String>,
 }
 
@@ -86,22 +87,9 @@ impl ApiOptions {
                 .docs_ui
                 .unwrap_or_else(|| on_by_default(env, cfg!(debug_assertions)))
     }
-}
 
-/// The default of `docs_ui` and `openapi_json`: off in `production` and
-/// `staging` (in any case), on in any other environment; with no environment (or a blank
-/// one), on in a debug build and off in a release build.
-fn on_by_default(env: Option<&str>, debug_build: bool) -> bool {
-    match env.map(str::trim).filter(|env| !env.is_empty()) {
-        Some(env) => !Environment::parse(env).behaves_like_production(),
-        None => debug_build,
-    }
-}
-
-impl ConfigSection for ApiOptions {
-    const KEY: &'static str = "api";
-
-    fn validate(&self) -> Result<(), String> {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         let mut errors = Vec::new();
         if self.title.trim().is_empty() {
             errors.push("api.title must not be empty".to_owned());
@@ -124,31 +112,62 @@ impl ConfigSection for ApiOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum List {
-        Items(Vec<String>),
-        Joined(String),
+/// The default of `docs_ui` and `openapi_json`: off in `production` and
+/// `staging` (in any case), on in any other environment; with no environment (or a blank
+/// one), on in a debug build and off in a release build.
+fn on_by_default(env: Option<&str>, debug_build: bool) -> bool {
+    match env.map(str::trim).filter(|env| !env.is_empty()) {
+        Some(env) => !Environment::parse(env).behaves_like_production(),
+        None => debug_build,
     }
-    let items = match List::deserialize(deserializer)? {
-        List::Items(items) => items,
-        List::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
 }
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = ApiOptions::schema().expect("schema");
+        assert_eq!(schema.key, "api");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/openapi/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("servers").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("docs_ui").ty, FieldType::Bool);
+        assert_eq!(field("require_docs").ty, FieldType::Bool);
+        let defaults = ApiOptions::defaults().expect("defaults");
+        assert_eq!(defaults["title"], "Navree API");
+        assert_eq!(defaults["version"], "1.0.0");
+        assert!(defaults["docs_ui"].is_null());
+    }
+
+    #[test]
+    fn lists_come_from_a_list_or_one_comma_separated_string() {
+        let list: ApiOptions =
+            serde_json::from_value(serde_json::json!({ "servers": ["https://a.test", " "] }))
+                .expect("list");
+        assert_eq!(list.servers, ["https://a.test"]);
+        let joined: ApiOptions =
+            serde_json::from_value(serde_json::json!({ "undocumented": "GET /storage/*, /up,," }))
+                .expect("joined");
+        assert_eq!(joined.undocumented, ["GET /storage/*", "/up"]);
+    }
 
     #[test]
     fn off_in_production_and_staging_and_on_in_any_other_environment() {

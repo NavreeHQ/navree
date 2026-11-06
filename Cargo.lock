@@ -5224,6 +5224,7 @@ name = "navree-log"
 version = "1.0.0"
 dependencies = [
  "navree-config",
+ "navree-contracts",
  "navree-kernel",
  "navree-telemetry",
  "serde",

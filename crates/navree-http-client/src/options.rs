@@ -1,8 +1,8 @@
 //! [`HttpClientOptions`] and [`SsrfPolicy`].
 
 use http::HeaderValue;
-use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer};
+use navree_config::{ConfigSection, ConfigTable};
+use serde::Deserialize;
 
 /// Options for [`HttpClient`](crate::HttpClient) and
 /// [`HttpClientModule::for_root`](crate::HttpClientModule::for_root).
@@ -27,7 +27,12 @@ use serde::{Deserialize, Deserializer};
 ///
 /// From the environment, `APP_HTTP_CLIENT__SSRF__ALLOW_HOSTS` takes a
 /// comma-separated list.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(
+    key = "http_client",
+    docs = "/docs/digging-deeper/http-client/",
+    validate = Self::check
+)]
 #[serde(default)]
 pub struct HttpClientOptions {
     /// Time allowed for each attempt, from connecting to the last body byte
@@ -46,6 +51,7 @@ pub struct HttpClientOptions {
     /// (default 10 MiB, at least 1).
     pub max_response_bytes: u64,
     /// Which destinations are refused (server-side request forgery guard).
+    #[config(table)]
     pub ssrf: SsrfPolicy,
     /// The `User-Agent` header sent with every request (default
     /// `navree-http-client/<version>`).
@@ -66,10 +72,9 @@ impl Default for HttpClientOptions {
     }
 }
 
-impl ConfigSection for HttpClientOptions {
-    const KEY: &'static str = "http_client";
-
-    fn validate(&self) -> Result<(), String> {
+impl HttpClientOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         if self.timeout_secs == 0 {
             return Err("`timeout_secs` must be at least 1".to_owned());
         }
@@ -101,7 +106,7 @@ fn default_user_agent() -> String {
 /// `100.100.100.200`, `192.0.0.192`, `fd00:ec2::254`) are refused even with
 /// `block_private` off. Both literal IP URLs and the addresses a host name
 /// resolves to are checked, on every redirect hop too.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SsrfPolicy {
     /// Refuse private, loopback, link-local and other internal addresses
@@ -110,7 +115,7 @@ pub struct SsrfPolicy {
     /// Destinations that bypass the policy: host names (`api.internal`),
     /// host globs (`*.svc.cluster.local`), IP addresses (`127.0.0.1`) or
     /// CIDR networks (`10.20.0.0/16`). Host names match case-insensitively.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allow_hosts: Vec<String>,
 }
 
@@ -123,23 +128,54 @@ impl Default for SsrfPolicy {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable holds).
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Hosts {
-        List(Vec<String>),
-        Joined(String),
+#[cfg(test)]
+mod tests {
+    use navree_config::FieldType;
+
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = HttpClientOptions::schema().expect("schema");
+        assert_eq!(schema.key, "http_client");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/digging-deeper/http-client/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("ssrf").ty, FieldType::Table);
+        assert_eq!(field("timeout_secs").ty, FieldType::Integer);
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        assert!(
+            leaves.contains(&"http_client.ssrf.allow_hosts".to_owned()),
+            "{leaves:?}"
+        );
+        let defaults = HttpClientOptions::defaults().expect("defaults");
+        assert_eq!(defaults["timeout_secs"], 30);
+        assert_eq!(defaults["ssrf"]["block_private"], true);
     }
-    let hosts = match Hosts::deserialize(deserializer)? {
-        Hosts::List(hosts) => hosts,
-        Hosts::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(hosts
-        .into_iter()
-        .map(|host| host.trim().to_owned())
-        .filter(|host| !host.is_empty())
-        .collect())
+
+    #[test]
+    fn allowed_hosts_come_from_a_list_or_one_comma_separated_string() {
+        let list: SsrfPolicy =
+            serde_json::from_value(serde_json::json!({ "allow_hosts": ["a.internal", " "] }))
+                .expect("list");
+        assert_eq!(list.allow_hosts, ["a.internal"]);
+        let joined: SsrfPolicy = serde_json::from_value(
+            serde_json::json!({ "allow_hosts": "a.internal, *.svc.cluster.local,," }),
+        )
+        .expect("joined");
+        assert_eq!(joined.allow_hosts, ["a.internal", "*.svc.cluster.local"]);
+    }
 }

@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use navree_contracts::Redactor;
 use serde_json::{Map, Value};
 
 use crate::naming::subject_type_of;
@@ -19,6 +20,9 @@ pub(crate) struct Policy {
     skip_entities: HashSet<String>,
     /// Lower-cased field names skipped at any depth.
     skip_fields: HashSet<String>,
+    /// Finds the fields that are secrets by name; they are skipped at any
+    /// depth too.
+    secrets: Redactor,
     /// Lower-cased (subject type, field) pairs.
     skip_owned_fields: HashSet<(String, String)>,
     /// Table → subject type overrides.
@@ -31,6 +35,7 @@ impl Policy {
             enabled: options.enabled,
             skip_entities: HashSet::new(),
             skip_fields: HashSet::new(),
+            secrets: Redactor::new(),
             skip_owned_fields: HashSet::new(),
             subject_types: options
                 .subject_types
@@ -99,12 +104,18 @@ impl Policy {
         self.strip_names(value)
     }
 
+    /// Whether a field called `name` is dropped wherever it is: it is in the
+    /// skip list, or its name says it holds a secret.
+    fn skips_name(&self, name: &str) -> bool {
+        self.skip_fields.contains(&name.to_lowercase()) || self.secrets.is_secret(name)
+    }
+
     /// `value` without the fields skipped everywhere, at any depth.
     fn strip_names(&self, value: Value) -> Value {
         match value {
             Value::Object(map) => Value::Object(
                 map.into_iter()
-                    .filter(|(key, _)| !self.skip_fields.contains(&key.to_lowercase()))
+                    .filter(|(key, _)| !self.skips_name(key))
                     .map(|(key, value)| (key, self.strip_names(value)))
                     .collect(),
             ),
@@ -170,6 +181,25 @@ mod tests {
                 "email": "a@example.com",
                 "settings": {"theme": "dark", "list": [{"ok": 2}]},
             })
+        );
+    }
+
+    #[test]
+    fn fields_named_like_secrets_are_stripped_too() {
+        let p = policy(AuditOptions::default());
+        let stripped = p.strip(
+            Some("integrations"),
+            json!({
+                "name": "tally",
+                "api_key": "k-1",
+                "Client_Secret": "s-1",
+                "db_password": "p-1",
+                "config": {"webhook_token": "t-1", "region": "ap-south-1"},
+            }),
+        );
+        assert_eq!(
+            stripped,
+            json!({"name": "tally", "config": {"region": "ap-south-1"}})
         );
     }
 

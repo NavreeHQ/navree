@@ -5,7 +5,7 @@ use std::sync::Arc;
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, SystemClock, ZoneSource};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::controller::TimeController;
@@ -48,39 +48,18 @@ impl TimeModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: TimeOptions) -> impl Module {
-        ConfiguredTimeModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<TimeModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `time` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredTimeModule { options: None }
+        ConfiguredModule::<TimeModule, TimeOptions>::from_config(register)
     }
 }
 
 impl Module for TimeModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `TimeModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredTimeModule {
-    options: Option<TimeOptions>,
-}
-
-impl Module for ConfiguredTimeModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<TimeModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

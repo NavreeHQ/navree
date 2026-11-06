@@ -12,8 +12,8 @@ use navree_http::extract::Request;
 use navree_http::middleware::{Next, from_fn};
 use navree_http::{AppError, GlobalLayer, IntoResponse, LayerSlot, ModuleBuilderHttpExt, Response};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, Lifecycle, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, Lifecycle, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_orm::hooks::ModelHook;
 use navree_orm::{Model, ModuleBuilderOrmExt};
@@ -114,41 +114,19 @@ impl WorkspaceModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(config: WorkspaceConfig) -> impl Module {
-        ConfiguredWorkspaceModule {
-            config: Some(config),
-        }
+        ConfiguredModule::<WorkspaceModule, _>::for_root(config, register)
     }
 
     /// The module configured from the `workspace` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredWorkspaceModule { config: None }
+        ConfiguredModule::<WorkspaceModule, WorkspaceConfig>::from_config(register)
     }
 }
 
 impl Module for WorkspaceModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `WorkspaceModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredWorkspaceModule {
-    /// `None`: read from configuration.
-    config: Option<WorkspaceConfig>,
-}
-
-impl Module for ConfiguredWorkspaceModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<WorkspaceModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.config.clone());
     }
 }
 

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 /// Field names that never reach the audit trail, whatever
 /// [`AuditOptions::skip_fields`] says.
@@ -36,8 +36,10 @@ pub const DEFAULT_SKIP_FIELDS: &[&str] = &[
 ///
 /// The names in [`DEFAULT_SKIP_FIELDS`] (passwords, tokens, secrets,
 /// two-factor codes) are always skipped, even when `skip_fields` replaces
-/// the default list.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+/// the default list, and so is any field whose name is a secret by name
+/// (it contains one of the shared secret words, such as `api_key`).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "audit", docs = "/docs/security/audit-log/", validate = Self::check)]
 #[serde(default)]
 pub struct AuditOptions {
     /// Record audit entries at all (default `true`). When off, nothing is
@@ -49,13 +51,13 @@ pub struct AuditOptions {
     /// Tables whose changes are never audited, by table name (`sessions`)
     /// or subject type (`Session`), case-insensitively. The `audit_logs`
     /// table itself is never audited.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub skip_entities: Vec<String>,
     /// Fields dropped from old and new values and metadata: a name
     /// (`ssn`, matched case-insensitively at any depth) or `table.field`
     /// (`users.phone`, top-level fields of one table or subject type).
     /// Defaults to [`DEFAULT_SKIP_FIELDS`], which apply in any case.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub skip_fields: Vec<String>,
     /// The subject type recorded for a table, overriding the default (the
     /// table name singularised in PascalCase: `deals` → `Deal`,
@@ -81,14 +83,6 @@ impl Default for AuditOptions {
             subject_types: BTreeMap::new(),
             routes: true,
         }
-    }
-}
-
-impl ConfigSection for AuditOptions {
-    const KEY: &'static str = "audit";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check()
     }
 }
 
@@ -120,24 +114,49 @@ impl AuditOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum List {
-        Items(Vec<String>),
-        Joined(String),
+#[cfg(test)]
+mod tests {
+    use navree_config::FieldType;
+
+    use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = AuditOptions::schema().expect("schema");
+        assert_eq!(schema.key, "audit");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/security/audit-log/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("skip_fields").ty, FieldType::list(FieldType::String));
+        assert_eq!(field("subject_types").ty, FieldType::map(FieldType::String));
+        assert_eq!(field("retention_days").ty, FieldType::Integer);
+        let defaults = AuditOptions::defaults().expect("defaults");
+        assert_eq!(defaults["retention_days"], 365);
+        assert_eq!(defaults["skip_fields"][0], "password");
     }
-    let items = match List::deserialize(deserializer)? {
-        List::Items(items) => items,
-        List::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
+
+    #[test]
+    fn lists_come_from_a_list_or_one_comma_separated_string() {
+        let list: AuditOptions = serde_json::from_value(
+            serde_json::json!({ "skip_fields": [" ssn ", "", "users.phone"] }),
+        )
+        .expect("list");
+        assert_eq!(list.skip_fields, ["ssn", "users.phone"]);
+        let joined: AuditOptions = serde_json::from_value(
+            serde_json::json!({ "skip_entities": "sessions, jobs,,", "skip_fields": "" }),
+        )
+        .expect("joined");
+        assert_eq!(joined.skip_entities, ["sessions", "jobs"]);
+        assert!(joined.skip_fields.is_empty());
+    }
 }

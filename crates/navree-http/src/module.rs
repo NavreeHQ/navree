@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Lifecycle,
-    Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, ConfiguredModule, Factory, Injectable,
+    KernelError, Lifecycle, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use tokio::sync::watch;
 
@@ -44,39 +44,18 @@ pub struct HttpModule;
 impl HttpModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: HttpOptions) -> impl Module {
-        ConfiguredHttpModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<HttpModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `http` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredHttpModule { options: None }
+        ConfiguredModule::<HttpModule, HttpOptions>::from_config(register)
     }
 }
 
 impl Module for HttpModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `HttpModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredHttpModule {
-    options: Option<HttpOptions>,
-}
-
-impl Module for ConfiguredHttpModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<HttpModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

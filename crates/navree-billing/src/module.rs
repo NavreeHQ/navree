@@ -11,7 +11,7 @@ use navree_events::ModuleBuilderEventsExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{
-    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::{MemberAdded, MemberRemoved};
@@ -69,15 +69,13 @@ impl BillingModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: BillingOptions) -> impl Module {
-        ConfiguredBillingModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<BillingModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `billing` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredBillingModule { options: None }
+        ConfiguredModule::<BillingModule, BillingOptions>::from_config(register)
     }
 
     /// Registers `B` as a billable type: the routes and the `Subscribed`
@@ -161,26 +159,6 @@ impl<P: BillingProvider> Module for ProviderFeature<P> {
 impl Module for BillingModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `BillingModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredBillingModule {
-    /// `None`: read from configuration.
-    options: Option<BillingOptions>,
-}
-
-impl Module for ConfiguredBillingModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<BillingModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

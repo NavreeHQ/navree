@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::str::FromStr;
 
-use navree_config::ConfigSection;
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
+use navree_config::{ConfigSection, ConfigTable};
 use serde::{Deserialize, Serialize};
 
 use crate::role::{RoleTable, check_permission, check_role_name};
@@ -61,6 +61,28 @@ impl fmt::Display for ResolverKind {
     }
 }
 
+impl FromStr for ResolverKind {
+    type Err = String;
+
+    /// The kind named by [`as_str`](ResolverKind::as_str); the message does
+    /// not repeat the text.
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        Ok(match name {
+            "header" => ResolverKind::Header,
+            "subdomain" => ResolverKind::Subdomain,
+            "path" => ResolverKind::Path,
+            "claim" => ResolverKind::Claim,
+            "domain" => ResolverKind::Domain,
+            "session" => ResolverKind::Session,
+            _ => {
+                return Err(
+                    "a resolver is header, subdomain, path, claim, domain or session".to_owned(),
+                );
+            }
+        })
+    }
+}
+
 /// How one workspace's data is kept apart from another's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -99,7 +121,7 @@ pub struct RoleOptions {
     /// inside a workspace, on top of the built-in ones of `owner`, `admin`,
     /// `member` and `viewer`. A list, or a comma-separated string (from an
     /// environment variable).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub permissions: Vec<String>,
 }
 
@@ -111,7 +133,7 @@ pub struct OrgRoleOptions {
     /// Permission strings the role grants inside the organization (on the
     /// organization routes and behind [`InOrganization`](crate::InOrganization)),
     /// on top of the built-in ones. A list, or a comma-separated string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub permissions: Vec<String>,
     /// The workspace role the organization role gives in the workspaces its
     /// members may enter. Default: the workspace role of the same name
@@ -138,7 +160,7 @@ pub struct OrgRoleOptions {
 /// permissions = ["organization.read", "reports.read"]
 /// workspace_role = "viewer"
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct OrganizationOptions {
     /// Whether organizations are on: the services work, the routes are
@@ -147,7 +169,7 @@ pub struct OrganizationOptions {
     pub enabled: bool,
     /// The resolvers [`CurrentOrganization`](crate::CurrentOrganization)
     /// tries, in order.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub resolvers: Vec<ResolverKind>,
     /// The header the `header` resolver reads.
     pub header: String,
@@ -199,14 +221,14 @@ impl OrganizationOptions {
 /// path_prefix = "/p"
 /// claim = "partition"
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PartitionOptions {
     /// Whether partitions are on. Off by default.
     pub enabled: bool,
     /// The resolvers that find the request's partition, in order (`header`,
     /// `path` or `claim`).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub resolvers: Vec<ResolverKind>,
     /// The header the `header` resolver reads.
     pub header: String,
@@ -236,7 +258,7 @@ impl PartitionOptions {
 }
 
 /// Invitation settings (`workspace.invitations`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct InvitationOptions {
     /// How long an invitation can be accepted, in seconds (default seven
@@ -301,10 +323,11 @@ impl fmt::Display for DemoMode {
 
 /// Demo workspaces (`workspace.demo`): workspaces seeded from fixtures for
 /// sales and onboarding, read-only or reset every night.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DemoOptions {
     /// `read_only` (the default) or `reset`.
+    #[config(one_of = "read_only, reset")]
     pub mode: DemoMode,
     /// When the nightly reset runs in `reset` mode, as 24-hour `HH:MM`
     /// UTC (default `03:00`). Needs `ScheduleModule` in the app.
@@ -315,13 +338,13 @@ pub struct DemoOptions {
     pub guest_role: Option<String>,
     /// Roles whose members still write to a read-only demo (the people who
     /// curate it). A list, or a comma-separated string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub editor_roles: Vec<String>,
     /// Routes that write but stay open in a read-only demo: a route name
     /// (`reports.preview`) or a method and the mounted path
     /// (`POST /api/v1/reports/preview`). A list, or a comma-separated
     /// string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allow: Vec<String>,
     /// The directory [`DemoSeed::fixture`](crate::DemoSeed::fixture) reads
     /// `<name>.json` files from (default `fixtures/demo`).
@@ -485,11 +508,16 @@ pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
 /// Environment variables map as usual: `APP_WORKSPACE__HEADER` →
 /// `workspace.header`; lists also accept a comma-separated string
 /// (`APP_WORKSPACE__RESOLVERS=header,path`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(
+    key = "workspace",
+    docs = "/docs/workspaces/introduction/",
+    validate = Self::check_values
+)]
 #[serde(default)]
 pub struct WorkspaceConfig {
     /// The resolvers to try, in order.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list_of")]
     pub resolvers: Vec<ResolverKind>,
     /// The header the `header` resolver reads.
     pub header: String,
@@ -501,6 +529,7 @@ pub struct WorkspaceConfig {
     /// The bearer JWT claim the `claim` resolver reads.
     pub claim: String,
     /// How workspaces' data is kept apart.
+    #[config(one_of = "row, schema, database")]
     pub isolation: Isolation,
     /// Whether the module mounts its routes (`/api/workspaces/...` and
     /// `/api/invitations/accept`).
@@ -522,6 +551,7 @@ pub struct WorkspaceConfig {
     /// the app has none.
     pub users_table: String,
     /// Invitations.
+    #[config(table)]
     pub invitations: InvitationOptions,
     /// Extra permissions per role, and app-defined roles.
     pub roles: BTreeMap<String, RoleOptions>,
@@ -532,10 +562,13 @@ pub struct WorkspaceConfig {
     /// `{id}` standing for the workspace id (simple form, 32 hex digits).
     pub database_url: Option<String>,
     /// Organizations above workspaces (off by default).
+    #[config(table)]
     pub organizations: OrganizationOptions,
     /// Partitions inside workspaces (off by default).
+    #[config(table)]
     pub partitions: PartitionOptions,
     /// Demo workspaces.
+    #[config(table)]
     pub demo: DemoOptions,
 }
 
@@ -710,10 +743,10 @@ impl WorkspaceConfig {
     }
 }
 
-impl ConfigSection for WorkspaceConfig {
-    const KEY: &'static str = "workspace";
-
-    fn validate(&self) -> Result<(), String> {
+impl WorkspaceConfig {
+    /// Checks the values for the configuration section: every problem, in
+    /// one message (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         self.check().map_err(|errors| errors.join("; "))
     }
 }
@@ -832,52 +865,84 @@ fn is_identifier(prefix: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-/// Deserializes a list from a sequence or from a comma-separated string
-/// (environment variables are strings).
-fn list_or_csv<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    struct ListOrCsv<T>(std::marker::PhantomData<T>);
-
-    impl<'de, T: Deserialize<'de>> Visitor<'de> for ListOrCsv<T> {
-        type Value = Vec<T>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<Vec<T>, E> {
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(|item| T::deserialize(de::value::StrDeserializer::<E>::new(item)))
-                .collect()
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<T>, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-    }
-
-    deserializer.deserialize_any(ListOrCsv(std::marker::PhantomData))
-}
-
 #[cfg(test)]
 mod tests {
-    use navree_config::{Config, ConfigSources};
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde_json::json;
 
     use super::*;
 
     fn load(sources: ConfigSources) -> Result<WorkspaceConfig, navree_config::ConfigError> {
         Config::load(&sources).unwrap().typed::<WorkspaceConfig>()
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = WorkspaceConfig::schema().expect("schema");
+        assert_eq!(schema.key, "workspace");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/workspaces/introduction/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(
+            field("isolation").ty,
+            FieldType::choice(&["row", "schema", "database"])
+        );
+        for table in ["invitations", "organizations", "partitions", "demo"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+        }
+        let leaves = schema.leaves();
+        let leaf = |path: &str| {
+            leaves
+                .iter()
+                .find(|(key, _)| key == path)
+                .map(|(_, field)| *field)
+                .unwrap_or_else(|| panic!("{path}"))
+        };
+        assert_eq!(
+            leaf("workspace.demo.mode").ty,
+            FieldType::choice(&["read_only", "reset"])
+        );
+        leaf("workspace.organizations.resolvers");
+        leaf("workspace.partitions.path_prefix");
+        leaf("workspace.invitations.ttl_secs");
+        let defaults = WorkspaceConfig::defaults().expect("defaults");
+        assert_eq!(defaults["header"], "X-Workspace");
+        assert_eq!(defaults["isolation"], "row");
+        assert_eq!(defaults["invitations"]["ttl_secs"], 604_800);
+        assert_eq!(defaults["demo"]["mode"], "read_only");
+    }
+
+    #[test]
+    fn resolver_names_parse_and_a_bad_one_is_refused() {
+        for kind in [
+            ResolverKind::Header,
+            ResolverKind::Subdomain,
+            ResolverKind::Path,
+            ResolverKind::Claim,
+            ResolverKind::Domain,
+            ResolverKind::Session,
+        ] {
+            assert_eq!(kind.as_str().parse::<ResolverKind>(), Ok(kind));
+        }
+        assert!("cookie".parse::<ResolverKind>().is_err());
+        let result = load(
+            ConfigSources::new().env_vars("APP_", [("APP_WORKSPACE__RESOLVERS", "header, cookie")]),
+        );
+        assert!(result.is_err());
     }
 
     #[test]

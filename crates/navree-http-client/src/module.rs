@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
-use navree_config::Config;
-use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_config::{Config, ModuleBuilderConfigExt};
+use navree_kernel::{
+    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_telemetry::Telemetry;
 
 use crate::{HttpClient, HttpClientOptions};
@@ -41,23 +43,19 @@ pub struct HttpClientModule;
 impl HttpClientModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: HttpClientOptions) -> impl Module {
-        ConfiguredHttpClientModule {
-            source: Source::Options(Arc::new(options)),
-        }
+        ConfiguredModule::<HttpClientModule, _>::for_root(options, register)
     }
 
     /// The module configured from section `http_client` of the app's
     /// `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredHttpClientModule {
-            source: Source::Config,
-        }
+        ConfiguredModule::<HttpClientModule, HttpClientOptions>::from_config(register)
     }
 }
 
 impl Module for HttpClientModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, Source::Config);
+        register(m, None);
     }
 }
 
@@ -87,27 +85,16 @@ impl Source {
     }
 }
 
-/// `HttpClientModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredHttpClientModule {
-    source: Source,
-}
-
-impl Module for ConfiguredHttpClientModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<HttpClientModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.source.clone());
-    }
-}
-
-/// Global; provides and exports the singleton `HttpClient`.
-fn register(m: &mut ModuleBuilder, source: Source) {
+/// Global; provides and exports the singleton `HttpClient`. No options: the
+/// module reads section `http_client`.
+fn register(m: &mut ModuleBuilder, options: Option<HttpClientOptions>) {
+    let source = match options {
+        Some(options) => Source::Options(Arc::new(options)),
+        None => {
+            m.config_section::<HttpClientOptions>();
+            Source::Config
+        }
+    };
     let deps = source.deps();
     m.global()
         .factory(

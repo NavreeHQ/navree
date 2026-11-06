@@ -1,10 +1,7 @@
 //! [`LogbookOptions`]: the `logbook` configuration section.
 
-use std::fmt;
-
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
 use navree_telemetry::{EventKind, Interest, LogLevel};
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
 /// The `logbook` configuration section. Every key is optional.
@@ -30,7 +27,8 @@ use serde::{Deserialize, Serialize};
 /// From the environment: `APP_LOGBOOK__STORE=memory`,
 /// `APP_LOGBOOK__WATCHERS__CACHE=false`, and lists as comma-separated
 /// strings (`APP_LOGBOOK__IGNORE__ROUTES=/health/*,/metrics,/up`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "logbook", docs = "/docs/tools/logbook/", validate = Self::check)]
 #[serde(default)]
 pub struct LogbookOptions {
     /// Record and serve anything at all. `None` (unset) means on in debug
@@ -39,6 +37,7 @@ pub struct LogbookOptions {
     /// Where the UI is served (`/_logbook`).
     pub path: String,
     /// Where entries are kept.
+    #[config(one_of = "file, memory")]
     pub store: StoreKind,
     /// The SQLite file of the `file` store.
     pub file: String,
@@ -57,12 +56,15 @@ pub struct LogbookOptions {
     /// Repeats of one statement in a batch that mark it as duplicated.
     pub duplicate_queries: usize,
     /// What request and response bodies are stored.
+    #[config(table)]
     pub capture: CaptureOptions,
     /// Allow replaying recorded requests.
     pub replay: bool,
     /// Paths never recorded.
+    #[config(table)]
     pub ignore: IgnoreOptions,
     /// The watchers: one per kind of entry.
+    #[config(table)]
     pub watchers: Watchers,
 }
 
@@ -195,14 +197,6 @@ impl LogbookOptions {
     }
 }
 
-impl ConfigSection for LogbookOptions {
-    const KEY: &'static str = "logbook";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check()
-    }
-}
-
 /// A log level name, case-insensitively.
 pub(crate) fn parse_level(name: &str) -> Option<LogLevel> {
     match name.trim().to_ascii_lowercase().as_str() {
@@ -234,7 +228,7 @@ pub enum StoreKind {
 }
 
 /// `logbook.capture`: what request and response bodies are stored.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CaptureOptions {
     /// Store request bodies.
@@ -256,12 +250,12 @@ impl Default for CaptureOptions {
 }
 
 /// `logbook.ignore`: what is never recorded.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct IgnoreOptions {
     /// Request paths never recorded, with `*` wildcards (`/health/*`); a
     /// comma-separated string from the environment.
-    #[serde(deserialize_with = "list_or_comma_string")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub routes: Vec<String>,
     /// Leave out what the framework does by itself: requests for the toolkit's
     /// own files, and, outside any request, job or scheduled task, the poll of
@@ -280,7 +274,7 @@ impl Default for IgnoreOptions {
 }
 
 /// `logbook.watchers`: each kind of entry, on by default.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct Watchers {
     /// HTTP requests, with headers and bodies.
@@ -329,44 +323,58 @@ impl Default for Watchers {
     }
 }
 
-/// A list, or a comma-separated string (environment variables).
-fn list_or_comma_string<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    struct ListVisitor;
-
-    impl<'de> Visitor<'de> for ListVisitor {
-        type Value = Vec<String>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list of strings or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-            Ok(v.split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
-                .collect())
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element::<String>()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-
-        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-            Ok(Vec::new())
-        }
-    }
-
-    d.deserialize_any(ListVisitor)
-}
-
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = LogbookOptions::schema().expect("schema");
+        assert_eq!(schema.key, "logbook");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/tools/logbook/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("store").ty, FieldType::choice(&["file", "memory"]));
+        for table in ["capture", "ignore", "watchers"] {
+            assert_eq!(field(table).ty, FieldType::Table, "{table}");
+        }
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        for path in [
+            "logbook.capture.max_body_kb",
+            "logbook.ignore.routes",
+            "logbook.watchers.http_client",
+        ] {
+            assert!(leaves.contains(&path.to_owned()), "{path}: {leaves:?}");
+        }
+        let defaults = LogbookOptions::defaults().expect("defaults");
+        assert_eq!(defaults["path"], "/_logbook");
+        assert_eq!(defaults["max_entries"], 10_000);
+        assert_eq!(defaults["watchers"]["requests"], true);
+    }
+
+    #[test]
+    fn ignored_routes_come_from_a_list_or_one_comma_separated_string() {
+        let list: IgnoreOptions =
+            serde_json::from_value(serde_json::json!({ "routes": ["/up", "/metrics"] }))
+                .expect("list");
+        assert_eq!(list.routes, ["/up", "/metrics"]);
+        let joined: IgnoreOptions =
+            serde_json::from_value(serde_json::json!({ "routes": "/up, /metrics,," }))
+                .expect("joined");
+        assert_eq!(joined.routes, ["/up", "/metrics"]);
+    }
 
     #[test]
     fn release_builds_run_only_when_forced() {

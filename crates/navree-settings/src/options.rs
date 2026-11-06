@@ -28,10 +28,12 @@ pub enum SettingsStoreKind {
 ///
 /// From the environment: `APP_SETTINGS__STORE=memory`,
 /// `APP_SETTINGS__CACHE_TTL_SECS=60`, `APP_SETTINGS__ROUTES=false`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "settings", docs = "/docs/packages/settings/")]
 #[serde(default)]
 pub struct SettingsOptions {
     /// Where stored values live (default `database`).
+    #[config(one_of = "database, memory")]
     pub store: SettingsStoreKind,
     /// How long resolved values stay in the app's cache (`CacheModule`), in
     /// seconds (default 300); `0` turns the cache off. Every write clears
@@ -60,13 +62,34 @@ impl SettingsOptions {
     }
 }
 
-impl ConfigSection for SettingsOptions {
-    const KEY: &'static str = "settings";
-}
-
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SettingsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "settings");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let store = schema
+            .fields
+            .iter()
+            .find(|f| f.name == "store")
+            .expect("store");
+        assert_eq!(store.ty, FieldType::choice(&["database", "memory"]));
+        for name in ["cache_ttl_secs", "routes"] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let defaults = SettingsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], "database");
+        assert_eq!(defaults["cache_ttl_secs"], 300);
+    }
 
     #[test]
     fn defaults_match_the_documentation() {

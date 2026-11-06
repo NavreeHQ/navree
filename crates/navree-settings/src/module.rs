@@ -10,8 +10,8 @@ use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_workspace::events::{
     OrganizationDeleted, WorkspaceAttached, WorkspaceDeleted, WorkspaceDetached,
@@ -79,15 +79,13 @@ impl SettingsModule {
     /// The module with explicit options (configure it once, in the app
     /// root).
     pub fn for_root(options: SettingsOptions) -> impl Module {
-        ConfiguredSettingsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<SettingsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `settings` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredSettingsModule { options: None }
+        ConfiguredModule::<SettingsModule, SettingsOptions>::from_config(register)
     }
 
     /// Registers settings type `T`. Import it in the module that owns the
@@ -109,26 +107,6 @@ impl SettingsModule {
 impl Module for SettingsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `SettingsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredSettingsModule {
-    /// `None`: read from configuration.
-    options: Option<SettingsOptions>,
-}
-
-impl Module for ConfiguredSettingsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<SettingsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

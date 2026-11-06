@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 use navree_telemetry::Telemetry;
@@ -50,40 +50,18 @@ pub struct LoggerModule;
 impl LoggerModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: LogOptions) -> impl Module {
-        ConfiguredLoggerModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<LoggerModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `log` section of the app's configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredLoggerModule { options: None }
+        ConfiguredModule::<LoggerModule, LogOptions>::from_config(register)
     }
 }
 
 impl Module for LoggerModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredLoggerModule {
-    /// `None`: read the `log` configuration section.
-    options: Option<LogOptions>,
-}
-
-impl Module for ConfiguredLoggerModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<LoggerModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

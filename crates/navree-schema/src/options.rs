@@ -69,7 +69,8 @@ pub enum KeyStrategy {
 /// assert_eq!(options.morph_key, MorphKey::Int);
 /// assert_eq!(options.timescaledb, TimescaleMode::Auto);
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "schema", docs = "/docs/database/schema-builder/", validate = Self::check)]
 #[serde(default)]
 pub struct SchemaOptions {
     /// The length of `string` columns without an explicit `.length(n)`.
@@ -79,14 +80,17 @@ pub struct SchemaOptions {
     /// database's default (MySQL's is whole seconds).
     pub default_time_precision: Option<u8>,
     /// The key type of `morphs` and `nullable_morphs`.
+    #[config(one_of = "int, uuid, ulid")]
     pub morph_key: MorphKey,
     /// When to use TimescaleDB.
+    #[config(one_of = "auto, require, off")]
     pub timescaledb: TimescaleMode,
     /// Whether the builder may run `CREATE EXTENSION IF NOT EXISTS
     /// timescaledb` when the extension is available but not installed.
     pub create_extensions: bool,
     /// What to do with a hypertable's primary key that lacks the time
     /// column.
+    #[config(one_of = "extend, reject")]
     pub hypertable_keys: KeyStrategy,
     /// The default character set of MySQL tables (`utf8mb4`: every Unicode
     /// character, emoji included); `None` leaves the server's default.
@@ -136,10 +140,9 @@ impl Default for SchemaOptions {
     }
 }
 
-impl ConfigSection for SchemaOptions {
-    const KEY: &'static str = "schema";
-
-    fn validate(&self) -> Result<(), String> {
+impl SchemaOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         let mut problems = Vec::new();
         if self.default_string_length == 0 {
             problems.push("default_string_length must be at least 1".to_owned());
@@ -160,7 +163,44 @@ impl ConfigSection for SchemaOptions {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = SchemaOptions::schema().expect("schema");
+        assert_eq!(schema.key, "schema");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(
+            field("morph_key").ty,
+            FieldType::choice(&["int", "uuid", "ulid"])
+        );
+        assert_eq!(
+            field("timescaledb").ty,
+            FieldType::choice(&["auto", "require", "off"])
+        );
+        assert_eq!(
+            field("hypertable_keys").ty,
+            FieldType::choice(&["extend", "reject"])
+        );
+        assert_eq!(field("default_string_length").ty, FieldType::Integer);
+        let defaults = SchemaOptions::defaults().expect("defaults");
+        assert_eq!(defaults["default_string_length"], 255);
+        assert_eq!(defaults["morph_key"], "int");
+        assert_eq!(defaults["dump_path"], "database/schema");
+    }
 
     #[test]
     fn validation_reports_bad_values() {

@@ -35,23 +35,35 @@ pub enum OtlpProtocol {
 /// `http/protobuf`), `OTEL_EXPORTER_OTLP_HEADERS` and
 /// `OTEL_RESOURCE_ATTRIBUTES` (`k=v,k=v`), `OTEL_SERVICE_NAME` and
 /// `OTEL_TRACES_SAMPLER_ARG`.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, ConfigSection)]
+#[config(
+    key = "observe.tracing",
+    docs = "/docs/microservices/tracing/",
+    validate = Self::check
+)]
 #[serde(default)]
 pub struct TracingOptions {
     /// Record spans and propagate trace context (default `true`).
     pub enabled: bool,
     /// The OTLP endpoint; without one, nothing is exported.
+    #[config(env_fallback = "OTEL_EXPORTER_OTLP_ENDPOINT")]
     pub endpoint: Option<String>,
     /// `grpc` (default) or `http`.
+    #[config(one_of = "grpc, http", env_fallback = "OTEL_EXPORTER_OTLP_PROTOCOL")]
     pub protocol: OtlpProtocol,
     /// Headers sent with every export, such as a vendor's API key.
+    #[config(secret, env_fallback = "OTEL_EXPORTER_OTLP_HEADERS")]
+    #[serde(skip_serializing)]
     pub headers: BTreeMap<String, String>,
     /// The `service.name` of every span: this key, then `micro.service`,
     /// then `app.name`, then the binary's name.
+    #[config(env_fallback = "OTEL_SERVICE_NAME")]
     pub service_name: Option<String>,
     /// Extra resource attributes (`deployment.environment = "production"`).
+    #[config(env_fallback = "OTEL_RESOURCE_ATTRIBUTES")]
     pub resource: BTreeMap<String, String>,
     /// The share of new traces recorded, 0 to 1 (default `1.0`).
+    #[config(env_fallback = "OTEL_TRACES_SAMPLER_ARG")]
     pub sample_ratio: f64,
     /// Continue traces from incoming `traceparent` headers (default `true`).
     pub trust_incoming: bool,
@@ -105,14 +117,6 @@ impl fmt::Debug for TracingOptions {
             .field("max_queue_size", &self.max_queue_size)
             .field("trace_url", &self.trace_url)
             .finish()
-    }
-}
-
-impl ConfigSection for TracingOptions {
-    const KEY: &'static str = "observe.tracing";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check()
     }
 }
 
@@ -282,7 +286,64 @@ fn binary_name() -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = TracingOptions::schema().expect("schema");
+        assert_eq!(schema.key, "observe.tracing");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        // The headers carry a vendor's key, so they are a credential.
+        assert_eq!(schema.secret_paths(), ["observe.tracing.headers"]);
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(field("protocol").ty, FieldType::choice(&["grpc", "http"]));
+        assert_eq!(field("sample_ratio").ty, FieldType::Float);
+        let fallbacks: Vec<(String, String)> = schema
+            .env_fallbacks()
+            .into_iter()
+            .map(|fallback| (fallback.key, fallback.variable))
+            .collect();
+        for (key, variable) in [
+            ("observe.tracing.endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT"),
+            ("observe.tracing.protocol", "OTEL_EXPORTER_OTLP_PROTOCOL"),
+            ("observe.tracing.headers", "OTEL_EXPORTER_OTLP_HEADERS"),
+            ("observe.tracing.service_name", "OTEL_SERVICE_NAME"),
+            ("observe.tracing.resource", "OTEL_RESOURCE_ATTRIBUTES"),
+            ("observe.tracing.sample_ratio", "OTEL_TRACES_SAMPLER_ARG"),
+        ] {
+            assert!(
+                fallbacks.contains(&(key.to_owned(), variable.to_owned())),
+                "{key}: {fallbacks:?}"
+            );
+        }
+        let defaults = TracingOptions::defaults().expect("defaults");
+        assert_eq!(defaults["enabled"], true);
+        assert_eq!(defaults["sample_ratio"], 1.0);
+        assert_eq!(defaults["timeout_ms"], 10_000);
+    }
+
+    #[test]
+    fn the_headers_never_show_in_debug_or_json() {
+        let options = TracingOptions {
+            headers: BTreeMap::from([("authorization".to_owned(), "Bearer hunter2".to_owned())]),
+            ..TracingOptions::default()
+        };
+        assert!(!format!("{options:?}").contains("hunter2"));
+        let json = serde_json::to_string(&options).expect("serializes");
+        assert!(!json.contains("hunter2"), "{json}");
+    }
 
     #[test]
     fn pairs_are_split_and_decoded() {

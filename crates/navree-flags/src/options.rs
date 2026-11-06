@@ -43,10 +43,12 @@ pub enum MissingScope {
 ///
 /// From the environment: `APP_FLAGS__STORE=memory`,
 /// `APP_FLAGS__CACHE_TTL_SECS=10`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "flags", docs = "/docs/packages/feature-flags/")]
 #[serde(default)]
 pub struct FlagsOptions {
     /// Where flag state is stored (default `database`).
+    #[config(one_of = "database, memory")]
     pub store: FlagStoreKind,
     /// How long the global state, the overrides of a scope and a
     /// workspace's plan stay in the app's cache (`CacheModule`), in
@@ -63,6 +65,7 @@ pub struct FlagsOptions {
     pub admin_routes: bool,
     /// How checks without a user or a workspace resolve (default
     /// `default`).
+    #[config(one_of = "default, off")]
     pub missing_scope: MissingScope,
 }
 
@@ -85,13 +88,42 @@ impl FlagsOptions {
     }
 }
 
-impl ConfigSection for FlagsOptions {
-    const KEY: &'static str = "flags";
-}
-
 #[cfg(test)]
 mod tests {
+    use navree_config::FieldType;
+
     use super::*;
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = FlagsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "flags");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let field = |name: &str| {
+            schema
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        assert_eq!(
+            field("store").ty,
+            FieldType::choice(&["database", "memory"])
+        );
+        assert_eq!(
+            field("missing_scope").ty,
+            FieldType::choice(&["default", "off"])
+        );
+        assert_eq!(field("cache_ttl_secs").ty, FieldType::Integer);
+        let defaults = FlagsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], "database");
+        assert_eq!(defaults["missing_scope"], "default");
+        assert_eq!(defaults["cache_ttl_secs"], 60);
+    }
 
     #[test]
     fn defaults_match_the_documentation() {

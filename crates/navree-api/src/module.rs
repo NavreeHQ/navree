@@ -8,8 +8,8 @@ use navree_contracts::ModuleBuilderConformityExt;
 use navree_http::body::Bytes;
 use navree_http::{HttpModule, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Injectable, KernelError, Lifecycle, Module,
-    ModuleBuilder, ModuleId, ProviderKey, Resolver, WeakAppContext,
+    AppContext, BoxError, BoxFuture, CommandSpec, ConfiguredModule, Injectable, KernelError,
+    Lifecycle, Module, ModuleBuilder, ProviderKey, Resolver, WeakAppContext,
 };
 use navree_openapi::Document;
 use serde_json::Value;
@@ -68,39 +68,18 @@ pub struct ApiModule;
 impl ApiModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: ApiOptions) -> impl Module {
-        ConfiguredApiModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<ApiModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `api` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredApiModule { options: None }
+        ConfiguredModule::<ApiModule, ApiOptions>::from_config(register)
     }
 }
 
 impl Module for ApiModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `ApiModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredApiModule {
-    options: Option<ApiOptions>,
-}
-
-impl Module for ConfiguredApiModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<ApiModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

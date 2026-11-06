@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder,
@@ -172,6 +172,9 @@ impl Handlers {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handlers) {
+    if options.is_none() {
+        m.config_section::<OrmOptions>();
+    }
     m.global()
         .factory(Factory::<OrmRuntime>::new(move |r: Resolver| {
             let options = options.clone();

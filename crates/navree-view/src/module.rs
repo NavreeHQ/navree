@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use navree_config::Config;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_kernel::{
-    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
 use navree_template::Environment;
@@ -47,42 +47,19 @@ impl ViewModule {
     /// root). A directory converts into the default options with that
     /// directory: `ViewModule::for_root("resources/mail")`.
     pub fn for_root(options: impl Into<ViewOptions>) -> impl Module {
-        ConfiguredViewModule {
-            source: Source::Options(Arc::new(options.into())),
-        }
+        ConfiguredModule::<ViewModule, ViewOptions>::for_root(options.into(), register)
     }
 
     /// The module configured from section `view` of the app's `Config` at
     /// boot (see [`ViewOptions`]).
     pub fn from_config() -> impl Module {
-        ConfiguredViewModule {
-            source: Source::Config,
-        }
+        ConfiguredModule::<ViewModule, ViewOptions>::from_config(register)
     }
 }
 
 impl Module for ViewModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        register(m, Source::Config);
-    }
-}
-
-/// `ViewModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredViewModule {
-    source: Source,
-}
-
-impl Module for ConfiguredViewModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<ViewModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.source.clone());
+        register(m, None);
     }
 }
 
@@ -111,8 +88,15 @@ impl Source {
 }
 
 /// Global; provides and exports [`Views`], built from the options and every
-/// module's embedded templates.
-fn register(m: &mut ModuleBuilder, source: Source) {
+/// module's embedded templates. No options: the module reads section `view`.
+fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
+    let source = match options {
+        Some(options) => Source::Options(Arc::new(options)),
+        None => {
+            m.config_section::<ViewOptions>();
+            Source::Config
+        }
+    };
     let deps = source.deps();
     m.global()
         .factory(
