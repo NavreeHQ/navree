@@ -23,6 +23,7 @@ mod navigation;
 mod otp_carousel;
 mod overlays;
 mod page_layouts;
+mod parts;
 mod panes;
 mod patterns;
 mod phone;
@@ -40,6 +41,7 @@ pub fn all() -> Vec<Example> {
     all.extend(inputs::all());
     all.extend(upload::all());
     all.extend(otp_carousel::all());
+    all.extend(parts::all());
     all.extend(pickers::all());
     all.extend(dates::all());
     all.extend(phone::all());

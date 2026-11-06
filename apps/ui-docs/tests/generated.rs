@@ -189,3 +189,35 @@ fn a_previews_scrim_is_the_toolkits_backdrop() {
         );
     }
 }
+
+/// The methods a macro writes for a family of types are in the props tables: the Select
+/// family's builders (`picker_methods`, `typed_methods`) and the charts' (`common_methods`).
+#[test]
+fn a_props_table_lists_the_methods_a_macro_wrote() {
+    let api = ui_docs::api::read(|file| {
+        ui_docs::read_repo(&format!("crates/navree-ui/src/{file}"))
+    });
+    let names = |type_name: &str| -> Vec<String> {
+        let doc = api.get(type_name).unwrap_or_else(|| panic!("no table for {type_name}"));
+        doc.methods.iter().map(|method| method.name.clone()).collect()
+    };
+    for type_name in ["Select", "Combobox", "MultiSelect"] {
+        let methods = names(type_name);
+        for wanted in ["option", "options", "group", "placeholder", "required", "disabled", "size", "labels"] {
+            assert!(methods.iter().any(|m| m == wanted), "{type_name} lacks {wanted}: {methods:?}");
+        }
+        assert!(methods.len() > 12, "{type_name}: {methods:?}");
+    }
+    // The two typed pickers add a search endpoint.
+    for type_name in ["Combobox", "MultiSelect"] {
+        let methods = names(type_name);
+        assert!(methods.iter().any(|m| m == "search"), "{type_name}: {methods:?}");
+    }
+    assert!(!names("Select").iter().any(|m| m == "search"), "Select is not searched on the server");
+    // The charts, as before.
+    assert!(names("Sparkline").iter().any(|m| m == "heading"));
+    // A new component is in the tables too.
+    for type_name in ["ColorPicker", "Trace", "Questionnaire", "ReportTable"] {
+        assert!(api.contains_key(type_name), "no table for {type_name}");
+    }
+}

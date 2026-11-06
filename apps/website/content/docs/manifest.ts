@@ -279,6 +279,8 @@ export const sections: DocsSection[] = [
       "switch",
       "radio-group",
       "phone-input",
+      "color-picker",
+      "questionnaire",
       "upload",
       // Date and time
       "calendar",
@@ -289,6 +291,8 @@ export const sections: DocsSection[] = [
       "card",
       "badge",
       "avatar",
+      "avatar-group",
+      "trace",
       "item",
       "typography",
       "kbd",

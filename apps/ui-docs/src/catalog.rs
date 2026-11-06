@@ -42,6 +42,8 @@ pub const GROUPS: &[Group] = &[
             "radio-group",
             "phone-input",
             "input-otp",
+            "color-picker",
+            "questionnaire",
             "upload",
             "forms",
         ],
@@ -63,6 +65,8 @@ pub const GROUPS: &[Group] = &[
             "card",
             "badge",
             "avatar",
+            "avatar-group",
+            "trace",
             "item",
             "typography",
             "kbd",
@@ -312,6 +316,25 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
+    component(
+        "color-picker",
+        "ColorPicker",
+        &["ColorPicker"],
+        "default",
+    ),
+    component(
+        "questionnaire",
+        "Questionnaire",
+        &["Questionnaire", "Question", "QuestionnaireMove", "QuestionnaireLabels"],
+        "default",
+    ),
+    component("avatar-group", "AvatarGroup", &["AvatarGroup"], "default"),
+    component(
+        "trace",
+        "Trace",
+        &["Trace", "TraceStep", "TraceState", "TraceLabels"],
+        "default",
+    ),
     // Date and time
     component(
         "calendar",

@@ -25,6 +25,9 @@ pub const FILES: &[&str] = &[
     "components/overlays.rs",
     "components/layout.rs",
     "components/flag.rs",
+    "components/color_picker.rs",
+    "components/trace.rs",
+    "components/questionnaire.rs",
     "icons/mod.rs",
     "flags/mod.rs",
     "components/tabs.rs",
@@ -92,6 +95,7 @@ pub const FILES: &[&str] = &[
     "charts/scale.rs",
     "charts/report.rs",
     "charts/report_orm.rs",
+    "charts/report_export.rs",
 ];
 
 /// One constructor or method.
@@ -306,8 +310,9 @@ fn shared_impl(definition: &str, name: &str) -> Option<syn::ItemImpl> {
             .replace("$crate::node::", "")
             .replace("$crate::html::", "")
             .replace("$crate", "crate"),
-        // The paths inside the crate are shown as the name a reader writes.
-        None => inner
+        // The paths inside the crate are shown as the name a reader writes. This is the
+        // spaced text, as the repeated form's is: the token text has a space in `$ type`.
+        None => spaced
             .replace("$type", name)
             .replace("$crate::components::", "")
             .replace("$crate::select::", "")

@@ -1,0 +1,40 @@
+---
+title: "Questionnaire"
+description: "One question at a time, with progress and Previous, Skip and Next. The server draws the question to show next, so it works with JavaScript off."
+---
+
+<UiPreview example="questionnaire/default" />
+
+`Questionnaire` asks a series of questions one by one: an onboarding, a survey, a form that is too long to show at once.
+
+```rust
+use navree::ui::*;
+
+Questionnaire::new("/welcome")
+    .question(
+        Question::single("team", "How big is your team?")
+            .choice("small", "Up to 10 people")
+            .choice("large", "More than 10")
+            .required(),
+    )
+    .question(Question::text("goal", "What do you want to keep track of?"))
+    .step(0)
+```
+
+## How it works
+
+The questionnaire is a form that posts to its address. Each press of a button sends the page with the answers so far kept in hidden fields, the question just answered (`_step`, counted from 0) and the button pressed (`_move`). The handler checks the answer, decides which question comes next and draws the questionnaire again with `.step(n)` and `.answers(..)`.
+
+`QuestionnaireMove::parse(&_move)` reads the button and `.target(step, total)` gives the next question: `Back` goes one back, `Skip` and `Next` go on, and a number equal to the count of questions means the questionnaire is finished.
+
+Because the server draws each question, there is nothing for a script to do: the buttons are real submit buttons, the progress bar is a real `<progress>`, and a page with the questionnaire loads no JavaScript of its own.
+
+## Kinds of question
+
+- `Question::single(name, text)` is one answer out of choices, drawn as cards that hold a radio button.
+- `Question::multiple(name, text)` is any number of answers out of choices.
+- `Question::text(name, text)` is an answer in a line of text.
+
+`.required()` makes the browser check an answer before Next and removes Skip. `.help(..)` adds a line under the question. An error from the server is shown under the answers with `.error(..)`, tied to the field and spoken as an alert.
+
+<UiPreview example="questionnaire/text" />
