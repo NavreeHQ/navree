@@ -11,12 +11,14 @@
 #[cfg(feature = "gcs")]
 mod gcs {
     //! fake-gcs-server answers the XML API's `GET`, `HEAD`, list and `DELETE`,
-    //! which are what the driver reads and deletes with. It does not take the
-    //! XML API's `PUT`, which is what the driver writes with, so these tests
-    //! put their files in the bucket through the JSON API and read, list,
-    //! count and delete them through the driver. The driver's writes and its
-    //! signed upload links stay covered by the recorded-response tests in
-    //! `cloud.rs` until a real bucket is tested.
+    //! which are what the driver reads and deletes with, and takes an XML
+    //! `PUT` through a signed link (without checking its signature). It does
+    //! not take the XML API's authenticated `PUT` or multipart uploads, which
+    //! are what the driver writes with, so these tests put their files in the
+    //! bucket through the JSON API (or a signed link) and read, list, count
+    //! and delete them through the driver. The driver's own writes run on
+    //! the in-process server that speaks the XML API and checks signatures
+    //! (`drivers::gcs`).
 
     use chrono::{Duration, Utc};
     use futures_util::TryStreamExt;
@@ -246,6 +248,36 @@ mod gcs {
         let reply = reqwest::get(&url).await.unwrap();
         assert_eq!(reply.status(), 200);
         assert_eq!(reply.text().await.unwrap(), "region,total\n");
+    }
+
+    // CONN-052
+    #[tokio::test]
+    async fn a_signed_upload_link_puts_the_file_in_the_bucket() {
+        let Some(bucket) = Bucket::open("a_signed_upload_link_puts_the_file_in_the_bucket") else {
+            return;
+        };
+        let disk = bucket.disk();
+        let rules = navree_storage::UploadRules::new(64 * 1024, ["image/png"]);
+        let body = crate::conformance::png(2000);
+        let upload = disk
+            .presigned_put("uploads/logo.png", Duration::minutes(10), &rules)
+            .content_type("image/png")
+            .size(body.len() as u64)
+            .await
+            .unwrap();
+        let mut request = reqwest::Client::new().put(&upload.url).body(body.clone());
+        for (name, value) in &upload.headers {
+            request = request.header(name, value);
+        }
+        let reply = request.send().await.expect("the emulator answers");
+        assert!(reply.status().is_success(), "{}", reply.status());
+        assert_eq!(disk.get("uploads/logo.png").await.unwrap(), body);
+        let stored = disk
+            .accept_upload("uploads/logo.png", &rules)
+            .await
+            .unwrap();
+        assert_eq!((stored.size, stored.mime.as_str()), (2000, "image/png"));
+        disk.delete("uploads/logo.png").await.unwrap();
     }
 }
 

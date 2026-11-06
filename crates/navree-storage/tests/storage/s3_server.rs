@@ -4,6 +4,16 @@
 //! query of a presigned URL, including its signed headers and expiry). It
 //! lets the s3 driver run the conformance suite without Docker; MinIO runs
 //! the same suite when `NAVREE_TEST_S3_URL` is set.
+//!
+//! [`S3Server::gcs`] speaks Google Cloud Storage's XML API instead, the one
+//! the gcs driver writes, reads and lists with (it follows S3's): requests
+//! carry the service account's self-signed token (`Authorization: Bearer`,
+//! RS256), signed links are `GOOG4-RSA-SHA256`, both checked against the
+//! test key, and uploads honour `x-goog-content-length-range` and
+//! `x-goog-if-generation-match`. fake-gcs-server reads like GCS but takes no
+//! write the driver makes, so the gcs driver's writes run here.
+
+#![cfg_attr(not(all(feature = "s3", feature = "gcs")), allow(dead_code))]
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,6 +37,13 @@ pub const SECRET_KEY: &str = "navree-test-secret";
 pub const REGION: &str = "us-east-1";
 /// The bucket the server starts with.
 pub const BUCKET: &str = "navree-test";
+/// The service account a [`S3Server::gcs`] server accepts.
+pub const GCS_EMAIL: &str = "navree-test@navree-test.iam.gserviceaccount.com";
+/// Its private key (the server checks signatures with its public half).
+pub const GCS_PRIVATE_KEY: &str = include_str!("../fixtures/rsa-2048.pem");
+/// The host the gcs driver signs links for, whatever its endpoint (the
+/// server checks them as Google Cloud Storage does).
+const GCS_HOST: &str = "storage.googleapis.com";
 
 /// A running server; stops when dropped.
 pub struct S3Server {
@@ -36,8 +53,17 @@ pub struct S3Server {
     task: tokio::task::JoinHandle<()>,
 }
 
+/// The API the server speaks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Flavor {
+    #[default]
+    S3,
+    Gcs,
+}
+
 #[derive(Default)]
 struct ServerState {
+    flavor: Flavor,
     buckets: Mutex<BTreeMap<String, BTreeMap<String, Object>>>,
     uploads: Mutex<HashMap<String, Upload>>,
     next_id: AtomicU64,
@@ -65,7 +91,20 @@ struct Upload {
 impl S3Server {
     /// Starts a server with the bucket [`BUCKET`].
     pub async fn start() -> Self {
-        let state = Arc::new(ServerState::default());
+        Self::start_as(Flavor::S3).await
+    }
+
+    /// Starts a server with the bucket [`BUCKET`] that speaks Google Cloud
+    /// Storage's XML API, for the service account [`GCS_EMAIL`].
+    pub async fn gcs() -> Self {
+        Self::start_as(Flavor::Gcs).await
+    }
+
+    async fn start_as(flavor: Flavor) -> Self {
+        let state = Arc::new(ServerState {
+            flavor,
+            ..ServerState::default()
+        });
         state
             .buckets
             .lock()
@@ -130,9 +169,19 @@ async fn handle(state: Arc<ServerState>, request: Request) -> Response {
     let query = parse_query(&raw_query);
     let body = navree_http::body::to_bytes(body, usize::MAX).await.unwrap();
 
-    if let Err(message) = authorize(&parts.method, &raw_path, &query, &parts.headers, &body) {
+    let authorized = match state.flavor {
+        Flavor::S3 => authorize(&parts.method, &raw_path, &query, &parts.headers, &body),
+        Flavor::Gcs => authorize_gcs(&parts.method, &raw_path, &query, &parts.headers),
+    };
+    if let Err(message) = authorized {
         return error(StatusCode::FORBIDDEN, "SignatureDoesNotMatch", &message);
     }
+    let gcs = state.flavor == Flavor::Gcs;
+    let copy_source = if gcs {
+        "x-goog-copy-source"
+    } else {
+        "x-amz-copy-source"
+    };
 
     let decoded = percent_decode_str(raw_path.trim_start_matches('/'))
         .decode_utf8()
@@ -234,7 +283,13 @@ async fn handle(state: Arc<ServerState>, request: Request) -> Response {
             StatusCode::NO_CONTENT.into_response()
         }
         (&Method::PUT, false) => {
-            if let Some(source) = parts.headers.get("x-amz-copy-source") {
+            if gcs
+                && let Err(refused) =
+                    gcs_preconditions(&state, &bucket, &key, &parts.headers, &body)
+            {
+                return refused;
+            }
+            if let Some(source) = parts.headers.get(copy_source) {
                 let source = percent_decode_str(source.to_str().unwrap())
                     .decode_utf8()
                     .unwrap()
@@ -261,8 +316,16 @@ async fn handle(state: Arc<ServerState>, request: Request) -> Response {
             response
         }
         (&Method::DELETE, false) => {
-            if let Some(objects) = state.buckets.lock().unwrap().get_mut(&bucket) {
-                objects.remove(&key);
+            let removed = state
+                .buckets
+                .lock()
+                .unwrap()
+                .get_mut(&bucket)
+                .and_then(|objects| objects.remove(&key));
+            // Google Cloud Storage says when there was nothing to delete;
+            // S3 does not.
+            if gcs && removed.is_none() {
+                return error(StatusCode::NOT_FOUND, "NoSuchKey", "The key does not exist");
             }
             StatusCode::NO_CONTENT.into_response()
         }
@@ -514,6 +577,145 @@ fn authorize(
     } else {
         Err("The request signature we calculated does not match the signature you provided".into())
     }
+}
+
+/// What Google Cloud Storage checks before it stores an upload: the size
+/// range a signed link bound (`x-goog-content-length-range: min,max`) and a
+/// write only if absent (`x-goog-if-generation-match: 0`).
+fn gcs_preconditions(
+    state: &ServerState,
+    bucket: &str,
+    key: &str,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Result<(), Response> {
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
+    if let Some(range) = header("x-goog-content-length-range") {
+        let (min, max) = range
+            .split_once(',')
+            .and_then(|(min, max)| Some((min.trim().parse().ok()?, max.trim().parse().ok()?)))
+            .ok_or_else(|| {
+                error(
+                    StatusCode::BAD_REQUEST,
+                    "InvalidArgument",
+                    "Invalid x-goog-content-length-range",
+                )
+            })?;
+        let len = body.len() as u64;
+        if len < min || len > max {
+            return Err(error(
+                StatusCode::BAD_REQUEST,
+                "EntityTooLarge",
+                "Your proposed upload is outside the size range of the signed link",
+            ));
+        }
+    }
+    if header("x-goog-if-generation-match") == Some("0")
+        && state.buckets.lock().unwrap()[bucket].contains_key(key)
+    {
+        return Err(error(
+            StatusCode::PRECONDITION_FAILED,
+            "PreconditionFailed",
+            "At least one of the pre-conditions you specified did not hold",
+        ));
+    }
+    Ok(())
+}
+
+/// Checks a Google Cloud Storage request: a `GOOG4-RSA-SHA256` signed link
+/// (in the query), or the service account's self-signed token (RS256) in
+/// `Authorization: Bearer`. Both are verified with [`GCS_PRIVATE_KEY`]'s
+/// public half.
+fn authorize_gcs(
+    method: &Method,
+    raw_path: &str,
+    query: &[(String, String)],
+    headers: &HeaderMap,
+) -> Result<(), String> {
+    use navree_crypto::jose::{Algorithm, Jws, SigningKey};
+
+    let key = SigningKey::from_pem(GCS_PRIVATE_KEY)
+        .map_err(|error| format!("the test key: {error}"))?
+        .verifying_key();
+    let get = |name: &str| {
+        query
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    };
+    let header = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .unwrap_or("")
+    };
+    let Some(signature) = get("X-Goog-Signature") else {
+        let token = header("authorization")
+            .strip_prefix("Bearer ")
+            .ok_or("no bearer token")?;
+        let jws = Jws::parse(token).map_err(|error| format!("the token: {error}"))?;
+        return jws
+            .verify(&key)
+            .map_err(|error| format!("the token's signature: {error}"));
+    };
+    if get("X-Goog-Algorithm") != Some("GOOG4-RSA-SHA256") {
+        return Err("unknown algorithm".into());
+    }
+    let date = get("X-Goog-Date").ok_or("no X-Goog-Date")?;
+    let expires: i64 = get("X-Goog-Expires")
+        .and_then(|value| value.parse().ok())
+        .ok_or("no X-Goog-Expires")?;
+    let signed_at = NaiveDateTime::parse_from_str(date, "%Y%m%dT%H%M%SZ")
+        .map_err(|_| "bad X-Goog-Date")?
+        .and_utc();
+    if Utc::now() > signed_at + chrono::Duration::seconds(expires) {
+        return Err("Request has expired".into());
+    }
+    let credential = get("X-Goog-Credential").ok_or("no credential")?;
+    let (email, scope) = credential.split_once('/').ok_or("bad credential")?;
+    if email != GCS_EMAIL {
+        return Err(format!("unknown service account `{email}`"));
+    }
+    let scope_parts: Vec<&str> = scope.split('/').collect();
+    if scope_parts.len() != 4 || scope_parts[2] != "storage" || scope_parts[3] != "goog4_request" {
+        return Err(format!("unexpected scope `{scope}`"));
+    }
+    let signed_headers = get("X-Goog-SignedHeaders").ok_or("no signed headers")?;
+    let mut pairs: Vec<(String, String)> = query
+        .iter()
+        .filter(|(key, _)| key != "X-Goog-Signature")
+        .map(|(key, value)| (aws_encode(key), aws_encode(value)))
+        .collect();
+    pairs.sort();
+    let canonical_query = pairs
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let canonical_headers: String = signed_headers
+        .split(';')
+        .map(|name| {
+            let value = if name == "host" {
+                GCS_HOST
+            } else {
+                header(name)
+            };
+            format!("{name}:{value}\n")
+        })
+        .collect();
+    let canonical_request = format!(
+        "{method}\n{raw_path}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\nUNSIGNED-PAYLOAD"
+    );
+    let string_to_sign = format!(
+        "GOOG4-RSA-SHA256\n{date}\n{scope}\n{}",
+        sha256_hex(canonical_request.as_bytes())
+    );
+    let signature = hex::decode(signature).map_err(|_| "a signature that is not hex")?;
+    key.verify(Algorithm::RS256, string_to_sign.as_bytes(), &signature)
+        .map_err(|_| {
+            "The request signature we calculated does not match the signature you provided".into()
+        })
 }
 
 /// RFC 3986 encoding as SigV4 wants it.

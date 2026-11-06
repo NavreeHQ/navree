@@ -130,9 +130,10 @@ services:
       - s3-data:/data
 
   # Google Cloud Storage. The emulator serves what the driver reads (the XML
-  # API's GET, HEAD, list and DELETE); it does not take the XML API's PUT, so
-  # the suite uploads through the JSON API. scripts/ci-services.sh creates the
-  # bucket.
+  # API's GET, HEAD, list and DELETE) and takes uploads through signed links;
+  # it does not take the XML API's authenticated PUT, so the suite seeds files
+  # through the JSON API (the driver's writes run on navree-storage's
+  # in-process XML server). scripts/ci-services.sh creates the bucket.
   gcs:
     image: ${GCS_IMAGE:-fsouza/fake-gcs-server:1.56.1}
     container_name: navree-ci-gcs

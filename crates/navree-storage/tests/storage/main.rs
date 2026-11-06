@@ -14,7 +14,7 @@ mod local_hardening;
 mod module;
 mod options;
 mod presign;
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "gcs"))]
 mod s3_server;
 mod serve;
 mod sync;

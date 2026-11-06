@@ -1,5 +1,6 @@
 //! The conformance suite on every driver: memory, local, S3 on the
-//! in-process server, and S3 on MinIO (`NAVREE_TEST_S3_URL`).
+//! in-process server, S3 on MinIO (`NAVREE_TEST_S3_URL`), and Google Cloud
+//! Storage on the in-process server speaking its XML API.
 
 use navree_kernel::Navree;
 use navree_storage::{Disk, DiskConfig, StorageModule};
@@ -52,6 +53,53 @@ fn files_under(dir: &std::path::Path) -> usize {
             }
         })
         .sum()
+}
+
+#[cfg(feature = "gcs")]
+mod gcs {
+    use navree_storage::{GcsConfig, Storage};
+    use serde_json::json;
+
+    use crate::conformance::{Http, Subject, run};
+    use crate::s3_server::{BUCKET, GCS_EMAIL, GCS_PRIVATE_KEY, S3Server};
+    use crate::support::{SIGNING_KEY, single_disk};
+
+    // CONN-052: the driver's writes (uploads, streams through multipart
+    // uploads, signed upload links bound to a type and a size) as well as
+    // its reads, against a server that checks every signature.
+    #[tokio::test]
+    async fn gcs_disk_conforms_on_the_in_process_server() {
+        let server = S3Server::gcs().await;
+        let key = json!({
+            "private_key": GCS_PRIVATE_KEY,
+            "private_key_id": "test-key",
+            "client_email": GCS_EMAIL,
+        });
+        let config = GcsConfig {
+            service_account_key: Some(key.to_string().into()),
+            endpoint: Some(server.url.clone()),
+            prefix: Some("site".into()),
+            ..GcsConfig::new(BUCKET)
+        };
+        // Build the disk first: it installs the TLS crypto provider reqwest
+        // needs.
+        let disk = Storage::new(&single_disk("media", config.into()), SIGNING_KEY)
+            .unwrap()
+            .default_disk();
+        assert_eq!(disk.driver(), "gcs");
+        let subject = Subject {
+            disk,
+            http: Http::network(),
+        };
+        run(&subject).await;
+        assert!(server.keys().is_empty(), "{:?}", server.keys());
+        let log = server.log();
+        assert!(log.iter().any(|line| line.contains("?uploads")), "{log:?}");
+        assert!(
+            log.iter().any(|line| line.contains("X-Goog-Signature=")),
+            "{log:?}"
+        );
+    }
 }
 
 #[cfg(feature = "s3")]
