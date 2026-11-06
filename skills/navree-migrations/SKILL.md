@@ -227,10 +227,6 @@ database without connecting (`schema.statements()`, `schema.notices()`);
   table doesn't exist yet.
 - `change()` without repeating `nullable()` or the default: they are
   removed.
-- A model's `Uuid` columns on MySQL: `uuid_primary()` and `foreign_uuid` are
-  `CHAR(36)` there, which refuses the 16 bytes a model writes (error 1366).
-  Branch on `schema.target().await?.dialect() == Dialect::MySql` and use
-  `t.binary("id").length(16).fixed().primary()` there.
 - Several DDL changes in one MySQL migration: a failure half-applies it.
 - A foreign key to a TimescaleDB hypertable's `id`: its key includes the
   time column.

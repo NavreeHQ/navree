@@ -138,7 +138,7 @@ pub struct ApiToken {
 
 Navree's own tables use UUID v7 keys. A generated key is known before the `INSERT`, doesn't reveal how many records there are, and lets [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) page by key.
 
-A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. On MySQL its column must be a 16-byte binary, not the schema builder's `uuid` column, which is `CHAR(36)` there; use the same binary on MariaDB ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)).
+A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. On MySQL and MariaDB the schema builder's `uuid` column is that 16-byte binary (`BINARY(16)`; see [UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)).
 
 ## Timestamps
 

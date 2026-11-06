@@ -8,7 +8,7 @@
 | Method | PostgreSQL | MySQL | SQLite |
 |---|---|---|---|
 | `id()` | `BIGINT` identity primary key | `BIGINT UNSIGNED AUTO_INCREMENT` | `INTEGER PRIMARY KEY AUTOINCREMENT` |
-| `uuid_primary()` | `UUID` primary key `id` | `CHAR(36)` (`UUID` on MariaDB 10.7+) | `VARCHAR` |
+| `uuid_primary()` | `UUID` primary key `id` | `BINARY(16)` | `VARCHAR` |
 | `ulid_primary()` | `CHAR(26)` | `CHAR(26)` | `VARCHAR` |
 | `string(name)` | `VARCHAR(255)`, `.length(n)` | `VARCHAR(255)` | `VARCHAR` |
 | `char(name, n)`, `text`, `medium_text`, `long_text` | `CHAR(n)`, `TEXT` | `CHAR(n)`, `TEXT`, `MEDIUMTEXT`, `LONGTEXT` | `TEXT` |
@@ -21,7 +21,7 @@
 | `timestamp`, `timestamp_tz` | `TIMESTAMP [WITH TIME ZONE]` | `TIMESTAMP(6)` (ends 2038) | `DATETIME` |
 | `json`, `jsonb` | `JSON`, `JSONB` | `JSON` | `TEXT` |
 | `binary(name)` | `BYTEA` | `BLOB`; `VARBINARY(n)` with `.length(n)`, `BINARY(n)` with `.fixed()` | `BLOB` |
-| `uuid`, `ulid` | `UUID`, `CHAR(26)` | `CHAR(36)`, `CHAR(26)` | `VARCHAR` |
+| `uuid`, `ulid` | `UUID`, `CHAR(26)` | `BINARY(16)`, `CHAR(26)` | `VARCHAR` |
 | `enumeration(name, [..])` | `VARCHAR` + `CHECK` | `ENUM(..)` | `VARCHAR` + `CHECK` |
 | `vector(name, n)` | pgvector `VECTOR(n)` | MySQL 9 / MariaDB 11.7 | not supported |
 | `tsvector`, `set`, `geometry`, `geography`, `ip_address`, `mac_address`, `year`, `raw_column(name, "SQL")` | | | |

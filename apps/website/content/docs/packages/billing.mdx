@@ -114,7 +114,7 @@ APP_BILLING__STRIPE__WEBHOOK_SECRET=whsec_Jx2...
 
 Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed` and `.expired`, `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and `.trial_will_end`, `invoice.paid`, `invoice.payment_failed`, and `refund.created`, `.updated` and `.failed` (the list is `navree::billing::STRIPE_EVENTS`), or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
 
-Every request is pinned to Stripe API version `2025-03-31.basil` (`navree::billing::STRIPE_API_VERSION`) with the `Stripe-Version` header, and `billing:webhook` creates the endpoint on the same version, so the payloads have the shape Navree reads.
+Every request is pinned to Stripe API version `2026-09-30.endive` (`navree::billing::STRIPE_API_VERSION`) with the `Stripe-Version` header, and `billing:webhook` creates the endpoint on the same version, so the payloads have the shape Navree reads.
 
 </Tab>
 <Tab label="Paddle">
@@ -407,7 +407,7 @@ The builder takes `billable` (named in the payment's metadata; its provider cust
 
 `next_action` says what the payer does next: `Redirect { url }` to a hosted page (Stripe and Paddle), `ClientToken { token }` for a provider's checkout script in your page, or `UpiIntent { url }`, a `upi://pay` link to open the payer's UPI app or show as a QR code. Coming back to `success_url` is not proof of payment. The outcome arrives by webhook as a `PaymentUpdated` event with the status `paid`, `failed` or `expired`; match it to your order by `reference`.
 
-On Stripe a payment is a Checkout Session in `payment` mode, with the reference as its `client_reference_id` and the metadata on the session and its PaymentIntent; `methods` may only name cards there (the methods you turn on in the Stripe dashboard are offered when you leave it empty). On Paddle it is a transaction for a non-catalog price; Paddle's checkout settings choose the methods, so `methods` must stay empty.
+On Stripe a payment is a Checkout Session in `payment` mode, with the reference as its `client_reference_id` and the metadata on the session and its PaymentIntent; `methods` may name cards and UPI there, sent as `allowed_payment_method_types` (the methods you turn on in the Stripe dashboard are offered when you leave it empty). On Paddle it is a transaction for a non-catalog price; Paddle's checkout settings choose the methods, so `methods` must stay empty.
 
 ## Payment links
 
@@ -734,9 +734,9 @@ async fn upgrading_starts_a_pro_trial() {
 | `idempotency_keys()` | Every idempotency key received, in order |
 | `webhook_secret()` | The secret the fake signs with (`Stripe-Signature`), to post to the webhook route yourself |
 
-The simulated webhooks are Stripe-shaped events signed with the fake's own secret, and they go through the same verification, storage, job and mapping as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Changes made through `Billing` (`swap`, `cancel`, ...) update the fake and the local copy at once; the fake sends no webhook for them. The fake honours idempotency keys as Stripe does: a repeated key returns what the first request created, so you can test that a retried payment or refund acts once. It checks payment methods as Stripe does too (cards only). Fake invoices cost 1000 cents per seat and period (nothing during a trial). Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
+The simulated webhooks are Stripe-shaped events signed with the fake's own secret, and they go through the same verification, storage, job and mapping as real ones, so run the queue (or use `queue.driver = "memory"` and `run_pending`) before you assert on subscriptions. Changes made through `Billing` (`swap`, `cancel`, ...) update the fake and the local copy at once; the fake sends no webhook for them. The fake honours idempotency keys as Stripe does: a repeated key returns what the first request created, so you can test that a retried payment or refund acts once. It checks payment methods as Stripe does too (cards and UPI). Fake invoices cost 1000 cents per seat and period (nothing during a trial). Override `dyn Clock` with a `FixedClock` to test trials and grace periods.
 
-To test against the provider's own test mode, use real test keys (`sk_test_...`, the Paddle sandbox) in a separate, opt-in test suite, and forward webhooks to your machine with the provider's CLI. `billing.stripe.api_base` and `billing.paddle.api_base` point the clients at a mock server or a proxy.
+To test against the provider's own test mode, use real test keys (`sk_test_...`, the Paddle sandbox) in a separate, opt-in test suite, and forward webhooks to your machine with the provider's CLI. `billing.stripe.api_base` and `billing.paddle.api_base` point the clients at a mock server or a proxy. To run the Stripe driver against your Stripe test mode, set `STRIPE_TEST_SECRET` (an `sk_test_` key) and run `cargo test -p navree-billing --test sandboxes`; `PADDLE_SANDBOX_KEY` does the same for the Paddle sandbox.
 
 ## Reference
 

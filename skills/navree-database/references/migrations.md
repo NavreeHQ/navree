@@ -58,8 +58,8 @@ impl navree::schema::Migration for Migration {
 }
 ```
 
-Match the model (on MySQL a `Uuid` the model writes needs
-`t.binary(..).length(16).fixed()`, not `uuid`, which is `CHAR(36)` there):
+Match the model (on MySQL and MariaDB `uuid` is `BINARY(16)`, the 16 bytes a
+model writes):
 `uuid` for `Uuid`, `timestamp_tz` for `DateTime<Utc>`,
 `boolean` for `bool`, `big_integer` for `i64`, `string`/`text` for
 `String`, `.nullable()` for `Option<T>`. Columns are `NOT NULL` unless

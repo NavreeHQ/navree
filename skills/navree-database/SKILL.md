@@ -253,7 +253,7 @@ On MySQL the unit of work sets `@navree_actor` and `@navree_request_id`
 (cleared before commit or rollback) where PostgreSQL uses `set_config`
 (neither when `transaction_settings = false`), the UUIDs models
 write are 16 bytes, for `BINARY(16)` columns (the schema builder's
-`uuid` columns are `CHAR(36)` there: see `navree-migrations`), and workspace
+`uuid` columns are `BINARY(16)` there too), and workspace
 isolation is query scoping only (no row-level security): every workspace
 query must go through `WorkspaceRepo` or a `#[model(workspace)]` model.
 

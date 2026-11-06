@@ -30,8 +30,8 @@ Feature `orm` (in `full`). Imports: `use navree::orm::prelude::*;` (models,
    (`--seeder`, `--controller`, `--policy`, or `--all` for every companion).
 2. Fill in the struct and the migration together: a `Uuid` key is
    `t.uuid_primary()`, `DateTime<Utc>` is `timestamp_tz`, `Option<T>` is
-   `.nullable()` (load `navree-migrations` for the column table). On MySQL a
-   model's `Uuid` columns must be `BINARY(16)`, not the builder's `CHAR(36)`.
+   `.nullable()` (load `navree-migrations` for the column table). On MySQL and
+   MariaDB the builder's `uuid` columns are `BINARY(16)`, the bytes a model writes.
 3. Add relations in a `#[relations] impl` block and scopes in `#[scopes]`.
 4. Use the model from services that take `&Uow`, and from controllers with
    `Bound<Deal>` for `{deal}` path parameters.
@@ -312,8 +312,6 @@ navree model:prune           # deletes what prunable models select
   an observer; `navree::orm::workspace::current_in(ctx)` is its workspace.
 - Factories implement `navree::orm::factory::ModelFactory`: import the
   trait from there.
-- A MySQL table made with `uuid_primary()` (`CHAR(36)`): inserting a model
-  fails with error 1366; declare `t.binary("id").length(16).fixed()`.
 
 ## Docs
 

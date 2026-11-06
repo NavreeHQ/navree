@@ -30,7 +30,7 @@ Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't h
 | Method | PostgreSQL | MySQL | SQLite |
 |---|---|---|---|
 | `id()` | `BIGINT` identity primary key | `BIGINT UNSIGNED AUTO_INCREMENT` primary key | `INTEGER PRIMARY KEY AUTOINCREMENT` |
-| `uuid_primary()` | `UUID` primary key `id` | `CHAR(36)` (`UUID` on MariaDB 10.7 and later) | `VARCHAR` |
+| `uuid_primary()` | `UUID` primary key `id` | `BINARY(16)` (MySQL and MariaDB) | `VARCHAR` |
 | `ulid_primary()` | `CHAR(26)` primary key `id` | `CHAR(26)` | `VARCHAR` |
 | `increments(name)`, `big_increments`, `small_increments`, `tiny_increments`, `medium_increments`, `integer_increments` | identity columns | `AUTO_INCREMENT` | `AUTOINCREMENT` |
 | `string(name)` | `VARCHAR(255)`, or `.length(n)` | `VARCHAR(255)` | `VARCHAR` |
@@ -51,7 +51,7 @@ Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't h
 | `year(name)` | `INTEGER` | `YEAR` | `INTEGER` |
 | `json`, `jsonb` | `JSON`, `JSONB` | `JSON` | `TEXT` |
 | `binary(name)` | `BYTEA` | `BLOB`; `VARBINARY(n)` with `.length(n)`, `BINARY(n)` with `.fixed()` | `BLOB` |
-| `uuid(name)`, `ulid(name)` | `UUID`, `CHAR(26)` | `CHAR(36)` (`UUID` on MariaDB 10.7 and later), `CHAR(26)` | `VARCHAR` |
+| `uuid(name)`, `ulid(name)` | `UUID`, `CHAR(26)` | `BINARY(16)` (MySQL and MariaDB), `CHAR(26)` | `VARCHAR` |
 | `ip_address`, `mac_address` | `INET`, `MACADDR` | `VARCHAR(45)`, `VARCHAR(17)` | `VARCHAR` |
 | `enumeration(name, [values])` | `VARCHAR(255)` with a `CHECK` | `ENUM(..)` | `VARCHAR` with a `CHECK` |
 | `set(name, [values])` | not supported | `SET(..)` | not supported |
@@ -84,28 +84,7 @@ When an [ORM model](/docs/orm/models/) maps the table, pick the column for the f
 
 ### UUID columns on MySQL
 
-A model writes a `Uuid` field as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. SQLite stores those bytes in any column, but on MySQL `uuid_primary()`, `uuid` and `foreign_uuid` are `CHAR(36)`, which refuses them: the insert fails with error 1366, "Incorrect string value". Declare the UUID columns of models as 16-byte binaries there, `BINARY(16)`, and on MariaDB, which models reach through the same driver. A migration that runs on several databases asks the schema which one it is talking to:
-
-```rust
-use navree::schema::Dialect;
-
-let mysql = schema.target().await?.dialect() == Dialect::MySql; // MariaDB too
-schema
-    .create("deals", |t| {
-        if mysql {
-            t.binary("id").length(16).fixed().primary();
-            t.binary("company_id").length(16).fixed();
-            t.foreign("company_id").references("id").on("companies").cascade_on_delete();
-        } else {
-            t.uuid_primary();
-            t.foreign_uuid("company_id").constrained().cascade_on_delete();
-        }
-        t.string("title");
-    })
-    .await?;
-```
-
-On PostgreSQL a binary column would be `BYTEA`, which a model's `Uuid` doesn't fit, so keep `uuid_primary()` there.
+A model writes a `Uuid` field as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. The schema builder's `uuid_primary()`, `uuid` and `foreign_uuid` are `BINARY(16)` on MySQL and MariaDB, so they hold those bytes, and a `foreign_uuid` constrained on `users` matches the users table's key. In raw SQL bind a `Uuid` value: a UUID string such as `'0199a7a0-…'` does not match a binary column (`UNHEX(REPLACE(?, '-', ''))` converts one).
 
 ## Helpers
 
