@@ -1,6 +1,6 @@
 [package]
 name = "navree-telemetry"
-description = "Navree telemetry: typed events (requests, queries, jobs, mail, cache, outgoing HTTP, exceptions, logs) delivered to registered sinks, and W3C trace context."
+description = "Navree telemetry: typed events (requests, queries, jobs, mail, cache, outgoing HTTP, exceptions, logs, AI calls, broadcasts, storage, webhooks, searches, sign-ins, UI operations) delivered to registered sinks, and W3C trace context."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

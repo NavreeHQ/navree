@@ -10,7 +10,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::TraceContext;
+use crate::{
+    AiCall, BroadcastSent, SearchQueried, SignInEvent, StorageOp, TraceContext, UiOperation,
+    WebhookDelivery,
+};
 
 /// What kind of event a [`TelemetryEvent`] is; sinks state their
 /// [`Interest`](crate::Interest) in kinds.
@@ -42,11 +45,25 @@ pub enum EventKind {
     Log,
     /// [`EventEmitted`].
     EventEmitted,
+    /// [`AiCall`].
+    AiCall,
+    /// [`BroadcastSent`].
+    Broadcast,
+    /// [`StorageOp`].
+    StorageOp,
+    /// [`WebhookDelivery`].
+    WebhookDelivery,
+    /// [`SearchQueried`].
+    Search,
+    /// [`SignInEvent`].
+    SignIn,
+    /// [`UiOperation`].
+    UiOperation,
 }
 
 impl EventKind {
     /// Every kind, in declaration order.
-    pub const ALL: [EventKind; 12] = [
+    pub const ALL: [EventKind; 19] = [
         EventKind::RequestHandled,
         EventKind::QueryExecuted,
         EventKind::JobProcessed,
@@ -59,6 +76,13 @@ impl EventKind {
         EventKind::ExceptionReported,
         EventKind::Log,
         EventKind::EventEmitted,
+        EventKind::AiCall,
+        EventKind::Broadcast,
+        EventKind::StorageOp,
+        EventKind::WebhookDelivery,
+        EventKind::Search,
+        EventKind::SignIn,
+        EventKind::UiOperation,
     ];
 
     /// The snake_case name, as in serialized records (`query_executed`).
@@ -76,6 +100,13 @@ impl EventKind {
             EventKind::ExceptionReported => "exception_reported",
             EventKind::Log => "log",
             EventKind::EventEmitted => "event_emitted",
+            EventKind::AiCall => "ai_call",
+            EventKind::Broadcast => "broadcast",
+            EventKind::StorageOp => "storage_op",
+            EventKind::WebhookDelivery => "webhook_delivery",
+            EventKind::Search => "search",
+            EventKind::SignIn => "sign_in",
+            EventKind::UiOperation => "ui_operation",
         }
     }
 
@@ -124,6 +155,21 @@ pub enum TelemetryEvent {
     /// An app event was emitted or published on the event bus
     /// (navree-events).
     EventEmitted(EventEmitted),
+    /// A call to a model provider finished (navree-ai).
+    AiCall(AiCall),
+    /// An event was pushed to real-time channels (navree-realtime).
+    Broadcast(BroadcastSent),
+    /// A file operation finished (navree-storage).
+    StorageOp(StorageOp),
+    /// One attempt to deliver a webhook finished (navree-webhooks).
+    WebhookDelivery(WebhookDelivery),
+    /// A search finished (navree-search).
+    Search(SearchQueried),
+    /// A sign-in attempt ended (navree-auth, and the sign-in modules that
+    /// build on it).
+    SignIn(SignInEvent),
+    /// A Navree UI operation was answered (navree-ui).
+    UiOperation(UiOperation),
 }
 
 impl TelemetryEvent {
@@ -142,6 +188,13 @@ impl TelemetryEvent {
             TelemetryEvent::ExceptionReported(_) => EventKind::ExceptionReported,
             TelemetryEvent::Log(_) => EventKind::Log,
             TelemetryEvent::EventEmitted(_) => EventKind::EventEmitted,
+            TelemetryEvent::AiCall(_) => EventKind::AiCall,
+            TelemetryEvent::Broadcast(_) => EventKind::Broadcast,
+            TelemetryEvent::StorageOp(_) => EventKind::StorageOp,
+            TelemetryEvent::WebhookDelivery(_) => EventKind::WebhookDelivery,
+            TelemetryEvent::Search(_) => EventKind::Search,
+            TelemetryEvent::SignIn(_) => EventKind::SignIn,
+            TelemetryEvent::UiOperation(_) => EventKind::UiOperation,
         }
     }
 }
@@ -499,16 +552,16 @@ pub struct TelemetryRecord {
 }
 
 /// Durations as (fractional) milliseconds.
-mod millis {
+pub(crate) mod millis {
     use std::time::Duration;
 
     use serde::{Deserialize, Deserializer, Serializer};
 
-    pub(super) fn serialize<S: Serializer>(value: &Duration, s: S) -> Result<S::Ok, S::Error> {
+    pub(crate) fn serialize<S: Serializer>(value: &Duration, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_f64(value.as_secs_f64() * 1000.0)
     }
 
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
         let ms = f64::deserialize(d)?;
         Duration::try_from_secs_f64(ms / 1000.0).map_err(serde::de::Error::custom)
     }

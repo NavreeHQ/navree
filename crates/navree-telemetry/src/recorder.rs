@@ -8,9 +8,11 @@ use navree_kernel::{Module, ModuleBuilder};
 use tokio::sync::Notify;
 
 use crate::{
-    CacheEvent, EventEmitted, EventKind, ExceptionReported, HttpClientRequest, Interest, JobFailed,
-    JobProcessed, LogRecord, MailSent, ModuleBuilderTelemetryExt, NotificationSent, QueryExecuted,
-    RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetryRecord, TelemetrySink,
+    AiCall, BroadcastSent, CacheEvent, EventEmitted, EventKind, ExceptionReported,
+    HttpClientRequest, Interest, JobFailed, JobProcessed, LogRecord, MailSent,
+    ModuleBuilderTelemetryExt, NotificationSent, QueryExecuted, RequestHandled, ScheduledTaskRan,
+    SearchQueried, SignInEvent, StorageOp, TelemetryEvent, TelemetryRecord, TelemetrySink,
+    UiOperation, WebhookDelivery,
 };
 
 /// A sink that keeps every record in memory, for assertions in tests.
@@ -232,6 +234,62 @@ impl TelemetryRecorder {
     pub fn emitted_events(&self) -> Vec<EventEmitted> {
         self.collect(|e| match e {
             TelemetryEvent::EventEmitted(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`AiCall`] events.
+    pub fn ai_calls(&self) -> Vec<AiCall> {
+        self.collect(|e| match e {
+            TelemetryEvent::AiCall(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`BroadcastSent`] events.
+    pub fn broadcasts(&self) -> Vec<BroadcastSent> {
+        self.collect(|e| match e {
+            TelemetryEvent::Broadcast(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`StorageOp`] events.
+    pub fn storage_ops(&self) -> Vec<StorageOp> {
+        self.collect(|e| match e {
+            TelemetryEvent::StorageOp(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`WebhookDelivery`] events.
+    pub fn webhook_deliveries(&self) -> Vec<WebhookDelivery> {
+        self.collect(|e| match e {
+            TelemetryEvent::WebhookDelivery(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`SearchQueried`] events.
+    pub fn searches(&self) -> Vec<SearchQueried> {
+        self.collect(|e| match e {
+            TelemetryEvent::Search(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`SignInEvent`]s.
+    pub fn sign_ins(&self) -> Vec<SignInEvent> {
+        self.collect(|e| match e {
+            TelemetryEvent::SignIn(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The [`UiOperation`] events.
+    pub fn ui_operations(&self) -> Vec<UiOperation> {
+        self.collect(|e| match e {
+            TelemetryEvent::UiOperation(x) => Some(x),
             _ => None,
         })
     }

@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use chrono::Utc;
 use navree_telemetry::{
-    CacheEvent, CacheOperation, EventEmitted, EventKind, ExceptionReported, HttpClientRequest,
-    JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent, QueryExecuted,
-    RequestHandled, ScheduledTaskRan, Telemetry, TelemetryEvent, TelemetryRecorder,
+    AiCall, BroadcastSent, CacheEvent, CacheOperation, EventEmitted, EventKind, ExceptionReported,
+    HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent,
+    QueryExecuted, RequestHandled, ScheduledTaskRan, SearchMode, SearchQueried, SignInEvent,
+    SignInMethod, StorageOp, StorageOperation, Telemetry, TelemetryEvent, TelemetryRecorder,
+    UiOperation, UiOperationKind, WebhookDelivery,
 };
 
 fn every_event() -> Vec<TelemetryEvent> {
@@ -107,6 +109,41 @@ fn every_event() -> Vec<TelemetryEvent> {
             failed: Vec::new(),
             duration: ms(1),
         }),
+        TelemetryEvent::AiCall(
+            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", ms(900)).tokens(1200, 340),
+        ),
+        TelemetryEvent::Broadcast(BroadcastSent::new(
+            ["private-crm.deals"],
+            "deal.updated",
+            3,
+            ms(1),
+        )),
+        TelemetryEvent::StorageOp(
+            StorageOp::new("uploads", "local", StorageOperation::Write, "kyc/pan.pdf", ms(4))
+                .bytes(52_314),
+        ),
+        TelemetryEvent::WebhookDelivery(WebhookDelivery::new(
+            "ep-1",
+            "invoice.paid",
+            1,
+            200,
+            ms(40),
+        )),
+        TelemetryEvent::Search(
+            SearchQueried::new("memory", "deals", SearchMode::Text, "Ludhiana", ms(2)).hits(7),
+        ),
+        TelemetryEvent::SignIn(SignInEvent::succeeded(
+            SignInMethod::Password,
+            "u-1",
+            ms(90),
+        )),
+        TelemetryEvent::UiOperation(UiOperation::new(
+            "/deals/{id}/stage",
+            UiOperationKind::FormPost,
+            200,
+            2,
+            ms(8),
+        )),
     ]
 }
 
@@ -117,7 +154,7 @@ fn typed_accessors_return_each_kind() {
     for event in every_event() {
         telemetry.emit(event);
     }
-    assert_eq!(recorder.len(), 12);
+    assert_eq!(recorder.len(), 19);
     assert_eq!(
         recorder.requests()[0].route.as_deref(),
         Some("/api/v1/deals/{id}")
@@ -134,7 +171,14 @@ fn typed_accessors_return_each_kind() {
     assert_eq!(recorder.logs()[0].level, LogLevel::Warn);
     assert_eq!(recorder.of_kind(EventKind::JobFailed).len(), 1);
     assert_eq!(recorder.emitted_events()[0].name, "deal.won");
-    assert_eq!(recorder.events().len(), 12);
+    assert_eq!(recorder.ai_calls()[0].model, "claude-sonnet-4-5");
+    assert_eq!(recorder.broadcasts()[0].delivered, 3);
+    assert_eq!(recorder.storage_ops()[0].bytes, Some(52_314));
+    assert_eq!(recorder.webhook_deliveries()[0].status, Some(200));
+    assert_eq!(recorder.searches()[0].hits, Some(7));
+    assert_eq!(recorder.sign_ins()[0].method, SignInMethod::Password);
+    assert_eq!(recorder.ui_operations()[0].kind, UiOperationKind::FormPost);
+    assert_eq!(recorder.events().len(), 19);
 
     recorder.clear();
     assert!(recorder.is_empty());

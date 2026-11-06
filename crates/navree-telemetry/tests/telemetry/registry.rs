@@ -134,8 +134,9 @@ fn every_event_names_its_kind() {
     assert_eq!(query("SELECT 1").kind(), EventKind::QueryExecuted);
     assert_eq!(cache_hit("k").kind(), EventKind::Cache);
     assert_eq!(EventKind::QueryExecuted.as_str(), "query_executed");
-    assert_eq!(EventKind::ALL.len(), 12);
+    assert_eq!(EventKind::ALL.len(), 19);
     assert_eq!(EventKind::EventEmitted.as_str(), "event_emitted");
+    assert_eq!(EventKind::SignIn.as_str(), "sign_in");
 }
 
 #[tokio::test]

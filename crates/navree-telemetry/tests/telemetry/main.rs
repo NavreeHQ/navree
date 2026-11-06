@@ -4,6 +4,7 @@
 
 mod context;
 mod module;
+mod platform;
 mod recorder;
 mod registry;
 mod trace;

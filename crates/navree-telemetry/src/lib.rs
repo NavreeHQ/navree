@@ -9,9 +9,14 @@
 //!   (navree-mail), [`NotificationSent`] (navree-notify), [`CacheEvent`]
 //!   (navree-cache), [`HttpClientRequest`] (navree-http-client),
 //!   [`ExceptionReported`] (navree-http, or your code), [`LogRecord`]
-//!   (navree-log) and [`EventEmitted`] (navree-events). A sink receives each one as a [`TelemetryRecord`]: the
-//!   event, when it was emitted and the [`EventContext`] (request id, job
-//!   id, trace, user, workspace) it happened in.
+//!   (navree-log) and [`EventEmitted`] (navree-events); and the platform
+//!   modules' [`AiCall`] (navree-ai), [`BroadcastSent`] (navree-realtime),
+//!   [`StorageOp`] (navree-storage), [`WebhookDelivery`] (navree-webhooks),
+//!   [`SearchQueried`] (navree-search), [`SignInEvent`] (navree-auth) and
+//!   [`UiOperation`] (navree-ui). A sink receives each one as a
+//!   [`TelemetryRecord`]: the event, when it was emitted and the
+//!   [`EventContext`] (request id, job id, trace, user, workspace) it
+//!   happened in.
 //! - **Sinks** ([`TelemetrySink`]) are `dyn TelemetrySink` multi-bindings,
 //!   registered with [`ModuleBuilderTelemetryExt`]; [`TelemetryModule`]
 //!   collects them into the app's [`Telemetry`] registry when the app boots.
@@ -49,6 +54,7 @@
 mod context;
 mod event;
 mod module;
+mod platform;
 mod recorder;
 mod registry;
 mod sink;
@@ -61,6 +67,10 @@ pub use event::{
     QueryExecuted, RequestHandled, RequestInfo, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
 };
 pub use module::{ModuleBuilderTelemetryExt, TelemetryModule};
+pub use platform::{
+    AiCall, BroadcastSent, Outcome, SearchMode, SearchQueried, SignInEvent, SignInMethod,
+    StorageOp, StorageOperation, UiOperation, UiOperationKind, WebhookDelivery,
+};
 pub use recorder::TelemetryRecorder;
 pub use registry::Telemetry;
 pub use sink::{Interest, TelemetrySink};
