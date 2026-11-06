@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer};
 
 /// The body of `POST /api/v1/users`.
 #[derive(Debug, Deserialize, Validate, ToSchema)]
+#[schema(as = UserCreateInput)]
 pub struct CreateUser {
     /// The display name.
     #[validate(length(min = 1, max = 255))]
@@ -31,6 +32,7 @@ fn trimmed<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Erro
 
 /// The body of `PATCH /api/v1/users/{id}`: only the fields present change.
 #[derive(Debug, Deserialize, Validate, ToSchema)]
+#[schema(as = UserUpdateInput)]
 pub struct UpdateUser {
     /// The display name.
     #[validate(length(min = 1, max = 255))]

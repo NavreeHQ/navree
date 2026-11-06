@@ -11,3 +11,10 @@ pub const DEAL: &str = "Deal";
 pub const ACTIVITY: &str = "Activity";
 /// Users (navree-auth's `users`).
 pub const USER: &str = "User";
+
+/// The schema of a resource's `__type`: a string that is always `subject`. Every resource says it
+/// the same way, so a client types them alike (`"Deal"`, not `string`).
+pub fn type_schema(subject: &'static str) -> navree::openapi::Schema {
+    navree::openapi::Schema::string_enum([subject])
+        .description(format!("Always `\"{subject}\"` (the CASL subject type)."))
+}

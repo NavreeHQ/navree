@@ -28,11 +28,12 @@ impl std::error::Error for UnknownValue {}
 
 /// Declares a string enum: serde and OpenAPI with the contract strings
 /// (which the ORM stores), `ALL` in declaration order, `as_str`, `Display`
-/// and `FromStr`.
+/// and `FromStr`. With `schema = Name` the OpenAPI component is called
+/// `Name` instead of the enum's name.
 macro_rules! string_enum {
     (
         $(#[$meta:meta])*
-        $name:ident, $kind:literal {
+        $name:ident, $kind:literal $(, schema = $schema:ident)? {
             $( $(#[$vmeta:meta])* $variant:ident => $value:tt ),+ $(,)?
         }
     ) => {
@@ -41,6 +42,7 @@ macro_rules! string_enum {
             Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord,
             Serialize, Deserialize, ToSchema,
         )]
+        $(#[schema(as = $schema)])?
         pub enum $name {
             $(
                 $(#[$vmeta])*
@@ -120,7 +122,7 @@ string_enum! {
     /// A deal's pipeline stage (`deals.stage`), in board order; new deals
     /// start as `lead`.
     #[derive(Default)]
-    Stage, "stage" {
+    Stage, "stage", schema = DealStage {
         /// 10% (the default).
         #[default]
         Lead => "lead",
@@ -194,7 +196,7 @@ string_enum! {
     /// The kind of record an activity is attached to
     /// (`activities.subject_type`).
     #[derive(Default)]
-    SubjectType, "subject type" {
+    SubjectType, "subject type", schema = ActivitySubjectType {
         /// A company.
         Company => "company",
         /// A contact.

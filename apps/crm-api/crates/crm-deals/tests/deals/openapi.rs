@@ -100,9 +100,17 @@ async fn openapi_documents_every_deal_route() {
         json!(["title", "company_id", "amount_cents"])
     );
     assert_eq!(schemas["DealMoveInput"]["required"], json!(["stage"]));
+    assert_eq!(
+        schemas["Deal"]["properties"]["__type"]["enum"],
+        json!(["Deal"])
+    );
+    assert!(
+        schemas.get("Stage").is_none(),
+        "`Stage` is still a component"
+    );
     for name in [
         "BoardStage",
-        "Stage",
+        "DealStage",
         "CompanyRef",
         "ContactRef",
         "OwnerRef",

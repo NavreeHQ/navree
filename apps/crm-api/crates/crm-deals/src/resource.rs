@@ -11,6 +11,11 @@ use navree::orm::attributes::Resource;
 use serde::Serialize;
 use uuid::Uuid;
 
+/// The schema of `__type`.
+fn deal_type() -> navree::openapi::Schema {
+    crm_core::subjects::type_schema(DEAL)
+}
+
 /// A deal as the API returns it: the row plus
 /// `probability` (from the stage) and the `company`, `contact` and `owner`
 /// embeds.
@@ -19,7 +24,7 @@ use uuid::Uuid;
 pub struct DealResource {
     /// Always `"Deal"` (the CASL subject type).
     #[serde(rename = "__type")]
-    #[schema(example = "Deal")]
+    #[schema(schema_with = deal_type)]
     pub resource_type: &'static str,
     /// The id.
     pub id: Uuid,

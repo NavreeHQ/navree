@@ -23,6 +23,7 @@ pub const REP: &str = "rep";
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, ToSchema,
 )]
 #[serde(rename_all = "lowercase")]
+#[schema(as = Role)]
 pub enum UserRole {
     /// [`ADMIN`].
     Admin,

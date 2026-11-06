@@ -16,6 +16,11 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
+/// The schema of `__type`.
+fn user_type() -> navree::openapi::Schema {
+    crm_core::subjects::type_schema(USER_SUBJECT)
+}
+
 /// A user as `/api/v1/users` returns it:
 /// `{__type: "User", id, name, email, email_verified_at, roles, created_at}`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
@@ -23,7 +28,7 @@ use uuid::Uuid;
 pub struct UserView {
     /// Always `"User"` (the CASL subject type).
     #[serde(rename = "__type")]
-    #[schema(example = "User")]
+    #[schema(schema_with = user_type)]
     pub resource_type: &'static str,
     /// The id.
     pub id: Uuid,

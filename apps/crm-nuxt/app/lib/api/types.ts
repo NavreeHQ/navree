@@ -30,7 +30,7 @@ export type OwnerRef = Schemas["OwnerRef"];
 export type CompanyRef = Schemas["CompanyRef"];
 export type ContactRef = Schemas["ContactRef"];
 
-export type Role = Schemas["UserRole"];
+export type Role = Schemas["Role"];
 /**
  * `GET /api/v1/users` items. `GET /api/auth/me` and the login `user` return the
  * same shape (crm-users adds `roles` through a user resource extension), although
@@ -45,8 +45,8 @@ export type NavreeLoginResponse = Schemas["LoginResponse"];
 export type TwoFactorChallenge = Schemas["TwoFactorChallenge"];
 export type TwoFactorVerifyInput = Schemas["TwoFactorVerifyInput"];
 export type TokenPair = Schemas["TokenPair"];
-export type UserCreateInput = Schemas["CreateUser"];
-export type UserUpdateInput = Schemas["UpdateUser"];
+export type UserCreateInput = Schemas["UserCreateInput"];
+export type UserUpdateInput = Schemas["UserUpdateInput"];
 
 export type CompanySize = Schemas["CompanySize"];
 /** The fields `GET /api/v1/companies` sorts by; a leading `-` sorts descending. */
@@ -62,7 +62,7 @@ export type Contact = Schemas["Contact"];
 export type ContactInput = Schemas["ContactInput"];
 export type ContactUpdateInput = Schemas["ContactUpdateInput"];
 
-export type DealStage = Schemas["Stage"];
+export type DealStage = Schemas["DealStage"];
 /** The fields `GET /api/v1/deals` sorts by; a leading `-` sorts descending. */
 export type DealSortField = "created_at" | "title" | "amount_cents" | "expected_close_date";
 export type DealSort = DealSortField | `-${DealSortField}`;
@@ -74,7 +74,7 @@ export type BoardStage = Schemas["BoardStage"];
 export type DealBoard = Schemas["DealBoard"];
 
 export type ActivityKind = Schemas["ActivityKind"];
-export type ActivitySubjectType = Schemas["SubjectType"];
+export type ActivitySubjectType = Schemas["ActivitySubjectType"];
 export type Activity = Schemas["Activity"];
 export type ActivityInput = Schemas["ActivityInput"];
 export type ActivityUpdateInput = Schemas["ActivityUpdateInput"];

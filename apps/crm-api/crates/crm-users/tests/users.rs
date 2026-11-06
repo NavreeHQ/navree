@@ -342,6 +342,51 @@ async fn user_routes_are_documented_with_their_schemas() {
     crm.shutdown().await;
 }
 
+/// The component names are the ones crm-web's and crm-nuxt's types use, and `__type` is the one
+/// value the CASL subject type is.
+#[tokio::test]
+async fn user_schemas_have_the_names_the_front_ends_use() {
+    let crm = crm().await;
+    let doc = crm
+        .client()
+        .get("/api/openapi.json")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let schemas = &doc["components"]["schemas"];
+    let body = |path: &str, method: &str| {
+        doc["paths"][path][method]["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+            .clone()
+    };
+    assert_eq!(
+        body("/api/v1/users", "post"),
+        json!("#/components/schemas/UserCreateInput")
+    );
+    assert_eq!(
+        body("/api/v1/users/{id}", "patch"),
+        json!("#/components/schemas/UserUpdateInput")
+    );
+    assert_eq!(
+        schemas["UserCreateInput"]["properties"]["role"]["$ref"],
+        json!("#/components/schemas/Role")
+    );
+    assert_eq!(
+        schemas["Role"]["enum"],
+        json!(["admin", "manager", "rep"]),
+        "{}",
+        schemas["Role"]
+    );
+    for old in ["CreateUser", "UpdateUser", "UserRole"] {
+        assert!(schemas.get(old).is_none(), "`{old}` is still a component");
+    }
+    assert_eq!(
+        schemas["User"]["properties"]["__type"]["enum"],
+        json!(["User"])
+    );
+    crm.shutdown().await;
+}
+
 /// User search ignores case for non-ASCII letters too.
 #[tokio::test]
 async fn user_search_ignores_case_beyond_ascii() {

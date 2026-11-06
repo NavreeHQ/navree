@@ -133,6 +133,18 @@ async fn routes_are_documented_with_their_schemas() {
             "Dashboard.{field}: {dashboard}"
         );
     }
+    // `__type` is the one value the CASL subject type is, and the subject type enum has the name
+    // crm-web's types use.
+    assert_eq!(
+        activity["__type"]["enum"],
+        json!(["Activity"]),
+        "Activity.__type: {activity}"
+    );
+    assert!(components["ActivitySubjectType"]["enum"].is_array());
+    assert!(
+        components.get("SubjectType").is_none(),
+        "`SubjectType` is still a component"
+    );
     let update = &components["ActivityUpdateInput"];
     assert!(
         update["required"].as_array().is_none_or(Vec::is_empty),

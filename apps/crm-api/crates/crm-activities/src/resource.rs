@@ -20,6 +20,11 @@ pub const ACTIVITY_TYPE: &str = crm_core::subjects::ACTIVITY;
 /// gone.
 pub const MISSING_SUBJECT_LABEL: &str = "Deleted record";
 
+/// The schema of `__type`.
+fn activity_type() -> navree::openapi::Schema {
+    crm_core::subjects::type_schema(ACTIVITY_TYPE)
+}
+
 /// An activity as the API returns it:
 /// `{__type: "Activity", id, kind, subject, body, due_at, completed_at,
 /// subject_type, subject_id, subject_label, owner_id, owner, assignee_id,
@@ -29,7 +34,7 @@ pub const MISSING_SUBJECT_LABEL: &str = "Deleted record";
 pub struct ActivityResource {
     /// Always `"Activity"` (the CASL subject type).
     #[serde(rename = "__type")]
-    #[schema(example = "Activity")]
+    #[schema(schema_with = activity_type)]
     pub resource_type: &'static str,
     /// The id.
     pub id: Uuid,
