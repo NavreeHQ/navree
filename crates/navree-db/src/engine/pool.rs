@@ -85,14 +85,21 @@ impl Pool {
             let message = crate::db::connect_message(url, error.message());
             error.with_message(message)
         })?;
-        Ok(Pool {
+        let pool = Pool {
             inner: Arc::new(PoolInner {
                 driver,
                 reporter,
                 waiting: Arc::new(AtomicUsize::new(0)),
                 mariadb: tokio::sync::OnceCell::new(),
             }),
-        })
+        };
+        // A MySQL or MariaDB server says which it is now, while the pool has
+        // connections to spare. Asked later, inside a unit of work that holds
+        // a connection (the ORM asks before its first statement), the question
+        // would take a second one, and with every connection held by such a
+        // unit of work none would come.
+        pool.mariadb_version().await?;
+        Ok(pool)
     }
 
     #[cfg(feature = "sqlite")]
@@ -117,9 +124,9 @@ impl Pool {
     }
 
     /// The server's version as `(major, minor)` when it is MariaDB, else
-    /// `None` (MySQL, PostgreSQL, SQLite). The server is asked once, without
-    /// reporting the question to listeners or the query log, and every
-    /// clone of the pool remembers the answer.
+    /// `None` (MySQL, PostgreSQL, SQLite). The server is asked once, when the
+    /// pool opens, without reporting the question to listeners or the query
+    /// log, and every clone of the pool remembers the answer.
     pub async fn mariadb_version(&self) -> Result<Option<(u16, u16)>, DbError> {
         if self.backend() != Backend::MySql {
             return Ok(None);
