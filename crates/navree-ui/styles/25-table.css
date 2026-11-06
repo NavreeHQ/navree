@@ -151,5 +151,4 @@ th:hover [data-th-menu],th:focus-within [data-th-menu],[data-th-menu]:popover-op
   & [data-slot=pagination-link]{min-width:1.75rem;height:1.75rem;padding:0 .25rem;font-size:13px;&[aria-current]{background:none;color:var(--fg);font-weight:600;box-shadow:none;border:0}}
 }
 [dir=rtl] [data-slot=pagination] [data-slot=icon],[dir=rtl] [data-slot=pagination-text] [data-slot=icon]{transform:scaleX(-1)}
-[data-ui-sr]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 @media (max-width:767px){[data-slot=table] td[data-sticky="1"],[data-slot=table] th[data-sticky="1"]{max-width:45vw;overflow:hidden;text-overflow:ellipsis}[data-slot=table-search]{max-width:none;flex-basis:100%}[data-slot=toolbar-end]{margin-inline-start:0}[data-slot=page-size] > span{display:none}[data-slot=table-footer]{justify-content:center}[data-slot=footer-end]{margin-inline:0}}

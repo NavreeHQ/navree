@@ -7,6 +7,8 @@
  */
 @font-face{font-family:Geist;src:url(geist.woff2) format("woff2");font-weight:100 900;font-display:optional}
 *,*::before,*::after{box-sizing:border-box}
+/* Words for assistive technology only: any component may carry them, so they are in the sheet every page loads. */
+[data-ui-sr]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scrollbar-color:var(--line-3) transparent}
 html[data-ui-loading]::before{content:"";position:fixed;inset:0 0 auto;height:2px;background:var(--accent);z-index:100;animation:ui-load 1s ease-out .1s both}
 body{margin:0;background:var(--ink-0);color:var(--fg-1);font:400 14px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}

@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "df2634a880eb";
+pub const BUILD: &str = "133f15cebff3";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-1eda0837195f.js";
@@ -83,7 +83,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-846f20b5316f.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-c81ce821ebab.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -113,7 +113,7 @@ pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-1598c397895d.css"
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-71c739ec974b.css";
 
 /// The URL of `table-styles.css`.
-pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-554c86edce25.css";
+pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-e36273c6df1f.css";
 
 /// The URL of `select-styles.css`.
 pub const SELECT_STYLES_URL: &str = "/_navree/ui/select-styles-4ca9053735a0.css";
@@ -384,7 +384,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "846f20b5316f",
+        hash: "c81ce821ebab",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -474,7 +474,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table-styles",
         ext: "css",
-        hash: "554c86edce25",
+        hash: "e36273c6df1f",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/table-styles.css"),
         gzip: Some(include_bytes!("../dist/table-styles.css.gz")),
