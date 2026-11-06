@@ -186,6 +186,11 @@ fn register(m: &mut ModuleBuilder, options: Option<I18nOptions>) {
     for command in commands() {
         m.command(command);
     }
+    #[cfg(feature = "ui")]
+    m.factory(Factory::<dyn navree_ui::Localizer>::new(|_| async {
+        Ok(Arc::new(crate::ui::UiLocalizer) as Arc<dyn navree_ui::Localizer>)
+    }))
+    .exports::<dyn navree_ui::Localizer>();
 }
 
 impl Lifecycle for I18n {

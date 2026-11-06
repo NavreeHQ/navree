@@ -16,6 +16,13 @@ workspace = true
 postgres = ["navree-db/postgres"]
 ## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
 mysql = ["navree-db/mysql"]
+## Navree UI in the reader's language: `FromLocale` for the toolkit's label structs, money
+## and dates by locale, the shipped words of the toolkit (`resources/<tag>/ui.ftl`) and the
+## `Localizer` that lets a form say its date, time and slider messages in the request's
+## language. The facade turns it on when both `ui` and `i18n` are on.
+ui = ["dep:navree-ui"]
+## `PhoneLabels` from a locale, when Navree UI has its phone input.
+phone = ["navree-ui?/phone"]
 
 [dependencies]
 chrono = { workspace = true }
@@ -39,6 +46,7 @@ navree-kernel = { workspace = true }
 navree-notify = { workspace = true }
 navree-openapi = { workspace = true }
 navree-template = { workspace = true }
+navree-ui = { workspace = true, optional = true }
 navree-validation = { workspace = true }
 navree-view = { workspace = true }
 navree-workspace = { workspace = true }
@@ -51,6 +59,8 @@ unic-langid = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests draw Navree UI in other languages.
+navree-i18n = { workspace = true, features = ["ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-access = { workspace = true }

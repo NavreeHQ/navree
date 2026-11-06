@@ -60,6 +60,8 @@ mod options;
 mod service;
 mod shipped;
 mod tag;
+#[cfg(feature = "ui")]
+pub mod ui;
 mod validation;
 mod views;
 

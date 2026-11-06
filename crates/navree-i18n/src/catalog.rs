@@ -406,6 +406,12 @@ fn locale_bundle(
         // The app's own messages win over the shipped ones.
         let _ = bundle.add_resource(Arc::new(resource));
     }
+    #[cfg(feature = "ui")]
+    if let Some(source) = shipped::ui_for(&langid)
+        && let Ok(resource) = FluentResource::try_new(source.to_owned())
+    {
+        let _ = bundle.add_resource(Arc::new(resource));
+    }
     LocaleBundle { bundle, messages }
 }
 

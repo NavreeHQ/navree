@@ -204,8 +204,10 @@ const HIERARCHY: &[Rule] = &[
     // navree-db's (optional, with the ORM), which it begins at READ COMMITTED.
     // Its phone input (optional feature `phone`) reads and writes numbers with
     // navree-phone. Its uploads (optional feature `storage`) are received through
-    // navree-storage's disks and upload rules.
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage"]),
+    // navree-storage's disks and upload rules. Its optional feature `time` reads the
+    // reader's zone from navree-time (today's day, the times of a timeline), and its
+    // optional feature `access` shows and hides actions by navree-access's abilities.
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
@@ -394,11 +396,13 @@ const HIERARCHY: &[Rule] = &[
     // Localization: Fluent messages, the request's locale (the signed-in
     // user's or the workspace's saved one, a query parameter, a cookie,
     // Accept-Language), translated validation messages, a `t` function in
-    // views and notifications in the recipient's locale.
+    // views and notifications in the recipient's locale. Its optional feature
+    // `ui` gives Navree UI's labels, money and dates a locale (navree-ui never
+    // depends on it: navree-workspace's own `ui` feature would close a cycle).
     rule("navree-i18n", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-db", "navree-validation", "navree-notify", "navree-workspace",
-        "navree-i18n-macros", "navree-template",
+        "navree-i18n-macros", "navree-template", "navree-ui",
     ]),
     // Documents: PDF from HTML templates (navree-view) laid out by the
     // native engine or printed by headless Chrome, DOCX, and PDF

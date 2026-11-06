@@ -180,12 +180,15 @@ notify = [
 ## shell, forms and tables from one struct, embedded CSS, JS and fonts.
 ## With `auth` on too, the sign-in, two-factor, password reset and sign-out
 ## pages (`navree::auth::AuthPages`, on the session); with `workspace`, the
-## workspace switcher (`navree::workspace::WorkspaceSwitcher`).
+## workspace switcher (`navree::workspace::WorkspaceSwitcher`); with `i18n`,
+## the toolkit's labels, money and dates in the request's language
+## (`navree::i18n::ui`).
 ui = [
     "dep:navree-ui",
     "http",
     "validation",
     "navree-auth?/ui",
+    "navree-i18n?/ui",
     "navree-workspace?/ui",
 ]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
@@ -613,7 +616,7 @@ postgres = ["db", "navree-db/postgres"]
 mysql = ["db", "navree-db/mysql"]
 ## navree-validation's `Phone`: E.164 phone numbers (navree-phone).
 ## Pure Rust; in `full`.
-validation-phone = ["validation", "phone", "navree-validation/phone", "navree-ui?/phone", "navree-orm?/phone"]
+validation-phone = ["validation", "phone", "navree-validation/phone", "navree-ui?/phone", "navree-orm?/phone", "navree-i18n?/phone"]
 ## navree-validation's `SafeHtml`: rich text sanitized by the app's
 ## `HtmlPolicy` (Navree's own sanitizer on html5ever). Pure Rust; in `full`.
 validation-html = ["validation", "navree-validation/html"]
