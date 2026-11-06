@@ -466,7 +466,7 @@ for (const browserName of browsers) {
       const c = picker("combo-search");
       await page.route("**/select/people?*", async (route) => {
         const q = new URL(route.request().url()).searchParams.get("q");
-        if (q === "gr") await new Promise((r) => setTimeout(r, 1200));
+        if (q === "ga") await new Promise((r) => setTimeout(r, 1200));
         await route.continue();
       });
       await page.locator("#f-combo-search").click();
