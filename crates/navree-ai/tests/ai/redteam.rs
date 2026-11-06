@@ -148,8 +148,9 @@ async fn hostile_text_a_model_chose_is_drawn_as_text_in_a_real_conversation() {
             "{}: {html}",
             probe.name
         );
-        // Markup a model wrote is text: escaped, so no tag of it is in the page.
-        for markup in ["<script", "<img", "<svg"] {
+        // Markup a model wrote is text: escaped, so no tag of it is in the page (the
+        // toolkit's own icons are `<svg data-slot="icon">`, never one with `onload`).
+        for markup in ["<script", "<img src=x", "<svg onload"] {
             assert!(!html.contains(markup), "{}: {markup} in {html}", probe.name);
         }
         assert!(!html.contains(r#"data-genui="approval""#), "{}", probe.name);
