@@ -31,6 +31,7 @@
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
+//! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/compare/{screen}` | the four screens the speed comparison measures: `table`, `select`, `dates` and `tabs` |
 #![forbid(unsafe_code)]
 
@@ -63,6 +64,7 @@ mod menubar;
 mod menus;
 mod otp_carousel;
 mod pages;
+mod parts;
 mod phone;
 mod select;
 mod themes;
@@ -147,7 +149,8 @@ impl Module for ProofModule {
             .controller::<markdown::MarkdownPages>()
             .controller::<charts::ChartPages>()
             .controller::<islands::IslandPages>()
-            .controller::<compare::ComparePages>();
+            .controller::<compare::ComparePages>()
+            .controller::<parts::PartsPages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
     }
