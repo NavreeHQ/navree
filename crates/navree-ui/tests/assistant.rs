@@ -649,7 +649,14 @@ fn conversation_html() -> String {
 fn a_conversation_is_a_live_list_that_starts_at_the_newest() {
     let html = conversation_html();
     assert!(html.contains(r#"data-genui="conversation""#), "{html}");
+    // A section of its own: a component's title and an answer's headings are level 3.
+    assert!(
+        html.contains(r#"<h2 data-ui-sr="">Conversation</h2>"#),
+        "{html}"
+    );
     assert!(html.contains(r#"data-ui-order="asc""#), "{html}");
+    // Drawn as nothing is changing, it fetches only when it hears something.
+    assert!(!html.contains("data-ui-live-catch-up"), "{html}");
     assert!(html.contains(r#"data-ui-live-at="end""#), "{html}");
     assert!(
         html.contains(r#"data-ui-live-event="assistant.7""#),

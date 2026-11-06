@@ -997,6 +997,10 @@ pub fn approval_notice(
 /// A conversation: its messages oldest first in a [`LazyList`] that starts at the newest,
 /// loads earlier ones as the reader scrolls up, and merges what changed live from its
 /// stream, so an answer grows in place while what the reader types stays as it is.
+///
+/// It is a section of the page under a level-2 heading that only a screen reader shows
+/// (its label, "Conversation"): what an answer shows has level-3 headings, a component's
+/// title and the headings an answer writes, so they sit one level under it.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Conversation {
@@ -1063,6 +1067,9 @@ impl Conversation {
     }
 
     fn into_node(self) -> Node {
+        let heading = el("h2")
+            .attr("data-ui-sr", "")
+            .child(self.labels.conversation.clone());
         let mut list = LazyList::new(
             id_part(&self.id),
             self.labels.conversation.clone(),
@@ -1092,6 +1099,7 @@ impl Conversation {
         el("div")
             .attr("data-genui", "conversation")
             .uses(Uses::GENUI)
+            .child(heading)
             .child(list)
             .into()
     }
