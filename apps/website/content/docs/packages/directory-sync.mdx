@@ -3,6 +3,21 @@ title: "Directory sync"
 description: "Keep each customer's people in step with their directory: a SCIM 2.0 server, pull connectors for Microsoft Graph, Google Workspace, Okta and LDAP, and a sink that maps people into your model."
 ---
 
+## Quick start
+
+The smallest setup: add `DirectoryModule` and create a SCIM connection for a workspace. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(DirectoryModule::from_config())
+let directory = ctx.get::<Directory>().await?;
+let scim = directory
+    .create_connection(Owner::Workspace(workspace_id), NewConnection::new("Sutlej Entra ID", "scim"))
+    .await?;
+let token = scim.scim_token.unwrap(); // shown once; only its hash is kept
+```
+
+The feature is `directory`, part of the default `full` feature. The module needs `DatabaseModule`. Give the identity provider your app's `/scim/v2` URL and the token ([SCIM connections](#scim-connections)); [mapping the directory into your model](#mapping-the-directory-into-your-model) says what happens to each person it sends.
+
 ## Introduction
 
 <Badge feature="directory" /> A business app is used by your customers' employees, and those employees already live in a directory: Microsoft Entra ID, Google Workspace, Okta, or an Active Directory on the customer's own network. People join, change departments and leave every week. Your app has to see those changes without anyone typing them in.

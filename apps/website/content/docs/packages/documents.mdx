@@ -3,6 +3,23 @@ title: "Documents"
 description: "Render PDF from HTML templates or documents built in code, laid out in process or printed by headless Chrome, in any script, write Word files, merge and stamp PDFs, and queue renders to a storage disk."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, put a template in `resources/documents` and render it. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] }
+```
+
+```rust
+// src/app.rs: .module(DocumentsModule::from_config())
+// resources/documents/certificates/course.html is the template
+let pdf = documents.pdf("certificates/course", &completion).await?;
+Ok(pdf.download("certificate.pdf"))
+```
+
+`completion` is any `Serialize` value the template reads. The module needs nothing else to render. [Rendering a PDF](#rendering-a-pdf) shows a controller, and [the native engine](#the-native-engine) what lays the page out.
+
 ## Introduction
 
 <Badge feature="documents" /> Most apps end up producing documents: a certificate when a course is completed, an invoice, a quarterly audit report, an export someone forwards to their manager. `navree-documents` renders them from templates and your data:

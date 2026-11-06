@@ -3,6 +3,23 @@ title: "Custom domains"
 description: "Put each workspace on its own domain: DNS verification, automatic TLS through a proxy or ACME, the `domain` workspace resolver, managed DNS zones and certificate expiry reports."
 ---
 
+## Quick start
+
+The smallest setup: add `DomainsModule` and add a domain to a workspace. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(DomainsModule::from_config())
+let domains = ctx.get::<Domains>().await?;
+let domain = domains
+    .add(workspace_id, NewDomain::new("crm.sutlejsupply.in"))
+    .await?;
+for record in &domain.dns_records {
+    println!("{} {} {}", record.kind, record.name, record.value);
+}
+```
+
+The feature is `domains`, part of the default `full` feature. The module needs `DatabaseModule`; the workspace routes also need `WorkspaceModule`. The customer creates the records printed here, then [verification](#verification) proves the domain is theirs.
+
 ## Introduction
 
 <Badge feature="domains" /> A workspace of your app lives at `acme.app.example.com`, or under `/w/acme`. Many customers want it on a domain of their own: `crm.acme-corp.com` for their team, `go.acme-corp.com` for the links they send, `book.acme-corp.com` for a public booking page. That takes three things: proof that the domain is theirs, a certificate for it, and a way for each request to find its workspace from the host name.

@@ -3,6 +3,27 @@ title: "Workflows"
 description: "Durable workflows in code: `#[workflow]` async functions whose steps are stored and replayed, sleeps of minutes or months, event waits with timeouts, versions, cancellation and retries."
 ---
 
+## Quick start
+
+The smallest setup: add the module, write a workflow, register it and start a run. The rest of the page explains each part.
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Onboarding { pub user_id: u64 }
+
+#[workflow]
+pub async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<(), BoxError> {
+    let mail = ctx.app().get::<LearnerMail>().await?;
+    let user_id = input.user_id;
+    ctx.step("send-welcome", || async move { mail.send(user_id, "welcome").await }).await?;
+    Ok(())
+}
+// src/app.rs: .module(WorkflowsModule::from_config()); the owning module: imports = [WorkflowsModule::for_feature::<Onboarding>()]
+let run_id = workflows.start(uow, Onboarding { user_id: 8 }).await?;
+```
+
+The feature is `workflows`, part of the default `full` feature. The module needs `DatabaseModule`; `QueueModule` runs the steps on workers. [Writing a workflow](#writing-a-workflow) adds timers and event waits, and [steps](#steps) says what is stored.
+
 ## Introduction
 
 <Badge feature="workflows" /> Some work spans days. A new learner gets a welcome mail, then a nudge a week later unless they finished a course in between. A renewal is charged, retried for an hour, and turned into a mail when the card keeps failing. A trial sends a reminder three days before it ends. Jobs and schedules can each do a piece of this, but the sequence itself, and the state between its pieces, ends up spread over tables, flags and cron tasks.

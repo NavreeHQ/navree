@@ -3,6 +3,27 @@ title: "Browser testing"
 description: "Drive a real Chrome from your Rust tests over the Chrome DevTools Protocol: visit pages, fill forms, press buttons and assert on what a user sees, with automatic waiting and a screenshot on every failure."
 ---
 
+## Quick start
+
+The smallest setup: add the crate as a dev-dependency and drive your running app from a test. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree-browser = { git = "https://github.com/NavreeHQ/navree" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+```rust
+let browser = Browser::launch().await?;
+let page = browser.visit("http://127.0.0.1:8080/login").await?;
+page.type_into("Email", "rep1@navree.test").await?;
+page.type_into("Password", "password123").await?;
+page.press("Sign in").await?;
+page.assert_see("Pipeline by stage").await?;
+```
+
+It needs Chrome, Chromium or Edge at test time: `navree browser:install` downloads one. [A first test](#a-first-test) boots the app and its front end inside the test.
+
 ## Introduction
 
 [HTTP tests](/docs/testing/http-tests/) check your API one request at a time. Some things only show up when a person uses the product: the sign-in form posts to the BFF, the BFF stores the tokens, the deal board loads, a drag between columns moves a deal. `navree-browser` tests those journeys from Rust, in the same `cargo test` run as everything else:

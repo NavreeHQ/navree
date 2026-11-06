@@ -3,6 +3,21 @@ title: "Integrations"
 description: "Connect each workspace or organization to Microsoft 365, Google Workspace, Slack, any OAuth 2.0 API or an API key, with encrypted credentials, token refresh, scope sets and health checks."
 ---
 
+## Quick start
+
+The smallest setup: add `IntegrationsModule`, let an admin connect a provider, and call its API from a handler. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(IntegrationsModule::from_config())
+#[get("/users")]
+#[permissions("directory.read")]
+async fn users(&self, graph: Connection<MicrosoftGraph, DirectoryRead>) -> Result<Json<Vec<GraphUser>>> {
+    Ok(Json(graph.paginate("/users?$select=id,mail").await?))
+}
+```
+
+The feature is `integrations`, part of the default `full` feature. The module needs `CryptoModule` and `DatabaseModule`. `DirectoryRead` is a scope set you declare ([scope sets](#scope-sets)), and the admin approves it first ([connecting a provider](#connecting-a-provider)).
+
 ## Introduction
 
 <Badge feature="integrations" /> A business app rarely works alone. It reads a customer's directory from Microsoft 365, sends mail through their Google Workspace, posts to their Slack and pulls alerts from the security tools they already run. Each of your customers connects their own accounts, and each connection has to keep working for months.

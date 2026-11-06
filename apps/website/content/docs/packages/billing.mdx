@@ -3,6 +3,32 @@ title: "Billing"
 description: "Subscriptions, trials, seats, metered usage, invoices, the customer portal, one-time payments, payment links and refunds, with Stripe, Paddle or a provider of your own, idempotent writes and verified webhooks processed on the queue."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, pick a provider and a plan, and start a checkout. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["billing"] }
+```
+
+```toml title="config/app.toml"
+[billing]
+provider = "fake"                 # stripe | paddle | fake
+return_url = "https://app.sutlej.example/settings/billing"
+
+[billing.plans.pro]
+name = "Pro"
+prices = { monthly = "price_pro_monthly" }
+```
+
+```rust
+// src/app.rs: .module(BillingModule::from_config())
+let checkout = billing.checkout(&workspace, "pro").create().await?;
+// checkout.url is the hosted page to send the customer to
+```
+
+The module needs the database, and its routes need auth. [Configuration](#configuration) shows Stripe and Paddle, and [checkout](#checkout) the whole builder.
+
 ## Introduction
 
 <Badge feature="billing" /> `navree-billing` charges your customers through Stripe, Paddle or a payment provider of your own, and keeps a copy of their subscriptions in your database, so a check like "is this workspace on Pro?" is a local query, not an API call.

@@ -3,6 +3,27 @@ title: "Media"
 description: "Attach files to models in collections, convert images into responsive variants, download remote files safely, unpack zips, extract text from PDF and DOCX, and process video with FFmpeg."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, let a model declare a collection and attach a file to it. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["media"] }
+```
+
+```rust
+impl HasMedia for Course {
+    const MEDIA_TYPE: &'static str = "Course";
+    const MEDIA_TABLE: &'static str = "courses";
+    fn media_key(&self) -> String { self.id.to_string() }
+    fn media_collections(c: &mut MediaCollections) { c.collection("thumbnail").single_file().accepts(["image/*"]); }
+}
+// src/app.rs: .module(MediaModule::from_config()); the owning module: imports = [MediaModule::for_feature::<Course>()]
+let item = media.add(course.model(), "thumbnail", MediaSource::bytes(file_name, bytes)).save(&uow).await?;
+```
+
+The module needs `StorageModule` for the disks and `DatabaseModule` for the `media` table. [Models and collections](#models-and-collections) lists what a collection can do.
+
 ## Introduction
 
 <Badge feature="media" /> Sooner or later a model needs files: a course has a thumbnail and attachments, a news post a gallery, a brand a logo, a knowledge base the documents it answers from. `navree-media` attaches files to your models and does the work around them:

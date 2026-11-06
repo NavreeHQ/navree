@@ -3,6 +3,26 @@ title: "Imports and exports"
 description: "CSV and Excel exports from typed rows, streamed or queued with a signed link, and imports with encoding detection, header mapping, row validation, a staging preview and error files."
 ---
 
+## Quick start
+
+The smallest setup: describe a row, then return it as a download. The rest of the page explains each part.
+
+```rust
+#[derive(Exportable)]
+#[export(sheet = "Contacts")]
+struct ContactRow {
+    #[export(header = "Name")]
+    name: String,
+    #[export(header = "Email", width = 30)]
+    email: String,
+}
+
+// src/app.rs: .module(SheetsModule::from_config())
+Ok(exports.csv("contacts", contacts.into_iter().map(ContactRow::from)))
+```
+
+The feature is `sheets`, part of the default `full` feature. A download needs nothing else; imports and queued exports need the database, the queue and storage. [Downloads](#downloads) shows the controller, and [imports](#imports) the other direction.
+
 ## Introduction
 
 <Badge feature="sheets" /> Business apps live on spreadsheets. Customers export their contacts to Excel every Monday, and import ten thousand employees from a file someone saved in Excel on a Windows laptop set to Arabic. `navree-sheets` handles both directions.

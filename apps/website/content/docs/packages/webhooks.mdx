@@ -3,6 +3,25 @@ title: "Webhooks"
 description: "Send signed webhooks from your events with queue-backed retries and a delivery log, and verify incoming webhooks from Stripe, GitHub, Paddle, AWS SNS, Twilio, Slack and other senders."
 ---
 
+## Quick start
+
+The smallest setup: add the module, say which event is a webhook and create an endpoint. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(WebhooksModule::from_config())
+// the module that owns DealWon: imports = [WebhooksModule::for_feature::<DealWon>()]
+impl WebhookEvent for DealWon {
+    const DESCRIPTION: &'static str = "A deal moved to won.";
+    fn workspace_id(&self) -> Option<Uuid> { Some(self.workspace_id) }
+}
+let created = webhooks
+    .create_endpoint(&uow, NewEndpoint::new("https://hooks.sutlejsupply.in/navree").events(["deal.won"]).workspace(workspace.id))
+    .await?;
+// created.secret is shown once
+```
+
+The feature is `webhooks`, part of the default `full` feature. Delivery needs the database, the queue, the events bus and the HTTP client. [Choosing the events](#choosing-the-events) shows the payload, and [verifying incoming webhooks](#verifying-incoming-webhooks) the other direction.
+
 ## Introduction
 
 <Badge feature="webhooks" /> Webhooks are how your app tells other systems that something happened, and how other systems tell you. `navree-webhooks` handles both directions.

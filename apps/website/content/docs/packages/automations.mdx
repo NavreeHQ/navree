@@ -3,6 +3,29 @@ title: "Automations"
 description: "End-user automations: `#[trigger]`, `#[condition]` and `#[action]` blocks with JSON Schemas for an editor, versioned definitions per workspace, enrollments, simulation and templates."
 ---
 
+## Quick start
+
+The smallest setup: add `WorkflowsModule`, write a trigger and an action, and register them. A person then connects them in a definition. The rest of the page explains each part.
+
+```rust
+#[trigger(type = "deal.won", label = "Deal won", event = DealWon, subject = "owner_id")]
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct DealWonTrigger {}
+
+#[action(type = "task.create", label = "Create a task")]
+async fn create_task(config: CreateTask, ctx: AutomationCtx) -> Result<TaskCreated, BoxError> { /* ... */ }
+
+// src/app.rs: .module(WorkflowsModule::from_config())
+// the owning module's `register`: m.trigger::<DealWonTrigger>().action::<CreateTask>();
+```
+
+```json title="A definition"
+{"trigger": {"type": "deal.won", "config": {}},
+ "nodes": [{"id": "thank", "kind": "action", "type": "task.create", "config": {"title": "Thank the customer"}}]}
+```
+
+Automations need `DatabaseModule` and `EventsModule`. [Triggers](#triggers) and [actions](#actions) show the blocks, and [definitions](#definitions) the JSON a person saves.
+
 ## Introduction
 
 <Badge feature="workflows" /> Your customers want to automate their own work: "when a deal is won, create a thank-you task, wait a day, then a call for big deals or a survey for the rest". Each customer wants a different sequence, so you can't write it as code. You can write the pieces.

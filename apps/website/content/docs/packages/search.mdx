@@ -3,6 +3,30 @@ title: "Search"
 description: "Full-text and vector search over your models with `#[derive(Searchable)]`, on PostgreSQL, Meilisearch, Typesense or an embedded Tantivy index, kept in sync through the queue."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, derive `Searchable` on a model, register it and search. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["search"] }
+```
+
+```rust
+#[derive(Model, Searchable, Clone, Debug, Default, Serialize)]
+#[model(table = "contacts")]
+pub struct Contact {
+    pub id: Uuid,
+    #[searchable(boost = 3)]
+    pub name: String,
+    #[searchable]
+    pub email: Option<String>,
+}
+// src/app.rs: .module(SearchModule::from_config()); the owning module: imports = [SearchModule::for_feature::<Contact>()]
+let contacts = search.query::<Contact>("gurpreet").paginate(page).await?;
+```
+
+The module goes after the database and the queue. [Configuration](#configuration) picks the engine, and [searching](#searching) shows a controller with filters.
+
 ## Introduction
 
 <Badge feature="search" /> A CRM lives or dies by its search box. Typing "ada lov" should find Ada Lovelace the contact, Lovelace Analytics the company and the "Lovelace renewal" deal, ranked by relevance, in a few milliseconds, and only the records the person is allowed to see.

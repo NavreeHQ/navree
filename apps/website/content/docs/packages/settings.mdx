@@ -3,6 +3,27 @@ title: "Settings"
 description: "Typed settings with `#[derive(Settings)]`, stored for the whole app, an organization, a workspace or a user, inherited field by field, with the source of every value."
 ---
 
+## Quick start
+
+The smallest setup: define a settings type, register it and read it in a handler. The rest of the page explains each part.
+
+```rust
+/// What the member portal shows.
+#[derive(Settings, Clone, Debug, Serialize, Deserialize, Validate)]
+#[settings(key = "portal", scopes(global, workspace))]
+pub struct PortalSettings {
+    #[validate(length(max = 200))]
+    pub welcome_text: String,
+}
+impl Default for PortalSettings {
+    fn default() -> Self { Self { welcome_text: "Welcome".to_owned() } }
+}
+// src/app.rs: .module(SettingsModule::from_config()); the owning module: imports = [SettingsModule::for_feature::<PortalSettings>()]
+async fn home(&self, portal: Setting<PortalSettings>) -> Json<String> { Json(portal.welcome_text.clone()) }
+```
+
+The feature is `settings`, part of the default `full` feature. The module needs `DatabaseModule`. [Scopes and inheritance](#scopes-and-inheritance) says which level wins, and [changing settings](#changing-settings) how a value is stored.
+
 ## Introduction
 
 <Badge feature="settings" /> Most apps grow settings that more than one party gets a say in. The product team picks a default welcome text, an organization overrides it for all of its workspaces, one workspace overrides it again, and a user turns on a compact view for themselves. Your screens then need the value that applies and, to explain it, where it came from.

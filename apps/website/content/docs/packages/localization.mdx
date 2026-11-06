@@ -3,6 +3,28 @@ title: "Localization"
 description: "Translate your app with Fluent files and `t!`: plurals and variables, the locale negotiated from the user, the workspace or `Accept-Language`, and translated validation messages, mail and notifications."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, write a message and look it up. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["i18n"] }
+```
+
+```text title="locales/en/main.ftl"
+deal-created = { $count ->
+    [one] One deal created
+   *[other] { $count } deals created
+}
+```
+
+```rust
+// src/app.rs: .module(I18nModule::from_config())
+let line = t!("deal-created", count = 3);
+```
+
+The defaults read `locales/` and support `en`. [Configuration](#configuration) adds locales and says how the request's locale is chosen; [translating in code](#translating-in-code) covers `t!` in full.
+
 ## Introduction
 
 <Badge feature="i18n" /> `navree-i18n` lets one app answer a sales team in Lyon in French and one in Munich in German, from the same code. You write your text in [Fluent](https://projectfluent.org) files, one directory per locale, and look messages up by id:

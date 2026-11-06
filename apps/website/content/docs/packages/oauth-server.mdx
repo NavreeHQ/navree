@@ -3,6 +3,27 @@ title: "OAuth server"
 description: "Turn your app into an OAuth 2.1 and OpenID Connect server: authorization code with PKCE, client credentials, device and refresh grants, scopes that map to permissions, and personal access tokens."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, add the module after `AuthModule` and register a client. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["oauth"] }
+```
+
+```rust
+// src/app.rs, after AuthModule:
+.module(OAuthServerModule::from_config()) // section `oauth`
+```
+
+```sh
+navree oauth:client "Zapier" \
+  --redirect-uri https://zapier.com/dashboard/auth/oauth/return/AcmeCRMCLIAPI/ \
+  --scopes deals:read
+```
+
+The module needs the database, `CryptoModule` and `AccessModule`. The client then sends the browser to `GET /oauth/authorize` with PKCE: [the authorization code flow](#the-authorization-code-flow) shows every step, and the consent page you write.
+
 ## Introduction
 
 <Badge feature="oauth" /> Your API already signs in your own front end with [Navree auth](/docs/security/authentication/). `navree-oauth` lets **other** software act on your users' behalf: a mobile app, a Zapier integration, a partner's dashboard, a command-line tool. It turns your app into an OAuth 2.1 authorization server and OpenID Connect provider, and it issues personal access tokens for scripts.

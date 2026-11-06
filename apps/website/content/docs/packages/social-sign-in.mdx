@@ -3,6 +3,33 @@ title: "Social sign-in"
 description: "Sign people in with Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X or any OpenID Connect provider, link the accounts to Navree users and issue normal Navree tokens."
 ---
 
+## Quick start
+
+The smallest setup: turn the feature on, list one provider and add the module after `AuthModule`. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["social"] }
+```
+
+```toml title="config/app.toml"
+[social]
+redirect_base = "https://app.sutlej.example/auth/callback"
+
+[social.providers.github]
+client_id = "Iv1.8a61f9b3a7aba766"
+```
+
+```env title=".env"
+APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET=4f1c0e7b9a...
+```
+
+```rust
+// src/app.rs, after AuthModule:
+.module(SocialModule::from_config()) // section `social`
+```
+
+The module needs `HttpClientModule` and the database. Register `{redirect_base}/github` as the callback URL with GitHub. [How the flow works](#how-the-flow-works) shows the calls your backend-for-frontend makes.
+
 ## Introduction
 
 <Badge feature="social" /> Many people would rather click "Continue with Google" than invent another password. `navree-social` adds that button to your app without changing how the rest of it works: a social sign-in ends with the same Navree user and the same access and refresh tokens as a [password login](/docs/security/authentication/), so every route, permission and audit entry behaves as before.
