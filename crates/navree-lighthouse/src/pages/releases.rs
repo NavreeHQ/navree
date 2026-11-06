@@ -172,12 +172,12 @@ pub(crate) async fn page(
             "No release has been reported yet.",
         )
     };
-    let detail: Option<Node> = selected.is_some().then(|| {
+    let detail: Option<Node> = selected.as_ref().map(|release| {
         Grid::cols(2)
             .gap(4)
             .children((
                 titled(
-                    "Introduced in this release",
+                    format!("Introduced in {}", release.name),
                     issues_table(
                         &mount,
                         &introduced,
@@ -185,7 +185,7 @@ pub(crate) async fn page(
                     ),
                 ),
                 titled(
-                    "Came back in this release",
+                    format!("Came back in {}", release.name),
                     issues_table(
                         &mount,
                         &regressed,
@@ -194,14 +194,6 @@ pub(crate) async fn page(
                 ),
             ))
             .into()
-    });
-    let selected_name: Option<Node> = selected.as_ref().map(|release| {
-        Text::muted(Node::list(vec![
-            Node::from("Showing "),
-            code(release.name.clone()),
-            Node::from("."),
-        ]))
-        .into()
     });
     let report = titled(
         "Report a release",
@@ -214,7 +206,7 @@ pub(crate) async fn page(
                 Node::from(" gives the running processes, so issues and releases match."),
             ])),
             CodeBlock::new(
-                "sh",
+                "",
                 format!(
                     "curl -X POST {}/api/releases \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{{\"release\": \"20261102-101500-3f2a9c1\", \"commit\": \"3f2a9c1\", \"url\": \"https://git.example.com/crm/commit/3f2a9c1\"}}'",
                     store.base_url()
@@ -222,7 +214,7 @@ pub(crate) async fn page(
             ),
             Text::muted("From the app's own code:"),
             CodeBlock::new(
-                "rust",
+                "",
                 "lighthouse.report_release(ReleaseReport::new(\"20261102-101500-3f2a9c1\").commit(\"3f2a9c1\")).await?;",
             ),
         )),
@@ -233,7 +225,6 @@ pub(crate) async fn page(
         ),
         now,
         list,
-        selected_name,
         detail,
         report,
     ));

@@ -115,12 +115,12 @@ fn changeable(viewer: &Viewer, mount: &str, rows: &[Value]) -> Node {
                 .into(),
         );
     }
-    post_form(
-        format!("{mount}/settings"),
-        viewer.csrf.as_deref(),
-        Stack::gap(4).children(parts),
-    )
-    .into()
+    let body = Stack::gap(4).children(parts);
+    if viewer.can_configure {
+        post_form(format!("{mount}/settings"), viewer.csrf.as_deref(), body).into()
+    } else {
+        body.into()
+    }
 }
 
 /// The options set at boot, in groups, with how each is set.

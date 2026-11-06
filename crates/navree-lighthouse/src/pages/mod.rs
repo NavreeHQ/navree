@@ -126,7 +126,7 @@ pub(crate) fn table(head: Vec<TableHead>, rows: Vec<TableRowEl>, empty: &'static
 }
 
 /// A card with a title around `body`.
-pub(crate) fn titled(title: &'static str, body: impl Into<Node>) -> Node {
+pub(crate) fn titled(title: impl Into<Node>, body: impl Into<Node>) -> Node {
     Card::titled(title).body(body.into()).into()
 }
 
