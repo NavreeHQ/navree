@@ -8,12 +8,12 @@ use navree_kernel::{
     BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
 
-use crate::{AppKey, Encrypter, Hasher, HashingOptions, generate_key};
+use crate::{AppKey, Encrypter, Hasher, HashingOptions};
 
 /// Options for [`CryptoModule::for_root`]: the application key, the keys
 /// that still decrypt after a rotation, and the password hashing parameters.
 ///
-/// Keys are given in their `base64:<32 bytes>` form ([`generate_key`]) and
+/// Keys are given in their `base64:<32 bytes>` form ([`generate_key`](crate::generate_key)) and
 /// parsed when the app boots, so a malformed key fails the boot. `Debug`
 /// redacts them.
 ///
@@ -247,12 +247,16 @@ fn register(m: &mut ModuleBuilder, source: Source) {
             .deps(deps),
         )
         .exports::<Hasher>()
-        .command(CommandSpec::new(
-            "key:generate",
-            "Print a new application key for `app.key` (APP_KEY)",
-            |_, _| async {
-                println!("{}", generate_key());
-                Ok(())
-            },
-        ));
+        .command(
+            CommandSpec::new(
+                "key:generate",
+                "Print a new application key for `app.key` (APP_KEY); --write [--force] puts it in .env instead",
+                |_, args| async move {
+                    let printed = crate::key_command::run(&args, std::path::Path::new(".env"))?;
+                    println!("{printed}");
+                    Ok::<(), BoxError>(())
+                },
+            )
+            .offline(),
+        );
 }

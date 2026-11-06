@@ -25,6 +25,91 @@ pub fn parse_dotenv(src: &str) -> Result<Vec<(String, String)>, ConfigError> {
     parse_with_lines(src).map(|(entries, _)| entries)
 }
 
+/// `set_dotenv_value` found a value in the way: the entry is already set and
+/// the caller did not ask to replace it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DotenvEntryExists {
+    /// The name of the entry (`APP_KEY`).
+    pub name: String,
+}
+
+impl std::fmt::Display for DotenvEntryExists {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} is already set in the .env file", self.name)
+    }
+}
+
+impl std::error::Error for DotenvEntryExists {}
+
+/// The text of a `.env` file with the entry `name` set to `value`.
+///
+/// An existing assignment of `name` (also after `export `) is replaced where
+/// it stands, so the comments and the order around it stay; when there is
+/// none, `name=value` is added on a new last line. An assignment whose value
+/// is not empty is only replaced when `overwrite` is set; otherwise the
+/// result is [`DotenvEntryExists`]. Line endings are kept. The value is
+/// written as it is, so it must not need quoting (a generated key does not).
+///
+/// ```
+/// use navree_config::set_dotenv_value;
+///
+/// let env = "# keys\nAPP_KEY=\nAPP_NAME=acme\n";
+/// assert_eq!(
+///     set_dotenv_value(env, "APP_KEY", "base64:abc", false).unwrap(),
+///     "# keys\nAPP_KEY=base64:abc\nAPP_NAME=acme\n"
+/// );
+/// assert!(set_dotenv_value("APP_KEY=base64:old\n", "APP_KEY", "base64:new", false).is_err());
+/// assert_eq!(
+///     set_dotenv_value("APP_KEY=base64:old\n", "APP_KEY", "base64:new", true).unwrap(),
+///     "APP_KEY=base64:new\n"
+/// );
+/// ```
+pub fn set_dotenv_value(
+    text: &str,
+    name: &str,
+    value: &str,
+    overwrite: bool,
+) -> Result<String, DotenvEntryExists> {
+    let mut out = String::with_capacity(text.len() + name.len() + value.len() + 2);
+    let mut replaced = false;
+    for line in text.split_inclusive('\n') {
+        if !replaced {
+            let body = line.trim_end_matches(['\n', '\r']);
+            let trimmed = body.trim_start();
+            if !trimmed.starts_with('#')
+                && let Some((key, rest)) = strip_export(trimmed).split_once('=')
+                && key.trim_end() == name
+            {
+                let current = strip_inline_comment(rest)
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == '\'');
+                if !current.is_empty() && !overwrite {
+                    return Err(DotenvEntryExists {
+                        name: name.to_owned(),
+                    });
+                }
+                out.push_str(name);
+                out.push('=');
+                out.push_str(value);
+                out.push_str(&line[body.len()..]);
+                replaced = true;
+                continue;
+            }
+        }
+        out.push_str(line);
+    }
+    if !replaced {
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(name);
+        out.push('=');
+        out.push_str(value);
+        out.push('\n');
+    }
+    Ok(out)
+}
+
 /// The entries of a `.env` file, and the 1-based line each starts on (same
 /// order as the entries).
 pub(crate) type EntriesWithLines = (Vec<(String, String)>, Vec<usize>);
@@ -271,6 +356,61 @@ APP_AGAIN=${APP_HOST}
                 ("APP_RAW", "one\ntwo"),
                 ("APP_NEXT", "1"),
             ])
+        );
+    }
+
+    #[test]
+    fn an_empty_entry_is_filled_where_it_stands() {
+        let env = "# Encrypts data.\nexport APP_KEY=\n\nAPP_MAIL__FROM=\"a <b@c.d>\"\n";
+        assert_eq!(
+            set_dotenv_value(env, "APP_KEY", "base64:k", false).unwrap(),
+            "# Encrypts data.\nAPP_KEY=base64:k\n\nAPP_MAIL__FROM=\"a <b@c.d>\"\n"
+        );
+        // A quoted empty value and an inline comment count as empty.
+        for empty in ["APP_KEY=\"\"\n", "APP_KEY=   # none\n", "  APP_KEY='' \n"] {
+            assert_eq!(
+                set_dotenv_value(empty, "APP_KEY", "base64:k", false).unwrap(),
+                "APP_KEY=base64:k\n",
+                "{empty:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_set_entry_is_kept_unless_asked() {
+        let env = "APP_KEY=base64:old\nAPP_NAME=acme\n";
+        let error = set_dotenv_value(env, "APP_KEY", "base64:new", false).unwrap_err();
+        assert_eq!(error.name, "APP_KEY");
+        assert!(!error.to_string().contains("old"));
+        assert_eq!(
+            set_dotenv_value(env, "APP_KEY", "base64:new", true).unwrap(),
+            "APP_KEY=base64:new\nAPP_NAME=acme\n"
+        );
+    }
+
+    #[test]
+    fn a_missing_entry_is_added_on_a_last_line() {
+        assert_eq!(
+            set_dotenv_value("", "APP_KEY", "base64:k", false).unwrap(),
+            "APP_KEY=base64:k\n"
+        );
+        assert_eq!(
+            set_dotenv_value("APP_NAME=acme", "APP_KEY", "base64:k", false).unwrap(),
+            "APP_NAME=acme\nAPP_KEY=base64:k\n"
+        );
+        // A commented line and a longer name are not the entry.
+        let env = "# APP_KEY=base64:old\nAPP_KEY_FILE=x\r\n";
+        assert_eq!(
+            set_dotenv_value(env, "APP_KEY", "base64:k", false).unwrap(),
+            "# APP_KEY=base64:old\nAPP_KEY_FILE=x\r\nAPP_KEY=base64:k\n"
+        );
+    }
+
+    #[test]
+    fn line_endings_are_kept() {
+        assert_eq!(
+            set_dotenv_value("APP_KEY=\r\nB=1\r\n", "APP_KEY", "base64:k", false).unwrap(),
+            "APP_KEY=base64:k\r\nB=1\r\n"
         );
     }
 

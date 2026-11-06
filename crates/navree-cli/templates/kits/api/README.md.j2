@@ -13,7 +13,6 @@ pnpm for the front end{% endif %}.
 
 ```sh
 navree dock up                 # {{ database_name }} and Mailpit (http://localhost:8025)
-navree key:generate            # then set APP_KEY in .env
 navree migrate:fresh --seed    # tables and a demo workspace
 {% if web %}
 pnpm --dir web install         # the web app's packages

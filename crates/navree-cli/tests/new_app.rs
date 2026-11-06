@@ -163,7 +163,18 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         configured_url(&root),
         "postgres://navree:navree@127.0.0.1:5432/my_shop"
     );
-    assert_eq!(std::fs::read_to_string(root.join(".env")).unwrap(), env);
+    // `.env` is the example with a key of its own; the example stays empty.
+    assert!(env.contains("APP_KEY=\n"), "{env}");
+    let dotenv = std::fs::read_to_string(root.join(".env")).unwrap();
+    let key = dotenv
+        .lines()
+        .find_map(|line| line.strip_prefix("APP_KEY="))
+        .expect("APP_KEY in .env");
+    assert!(
+        key.starts_with("base64:") && key.len() == "base64:".len() + 44,
+        "{dotenv}"
+    );
+    assert_eq!(dotenv.replacen(key, "", 1), env);
 }
 
 /// TimescaleDB is the default database: a PostgreSQL URL, the `postgres`
@@ -305,7 +316,6 @@ fn the_next_steps_start_the_database_first() {
         [
             "  cd my-shop",
             "  navree dock up             # TimescaleDB on 127.0.0.1:5432",
-            "  navree key:generate        # then set APP_KEY in .env",
             "  navree dev                 # http://127.0.0.1:8080/api/docs",
         ]
     );
@@ -1265,7 +1275,6 @@ fn ui_navree_says_how_to_run_it_and_how_to_sign_in() {
         [
             "  cd demo",
             "  navree dock up             # TimescaleDB on 127.0.0.1:5432",
-            "  navree key:generate        # then set APP_KEY in .env",
             "  navree dev                 # http://127.0.0.1:8080",
             "",
             "Sign in at http://127.0.0.1:8080/sign-in as harpreet.singh@example.com with the password demo-password-2026.",
@@ -1276,7 +1285,7 @@ fn ui_navree_says_how_to_run_it_and_how_to_sign_in() {
     let lite = app_on("lite", Ui::Navree, Database::Sqlite);
     let message = created_message(&lite, &dir.path().join("lite"));
     assert!(!message.contains("dock"), "{message}");
-    assert!(message.contains("navree key:generate"), "{message}");
+    assert!(!message.contains("navree key:generate"), "{message}");
     // Other apps say nothing of signing in.
     let message = created_message(&app("plain", Ui::None), &dir.path().join("plain"));
     assert!(!message.contains("Sign in at"), "{message}");

@@ -90,7 +90,7 @@ mod value;
 
 pub use app::{AppOptions, Environment};
 pub use config::Config;
-pub use dotenv::parse_dotenv;
+pub use dotenv::{DotenvEntryExists, parse_dotenv, set_dotenv_value};
 pub use error::ConfigError;
 pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt, defaults_of};
 pub use origin::{Shadowed, ValueOrigin};

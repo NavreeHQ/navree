@@ -60,6 +60,7 @@ mod error;
 mod hasher;
 pub mod jose;
 mod key;
+mod key_command;
 mod module;
 pub mod qr;
 pub mod sns;

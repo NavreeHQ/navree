@@ -39,6 +39,7 @@
 //! edited safely becomes a printed hint.
 #![forbid(unsafe_code)]
 
+mod app_key;
 pub mod browser;
 pub mod check;
 pub mod cli;

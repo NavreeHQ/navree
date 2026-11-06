@@ -491,10 +491,7 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
                 (_, true) => "TimescaleDB and Mailpit",
                 (_, false) => "PostgreSQL and Mailpit",
             };
-            let mut steps = vec![
-                ("navree dock up", services),
-                ("navree key:generate", "then set APP_KEY in .env"),
-            ];
+            let mut steps = vec![("navree dock up", services)];
             match kit {
                 Kit::Saas => {
                     steps.push(("navree migrate:fresh --seed", "tables and a demo workspace"));
@@ -523,7 +520,6 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
                 Database::Mysql | Database::Sqlite => None,
             };
             let mut steps: Vec<(&str, &str)> = database.into_iter().collect();
-            steps.push(("navree key:generate", "then set APP_KEY in .env"));
             if app.ui == Ui::Next {
                 if let Some((install, build)) = &js_steps {
                     steps.push((install.as_str(), "the Navree packages (not on npm yet)"));
@@ -644,5 +640,8 @@ pub fn create_app(parent: &Path, app: &NewApp, now: Timestamp) -> anyhow::Result
         }
     }
     app_files(app, now)?.write(&root)?;
+    // `.env` is this machine's copy: it gets a key of its own. `.env.example`
+    // keeps `APP_KEY=` empty.
+    crate::app_key::write_app_key(&root)?;
     Ok(root)
 }

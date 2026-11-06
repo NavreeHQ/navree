@@ -698,7 +698,11 @@ fn env_points_at_the_services_dock_starts() {
     let env = read(&root, ".env");
     let example = read(&root, ".env.example");
     // `.env.example`'s settings, then Dock's between its markers.
-    for line in example.lines().filter(|line| line.starts_with("APP_")) {
+    // (`APP_KEY` is empty in the example and holds a key of its own in `.env`.)
+    for line in example
+        .lines()
+        .filter(|line| line.starts_with("APP_") && *line != "APP_KEY=")
+    {
         assert!(env.lines().any(|l| l == line), "{line} in {env}");
     }
     assert!(env.contains("# dock:start"), "{env}");
@@ -711,8 +715,9 @@ fn env_points_at_the_services_dock_starts() {
         "{env}"
     );
     assert!(!example.contains("# dock:start"));
-    // Secrets are placeholders, never values.
-    assert!(env.contains("APP_KEY=\n"));
+    // The example has no secrets; `.env` has the app's key.
+    assert!(example.contains("APP_KEY=\n"));
+    assert!(env.contains("APP_KEY=base64:"), "{env}");
 }
 
 #[test]
@@ -767,7 +772,6 @@ fn the_created_message_lists_the_kit_s_next_steps() {
     for line in [
         "  cd acme\n",
         "  navree dock up                 # TimescaleDB and Mailpit\n",
-        "  navree key:generate            # then set APP_KEY in .env\n",
         "  navree migrate:fresh --seed    # tables and a demo workspace\n",
         "  pnpm --dir /opt/navree/packages/js install # the Navree packages (not on npm yet)\n",
         "  pnpm --dir /opt/navree/packages/js build # once; the web app links them\n",

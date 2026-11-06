@@ -11,7 +11,6 @@ You need Rust, the `navree` CLI and Docker or Podman.
 
 ```sh
 navree dock up                 # {{ database_name }} and NATS
-navree key:generate            # then set APP_KEY in .env
 navree migrate                 # the invoices table
 navree dev                     # handlers on NATS, health on http://127.0.0.1:8080/health/ready
 ```

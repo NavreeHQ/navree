@@ -28,7 +28,6 @@ cp .env.example .env
 {% if dock %}
 navree dock up               # the database on 127.0.0.1:5432; `navree dock down` stops it
 {% endif %}
-navree key:generate          # paste the key into APP_KEY in .env
 navree dev                   # build, serve on http://127.0.0.1:8080, rebuild on save
 ```
 
