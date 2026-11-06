@@ -21,6 +21,7 @@ mod state;
 pub use labels::{KindWords, StateKind, StateLabels};
 pub use options::PagesOptions;
 pub(crate) use render::Renderer;
+pub(crate) use render::shell_of;
 pub use render::{ErrorShell, FROM_HEADER, REGION_HEADER, STATE_HEADER};
 pub use return_to::ReturnTo;
 pub use state::{

@@ -126,6 +126,24 @@ impl Draft {
         crate::form::decode::<T>(values)
     }
 
+    /// [`read`](Self::read) in the reader's language: the app's validation messages and
+    /// the reader's date, time and slider words.
+    pub fn read_for<T>(
+        &self,
+        step: &str,
+        language: &crate::form::Language,
+    ) -> Result<T, crate::form::FieldErrors>
+    where
+        T: crate::form::Form + serde::de::DeserializeOwned + navree_validation::Validate,
+    {
+        let values = self
+            .steps
+            .get(step)
+            .map(|r| r.values.as_slice())
+            .unwrap_or(&[]);
+        crate::form::decode_for::<T>(values, language)
+    }
+
     /// How many bytes the draft holds.
     pub fn bytes(&self) -> usize {
         self.id.len()

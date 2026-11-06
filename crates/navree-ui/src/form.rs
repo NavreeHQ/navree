@@ -31,8 +31,10 @@ use crate::components::{
 };
 use crate::dates::{DateLocale, DatePicker, DateRules, TimePicker, TimeRules};
 use crate::html::Href;
+use crate::localize::ReaderWords;
 use crate::node::{Element, Node, Uses, el};
 use crate::op::{Envelope, Op, UI_HEADER};
+use crate::shell::AppShell;
 use crate::view::View;
 
 /// How a field is drawn.
@@ -723,6 +725,7 @@ pub struct FormView<T> {
     columns: bool,
     csrf: Option<String>,
     date_locale: DateLocale,
+    slider_labels: crate::flow::SliderLabels,
     today: Option<chrono::NaiveDate>,
     #[cfg(feature = "phone")]
     phone_region: Option<navree_phone::Region>,
@@ -747,6 +750,7 @@ impl<T: Form> FormView<T> {
             columns: true,
             csrf: None,
             date_locale: DateLocale::english(),
+            slider_labels: crate::flow::SliderLabels::default(),
             today: None,
             #[cfg(feature = "phone")]
             phone_region: None,
@@ -795,6 +799,16 @@ impl<T: Form> FormView<T> {
     pub fn dates(mut self, locale: DateLocale, today: chrono::NaiveDate) -> Self {
         self.date_locale = locale;
         self.today = Some(today);
+        self
+    }
+
+    /// Draws the form in the reader's language: the date pickers' names and words, the
+    /// sliders' words and the submit button's text (set [`submit`](Self::submit) after it for
+    /// a button of your own). [`ReaderWords::of`] reads them for the request.
+    pub fn words(mut self, words: &ReaderWords) -> Self {
+        self.date_locale = words.dates.clone();
+        self.slider_labels = words.slider.clone();
+        self.submit = Node::from(words.save.to_string());
         self
     }
 
@@ -1073,6 +1087,7 @@ impl<T: Form> FormView<T> {
                     .and_then(|text| crate::flow::Decimal::from_browser(text.trim()).ok())
                     .unwrap_or_else(|| spec.minimum());
                 crate::flow::Slider::new(field.name)
+                    .labels(self.slider_labels.clone())
                     .spec(spec)
                     .value(shown)
                     .invalid(invalid)
@@ -1463,6 +1478,69 @@ pub const FORM_MESSAGES: &[(&str, &str)] = &[
     ("form.unreadable", "This form could not be read."),
 ];
 
+/// The reader's language for a form: the app's validation messages (with its translator,
+/// which renders them in the request's language) and the [`ReaderWords`] of the request
+/// (the names of months, the date and time conventions, the slider's words). One value
+/// carries both to [`decode_for`], to a [`Wizard`](crate::Wizard), to
+/// [`Draft::read_for`](crate::Draft::read_for) and to
+/// [`TestView::submit_as_for`](crate::TestView::submit_as_for).
+///
+/// ```
+/// use navree_ui::form::Language;
+///
+/// // Without an app or a translator, a form speaks English.
+/// let language = Language::english();
+/// assert_eq!(language.words().check_form, "Check this form");
+/// ```
+#[derive(Clone)]
+pub struct Language {
+    messages: AppMessages,
+    words: ReaderWords,
+}
+
+impl Language {
+    /// English, as a form says it without an app: the built-in messages, and English
+    /// dates and sliders.
+    pub fn english() -> Self {
+        Self::new(AppMessages::default(), ReaderWords::english())
+    }
+
+    /// A language from the messages and the words of the reader.
+    pub fn new(messages: AppMessages, words: ReaderWords) -> Self {
+        Self { messages, words }
+    }
+
+    /// The language of the request behind `ctx`: the app's validation messages and its
+    /// [`Localizer`](crate::localize::Localizer). Without an app, English.
+    pub async fn of(ctx: Option<&AppContext>) -> Self {
+        Self::new(AppMessages::of(ctx).await, ReaderWords::of(ctx).await)
+    }
+
+    /// The app's validation messages.
+    pub fn messages(&self) -> &AppMessages {
+        &self.messages
+    }
+
+    /// The reader's words.
+    pub fn words(&self) -> &ReaderWords {
+        &self.words
+    }
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Self::english()
+    }
+}
+
+impl std::fmt::Debug for Language {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Language")
+            .field("words", &self.words)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The app's messages as a form of `T` says them: its labels name its fields (over the
 /// app's `validation.attributes`; a translator's own names still come first), and the
 /// form's own words fill the keys the app has no message for.
@@ -1687,10 +1765,14 @@ fn slider_spec<T: Form>(field: &FormField) -> crate::flow::SliderSpec {
 /// (a leap second, a fraction of a second) are always refused, and the rules a field was
 /// given with `date_rules` or `time_rules` hold the server as they held the browser, so a
 /// value the picker drew as off is off here. Text that isn't a day or a time is left to the
-/// type's own error. The days' and times' words are English, or the field's own `error`;
-/// the decimal places' are the app's (`form.decimal_places`).
-fn refused_by_pickers<T: Form>(pairs: &[(String, String)], words: &AppMessages) -> FieldErrors {
-    let english = DateLocale::english();
+/// type's own error. The days' and times' words are the reader's (`reader`), or the field's
+/// own `error`; the decimal places' are the app's (`form.decimal_places`).
+fn refused_by_pickers<T: Form>(
+    pairs: &[(String, String)],
+    words: &AppMessages,
+    reader: &ReaderWords,
+) -> FieldErrors {
+    let dates = &reader.dates;
     let mut out = FieldErrors::new();
     for (name, value) in pairs {
         let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
@@ -1704,12 +1786,12 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)], words: &AppMessages) 
                 DateRules::default()
                     .check(at.date())
                     .err()
-                    .map(|error| error.message(&english))
+                    .map(|error| error.message(dates))
                     .or_else(|| {
                         TimeRules::default()
                             .check(at.time())
                             .err()
-                            .map(|error| error.message(&english))
+                            .map(|error| error.message(dates))
                     })
             }),
             // A number is read exactly or not at all: past 28 decimal places a `Decimal` would
@@ -1725,14 +1807,14 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)], words: &AppMessages) 
                     continue;
                 };
                 let rules = field.date_rules.map(|rules| rules()).unwrap_or_default();
-                rules.check(day).err().map(|error| error.message(&english))
+                rules.check(day).err().map(|error| error.message(dates))
             }
             Widget::TimePicker | Widget::Input(InputKind::Time) => {
                 let Ok(time) = value.trim().parse::<NaiveTime>() else {
                     continue;
                 };
                 let rules = field.time_rules.map(|rules| rules()).unwrap_or_default();
-                rules.check(time).err().map(|error| error.message(&english))
+                rules.check(time).err().map(|error| error.message(dates))
             }
             Widget::Slider => {
                 // An optional field left empty is no value, and the rules say if it may be.
@@ -1742,7 +1824,7 @@ fn refused_by_pickers<T: Form>(pairs: &[(String, String)], words: &AppMessages) 
                 let spec = slider_spec::<T>(field);
                 spec.check(value.trim())
                     .err()
-                    .map(|error| spec.message(error, &crate::flow::SliderLabels::default()))
+                    .map(|error| spec.message(error, &reader.slider))
             }
             _ => None,
         };
@@ -1776,14 +1858,36 @@ where
 /// [`decode`] in the app's words: the rules' messages, and the form's own
 /// ([`FORM_MESSAGES`]), come from `messages` (the app's `validation.messages` and its
 /// translator, navree-validation's `AppMessages::of`), with the form's labels as the
-/// fields' names. What [`Submit`] uses.
+/// fields' names. The date, time and slider messages are English; [`decode_for`] says
+/// them in the reader's language.
 pub fn decode_with<T>(pairs: &[(String, String)], messages: &AppMessages) -> Result<T, FieldErrors>
+where
+    T: Form + DeserializeOwned + Validate,
+{
+    decode_in::<T>(pairs, messages, &ReaderWords::english())
+}
+
+/// [`decode`] in the reader's language: the messages of the app, and the names of months
+/// and the words of the date, time and slider checks of the reader. What [`Submit`] uses
+/// ([`Language::of`] reads both from the request's app).
+pub fn decode_for<T>(pairs: &[(String, String)], language: &Language) -> Result<T, FieldErrors>
+where
+    T: Form + DeserializeOwned + Validate,
+{
+    decode_in::<T>(pairs, &language.messages, &language.words)
+}
+
+fn decode_in<T>(
+    pairs: &[(String, String)],
+    messages: &AppMessages,
+    reader: &ReaderWords,
+) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
     let words = words::<T>(messages);
     let over = over_limit::<T>(pairs, &words);
-    match decode_values::<T>(pairs, &words) {
+    match decode_values::<T>(pairs, &words, reader) {
         Ok(value) if over.is_empty() => Ok(value),
         Ok(_) => Err(over),
         Err(mut errors) => {
@@ -1824,7 +1928,11 @@ fn over_limit<T: Form>(pairs: &[(String, String)], words: &AppMessages) -> Field
     errors
 }
 
-fn decode_values<T>(pairs: &[(String, String)], words: &AppMessages) -> Result<T, FieldErrors>
+fn decode_values<T>(
+    pairs: &[(String, String)],
+    words: &AppMessages,
+    reader: &ReaderWords,
+) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
@@ -1834,7 +1942,7 @@ where
         .iter()
         .map(|(name, value)| (name.clone(), browser_text::<T>(name, value)))
         .collect();
-    let refused = refused_by_pickers::<T>(&pairs, words);
+    let refused = refused_by_pickers::<T>(&pairs, words, reader);
     let outcome = read::<T>(&pairs, words);
     if refused.is_empty() {
         return outcome;
@@ -2178,6 +2286,10 @@ pub struct Rejected<T> {
     failed: Option<AppError>,
     options: BTreeMap<&'static str, Vec<(String, String)>>,
     rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
+    /// The app's shell for the request, when the form is drawn on the page of its own.
+    shell: Option<AppShell>,
+    /// The reader's words, for the heading of the page of its own.
+    reader: ReaderWords,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -2230,8 +2342,27 @@ impl<T: Form> Rejected<T> {
             failed: None,
             options: BTreeMap::new(),
             rich: BTreeMap::new(),
+            shell: None,
+            reader: ReaderWords::english(),
             marker: PhantomData,
         }
+    }
+
+    /// Draws the page this refusal falls back on the way the request's reader expects:
+    /// in the app's shell (the `Shell` it registered, or its [`ErrorShell`](crate::ErrorShell),
+    /// with the signed-in user's menu) and with the heading in the reader's language (the
+    /// app's [`Localizer`](crate::localize::Localizer)). [`Submit`] does this for the form it
+    /// refuses; call it on a refusal built with [`after_decode`](Self::after_decode). A
+    /// refusal drawn with [`respond`](Self::respond) draws its own page and ignores both.
+    ///
+    /// ```ignore
+    /// return Ok(Rejected::after_decode(&deal, errors, &parts).for_request(&parts).await.into_response());
+    /// ```
+    pub async fn for_request(mut self, parts: &Parts) -> Self {
+        let ctx = parts.extensions.get::<AppContext>().cloned();
+        self.reader = ReaderWords::of(ctx.as_ref()).await;
+        self.shell = shell_of_request(parts).await;
+        self
     }
 
     /// The errors by field.
@@ -2339,6 +2470,7 @@ impl<T: Form> Rejected<T> {
             return (StatusCode::UNPROCESSABLE_ENTITY, Envelope::new(ops)).into_response();
         }
         let mut form = FormView::<T>::new()
+            .words(&self.reader)
             .post(self.action)
             .with_values(self.values)
             .with_errors(self.errors);
@@ -2355,14 +2487,42 @@ impl<T: Form> Rejected<T> {
 }
 
 impl<T: Form> IntoResponse for Rejected<T> {
+    /// The form on a page of its own: inside the app's shell when the request had one (see
+    /// [`for_request`](Rejected::for_request)), else alone; the heading is in the reader's
+    /// language.
     fn into_response(self) -> Response {
-        self.respond(|form| {
-            View::new("Check this form").body(el("main").slot("page").children((
-                el("h1").slot("page-title").child("Check this form"),
-                Node::from(form),
-            )))
+        let title = self.reader.check_form.clone();
+        let shell = self.shell.clone();
+        self.respond(move |form| match shell {
+            Some(shell) => shell.page(title).body(Node::from(form)).into_response(),
+            None => View::new(title.clone())
+                .body(el("main").slot("page").children((
+                    el("h1").slot("page-title").child(title.to_string()),
+                    Node::from(form),
+                )))
+                .into_response(),
         })
     }
+}
+
+/// The app's shell for the request of `parts`, drawn as an error page's is: the `Shell` the
+/// app registered or the one its `ErrorShell` builds for the signed-in user. `None` for a
+/// guest (whose page is not the app's), when the app has neither, or when the request did not
+/// go through the HTTP pipeline.
+async fn shell_of_request(parts: &Parts) -> Option<AppShell> {
+    let mut context = parts
+        .extensions
+        .get::<std::sync::Arc<navree_http::ErrorContext>>()?
+        .as_ref()
+        .clone();
+    context.user = Some(
+        navree_http::CurrentPrincipal::from_parts(parts)
+            .ok()?
+            .0
+            .user_id,
+    );
+    let shell = crate::pages::shell_of(&context).await?;
+    Some(shell.for_request(parts.uri.path(), &parts.headers))
 }
 
 impl<T> FromRequest for Submit<T>
@@ -2387,6 +2547,8 @@ where
             failed: None,
             options: BTreeMap::new(),
             rich: BTreeMap::new(),
+            shell: None,
+            reader: ReaderWords::english(),
             marker: PhantomData,
         };
         if let Some(status) = refusal(&parts).await {
@@ -2399,9 +2561,9 @@ where
         let Some(values) = read_pairs::<T>(&bytes) else {
             return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
         };
-        // The app's messages, and its translator: the reader's language.
+        // The app's messages and its translator, and the reader's words: the reader's language.
         let ctx = parts.extensions.get::<AppContext>().cloned();
-        let messages = AppMessages::of(ctx.as_ref()).await;
+        let language = Language::of(ctx.as_ref()).await;
         let rejected =
             |values: Vec<(String, String)>, errors: FieldErrors, action: String| Rejected {
                 values: echo::<T>(values),
@@ -2412,11 +2574,20 @@ where
                 failed: None,
                 options: BTreeMap::new(),
                 rich: BTreeMap::new(),
+                shell: None,
+                reader: language.words.clone(),
                 marker: PhantomData,
             };
-        let value = match decode_with::<T>(&values, &messages) {
+        let value = match decode_for::<T>(&values, &language) {
             Ok(value) => value,
-            Err(errors) => return Err(rejected(values, errors, action)),
+            Err(errors) => {
+                let mut refused = rejected(values, errors, action);
+                // Only a post that gets its page back needs the shell.
+                if !from_runtime {
+                    refused.shell = shell_of_request(&parts).await;
+                }
+                return Err(refused);
+            }
         };
         // Then the database rules, as `ValidAsync` runs them for an API.
         let rules = Form::database_rules(&value);
@@ -2426,8 +2597,12 @@ where
         match check_async_rules(&parts, rules).await {
             Ok(violations) if violations.is_empty() => Ok(Self(value)),
             Ok(violations) => {
-                let errors = rule_errors::<T>(&violations, &words::<T>(&messages));
-                Err(rejected(values, errors, action))
+                let errors = rule_errors::<T>(&violations, &words::<T>(&language.messages));
+                let mut refused = rejected(values, errors, action);
+                if !from_runtime {
+                    refused.shell = shell_of_request(&parts).await;
+                }
+                Err(refused)
             }
             Err(error) => {
                 let mut failed = rejected(Vec::new(), FieldErrors::new(), action);

@@ -6,7 +6,7 @@ use serde::de::DeserializeOwned;
 
 use navree_validation::Validate;
 
-use crate::form::{FieldErrors, Form, decode};
+use crate::form::{FieldErrors, Form, Language, decode, decode_for};
 use crate::node::{AttrValue, Element, Node};
 use crate::view::View;
 
@@ -202,5 +202,14 @@ impl TestView {
         T: Form + DeserializeOwned + Validate,
     {
         decode::<T>(&self.form_values())
+    }
+
+    /// [`submit_as`](Self::submit_as) in the reader's language: the messages of the app
+    /// and the reader's date, time and slider words, as `Submit` says them.
+    pub fn submit_as_for<T>(&self, language: &Language) -> Result<T, FieldErrors>
+    where
+        T: Form + DeserializeOwned + Validate,
+    {
+        decode_for::<T>(&self.form_values(), language)
     }
 }

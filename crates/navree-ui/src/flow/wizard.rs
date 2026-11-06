@@ -39,7 +39,7 @@ use super::draft::{
 };
 use super::stepper::{Step, StepState, Stepper, StepperLabels};
 use crate::components::{Alert, AlertTone, Button, ButtonVariant, Size};
-use crate::form::{self, FieldErrors, Form, FormView, Widget};
+use crate::form::{self, FieldErrors, Form, FormView, Language, Widget};
 use crate::node::{Element, Node, Uses, el};
 use navree_validation::Validate;
 
@@ -52,7 +52,7 @@ pub const REVISION_FIELD: &str = "_rev";
 
 type Pairs = [(String, String)];
 type Render = Arc<dyn Fn(&Pairs, &FieldErrors) -> Node + Send + Sync>;
-type Check = Arc<dyn Fn(&Pairs) -> Result<(), FieldErrors> + Send + Sync>;
+type Check = Arc<dyn Fn(&Pairs, &Language) -> Result<(), FieldErrors> + Send + Sync>;
 type Shape<T> = Arc<dyn Fn(FormView<T>) -> FormView<T> + Send + Sync>;
 type Rows = Arc<dyn Fn(&Pairs, &str, &str) -> Vec<(String, String)> + Send + Sync>;
 
@@ -341,7 +341,9 @@ where
             optional: step.optional,
             allowed,
             secret,
-            check: Arc::new(|values: &Pairs| form::decode::<T>(values).map(|_| ())),
+            check: Arc::new(|values: &Pairs, language: &Language| {
+                form::decode_for::<T>(values, language).map(|_| ())
+            }),
             render: Arc::new(move |values: &Pairs, errors: &FieldErrors| {
                 for_render(values, errors).fields_node()
             }),
@@ -428,6 +430,7 @@ pub struct Wizard {
     leave: bool,
     labels: WizardLabels,
     stepper_labels: StepperLabels,
+    language: Language,
 }
 
 impl Wizard {
@@ -444,6 +447,7 @@ impl Wizard {
             leave: true,
             labels: WizardLabels::default(),
             stepper_labels: StepperLabels::default(),
+            language: Language::english(),
         }
     }
 
@@ -507,6 +511,15 @@ impl Wizard {
     /// Sets the words of the stepper.
     pub fn stepper_labels(mut self, labels: StepperLabels) -> Self {
         self.stepper_labels = labels;
+        self
+    }
+
+    /// Sets the language the steps are checked in: the app's validation messages and the
+    /// reader's date, time and slider words (`Language::of(ctx)` reads both for a request).
+    /// Without it the steps say their errors in English. The wizard is cheap to build, so
+    /// an app builds it for each request.
+    pub fn language(mut self, language: Language) -> Self {
+        self.language = language;
         self
     }
 
@@ -594,7 +607,7 @@ impl Wizard {
             if step.has_secrets() {
                 draft.steps.get(&step.id).is_some_and(|record| record.valid)
             } else {
-                (step.check)(self.values(draft, at)).is_ok()
+                (step.check)(self.values(draft, at), &self.language).is_ok()
             }
         })
     }
@@ -704,7 +717,7 @@ impl Wizard {
                 .is_some_and(|record| record.values == picked.kept)
                 && !picked.secret_given;
             let tried = matches!(action, WizardAction::Next | WizardAction::Finish);
-            let result = tried.then(|| (self.steps[at].check)(&picked.all));
+            let result = tried.then(|| (self.steps[at].check)(&picked.all, &self.language));
             let valid = match &result {
                 Some(result) => result.is_ok(),
                 None => unchanged && before.as_ref().is_some_and(|record| record.valid),
@@ -925,7 +938,9 @@ impl WizardPage {
                 // A step the person has moved on from shows what is wrong with it.
                 let errors = if wizard.tried(&self.draft, self.at) {
                     // The password was not kept to be checked again: what it got wrong was.
-                    let mut errors = (step.check)(values).err().unwrap_or_default();
+                    let mut errors = (step.check)(values, &self.wizard.language)
+                        .err()
+                        .unwrap_or_default();
                     for name in &step.secret {
                         errors.remove(name);
                     }

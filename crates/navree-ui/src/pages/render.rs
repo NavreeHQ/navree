@@ -366,7 +366,7 @@ const SHELL_DEADLINE: Duration = Duration::from_secs(1);
 /// The shell of the app for this request, when it has one. What builds it is the app's own
 /// code: one that panics, or that never answers, leaves the page on its own, and does not take
 /// the answer down with it.
-async fn shell_of(request: &ErrorContext) -> Option<Shell> {
+pub(crate) async fn shell_of(request: &ErrorContext) -> Option<Shell> {
     let attempt = AssertUnwindSafe(build_shell(request)).catch_unwind();
     match tokio::time::timeout(SHELL_DEADLINE, attempt).await {
         Ok(Ok(shell)) => shell,
