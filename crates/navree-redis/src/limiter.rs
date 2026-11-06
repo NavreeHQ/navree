@@ -36,7 +36,7 @@ return {1, math.floor((period - ahead) / interval)}
 ";
 
 /// [`HIT`] for the HTTP server's limits, which also say whether a refusal is
-/// the first of its window, so a flood is audited once. One hash per key:
+/// the first of its window, so a flood is reported once. One hash per key:
 /// `tat` as in [`HIT`], and `reported`, when a refusal was last reported.
 ///
 /// KEYS and ARGV as for [`HIT`]. Returns {1, 0, 0}, or {0, retry after in
