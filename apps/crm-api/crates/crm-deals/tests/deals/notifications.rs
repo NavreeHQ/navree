@@ -155,7 +155,7 @@ async fn own_changes_notify_nobody() {
     assert!(mails(&crm).await.is_empty());
 
     // A deal created for someone else is an assignment.
-    let mut input = new_deal("Indrani", agra, 100);
+    let mut input = new_deal("Ilaichi", agra, 100);
     input["owner_id"] = json!(rep2.id());
     create_deal(&manager, input).await;
     crm.run_queue().await;

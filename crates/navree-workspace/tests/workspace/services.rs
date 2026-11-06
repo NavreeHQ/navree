@@ -125,7 +125,7 @@ async fn workspaces_are_renamed_listed_and_resolved() {
         "gulati"
     );
     assert!(matches!(
-        workspaces.resolve("indrani").await,
+        workspaces.resolve("ilaichi").await,
         Err(WorkspaceError::WorkspaceNotFound(_))
     ));
 }

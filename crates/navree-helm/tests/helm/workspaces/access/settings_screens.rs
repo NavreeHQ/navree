@@ -285,14 +285,14 @@ async fn organization(world: &World, owner: Uuid, name: &str) -> Uuid {
 #[tokio::test]
 async fn nobody_reaches_the_settings_of_an_organization_they_arent_in() {
     let world = settings_world(|builder| builder).await;
-    let indrani = organization(&world, world.member_id, "Indrani").await;
-    let response = page(&world.outsider, &at("organization", indrani))
+    let ilaichi = organization(&world, world.member_id, "Ilaichi").await;
+    let response = page(&world.outsider, &at("organization", ilaichi))
         .await
         .assert_status(403);
-    assert!(!response.text().contains("Indrani"), "{}", response.text());
+    assert!(!response.text().contains("Ilaichi"), "{}", response.text());
     post(
         &world.outsider,
-        &at("organization", indrani),
+        &at("organization", ilaichi),
         &[("welcome_text", "Set by a stranger")],
     )
     .await
@@ -301,13 +301,13 @@ async fn nobody_reaches_the_settings_of_an_organization_they_arent_in() {
         .await
         .assert_status(403);
     assert_eq!(
-        stored(&world, Scope::organization(indrani)).await,
+        stored(&world, Scope::organization(ilaichi)).await,
         Some(json!("Welcome"))
     );
     // Its owner does; a viewer of it only reads.
     post(
         &world.member,
-        &at("organization", indrani),
+        &at("organization", ilaichi),
         &[("welcome_text", "Ours")],
     )
     .await
@@ -316,7 +316,7 @@ async fn nobody_reaches_the_settings_of_an_organization_they_arent_in() {
     let members = world.app.get::<OrgMembers>().await;
     let db = world.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    uow.scope(members.add(&uow, indrani, id, OrgRole::Viewer, Default::default()))
+    uow.scope(members.add(&uow, ilaichi, id, OrgRole::Viewer, Default::default()))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -328,12 +328,12 @@ async fn nobody_reaches_the_settings_of_an_organization_they_arent_in() {
     )
     .await;
     let viewer = world.app.acting_as(navree_testing::principal(id));
-    page(&viewer, &at("organization", indrani))
+    page(&viewer, &at("organization", ilaichi))
         .await
         .assert_status(200);
     post(
         &viewer,
-        &at("organization", indrani),
+        &at("organization", ilaichi),
         &[("welcome_text", "By a viewer")],
     )
     .await
@@ -354,7 +354,7 @@ impl Module for StaffOrganizationsModule {
 #[tokio::test]
 async fn staff_reach_an_organization_only_by_its_own_opt_in_and_it_is_written_down() {
     let world = settings_world(|builder| builder.module(StaffOrganizationsModule)).await;
-    let indrani = organization(&world, world.member_id, "Indrani").await;
+    let ilaichi = organization(&world, world.member_id, "Ilaichi").await;
     let staff_id = account(&world.app, "staff").await;
     give_role(
         &world.app,
@@ -364,12 +364,12 @@ async fn staff_reach_an_organization_only_by_its_own_opt_in_and_it_is_written_do
     )
     .await;
     let staff = world.app.acting_as(navree_testing::principal(staff_id));
-    page(&staff, &at("organization", indrani))
+    page(&staff, &at("organization", ilaichi))
         .await
         .assert_status(200);
     post(
         &staff,
-        &at("organization", indrani),
+        &at("organization", ilaichi),
         &[("welcome_text", "By staff")],
     )
     .await
@@ -395,7 +395,7 @@ async fn staff_reach_an_organization_only_by_its_own_opt_in_and_it_is_written_do
         .await
         .assert_status(404);
     // The others still don't get in.
-    page(&world.outsider, &at("organization", indrani))
+    page(&world.outsider, &at("organization", ilaichi))
         .await
         .assert_status(403);
 }
@@ -406,7 +406,7 @@ async fn a_credential_limited_to_a_workspace_reaches_the_settings_of_that_one() 
 
     let world = settings_world(|builder| builder.module(PinLayer)).await;
     join(&world.app, world.gulati, world.member_id).await;
-    let indrani = organization(&world, world.member_id, "Indrani").await;
+    let ilaichi = organization(&world, world.member_id, "Ilaichi").await;
     let html =
         |path: String| pinned(world.member.get(&path), world.agra).header("accept", "text/html");
     html(at("workspace", world.agra))
@@ -417,7 +417,7 @@ async fn a_credential_limited_to_a_workspace_reaches_the_settings_of_that_one() 
         .send()
         .await
         .assert_status(403);
-    html(at("organization", indrani))
+    html(at("organization", ilaichi))
         .send()
         .await
         .assert_status(403);

@@ -239,7 +239,7 @@ fn table() -> Node {
             row("Gulati", "3,400.00"),
             NotFound::new().what("deal").row(2),
             EmptyState::no_results().row(2),
-            row("Indrani", "9,900.00"),
+            row("Ilaichi", "9,900.00"),
         ))
         .into()
 }

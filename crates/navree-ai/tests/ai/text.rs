@@ -142,7 +142,7 @@ async fn respond_when_answers_matching_requests_every_time() {
     assert_eq!(ai.text("About Gulati again").await.unwrap().text, "Gulati!");
     assert_eq!(ai.text("Something else").await.unwrap().text, "queued");
     fake.assert_prompted(|r| r.last_user_message() == "Something else");
-    fake.assert_not_prompted(|r| r.last_user_message() == "Indrani");
+    fake.assert_not_prompted(|r| r.last_user_message() == "Ilaichi");
     fake.assert_prompt_count(3);
 }
 

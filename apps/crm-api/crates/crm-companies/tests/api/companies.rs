@@ -125,7 +125,7 @@ async fn company_detail_counts_live_contacts_and_open_deals() {
     let rep = crm.login_as(Role::Rep1).await;
     let company = create_company(&rep, json!({ "name": "Gulati" })).await;
     let id = id_of(&company);
-    let other = create_company(&rep, json!({ "name": "Indrani" })).await;
+    let other = create_company(&rep, json!({ "name": "Ilaichi" })).await;
 
     create_contact(
         &rep,
@@ -394,7 +394,7 @@ async fn search_and_filters() {
     let rep2 = crm.login_as(Role::Rep2).await;
     create_company(
         &rep1,
-        json!({ "name": "Indrani", "domain": "indrani.com", "industry": "Software" }),
+        json!({ "name": "Ilaichi", "domain": "ilaichi.com", "industry": "Software" }),
     )
     .await;
     tick(&crm);
@@ -418,12 +418,12 @@ async fn search_and_filters() {
     // Default order: by name, case-insensitively.
     assert_eq!(
         names(&[]).await,
-        ["100% Juice", "agra", "Gulati", "Indrani"]
+        ["100% Juice", "agra", "Gulati", "Ilaichi"]
     );
     // Search: name or domain, case-insensitive, `%` and `_` are literal.
     assert_eq!(names(&[("search", "AGR")]).await, ["agra"]);
     assert_eq!(names(&[("search", ".io")]).await, ["Gulati"]);
-    assert_eq!(names(&[("search", "te")]).await, ["Indrani"]);
+    assert_eq!(names(&[("search", "te")]).await, ["Ilaichi"]);
     assert_eq!(names(&[("search", "%")]).await, ["100% Juice"]);
     assert_eq!(names(&[("search", "_")]).await, Vec::<String>::new());
     assert_eq!(names(&[("search", "  ")]).await.len(), 4);
@@ -435,24 +435,24 @@ async fn search_and_filters() {
     );
     assert_eq!(
         names(&[("filter[industry]", "Software")]).await,
-        ["agra", "Indrani"]
+        ["agra", "Ilaichi"]
     );
     assert_eq!(
         names(&[("filter[industry]", "software"), ("search", "indr")]).await,
-        ["Indrani"]
+        ["Ilaichi"]
     );
     // Sort.
     assert_eq!(
         names(&[("sort", "-name")]).await,
-        ["Indrani", "Gulati", "agra", "100% Juice"]
+        ["Ilaichi", "Gulati", "agra", "100% Juice"]
     );
     assert_eq!(
         names(&[("sort", "created_at")]).await,
-        ["Indrani", "Gulati", "agra", "100% Juice"]
+        ["Ilaichi", "Gulati", "agra", "100% Juice"]
     );
     assert_eq!(
         names(&[("sort", "-created_at")]).await,
-        ["100% Juice", "agra", "Gulati", "Indrani"]
+        ["100% Juice", "agra", "Gulati", "Ilaichi"]
     );
     let refused = rep1
         .get("/api/v1/companies")
@@ -481,7 +481,7 @@ async fn search_and_filters() {
             "meta",
             json!({ "current_page": 2, "per_page": 3, "total": 4, "last_page": 2 }),
         )
-        .assert_json_path("data.0.name", json!("Indrani"));
+        .assert_json_path("data.0.name", json!("Ilaichi"));
     crm.shutdown().await;
 }
 

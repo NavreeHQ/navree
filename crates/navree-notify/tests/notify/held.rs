@@ -35,7 +35,7 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
         .await
         .unwrap();
     notifier
-        .send(&new_york, DealUpdate::new("Indrani"))
+        .send(&new_york, DealUpdate::new("Ilaichi"))
         .await
         .unwrap();
 

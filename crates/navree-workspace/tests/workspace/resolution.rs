@@ -167,7 +167,7 @@ async fn errors_follow_the_framework_shape() {
     world
         .as_user(ada)
         .get("/api/current")
-        .header("x-workspace", "indrani")
+        .header("x-workspace", "ilaichi")
         .send()
         .await
         .assert_error(404, "Workspace not found.");

@@ -250,7 +250,7 @@ async fn workspace_scoped_changes_carry_their_workspace() {
         vec![
             new_company(w1, "Agra"),
             new_company(w2, "Gulati"),
-            new_company(w1, "Indrani"),
+            new_company(w1, "Ilaichi"),
         ],
     )
     .await;

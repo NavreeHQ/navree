@@ -13,8 +13,8 @@ async fn seeded() -> TestDb {
     for (name, country, active, employees) in [
         ("Agra", Some("US"), true, 120),
         ("Gulati", Some("DE"), false, 40),
-        ("Indrani", Some("US"), true, 15),
-        ("Ujala", None, true, 300),
+        ("Ilaichi", Some("US"), true, 15),
+        ("Utsav", None, true, 300),
     ] {
         Company::create(
             &t.db,
@@ -417,7 +417,7 @@ async fn subqueries_exists_and_raw() {
         .get(db)
         .await
         .unwrap();
-    assert_eq!(without[0].name, "Ujala");
+    assert_eq!(without[0].name, "Utsav");
 
     let above_average = Deal::query()
         .where_sub(
@@ -754,7 +754,7 @@ async fn aggregates_values_and_plucks() {
         .pluck_keyed(db, Company::EMPLOYEES, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(keyed.get("Ujala"), Some(&300));
+    assert_eq!(keyed.get("Utsav"), Some(&300));
     assert_eq!(keyed.keys().next().map(String::as_str), Some("Agra"));
     let untyped = Company::query()
         .where_key(1_i64)

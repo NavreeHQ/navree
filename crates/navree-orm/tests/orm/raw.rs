@@ -10,7 +10,7 @@ use crate::models::Company;
 use crate::support::sqlite;
 
 async fn seed(db: &navree_db::Db) {
-    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Indrani", 15)] {
+    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Ilaichi", 15)] {
         Company::create(
             db,
             Company {
@@ -41,7 +41,7 @@ async fn raw_selects_return_rows_one_row_or_one_value() {
         .iter()
         .map(|row| row.get::<String>("name").unwrap())
         .collect();
-    assert_eq!(names, ["Gulati", "Indrani"]);
+    assert_eq!(names, ["Gulati", "Ilaichi"]);
 
     let first = select_one(
         &t.db,
@@ -152,7 +152,7 @@ async fn raw_fragments_fit_conditions_selects_and_orders() {
         companies.map(|c| (c.name.clone(), c.extra::<i64>("doubled").unwrap())),
         [
             ("Gulati".to_owned(), Some(100)),
-            ("Indrani".to_owned(), Some(30)),
+            ("Ilaichi".to_owned(), Some(30)),
             ("Agra".to_owned(), Some(10))
         ]
     );

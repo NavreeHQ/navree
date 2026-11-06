@@ -12,7 +12,7 @@ async fn seeded() -> (TestDb, Collection<Company>) {
     for (name, country, employees) in [
         ("Agra", Some("US"), 10),
         ("Gulati", Some("DE"), 20),
-        ("Indrani", Some("US"), 30),
+        ("Ilaichi", Some("US"), 30),
     ] {
         Company::create(
             &t.db,
@@ -50,10 +50,10 @@ async fn keys_finding_and_containment() {
 #[tokio::test]
 async fn transforming_and_grouping() {
     let (_t, all) = seeded().await;
-    assert_eq!(all.map(|c| c.name.clone()), ["Agra", "Gulati", "Indrani"]);
+    assert_eq!(all.map(|c| c.name.clone()), ["Agra", "Gulati", "Ilaichi"]);
     assert_eq!(
         all.pluck(Company::NAME).unwrap(),
-        ["Agra", "Gulati", "Indrani"]
+        ["Agra", "Gulati", "Ilaichi"]
     );
     assert_eq!(
         all.pluck(Company::COUNTRY).unwrap(),
@@ -76,7 +76,7 @@ async fn transforming_and_grouping() {
     assert_eq!(by_country.keys().collect::<Vec<_>>(), ["US", "DE"]);
     assert_eq!(by_country["US"].model_keys(), [1, 3]);
     let by_name = all.clone().key_by(|c| c.name.clone());
-    assert_eq!(by_name["Indrani"].id, 3);
+    assert_eq!(by_name["Ilaichi"].id, 3);
 
     let sorted = all.clone().sort_by_key(|c| std::cmp::Reverse(c.employees));
     assert_eq!(sorted.model_keys(), [3, 2, 1]);

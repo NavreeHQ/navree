@@ -164,7 +164,7 @@ async fn organizations_are_created_updated_listed_and_deleted() {
     assert_eq!(mine[0].workspaces, Selector::All);
 
     // Deleting an organization keeps its workspaces, detached.
-    let ws = world.workspace(ada, "Agra UK").await;
+    let ws = world.workspace(ada, "Agra Pune").await;
     world.attach(agra.id, ws.id).await;
     events.drain();
     let service = organizations.clone();
@@ -188,7 +188,7 @@ async fn workspaces_are_attached_and_detached() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.organization(ada, "Agra").await;
     let other = world.organization(ada, "Other").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     let organizations = world.organizations().await;
     let mut events = world
@@ -271,7 +271,7 @@ async fn org_members_reach_all_or_some_workspaces_with_the_mapped_role() {
     let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     let outside = world.workspace(ada, "Outside").await;
     world.attach(agra.id, uk.id).await;
@@ -369,7 +369,7 @@ async fn organization_grants_do_nothing_while_organizations_are_off() {
     let ada = on.user("Anu", "anu@example.com").await;
     let grace = on.user("Gauri", "gauri@example.com").await;
     let agra = on.organization(ada, "Agra").await;
-    let uk = on.workspace(ada, "Agra UK").await;
+    let uk = on.workspace(ada, "Agra Pune").await;
     on.attach(agra.id, uk.id).await;
     on.grant(agra.id, grace, "admin", WorkspaceSelector::All)
         .await;
@@ -414,7 +414,7 @@ async fn members_are_added_changed_and_removed_and_the_owner_is_kept() {
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let outside = world.workspace(ada, "Outside").await;
     world.attach(agra.id, uk.id).await;
     let members = world.org_members().await;
@@ -573,7 +573,7 @@ async fn access_requests_are_requested_approved_and_declined() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let outside = world.workspace(ada, "Outside").await;
     world.attach(agra.id, uk.id).await;
     let requests = world.access_requests().await;

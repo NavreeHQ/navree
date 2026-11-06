@@ -609,7 +609,7 @@ async fn the_switcher_lists_the_users_workspaces() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.workspace(ada, "Agra").await;
     let gulati = world.workspace(ada, "Gulati").await;
-    let hidden = world.workspace(grace, "Indrani").await;
+    let hidden = world.workspace(grace, "Ilaichi").await;
     let client = world.as_user(ada);
     client.csrf_cookie().await;
     client
@@ -644,7 +644,7 @@ async fn the_switcher_lists_the_users_workspaces() {
         "{html}"
     );
     assert!(!html.contains(&hidden.id.to_string()), "{html}");
-    assert!(!html.contains("Indrani"), "{html}");
+    assert!(!html.contains("Ilaichi"), "{html}");
     assert_eq!(html.matches(r#"aria-current="true""#).count(), 1, "{html}");
     let current = html.find(r#"aria-current="true""#).unwrap();
     assert!(
@@ -783,7 +783,7 @@ async fn a_switch_ends_the_users_live_subscriptions() {
 
     // A refused switch ends nothing.
     let bob = world.user("Bal", "bal@example.com").await;
-    world.workspace(bob, "Indrani").await;
-    switch(&client, "indrani", "/").await.assert_status(403);
+    world.workspace(bob, "Ilaichi").await;
+    switch(&client, "ilaichi", "/").await.assert_status(403);
     assert_eq!(broadcaster.ended(), [ada, ada]);
 }

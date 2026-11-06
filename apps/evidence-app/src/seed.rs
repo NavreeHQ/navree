@@ -91,7 +91,7 @@ pub const OPS_VIEWER_PERMISSIONS: &[&str] = &[
 pub const WORKSPACES: &[(&str, &str)] = &[
     ("agra", "Agra Logistics"),
     ("gulati", "Gulati Research"),
-    ("indrani", "Indrani Software"),
+    ("ilaichi", "Ilaichi Software"),
 ];
 
 /// How many projects each workspace gets, in [`WORKSPACES`] order.
@@ -138,13 +138,13 @@ pub const PEOPLE: &[Person] = &[
     Person { name: "Sukhmani Lamba", memberships: &[("agra", "member")] },
     Person { name: "Ravi Menon", memberships: &[("agra", "member")] },
     Person { name: "Harleen Bhandari", memberships: &[("agra", "member")] },
-    Person { name: "Jaspal Chadha", memberships: &[("agra", "member"), ("indrani", "viewer")] },
+    Person { name: "Jaspal Chadha", memberships: &[("agra", "member"), ("ilaichi", "viewer")] },
     Person { name: "Mehak Talwar", memberships: &[("agra", "member")] },
     Person { name: "Lakhwinder Gill", memberships: &[("agra", "member")] },
     Person { name: "Nikita Dhir", memberships: &[("agra", "member")] },
     Person { name: "Charu Mahajan", memberships: &[("agra", "viewer")] },
     Person { name: "Vandana Chawla", memberships: &[("agra", "viewer")] },
-    Person { name: "Inderjit Sodhi", memberships: &[("gulati", "admin"), ("indrani", "member")] },
+    Person { name: "Inderjit Sodhi", memberships: &[("gulati", "admin"), ("ilaichi", "member")] },
     Person { name: "Kulwant Mehta", memberships: &[("gulati", "admin")] },
     Person { name: "Balvinder Luthra", memberships: &[("gulati", "member"), ("agra", "member")] },
     Person { name: "Amarjit Puri", memberships: &[("gulati", "member")] },
@@ -155,18 +155,18 @@ pub const PEOPLE: &[Person] = &[
     Person { name: "Lovleen Ahluwalia", memberships: &[("gulati", "member")] },
     Person { name: "Gurleen Nagpal", memberships: &[("gulati", "viewer")] },
     Person { name: "Ishaan Kohli", memberships: &[("gulati", "viewer")] },
-    Person { name: "Navjot Brar", memberships: &[("indrani", "admin"), ("agra", "member")] },
-    Person { name: "Rahul Deshmukh", memberships: &[("indrani", "admin")] },
-    Person { name: "Jyoti Saini", memberships: &[("indrani", "member")] },
-    Person { name: "Pradeep Nanda", memberships: &[("indrani", "member"), ("gulati", "viewer")] },
-    Person { name: "Amarpreet Dua", memberships: &[("indrani", "member")] },
-    Person { name: "Eshan Chopra", memberships: &[("indrani", "member")] },
-    Person { name: "Kiran Walia", memberships: &[("indrani", "member")] },
-    Person { name: "Samir Aziz", memberships: &[("indrani", "member")] },
-    Person { name: "Gagan Lamba", memberships: &[("indrani", "member")] },
-    Person { name: "Deepak Marwah", memberships: &[("indrani", "member")] },
-    Person { name: "Hardeep Kang", memberships: &[("indrani", "viewer")] },
-    Person { name: "Onkar Bedi", memberships: &[("indrani", "viewer")] },
+    Person { name: "Navjot Brar", memberships: &[("ilaichi", "admin"), ("agra", "member")] },
+    Person { name: "Rahul Deshmukh", memberships: &[("ilaichi", "admin")] },
+    Person { name: "Jyoti Saini", memberships: &[("ilaichi", "member")] },
+    Person { name: "Pradeep Nanda", memberships: &[("ilaichi", "member"), ("gulati", "viewer")] },
+    Person { name: "Amarpreet Dua", memberships: &[("ilaichi", "member")] },
+    Person { name: "Eshan Chopra", memberships: &[("ilaichi", "member")] },
+    Person { name: "Kiran Walia", memberships: &[("ilaichi", "member")] },
+    Person { name: "Samir Aziz", memberships: &[("ilaichi", "member")] },
+    Person { name: "Gagan Lamba", memberships: &[("ilaichi", "member")] },
+    Person { name: "Deepak Marwah", memberships: &[("ilaichi", "member")] },
+    Person { name: "Hardeep Kang", memberships: &[("ilaichi", "viewer")] },
+    Person { name: "Onkar Bedi", memberships: &[("ilaichi", "viewer")] },
     Person { name: "Tanya Khurana", memberships: &[("agra", "member"), ("gulati", "member")] },
     Person { name: "Vikas Hans", memberships: &[("gulati", "member")] },
 ];
@@ -681,7 +681,7 @@ fn make_report(workspace: Uuid, totals: [u64; 3], calendar: &Calendar, rng: &mut
 /// a rollout, an override for a workspace, a kill switch.
 async fn seed_flags(ctx: &AppContext, workspaces: &[Workspace]) -> Result<(), BoxError> {
     let flags = ctx.get::<Flags>().await?;
-    let (agra, indrani) = (workspaces[0].id, workspaces[2].id);
+    let (agra, ilaichi) = (workspaces[0].id, workspaces[2].id);
 
     // The board view reaches half of the workspaces.
     if flags.state::<BoardView>().await?.rollout.is_none() {
@@ -712,13 +712,13 @@ async fn seed_flags(ctx: &AppContext, workspaces: &[Workspace]) -> Result<(), Bo
             .activate::<ReportSchedules>(FlagScope::workspace(agra))
             .await?;
     }
-    // The export is on by default; Indrani has it off.
+    // The export is on by default; Ilaichi has it off.
     if flags
-        .active::<TaskExport>(FlagScope::workspace(indrani))
+        .active::<TaskExport>(FlagScope::workspace(ilaichi))
         .await?
     {
         flags
-            .deactivate::<TaskExport>(FlagScope::workspace(indrani))
+            .deactivate::<TaskExport>(FlagScope::workspace(ilaichi))
             .await?;
     }
     // The old importer is switched off for everyone.

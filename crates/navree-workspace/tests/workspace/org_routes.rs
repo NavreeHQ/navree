@@ -84,7 +84,7 @@ async fn organization_routes_follow_the_organization_role() {
     let linus = world.user("Laksh", "laksh@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     world.attach(agra.id, uk.id).await;
     world.attach(agra.id, de.id).await;
@@ -220,7 +220,7 @@ async fn limited_admins_grant_only_the_workspaces_they_reach() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     let de = world.workspace(ada, "Agra DE").await;
     world.attach(agra.id, uk.id).await;
     world.attach(agra.id, de.id).await;
@@ -289,7 +289,7 @@ async fn workspaces_are_attached_and_detached_over_http() {
     let ada = world.user("Anu", "anu@example.com").await;
     let grace = world.user("Gauri", "gauri@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let mine = world.workspace(ada, "Agra UK").await;
+    let mine = world.workspace(ada, "Agra Pune").await;
     let theirs = world.workspace(grace, "Gauri Co").await;
     world
         .grant(agra.id, grace, "admin", WorkspaceSelector::All)
@@ -352,7 +352,7 @@ async fn access_requests_over_http() {
     let grace = world.user("Gauri", "gauri@example.com").await;
     let linus = world.user("Laksh", "laksh@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let uk = world.workspace(ada, "Agra UK").await;
+    let uk = world.workspace(ada, "Agra Pune").await;
     world.attach(agra.id, uk.id).await;
 
     let asking = world.as_user(grace);

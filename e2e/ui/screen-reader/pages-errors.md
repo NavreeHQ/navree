@@ -111,7 +111,7 @@ The UI proof app, http://127.0.0.1:8090 (see [Start the proof apps](README.md#st
 **15. Locked and missing rows in a table**
 - Keys: NVDA: open `/pages/rows`, browse mode, move into the table and use Ctrl+Alt+Down arrow. VoiceOver: VO+Shift+Down arrow to interact with the table, then VO+Down arrow.
 - The page: a table of deals where two rows cannot show their deal. Each such row is one cell across both columns.
-- The reader says: the caption "Deals, one of which you can no longer open"; a table of 2 columns; the headers "Name" and "Amount". Rows in order: "Agra", "1,200.00"; then one cell, "You no longer have access to this row."; "Gulati", "3,400.00"; one cell, "This deal doesn't exist, or it was removed."; one cell beginning "No results"; "Indrani", "9,900.00". None of the three single cells is spoken as a link, button or check box.
+- The reader says: the caption "Deals, one of which you can no longer open"; a table of 2 columns; the headers "Name" and "Amount". Rows in order: "Agra", "1,200.00"; then one cell, "You no longer have access to this row."; "Gulati", "3,400.00"; one cell, "This deal doesn't exist, or it was removed."; one cell beginning "No results"; "Ilaichi", "9,900.00". None of the three single cells is spoken as a link, button or check box.
 
 ### Regions
 

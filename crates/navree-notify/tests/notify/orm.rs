@@ -17,7 +17,7 @@ async fn stored_notifications_are_orm_models() {
     let app = support::app().await;
     let notifier = app.get::<Notifier>().await;
     let (alice, bob) = (TestUser::new(), TestUser::new());
-    for (user, title) in [(&alice, "Agra"), (&alice, "Gulati"), (&bob, "Indrani")] {
+    for (user, title) in [(&alice, "Agra"), (&alice, "Gulati"), (&bob, "Ilaichi")] {
         notifier
             .send(user, DealWon::via(&[Channel::Database], title))
             .await

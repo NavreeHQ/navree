@@ -129,11 +129,11 @@ async fn results_are_structured_content_and_json_text() {
     let created = mcp
         .call_tool(
             "create_deal",
-            json!({ "title": "Indrani", "amount_cents": 5000 }),
+            json!({ "title": "Ilaichi", "amount_cents": 5000 }),
         )
         .await
         .assert_ok()
-        .assert_json_path("title", json!("Indrani"));
+        .assert_json_path("title", json!("Ilaichi"));
     // An object is its own structured content.
     assert_eq!(created.structured().unwrap()["amount_cents"], 5000);
 

@@ -30,13 +30,13 @@ describe("workspaces", () => {
   });
 
   it("reads the cookie when the server didn't say", () => {
-    writeWorkspaceCookie("indrani");
+    writeWorkspaceCookie("ilaichi");
     render(
       <WorkspaceProvider>
         <Switcher />
       </WorkspaceProvider>,
     );
-    expect(screen.getByRole("button").textContent).toBe("indrani");
+    expect(screen.getByRole("button").textContent).toBe("ilaichi");
     writeWorkspaceCookie(undefined);
     expect(readWorkspaceCookie()).toBeUndefined();
   });

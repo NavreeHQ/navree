@@ -536,7 +536,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 async fn the_docs_resource_serves_its_screens() {
     let app = boot_app().await;
     let priya = create_user(&app, "priya@example.com", "rep").await;
-    let own = create_deal(&app, priya.id, "Indrani upgrade").await;
+    let own = create_deal(&app, priya.id, "Ilaichi upgrade").await;
     let rep = app.acting_as(principal(priya.id));
 
     let body = rep
@@ -553,11 +553,11 @@ async fn the_docs_resource_serves_its_screens() {
 
     // Saving through the service, with the DTO's validation rules.
     rep.patch(&format!("/admin/api/resources/deals/{}", own.id))
-        .json(&json!({ "title": "Indrani upgrade, phase 2" }))
+        .json(&json!({ "title": "Ilaichi upgrade, phase 2" }))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data.title", json!("Indrani upgrade, phase 2"));
+        .assert_json_path("data.title", json!("Ilaichi upgrade, phase 2"));
 
     rep.post("/admin/api/resources/deals/actions/mark-won")
         .json(&json!({ "ids": [own.id] }))

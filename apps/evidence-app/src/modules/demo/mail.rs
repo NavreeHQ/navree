@@ -115,7 +115,7 @@ const LAST_NAMES: [&str; 30] = [
     "Bajwa",
 ];
 
-const WORKSPACES: [&str; 3] = ["Agra Logistics", "Gulati Research", "Indrani Software"];
+const WORKSPACES: [&str; 3] = ["Agra Logistics", "Gulati Research", "Ilaichi Software"];
 
 const SERVICES: [&str; 4] = [
     "Platform seats",

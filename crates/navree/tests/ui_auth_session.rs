@@ -264,8 +264,8 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
         .create(&uow, ada.id, NewWorkspace::named("Gulati"))
         .await
         .unwrap();
-    let indrani = workspaces
-        .create(&uow, grace.id, NewWorkspace::named("Indrani"))
+    let ilaichi = workspaces
+        .create(&uow, grace.id, NewWorkspace::named("Ilaichi"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
@@ -313,7 +313,7 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
     let home = get(&browser, "/home").await.assert_status(200).text();
     assert!(home.contains("Working in Agra"), "{home}");
     assert!(
-        home.contains("Gulati") && !home.contains("Indrani"),
+        home.contains("Gulati") && !home.contains("Ilaichi"),
         "{home}"
     );
     post(&browser, "/workspace/switch", &[("workspace", "gulati")])
@@ -324,7 +324,7 @@ async fn a_browser_signs_in_with_two_factor_switches_workspace_and_signs_out() {
     post(
         &browser,
         "/workspace/switch",
-        &[("workspace", indrani.id.to_string().as_str())],
+        &[("workspace", ilaichi.id.to_string().as_str())],
     )
     .await
     .assert_status(403);

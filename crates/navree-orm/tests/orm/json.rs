@@ -104,7 +104,7 @@ async fn hand_written_operators_and_null_safe_inequality() {
     for (name, country) in [
         ("Agra", Some("US")),
         ("Gulati", None),
-        ("Indrani", Some("DE")),
+        ("Ilaichi", Some("DE")),
     ] {
         Company::create(
             &t.db,
@@ -123,13 +123,13 @@ async fn hand_written_operators_and_null_safe_inequality() {
         .pluck(&t.db, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(not_us, ["Gulati", "Indrani"], "NULL is distinct from US");
+    assert_eq!(not_us, ["Gulati", "Ilaichi"], "NULL is distinct from US");
     let globbed: Vec<String> = Company::query()
         .where_(Filter::op_raw(Company::NAME, "glob", Expr::val("*ech")))
         .pluck(&t.db, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(globbed, ["Indrani"]);
+    assert_eq!(globbed, ["Ilaichi"]);
     let loud: Vec<Value> = Company::query()
         .order_by(Company::NAME)
         .pluck(&t.db, Expr::col("name").binary("||", Expr::val("!")))

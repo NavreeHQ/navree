@@ -94,7 +94,7 @@ fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> AppPage {
         .post("/deals")
         .submit("Create deal")
         .cancel("Cancel", "/deals?per_page=1000")
-        .options("company_id", choices(&["Agra", "Gulati", "Indrani"]))
+        .options("company_id", choices(&["Agra", "Gulati", "Ilaichi"]))
         .options("contact_id", choices(&["Anu Lakhotia", "Arun Tiwari"]))
         .options("owner_id", choices(&["Gauri Hundal", "Esha Dhillon"]));
     shell

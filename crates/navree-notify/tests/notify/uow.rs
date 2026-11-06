@@ -135,7 +135,7 @@ async fn send_inside_a_unit_of_work_scope_joins_it() {
 
     let rolled_back = db.uow(None, None).await;
     rolled_back
-        .scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Indrani")))
+        .scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Ilaichi")))
         .await
         .unwrap();
     rolled_back.rollback().await.unwrap();

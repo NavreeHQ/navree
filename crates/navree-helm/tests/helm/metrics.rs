@@ -14,7 +14,7 @@ use crate::support::*;
 async fn seed(app: &TestApp, owner: Uuid) {
     let at = |m, d, h| Utc.with_ymd_and_hms(2026, m, d, h, 0, 0).unwrap();
     let gulati = company(app, "Gulati", None).await;
-    let indrani = company(app, "Indrani", None).await;
+    let ilaichi = company(app, "Ilaichi", None).await;
     deal(
         app,
         DealSeed {
@@ -47,7 +47,7 @@ async fn seed(app: &TestApp, owner: Uuid) {
             title: "Three",
             amount_cents: 3000,
             stage: "lead",
-            company: Some(indrani.id),
+            company: Some(ilaichi.id),
             created_at: at(10, 20, 10),
             ..DealSeed::default()
         },
@@ -216,7 +216,7 @@ async fn partitions_group_with_labels() {
         [
             ("None", "$40.00"),
             ("Gulati", "$30.00"),
-            ("Indrani", "$30.00")
+            ("Ilaichi", "$30.00")
         ]
     );
 }

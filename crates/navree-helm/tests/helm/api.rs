@@ -152,7 +152,7 @@ async fn lists_search_sort_and_paginate() {
     let (_, rep) = user(&app, "rep").await;
     for (title, amount) in [
         ("Gulati renewal", 500),
-        ("Indrani upgrade", 300),
+        ("Ilaichi upgrade", 300),
         ("GULATI expansion", 900),
         ("Hariyali pilot", 100),
     ] {
@@ -216,7 +216,7 @@ async fn lists_search_sort_and_paginate() {
         [
             "GULATI expansion",
             "Gulati renewal",
-            "Indrani upgrade",
+            "Ilaichi upgrade",
             "Hariyali pilot"
         ]
     );
@@ -247,7 +247,7 @@ async fn filters_narrow_the_list() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
     let gulati = company(&app, "Gulati", Some("Springfield")).await;
-    let indrani = company(&app, "Indrani", None).await;
+    let ilaichi = company(&app, "Ilaichi", None).await;
     let day = |d| NaiveDate::from_ymd_opt(2026, 10, d);
     deal(
         &app,
@@ -279,7 +279,7 @@ async fn filters_narrow_the_list() {
         DealSeed {
             title: "C",
             stage: "lost",
-            company: Some(indrani.id),
+            company: Some(ilaichi.id),
             expected_close_date: day(27),
             amount_cents: 900,
             closed: true,
@@ -333,7 +333,7 @@ async fn filters_narrow_the_list() {
     assert_eq!(
         list(vec![(
             "filter[company_id][in]",
-            format!("{},{}", gulati.id, indrani.id)
+            format!("{},{}", gulati.id, ilaichi.id)
         )])
         .await,
         ["A", "B", "C"]
@@ -666,17 +666,17 @@ async fn the_default_create_writes_the_form_to_the_columns() {
     let (_, manager) = user(&app, "manager").await;
     let body = manager
         .post("/admin/api/resources/companies")
-        .json(&json!({ "name": "Indrani", "city": "", "website": "https://indrani.example" }))
+        .json(&json!({ "name": "Ilaichi", "city": "", "website": "https://ilaichi.example" }))
         .send()
         .await
         .assert_status(201)
         .json_value();
     let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
     let saved = reload_company(&app, id).await.unwrap();
-    assert_eq!(saved.name, "Indrani");
+    assert_eq!(saved.name, "Ilaichi");
     // A blank nullable column is stored as NULL; created_at is set.
     assert_eq!(saved.city, None);
-    assert_eq!(saved.website.as_deref(), Some("https://indrani.example"));
+    assert_eq!(saved.website.as_deref(), Some("https://ilaichi.example"));
     assert_eq!(saved.created_at, now());
     manager
         .post("/admin/api/resources/companies")
@@ -812,7 +812,7 @@ async fn deleting_needs_the_delete_ability() {
 async fn pickers_list_readable_records_by_title() {
     let app = app().await;
     let (_, rep) = user(&app, "rep").await;
-    company(&app, "Indrani", Some("Austin")).await;
+    company(&app, "Ilaichi", Some("Austin")).await;
     company(&app, "Gulati", Some("Springfield")).await;
     company(&app, "Hariyali", Some("Palo Alto")).await;
     let body = rep
@@ -827,7 +827,7 @@ async fn pickers_list_readable_records_by_title() {
         .iter()
         .map(|r| r["title"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["Gulati", "Hariyali", "Indrani"]);
+    assert_eq!(names, ["Gulati", "Hariyali", "Ilaichi"]);
     let body = rep
         .get("/admin/api/resources/companies/options")
         .query(&[("search", "spring")])
@@ -905,7 +905,7 @@ async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
     let (manager_id, manager) = user(&app, "manager").await;
     let body = manager
         .post("/admin/api/resources/companies")
-        .json(&json!({ "name": "Indrani", "api_token": "tok-created-secret" }))
+        .json(&json!({ "name": "Ilaichi", "api_token": "tok-created-secret" }))
         .send()
         .await
         .assert_status(201)
@@ -968,7 +968,7 @@ async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
         &json!({ "city": "Austin" })
     );
     let text = serde_json::to_string(&rows).unwrap();
-    assert!(text.contains("Indrani"), "{text}");
+    assert!(text.contains("Ilaichi"), "{text}");
     assert!(
         !text.contains("tok-"),
         "a secret reached the audit log: {text}"

@@ -238,7 +238,7 @@ impl Module for TemplatesModule {
     }
 }
 
-/// Organization `Group` with workspaces Agra and Indrani, organization
+/// Organization `Group` with workspaces Agra and Ilaichi, organization
 /// `Other` with Hariyali, and the standalone Gulati, each with library items.
 pub struct Fixture {
     pub world: World,
@@ -246,7 +246,7 @@ pub struct Fixture {
     pub group: Organization,
     pub other: Organization,
     pub agra: Workspace,
-    pub indrani: Workspace,
+    pub ilaichi: Workspace,
     pub gulati: Workspace,
     pub welcome: Uuid,
     pub handbook: Uuid,
@@ -282,15 +282,15 @@ pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
     let group = world.organization(ada, "Group").await;
     let other = world.organization(ada, "Other").await;
     let agra = world.workspace(ada, "Agra").await;
-    let indrani = world.workspace(ada, "Indrani").await;
+    let ilaichi = world.workspace(ada, "Ilaichi").await;
     let hariyali = world.workspace(ada, "Hariyali").await;
     let gulati = world.workspace(ada, "Gulati").await;
     world.attach(group.id, agra.id).await;
-    world.attach(group.id, indrani.id).await;
+    world.attach(group.id, ilaichi.id).await;
     world.attach(other.id, hariyali.id).await;
     let workspaces = world.workspaces().await;
     let agra = workspaces.find(agra.id).await.unwrap().unwrap();
-    let indrani = workspaces.find(indrani.id).await.unwrap().unwrap();
+    let ilaichi = workspaces.find(ilaichi.id).await.unwrap().unwrap();
     let gulati = workspaces.find(gulati.id).await.unwrap().unwrap();
     let db = world.db().await;
     let welcome = create(&db, LibraryOwner::Global, "welcome", "Welcome").await;
@@ -334,7 +334,7 @@ pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
         group,
         other,
         agra,
-        indrani,
+        ilaichi,
         gulati,
         welcome,
         handbook,
@@ -371,7 +371,7 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
         ["Agra only", "Group handbook", "Welcome"]
     );
     assert_eq!(
-        visible(&db, &lib.indrani).await,
+        visible(&db, &lib.ilaichi).await,
         ["Group handbook", "Welcome"]
     );
     assert_eq!(visible(&db, &lib.gulati).await, ["Gulati only", "Welcome"]);
@@ -446,7 +446,7 @@ async fn queries_see_what_the_current_workspace_sees() {
     assert_eq!(names(&gulati), ["Gulati only", "Welcome"]);
     // A unit of work that entered a workspace.
     let uow = db.uow(None, None).await;
-    uow.set_workspace(Some(lib.indrani.id));
+    uow.set_workspace(Some(lib.ilaichi.id));
     assert_eq!(
         names(&Template::query().get(&uow).await.unwrap()),
         ["Group handbook", "Welcome"]
@@ -802,7 +802,7 @@ async fn cloning_copies_an_item_into_the_workspace() {
         .assert_status(200);
     client
         .get("/api/templates")
-        .header("x-workspace", "indrani")
+        .header("x-workspace", "ilaichi")
         .send()
         .await
         .assert_json_path("data", json!(["Group handbook", "Welcome"]));
@@ -821,13 +821,13 @@ async fn cloning_copies_an_item_into_the_workspace() {
     // Organization items clone too; the clones of an item are found back.
     client
         .post(&format!("/api/templates/{}/clone", lib.handbook))
-        .header("x-workspace", "indrani")
+        .header("x-workspace", "ilaichi")
         .send()
         .await
         .assert_status(200)
         .assert_json_path("name", json!("Group handbook (copy)"));
     let indrani_clones = navree_orm::workspace::scope(
-        lib.indrani.id,
+        lib.ilaichi.id,
         LibraryRepo::<Template>::clones_of(lib.handbook).count(db.as_ref()),
     )
     .await

@@ -245,7 +245,7 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
     let ada = world.user("Anu", "anu@example.com").await;
     let ken = world.user("Ken", "ken@example.com").await;
     let agra = world.organization(ada, "Agra").await;
-    let ws = world.workspace(ada, "Agra UK").await;
+    let ws = world.workspace(ada, "Agra Pune").await;
     let client = world.as_user(ada);
 
     for (request, resolver) in [

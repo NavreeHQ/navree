@@ -11,14 +11,14 @@ use navree_orm::{Decimal, Expr, Filter, Model, OrmError, Value, col, table};
 use crate::models::{Company, Deal, DealMeta, Note, Reading, Stage, WORKSPACE};
 use crate::support::TestMongo;
 
-/// Companies Agra (NO, 12 people), Gulati (US, 250) and Indrani (US, no
+/// Companies Agra (NO, 12 people), Gulati (US, 250) and Ilaichi (US, no
 /// deals); deals across stages, amounts, tags and dates.
 async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
     let mut companies = Vec::new();
     for (name, country, employees) in [
         ("Agra", Some("NO"), 12),
         ("Gulati", Some("US"), 250),
-        ("Indrani", None, 40),
+        ("Ilaichi", None, 40),
     ] {
         let company = Company::create(
             mongo,
@@ -235,7 +235,7 @@ async fn conditions_become_filter_documents() {
             .pluck(mongo, Company::NAME)
             .await
             .unwrap(),
-        ["Indrani"]
+        ["Ilaichi"]
     );
     assert_eq!(
         Company::query()
@@ -587,7 +587,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(without, ["Indrani"]);
+    assert_eq!(without, ["Ilaichi"]);
     // IN (subquery): deals of Norwegian companies.
     let norwegian = titles(
         mongo,
@@ -626,7 +626,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         [
             ("Agra".into(), 3),
             ("Gulati".into(), 2),
-            ("Indrani".into(), 0)
+            ("Ilaichi".into(), 0)
         ]
     );
     // Joins.
@@ -655,8 +655,8 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, "companies.name")
         .await
         .unwrap();
-    assert_eq!(left, [Value::from("Indrani")]);
-    // NULL keys join nothing, as in SQL (MongoDB would match Indrani's
+    assert_eq!(left, [Value::from("Ilaichi")]);
+    // NULL keys join nothing, as in SQL (MongoDB would match Ilaichi's
     // null country with itself).
     let unmatched = table("companies")
         .left_join(
@@ -669,7 +669,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         .pluck(mongo, "companies.name")
         .await
         .unwrap();
-    assert_eq!(unmatched, [Value::from("Indrani")]);
+    assert_eq!(unmatched, [Value::from("Ilaichi")]);
     // Unions: the columns are named by the first query's, by position.
     let names: Vec<String> = table("companies")
         .select(["name"])

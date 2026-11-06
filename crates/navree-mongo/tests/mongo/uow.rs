@@ -90,7 +90,7 @@ async fn units_of_work_commit_together_or_not_at_all() {
 
     // Rolled back: nothing stays, no hook runs.
     let uow = mongo.begin().await.unwrap();
-    Company::create(&uow, company("Indrani")).await.unwrap();
+    Company::create(&uow, company("Ilaichi")).await.unwrap();
     let ran = Arc::new(AtomicBool::new(false));
     let hook = ran.clone();
     uow.after_commit(move || {
@@ -132,14 +132,14 @@ async fn sessions_run_models_and_transactions_by_hand() {
     assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
 
     session.start_transaction().await.unwrap();
-    Company::create(&session, company("Indrani")).await.unwrap();
+    Company::create(&session, company("Ilaichi")).await.unwrap();
     session.commit_transaction().await.unwrap();
     let names: Vec<String> = Company::query()
         .order_by(Company::NAME)
         .pluck(mongo, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(names, ["Agra", "Indrani"]);
+    assert_eq!(names, ["Agra", "Ilaichi"]);
     t.cleanup().await;
 }
 

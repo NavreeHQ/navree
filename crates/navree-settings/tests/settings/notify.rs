@@ -165,7 +165,7 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
                     workspace,
                 },
                 DealWon {
-                    title: "Indrani".into(),
+                    title: "Ilaichi".into(),
                 },
             )
             .await
@@ -181,22 +181,22 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
         .sent();
     assert_eq!(sent.len(), 3);
     // Agra: its own subject, its organization's color and footer.
-    assert_eq!(sent[0].subject, "Agra won Indrani!");
+    assert_eq!(sent[0].subject, "Agra won Ilaichi!");
     assert_eq!(
         sent[0].html.as_deref(),
-        Some("<p style=\"color: #0F766E\">Indrani was won.</p>")
+        Some("<p style=\"color: #0F766E\">Ilaichi was won.</p>")
     );
     assert_eq!(
         sent[0].text.as_deref(),
-        Some("Indrani was won.\nHolding Group, Pune")
+        Some("Ilaichi was won.\nHolding Group, Pune")
     );
     // Another workspace and mail outside any: the global values.
     for mail in &sent[1..] {
-        assert_eq!(mail.subject, "Deal won: Indrani");
-        assert_eq!(mail.html.as_deref(), Some("<p>Indrani was won.</p>"));
+        assert_eq!(mail.subject, "Deal won: Ilaichi");
+        assert_eq!(mail.html.as_deref(), Some("<p>Ilaichi was won.</p>"));
         assert_eq!(
             mail.text.as_deref(),
-            Some("Indrani was won.\nSent by Navree")
+            Some("Ilaichi was won.\nSent by Navree")
         );
     }
 }

@@ -279,12 +279,12 @@ async fn results_and_errors_have_their_protocol_shape() {
         .call(
             2,
             "tools/call",
-            json!({ "name": "create_deal", "arguments": { "title": "Indrani", "amount_cents": 5 } }),
+            json!({ "name": "create_deal", "arguments": { "title": "Ilaichi", "amount_cents": 5 } }),
         )
         .await["result"]
         .clone();
     assert_eq!(created["isError"], false);
-    assert_eq!(created["structuredContent"]["title"], "Indrani");
+    assert_eq!(created["structuredContent"]["title"], "Ilaichi");
     assert_eq!(created["content"][0]["type"], "text");
     let text: Value =
         serde_json::from_str(created["content"][0]["text"].as_str().unwrap()).unwrap();

@@ -334,13 +334,13 @@ async fn a_deal_from_first_contact_to_reassignment() {
 async fn deleted_companies_drop_out_of_every_module() {
     let crm = crm().await;
     let rep = crm.login_as(Role::Rep1).await;
-    let company = create(&rep, "/api/v1/companies", json!({ "name": "Indrani" })).await;
+    let company = create(&rep, "/api/v1/companies", json!({ "name": "Ilaichi" })).await;
     let path = format!("/api/v1/companies/{}", id(&company));
     rep.delete(&path).send().await.assert_status(204);
 
     rep.get(&path).send().await.assert_error(404, None);
     rep.get("/api/v1/companies")
-        .query(&[("search", "Indrani")])
+        .query(&[("search", "Ilaichi")])
         .send()
         .await
         .assert_status(200)
@@ -383,7 +383,7 @@ async fn deleting_a_deal_deletes_its_activities() {
     let rep1 = crm.login_as(Role::Rep1).await;
     let rep2 = crm.login_as(Role::Rep2).await;
     let admin = crm.login_as(Role::Admin).await;
-    let company = create(&rep1, "/api/v1/companies", json!({ "name": "Ujala" })).await;
+    let company = create(&rep1, "/api/v1/companies", json!({ "name": "Utsav" })).await;
     let deal =
         |title: &str| json!({ "title": title, "company_id": id(&company), "amount_cents": 500 });
     let doomed = id(&create(&rep1, "/api/v1/deals", deal("Doomed")).await);
@@ -406,7 +406,7 @@ async fn deleting_a_deal_deletes_its_activities() {
         "/api/v1/activities",
         json!({
             "kind": "note",
-            "subject": "About Ujala",
+            "subject": "About Utsav",
             "subject_type": "company",
             "subject_id": id(&company),
         }),

@@ -430,7 +430,7 @@ async fn models_run_on_a_document_store() {
     .await
     .unwrap();
     assert_eq!(agra.id, 1, "the store assigned the key");
-    for (name, employees) in [("Gulati", 50), ("Indrani", 15)] {
+    for (name, employees) in [("Gulati", 50), ("Ilaichi", 15)] {
         Company::create(
             &store,
             Company {
@@ -449,7 +449,7 @@ async fn models_run_on_a_document_store() {
         .get(&store)
         .await
         .unwrap();
-    assert_eq!(big.map(|c| c.name.clone()), ["Gulati", "Indrani"]);
+    assert_eq!(big.map(|c| c.name.clone()), ["Gulati", "Ilaichi"]);
     assert_eq!(
         Company::find_or_fail(&store, agra.id).await.unwrap().name,
         "Agra"
@@ -462,7 +462,7 @@ async fn models_run_on_a_document_store() {
         .unwrap();
     assert_eq!(
         (page.meta.total, page.data[0].name.as_str()),
-        (3, "Indrani")
+        (3, "Ilaichi")
     );
 
     agra.employees = 6;
@@ -481,7 +481,7 @@ async fn models_run_on_a_document_store() {
         .pluck(&store, Company::NAME)
         .await
         .unwrap();
-    assert_eq!(names, ["Gulati", "Indrani"]);
+    assert_eq!(names, ["Gulati", "Ilaichi"]);
 
     // What the store cannot express is refused, not guessed.
     let error = Company::query()
@@ -591,7 +591,7 @@ async fn documents_stream_through_cursors_and_pages() {
     use futures::TryStreamExt;
 
     let store = MemoryStore::new(Memory::default());
-    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Indrani", 15)] {
+    for (name, employees) in [("Agra", 5), ("Gulati", 50), ("Ilaichi", 15)] {
         Company::create(
             &store,
             Company {
@@ -611,7 +611,7 @@ async fn documents_stream_through_cursors_and_pages() {
         .try_collect()
         .await
         .unwrap();
-    assert_eq!(streamed, ["Gulati", "Indrani"]);
+    assert_eq!(streamed, ["Gulati", "Ilaichi"]);
     let paged: Vec<i64> = Company::query()
         .lazy_by_id(&store, 2)
         .map_ok(|company| company.id)
@@ -744,7 +744,7 @@ async fn drivers_turn_native_rows_into_records() {
     let target = store.target(Access::Read).await.unwrap();
     let rows = vec![Row::from_values(vec![
         ("id".to_owned(), Value::from(7_i64)),
-        ("name".to_owned(), Value::from("Indrani")),
+        ("name".to_owned(), Value::from("Ilaichi")),
         ("country".to_owned(), Value::Null(Kind::String)),
         ("active".to_owned(), Value::from(true)),
         ("employees".to_owned(), Value::from(15_i32)),
@@ -755,6 +755,6 @@ async fn drivers_turn_native_rows_into_records() {
     let records = target.records::<Company>(&rows).await.unwrap();
     assert_eq!(records.len(), 1);
     assert!(records[0].exists() && !records[0].is_dirty());
-    assert_eq!(records[0].name, "Indrani");
+    assert_eq!(records[0].name, "Ilaichi");
     assert_eq!(records[0].extra::<f64>("score").unwrap(), Some(0.5));
 }

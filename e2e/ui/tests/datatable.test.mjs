@@ -1255,7 +1255,7 @@ for (const browserName of browsers) {
       page.on("request", (request) => requests.push(request.url()));
       await page.locator("#deals-m-company [data-ui-find-option]").fill("umb");
       const shown = await options.evaluateAll((items) => items.filter((item) => !item.hidden).map((item) => item.innerText.trim()));
-      assert.deepEqual(shown, ["Ujala"]);
+      assert.deepEqual(shown, ["Utsav"]);
       await page.waitForTimeout(350);
       assert.deepEqual(requests, [], "client-only");
       await shot(page, `${browserName}-find-option`);

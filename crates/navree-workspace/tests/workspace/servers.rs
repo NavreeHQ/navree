@@ -102,11 +102,11 @@ mod real {
             ["Other handbook", "Welcome"]
         );
         // The scope reads the current workspace's organization in SQL.
-        let indrani =
-            navree_orm::workspace::scope(lib.indrani.id, Template::query().get(db.as_ref()))
+        let ilaichi =
+            navree_orm::workspace::scope(lib.ilaichi.id, Template::query().get(db.as_ref()))
                 .await
                 .unwrap();
-        assert_eq!(names(&indrani), ["Group handbook", "Welcome"]);
+        assert_eq!(names(&ilaichi), ["Group handbook", "Welcome"]);
         assert_eq!(
             names(&Template::query().get(db.as_ref()).await.unwrap()),
             ["Welcome"]

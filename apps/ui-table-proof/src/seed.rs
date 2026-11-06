@@ -19,7 +19,7 @@ fn title(id: i64) -> String {
         6 => "A very long deal title that goes on and on and on and on and on and on and on, far past what any column should show on one line, and then some more".to_owned(),
         7 => "Averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylongunbrokenword".to_owned(),
         8 => "=HYPERLINK(\"http://evil.example\",\"click\")".to_owned(),
-        _ => format!("{} renewal {id}", ["Gulati", "Indrani", "Ujala", "Hariyali", "Sutlej"][usize::try_from(id % 5).unwrap_or(0)]),
+        _ => format!("{} renewal {id}", ["Gulati", "Ilaichi", "Utsav", "Hariyali", "Sutlej"][usize::try_from(id % 5).unwrap_or(0)]),
     }
 }
 
@@ -85,8 +85,8 @@ pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
     let names = [
         "Agra",
         "Gulati",
-        "Indrani",
-        "Ujala",
+        "Ilaichi",
+        "Utsav",
         "شركة الخليج",
         "Hariyali",
         "Sutlej",

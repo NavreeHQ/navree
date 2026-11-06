@@ -203,11 +203,11 @@ async fn a_navree_ui_page_follows_the_workspace_the_browser_switched_to() {
     let grace = Uuid::now_v7();
     let agra = create(&app, ada, "Agra").await;
     let gulati = create(&app, ada, "Gulati").await;
-    let indrani = create(&app, grace, "Indrani").await;
+    let ilaichi = create(&app, grace, "Ilaichi").await;
     deal(&app, agra.id, "Agra renewal").await;
     deal(&app, agra.id, "Agra upsell").await;
     deal(&app, gulati.id, "Gulati pilot").await;
-    deal(&app, indrani.id, "Indrani secret").await;
+    deal(&app, ilaichi.id, "Ilaichi secret").await;
 
     let client = app.acting_as(principal(ada));
     client.csrf_cookie().await;
@@ -221,7 +221,7 @@ async fn a_navree_ui_page_follows_the_workspace_the_browser_switched_to() {
     );
     assert!(!html.contains("Gulati pilot"), "{html}");
     assert!(
-        !html.contains("Indrani"),
+        !html.contains("Ilaichi"),
         "another user's workspace is never listed: {html}"
     );
     assert_eq!(html.matches(r#"name="workspace""#).count(), 2, "{html}");
@@ -240,15 +240,15 @@ async fn a_navree_ui_page_follows_the_workspace_the_browser_switched_to() {
         .expect("a current workspace");
     assert!(html[current..].contains("Gulati"), "{html}");
 
-    // Indrani isn't Anu's: refused, and the page stays in Gulati.
+    // Ilaichi isn't Anu's: refused, and the page stays in Gulati.
     client
         .post("/workspace/switch")
         .xsrf()
-        .form(&[("workspace", indrani.id.to_string().as_str())])
+        .form(&[("workspace", ilaichi.id.to_string().as_str())])
         .send()
         .await
         .assert_error_code(403, "not_a_member");
     let html = page(&client).await;
     assert!(html.contains("Deals of Gulati"), "{html}");
-    assert!(!html.contains("Indrani secret"), "{html}");
+    assert!(!html.contains("Ilaichi secret"), "{html}");
 }

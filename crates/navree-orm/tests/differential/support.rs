@@ -260,7 +260,7 @@ fn seed(dialect: Dialect) -> String {
     };
     sql.push_str(&format!(
         "INSERT INTO companies (name, country, active, region_id) VALUES \
-         ('Agra', 'US', {}, 1), ('Gulati', 'DE', {}, 2), ('Indrani', NULL, {}, NULL), ({}, 'FR', {}, 1);\n",
+         ('Agra', 'US', {}, 1), ('Gulati', 'DE', {}, 2), ('Ilaichi', NULL, {}, NULL), ({}, 'FR', {}, 1);\n",
         b(true),
         b(true),
         b(false),

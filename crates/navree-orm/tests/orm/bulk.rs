@@ -536,7 +536,7 @@ async fn models_insert_as_they_are_or_filled_like_save() {
         .fill_and_insert_get_id(
             &t.db,
             Company {
-                name: "Indrani".into(),
+                name: "Ilaichi".into(),
                 ..Company::default()
             },
         )
