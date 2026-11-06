@@ -187,7 +187,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
                 None => String::new(),
             };
             let mut routes = setup_routes(&api_prefix, &options);
-            routes.push((Method::POST, crate::session_auth::SIGN_OUT_PATH.to_owned()));
+            routes.extend(crate::session_auth::page_setup_routes());
             let strategy = crate::SessionStrategy::new(service).with_setup_routes(routes);
             Ok(Arc::new(strategy) as Arc<dyn Strategy>)
         })

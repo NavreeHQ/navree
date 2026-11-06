@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use http::Method;
 use http::request::Parts;
-use navree_contracts::{AuditKind, AuthVia, BoxFuture, Principal};
+use navree_contracts::{AuditKind, AuthVia, BoxFuture, Impersonator, Principal};
 use navree_http::AppError;
 use navree_orm::Model as _;
 use navree_session::Session;
@@ -36,8 +36,8 @@ use crate::refresh_token::Model as RefreshToken;
 use crate::service::{PasswordStep, SessionKind, entry};
 use crate::two_factor::two_factor_enabled;
 use crate::{
-    AccessClaims, AuthError, AuthService, Claims, ClientMeta, ConfirmProof, SignInAttempt,
-    SignInMethod, Strategy, TokenType, TwoFactorProof, User,
+    AccessClaims, ActorClaim, AuthError, AuthService, Claims, ClientMeta, ConfirmProof,
+    SignInAttempt, SignInMethod, Strategy, TokenType, TwoFactorProof, User,
 };
 
 /// The session key holding the signed-in user of a browser.
@@ -46,9 +46,25 @@ pub const SESSION_USER_KEY: &str = "_auth";
 /// The session key holding a sign-in that waits for its second factor.
 pub const SESSION_CHALLENGE_KEY: &str = "_auth_challenge";
 
+/// The session key holding the sign-in an impersonating administrator goes
+/// back to.
+const SESSION_STASH_KEY: &str = "_auth_stash";
+
 /// Where browsers sign out (the `POST` route of the sign-out page):
 /// a user who must set up two-factor authentication can still reach it.
 pub const SIGN_OUT_PATH: &str = "/sign-out";
+
+/// Where a user who must set up two-factor authentication does it (the
+/// page of [`AuthPages`](crate::AuthPages); `GET` shows the secret, `POST`
+/// confirms the first code).
+pub const TWO_FACTOR_SETUP_PATH: &str = "/account/two-factor";
+
+/// Where the setup page posts the first code (see [`TWO_FACTOR_SETUP_PATH`]).
+pub(crate) const TWO_FACTOR_CONFIRM_PATH: &str = "/account/two-factor/confirm";
+
+/// Where an impersonating administrator goes back to their own sign-in (the
+/// `POST` route of [`AuthPages`](crate::AuthPages)).
+pub const STOP_IMPERSONATING_PATH: &str = "/impersonate/stop";
 
 /// What the session holds for a signed-in browser.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +84,10 @@ struct SignedIn {
     /// "Remember me".
     #[serde(default)]
     remember: bool,
+    /// The administrator acting as `user` (an impersonation); their own
+    /// sign-in waits under `SESSION_STASH_KEY`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    impersonator: Option<Uuid>,
 }
 
 /// What the session holds while a sign-in waits for its second factor.
@@ -103,6 +123,21 @@ pub struct SessionUser {
     pub auth_time: i64,
     /// Whether the browser was signed in with "remember me".
     pub remember: bool,
+    /// The administrator acting as the user, when this is an impersonation
+    /// ([`AuthService::impersonate_session`]).
+    pub impersonator: Option<Uuid>,
+}
+
+/// The routes a user who must set up two-factor authentication reaches
+/// through the pages (method and path): the setup page and its post, the
+/// way to stop impersonating and signing out.
+pub(crate) fn page_setup_routes() -> Vec<(Method, String)> {
+    vec![
+        (Method::GET, TWO_FACTOR_SETUP_PATH.to_owned()),
+        (Method::POST, TWO_FACTOR_SETUP_PATH.to_owned()),
+        (Method::POST, TWO_FACTOR_CONFIRM_PATH.to_owned()),
+        (Method::POST, SIGN_OUT_PATH.to_owned()),
+    ]
 }
 
 impl AuthService {
@@ -125,13 +160,104 @@ impl AuthService {
         remember: bool,
         meta: &ClientMeta,
     ) -> Result<SessionSignIn, AuthError> {
-        match self.password_step(email, password, meta).await? {
+        let step = self.password_step(email, password, meta).await?;
+        self.session_step(session, step, None, remember, meta).await
+    }
+
+    /// Signs a browser in with a magic link token (the page the link in the
+    /// mail opens): the same steps as
+    /// [`login_with_magic_link`](AuthService::login_with_magic_link) (the
+    /// token works once; the sign-in policies and the audit trail apply; an
+    /// unverified address becomes verified), then a session as
+    /// [`sign_in_session`](AuthService::sign_in_session) starts it, or the
+    /// waiting second factor.
+    pub async fn login_with_magic_link_session(
+        &self,
+        session: &Session,
+        token: &str,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        let (user, now) = self.claim_magic_link(token, meta).await?;
+        let step = self
+            .passwordless_step(user, SignInMethod::MagicLink, meta, now)
+            .await?;
+        self.session_step(
+            session,
+            step,
+            Some(SignInMethod::MagicLink.name()),
+            remember,
+            meta,
+        )
+        .await
+    }
+
+    /// Signs a browser in with an emailed code: the same steps as
+    /// [`login_with_code`](AuthService::login_with_code) (counted by the
+    /// login throttle, burned after `auth.otp.max_attempts` wrong guesses),
+    /// then a session, or the waiting second factor.
+    pub async fn login_with_code_session(
+        &self,
+        session: &Session,
+        email: &str,
+        code: &str,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        let (user, now) = self.claim_login_code(email, code, meta).await?;
+        let step = self
+            .passwordless_step(user, SignInMethod::Otp, meta, now)
+            .await?;
+        self.session_step(session, step, Some(SignInMethod::Otp.name()), remember, meta)
+            .await
+    }
+
+    /// Signs a browser in with the passkey assertion in `credential` (the
+    /// browser's `PublicKeyCredential` JSON): the same steps as
+    /// [`login_with_passkey`](AuthService::login_with_passkey), then a
+    /// session, or the waiting second factor for an account whose passkey
+    /// did not verify the user.
+    pub async fn login_with_passkey_session(
+        &self,
+        session: &Session,
+        credential: &serde_json::Value,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        let (step, _verified) = self.passkey_step(credential, meta).await?;
+        self.session_step(
+            session,
+            step,
+            Some(SignInMethod::Passkey.name()),
+            remember,
+            meta,
+        )
+        .await
+    }
+
+    /// What follows the first step of any browser sign-in: a session and an
+    /// `auth.login` entry (with `metadata.via = "session"` and the sign-in
+    /// `method` when it was not a password), or the second factor waiting in
+    /// the session.
+    async fn session_step(
+        &self,
+        session: &Session,
+        step: PasswordStep,
+        method: Option<&'static str>,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        match step {
             PasswordStep::Done(user) => {
                 self.start_session(session, &user, remember, meta).await?;
+                let mut metadata = json!({ "via": "session", "remember": remember });
+                if let Some(method) = method {
+                    metadata["method"] = json!(method);
+                }
                 self.audit(
                     entry(AuditKind::Auth, "auth.login", meta)
                         .actor(user.id)
-                        .metadata(json!({ "via": "session", "remember": remember })),
+                        .metadata(metadata),
                 )
                 .await;
                 Ok(SessionSignIn::SignedIn(user))
@@ -158,6 +284,16 @@ impl AuthService {
     /// (the two-factor page shows its form only then).
     pub fn two_factor_pending(&self, session: &Session) -> bool {
         session.get::<Pending>(SESSION_CHALLENGE_KEY).is_some()
+    }
+
+    /// Whether the browser is signed in but must set up two-factor
+    /// authentication before it reaches anything else (the sign-in pages
+    /// send it to [`TWO_FACTOR_SETUP_PATH`]). It stops being true once the
+    /// first code is confirmed.
+    pub fn two_factor_setup_required(&self, session: &Session) -> bool {
+        session
+            .get::<SignedIn>(SESSION_USER_KEY)
+            .is_some_and(|signed_in| signed_in.setup)
     }
 
     /// Finishes a browser's two-factor sign-in with `proof`: the same
@@ -245,6 +381,7 @@ impl AuthService {
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
         let previous = session.get::<SignedIn>(SESSION_USER_KEY);
+        let stashed = session.get::<SignedIn>(SESSION_STASH_KEY);
         let max_age_secs = self.options.session.max_age_secs(remember);
         let (state, _secret) = self
             .open_family(user, meta, SessionKind::Browser { max_age_secs })
@@ -258,10 +395,14 @@ impl AuthService {
                 at: self.clock.now().timestamp(),
                 setup: typ == TokenType::TwoFactorSetup,
                 remember,
+                impersonator: None,
             },
         )?;
         if let Some(previous) = previous {
             self.end_server_session(previous.user, previous.sid).await?;
+        }
+        if let Some(stashed) = stashed {
+            self.end_server_session(stashed.user, stashed.sid).await?;
         }
         Ok(())
     }
@@ -277,12 +418,18 @@ impl AuthService {
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
         let signed_in = session.get::<SignedIn>(SESSION_USER_KEY);
+        let stashed = session.get::<SignedIn>(SESSION_STASH_KEY);
         session.invalidate();
         let Some(signed_in) = signed_in else {
             return Ok(());
         };
         let (user_id, sid) = (signed_in.user, signed_in.sid);
         let revoked = self.end_server_session(user_id, sid).await?;
+        // Signing out while impersonating ends the administrator's own
+        // sign-in too.
+        if let Some(stashed) = stashed {
+            self.end_server_session(stashed.user, stashed.sid).await?;
+        }
         self.audit(
             entry(AuditKind::Auth, "auth.logout", meta)
                 .actor(user_id)
@@ -370,7 +517,112 @@ impl AuthService {
                 session_id: signed_in.sid,
                 auth_time: signed_in.at,
                 remember: signed_in.remember,
+                impersonator: signed_in.impersonator,
             })
+    }
+
+    /// Starts impersonating `target_id` in the browser's session (`POST
+    /// /auth/impersonate/{user}` for a browser): the same checks and audit
+    /// entry as [`impersonate`](AuthService::impersonate) (the route checks
+    /// the permission `auth.impersonation.permission`). The session becomes
+    /// the target's: a new server-side session that ends after
+    /// `auth.impersonation.ttl_secs` however often it is used, no
+    /// "remember me", no `auth_time` (so `#[recent_auth]` routes refuse it),
+    /// the request carrying navree-contracts' `Impersonator`, and the
+    /// administrator's own sign-in kept aside for
+    /// [`stop_impersonating_session`](AuthService::stop_impersonating_session).
+    /// [`AuthError::InvalidToken`] when the browser is not signed in.
+    pub async fn impersonate_session(
+        &self,
+        session: &Session,
+        target_id: Uuid,
+        reason: &str,
+        meta: &ClientMeta,
+    ) -> Result<User, AuthError> {
+        let current = session
+            .get::<SignedIn>(SESSION_USER_KEY)
+            .ok_or(AuthError::InvalidToken)?;
+        if current.impersonator.is_some() {
+            return Err(AuthError::ImpersonationForbidden);
+        }
+        let (target, reason) = self
+            .impersonation_target(current.user, None, target_id, reason)
+            .await?;
+        let (state, _secret) = self
+            .open_family(
+                &target,
+                meta,
+                SessionKind::Impersonation {
+                    impersonator: current.user,
+                },
+            )
+            .await?;
+        session.regenerate();
+        session.remove(SESSION_CHALLENGE_KEY);
+        session.clear_lifetime();
+        session
+            .insert(SESSION_STASH_KEY, &current)
+            .map_err(session_error)?;
+        session
+            .insert(
+                SESSION_USER_KEY,
+                &SignedIn {
+                    user: target.id,
+                    sid: state.family_id,
+                    at: self.clock.now().timestamp(),
+                    setup: false,
+                    remember: false,
+                    impersonator: Some(current.user),
+                },
+            )
+            .map_err(session_error)?;
+        self.impersonation_started(current.user, &target, &reason, state.family_id, meta)
+            .await;
+        Ok(target)
+    }
+
+    /// Ends the impersonation of the browser's session (`DELETE
+    /// /auth/impersonate` for a browser): the impersonation's server-side
+    /// session is revoked, the session gets a new id and CSRF token, and the
+    /// administrator is signed in as themselves again, when their own
+    /// sign-in is still live (else the browser is a guest).
+    /// [`AuthError::NotImpersonating`] for a session that is not
+    /// impersonating, [`AuthError::InvalidToken`] for a guest. Audited as
+    /// `auth.impersonation_ended`.
+    pub async fn stop_impersonating_session(
+        &self,
+        session: &Session,
+        meta: &ClientMeta,
+    ) -> Result<(), AuthError> {
+        let current = session
+            .get::<SignedIn>(SESSION_USER_KEY)
+            .ok_or(AuthError::InvalidToken)?;
+        let Some(impersonator) = current.impersonator else {
+            return Err(AuthError::NotImpersonating);
+        };
+        let original = session
+            .get::<SignedIn>(SESSION_STASH_KEY)
+            .filter(|original| original.user == impersonator);
+        self.end_server_session(current.user, current.sid).await?;
+        self.impersonation_ended(impersonator, current.user, Some(current.sid), meta)
+            .await;
+        session.regenerate();
+        session.remove(SESSION_STASH_KEY);
+        session.remove(SESSION_USER_KEY);
+        if let Some(original) = original
+            && self
+                .live_session(original.user, original.sid)
+                .await?
+                .is_some()
+        {
+            if original.remember {
+                session.set_lifetime(Duration::from_secs(self.options.session.max_age_secs(true)));
+            }
+            session
+                .insert(SESSION_USER_KEY, &original)
+                .map_err(session_error)?;
+        }
+        Ok(())
     }
 
     // -- internals ----------------------------------------------------------
@@ -380,6 +632,7 @@ impl AuthService {
     fn bind(&self, session: &Session, signed_in: SignedIn) -> Result<(), AuthError> {
         session.regenerate();
         session.remove(SESSION_CHALLENGE_KEY);
+        session.remove(SESSION_STASH_KEY);
         if signed_in.remember {
             session.set_lifetime(Duration::from_secs(self.options.session.max_age_secs(true)));
         } else {
@@ -496,6 +749,7 @@ impl SessionStrategy {
                 "a browser session whose sign-in ended was used; it is signed out"
             );
             session.remove(SESSION_USER_KEY);
+            session.remove(SESSION_STASH_KEY);
             session.regenerate();
             return Ok(None);
         };
@@ -528,10 +782,15 @@ impl SessionStrategy {
                 TokenType::Access
             },
             sid: Some(signed_in.sid),
-            auth_time: Some(signed_in.at),
-            act: None,
+            // An impersonation has no sign-in time of its own: routes that
+            // want a recent sign-in refuse it, as for a token.
+            auth_time: signed_in.impersonator.is_none().then_some(signed_in.at),
+            act: signed_in.impersonator.map(|sub| ActorClaim { sub }),
             sign_in: None,
         }));
+        if let Some(sub) = signed_in.impersonator {
+            parts.extensions.insert(Impersonator(sub));
+        }
         Ok(Some(Principal {
             user_id: signed_in.user,
             via: AuthVia::Session,

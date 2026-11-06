@@ -46,7 +46,7 @@ use self::webauthn::{
     AuthenticatorData, ClientData, CredentialKey, EDDSA, ES256, attestation_auth_data, b64url,
     sha256,
 };
-use crate::service::entry;
+use crate::service::{PasswordStep, entry};
 use crate::two_factor::two_factor_enabled;
 use crate::{
     AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, SignInAttempt, SignInMethod,
@@ -390,6 +390,42 @@ impl AuthService {
         credential: &Value,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
+        match self.passkey_step(credential, meta).await? {
+            (
+                PasswordStep::TwoFactor {
+                    user,
+                    challenge_token,
+                },
+                _,
+            ) => Ok(LoginOutcome::TwoFactorRequired {
+                user,
+                challenge_token,
+            }),
+            (PasswordStep::Done(user), verified) => {
+                let tokens = self.issue_tokens(&user, meta.clone()).await?;
+                self.audit(
+                    entry(AuditKind::Auth, "auth.login", meta)
+                        .actor(user.id)
+                        .metadata(json!({ "method": "passkey", "user_verified": verified })),
+                )
+                .await;
+                Ok(LoginOutcome::Authenticated { user, tokens })
+            }
+        }
+    }
+
+    /// The first step of every passkey sign-in, for tokens and for the
+    /// session cookie alike: the assertion checked (a refusal is audited as
+    /// `auth.login_failed`), the sign-in policies for
+    /// [`SignInMethod::Passkey`], and, for an account with two-factor
+    /// authentication whose passkey did not verify the user, a challenge
+    /// (audited as `auth.two_factor_challenge`). Whether the passkey
+    /// verified the user comes with it. Nothing is issued yet.
+    pub(crate) async fn passkey_step(
+        &self,
+        credential: &Value,
+        meta: &ClientMeta,
+    ) -> Result<(PasswordStep, bool), AuthError> {
         match self.check_assertion(credential).await {
             Ok((user, verified)) => {
                 self.check_sign_in(&SignInAttempt::of(&user, SignInMethod::Passkey), meta)
@@ -402,19 +438,15 @@ impl AuthService {
                             .metadata(json!({ "method": "passkey" })),
                     )
                     .await;
-                    return Ok(LoginOutcome::TwoFactorRequired {
-                        user,
-                        challenge_token,
-                    });
+                    return Ok((
+                        PasswordStep::TwoFactor {
+                            user,
+                            challenge_token,
+                        },
+                        verified,
+                    ));
                 }
-                let tokens = self.issue_tokens(&user, meta.clone()).await?;
-                self.audit(
-                    entry(AuditKind::Auth, "auth.login", meta)
-                        .actor(user.id)
-                        .metadata(json!({ "method": "passkey", "user_verified": verified })),
-                )
-                .await;
-                Ok(LoginOutcome::Authenticated { user, tokens })
+                Ok((PasswordStep::Done(user), verified))
             }
             Err(error) => {
                 if let AuthError::PasskeyRefused(reason) = &error {

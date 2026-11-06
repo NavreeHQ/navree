@@ -45,6 +45,33 @@ impl AuthService {
         reason: &str,
         meta: &ClientMeta,
     ) -> Result<(User, TokenPair), AuthError> {
+        let (target, reason) = self
+            .impersonation_target(impersonator_id, impersonator_claims, target_id, reason)
+            .await?;
+        let (tokens, session_id) = self
+            .open_session(
+                &target,
+                meta.clone(),
+                SessionKind::Impersonation {
+                    impersonator: impersonator_id,
+                },
+            )
+            .await?;
+        self.impersonation_started(impersonator_id, &target, &reason, session_id, meta)
+            .await;
+        Ok((target, tokens))
+    }
+
+    /// The checks before any impersonation, for tokens and for the session
+    /// cookie alike (see [`impersonate`](AuthService::impersonate)): the
+    /// target user and the reason, trimmed.
+    pub(crate) async fn impersonation_target(
+        &self,
+        impersonator_id: Uuid,
+        impersonator_claims: Option<&Claims>,
+        target_id: Uuid,
+        reason: &str,
+    ) -> Result<(User, String), AuthError> {
         if !self.options.impersonation.enabled {
             return Err(AuthError::Disabled("impersonation"));
         }
@@ -81,15 +108,19 @@ impl AuthService {
                 "a user who may impersonate others",
             ));
         }
-        let (tokens, session_id) = self
-            .open_session(
-                &target,
-                meta.clone(),
-                SessionKind::Impersonation {
-                    impersonator: impersonator_id,
-                },
-            )
-            .await?;
+        Ok((target, reason.to_owned()))
+    }
+
+    /// Logs and audits a started impersonation
+    /// (`auth.impersonation_started`).
+    pub(crate) async fn impersonation_started(
+        &self,
+        impersonator_id: Uuid,
+        target: &User,
+        reason: &str,
+        session_id: Uuid,
+        meta: &ClientMeta,
+    ) {
         tracing::info!(
             target: "navree::security",
             impersonator_id = %impersonator_id,
@@ -105,7 +136,6 @@ impl AuthService {
                 .metadata(json!({ "reason": reason, "session_id": session_id })),
         )
         .await;
-        Ok((target, tokens))
     }
 
     /// Ends the impersonation session of `claims` (`DELETE
@@ -128,15 +158,27 @@ impl AuthService {
             })
             .await?;
         }
+        self.impersonation_ended(act.sub, claims.sub, claims.sid, meta)
+            .await;
+        Ok(())
+    }
+
+    /// Audits an ended impersonation (`auth.impersonation_ended`).
+    pub(crate) async fn impersonation_ended(
+        &self,
+        impersonator_id: Uuid,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        meta: &ClientMeta,
+    ) {
         self.audit(
             entry(AuditKind::Security, "auth.impersonation_ended", meta)
-                .actor(act.sub)
-                .impersonator(act.sub)
-                .subject(USER_SUBJECT, claims.sub.to_string())
-                .metadata(json!({ "session_id": claims.sid })),
+                .actor(impersonator_id)
+                .impersonator(impersonator_id)
+                .subject(USER_SUBJECT, user_id.to_string())
+                .metadata(json!({ "session_id": session_id })),
         )
         .await;
-        Ok(())
     }
 
     /// Whether `user_id` holds the impersonation permission (navree-access,

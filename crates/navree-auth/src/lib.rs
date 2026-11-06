@@ -219,6 +219,8 @@ mod service;
 #[cfg(feature = "session")]
 mod session_auth;
 mod session_controller;
+#[cfg(feature = "session")]
+mod session_json;
 mod sessions;
 mod sign_in_policy;
 mod strategy;
@@ -265,12 +267,16 @@ pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResou
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
 #[cfg(feature = "session")]
 pub use session_auth::{
-    SESSION_CHALLENGE_KEY, SESSION_USER_KEY, SIGN_OUT_PATH, SessionSignIn, SessionStrategy,
-    SessionUser,
+    SESSION_CHALLENGE_KEY, SESSION_USER_KEY, SIGN_OUT_PATH, STOP_IMPERSONATING_PATH,
+    SessionSignIn, SessionStrategy, SessionUser, TWO_FACTOR_SETUP_PATH,
 };
 pub use session_controller::{
     ConfirmInput, ExchangeInput, ImpersonateInput, MagicLinkVerifyInput, OtpVerifyInput,
     PasswordlessInput, SessionList,
+};
+#[cfg(feature = "session")]
+pub use session_json::{
+    SessionLoginInput, SessionMagicLinkInput, SessionOtpInput, SessionTwoFactorInput,
 };
 pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
 pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy, email_domain};

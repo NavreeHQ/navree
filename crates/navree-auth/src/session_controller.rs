@@ -140,8 +140,8 @@ const PASSWORDLESS_SENT: &str =
 
 /// The session and sign-in routes.
 pub(crate) struct SessionController {
-    service: Arc<AuthService>,
-    options: Arc<AuthOptions>,
+    pub(crate) service: Arc<AuthService>,
+    pub(crate) options: Arc<AuthOptions>,
 }
 
 impl Injectable for SessionController {
@@ -171,6 +171,8 @@ impl Controller for SessionController {
         let prefix = self.options.routes_prefix.trim_end_matches('/');
         let path = |p: &str| format!("{prefix}{p}");
         let mut routes = self.session_routes(&path);
+        #[cfg(feature = "session")]
+        routes.extend(self.browser_routes(&path));
         if self.options.impersonation.enabled {
             routes.extend(self.impersonation_routes(&path));
         }
@@ -313,10 +315,33 @@ impl SessionController {
         let start = move |CurrentPrincipal(principal): CurrentPrincipal,
                           claims: Option<AccessClaims>,
                           meta: ClientMeta,
+                          browser: BrowserSession,
                           Path(target): Path<Uuid>,
                           Valid(Json(input)): Valid<Json<ImpersonateInput>>| {
             let service = service.clone();
             async move {
+                // A browser signed in on its session becomes the target's
+                // session; it gets no token.
+                #[cfg(feature = "session")]
+                if let Some(session) = browser.0 {
+                    let user = service
+                        .impersonate_session(&session, target, &input.reason, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    let user = service
+                        .present(&user)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    return Ok::<Response, AppError>(
+                        Json(serde_json::json!({
+                            "user": user,
+                            "impersonator_id": principal.user_id,
+                        }))
+                        .into_response(),
+                    );
+                }
+                #[cfg(not(feature = "session"))]
+                let _ = browser;
                 let (user, tokens) = service
                     .impersonate(
                         principal.user_id,
@@ -341,7 +366,10 @@ impl SessionController {
                     description: Some(
                         "Signs in as the user for support. The tokens carry an `act` claim \
                          naming the impersonator; the session ends after \
-                         `auth.impersonation.ttl_secs`."
+                         `auth.impersonation.ttl_secs`. A browser signed in on the session \
+                         cookie becomes the target's session instead (answer: `{user, \
+                         impersonator_id}`, no token), and `DELETE /auth/impersonate` brings \
+                         it back to its own sign-in."
                             .to_owned(),
                     ),
                     request: Some(schema_fn::<ImpersonateInput>),
@@ -351,9 +379,20 @@ impl SessionController {
         );
 
         let service = self.service.clone();
-        let stop = move |claims: AccessClaims, meta: ClientMeta| {
+        let stop = move |claims: AccessClaims, meta: ClientMeta, browser: BrowserSession| {
             let service = service.clone();
             async move {
+                // A browser goes back to its own sign-in.
+                #[cfg(feature = "session")]
+                if let Some(session) = browser.0 {
+                    service
+                        .stop_impersonating_session(&session, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    return Ok::<_, AppError>(NoContent);
+                }
+                #[cfg(not(feature = "session"))]
+                let _ = browser;
                 service
                     .stop_impersonating(&claims, &meta)
                     .await

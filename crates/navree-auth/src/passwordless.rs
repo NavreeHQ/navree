@@ -31,7 +31,7 @@ use uuid::Uuid;
 
 use crate::account::{after, send_after_commit};
 use crate::login_token::Model as LoginToken;
-use crate::service::{entry, normalize_email};
+use crate::service::{PasswordStep, entry, normalize_email};
 use crate::token::RefreshSecret;
 use crate::two_factor::two_factor_enabled;
 use crate::{
@@ -96,6 +96,20 @@ impl AuthService {
         token: &str,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
+        let (user, now) = self.claim_magic_link(token, meta).await?;
+        self.finish_passwordless(user, SignInMethod::MagicLink, meta, now)
+            .await
+    }
+
+    /// Checks a magic link token and uses it up: the user it names and the
+    /// time it was used. The first half of
+    /// [`login_with_magic_link`](AuthService::login_with_magic_link), shared
+    /// with the browser's sign-in.
+    pub(crate) async fn claim_magic_link(
+        &self,
+        token: &str,
+        meta: &ClientMeta,
+    ) -> Result<(User, DateTime<Utc>), AuthError> {
         if !self.options.magic_link.enabled {
             return Err(AuthError::Disabled("magic links"));
         }
@@ -126,8 +140,7 @@ impl AuthService {
             .find_user(row.user_id)
             .await?
             .ok_or(AuthError::InvalidLoginToken)?;
-        self.finish_passwordless(user, SignInMethod::MagicLink, meta, now)
-            .await
+        Ok((user, now))
     }
 
     /// Mails a sign-in code to `email` (`POST /auth/otp`) when it is
@@ -181,6 +194,21 @@ impl AuthService {
         code: &str,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
+        let (user, now) = self.claim_login_code(email, code, meta).await?;
+        self.finish_passwordless(user, SignInMethod::Otp, meta, now)
+            .await
+    }
+
+    /// Checks an emailed code and uses it up: the user it signs in and the
+    /// time it was used. The first half of
+    /// [`login_with_code`](AuthService::login_with_code), shared with the
+    /// browser's sign-in.
+    pub(crate) async fn claim_login_code(
+        &self,
+        email: &str,
+        code: &str,
+        meta: &ClientMeta,
+    ) -> Result<(User, DateTime<Utc>), AuthError> {
         let options = &self.options.otp;
         if !options.enabled {
             return Err(AuthError::Disabled("sign-in codes"));
@@ -234,8 +262,7 @@ impl AuthService {
         if let Err(error) = self.throttle.clear(&key).await {
             tracing::warn!(target: "navree::auth", %error, "could not reset the login throttle");
         }
-        self.finish_passwordless(user, SignInMethod::Otp, meta, now)
-            .await
+        Ok((user, now))
     }
 
     // -- internals ----------------------------------------------------------
@@ -366,11 +393,47 @@ impl AuthService {
     /// authentication on).
     async fn finish_passwordless(
         &self,
-        mut user: User,
+        user: User,
         method: SignInMethod,
         meta: &ClientMeta,
         now: DateTime<Utc>,
     ) -> Result<LoginOutcome, AuthError> {
+        match self
+            .passwordless_step(user, method.clone(), meta, now)
+            .await?
+        {
+            PasswordStep::TwoFactor {
+                user,
+                challenge_token,
+            } => Ok(LoginOutcome::TwoFactorRequired {
+                user,
+                challenge_token,
+            }),
+            PasswordStep::Done(user) => {
+                let tokens = self.issue_tokens(&user, meta.clone()).await?;
+                self.audit(
+                    entry(AuditKind::Auth, "auth.login", meta)
+                        .actor(user.id)
+                        .metadata(json!({ "method": method.name() })),
+                )
+                .await;
+                Ok(LoginOutcome::Authenticated { user, tokens })
+            }
+        }
+    }
+
+    /// The step after a link or code is accepted, for tokens and for the
+    /// session cookie alike: the sign-in policies, the address verified when
+    /// it is not yet, and, for an account with two-factor authentication,
+    /// a challenge (audited as `auth.two_factor_challenge`). Nothing is
+    /// issued yet.
+    pub(crate) async fn passwordless_step(
+        &self,
+        mut user: User,
+        method: SignInMethod,
+        meta: &ClientMeta,
+        now: DateTime<Utc>,
+    ) -> Result<PasswordStep, AuthError> {
         self.check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
             .await?;
         if user.email_verified_at.is_none() {
@@ -393,19 +456,12 @@ impl AuthService {
                     .metadata(json!({ "method": method.name() })),
             )
             .await;
-            return Ok(LoginOutcome::TwoFactorRequired {
+            return Ok(PasswordStep::TwoFactor {
                 user,
                 challenge_token,
             });
         }
-        let tokens = self.issue_tokens(&user, meta.clone()).await?;
-        self.audit(
-            entry(AuditKind::Auth, "auth.login", meta)
-                .actor(user.id)
-                .metadata(json!({ "method": method.name() })),
-        )
-        .await;
-        Ok(LoginOutcome::Authenticated { user, tokens })
+        Ok(PasswordStep::Done(user))
     }
 
     /// The stored digest of code `code` of token `id`.
