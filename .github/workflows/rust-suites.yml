@@ -10,7 +10,9 @@
 # NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server, Chrome, Node.js or
 # FFmpeg into a failure instead of a skip. Each run keeps its output (cargo
 # test ... -- --show-output) and a step counts the "skipped" notices in it: a
-# service test that skipped itself fails the job.
+# service test that skipped itself fails the job. The job's summary shows,
+# per run, the tests passed, failed and ignored and the unexpected skips; the
+# logs are kept as the run's `rust-suites-logs` artifact.
 # The job builds every test binary once (all features), then runs:
 #
 # 1. the whole workspace on SQLite, with the servers up for the suites that
@@ -223,6 +225,21 @@ jobs:
             echo "::endgroup::"
           done
           exit "$status"
+
+      - name: Summarise the test runs
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          scripts/ci-services.sh summary target/logs/sqlite.log target/logs/postgres.log \
+            target/logs/mysql.log | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the test logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-suites-logs
+          path: target/logs
+          if-no-files-found: ignore
 
       - name: Test with the default features
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}

@@ -19,6 +19,10 @@
 #                                        count the "skipped" notices in the
 #                                        output of a test run (exit 1 if a
 #                                        service test skipped itself)
+#   scripts/ci-services.sh summary LOG...
+#                                        a Markdown table of test runs: tests
+#                                        passed, failed and ignored, skip
+#                                        notices, and the failed tests
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 1025-1027,
 # 1465, 1883, 3306, 3307, 4222, 4443, 5432, 5433, 5672, 6333, 6379, 7700, 8025,
@@ -443,6 +447,40 @@ check_skips() {
   [ "$unexpected" = 0 ]
 }
 
+# A Markdown summary of test runs made with -- --show-output, one row per
+# log (its name without .log): the tests passed, failed and ignored (summed
+# over the test binaries and doctests), the skip notices that are not on
+# scripts/services/skips.allow, then the names of the failed tests. A log
+# that does not exist is a run that did not happen.
+summary() {
+  if [ "$#" = 0 ]; then
+    say "usage: $0 summary LOG..."
+    return 2
+  fi
+  local log name passed failed ignored skips failures
+  printf '| Run | Passed | Failed | Ignored | Unexpected skips |\n'
+  printf '|---|---:|---:|---:|---:|\n'
+  for log in "$@"; do
+    name="$(basename "$log" .log)"
+    if [ ! -f "$log" ]; then
+      printf '| %s | not run | | | |\n' "$name"
+      continue
+    fi
+    read -r passed failed ignored < <(
+      grep -E '^test result: ' "$log" |
+        sed -E 's/.* ([0-9]+) passed; ([0-9]+) failed; ([0-9]+) ignored.*/\1 \2 \3/' |
+        awk '{ p += $1; f += $2; i += $3 } END { print p + 0, f + 0, i + 0 }'
+    )
+    skips="$( (check_skips "$log" 2>/dev/null || true) | grep -c . || true)"
+    printf '| %s | %s | %s | %s | %s |\n' "$name" "$passed" "$failed" "$ignored" "$skips"
+  done
+  failures="$(cat "$@" 2>/dev/null | sed -nE 's/^test (.+) \.\.\. FAILED$/\1/p' | sort -u || true)"
+  if [ -n "$failures" ]; then
+    printf '\nFailed tests:\n\n'
+    printf '%s\n' "$failures" | sed -E 's/^(.*)$/- `\1`/'
+  fi
+}
+
 case "${1:-}" in
   pull) pull ;;
   start) start ;;
@@ -450,8 +488,12 @@ case "${1:-}" in
   status) status ;;
   stop) stop ;;
   check-skips) check_skips "${2:-}" ;;
+  summary)
+    shift
+    summary "$@"
+    ;;
   *)
-    say "usage: $0 pull|start|env|status|stop|check-skips LOG"
+    say "usage: $0 pull|start|env|status|stop|check-skips LOG|summary LOG..."
     exit 2
     ;;
 esac
