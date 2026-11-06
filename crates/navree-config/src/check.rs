@@ -270,5 +270,28 @@ pub fn production_profile(config: &Config) -> Vec<Finding> {
             "is `debug` or `trace`, which logs more than production usually needs.",
         ));
     }
+
+    let exports_traces = config
+        .get_string("observe.tracing.endpoint")
+        .is_some_and(|endpoint| !endpoint.trim().is_empty());
+    let traces_everything = config
+        .get_string("observe.tracing.sample_ratio")
+        .is_none_or(|ratio| ratio.trim().parse::<f64>().is_ok_and(|ratio| ratio >= 1.0));
+    if exports_traces && traces_everything {
+        findings.push(note(
+            "observe.tracing.sample_ratio",
+            "is 1 (the default) while traces are exported, so every request is traced. A smaller ratio such as 0.1 costs less.",
+        ));
+    }
+
+    for key in ["api.docs_ui", "api.openapi_json"] {
+        if config.get_bool(key) == Some(true) {
+            findings.push(note(
+                key,
+                "is on, so the API reference or the OpenAPI document is public in production.",
+            ));
+            break;
+        }
+    }
     findings
 }

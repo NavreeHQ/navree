@@ -313,6 +313,45 @@ fn a_safe_production_configuration_passes() {
 }
 
 #[test]
+fn tracing_everything_to_an_exporter_and_a_public_api_reference_are_notes() {
+    let safe = || {
+        ConfigSources::new()
+            .set("app.key", "base64:abc")
+            .set("app.url", "https://acme.example.com")
+            .set("database.url", "postgres://u:p@db/acme")
+            .set("mail.transport", "smtp://mail.acme.example.com:587")
+    };
+    let report = CheckReport::run(
+        &safe()
+            .set("observe.tracing.endpoint", "http://collector:4317")
+            .set("api.docs_ui", true),
+        &registrations(),
+        &production(),
+    )
+    .expect("load");
+    let found = findings(&report);
+    assert!(
+        found.contains(&("observe.tracing.sample_ratio", false)),
+        "{found:?}"
+    );
+    assert!(found.contains(&("api.docs_ui", false)), "{found:?}");
+    assert!(report.profile.iter().all(|finding| !finding.fail));
+
+    // A ratio below 1, or no exporter, is quiet.
+    let report = CheckReport::run(
+        &safe()
+            .set("observe.tracing.endpoint", "http://collector:4317")
+            .set("observe.tracing.sample_ratio", "0.1"),
+        &registrations(),
+        &production(),
+    )
+    .expect("load");
+    assert!(report.profile.is_empty(), "{:?}", report.profile);
+    let report = CheckReport::run(&safe(), &registrations(), &production()).expect("load");
+    assert!(report.profile.is_empty(), "{:?}", report.profile);
+}
+
+#[test]
 fn the_environment_can_come_from_the_sources() {
     let report = CheckReport::run(
         &good().set("app.env", "production"),
