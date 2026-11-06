@@ -1,6 +1,7 @@
 //! PostgreSQL: the `postgres` engine on PostgreSQL (the weighted
-//! `tsvector`, trigram typo tolerance), the `pgvector` store, and an app
-//! that syncs through the database queue.
+//! `tsvector`, trigram typo tolerance), the `pgvector` store (search's and
+//! navree-ai's, shared with an AI collection), and an app that syncs through
+//! the database queue.
 //!
 //! Opt-in: build with `--features postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
@@ -285,6 +286,110 @@ async fn pgvector_store_conforms() {
         } else {
             let store = PgvectorStore::new((*db).clone(), 3, Metric::Cosine);
             vector_suite(Arc::new(store)).await;
+        }
+    }
+    scratch.drop().await;
+}
+
+/// Whether the server has the `vector` extension; else prints why `test`
+/// is skipped (`NAVREE_TEST_REQUIRE_SERVICES=1` makes it a failure).
+async fn has_pgvector(db: &Db, test: &str) -> bool {
+    let available: i64 = db
+        .fetch_scalar(&Statement::text(
+            "SELECT COUNT(*) AS n FROM pg_available_extensions WHERE name = 'vector'",
+        ))
+        .await
+        .unwrap();
+    if available == 0 {
+        assert!(
+            std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
+            "{test} needs the pgvector extension on the server"
+        );
+        println!("SKIPPED {test}: the server has no `vector` extension");
+    }
+    available > 0
+}
+
+/// navree-ai's pgvector store behind search (`search.vectors.store =
+/// "ai"`): the vector store suite, then a searchable model and an AI
+/// collection in the one pgvector database, configured once in
+/// `ai.vectors`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_searchable_model_and_an_ai_collection_share_one_pgvector_store() {
+    const TEST: &str = "a_searchable_model_and_an_ai_collection_share_one_pgvector_store";
+    let Some(scratch) = Scratch::new(TEST).await else {
+        return;
+    };
+    {
+        let suite_app = builder(&scratch, "off")
+            .config("ai.fake", true)
+            .config(
+                "ai.vectors",
+                serde_json::json!({ "store": "pgvector", "dimensions": 3 }),
+            )
+            .module(navree_ai::AiModule::from_config())
+            .build()
+            .await;
+        let db = suite_app.get::<Db>().await;
+        if has_pgvector(&db, TEST).await {
+            let store = suite_app.get::<navree_ai::VectorStore>().await;
+            vector_suite(Arc::new(navree_search::AiVectorStore::new(
+                (*store).clone(),
+            )))
+            .await;
+            drop(suite_app);
+
+            let app = builder(&scratch, "inline")
+                .config("ai.fake", true)
+                .config(
+                    "ai.vectors",
+                    serde_json::json!({ "store": "pgvector", "dimensions": 64 }),
+                )
+                .config("search.vectors.store", "ai")
+                .module(navree_ai::AiModule::from_config())
+                .build()
+                .await;
+            let db = app.get::<Db>().await;
+            let search = app.get::<Search>().await;
+            let store = app.get::<navree_ai::VectorStore>().await;
+            let mut onboarding = new_contact("Gurpreet", "Sandhu");
+            onboarding.notes = Some("struggled with onboarding the sales team".to_owned());
+            let mut billing = new_contact("Ananya", "Sharma");
+            billing.notes = Some("billing questions about the invoice".to_owned());
+            insert_contacts(&db, vec![onboarding, billing]).await;
+            search.flush_pending().await.unwrap();
+
+            let embeddings = app.get::<navree_ai::Embeddings>().await;
+            let text = "Onboarding call: the sales team starts on Monday";
+            store
+                .collection("activity_notes")
+                .upsert(navree_ai::VectorRecord::new(
+                    "n1",
+                    embeddings.embed(text).await.unwrap(),
+                ))
+                .await
+                .unwrap();
+
+            // Both are tables of navree-ai's store in the app's database.
+            for (table, rows) in [
+                ("ai_vectors_search_contacts", 2),
+                ("ai_vectors_activity_notes", 1),
+            ] {
+                let count: i64 = db
+                    .fetch_scalar(&Statement::text(format!(
+                        "SELECT COUNT(*) AS n FROM \"{table}\""
+                    )))
+                    .await
+                    .unwrap();
+                assert_eq!(count, rows, "{table}");
+            }
+            let similar = search
+                .similar::<Contact>("billing questions")
+                .limit(1)
+                .run()
+                .await
+                .unwrap();
+            assert_eq!(similar[0].record.first_name, "Ananya");
         }
     }
     scratch.drop().await;
