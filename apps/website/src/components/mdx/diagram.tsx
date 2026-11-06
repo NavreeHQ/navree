@@ -19,6 +19,7 @@ export const diagramNames = [
   "reverse-engineering",
   "design-to-ui",
   "two-ways",
+  "workspace-resolution",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];

@@ -5,6 +5,8 @@ description: "Find the current workspace from a header, a subdomain, a path pref
 
 Every workspace request names its workspace somewhere: in a header, in the host name, in the URL, inside the access token or, for pages in a browser, in the session. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
 
+<Diagram name="workspace-resolution" />
+
 ## The resolvers
 
 A resolver finds an identifier: the workspace's slug (`acme`) or its id (a UUID). An identifier that parses as a UUID is looked up by id, anything else by slug.
