@@ -36,6 +36,7 @@ use image::{
     DynamicImage, ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, ImageReader, Limits,
     RgbImage,
 };
+use navree_config::ConfigTable;
 use serde::{Deserialize, Deserializer, Serialize};
 
 pub use metadata::strip_metadata;
@@ -52,7 +53,7 @@ use crate::conversion::{Conversion, Fit, OutputFormat};
 /// max_pixels = 50000000
 /// responsive_widths = [320, 640, 960, 1280, 1920, 2560]
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ImageOptions {
     /// Images (and SVG renderings) with more pixels than this are refused

@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 
 use bytes::Bytes;
+use navree_config::ConfigTable;
 use serde::{Deserialize, Serialize};
 
 use crate::{Cell, SheetsError};
@@ -13,7 +14,7 @@ use crate::{Cell, SheetsError};
 pub const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 
 /// How CSV is written (configuration section `sheets.csv`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CsvOptions {
     /// Start the file with a UTF-8 byte-order mark, so Excel reads it as

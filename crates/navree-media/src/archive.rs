@@ -21,6 +21,7 @@ use std::collections::HashSet;
 use std::io::{Cursor, Read, Write};
 
 use bytes::Bytes;
+use navree_config::ConfigTable;
 use navree_storage::Disk;
 use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
@@ -39,7 +40,7 @@ const RATIO_FLOOR: u64 = 1024 * 1024;
 /// They are checked against the sizes the archive declares when it is
 /// opened, and again against the bytes actually inflated when an entry
 /// is read, so a forged header cannot get past them.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ArchiveLimits {
     /// The most entries, directories included (default 10 000). The count is

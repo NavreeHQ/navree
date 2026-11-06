@@ -111,6 +111,7 @@ pub struct NativeOptions {
     /// The page settings renders use unless they bring their own (an
     /// `@page` rule in the template wins while `prefer_css_page_size`
     /// is on).
+    #[config(table)]
     pub print: PrintOptions,
 }
 
@@ -155,6 +156,7 @@ pub struct ChromeOptions {
     #[serde(deserialize_with = "navree_config::comma_list")]
     pub args: Vec<String>,
     /// The page settings renders use unless they bring their own.
+    #[config(table)]
     pub print: PrintOptions,
 }
 

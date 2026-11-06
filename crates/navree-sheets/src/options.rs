@@ -43,6 +43,7 @@ use crate::CsvOptions;
 #[serde(default)]
 pub struct SheetsOptions {
     /// How CSV files are written.
+    #[config(table)]
     pub csv: CsvOptions,
     /// Exports.
     #[config(table)]

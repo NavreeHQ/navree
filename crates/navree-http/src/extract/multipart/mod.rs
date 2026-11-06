@@ -16,6 +16,7 @@ use futures_util::{Stream, StreamExt};
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
 use http_body_util::{BodyDataStream, BodyExt, LengthLimitError, Limited};
+use navree_config::ConfigTable;
 use navree_kernel::{AppContext, BoxError};
 use serde::Deserialize;
 
@@ -48,7 +49,7 @@ const MAX_BOUNDARY_BYTES: usize = 70;
 /// max_field_bytes = 1048576
 /// max_header_bytes = 16384
 /// ```
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, ConfigTable)]
 #[serde(default)]
 pub struct MultipartLimits {
     /// The most parts in a form (default 1,000), counting parts a handler

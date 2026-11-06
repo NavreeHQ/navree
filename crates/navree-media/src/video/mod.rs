@@ -34,6 +34,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
+use navree_config::ConfigTable;
 use serde::{Deserialize, Serialize};
 
 pub use fake::{FfmpegCall, FfmpegFake};
@@ -52,7 +53,7 @@ use crate::MediaError;
 /// timeout_secs = 600
 /// threads = 2
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct FfmpegOptions {
     /// The `ffmpeg` executable: a name on the PATH or a path (default

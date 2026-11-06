@@ -20,6 +20,7 @@
 //! );
 //! ```
 
+use navree_config::ConfigTable;
 use serde::Deserialize;
 
 use crate::{MailError, Message};
@@ -32,7 +33,7 @@ use crate::{MailError, Message};
 /// inline_css = true       # APP_MAIL__RENDER__INLINE_CSS
 /// text_from_html = true   # APP_MAIL__RENDER__TEXT_FROM_HTML
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct RenderOptions {
     /// Move the rules of `<style>` blocks into `style` attributes, which

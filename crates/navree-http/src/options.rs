@@ -91,6 +91,7 @@ pub struct HttpOptions {
     #[config(table)]
     pub server: ServerOptions,
     /// The limits on `multipart/form-data` forms (`http.multipart`).
+    #[config(table)]
     pub multipart: MultipartLimits,
 }
 

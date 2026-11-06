@@ -1,5 +1,6 @@
 //! [`InboundOptions`]: section `mail.inbound`.
 
+use navree_config::ConfigTable;
 use navree_contracts::Secret;
 use serde::Deserialize;
 
@@ -39,7 +40,7 @@ const DEFAULT_MAX_SIZE: usize = 25 * 1024 * 1024;
 /// [mail.inbound.raw]           # POST /api/mail/inbound/raw
 /// token = "..."                # Authorization: Bearer ..., or ?token=
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct InboundOptions {
     /// The largest message accepted, in bytes (default 25 MiB). Payloads

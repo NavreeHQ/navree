@@ -621,9 +621,8 @@ fn shape(ty: &Type) -> Shape {
         }
         "u128" | "i128" => leaf(Kind::Integer, false),
         "f32" | "f64" => leaf(Kind::Float, true),
-        "String" | "str" | "PathBuf" | "SocketAddr" | "IpAddr" | "Ipv4Addr" | "Ipv6Addr" => {
-            leaf(Kind::String, true)
-        }
+        "String" | "str" | "char" | "PathBuf" | "SocketAddr" | "IpAddr" | "Ipv4Addr"
+        | "Ipv6Addr" => leaf(Kind::String, true),
         "Duration" => leaf(Kind::Duration, false),
         "Value" => leaf(Kind::Any, false),
         "Vec" | "VecDeque" | "HashSet" | "BTreeSet" => match args.first() {

@@ -1,5 +1,6 @@
 //! [`PrintOptions`]: page settings for HTML printed by Chrome.
 
+use navree_config::ConfigTable;
 use serde::{Deserialize, Serialize};
 
 /// A paper size.
@@ -44,7 +45,7 @@ impl Paper {
 }
 
 /// Page margins in millimeters.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct Margins {
     /// Top margin.
@@ -89,7 +90,7 @@ impl Default for Margins {
 /// prefer_css_page_size = true
 /// scale = 1.0
 /// ```
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PrintOptions {
     /// The paper size (default A4).
@@ -97,6 +98,7 @@ pub struct PrintOptions {
     /// Landscape orientation (default false).
     pub landscape: bool,
     /// The margins (default 10 mm on every side).
+    #[config(table)]
     pub margin: Margins,
     /// Print background colors and images (default true).
     pub print_background: bool,

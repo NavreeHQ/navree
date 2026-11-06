@@ -456,7 +456,7 @@ macro_rules! describe_text {
     };
 }
 
-describe_text!(str, String, SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr);
+describe_text!(str, String, char, SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr);
 
 impl DescribeValue for Path {
     fn describe(&self) -> Json {

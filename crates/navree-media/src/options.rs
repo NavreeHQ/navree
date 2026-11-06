@@ -86,11 +86,14 @@ pub struct MediaOptions {
     /// How long a remote download may take (default 30 s).
     pub download_timeout_secs: u64,
     /// Image settings.
+    #[config(table)]
     pub images: ImageOptions,
     /// Archive limits.
+    #[config(table)]
     pub archives: ArchiveLimits,
     /// The FFmpeg sidecar (the `ffmpeg` feature).
     #[cfg(feature = "ffmpeg")]
+    #[config(table)]
     pub ffmpeg: FfmpegOptions,
 }
 

@@ -52,6 +52,7 @@ pub struct MailOptions {
     /// (lanes such as `simulation` and `notifications`).
     pub transports: BTreeMap<String, TransportConfig>,
     /// CSS inlining and the generated text body.
+    #[config(table)]
     pub render: RenderOptions,
     /// The delivery log, suppressions, the outbox and tenant transports.
     #[config(table)]
@@ -66,6 +67,7 @@ pub struct MailOptions {
     /// Inbound mail: size limit, the disk for raw messages, reply tokens
     /// and the provider sources (crate feature `inbound`).
     #[cfg(feature = "inbound")]
+    #[config(table)]
     pub inbound: crate::inbound::InboundOptions,
 }
 
