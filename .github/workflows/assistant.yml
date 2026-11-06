@@ -1,0 +1,107 @@
+# The assistant: Navree UI's conversation parts and the components a model
+# picks (navree-ai's `ui` feature), in real browsers and against a real model.
+#
+# - browsers: the example app (apps/agent-demo, a shop's back office with an
+#   assistant, on the scripted model its test hooks drive) in Chromium,
+#   Firefox and WebKit: e2e/ui/tests/assistant.test.mjs (the conversation,
+#   surfaces, buttons, approvals, the page's context) and
+#   surfaces-hostile.test.mjs (hostile text and markup a model could send).
+#   On changes to the assistant's code, nightly and by hand.
+# - live: the evaluation against a real model (navree-ai's
+#   `redteam::live_models_meet_the_validity_targets`): how often its first
+#   component call is valid, and after the one repair a run allows. Nightly
+#   and by hand, only when the repository has the key (the
+#   NAVREE_AI_EVAL_KEY secret; the model is the NAVREE_AI_EVAL_MODEL
+#   variable). Without it the job says so and passes.
+name: Assistant
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-ai/**"
+      - "crates/navree-ui/src/genui/**"
+      - "crates/navree-ui/runtime/src/genui.js"
+      - "apps/agent-demo/**"
+      - "e2e/ui/tests/assistant.test.mjs"
+      - "e2e/ui/tests/surfaces-hostile.test.mjs"
+      - ".github/workflows/assistant.yml"
+  pull_request:
+    paths:
+      - "crates/navree-ai/**"
+      - "crates/navree-ui/src/genui/**"
+      - "crates/navree-ui/runtime/src/genui.js"
+      - "apps/agent-demo/**"
+      - "e2e/ui/tests/assistant.test.mjs"
+      - "e2e/ui/tests/surfaces-hostile.test.mjs"
+      - ".github/workflows/assistant.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assistant-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browsers:
+    name: The example app in three browsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+      - run: cargo build --locked --release -p agent-demo
+      - run: npm ci
+        working-directory: e2e/ui
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: e2e/ui
+      - name: Run the suites against the example app
+        run: |
+          # The test hooks let the suites script the model's answers.
+          AGENT_TEST_HOOKS=1 AGENT_DATABASE_URL="sqlite://target/agent-demo.db?mode=rwc" target/release/agent-demo &
+          timeout 120 bash -c 'until curl -s -o /dev/null http://127.0.0.1:8098/sign-in; do sleep 0.5; done'
+          cd e2e/ui && UI_BROWSERS=chromium,firefox,webkit node --test tests/assistant.test.mjs tests/surfaces-hostile.test.mjs
+
+  live:
+    name: The live evaluation against a real model
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NAVREE_AI_EVAL: "1"
+      NAVREE_AI_EVAL_PROVIDER: anthropic
+      NAVREE_AI_EVAL_MODEL: ${{ vars.NAVREE_AI_EVAL_MODEL }}
+      NAVREE_AI_EVAL_KEY: ${{ secrets.NAVREE_AI_EVAL_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+      - name: Evaluate the model's component calls
+        shell: bash
+        run: |
+          if [ -z "$NAVREE_AI_EVAL_KEY" ] || [ -z "$NAVREE_AI_EVAL_MODEL" ]; then
+            echo "SKIPPED: set the NAVREE_AI_EVAL_KEY secret and the NAVREE_AI_EVAL_MODEL variable to run the live evaluation"
+            exit 0
+          fi
+          cargo test --locked -p navree-ai --features ui --test ai \
+            redteam::live_models_meet_the_validity_targets -- --ignored --exact --nocapture
