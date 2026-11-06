@@ -68,7 +68,12 @@ export function uiBudgets(): Budget[] {
       files: budgetList(budgetTest(source, "a_typical_crud_page_loads_at_most_30_kb_gzip_of_script"), "CRUD page"),
       ceilingKb: ceiling(/total <= (\d+) \* 1024/, "CRUD page"),
     },
-    { label: "Every module together", files: "js", ceilingKb: ceiling(/total < (\d+) \* 1024/, "all modules") },
+    {
+      label: "The heaviest page's script",
+      // The inbox's conversation page, built in the test: the files it loads are read from it.
+      files: budgetList(budgetTest(source, /fn (the_heaviest_page_loads_at_most_\d+_kb_gzip_of_script)\(/.exec(source)?.[1] ?? "the_heaviest_page"), "heaviest page"),
+      ceilingKb: ceiling(/fn the_heaviest_page_loads_at_most_\d+_kb_gzip_of_script\(\)[^]*?total <= (\d+) \* 1024/, "heaviest page"),
+    },
   ];
 }
 
@@ -122,12 +127,12 @@ export function uiBudgetRows(assets: AssetSize[]): BudgetRow[] {
     measured: kbOf(find("phone-data")?.brotli ?? 0),
   });
 
-  for (const b of uiBudgets().filter((x) => x.label.startsWith("A typical") || x.label.startsWith("Every module"))) {
+  for (const b of uiBudgets().filter((x) => x.label.startsWith("A typical") || x.label.startsWith("The heaviest"))) {
     const names = b.files === "js" ? assets.filter((a) => a.ext === "js").map((a) => a.name) : b.files;
     const total = names.reduce((n, name) => n + gzip(name), 0);
     rows.push(
-      b.files === "js"
-        ? { label: "Every module together", ceiling: `under ${b.ceilingKb} KB`, measured: kbOf(total) }
+      b.label.startsWith("The heaviest")
+        ? { label: `The heaviest page's script, the inbox's conversation (${code(names)})`, ceiling: `${b.ceilingKb} KB`, measured: kbOf(total) }
         : { label: `A typical CRUD page's script (${code(names)})`, ceiling: `${b.ceilingKb} KB`, measured: kbOf(total) },
     );
   }

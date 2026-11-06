@@ -177,7 +177,8 @@ function scriptBudgets() {
   if (source === null || !toolkit?.assets) return null;
   const modules = toolkit.assets.filter((asset) => asset.ext === "js");
   const ceilings = new Map([...source.matchAll(/size\("([\w-]+)"\) <= (\d+) \* 1024/g)].map((m) => [m[1], Number(m[2])]));
-  const all = /fn all_modules_together_are_under_\d+_kb_gzip\(\)[^]*?total < (\d+) \* 1024/.exec(source);
+  const all = /fn the_heaviest_page_loads_at_most_\d+_kb_gzip_of_script\(\)[^]*?\[([^\]]+)\][^]*?total <= (\d+) \* 1024/.exec(source);
+  const heaviest = all ? [...all[1].matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]) : [];
   const core = modules.find((m) => m.name === "core");
   const coreCeiling = ceilings.get("core");
   if (!core?.gzip || !coreCeiling || !all) return null;
@@ -186,8 +187,8 @@ function scriptBudgets() {
     coreCeiling,
     own: modules.filter((m) => ceilings.has(m.name)).length,
     modules: modules.length,
-    total: modules.reduce((sum, m) => sum + (m.gzip ?? 0), 0),
-    allCeiling: Number(all[1]),
+    total: modules.filter((m) => heaviest.includes(m.name)).reduce((sum, m) => sum + (m.gzip ?? 0), 0),
+    allCeiling: Number(all[2]),
   };
 }
 
@@ -216,7 +217,7 @@ function serverAuthority(): Built {
   const budgets = scriptBudgets();
   const missing = first(
     () => lacking("crates/navree-ui/tests/budgets.rs", "fn a_page_with_nothing_interactive_ships_no_script()", 'assert!(!page.to_html().contains("<script"));'),
-    () => (budgets ? null : "core and all-modules budgets in crates/navree-ui/tests/budgets.rs and content/ui/toolkit.json"),
+    () => (budgets ? null : "core and heaviest-page budgets in crates/navree-ui/tests/budgets.rs and content/ui/toolkit.json"),
     () => docsLacking(docs.href),
   );
   if (missing || !budgets) return { id, missing: missing ?? "budgets" };
@@ -228,7 +229,7 @@ function serverAuthority(): Built {
     proof: [
       { what: "Test `a_page_with_nothing_interactive_ships_no_script`", file: "crates/navree-ui/tests/budgets.rs" },
       {
-        what: `The core runtime is ${indian(budgets.core)}\u00a0bytes gzip, under its ${budgets.coreCeiling}\u00a0KB ceiling. Of the ${budgets.modules} modules, ${budgets.own} have a ceiling of their own, and all ${budgets.modules} together are ${indian(budgets.total)}\u00a0bytes, under ${budgets.allCeiling}\u00a0KB`,
+        what: `The core runtime is ${indian(budgets.core)}\u00a0bytes gzip, under its ${budgets.coreCeiling}\u00a0KB ceiling. Of the ${budgets.modules} modules, ${budgets.own} have a ceiling of their own, and the heaviest page, the inbox's conversation, loads ${indian(budgets.total)}\u00a0bytes of them, under ${budgets.allCeiling}\u00a0KB`,
         file: "apps/website/content/ui/toolkit.json",
       },
     ],

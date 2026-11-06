@@ -8,7 +8,7 @@
  * Node runs this with the types stripped: no imports.
  */
 export const loadedWhen: Record<string, string> = {
-  "navree-ui": "Every page",
+  "navree-ui": "Every page: tokens, controls, display parts, overlays, toasts and the shell",
   core: "A form, a region or a command",
   overlay: "A popover, tooltip, hover card, menu or picker",
   sidebar: "The app shell",
@@ -39,6 +39,20 @@ export const loadedWhen: Record<string, string> = {
   "carousel-styles": "A carousel",
   "charts-styles": "A line, area, bar, donut or funnel chart",
   "menubar-styles": "A menu bar or a context menu",
+  "table-styles": "A data table",
+  "select-styles": "A select, combobox, multi-select or command palette",
+  "phone-styles": "A phone input",
+  "slider-styles": "A slider",
+  "menus-styles": "A menu, tabs, a toggle group, or a table row's actions",
+  "split-styles": "A split pane",
+  "tree-styles": "A tree view",
+  "lazy-styles": "A lazy list",
+  "toolbar-styles": "A toolbar",
+  "dates-styles": "A calendar, or a date or time picker",
+  islands: "An island",
+  parts: "A colour picker, a clearable input, an indeterminate checkbox or an avatar with a fallback",
+  "parts-styles": "An avatar group, a trace, a questionnaire, an alert's actions, a card variant or a sparkline in a cell",
+  genui: "A conversation or its composer",
 };
 
 /** The files the overview lists: scripts, stylesheets and the data they fetch, the stylesheet first and the core runtime after it. The fonts are described in the text. */
