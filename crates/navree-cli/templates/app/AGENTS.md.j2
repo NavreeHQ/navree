@@ -16,8 +16,9 @@ src/main.rs            runs the app: `serve` by default, or any other command
 src/app.rs             the root module: every module, configured once
 src/abilities.rs       who may do what: permissions and ability rules
 {% if ui_navree %}
-src/ui/                the screens' shell, sign-in (auth.rs), live stream (live.rs)
-                       and formats (rupees, phone numbers, days)
+src/ui/                the screens' shell and `Desk` extractor (shell.rs), who is signed
+                       in (auth.rs), the live topic (live.rs) and formats (rupees,
+                       phone numbers, days)
 src/modules/customers/ the example feature drawn with Navree UI: table.rs,
                        form.rs, pages.rs, home.rs, seed.rs
 {% endif %}
@@ -129,7 +130,8 @@ snake_case; module names are plural. Generators never overwrite a file.
   that has run anywhere, add a new one.
 {% if ui_navree %}
 - **Screens.** Pages are drawn on the server with `navree::ui`; there is no
-  front-end project. A page is a handler that takes `AppShell` and returns an
+  front-end project. A page is a handler that takes `Desk` (the shell, the
+  signed-in account and the workspace) and returns an
   `AppPage` (see `src/modules/customers/pages.rs`); its route is a `RouteDef`
   marked `.authenticated()` and `.page()`, so a guest is sent to `/sign-in`
   and back. A form is a struct deriving `Validate` and `Form`, drawn by
@@ -137,16 +139,22 @@ snake_case; module names are plural. Generators never overwrite a file.
   drawn by `DataTable` (see `form.rs` and `table.rs`). Lists use the one list
   query: `search`, `filter[col][op]`, `sort`, `page` and `per_page`. Money is
   stored in paise and shown with `ui::format::rupees` (`₹1,00,000`).
-- **Signing in.** `src/ui/auth.rs` is the only file that knows how a browser
-  signs in: pages use `CurrentAccount`, `Browser::sign_in` and
-  `Browser::sign_out`, and never touch the cookie, the session or the password
-  hasher. Keep it that way, so sign-in can change without touching the pages.
-- **Live updates.** After a change to data a screen shows, call
-  `Hub::nudge` once the unit of work commits (`uow.after_commit`), as
-  `CustomerService` does; tables and figures that follow the stream fetch
-  themselves again.
-- **Demo data.** `src/modules/customers/seed.rs` and the demo account in
-  `auth.rs` are made at boot outside production. Do not rely on them in
+- **Signing in.** `AuthPages` (registered in `src/app.rs`) draws the sign-in,
+  two-factor, forgotten password and reset pages and answers `POST /sign-out`
+  on the session cookie, with the throttle, two-factor authentication and the
+  audit trail of `AuthModule`. Pages use `CurrentAccount` (or `Desk`) and
+  never touch the cookie, the session or the password hasher.
+- **Workspaces.** Customers belong to a workspace. A browser is in the
+  workspace it last switched to (the switcher beside every page heading posts
+  to `/workspace/switch`); read and write customers with
+  `WorkspaceRepo::<Customer>` and the workspace id of the `Desk`.
+- **Live updates.** After a change to data a screen shows, nudge the topic with
+  `Live::nudge` once the unit of work commits (`uow.after_commit`), as
+  `CustomerService` does; tables and figures that follow the stream
+  (`stream().on(TOPIC)`) fetch themselves again. Only the members of the
+  workspace the topic names hear it.
+- **Demo data.** `src/modules/customers/seed.rs` (two demo workspaces) and the
+  demo account in `auth.rs` are made at boot outside production. Do not rely on them in
   anything that runs in production.
 {% endif %}
 {% if database == "timescaledb" %}

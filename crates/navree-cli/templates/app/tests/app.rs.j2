@@ -63,3 +63,57 @@ async fn profile_needs_a_signed_in_user() {
         .assert_status(200)
         .assert_json_path("timezone", json!("UTC"));
 }
+
+#[tokio::test]
+async fn a_new_app_has_workspaces_and_resolves_one() {
+    let (sources, _guard) = sources();
+    let app = TestApp::from_builder({{ crate_name }}::app(sources)).await;
+    let client = app.client();
+    let body = client
+        .post("/api/auth/register")
+        .json(&json!({
+            "name": "Navjot Kaur",
+            "email": "navjot.kaur@example.com",
+            "password": "a long enough password",
+        }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let token = body["access_token"].as_str().expect("a token").to_owned();
+
+    // No workspace yet: the first one is the new user's.
+    client
+        .get("/api/workspaces")
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data", json!([]));
+    let created = client
+        .post("/api/workspaces")
+        .bearer(&token)
+        .json(&json!({ "name": "Ludhiana desk" }))
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("role", json!("owner"))
+        .json_value();
+    let slug = created["slug"].as_str().expect("a slug").to_owned();
+
+    // A request that names the workspace finds it.
+    client
+        .get(&format!("/api/workspaces/{slug}"))
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("name", json!("Ludhiana desk"));
+    client
+        .get("/api/workspaces")
+        .bearer(&token)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data.0.slug", json!(slug));
+}

@@ -1,5 +1,5 @@
-//! The customers module: a table, a form and a page for each customer, kept
-//! current over server-sent events.
+//! The customers module: a table, a form and a page for each customer of a
+//! workspace, kept current through the app's live hub.
 //!
 //! ```text
 //! customers/
@@ -10,7 +10,7 @@
 //! ├── service.rs    # the rules: unique emails, the figures, telling open pages
 //! ├── pages.rs      # /customers, /customers/new, /customers/{id}, ...
 //! ├── home.rs       # / and its live figures
-//! ├── seed.rs       # forty demo customers (never in production)
+//! ├── seed.rs       # two demo workspaces and their customers (never in production)
 //! └── migrations/   # the customers table
 //! ```
 //!

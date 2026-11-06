@@ -6,17 +6,21 @@ use navree::orm::Model;
 use navree::ui::form::Options as _;
 use navree::ui::table::option_label;
 use navree::ui::{Options, Tone};
+use navree::workspace::WorkspaceScoped;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// A customer. Query it with `Customer::query()`; create one with
-/// `Customer::create(&uow, Customer { .. })`. The ORM sets the id (a UUID v7)
+/// A customer, owned by a workspace. Read and write customers through
+/// `WorkspaceRepo::<Customer>` (`query(workspace)`, `insert`, `update`), which
+/// keeps every query to one workspace's rows. The ORM sets the id (a UUID v7)
 /// and the timestamps.
 #[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[model(table = "customers", timestamps)]
 pub struct Customer {
     /// The id (UUID v7, generated when the customer is created).
     pub id: Uuid,
+    /// The workspace the customer belongs to.
+    pub workspace_id: Uuid,
     /// The person's name.
     pub name: String,
     /// The email address, lower case and unique.
@@ -42,6 +46,9 @@ pub struct Customer {
     /// When it last changed.
     pub updated_at: DateTime<Utc>,
 }
+
+/// Every query through `WorkspaceRepo` is filtered by `workspace_id`.
+impl WorkspaceScoped for Customer {}
 
 /// What a customer pays for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Options)]

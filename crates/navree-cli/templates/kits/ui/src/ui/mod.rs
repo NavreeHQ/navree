@@ -1,20 +1,21 @@
-//! The browser front end: sign-in, the app shell and the live stream, with the
-//! pages that belong to no feature (sign in, sign out, profile).
+//! The browser front end: the app shell and the profile page. Signing in and
+//! out is `AuthPages` and live updates are the app's live hub, both registered
+//! in `src/app.rs`.
 //!
 //! ```text
 //! ui/
-//! ├── mod.rs      # UiAppModule: registers the shell, the live hub and sign-in
-//! ├── auth.rs     # how a browser signs in: the one file that knows (read its top)
-//! ├── shell.rs    # the sidebar, the top bar and the user menu
-//! ├── live.rs     # server-sent events that tell open pages to fetch again
-//! ├── pages.rs    # /sign-in, /sign-out and /profile
+//! ├── mod.rs      # UiAppModule: registers the shell and the profile page
+//! ├── auth.rs     # who is signed in (CurrentAccount) and the demo account
+//! ├── shell.rs    # the sidebar, the top bar, the user menu and the Desk extractor
+//! ├── live.rs     # the topic and the stream that tell open pages to fetch again
+//! ├── pages.rs    # /profile
 //! └── format.rs   # rupees, phone numbers and days the way people here read them
 //! ```
 //!
 //! Feature modules (`src/modules/customers/`) draw their own pages: a handler
-//! takes the `AppShell` extractor and returns the page it builds. Every page
-//! route says who may see it (`.authenticated()`) and that it is a page
-//! (`.page()`), so a guest is sent to `/sign-in` and back.
+//! takes the [`Desk`](shell::Desk) extractor and returns the page it builds.
+//! Every page route says who may see it (`.authenticated()`) and that it is a
+//! page (`.page()`), so a guest is sent to `/sign-in` and back.
 
 pub mod auth;
 pub mod format;
@@ -25,10 +26,8 @@ pub mod shell;
 use navree::prelude::*;
 use navree::ui::Shell;
 
-use live::Hub;
-
 /// The front end's providers and pages. It is global: every module's pages
-/// find the shell and the hub without importing it.
+/// find the shell without importing it.
 pub struct UiAppModule;
 
 impl Module for UiAppModule {
@@ -38,9 +37,6 @@ impl Module for UiAppModule {
             Ok(Arc::new(shell::shell()))
         }))
         .exports::<Shell>();
-        m.value(Hub::new()).exports::<Hub>();
-        // Lets `.authenticated()` and `CurrentUser` see a signed-in browser.
-        m.strategy::<auth::BrowserStrategy>();
         m.controller::<pages::AccountPages>();
     }
 }

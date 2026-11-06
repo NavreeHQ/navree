@@ -13,7 +13,8 @@ use navree::ui::*;
 use super::entity::Customer;
 use super::service::{CustomerService, Figures};
 use crate::ui::format::{day, grouped, rupees};
-use crate::ui::live::{EVENT, STREAM};
+use crate::ui::live::{TOPIC, stream};
+use crate::ui::shell::Desk;
 
 /// The four figures across the top.
 fn figures_grid(figures: &Figures) -> Grid {
@@ -34,8 +35,7 @@ fn figures_grid(figures: &Figures) -> Grid {
 fn live_figures(figures: &Figures) -> Region {
     Region::new("figures")
         .src("/fragments/figures")
-        .live_from(STREAM)
-        .live_event(EVENT)
+        .live_on(stream().on(TOPIC))
         .children(figures_grid(figures))
 }
 
@@ -56,10 +56,10 @@ fn newest(customers: &[Customer]) -> Card {
 }
 
 /// `GET /`.
-async fn home(shell: AppShell, uow: Uow, service: Scoped<CustomerService>) -> Result<AppPage> {
-    let figures = service.figures(&uow).await?;
-    let customers = service.newest(&uow, 5).await?;
-    Ok(shell
+async fn home(desk: Desk, uow: Uow, service: Scoped<CustomerService>) -> Result<AppPage> {
+    let figures = service.figures(&uow, desk.workspace()).await?;
+    let customers = service.newest(&uow, desk.workspace(), 5).await?;
+    Ok(desk
         .page("Home")
         .actions(
             Button::outline("All customers")
@@ -70,8 +70,12 @@ async fn home(shell: AppShell, uow: Uow, service: Scoped<CustomerService>) -> Re
 }
 
 /// `GET /fragments/figures`.
-async fn figures_fragment(uow: Uow, service: Scoped<CustomerService>) -> Result<View> {
-    let figures = service.figures(&uow).await?;
+async fn figures_fragment(
+    desk: Desk,
+    uow: Uow,
+    service: Scoped<CustomerService>,
+) -> Result<View> {
+    let figures = service.figures(&uow, desk.workspace()).await?;
     Ok(View::new("Figures").body(figures_grid(&figures)))
 }
 

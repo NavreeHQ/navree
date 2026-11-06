@@ -5,8 +5,9 @@ dependency injection, JWT authentication, roles and abilities, migrations,
 queues and OpenAPI docs.
 {% if ui_navree %}
 
-Its screens are drawn on the server with Navree UI: sign-in, a customers table
-with search, filters and sort, forms, a page for each customer, and a home page
+Its screens are drawn on the server with Navree UI: sign-in with two-factor
+authentication, workspaces you can switch between, a customers table with
+search, filters and sort, forms, a page for each customer, and a home page
 whose figures stay current. There is no front-end project to build.
 {% endif %}
 
@@ -77,7 +78,7 @@ dock.toml              the local services `navree dock up` runs
 src/app.rs             the root module: every module, configured once
 src/abilities.rs       what each user may do
 {% if ui_navree %}
-src/ui/                the shell, sign-in (auth.rs), the live stream and formats
+src/ui/                the shell, who is signed in (auth.rs), the live topic and formats
 src/modules/customers/ the example feature: table, forms, pages, demo data
 {% endif %}
 src/modules/<name>/    feature modules (mod.rs, controller.rs, service.rs,
@@ -99,27 +100,38 @@ web/                   the Next.js front end (`pnpm --dir web install && pnpm --
 | `/customers/new`, `/customers/{id}/edit` | the form that adds and edits a customer; mistakes appear under the fields |
 | `/customers/{id}` | one customer |
 | `/sign-in`, `/profile` | sign in (`?next=` is where to go afterwards), and who is signed in |
+| `/account/two-factor` | sets up two-factor authentication with an authenticator app |
 
-A page is a handler that takes the `AppShell` extractor and returns the page it
+A page is a handler that takes the `Desk` extractor and returns the page it
 builds; see `src/modules/customers/pages.rs`. Search, sort, filters and pages in
 the address are the one list query every Navree list reads.
 
 ## How sign-in works
 
-`src/ui/auth.rs` is the one file that knows how a browser signs in. It gives the
-pages `CurrentAccount` (who is signed in), `Browser::sign_in` and
-`Browser::sign_out`, and nothing else touches the cookie or the password
-check. Read the top of that file before you change sign-in: it says what to
-replace and what stays.
+`AuthPages` (registered in `src/app.rs`) draws the sign-in, two-factor,
+forgotten password and reset pages and signs out, on the session cookie, with
+the throttle, two-factor authentication and the audit trail of `AuthModule`.
+`src/ui/auth.rs` gives the pages `CurrentAccount`, who is signed in. To mail a
+sign-in link or a code, or to sign in with a passkey, turn on
+`auth.magic_link.enabled`, `auth.otp.enabled` or `auth.passkeys.enabled`: the
+pages add the way in.
 
 Public sign-up is off (`auth.registration` in `config/app.toml`). Accounts
 exist because the seeder made the demo account, or because you make them.
 
+## Workspaces
+
+The demo account owns two workspaces, the Ludhiana desk and the Jalandhar desk,
+each with its own customers. The switcher beside every page heading changes the
+workspace; the customers table, the figures and the live updates are the
+workspace's own.
+
 ## Live updates
 
-`src/ui/live.rs` serves `GET /customers/events`, a server-sent event stream.
-The customers service nudges it after a change commits, and every open table
-and figure fetches itself again. Open two windows to see it.
+The app's live hub (`RealtimeModule`) serves `GET /broadcasting/stream`. The
+customers service nudges the workspace's `customers` topic after a change
+commits, and every open table and figure of that workspace fetches itself
+again. Open two windows to see it.
 {% endif %}
 
 ## Tests

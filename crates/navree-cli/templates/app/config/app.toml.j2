@@ -55,15 +55,33 @@ registration = false
 # Public sign-up at POST /api/auth/register.
 registration = true
 {% endif %}
+{% if not ui_navree %}
+
+[workspace]
+# Where a request's workspace comes from: the X-Workspace header. Create the
+# first workspace with POST /api/workspaces (the signed-in user owns it).
+resolvers = ["header"]
+{% endif %}
 {% if ui_navree %}
 
+[auth.password_reset]
+# The mail's link opens the reset page of AuthPages. Production sets the
+# address of the site.
+url = "http://127.0.0.1:8080/reset-password"
+
 [session]
-# A browser that signs in keeps its state on the server (src/ui/auth.rs). The
-# database store survives the restarts `navree dev` does on every save.
+# A browser that signs in keeps its state on the server (AuthPages, in
+# src/app.rs). The database store survives the restarts `navree dev` does on
+# every save.
 store = "database"
 # The session cookie goes over plain HTTP while you develop. Production serves
 # HTTPS and sets APP_SESSION__SECURE=true.
 secure = false
+
+[workspace]
+# A browser is in the workspace it last switched to (the first one it belongs
+# to until then); API clients name theirs in the X-Workspace header.
+resolvers = ["session", "header"]
 
 [ui]
 sign_in = "/sign-in"
@@ -87,7 +105,14 @@ undocumented = [
     "/_navree/*",
     "/",
     "/sign-in",
+    "/sign-in/*",
     "/sign-out",
+    "/forgot-password",
+    "/reset-password",
+    "/account/*",
+    "/impersonate/*",
+    "/workspace/*",
+    "/broadcasting/*",
     "/profile",
     "/customers*",
     "/fragments/*",

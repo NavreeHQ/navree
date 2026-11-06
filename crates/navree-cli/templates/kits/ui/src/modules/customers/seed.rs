@@ -1,7 +1,10 @@
-//! Forty demo customers, so the screens have something to show.
+//! Demo customers in two demo workspaces, so the screens have something to
+//! show and there is a second workspace to switch to.
 //!
-//! They are written when the app boots, in development and in tests, and never
-//! when `env` is `production`. They are written once: a database that has
+//! The demo account owns both workspaces: the Ludhiana desk has all forty
+//! customers below and the Jalandhar desk those of two cities. They are
+//! written when the app boots, in development and in tests, and never when
+//! `env` is `production`. They are written once: a workspace that has
 //! customers is left as it is. `navree db:seed customers` writes them on
 //! demand. Edit the table below to change them; each line is one customer.
 
@@ -11,9 +14,18 @@ use navree::config::Config;
 use navree::db::{Db, Seeder, Uow};
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
+use navree::workspace::{NewWorkspace, Workspace, Workspaces};
+use uuid::Uuid;
 
 use super::entity::{Customer, Plan, Status};
 use crate::ui::auth::ensure_demo_account;
+
+/// The demo workspaces: name, slug and the cities whose customers they hold (all
+/// of them when the list is empty). The first one is the one a browser opens.
+const DESKS: [(&str, &str, &[&str]); 2] = [
+    ("Ludhiana desk", "ludhiana", &[]),
+    ("Jalandhar desk", "jalandhar", &["Jalandhar", "Amritsar"]),
+];
 
 /// One customer per line: name, city, plan, status, monthly fee in rupees, the
 /// day they joined and whether they pay by auto-pay. The email follows from the
@@ -102,6 +114,15 @@ impl Seed {
     }
 }
 
+/// The lines of [`CUSTOMERS`] that are in one of `cities` (all of them when
+/// `cities` is empty), read.
+pub fn seeds_in(cities: &[&str]) -> Vec<Seed> {
+    seeds()
+        .into_iter()
+        .filter(|seed| cities.is_empty() || cities.contains(&seed.city.as_str()))
+        .collect()
+}
+
 /// The lines of [`CUSTOMERS`], read. A line that is not seven cells long, or
 /// holds a number or a day that does not read, stops the app with a message
 /// that names it: it is a mistake in this file.
@@ -149,29 +170,56 @@ async fn in_production(ctx: &AppContext) -> bool {
         .is_some_and(|env| env.trim().eq_ignore_ascii_case("production"))
 }
 
-/// Writes the demo customers if there are none, and the demo account.
+/// Writes the demo account, its workspaces and their customers, where they
+/// are missing.
 pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
-    ensure_demo_account(ctx).await?;
+    let owner = ensure_demo_account(ctx).await?;
     let db = ctx.get::<Db>().await?;
-    let uow = db.uow(None, None).await;
-    match seed_customers(&uow).await {
-        Ok(()) => {
-            uow.commit().await?;
-            Ok(())
-        }
-        Err(error) => {
-            uow.rollback().await?;
-            Err(error)
+    let workspaces = ctx.get::<Workspaces>().await?;
+    for (name, slug, cities) in DESKS {
+        let workspace = match workspaces.find_by_slug(slug).await? {
+            Some(workspace) => workspace,
+            None => {
+                let input = NewWorkspace::named(name).slug(slug);
+                let uow = db.uow(None, None).await;
+                match workspaces.create(&uow, owner, input).await {
+                    Ok(workspace) => {
+                        uow.commit().await?;
+                        workspace
+                    }
+                    Err(error) => {
+                        uow.rollback().await?;
+                        return Err(error.into());
+                    }
+                }
+            }
+        };
+        let uow = db.uow(None, None).await;
+        match seed_customers(&workspaces, &uow, &workspace, cities).await {
+            Ok(()) => uow.commit().await?,
+            Err(error) => {
+                uow.rollback().await?;
+                return Err(error);
+            }
         }
     }
+    Ok(())
 }
 
-async fn seed_customers(uow: &Uow) -> Result<(), BoxError> {
-    if Customer::query().exists(uow).await? {
+async fn seed_customers(
+    workspaces: &Workspaces,
+    uow: &Uow,
+    workspace: &Workspace,
+    cities: &[&str],
+) -> Result<(), BoxError> {
+    let id: Uuid = workspace.id;
+    // On PostgreSQL, row-level security admits this workspace's rows only.
+    workspaces.enter(uow, id).await?;
+    if WorkspaceRepo::<Customer>::query(id).exists(uow).await? {
         return Ok(());
     }
-    for seed in seeds() {
-        Customer::create(uow, seed.into_customer()).await?;
+    for seed in seeds_in(cities) {
+        WorkspaceRepo::<Customer>::insert(uow, id, seed.into_customer()).await?;
     }
     Ok(())
 }
@@ -221,6 +269,14 @@ mod tests {
             let count = seeds.iter().filter(|seed| seed.city == city).count();
             assert_eq!(count, 5, "{city}");
         }
+    }
+
+    #[test]
+    fn the_second_desk_holds_two_cities() {
+        let seeds = seeds_in(&["Jalandhar", "Amritsar"]);
+        assert_eq!(seeds.len(), 10);
+        assert!(seeds.iter().all(|seed| seed.city == "Jalandhar" || seed.city == "Amritsar"));
+        assert_eq!(seeds_in(&[]).len(), 40);
     }
 
     #[test]

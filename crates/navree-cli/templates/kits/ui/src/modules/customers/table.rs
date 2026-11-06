@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use super::entity::{CITIES, Customer, PLANS, STATUSES, Status};
 use crate::ui::format::{day, phone_text, rupees};
-use crate::ui::live::{EVENT, STREAM};
+use crate::ui::live::{TOPIC, stream};
 
 /// A customer as the table shows it. Each field is a column of the `customers`
 /// table, under the same name.
@@ -81,8 +81,7 @@ pub fn customers_table<'a>(
         .cell("phone", |row| Text::new(phone_text(&row.phone)).inline())
         .cell("since", |row| Text::new(day(row.since)).inline())
         .row_href(|row| format!("/customers/{}", row.id))
-        .live_from(STREAM)
-        .live_event(EVENT)
+        .live_on(stream().on(TOPIC))
         .empty(
             Empty::new("No customer matches")
                 .icon(icons::SEARCH_X)

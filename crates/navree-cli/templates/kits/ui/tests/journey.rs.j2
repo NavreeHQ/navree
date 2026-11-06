@@ -1,13 +1,16 @@
 //! The browser journey over HTTP, in process: a guest is sent to sign in, signs
-//! in, looks at the customers, narrows them, adds and edits one, hears about it
-//! on the live stream and signs out. Each test boots the whole app on a fresh
-//! SQLite file, with its forty demo customers and its demo account.
+//! in, looks at the customers of a workspace, narrows them, adds and edits one,
+//! hears about it on the live stream, switches to a second workspace whose
+//! customers are its own, sets up two-factor authentication and signs out. Each
+//! test boots the whole app on a fresh SQLite file, with its demo account, its
+//! two demo workspaces and their customers.
 
 use std::time::Duration;
 
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use navree::config::ConfigSources;
 use navree::crypto::generate_key;
+use navree::crypto::totp::{Secret, Totp};
 use navree::testing::{
     TempDirGuard, TestApp, TestClient, TestRequest, TestResponse, temp_sqlite_url,
 };
@@ -38,7 +41,8 @@ fn sources() -> (ConfigSources, TempDirGuard) {
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1)
         .set("session.store", "database")
-        .set("ui.sign_in_redirect", true);
+        .set("ui.sign_in_redirect", true)
+        .set("workspace.resolvers", serde_json::json!(["session", "header"]));
     (sources, guard)
 }
 
@@ -51,6 +55,54 @@ async fn app() -> (TestApp, TempDirGuard) {
 /// A page request, as a browser makes it.
 fn page(client: &TestClient, path: &str) -> TestRequest {
     client.get(path).header("accept", HTML)
+}
+
+/// A form post of a signed-in browser, carrying the session's token.
+async fn post_form(client: &TestClient, path: &str, fields: &[(&str, &str)]) -> TestResponse {
+    client
+        .post(path)
+        .header("accept", HTML)
+        .xsrf()
+        .form(fields)
+        .send()
+        .await
+}
+
+/// The text between the first `<code data-slot="code">` and its end.
+fn first_code(html: &str) -> String {
+    let marker = "<code data-slot=\"code\">";
+    let start = html.find(marker).expect("a code on the page") + marker.len();
+    html[start..]
+        .split("</code>")
+        .next()
+        .expect("a closed code")
+        .to_owned()
+}
+
+/// The code an authenticator app shows for `secret` now.
+fn code_now(secret: &str) -> String {
+    let now = u64::try_from(chrono::Utc::now().timestamp()).expect("a time after 1970");
+    Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
+        .build()
+        .expect("a valid TOTP")
+        .generate(now)
+}
+
+/// Reads `stream` until `needle` has come or `wait` has passed; whether it came.
+async fn hears<S, B, E>(stream: &mut S, needle: &str, wait: Duration) -> bool
+where
+    S: Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+{
+    let deadline = tokio::time::Instant::now() + wait;
+    let mut heard = String::new();
+    while let Ok(Some(Ok(chunk))) = tokio::time::timeout_at(deadline, stream.next()).await {
+        heard.push_str(&String::from_utf8_lossy(chunk.as_ref()));
+        if heard.contains(needle) {
+            return true;
+        }
+    }
+    false
 }
 
 /// What a browser does to sign in: opens the form, which gives it a session and
@@ -172,7 +224,7 @@ async fn a_wrong_password_is_a_field_error_that_does_not_say_which_part_was_wron
         let body = response.text();
         assert!(body.contains("field-error"), "{body}");
         assert!(
-            body.contains("Check your email and password, then try again."),
+            body.contains("These details don't match an account. Check them and try again."),
             "{body}"
         );
         // The form comes back as it was, and never with the password in it.
@@ -480,15 +532,8 @@ async fn editing_a_customer_saves_it_and_keeps_the_email_unique() {
 async fn the_live_stream_speaks_after_a_customer_is_added() {
     let (app, _guard) = app().await;
     let client = signed_in(&app).await;
-    // A guest gets no stream.
-    app.client()
-        .get("/customers/events")
-        .header("accept", "text/event-stream")
-        .send()
-        .await
-        .assert_status(401);
     let response = client
-        .get("/customers/events")
+        .get("/broadcasting/stream?topics=customers")
         .header("accept", "text/event-stream")
         .send_stream()
         .await;
@@ -505,17 +550,11 @@ async fn the_live_stream_speaks_after_a_customer_is_added() {
     let added = add(&client, "Live Test", "live.test@example.com").await;
     assert_eq!(added.status(), 303);
 
-    // A first comment, then the event the table and the figures wait for.
-    let mut heard = String::new();
-    while !heard.contains("event: customers") {
-        let chunk = tokio::time::timeout(Duration::from_secs(10), stream.next())
-            .await
-            .expect("the stream spoke in time")
-            .expect("the stream is still open")
-            .expect("a chunk");
-        heard.push_str(&String::from_utf8_lossy(&chunk));
-    }
-    assert!(heard.contains("ready"), "{heard}");
+    // The event the table and the figures wait for.
+    assert!(
+        hears(&mut stream, "event: customers", Duration::from_secs(10)).await,
+        "the stream spoke in time"
+    );
 }
 
 #[tokio::test]
@@ -560,7 +599,7 @@ async fn signing_out_ends_the_session_for_good() {
         .send()
         .await;
     assert_eq!(out.status(), 303);
-    assert_eq!(out.header("location"), Some("/sign-in"));
+    assert_eq!(out.header("location"), Some("/sign-in?status=signed-out"));
 
     let response = page(&client, "/customers").send().await;
     assert_eq!(response.status(), 303);
@@ -635,4 +674,159 @@ async fn the_whole_journey() {
     assert_eq!(out.status(), 303);
     let response = page(&client, "/customers").send().await;
     assert_eq!(response.status(), 303);
+}
+
+#[tokio::test]
+async fn the_demo_account_has_two_workspaces_and_each_has_its_own_customers() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+
+    // A browser starts in the first workspace it belongs to: all forty customers.
+    assert_eq!(rows(&table(&client, "per_page=40").await), 40);
+    let home = page(&client, "/").send().await.assert_status(200).text();
+    assert!(home.contains("Ludhiana desk"), "the sidebar names the workspace");
+    assert!(home.contains("Jalandhar desk"), "the switcher lists the other one");
+    let found = table(&client, "search=Rajesh&per_page=40").await;
+    let rajesh = customer_links(&found).remove(0);
+
+    // Switching changes every page: the other workspace has ten customers, in
+    // two cities, and not the first one's.
+    let switched = post_form(
+        &client,
+        "/workspace/switch",
+        &[("workspace", "jalandhar"), ("next", "/customers")],
+    )
+    .await;
+    assert_eq!(switched.status(), 303);
+    assert_eq!(switched.header("location"), Some("/customers"));
+    let second = table(&client, "per_page=40").await;
+    assert_eq!(rows(&second), 10);
+    for seed in seeds() {
+        let here = seed.city == "Jalandhar" || seed.city == "Amritsar";
+        assert_eq!(second.contains(&seed.name), here, "{}", seed.name);
+    }
+    let home = page(&client, "/").send().await.assert_status(200).text();
+    assert!(home.contains("Jalandhar desk"));
+
+    // A customer of the first workspace is not found in the second.
+    page(&client, &rajesh).send().await.assert_status(404);
+
+    // An email is taken within a workspace, not across them.
+    let taken = seeds()[0].email.clone();
+    let response = add(&client, "Sneha Bajaj", &taken).await;
+    assert_eq!(response.status(), 303, "{}", response.text());
+    let again = add(&client, "Someone Else", &taken).await;
+    assert_eq!(again.status(), 422);
+    assert_eq!(rows(&table(&client, "per_page=40").await), 11);
+
+    // Back in the first workspace nothing has changed.
+    post_form(&client, "/workspace/switch", &[("workspace", "ludhiana")])
+        .await
+        .assert_status(303);
+    assert_eq!(rows(&table(&client, "per_page=40").await), 40);
+    page(&client, &rajesh).send().await.assert_status(200);
+
+    // A workspace the account does not belong to cannot be entered.
+    let refused = post_form(&client, "/workspace/switch", &[("workspace", "nowhere")]).await;
+    assert_eq!(refused.status(), 404);
+}
+
+#[tokio::test]
+async fn the_live_stream_tells_only_the_workspace_that_changed() {
+    let (app, _guard) = app().await;
+    let first = signed_in(&app).await;
+    let second = signed_in(&app).await;
+    post_form(&second, "/workspace/switch", &[("workspace", "jalandhar")])
+        .await
+        .assert_status(303);
+    let mut streams = Vec::new();
+    for client in [&first, &second] {
+        let response = client
+            .get("/broadcasting/stream?topics=customers")
+            .header("accept", "text/event-stream")
+            .send_stream()
+            .await;
+        assert_eq!(response.status(), 200);
+        streams.push(response.into_body().into_data_stream());
+    }
+    let mut second_stream = streams.pop().expect("the second stream");
+    let mut first_stream = streams.pop().expect("the first stream");
+
+    // A customer added in the second workspace reaches its window, not the other's.
+    let added = add(&second, "Live Test", "live.test@example.com").await;
+    assert_eq!(added.status(), 303);
+    assert!(
+        hears(&mut second_stream, "event: customers", Duration::from_secs(10)).await,
+        "the workspace that changed hears it"
+    );
+    assert!(
+        !hears(&mut first_stream, "event: customers", Duration::from_millis(800)).await,
+        "the other workspace does not"
+    );
+}
+
+#[tokio::test]
+async fn two_factor_authentication_is_set_up_on_a_page_and_asked_for_at_sign_in() {
+    let (app, _guard) = app().await;
+    let client = signed_in(&app).await;
+
+    let status = page(&client, "/account/two-factor")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(status.contains("Set it up"), "{status}");
+    let setup = post_form(&client, "/account/two-factor", &[])
+        .await
+        .assert_status(200)
+        .text();
+    assert!(setup.contains("<svg"), "the picture to scan: {setup}");
+    let secret = first_code(&setup);
+
+    // A wrong code starts again; the right one turns it on and shows the
+    // recovery codes once.
+    let wrong = post_form(&client, "/account/two-factor/confirm", &[("code", "000000")]).await;
+    assert_eq!(wrong.status(), 422);
+    let secret = first_code(&wrong.text());
+    let done = post_form(
+        &client,
+        "/account/two-factor/confirm",
+        &[("code", code_now(&secret).as_str())],
+    )
+    .await
+    .assert_status(200)
+    .text();
+    assert!(done.contains("Save your recovery codes"), "{done}");
+    let recovery = first_code(&done);
+
+    // The next sign-in asks for a second factor, and a recovery code works once.
+    let out = post_form(&client, "/sign-out", &[]).await;
+    assert_eq!(out.status(), 303);
+    let other = app.client();
+    let response = post_sign_in(&other, DEMO_EMAIL, DEMO_PASSWORD, "/customers").await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(
+        response.header("location"),
+        Some("/sign-in/two-factor?next=%2Fcustomers")
+    );
+    assert_eq!(page(&other, "/customers").send().await.status(), 303);
+    let response = post_form(
+        &other,
+        "/sign-in/two-factor",
+        &[("recovery_code", recovery.as_str()), ("next", "/customers")],
+    )
+    .await;
+    assert_eq!(response.status(), 303, "{}", response.text());
+    assert_eq!(response.header("location"), Some("/customers"));
+    page(&other, "/customers").send().await.assert_status(200);
+
+    let third = app.client();
+    post_sign_in(&third, DEMO_EMAIL, DEMO_PASSWORD, "/customers").await;
+    let response = post_form(
+        &third,
+        "/sign-in/two-factor",
+        &[("recovery_code", recovery.as_str())],
+    )
+    .await;
+    assert_eq!(response.status(), 422, "a recovery code works once");
 }
