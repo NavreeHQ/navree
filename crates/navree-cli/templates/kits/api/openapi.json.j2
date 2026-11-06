@@ -2734,16 +2734,42 @@
   "paths": {
     "/_navree/ui/appearance": {
       "post": {
+        "description": "The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back`, so it works with JavaScript off. A post from another site is refused.",
         "operationId": "ui.appearance",
         "responses": {
-          "200": {
-            "description": "OK"
+          "303": {
+            "description": "See Other"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
           }
-        }
+        },
+        "summary": "Sets the reader's theme and mode",
+        "tags": [
+          "UI"
+        ]
       }
     },
     "/_navree/ui/island/{file}": {
       "get": {
+        "description": "A script one of the app's modules contributed, by its name and content hash; under an older hash it is still served, uncached.",
         "operationId": "ui.islands",
         "parameters": [
           {
@@ -2758,12 +2784,30 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
-        }
+        },
+        "summary": "An island script of the app",
+        "tags": [
+          "UI"
+        ]
       }
     },
     "/_navree/ui/theme/{file}": {
       "get": {
+        "description": "The file's name is the theme's short form, then a dash and the build; a name that is not a theme is not found.",
         "operationId": "ui.theme",
         "parameters": [
           {
@@ -2778,12 +2822,30 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
-        }
+        },
+        "summary": "The stylesheet of a theme of your own",
+        "tags": [
+          "UI"
+        ]
       }
     },
     "/_navree/ui/{file}": {
       "get": {
+        "description": "Named by its content hash: cached for good under the current hash, checked again under an older one. Brotli or gzip when the client takes it.",
         "operationId": "ui.assets",
         "parameters": [
           {
@@ -2798,12 +2860,30 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
-        }
+        },
+        "summary": "A toolkit asset (script, stylesheet, font or icon)",
+        "tags": [
+          "UI"
+        ]
       }
     },
     "/account/two-factor": {
       "get": {
+        "description": "Whether two-factor authentication is on, with a button to set it up. Not while impersonating (403).",
         "operationId": "auth.pages.two_factor_setup",
         "responses": {
           "200": {
@@ -2818,6 +2898,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
           }
         },
         "security": [
@@ -2827,14 +2917,22 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "The two-factor setup page",
+        "tags": [
+          "Auth pages"
         ]
       },
       "post": {
+        "description": "Draws a new secret as a picture and a key, with the form for the first code.",
         "operationId": "auth.pages.two_factor_setup.start",
         "responses": {
           "200": {
             "description": "OK"
           },
+          "303": {
+            "description": "See Other"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -2844,6 +2942,26 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         },
         "security": [
@@ -2853,15 +2971,23 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Starts setting two-factor authentication up",
+        "tags": [
+          "Auth pages"
         ]
       }
     },
     "/account/two-factor/confirm": {
       "post": {
+        "description": "Shows the recovery codes once. A wrong code starts the setup again with a new key (422).",
         "operationId": "auth.pages.two_factor_setup.confirm",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
           },
           "401": {
             "content": {
@@ -2872,6 +2998,26 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         },
         "security": [
@@ -2881,6 +3027,10 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Turns two-factor authentication on with the first code",
+        "tags": [
+          "Auth pages"
         ]
       }
     },
@@ -9728,15 +9878,54 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "summary": "The forgotten-password page",
+        "tags": [
+          "Auth pages"
+        ]
       },
       "post": {
+        "description": "The same answer for every address, so the page never says whether an account uses it.",
         "operationId": "auth.pages.forgot_password.submit",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
-        }
+        },
+        "summary": "Mails a link to choose a new password",
+        "tags": [
+          "Auth pages"
+        ]
       }
     },
     "/health/live": {
@@ -9894,10 +10083,24 @@
     },
     "/impersonate/stop": {
       "post": {
+        "description": "The administrator is signed in as themselves again, then goes to the home page (303). A browser that is not impersonating answers 400.",
         "operationId": "auth.pages.impersonation.stop",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
           },
           "401": {
             "content": {
@@ -9908,6 +10111,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
           }
         },
         "security": [
@@ -9917,6 +10130,10 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Stops impersonating a user",
+        "tags": [
+          "Auth pages"
         ]
       }
     },
@@ -9943,6 +10160,7 @@
     },
     "/notifications/bell": {
       "get": {
+        "description": "The `NotificationBell` region as HTML: the unread count and the latest notifications, each a link to what it is about. A page asks for it after it paints, then again on a new notification (or once a minute without the live hub).",
         "operationId": "notifications.bell",
         "responses": {
           "200": {
@@ -9966,15 +10184,23 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "The signed-in user's notification bell",
+        "tags": [
+          "Notifications"
         ]
       }
     },
     "/notifications/read-all": {
       "post": {
+        "description": "Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it.",
         "operationId": "notifications.bell.read_all",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
           },
           "401": {
             "content": {
@@ -9994,11 +10220,16 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Marks every notification read",
+        "tags": [
+          "Notifications"
         ]
       }
     },
     "/notifications/{id}/mark-read": {
       "post": {
+        "description": "Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it. Another user's notification is not found.",
         "operationId": "notifications.bell.read",
         "parameters": [
           {
@@ -10014,6 +10245,9 @@
           "200": {
             "description": "OK"
           },
+          "303": {
+            "description": "See Other"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -10023,6 +10257,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [
@@ -10032,11 +10276,16 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Marks a notification read",
+        "tags": [
+          "Notifications"
         ]
       }
     },
     "/operations/{id}/progress": {
       "get": {
+        "description": "The `OperationProgress` region as HTML: a page asks for it again while the operation runs.",
         "operationId": "operations.progress",
         "parameters": [
           {
@@ -10061,6 +10310,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [
@@ -10070,71 +10329,228 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "An operation's progress, drawn for a page",
+        "tags": [
+          "Operations"
         ]
       }
     },
     "/reset-password": {
       "get": {
+        "description": "The form for a new password, filled from the mailed link's `token` and `email`.",
         "operationId": "auth.pages.reset_password",
         "responses": {
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "summary": "The reset-password page",
+        "tags": [
+          "Auth pages"
+        ]
       },
       "post": {
+        "description": "Signs every session of the user out, then goes to the sign-in page (303). A link that is no longer good answers 400.",
         "operationId": "auth.pages.reset_password.submit",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
-        }
+        },
+        "summary": "Sets a new password",
+        "tags": [
+          "Auth pages"
+        ]
       }
     },
     "/sign-in": {
       "get": {
+        "description": "The form, with \"remember me\"; a browser already signed in goes on to `next` (303).",
         "operationId": "auth.pages.sign_in",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
           }
-        }
+        },
+        "summary": "The sign-in page",
+        "tags": [
+          "Auth pages"
+        ]
       },
       "post": {
+        "description": "Goes on to `next`, or to the second factor when the account uses it (303). Details that don't match an account draw the form again with the error (422); a sign-in policy that refuses the account answers 403.",
         "operationId": "auth.pages.sign_in.submit",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
-        }
+        },
+        "summary": "Signs in with an email and a password",
+        "tags": [
+          "Auth pages"
+        ]
       }
     },
     "/sign-in/two-factor": {
       "get": {
+        "description": "Asks for the code from the authenticator app, or a recovery code; with no sign-in waiting for one, goes back to the sign-in page (303).",
         "operationId": "auth.pages.two_factor",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
           }
-        }
+        },
+        "summary": "The second-factor page",
+        "tags": [
+          "Auth pages"
+        ]
       },
       "post": {
+        "description": "A code from the authenticator app, or a recovery code. Goes on to `next` (303); a code that didn't work draws the form again (422).",
         "operationId": "auth.pages.two_factor.submit",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
-        }
+        },
+        "summary": "Finishes signing in with a two-factor code",
+        "tags": [
+          "Auth pages"
+        ]
       }
     },
     "/sign-out": {
       "post": {
+        "description": "Ends the browser's sign-in, then goes to the sign-in page.",
         "operationId": "auth.pages.sign_out",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
           }
-        }
+        },
+        "summary": "Signs out",
+        "tags": [
+          "Auth pages"
+        ]
       }
     },
     "/workspace/switch": {
@@ -10222,6 +10638,12 @@
     },
     {
       "name": "Session"
+    },
+    {
+      "name": "UI"
+    },
+    {
+      "name": "Auth pages"
     },
     {
       "name": "Access"

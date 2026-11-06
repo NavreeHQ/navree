@@ -13,6 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Sets the reader's theme and mode
+         * @description The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back`, so it works with JavaScript off. A post from another site is refused.
+         */
         post: operations["ui.appearance"];
         delete?: never;
         options?: never;
@@ -27,6 +31,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * An island script of the app
+         * @description A script one of the app's modules contributed, by its name and content hash; under an older hash it is still served, uncached.
+         */
         get: operations["ui.islands"];
         put?: never;
         post?: never;
@@ -43,6 +51,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The stylesheet of a theme of your own
+         * @description The file's name is the theme's short form, then a dash and the build; a name that is not a theme is not found.
+         */
         get: operations["ui.theme"];
         put?: never;
         post?: never;
@@ -59,6 +71,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * A toolkit asset (script, stylesheet, font or icon)
+         * @description Named by its content hash: cached for good under the current hash, checked again under an older one. Brotli or gzip when the client takes it.
+         */
         get: operations["ui.assets"];
         put?: never;
         post?: never;
@@ -75,8 +91,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The two-factor setup page
+         * @description Whether two-factor authentication is on, with a button to set it up. Not while impersonating (403).
+         */
         get: operations["auth.pages.two_factor_setup"];
         put?: never;
+        /**
+         * Starts setting two-factor authentication up
+         * @description Draws a new secret as a picture and a key, with the form for the first code.
+         */
         post: operations["auth.pages.two_factor_setup.start"];
         delete?: never;
         options?: never;
@@ -93,6 +117,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Turns two-factor authentication on with the first code
+         * @description Shows the recovery codes once. A wrong code starts the setup again with a new key (422).
+         */
         post: operations["auth.pages.two_factor_setup.confirm"];
         delete?: never;
         options?: never;
@@ -2351,8 +2379,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** The forgotten-password page */
         get: operations["auth.pages.forgot_password"];
         put?: never;
+        /**
+         * Mails a link to choose a new password
+         * @description The same answer for every address, so the page never says whether an account uses it.
+         */
         post: operations["auth.pages.forgot_password.submit"];
         delete?: never;
         options?: never;
@@ -2403,6 +2436,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Stops impersonating a user
+         * @description The administrator is signed in as themselves again, then goes to the home page (303). A browser that is not impersonating answers 400.
+         */
         post: operations["auth.pages.impersonation.stop"];
         delete?: never;
         options?: never;
@@ -2434,6 +2471,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The signed-in user's notification bell
+         * @description The `NotificationBell` region as HTML: the unread count and the latest notifications, each a link to what it is about. A page asks for it after it paints, then again on a new notification (or once a minute without the live hub).
+         */
         get: operations["notifications.bell"];
         put?: never;
         post?: never;
@@ -2452,6 +2493,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Marks every notification read
+         * @description Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it.
+         */
         post: operations["notifications.bell.read_all"];
         delete?: never;
         options?: never;
@@ -2468,6 +2513,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Marks a notification read
+         * @description Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it. Another user's notification is not found.
+         */
         post: operations["notifications.bell.read"];
         delete?: never;
         options?: never;
@@ -2482,6 +2531,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * An operation's progress, drawn for a page
+         * @description The `OperationProgress` region as HTML: a page asks for it again while the operation runs.
+         */
         get: operations["operations.progress"];
         put?: never;
         post?: never;
@@ -2498,8 +2551,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The reset-password page
+         * @description The form for a new password, filled from the mailed link's `token` and `email`.
+         */
         get: operations["auth.pages.reset_password"];
         put?: never;
+        /**
+         * Sets a new password
+         * @description Signs every session of the user out, then goes to the sign-in page (303). A link that is no longer good answers 400.
+         */
         post: operations["auth.pages.reset_password.submit"];
         delete?: never;
         options?: never;
@@ -2514,8 +2575,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The sign-in page
+         * @description The form, with "remember me"; a browser already signed in goes on to `next` (303).
+         */
         get: operations["auth.pages.sign_in"];
         put?: never;
+        /**
+         * Signs in with an email and a password
+         * @description Goes on to `next`, or to the second factor when the account uses it (303). Details that don't match an account draw the form again with the error (422); a sign-in policy that refuses the account answers 403.
+         */
         post: operations["auth.pages.sign_in.submit"];
         delete?: never;
         options?: never;
@@ -2530,8 +2599,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The second-factor page
+         * @description Asks for the code from the authenticator app, or a recovery code; with no sign-in waiting for one, goes back to the sign-in page (303).
+         */
         get: operations["auth.pages.two_factor"];
         put?: never;
+        /**
+         * Finishes signing in with a two-factor code
+         * @description A code from the authenticator app, or a recovery code. Goes on to `next` (303); a code that didn't work draws the form again (422).
+         */
         post: operations["auth.pages.two_factor.submit"];
         delete?: never;
         options?: never;
@@ -2548,6 +2625,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Signs out
+         * @description Ends the browser's sign-in, then goes to the sign-in page.
+         */
         post: operations["auth.pages.sign_out"];
         delete?: never;
         options?: never;
@@ -3822,12 +3903,30 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
-            200: {
+            /** @description See Other */
+            303: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
             };
         };
     };
@@ -3849,6 +3948,22 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "ui.theme": {
@@ -3869,6 +3984,22 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "ui.assets": {
@@ -3888,6 +4019,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
             };
         };
     };
@@ -3916,6 +4063,15 @@ export interface operations {
                     "application/json": components["schemas"]["HttpError"];
                 };
             };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "auth.pages.two_factor_setup.start": {
@@ -3934,8 +4090,33 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3961,8 +4142,33 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8718,6 +8924,33 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "health.live": {
@@ -8822,8 +9055,33 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8896,6 +9154,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
                 headers: {
@@ -8925,8 +9190,24 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8956,6 +9237,15 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8999,6 +9289,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "auth.pages.sign_in": {
@@ -9012,6 +9336,13 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description See Other */
+            303: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9035,6 +9366,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "auth.pages.two_factor": {
@@ -9048,6 +9413,13 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description See Other */
+            303: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9071,6 +9443,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "auth.pages.sign_out": {
@@ -9088,6 +9494,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
             };
         };
     };
