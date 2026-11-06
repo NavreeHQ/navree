@@ -190,15 +190,15 @@ fn per_ip(connections: usize) -> ServerOptions {
     }
 }
 
-/// The address is only known after the accept, so a client over its limit is
-/// closed rather than left waiting, and its slot comes back with a connection.
+/// The address is only known after the accept, so a client over its limit,
+/// whose address has no idle connection to give up, is closed rather than left
+/// waiting, and its slot comes back with a connection.
 #[tokio::test]
-async fn a_client_over_its_address_limit_is_closed() {
+async fn a_client_over_its_address_limit_is_closed_when_none_of_its_connections_is_idle() {
     let server = start(echo_app(), per_ip(2)).await;
+    // Neither has finished a request, so neither is idle.
     let mut first = connect(server.addr).await;
-    let mut second = connect(server.addr).await;
-    assert!(exchange(&mut first, GET).await.starts_with("HTTP/1.1 200"));
-    assert!(exchange(&mut second, GET).await.starts_with("HTTP/1.1 200"));
+    let _second = connect(server.addr).await;
 
     let mut over = connect(server.addr).await;
     assert_eq!(read_until_closed(&mut over).await, "");
@@ -217,6 +217,32 @@ async fn a_client_over_its_address_limit_is_closed() {
         }
     });
     served.await.expect("the address has room again");
+}
+
+/// Many users behind one address (an office, a carrier's NAT), or one browser
+/// keeping its connections: at the address's limit a new connection takes the
+/// place of its connection idle the longest, which closes as at its idle
+/// timeout, and the others are left alone.
+#[tokio::test]
+async fn at_its_limit_an_address_trades_its_longest_idle_connection_for_a_new_one() {
+    let server = start(echo_app(), per_ip(2)).await;
+    let mut oldest = connect(server.addr).await;
+    assert!(exchange(&mut oldest, GET).await.starts_with("HTTP/1.1 200"));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let mut newest = connect(server.addr).await;
+    assert!(exchange(&mut newest, GET).await.starts_with("HTTP/1.1 200"));
+
+    let mut new = connect(server.addr).await;
+    let response = exchange(&mut new, GET).await;
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert_eq!(read_until_closed(&mut oldest).await, "", "a clean close");
+    assert!(exchange(&mut newest, GET).await.starts_with("HTTP/1.1 200"));
+    assert!(exchange(&mut new, GET).await.starts_with("HTTP/1.1 200"));
+
+    // The new one is idle now too, and the next makes way in its turn.
+    let mut next = connect(server.addr).await;
+    assert!(exchange(&mut next, GET).await.starts_with("HTTP/1.1 200"));
+    assert_eq!(read_until_closed(&mut newest).await, "");
 }
 
 /// A proxy carries every client, so counting it would limit them all
@@ -252,13 +278,16 @@ async fn a_client_over_its_address_limit_takes_no_slot() {
         },
     )
     .await;
+    // On its first request, so it is not idle and does not make way.
     let mut held = connect(server.addr).await;
-    assert!(exchange(&mut held, GET).await.starts_with("HTTP/1.1 200"));
+    held.write_all(b"GET / HT").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
     for _ in 0..20 {
         let mut over = connect(server.addr).await;
         assert_eq!(read_until_closed(&mut over).await, "");
     }
-    assert!(exchange(&mut held, GET).await.starts_with("HTTP/1.1 200"));
+    let response = exchange(&mut held, b"TP/1.1\r\nHost: test\r\n\r\n").await;
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
 }
 
 /// A server waiting for a slot still shuts down.

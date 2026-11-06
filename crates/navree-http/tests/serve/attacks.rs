@@ -1883,7 +1883,8 @@ async fn a_few_addresses_cannot_keep_every_slot_by_starting_the_next_head() {
 // The address limit.
 
 /// A storm of connections over the limit costs the address nothing later:
-/// no count stays behind, and another address is served throughout.
+/// no count stays behind, and another address is served throughout. Its two
+/// connections hold requests, so neither is idle and neither makes way.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_storm_over_the_address_limit_leaves_no_count_behind() {
     let server = start(
@@ -1897,6 +1898,9 @@ async fn a_storm_over_the_address_limit_leaves_no_count_behind() {
     let mut first = connect(server.addr).await;
     let mut second = connect(server.addr).await;
     assert!(still_served(&mut first).await && still_served(&mut second).await);
+    let half = b"POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 5\r\n\r\nhe";
+    first.write_all(half).await.unwrap();
+    second.write_all(half).await.unwrap();
     let addr = server.addr;
     let storm = tokio::spawn(async move {
         for _ in 0..1500 {
@@ -1912,7 +1916,11 @@ async fn a_storm_over_the_address_limit_leaves_no_count_behind() {
     }
     storm.await.unwrap();
     println!("slowest request of another address in the storm: {slowest:?}");
-    assert!(still_served(&mut first).await, "the storm cost it nothing");
+    for held in [&mut first, &mut second] {
+        let response = exchange(held, b"llo").await;
+        assert!(response.ends_with("hello"), "the storm cost it nothing: {response}");
+    }
+    assert!(still_served(&mut first).await);
     drop(first);
     drop(second);
     timeout(PATIENCE, async {

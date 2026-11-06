@@ -24,16 +24,22 @@
 //! its next head counts as idle: a client must not keep its slot by starting
 //! a head with each request.
 //!
-//! `http.server.max_connections_per_ip` limits what one address can hold of
-//! what is not reclaimed. It does not stop a client with many addresses. The
-//! address is only known after the accept, so a client over it is closed, not
-//! queued. Peers named in `http.trusted_proxies` are not counted: each carries
-//! many clients.
+//! `http.server.max_connections_per_ip` limits what one address can hold. It
+//! does not stop a client with many addresses. An address at its limit is
+//! often many users behind one (an office, a carrier's NAT) or one browser
+//! keeping connections open, so a new connection from it takes the place of
+//! its own connection idle the longest, which closes as at its idle timeout,
+//! by the same rules as above. Only when none of its connections is idle is
+//! the new one closed: the address is only known after the accept, so it
+//! cannot wait in line. A connection that made way counts no more, and the
+//! count of an address is exact whatever order its sockets close in. Peers
+//! named in `http.trusted_proxies` are not counted: each carries many clients.
 
 use std::collections::{HashMap, VecDeque};
 use std::future::poll_fn;
 use std::net::IpAddr;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -97,7 +103,7 @@ struct Waiter<L: Listener> {
 #[derive(Debug, Default)]
 pub(super) struct Slot {
     _cap: Option<OwnedSemaphorePermit>,
-    _ip: Option<IpSlot>,
+    ip: Option<IpSlot>,
 }
 
 impl<L: Listener> Gate<L> {
@@ -122,10 +128,7 @@ impl<L: Listener> Gate<L> {
     pub(super) async fn next(&mut self, listener: &mut L) -> (L::Stream, L::Addr, Slot) {
         let Some(cap) = self.cap.clone() else {
             let (stream, remote, ip) = admitted(&mut self.per_ip, listener).await;
-            let slot = Slot {
-                _cap: None,
-                _ip: ip,
-            };
+            let slot = Slot { _cap: None, ip };
             return (stream, remote, slot);
         };
         // A slot first: a client with none waits instead of costing a task.
@@ -139,7 +142,7 @@ impl<L: Listener> Gate<L> {
         };
         let slot = Slot {
             _cap: Some(permit),
-            _ip: ip,
+            ip,
         };
         (stream, remote, slot)
     }
@@ -217,8 +220,12 @@ impl<L: Listener> Gate<L> {
         }
     }
 
-    /// Follows `clock`, a new connection's, for [`reclaim`](Self::reclaim).
-    pub(super) fn track(&mut self, clock: &Arc<Clock>) {
+    /// Follows `clock`, the connection's that holds `slot`, for
+    /// [`reclaim`](Self::reclaim) and for its address's limit.
+    pub(super) fn track(&mut self, clock: &Arc<Clock>, slot: &Slot) {
+        if let Some(ip) = &slot.ip {
+            ip.follow(clock);
+        }
         if self.cap.is_none() {
             return;
         }
@@ -316,23 +323,111 @@ struct PerIp {
     limit: usize,
     proxies: ProxyTrust,
     ipv6_prefix: u8,
-    open: Arc<Mutex<HashMap<IpAddr, usize>>>,
+    open: Arc<Mutex<HashMap<IpAddr, Address>>>,
     warned: Option<Instant>,
+}
+
+/// The connections counted under one address.
+#[derive(Debug, Default)]
+struct Address {
+    count: usize,
+    /// The connections counted, to find one that can make way. Ones that no
+    /// longer count are dropped from here now and then.
+    held: Vec<Held>,
 }
 
 /// A connection counted under an address.
 #[derive(Debug)]
+struct Held {
+    clock: Weak<Clock>,
+    /// Shared with its [`IpSlot`]: whether it still counts.
+    counted: Arc<AtomicBool>,
+}
+
+impl Address {
+    /// Closes the connection idle the longest, if one is, for a new one from
+    /// the same address, which takes its count.
+    fn make_way(&mut self) -> bool {
+        self.held.retain(Held::counts);
+        let mut idle: Vec<_> = self
+            .held
+            .iter()
+            .enumerate()
+            .filter_map(|(at, held)| {
+                let since = held.clock.upgrade()?.reclaimable_since()?;
+                Some((since, at))
+            })
+            .collect();
+        idle.sort_unstable();
+        for (_, at) in idle {
+            // One that took a request a moment ago keeps its slot.
+            if self.held[at]
+                .clock
+                .upgrade()
+                .is_some_and(|clock| clock.reclaim())
+            {
+                let held = self.held.swap_remove(at);
+                held.counted.store(false, Ordering::Relaxed);
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl Held {
+    fn counts(&self) -> bool {
+        self.counted.load(Ordering::Relaxed)
+    }
+}
+
+/// A connection counted under an address, until its socket closes or it makes
+/// way for another (see [`Address::make_way`]).
+#[derive(Debug)]
 struct IpSlot {
-    open: Arc<Mutex<HashMap<IpAddr, usize>>>,
+    open: Arc<Mutex<HashMap<IpAddr, Address>>>,
     key: IpAddr,
+    counted: Arc<AtomicBool>,
+}
+
+impl IpSlot {
+    fn new(open: &Arc<Mutex<HashMap<IpAddr, Address>>>, key: IpAddr) -> Self {
+        Self {
+            open: open.clone(),
+            key,
+            counted: Arc::new(AtomicBool::new(true)),
+        }
+    }
+
+    /// `clock` is this connection's: it can make way for another.
+    fn follow(&self, clock: &Arc<Clock>) {
+        let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(address) = open.get_mut(&self.key) else {
+            return;
+        };
+        if !self.counted.load(Ordering::Relaxed) {
+            return;
+        }
+        if address.held.len() >= address.count.max(4) * 2 {
+            address.held.retain(Held::counts);
+        }
+        address.held.push(Held {
+            clock: Arc::downgrade(clock),
+            counted: self.counted.clone(),
+        });
+    }
 }
 
 impl Drop for IpSlot {
     fn drop(&mut self) {
         let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(count) = open.get_mut(&self.key) {
-            *count -= 1;
-            if *count == 0 {
+        // One that made way gave its count to another already.
+        if !self.counted.swap(false, Ordering::Relaxed) {
+            return;
+        }
+        if let Some(address) = open.get_mut(&self.key) {
+            address.count -= 1;
+            if address.count == 0 {
                 open.remove(&self.key);
             }
         }
@@ -355,28 +450,35 @@ impl PerIp {
     }
 
     /// Counts a connection from `peer`: `None` means it is not counted, for
-    /// a listed proxy or a listener whose peers have no address.
+    /// a listed proxy or a listener whose peers have no address. At the
+    /// limit, the address's connection idle the longest makes way for it.
     fn admit(&mut self, peer: Option<IpAddr>) -> Result<Option<IpSlot>, OverLimit> {
         let Some(ip) = peer.filter(|ip| !self.proxies.trusts(Some(*ip))) else {
             return Ok(None);
         };
         let key = rate_limit_key(ip, self.ipv6_prefix);
-        {
+        let made_way = {
             let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
-            let count = open.entry(key).or_insert(0);
-            if *count < self.limit {
-                *count += 1;
-                return Ok(Some(IpSlot {
-                    open: self.open.clone(),
-                    key,
-                }));
+            let address = open.entry(key).or_default();
+            if address.count < self.limit {
+                address.count += 1;
+                return Ok(Some(IpSlot::new(&self.open, key)));
             }
-        }
+            address.make_way()
+        };
         if self.warned.is_none_or(|at| at.elapsed() >= WARNING_EVERY) {
             self.warned = Some(Instant::now());
-            tracing::warn!(target: "navree::http", client = %key, "http.server.max_connections_per_ip reached; closing new connections from this address (behind a reverse proxy, list it in http.trusted_proxies)");
+            if made_way {
+                tracing::warn!(target: "navree::http", client = %key, "http.server.max_connections_per_ip reached; closing this address's idle connections for its new ones (behind a reverse proxy, list it in http.trusted_proxies)");
+            } else {
+                tracing::warn!(target: "navree::http", client = %key, "http.server.max_connections_per_ip reached; closing new connections from this address while none of its own is idle (behind a reverse proxy, list it in http.trusted_proxies)");
+            }
         }
-        Err(OverLimit)
+        if made_way {
+            Ok(Some(IpSlot::new(&self.open, key)))
+        } else {
+            Err(OverLimit)
+        }
     }
 }
 
@@ -469,6 +571,95 @@ mod tests {
         assert!(limit.admit(None).unwrap().is_none());
     }
 
+    /// A connection admitted under `limit` from `client`, whose first request
+    /// has finished: idle since now.
+    fn idle_from(limit: &mut PerIp, client: &str) -> (Arc<Clock>, IpSlot) {
+        let (clock, slot) = busy_from(limit, client);
+        drop(clock.request(Version::HTTP_2, true));
+        (clock, slot)
+    }
+
+    /// A connection admitted under `limit` from `client`, on its first request.
+    fn busy_from(limit: &mut PerIp, client: &str) -> (Arc<Clock>, IpSlot) {
+        let slot = limit.admit(Some(ip(client))).unwrap().unwrap();
+        let clock = Arc::new(Clock::new(None, None));
+        slot.follow(&clock);
+        (clock, slot)
+    }
+
+    fn count(limit: &PerIp, client: &str) -> usize {
+        limit
+            .open
+            .lock()
+            .unwrap()
+            .get(&ip(client))
+            .map_or(0, |address| address.count)
+    }
+
+    /// Many users behind one address: its idle connections make way for its
+    /// new ones, the one idle the longest first, and only its own.
+    #[tokio::test(start_paused = true)]
+    async fn an_address_at_its_limit_trades_its_longest_idle_connection_for_a_new_one() {
+        let mut limit = per_ip(2, ProxyTrust::none());
+        let (other, _other_slot) = idle_from(&mut limit, "192.0.2.9");
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let (older, older_slot) = idle_from(&mut limit, "192.0.2.1");
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let (newer, _newer_slot) = idle_from(&mut limit, "192.0.2.1");
+
+        let (_third, _third_slot) = busy_from(&mut limit, "192.0.2.1");
+        assert!(older.reclaimable_since().is_none(), "it made way");
+        assert!(newer.reclaimable_since().is_some(), "it stays");
+        assert!(
+            other.reclaimable_since().is_some(),
+            "another address's is left alone, older as it is"
+        );
+        assert_eq!(count(&limit, "192.0.2.1"), 2);
+        drop(older_slot);
+        assert_eq!(count(&limit, "192.0.2.1"), 2, "its count went to the new one");
+
+        let (_fourth, _fourth_slot) = busy_from(&mut limit, "192.0.2.1");
+        assert!(newer.reclaimable_since().is_none(), "the next one made way");
+        assert!(
+            limit.admit(Some(ip("192.0.2.1"))).is_err(),
+            "the rest are busy"
+        );
+    }
+
+    /// A client must not take over the connections still on their first
+    /// request, which have `header_read` to finish it.
+    #[tokio::test(start_paused = true)]
+    async fn an_address_with_no_idle_connection_is_refused() {
+        let mut limit = per_ip(2, ProxyTrust::none());
+        let (first, _first_slot) = busy_from(&mut limit, "192.0.2.1");
+        let (second, _second_slot) = idle_from(&mut limit, "192.0.2.1");
+        let _request = second.request(Version::HTTP_2, true);
+        assert!(limit.admit(Some(ip("192.0.2.1"))).is_err());
+        assert!(first.reclaimable_since().is_none());
+        assert_eq!(count(&limit, "192.0.2.1"), 2);
+    }
+
+    /// However the sockets close, the count ends at nothing, and nothing is
+    /// kept for the address.
+    #[tokio::test(start_paused = true)]
+    async fn the_count_is_exact_through_every_trade() {
+        let mut limit = per_ip(1, ProxyTrust::none());
+        let mut held = Vec::new();
+        for _ in 0..20 {
+            let (clock, slot) = idle_from(&mut limit, "192.0.2.1");
+            held.push((clock, slot));
+            tokio::time::advance(Duration::from_millis(10)).await;
+        }
+        assert_eq!(count(&limit, "192.0.2.1"), 1);
+        assert!(
+            limit.open.lock().unwrap()[&ip("192.0.2.1")].held.len() <= 8,
+            "the ones that made way are not kept"
+        );
+        // The ones that made way close first, the one that counts last.
+        drop(held);
+        assert!(limit.open.lock().unwrap().is_empty());
+    }
+
     /// A listener whose connections say what they say: a stream is what
     /// [`Listener::poll_sent`] answers for it.
     struct Door;
@@ -522,7 +713,7 @@ mod tests {
     /// A connection `gate` follows, idle since now.
     fn idle(gate: &mut Gate<Door>) -> Arc<Clock> {
         let clock = Arc::new(Clock::new(None, None));
-        gate.track(&clock);
+        gate.track(&clock, &Slot::default());
         drop(clock.request(Version::HTTP_2, true));
         clock
     }
@@ -661,7 +852,7 @@ mod tests {
         let mut gate = gate(None);
         for _ in 0..10 * TRACKED_AT_LEAST {
             let clock = Arc::new(Clock::new(None, None));
-            gate.track(&clock);
+            gate.track(&clock, &Slot::default());
         }
         assert!(
             gate.tracked.len() <= TRACKED_AT_LEAST + 1,
@@ -677,7 +868,7 @@ mod tests {
             ..ServerOptions::default()
         };
         let mut gate = Gate::<Door>::new(&options, ProxyTrust::none(), 64);
-        gate.track(&Arc::new(Clock::new(None, None)));
+        gate.track(&Arc::new(Clock::new(None, None)), &Slot::default());
         assert!(gate.tracked.is_empty());
     }
 }

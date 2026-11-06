@@ -83,7 +83,11 @@
 //!   A client that has sent nothing closes nothing. One address holds at most
 //!   [`max_connections_per_ip`](ServerOptions::max_connections_per_ip). That
 //!   limits what one address can hold; it does not stop a client with many
-//!   addresses. TLS handshakes hold a slot too.
+//!   addresses. At that limit a new connection takes the place of the
+//!   address's own connection idle the longest, by the same rules, so many
+//!   users behind one address (an office, a carrier's NAT) are not turned
+//!   away by their idle connections; only when none of them is idle is the
+//!   new one closed. TLS handshakes hold a slot too.
 //! - **Upgrades.** A WebSocket holds its slot for as long as it is open, and
 //!   no limit above ends a quiet one: it can be perfectly healthy, and the
 //!   server cannot tell it from a client doing nothing. So unlike the others
@@ -302,7 +306,7 @@ where
                 next = gate.next(&mut listener) => next,
             };
             let clock = Arc::new(Clock::new(limits.header_read, limits.idle));
-            gate.track(&clock);
+            gate.track(&clock, &slot);
             connections.spawn(connection(
                 listener.handshake(stream),
                 remote,
