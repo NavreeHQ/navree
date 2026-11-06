@@ -1990,6 +1990,118 @@ async fn the_address_count_follows_the_socket() {
     .expect("the closed socket gave the address back");
 }
 
+/// The type, flags and stream of the next frame, its payload read and dropped.
+async fn next_frame_head(stream: &mut TcpStream) -> Option<(u8, u8, u32)> {
+    let mut head = [0_u8; 9];
+    stream.read_exact(&mut head).await.ok()?;
+    let length = u32::from_be_bytes([0, head[0], head[1], head[2]]) as usize;
+    let id = u32::from_be_bytes([head[5] & 0x7f, head[6], head[7], head[8]]);
+    let mut payload = vec![0_u8; length];
+    stream.read_exact(&mut payload).await.ok()?;
+    Some((head[3], head[4], id))
+}
+
+/// Reads frames until one that is `wanted` (by type, flags and stream).
+async fn until_frame(stream: &mut TcpStream, wanted: impl Fn(u8, u8, u32) -> bool) {
+    timeout(PATIENCE, async {
+        loop {
+            let (kind, flags, id) = next_frame_head(stream)
+                .await
+                .expect("the connection stays open");
+            if wanted(kind, flags, id) {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the frame arrives");
+}
+
+/// `GET /` on stream `id` of an HTTP/2 connection, answered to its end.
+async fn get_on(client: &mut TcpStream, id: u32) {
+    client
+        .write_all(&frame(HEADERS, END_HEADERS | END_STREAM, id, GET_ROOT))
+        .await
+        .unwrap();
+    until_frame(client, |_, flags, on| on == id && flags & END_STREAM != 0).await;
+}
+
+/// The header block of an HTTP/2 WebSocket (extended `CONNECT`) to `/ws`.
+fn websocket_connect() -> Vec<u8> {
+    let mut block = Vec::new();
+    for (name, value) in [
+        (":method", "CONNECT"),
+        (":protocol", "websocket"),
+        (":scheme", "http"),
+        (":path", "/ws"),
+        (":authority", "test"),
+        ("sec-websocket-version", "13"),
+    ] {
+        block.push(0);
+        block.push(name.len() as u8);
+        block.extend_from_slice(name.as_bytes());
+        block.push(value.len() as u8);
+        block.extend_from_slice(value.as_bytes());
+    }
+    block
+}
+
+/// A connection that made way for a newer one from its address counts until
+/// its socket has closed. Its client can answer the GOAWAY with a WebSocket
+/// (and never acknowledge the PING after it), which keeps the connection open
+/// for good: if its count had gone to the newer connection, each round of
+/// this would leave one more socket over the limit, up to `max_connections`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_connection_that_made_way_and_opened_a_websocket_still_counts() {
+    let server = start(
+        websocket_app(),
+        ServerOptions {
+            max_connections_per_ip: Some(1),
+            ..no_limits()
+        },
+    )
+    .await;
+    let mut first = raw(server.addr).await;
+    get_on(&mut first, 1).await;
+    // Its stream's task has ended: it is idle.
+    sleep(Duration::from_millis(100)).await;
+
+    // A newer connection from the address takes its place.
+    let mut second = raw(server.addr).await;
+    until_frame(&mut first, |kind, _, _| kind == GOAWAY).await;
+    first
+        .write_all(&frame(HEADERS, END_HEADERS, 3, &websocket_connect()))
+        .await
+        .unwrap();
+    until_frame(&mut first, |kind, _, id| kind == HEADERS && id == 3).await;
+
+    get_on(&mut second, 1).await;
+    sleep(Duration::from_millis(100)).await;
+    // The address holds its limit and the one closing for a newer one: the
+    // idle `second` does not make way again while `first` is open.
+    let mut over = connect(server.addr).await;
+    assert!(
+        !still_served(&mut over).await,
+        "a third socket for a limit of one"
+    );
+
+    // The WebSocket goes, and with it the socket: the next connection takes
+    // the place of `second`.
+    drop(first);
+    timeout(PATIENCE, async {
+        loop {
+            sleep(Duration::from_millis(10)).await;
+            let mut next = connect(server.addr).await;
+            if still_served(&mut next).await {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the closed socket gave the address room");
+    until_frame(&mut second, |kind, _, _| kind == GOAWAY).await;
+}
+
 // The write stall.
 
 /// Grants too small to move a chunk do not count as progress.

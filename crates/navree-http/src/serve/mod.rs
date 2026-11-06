@@ -87,7 +87,13 @@
 //!   address's own connection idle the longest, by the same rules, so many
 //!   users behind one address (an office, a carrier's NAT) are not turned
 //!   away by their idle connections; only when none of them is idle is the
-//!   new one closed. TLS handshakes hold a slot too.
+//!   new one closed. A connection that makes way counts until its socket has
+//!   closed, and at most 8 of an address's connections (no more than its
+//!   limit) close for newer ones at a time, so whatever a client sends on a
+//!   connection that is closing, one address holds at most its limit and
+//!   those. Everyone behind an address shares its limit, so one of them can
+//!   close the others' idle connections by opening new ones, which they then
+//!   open again. TLS handshakes hold a slot too.
 //! - **Upgrades.** A WebSocket holds its slot for as long as it is open, and
 //!   no limit above ends a quiet one: it can be perfectly healthy, and the
 //!   server cannot tell it from a client doing nothing. So unlike the others
