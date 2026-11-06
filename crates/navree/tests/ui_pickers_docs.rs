@@ -278,7 +278,7 @@ async fn a_searched_list_answers_from_the_database_and_the_palette_gets_links() 
     let app = app().await;
     let list = app
         .client()
-        .get("/people/options?q=gra")
+        .get("/people/options?q=gau")
         .send()
         .await
         .assert_status(200)
