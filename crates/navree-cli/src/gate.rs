@@ -622,11 +622,14 @@ mod tests {
             .iter()
             .map(|s| (*s).to_owned())
             .chain(std::iter::once(runner.ran[5].clone()))
+            .chain(std::iter::once(
+                "cargo run --quiet -- config:check".to_owned()
+            ))
             .collect::<Vec<_>>()
         );
         assert!(runner.ran[5].starts_with("cargo run --quiet -- conformity:check --root "));
         assert!(
-            out.contains("[1/4] fmt: cargo fmt --all -- --check\n"),
+            out.contains("[1/5] fmt: cargo fmt --all -- --check\n"),
             "{out}"
         );
         assert!(out.contains("\nGate\n  ok    fmt   "), "{out}");
@@ -648,6 +651,7 @@ mod tests {
                 StepStatus::Passed,
                 StepStatus::Failed,
                 StepStatus::NotRun,
+                StepStatus::NotRun,
                 StepStatus::NotRun
             ]
         );
@@ -664,7 +668,7 @@ mod tests {
         };
         let (report, _) = gate(&options, &mut runner);
         assert!(!report.passed());
-        assert_eq!(runner.ran.len(), 6);
+        assert_eq!(runner.ran.len(), 7);
     }
 
     #[test]
