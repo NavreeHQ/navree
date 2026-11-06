@@ -323,6 +323,7 @@ fn routes_json(routes: &[RouteMeta]) -> serde_json::Value {
                 "transactional": r.transactional,
                 "audit": r.audit_action,
                 "guards": r.guards.len(),
+                "page": r.kind == crate::RouteKind::Page,
             })
         })
         .collect()
@@ -407,6 +408,10 @@ mod tests {
             routes_json(&[handled])[0]["handler"],
             "DealsController::index"
         );
+        assert_eq!(json[0]["page"], false);
+        let mut page = route("GET", "/z", None, true);
+        page.kind = crate::RouteKind::Page;
+        assert_eq!(routes_json(&[page])[0]["page"], true);
     }
 
     #[test]
