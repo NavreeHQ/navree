@@ -188,12 +188,19 @@ async fn snapshot(h: &Harness, kind: MetricKind, name: &str, processed: u64, min
 
 /// How wide the page is against the `width` of its window, and what sticks
 /// out of the window or out of the card it sits in. (On a phone the browser
-/// widens its window to the page, so the width is the one asked for.)
+/// widens its window to the page, so the width is the one asked for.) What
+/// scrolls in its own box (a table's container, a code block's listing) is
+/// left out, and so is a chart's table while it is hidden for screen readers
+/// only: it keeps its width but is clipped to nothing.
 async fn overflow(page: &Page, width: u32) -> Value {
     page.script::<Value>(format!(
         "const w = {width};
+         const unseen = (e) => {{
+           const table = e.closest('[data-slot=\"chart-table\"]');
+           return !!table && getComputedStyle(table).position === 'absolute';
+         }};
          const out = [...document.querySelectorAll('body *')]
-           .filter((e) => !e.closest('[data-slot=\"table-container\"]') && getComputedStyle(e).display !== 'none')
+           .filter((e) => !e.closest('[data-slot=\"table-container\"], [data-slot=\"code-block\"] pre') && getComputedStyle(e).display !== 'none' && !unseen(e))
            .filter((e) => {{
              const right = e.getBoundingClientRect().right;
              const card = e.parentElement && e.parentElement.closest('[data-slot=\"card\"]');
