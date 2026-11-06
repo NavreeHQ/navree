@@ -5,11 +5,11 @@
 //! this feature on, the module serves that page itself at [`CONSENT_PATH`]
 //! (`oauth.consent_url = "https://app.acme.test/oauth/consent"`, the app's own address and this
 //! path: the setting takes an absolute URL): the signed-in person sees who is asking (the
-//! client's name, and its website when it has one), the scopes it asks for in the words of
-//! `oauth.scopes`, whether they allowed these scopes before, and two buttons. Allow and Deny
-//! post to the same decisions the JSON routes make (`/api/oauth/requests/{id}/approve` and
-//! `deny`: the approval remembered, the audit entry written, the code issued) and send the
-//! browser back to the client.
+//! client's name, and its website when it has one a link can follow), the scopes it asks for
+//! in the words of `oauth.scopes`, whether they allowed these scopes before, and two buttons.
+//! Allow and Deny post to the same decisions the JSON routes make
+//! (`/api/oauth/requests/{id}/approve` and `deny`: the approval remembered, the audit entry
+//! written, the code issued) and send the browser back to the client.
 //!
 //! The page needs a person signed in with the session (a guest is sent to sign in and back);
 //! a request made with an OAuth or a personal access token is refused, as the JSON routes
@@ -94,12 +94,16 @@ pub fn consent_card(
                 .into()
         })
         .collect();
-    let website = view.client.website.as_deref().map(|site| {
-        el("p").slot("consent-website").child(
-            el("a")
-                .attr("href", Href::from(site))
-                .attr("rel", "noopener noreferrer")
-                .child(format!("{}: {site}", labels.website)),
+    // A website a link cannot follow (a `javascript:` address) is left off the page.
+    let website = view.client.website.as_deref().and_then(|site| {
+        let href = Href::parse(site).ok()?;
+        Some(
+            el("p").slot("consent-website").child(
+                el("a")
+                    .attr("href", href)
+                    .attr("rel", "noopener noreferrer")
+                    .child(format!("{}: {site}", labels.website)),
+            ),
         )
     });
     let post = |decision: &str, button: Button| {
