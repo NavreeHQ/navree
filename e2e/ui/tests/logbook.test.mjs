@@ -166,7 +166,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
     await withPage(WIDE, async (page) => {
       await page.goto(`${LOGBOOK}/_logbook`);
       const items = page.locator("[data-slot=sidebar-item]");
-      assert.equal(await items.count(), 14, "All and the thirteen types");
+      assert.equal(await items.count(), 21, "All and the twenty types");
       const requests = page.locator("[data-slot=sidebar-item][title=Requests]");
       const count = Number(await requests.locator("[data-slot=sidebar-count]").textContent());
       assert.ok(count >= 8, `the requests recorded so far: ${count}`);
