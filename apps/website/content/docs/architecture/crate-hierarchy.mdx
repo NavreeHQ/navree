@@ -21,7 +21,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-phone (phone numbers)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
 ```
 
 | Layer | Crate | What it provides |
@@ -30,6 +30,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading. It holds the memory cache store, abilities, token lookups and verified domains, and is re-exported as `navree::bounded` |
 | L0 | `navree-pdf` | The PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
+| L0 | `navree-phone` | Phone numbers: parsing what people type, checking it against each country's numbering plan (libphonenumber's, compiled into tables) and writing E.164, international, national and `tel:` forms. navree-validation's `Phone` rule, navree-orm's phone fields and navree-ui's phone input are built on it |
 | L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | L0 | `navree-openapi` | The OpenAPI 3.1 document model, and `ToSchema` (trait; its derive is in `navree-macros`) |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
@@ -108,7 +109,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-phone`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
 | `navree-openapi` | macros |
 | `navree-harbor`, `navree-template-peak` | template |
 | `navree-contracts` | kernel |
@@ -125,17 +126,18 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree-api` | openapi, kernel, contracts, config, http |
 | `navree-observe` | kernel, contracts, config, telemetry, http |
 | `navree-mail` | openapi, kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables), storage (a same-layer edge, feature `inbound`: raw messages on disks), testing (a same-layer edge, for its tests) |
-| `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
+| `navree-realtime` | kernel, contracts, config, http, crypto, db (a same-layer edge: a live nudge sent inside a unit of work waits for its commit) |
+| `navree-storage` | kernel, contracts, config, http, crypto |
 | `navree-time` | openapi, kernel, contracts, config, http, db (a same-layer edge: local-time SQL) |
 | `navree-session` | kernel, contracts, config, http, crypto, db, glob |
-| `navree-validation` | kernel, contracts, config, http, db, validation-macros, time (for the optional `time` feature) |
+| `navree-validation` | kernel, contracts, config, http, db, validation-macros, time (for the optional `time` feature), phone (for the optional `phone` feature) |
 | `navree-audit` | kernel, contracts, config, http, db, orm (a same-layer edge: the audit trail is an ORM model) |
 | `navree-queue` | openapi, kernel, contracts, config, telemetry, http, db, realtime, schedule (a same-layer edge: the operations watchdog), orm (a same-layer edge: failed jobs are ORM models) |
 | `navree-schedule` | kernel, contracts, config, telemetry, db, time |
 | `navree-access` | kernel, bounded, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, telemetry, http, db, mail, orm, crypto, http-client, validation, time, schedule, view, macros |
-| `navree-ui` | kernel, contracts, config, http, validation, ui-macros; orm (a same-layer edge, behind a feature: the data table's backend) |
-| `navree-orm` | openapi, kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
+| `navree-ui` | kernel, contracts, config, http, validation, ui-macros; orm and db (same-layer edges, behind the `orm` feature: the data table's backend and the sortable's unit of work), phone (feature `phone`: the phone input), storage (feature `storage`: received uploads) |
+| `navree-orm` | openapi, kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing, validation and phone behind features |
 | `navree-browser` | kernel, contracts, config, http, testing, glob |
 | `navree-auth` | openapi, kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm; ui behind its `ui` feature (the sign-in pages) |
 | `navree-workspace` | openapi, kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule, orm; testing behind its `testing` feature, session behind `session` (the session resolver) and ui behind `ui` (the workspace switcher) |
@@ -161,7 +163,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree-lighthouse` | openapi, kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth, orm, validation; mcp (with its `mcp` feature) |
 | `navree-logbook` | kernel, contracts, config, telemetry, http, ui, view, db, auth, glob |
 | `navree-fleet` | kernel, contracts, config, telemetry, http, events, view, db, observe, queue, access |
-| `navree-helm` | kernel, bounded, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace, orm; settings (with its `settings` feature) |
+| `navree-helm` | kernel, bounded, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace, orm, ui (its Markdown renderer); settings (with its `settings` feature) |
 | `navree-workflows` | openapi, kernel, contracts, config, macros, http, events, db, schedule, workspace |
 | `navree-media` | openapi, kernel, contracts, config, http, http-client, db, orm, storage, queue, pdf |
 | `navree-directory` | openapi, kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |

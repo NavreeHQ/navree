@@ -3,7 +3,7 @@ title: "Views and templates"
 description: "Templates for mail and other text: where they live, how modules embed them, the syntax, escaping, filters, limits and reloading."
 ---
 
-<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them on Navree's own template engine, `navree-template`, in the Jinja syntax.
+<Badge feature="view" /> Views are templates for text: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them on Navree's own template engine, `navree-template`, in the Jinja syntax. The pages of a web app are not templates: [Navree UI](/docs/ui/overview/) draws them from typed Rust components.
 
 ```jinja title="resources/views/mail/invoice.html"
 <p>Hello {{ name }},</p>
