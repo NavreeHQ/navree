@@ -1570,8 +1570,16 @@ async fn only_the_apps_island_scripts_are_served() {
     for path in [
         "/_navree/ui/island/map-000000000000.js",
         "/_navree/ui/island/clock.js",
-        "/_navree/ui/island/..%2Fcore.js",
     ] {
         app.client().get(path).send().await.assert_status(404);
     }
+    // A way out of the mount is refused by the router before any file is looked up: a
+    // path parameter that holds an encoded slash is a 400.
+    let out = app
+        .client()
+        .get("/_navree/ui/island/..%2Fcore.js")
+        .send()
+        .await
+        .assert_status(400);
+    assert!(out.text().contains("Invalid URL"), "{}", out.text());
 }

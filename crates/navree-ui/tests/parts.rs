@@ -746,8 +746,13 @@ fn a_flag_by_pointer_is_small_and_the_sprite_holds_each_flag_once() {
     assert!(square.contains("#flag-in-square"), "{square}");
     let both = html(FlagSprite::new([flags::IN]).with_squares());
     assert_eq!(count(&both, "<symbol"), 2);
-    // Without the sprite option the flag is as before.
-    assert!(!html(Flag::new(flags::IN)).contains("<use"));
+    // Without the sprite option the flag is as before: its own art, which for India points
+    // inside itself to draw the wheel's spokes, and no pointer at the sprite.
+    let plain = html(Flag::new(flags::IN));
+    assert!(
+        plain.contains("<path") && !plain.contains("#flag-in"),
+        "{plain}"
+    );
     // A code nobody knows is drawn in full, whatever is asked.
     assert!(!html(Flag::country("??").sprite()).contains("<use"));
 }
