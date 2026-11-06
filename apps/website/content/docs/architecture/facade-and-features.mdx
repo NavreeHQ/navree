@@ -214,7 +214,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `audit` | `http`, `db`, `orm` |
 | `queue` | `http`, `db`, `realtime`, `schedule`, `orm` |
 | `schedule` | `db`, `time` |
-| `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`; with `webhooks`, `integrations` or `settings` on too, their notification features |
+| `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`, `realtime`; with `webhooks`, `integrations` or `settings` on too, their notification features |
 | `ui` | `http`, `telemetry`, `validation`; with `orm` on too, the data table's backend; with `ai` on too, the assistant's pages (`navree::ai::ui`) |
 | `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
 | `auth` | `http`, `telemetry`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
@@ -233,7 +233,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `documents-native`, `documents-chrome`, `documents-docx` (opt-in) | `http`, `view`, `storage`, `pdf`, and one part of navree-documents: the native PDF engine, headless Chrome for PDF, or DOCX files. Use one or more of them in place of `documents` to compile only what the app uses |
 | `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue`, `pdf` |
 | `media-ffmpeg` (opt-in) | `media`, and its FFmpeg sidecar for video and audio |
-| `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace`, `orm` |
+| `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace`, `orm`, `webhooks` |
 | `search` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `db`, `orm`, `queue`, `access`, `workspace` |
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
 | `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |

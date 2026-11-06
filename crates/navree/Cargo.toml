@@ -180,6 +180,7 @@ notify = [
     "validation",
     "time",
     "schedule",
+    "realtime",
     "navree-webhooks?/notify",
     "navree-integrations?/notify",
     "navree-settings?/notify",
@@ -464,6 +465,7 @@ billing = [
     "auth",
     "workspace",
     "orm",
+    "webhooks",
 ]
 ## L6 (ecosystem, opt-in: not in `full`)
 ## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
