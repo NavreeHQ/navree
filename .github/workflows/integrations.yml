@@ -296,9 +296,10 @@ jobs:
       NAVREE_SANDBOX_SES_SECRET: ${{ secrets.NAVREE_SANDBOX_SES_SECRET }}
       NAVREE_SANDBOX_SES_REGION: ${{ secrets.NAVREE_SANDBOX_SES_REGION }}
       NAVREE_SANDBOX_SES_FROM: ${{ secrets.NAVREE_SANDBOX_SES_FROM }}
-      # The payment providers' test modes (navree-billing's opt-in suites).
+      # The payment providers' test modes (navree-billing's opt-in suite, which
+      # rust-suites.yml also runs).
       STRIPE_TEST_SECRET: ${{ secrets.STRIPE_TEST_SECRET }}
-      PADDLE_SANDBOX_API_KEY: ${{ secrets.PADDLE_SANDBOX_API_KEY }}
+      PADDLE_SANDBOX_KEY: ${{ secrets.PADDLE_SANDBOX_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -314,7 +315,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p target/logs
-          cargo test --locked -p navree-mail -p navree-billing -p navree-notify -p navree-integrations -p navree-ai \
+          cargo test --locked -p navree-mail -p navree-notify -p navree-integrations -p navree-ai \
             -- --ignored sandbox_ --nocapture 2>&1 | tee target/logs/sandbox.log
+          # Billing's suite is not ignored: without a key each test says SKIPPED and passes.
+          cargo test --locked --all-features -p navree-billing --test sandboxes -- --nocapture 2>&1 \
+            | tee -a target/logs/sandbox.log
           echo "Providers skipped for want of a key:"
           grep -h '^SKIPPED' target/logs/sandbox.log || echo "  none"
