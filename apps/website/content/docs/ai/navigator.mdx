@@ -16,7 +16,7 @@ Connect your agent to it once, and it can ask your app:
 | Tool | Answers |
 |---|---|
 | `app_info` | Navree and Rust versions, the facade features, the modules, the database driver |
-| `list_routes` | Every route with its method, path, access rule, handler and module |
+| `list_routes` | Every route with its method, path, access rule, handler and module, and whether it is a page |
 | `module_graph` | Modules with their imports, exports, providers and commands |
 | `list_providers` | Providers with their scope, module, visibility and dependencies |
 | `list_commands` | The app's commands, as `navree list` shows them |
@@ -26,6 +26,8 @@ Connect your agent to it once, and it can ask your app:
 | `last_error` | The most recent error, with its request and the log lines around it |
 | `read_config` | The merged configuration, secrets redacted |
 | `search_docs`, `read_doc` | These docs, for the Navree version your app uses |
+| `list_components` | The Navree UI components: group, summary, Rust types and docs page |
+| `render_page` | What one page of your app draws: title, headings, links, forms with their fields and the components used |
 
 When the app includes [Lighthouse](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents) (a file under `src/` adds `LighthouseModule`, as `navree new` apps do), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database. See [Lighthouse's tools](#lighthouses-tools).
 
@@ -122,7 +124,7 @@ The first call an agent makes in a new project. It returns the package and its p
 
 ### list_routes
 
-Every route of the booted app, with the information of `navree routes --json`: method, path, name, access rule (`public`, `auth`, `can:read Deal from id`), the module, the handler (`#[controller]` records the controller method) and the route's throttle, timeout, body limit and audit action. Arguments filter by `path` prefix, `method` or `module`.
+Every route of the booted app, with the information of `navree routes --json`: method, path, name, access rule (`public`, `auth`, `can:read Deal from id`), the module, the handler (`#[controller]` records the controller method) and the route's throttle, timeout, body limit and audit action. A route declared with `.page()` has `"page": true`. Arguments filter by `path` prefix, `method` or `module`, and `pages_only` keeps the pages.
 
 ```json title="list_routes, path /api/v1/deals"
 [
@@ -195,6 +197,12 @@ The configuration tree your app sees, merged from `.env`, `config/app.toml` and 
 `search_docs` searches these docs for the Navree version in your `Cargo.lock` and returns the best sections with an excerpt each, their address on navree.com and the slug `read_doc` takes. `read_doc` returns one page as Markdown: give it a slug (`basics/validation`), a `/docs/...` path or a navree.com URL, and optionally a `section` (its heading or anchor) to read only that part. An agent working on an app pinned to an older Navree reads the docs of that version, not of the latest release, so the APIs it finds are the APIs it has. When those docs can't be had (offline and not cached, or navree.com has no bundle for that version), Navigator answers from the docs it ships with and says so in a `note` that names both versions, so the agent knows to check APIs against the code.
 
 A version's docs are one JSON file, `docs.json`: `{"version": "1.0.0", "pages": [{"slug": "ai/navigator", "title": "Navigator", "description": "...", "planned": false, "sections": [{"heading": "Options", "anchor": "options", "markdown": "..."}]}]}`, each page split at its `##` headings, the site's components written as plain Markdown.
+
+### list_components and render_page
+
+`list_components` lists the [Navree UI](/docs/ui/overview/) components from a catalog built into Navigator, so it works without the app and describes the Navree version Navigator ships with (`version`; a `note` appears when your app's `Cargo.lock` pins another one). Each component has its `id`, `name`, `group`, a one-line `summary`, the Rust `types` that make it and `docs`, the slug `read_doc` takes (`components/button`). Arguments filter by `query` (words in the id, name, summary or types: `date picker`, `ButtonVariant`) and `group` (`inputs`; the answer lists the groups). An agent that checks it before building a screen uses a component that exists.
+
+`render_page` shows what one page of your app draws, without a browser. The app draws the page itself, for a guest (a `GET` that changes nothing), through its own router, and Navigator answers with an outline: the `status`, the `title`, the `headings` with their level, the `links`, the `buttons`, the `forms` with their action, method, fields (type, name, label, whether required, options) and buttons, and the `components` the page uses, each with the `docs` slug for `read_doc`. A route that redirects, to sign in for example, answers with the `redirect`. Give it a `path` (`/deals`, `/deals?page=2`); `list_routes` with `pages_only` lists the paths worth asking for. It needs the app's `ui:render` command, which the UI module adds; an app without it is told so in plain words.
 
 ### Lighthouse's tools
 
