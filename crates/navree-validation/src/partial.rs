@@ -310,7 +310,7 @@ impl Mendable for Value {
     }
 
     fn values(&self, at_most: usize) -> usize {
-        let mut values = 1;
+        let mut values: usize = 1;
         // Counted before they wait here, so fewer than `at_most` ever do.
         let mut pending = vec![self];
         while let Some(value) = pending.pop() {
