@@ -426,6 +426,8 @@ cd packages/js && pnpm check && pnpm smoke
 In `apps/crm-nuxt`:
 
 ```bash
+pnpm packages                  # once: installs and builds packages/js, which the app links
+pnpm install
 pnpm typecheck && pnpm test && pnpm build
 pnpm e2e                       # real API on :8092 + production build on :3102
 pnpm screenshots               # every screen at 1440 and 390 px into ./screenshots

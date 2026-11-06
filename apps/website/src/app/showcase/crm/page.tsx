@@ -527,12 +527,14 @@ APP_REALTIME__ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3102 \\
   cargo run -p crm-api -- serve               # http://127.0.0.1:8080`;
 
 const RUN_NEXT = `cd navree/apps/crm-web
+pnpm --dir ../../packages/js install && pnpm --dir ../../packages/js build   # once
 pnpm install
 pnpm dev                                      # http://localhost:3000`;
 
 const RUN_NUXT = `cd navree/apps/crm-nuxt
+pnpm packages                                 # once
 pnpm install
-NAVREE_API_URL=http://127.0.0.1:8080 NUXT_PUBLIC_WS_PORT=8080 pnpm dev
+NAVREE_API_URL=http://127.0.0.1:8080 NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT=8080 pnpm dev
                                               # http://localhost:3102`;
 
 const accounts = [
