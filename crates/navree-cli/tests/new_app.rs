@@ -994,7 +994,7 @@ fn ui_navree_wires_the_screens_into_the_app() {
     assert!(read(&root, "src/lib.rs").contains("pub mod ui;\n"));
     assert!(read(&root, "src/modules/mod.rs").contains("pub mod customers;\n"));
     // The minimal app without screens has none of it, but it has workspaces
-    // from the start.
+    // from the start, and the browser sign-in the tools' dashboards use.
     let plain = create_app(dir.path(), &app("plain", Ui::None), now()).unwrap();
     for file in [
         "src/app.rs",
@@ -1003,15 +1003,7 @@ fn ui_navree_wires_the_screens_into_the_app() {
         "Cargo.toml",
     ] {
         let text = read(&plain, file);
-        for word in [
-            "SessionModule",
-            "UiModule",
-            "AuthPages",
-            "RealtimeModule",
-            "customers",
-            "pub mod ui",
-            "futures-util",
-        ] {
+        for word in ["RealtimeModule", "customers", "pub mod ui", "futures-util"] {
             assert!(
                 !text.contains(word),
                 "{file} of the plain app mentions {word}"
@@ -1019,6 +1011,13 @@ fn ui_navree_wires_the_screens_into_the_app() {
         }
     }
     let plain_app = read(&plain, "src/app.rs");
+    for line in [
+        ".module(UiModule::from_config())",
+        ".module(SessionModule::from_config())",
+        ".module(AuthPages::new().app_name(\"Plain\"))",
+    ] {
+        assert!(plain_app.contains(line), "src/app.rs lacks `{line}`:\n{plain_app}");
+    }
     assert!(plain_app.contains("use navree::workspace::WorkspaceModule;"));
     assert!(plain_app.contains(".module(WorkspaceModule::from_config())"));
     assert!(read(&plain, "tests/app.rs").contains("a_new_app_has_workspaces_and_resolves_one"));

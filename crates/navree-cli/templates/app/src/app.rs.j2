@@ -2,11 +2,7 @@
 
 use navree::access::{AccessModule, AccessOptions};
 use navree::api::ApiModule;
-{% if ui_navree %}
 use navree::auth::{AuthModule, AuthPages};
-{% else %}
-use navree::auth::AuthModule;
-{% endif %}
 use navree::cache::CacheModule;
 use navree::config::{ConfigModule, ConfigSources};
 use navree::crypto::CryptoModule;
@@ -24,9 +20,9 @@ use navree::queue::QueueModule;
 use navree::schedule::{ModuleBuilderScheduleExt, ScheduleModule};
 {% if ui_navree %}
 use navree::realtime::RealtimeModule;
+{% endif %}
 use navree::session::SessionModule;
 use navree::ui::UiModule;
-{% endif %}
 use navree::validation::ValidationModule;
 use navree::view::ViewModule;
 use navree::workspace::WorkspaceModule;
@@ -50,11 +46,13 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(CacheModule::from_config())
         .module(EventsModule::for_root())
         .module(ViewModule::from_config())
-{% if ui_navree %}
         // Pages are drawn on the server with Navree UI, and a browser that signs in
-        // gets a server-side session. The live hub tells open pages what changed.
+        // gets a server-side session: the tools' dashboards (Lighthouse, Logbook)
+        // sign in on it too.
         .module(UiModule::from_config())
         .module(SessionModule::from_config())
+{% if ui_navree %}
+        // The live hub tells open pages what changed.
         .module(RealtimeModule::from_config())
 {% endif %}
         .module(MailModule::from_config())
@@ -73,10 +71,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
             abilities: abilities::define,
             super_admin_role: Some("admin".to_owned()),
         }))
-{% if ui_navree %}
         // The sign-in, two-factor, forgotten password and sign-out pages.
         .module(AuthPages::new().app_name("{{ title }}"))
-{% endif %}
         // Workspaces, members and roles (`/api/workspaces/*`). A request is in a
         // workspace when it names one: the `X-Workspace` header, or, for a
         // browser, the workspace it last switched to.
