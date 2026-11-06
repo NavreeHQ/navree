@@ -225,7 +225,7 @@ async fn a_wrong_password_is_a_field_error_that_does_not_say_which_part_was_wron
         let body = response.text();
         assert!(body.contains("field-error"), "{body}");
         assert!(
-            body.contains("These details don't match an account. Check them and try again."),
+            body.contains("These details don&#39;t match an account. Check them and try again."),
             "{body}"
         );
         // The form comes back as it was, and never with the password in it.
