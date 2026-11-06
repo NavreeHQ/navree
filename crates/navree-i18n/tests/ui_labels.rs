@@ -27,17 +27,22 @@ fn i18n() -> I18n {
     .expect("the locales load")
 }
 
-/// The blank names (`{n}`, `{label}`) of a Debug print, sorted and without repeats.
+/// The blank names (`{n}`, `{label}`) of a Debug print, sorted and without repeats. A Debug
+/// print writes a combining mark, such as a Hindi vowel sign, as `\u{94d}`: that is not a blank.
 fn blanks_of(debug: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut rest = debug;
     while let Some(open) = rest.find('{') {
+        let escape = rest[..open].ends_with("\\u");
         let after = &rest[open + 1..];
         let Some(close) = after.find('}') else {
             break;
         };
         let name = &after[..close];
-        if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        if !escape
+            && !name.is_empty()
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
             found.push(name.to_owned());
             rest = &after[close + 1..];
         } else {
@@ -124,14 +129,17 @@ fn hindi_translates_every_label_struct_and_keeps_the_blanks() {
     );
 }
 
-// A locale with no shipped words has the toolkit's English, never an id.
+// A locale with no shipped words has the toolkit's English, never an id. Its table still
+// counts as the locale counts (Tamil in lakhs), which the grouping test checks.
 #[test]
 fn a_locale_without_shipped_words_keeps_english() {
     let i18n = i18n();
     for tag in ["fr", "ta", "ja"] {
         let locale = i18n.locale(tag);
+        let mut table = TableLabels::from_locale(&locale);
+        table.grouping = TableLabels::default().grouping;
         assert_eq!(
-            format!("{:?}", TableLabels::from_locale(&locale)),
+            format!("{table:?}"),
             format!("{:?}", TableLabels::default()),
             "{tag}"
         );
@@ -183,6 +191,7 @@ fn a_tables_counts_are_grouped_as_the_locale_groups_numbers() {
         ("en", Grouping::Thousands),
         ("en-IN", Grouping::Indian),
         ("hi", Grouping::Indian),
+        ("ta", Grouping::Indian),
         ("de", Grouping::Thousands),
         ("fr", Grouping::Thousands),
         ("ja", Grouping::Thousands),
@@ -211,6 +220,11 @@ fn the_toolkits_month_names_are_icus() {
             continue;
         }
         let dates = locale.date_locale();
+        // A language the toolkit has no names for (Tamil) is drawn in English, so there is
+        // nothing of its own to compare.
+        if dates.tag.split('-').next() != tag.split('-').next() {
+            continue;
+        }
         for month in 1..=12u32 {
             let day = NaiveDate::from_ymd_opt(2026, month, 15).unwrap();
             let written = locale.format_date_with(day, DateStyle::Long).to_lowercase();
