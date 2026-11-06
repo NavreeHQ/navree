@@ -376,8 +376,8 @@ fn urls_read_what_apps_and_services_write() {
     // %3A and a literal colon both separate issuer and account.
     for label in [
         "Navree:anu%40example.com",
-        "Navree%3Aada%40example.com",
-        "Navree%3aada@example.com",
+        "Navree%3Aanu%40example.com",
+        "Navree%3aanu@example.com",
     ] {
         let totp = Totp::from_url(&format!(
             "otpauth://totp/{label}?secret={secret}&issuer=Navree"
