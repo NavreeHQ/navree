@@ -155,7 +155,7 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
         <div data-slot="split-handle" id="h" role="separator" aria-orientation="vertical" aria-controls="a" aria-label="List" data-ui-keep-attrs="tabindex aria-valuenow aria-valuemin aria-valuemax"></div>
         <section data-slot="split-pane" id="b" aria-label="Detail" data-split-fill data-split-min="300" data-split-max="900"><div data-slot="split-pane-body"><div data-slot="split-pane-content"><a id="hot" href="/${path}-hot" data-ui-hotkey="j" aria-keyshortcuts="j">Next</a></div></div></section>
       </div>`;
-      route(`/${path}`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><link rel="stylesheet" href="/_navree/ui/navree-ui.css"><script type="module" src="/_navree/ui/split.js"></script><script type="module" src="/_navree/ui/keys.js"></script><script type="module" src="/_navree/ui/lazy.js"></script></head><body>${clobber}${split}</body></html>`);
+      route(`/${path}`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><link rel="stylesheet" href="/_navree/ui/navree-ui.css"><link rel="stylesheet" href="/_navree/ui/split-styles.css"><link rel="stylesheet" href="/_navree/ui/lazy-styles.css"><script type="module" src="/_navree/ui/split.js"></script><script type="module" src="/_navree/ui/keys.js"></script><script type="module" src="/_navree/ui/lazy.js"></script></head><body>${clobber}${split}</body></html>`);
       route(`/${path}-hot`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>hot</title></head><body>hot</body></html>`);
       f.routes.set(`/${path}-save`, (req, res) => {
         res.writeHead(204);
@@ -1129,6 +1129,36 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       assert.deepEqual(await busy(), [false, false], "neither table is left busy");
       assert.equal(await attr(page, "data-ui-loading"), null, "nor the page loading");
       assert.equal(await page.evaluate(() => document.getElementById("ta").getAttribute("aria-busy")), null);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a region's answer brings the styles and the module its parts need, and is drawn once its styles are in (${engine})`, async () => {
+      const name = key("brings");
+      let release;
+      const held = new Promise((resolve) => (release = resolve));
+      f.routes.set(`/${name}.css`, async (req, res) => {
+        await held;
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end("#r [data-part]{outline:3px solid rgb(1, 2, 3)}");
+      });
+      route(`/${name}`, doc(`<div id="r" data-ui-region data-ui-src="/${name}-frag">start</div>`));
+      // A fragment is a page with no script of its own: its head names what its parts need.
+      route(`/${name}-frag`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>f</title><link rel="stylesheet" href="/${name}.css"><script type="module" src="/_navree/ui/keys.js"></script></head><body><div id="r" data-ui-region data-ui-src="/${name}-frag"><span data-part>part</span></div></body></html>`);
+      const { context, page, errors } = await fresh(`/${name}`);
+      await ask(page, "r", "__done");
+      await until(() => hits(`/${name}.css`).length === 1);
+      await sleep(100);
+      assert.equal(await page.textContent("#r"), "start", "the part waits for its styles");
+      release();
+      await page.evaluate(() => window.__done);
+      assert.equal(await page.textContent("#r"), "part");
+      assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector("#r [data-part]")).outlineColor), "rgb(1, 2, 3)");
+      assert.equal(await page.locator('head script[src="/_navree/ui/keys.js"]').count(), 1, "the module it needs is loaded, once");
+      // The next answer names the same: nothing is added twice.
+      await ask(page, "r");
+      assert.equal(await page.locator(`head link[href="/${name}.css"]`).count(), 1);
+      assert.equal(await page.locator('head script[src="/_navree/ui/keys.js"]').count(), 1);
       assert.deepEqual(errors, []);
       await context.close();
     });

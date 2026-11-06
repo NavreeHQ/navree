@@ -99,7 +99,8 @@ export function inBrowsers(body) {
  */
 export async function asIfScriptingOff(page) {
   await page.route("**/*.js", (route) => route.abort());
-  await page.route("**/navree-ui-*.css", async (route) => {
+  // Every toolkit sheet the page links: a module's own styles answer to scripting too.
+  await page.route("**/_navree/ui/*.css", async (route) => {
     const response = await route.fetch();
     const text = (await response.text()).replaceAll("(scripting:none)", "all").replaceAll("(scripting:enabled)", "not all");
     await route.fulfill({ response, body: text });

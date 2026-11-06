@@ -5,8 +5,8 @@
 
 use navree_ui::assets::{self, Asset, get};
 use navree_ui::{
-    Button, Card, Combobox, Dialog, Grid, NavGroup, NavItem, Select, Shell, Stat, Uses, View,
-    icons, measure,
+    Button, Card, Combobox, Dialog, Grid, NavGroup, NavItem, Node, Select, Shell, Stat, Uses,
+    View, icons, measure,
 };
 
 fn gzip(asset: &Asset) -> usize {
@@ -17,9 +17,37 @@ fn size(name: &str) -> usize {
     gzip(get(name).unwrap_or_else(|| panic!("no asset {name}")))
 }
 
+/// The core runtime is what every page with a command, a form or a boosted link needs.
+/// Its ceiling leaves it room for a fix, not for a feature: what only some pages use is
+/// a module of its own (see the test after this one).
 #[test]
-fn the_core_runtime_is_at_most_12_kb_gzip() {
-    assert!(size("core") <= 12 * 1024, "{}", size("core"));
+fn the_core_runtime_is_at_most_13_kb_gzip() {
+    assert!(size("core") <= 13 * 1024, "{}", size("core"));
+}
+
+/// The files the core runtime is built from, and no others: a new behaviour that only
+/// some pages need (a chat, a generated surface, an island) can't grow it by an import.
+#[test]
+fn the_core_runtime_is_built_from_its_own_files_only() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/src");
+    let mut seen = std::collections::BTreeSet::new();
+    let mut next = vec!["core.js".to_owned()];
+    while let Some(file) = next.pop() {
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+        let text = std::fs::read_to_string(src.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let mut rest = text.as_str();
+        while let Some(at) = rest.find("from \"./") {
+            rest = &rest[at + 8..];
+            let end = rest.find('"').expect("an import ends");
+            next.push(rest[..end].to_owned());
+        }
+    }
+    assert_eq!(
+        seen.into_iter().collect::<Vec<_>>(),
+        ["commands.js", "core.js", "dom.js", "forms.js", "morph.js", "nav.js", "ops.js", "ui.js"]
+    );
 }
 
 #[test]
@@ -318,7 +346,7 @@ fn the_menubar_module_is_at_most_3_kb_gzip() {
 }
 
 /// Each of these components links a stylesheet of its own instead of growing the one every
-/// page loads, so the one stays where it was.
+/// page loads, so the one stays where it was. The theme builder's sheet is one of them.
 #[test]
 fn the_modules_styles_are_at_most_3_kb_gzip_each() {
     for name in [
@@ -327,9 +355,124 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "otp-styles",
         "carousel-styles",
         "menubar-styles",
+        "charts-styles",
+        "select-styles",
+        "phone-styles",
+        "slider-styles",
+        "menus-styles",
+        "split-styles",
+        "tree-styles",
+        "lazy-styles",
+        "toolbar-styles",
+        "dates-styles",
+        "theme-builder",
     ] {
         assert!(size(name) <= 3 * 1024, "{name}: {}", size(name));
     }
+}
+
+/// The data table's own styles: its toolbar, filters, columns, sticky cells and pages.
+#[test]
+fn the_table_styles_are_at_most_4_kb_gzip() {
+    assert!(size("table-styles") <= 4 * 1024, "{}", size("table-styles"));
+}
+
+/// The asset names of the scripts and of the stylesheets `html` links, in the toolkit's order.
+fn linked(html: &str) -> (Vec<&'static str>, Vec<&'static str>) {
+    let mut scripts = Vec::new();
+    let mut sheets = Vec::new();
+    for asset in assets::FILES {
+        let url = format!("{}/{}-{}.{}", assets::MOUNT, asset.name, asset.hash, asset.ext);
+        if html.contains(&url) {
+            match asset.ext {
+                "js" => scripts.push(asset.name),
+                "css" => sheets.push(asset.name),
+                _ => {}
+            }
+        }
+    }
+    (scripts, sheets)
+}
+
+/// What the files `names` weigh together, gzip.
+fn weight(names: &[&str]) -> usize {
+    names.iter().map(|name| size(name)).sum()
+}
+
+/// The styles that only one module's parts use are in that module's sheet, not in the one
+/// every page loads: a page links a module's styles where it loads the module, and no others.
+#[test]
+fn a_modules_own_styles_come_with_it_and_only_with_it() {
+    use navree_ui::dates::{Calendar, DatePicker};
+    use navree_ui::{
+        DropdownMenu, LazyItem, LazyList, MenuItem, Pane, PhoneInput, Slider, SplitPane, Toolbar,
+        ToolbarItem, Tree, TreeNode,
+    };
+
+    let text = |name: &str| {
+        std::str::from_utf8(get(name).unwrap_or_else(|| panic!("no asset {name}")).bytes)
+            .expect("a stylesheet is text")
+    };
+    let shared = text("navree-ui");
+    for (sheet, slot) in [
+        ("table-styles", "[data-slot=filter-bar]"),
+        ("select-styles", "[data-slot=select-popup]"),
+        ("phone-styles", "[data-slot=phone-input]"),
+        ("slider-styles", "[data-slot=slider-track]"),
+        ("menus-styles", "[data-slot=dropdown-menu]"),
+        ("split-styles", "[data-slot=split-handle]"),
+        ("tree-styles", "[data-slot=tree-row]"),
+        ("lazy-styles", "[data-slot=lazy-items]"),
+        ("toolbar-styles", "[data-slot=toolbar-tool]"),
+        ("dates-styles", "[data-slot=calendar-day]"),
+    ] {
+        assert!(text(sheet).contains(slot), "{slot} in {sheet}");
+        assert!(!shared.contains(slot), "{slot} in the sheet every page loads");
+    }
+
+    let sheets = |body: Node| linked(&View::new("x").body(body).to_html()).1;
+    assert_eq!(sheets(Button::primary("Go").href("/x").into()), ["navree-ui"]);
+    let parts: [(Node, &str); 9] = [
+        (Select::new("s").option("a", "A").into(), "select-styles"),
+        (Combobox::new("c").option("a", "A").into(), "select-styles"),
+        (PhoneInput::new("mobile").into(), "phone-styles"),
+        (Slider::new("v").label("Value").into(), "slider-styles"),
+        (Tree::new("t", "T").node(TreeNode::leaf("a", "A")).into(), "tree-styles"),
+        (
+            LazyList::new("l", "Things", "/rows")
+                .items([LazyItem::new("1", "1", "One")])
+                .into(),
+            "lazy-styles",
+        ),
+        (
+            SplitPane::new("s")
+                .pane(Pane::new("a", "A"))
+                .pane(Pane::fill("b", "B"))
+                .into(),
+            "split-styles",
+        ),
+        (Calendar::new("cal").into(), "dates-styles"),
+        (DatePicker::new("due").into(), "dates-styles"),
+    ];
+    for (body, own) in parts {
+        let linked = sheets(body);
+        assert_eq!(linked.first(), Some(&"navree-ui"), "{own}: {linked:?}");
+        assert!(linked.contains(&own), "{own}: {linked:?}");
+        assert!(!linked.contains(&"table-styles"), "{own}: {linked:?}");
+    }
+    // A menu's styles come with every menu, the one a toolbar moves its tools into too.
+    let menu = sheets(DropdownMenu::new("m", "M").item(MenuItem::link("L", "/l")).into());
+    assert_eq!(menu, ["navree-ui", "menus-styles"]);
+    let bar = sheets(
+        Toolbar::new("b", "B")
+            .item(ToolbarItem::button("A"))
+            .item(ToolbarItem::menu(
+                "M",
+                DropdownMenu::new("m", "M").item(MenuItem::link("L", "/l")),
+            ))
+            .into(),
+    );
+    assert_eq!(bar, ["navree-ui", "menus-styles", "toolbar-styles"]);
 }
 
 /// The bits are one each, so a page asks for exactly what it names.
@@ -370,9 +513,11 @@ fn no_two_modules_share_a_bit() {
     }
 }
 
+/// The stylesheet every page loads: the tokens, the base, controls, display, states,
+/// overlays, toasts and the shell. A module's own parts are styled in its own sheet.
 #[test]
-fn the_stylesheet_is_at_most_25_kb_gzip() {
-    assert!(size("navree-ui") <= 25 * 1024, "{}", size("navree-ui"));
+fn the_stylesheet_is_at_most_16_kb_gzip() {
+    assert!(size("navree-ui") <= 16 * 1024, "{}", size("navree-ui"));
 }
 
 #[test]
@@ -384,14 +529,100 @@ fn a_typical_crud_page_loads_at_most_30_kb_gzip_of_script() {
     assert!(total <= 30 * 1024, "{total}");
 }
 
+/// The typical CRUD page above, built: the shell and a table whose rows have menus. It
+/// loads the files the budget counts, and those styles.
 #[test]
-fn all_modules_together_are_under_80_kb_gzip() {
-    let total: usize = assets::FILES
-        .iter()
-        .filter(|asset| asset.ext == "js")
-        .map(gzip)
-        .sum();
-    assert!(total < 80 * 1024, "{total}");
+fn a_typical_crud_page_loads_its_scripts_and_at_most_22_kb_gzip_of_styles() {
+    use navree_ui::{DataTable, RowAction, TableQuery, TableRow};
+
+    #[derive(Clone, TableRow)]
+    struct Deal {
+        #[col(skip)]
+        id: i64,
+        #[col(sortable)]
+        title: String,
+    }
+
+    let rows = vec![Deal {
+        id: 1,
+        title: "Gurdaspur depot".to_owned(),
+    }];
+    let query = TableQuery::<Deal>::parse("/deals", "");
+    let shell = Shell::new("Acme")
+        .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
+    let html = shell
+        .page("Deals", "/deals")
+        .body(
+            DataTable::new("deals", &query, &rows)
+                .row_actions(|row| vec![RowAction::link("View", format!("/deals/{}", row.id))]),
+        )
+        .to_view()
+        .to_html();
+    let (scripts, sheets) = linked(&html);
+    assert_eq!(scripts, ["core", "sidebar", "overlay", "table", "menus"]);
+    assert_eq!(sheets, ["navree-ui", "table-styles", "menus-styles"]);
+    let total = weight(&sheets);
+    assert!(total <= 22 * 1024, "{total}");
+}
+
+/// The heaviest screen of the example apps, as its parts load: the inbox's conversation.
+/// The shell, the list and the thread in panes, both lazy lists following the stream, the
+/// assign box searched on the server, the status menu, the snooze date and the single-key
+/// shortcuts. What every module together weighs never reaches a page; this does.
+fn conversation_page() -> String {
+    use navree_ui::dates::DatePicker;
+    use navree_ui::{DropdownMenu, LazyEnd, LazyList, MenuItem, Pane, SplitPane, el};
+
+    let shell = Shell::new("Support").group(
+        NavGroup::new("Views").item(NavItem::new("All conversations", "/inbox").icon(icons::INBOX)),
+    );
+    shell
+        .page("Refund for order 2041", "/inbox/1")
+        .body((
+            SplitPane::new("inbox")
+                .pane(Pane::new("list", "Conversations"))
+                .pane(Pane::fill("thread", "Conversation")),
+            LazyList::new("conversations", "Conversations", "/inbox/rows").live_from(
+                "/events",
+                None,
+                LazyEnd::Start,
+            ),
+            LazyList::new("messages", "Messages", "/inbox/1/messages").live_from(
+                "/events",
+                None,
+                LazyEnd::End,
+            ),
+            Combobox::new("agent").search("/inbox/agents/options"),
+            DropdownMenu::new("status", "Status").item(MenuItem::link("Close", "/inbox/1/close")),
+            DatePicker::new("until"),
+            el("a").href("/inbox/2").hotkey("j").child("Next"),
+        ))
+        .to_view()
+        .to_html()
+}
+
+/// The script of the heaviest page. Each module has its own ceiling as well.
+#[test]
+fn the_heaviest_page_loads_at_most_52_kb_gzip_of_script() {
+    let (scripts, _) = linked(&conversation_page());
+    assert_eq!(
+        scripts,
+        ["core", "sidebar", "overlay", "live", "select", "dates", "menus", "split", "keys", "lazy"]
+    );
+    let total = weight(&scripts);
+    assert!(total <= 52 * 1024, "{total}");
+}
+
+/// The styles of the heaviest page: the sheet every page loads and its modules' own.
+#[test]
+fn the_heaviest_page_loads_at_most_26_kb_gzip_of_styles() {
+    let (_, sheets) = linked(&conversation_page());
+    assert_eq!(
+        sheets,
+        ["navree-ui", "select-styles", "menus-styles", "split-styles", "lazy-styles", "dates-styles"]
+    );
+    let total = weight(&sheets);
+    assert!(total <= 26 * 1024, "{total}");
 }
 
 #[test]

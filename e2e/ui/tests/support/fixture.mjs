@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 const crate = join(dirname(fileURLToPath(import.meta.url)), "../../../../crates/navree-ui");
 const file = (name) => readFileSync(join(crate, "dist", name));
 const FILES = { "/_navree/ui/core.js": file("core.js"), "/_navree/ui/overlay.js": file("overlay.js"), "/_navree/ui/menus.js": file("menus.js"), "/_navree/ui/phone.js": file("phone.js"), "/_navree/ui/slider.js": file("slider.js"), "/_navree/ui/tree.js": file("tree.js"), "/_navree/ui/toolbar.js": file("toolbar.js"), "/_navree/ui/split.js": file("split.js"), "/_navree/ui/keys.js": file("keys.js"), "/_navree/ui/lazy.js": file("lazy.js"), "/_navree/ui/live.js": file("live.js"), "/_navree/ui/sortable.js": file("sortable.js"), "/_navree/ui/navree-ui.css": file("navree-ui.css") };
+// The styles of a module whose parts a page draws, linked after the sheet every page loads.
+for (const name of ["menus", "split", "lazy"]) FILES[`/_navree/ui/${name}-styles.css`] = file(`${name}-styles.css`);
 // The phone module fetches its plans beside itself, by their hashed name.
 const PHONE_DATA = /PHONE_DATA_URL: &str = "([^"]+)"/.exec(readFileSync(join(crate, "src/assets_gen.rs"), "utf8"))[1];
 FILES[PHONE_DATA] = file("phone-data.json");
@@ -20,10 +22,10 @@ export const BUILD = "b1";
 
 const MARKER = (name) => `document.documentElement.setAttribute("${name}", "1");`;
 
-/** A page with the core runtime, as `View` writes one; `menus` adds the menus module, `css` the stylesheet. */
+/** A page with the core runtime, as `View` writes one; `menus` adds the menus module, `css` the stylesheets. */
 export function page(body, { title = "t", build = BUILD, head = "", menus = false, css = false } = {}) {
   const module = menus ? `<script type="module" src="/_navree/ui/menus.js"></script>` : "";
-  const sheet = css ? `<link rel="stylesheet" href="/_navree/ui/navree-ui.css">` : "";
+  const sheet = css ? `<link rel="stylesheet" href="/_navree/ui/navree-ui.css">${menus ? `<link rel="stylesheet" href="/_navree/ui/menus-styles.css">` : ""}` : "";
   return `<!doctype html><html lang="en" data-build="${build}"><head><meta charset="utf-8"><title>${title}</title>${sheet}<script type="module" src="/_navree/ui/core.js"></script>${module}${head}</head><body data-ui-boost>${body}</body></html>`;
 }
 

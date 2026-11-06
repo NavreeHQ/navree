@@ -569,6 +569,10 @@ export async function refresh(id, polled = false) {
       return;
     }
     clean(body(doc));
+    // A part the answer brings that this page has none of yet needs its module's styles and script: they come first.
+    const styles = mergeHead(doc);
+    if (styles) await styles;
+    if (old()) return;
     let to = byId(id, doc);
     if (!to) {
       // A page with the runtime that lacks the region is somewhere else, not a fragment.

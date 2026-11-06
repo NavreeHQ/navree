@@ -99,9 +99,23 @@ pub fn stylesheets(uses: Uses) -> impl Iterator<Item = &'static str> {
         .map(|(_, url)| url)
 }
 
-/// Every module stylesheet, with the bit of [`Uses`] that links it.
+/// Every module stylesheet, with the bit of [`Uses`] that links it, in the order a page
+/// links them: first the styles of `styles` that only one module's parts use, in the
+/// order of their sources' names (`build.mjs` keeps them out of the toolkit's own
+/// sheet), then the sheets of `styles/extra`.
 fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
     [
+        (Uses::TABLE, TABLE_STYLES_URL),
+        (Uses::SELECT, SELECT_STYLES_URL),
+        #[cfg(feature = "phone")]
+        (Uses::PHONE, PHONE_STYLES_URL),
+        (Uses::SLIDER, SLIDER_STYLES_URL),
+        (Uses::MENUS, MENUS_STYLES_URL),
+        (Uses::SPLIT, SPLIT_STYLES_URL),
+        (Uses::TREE, TREE_STYLES_URL),
+        (Uses::LAZY, LAZY_STYLES_URL),
+        (Uses::TOOLBAR, TOOLBAR_STYLES_URL),
+        (Uses::DATES, DATES_STYLES_URL),
         (Uses::THEME_BUILDER, THEME_BUILDER_URL),
         (Uses::MARKDOWN, MARKDOWN_URL),
         (Uses::UPLOAD, UPLOAD_STYLES_URL),

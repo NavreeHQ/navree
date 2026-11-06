@@ -39,8 +39,7 @@
   & caption{padding:.75rem .75rem .25rem;color:var(--fg);font-weight:500;text-align:start}
   & thead th{padding:0 .375rem .25rem;color:var(--fg-3);font-size:12px;font-weight:500;text-align:start}
   & tbody th{padding:.25rem .375rem .25rem .75rem;text-align:start;font-weight:400;vertical-align:top}
-  & td{padding:.25rem .375rem;vertical-align:top;&:last-child{padding-inline-end:.75rem}}
-  & td{white-space:nowrap}
+  & td{padding:.25rem .375rem;vertical-align:top;white-space:nowrap;&:last-child{padding-inline-end:.75rem}}
   & [data-slot=input]{display:inline-block;width:6.25rem;height:1.75rem;padding:0 .375rem;font:12px var(--font-mono);vertical-align:middle}
   & [data-slot=field-error]{max-width:8rem;white-space:normal;font-size:12px}
 }

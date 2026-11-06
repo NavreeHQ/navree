@@ -41,11 +41,30 @@ async function js(entry, define = {}) {
   return Buffer.from(out.outputFiles[0].contents);
 }
 
+/**
+ * The sources in `styles` that only one module's parts use. Each is a sheet of its own, named after the
+ * module's script with `-styles` and linked by the same bit, and is left out of the sheet every page loads.
+ * A page links them after that sheet, in this order, which is the order of their names.
+ */
+const MODULE_STYLES = {
+  "table-styles": ["25-table.css"],
+  "select-styles": ["27-select.css"],
+  "phone-styles": ["28-phone.css"],
+  "slider-styles": ["31-slider.css"],
+  "menus-styles": ["32-menus.css"],
+  "split-styles": ["33-split.css"],
+  "tree-styles": ["33-tree.css"],
+  "lazy-styles": ["35-lazy.css"],
+  "toolbar-styles": ["35-toolbar.css"],
+  "dates-styles": ["36-dates.css"],
+};
+const OWNED = new Set(Object.values(MODULE_STYLES).flat());
+
 async function css() {
-  // Sources are concatenated in name order, tokens first.
+  // Sources are concatenated in name order, tokens first; a module's own are not.
   const dir = join(crate, "styles");
   const files = readdirSync(dir)
-    .filter((f) => f.endsWith(".css"))
+    .filter((f) => f.endsWith(".css") && !OWNED.has(f))
     .sort((a, b) => (a === "tokens.css" ? -1 : b === "tokens.css" ? 1 : a.localeCompare(b)));
   const source = files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
   const out = await build({
@@ -58,9 +77,9 @@ async function css() {
   return Buffer.from(out.outputFiles[0].contents);
 }
 
-/** A stylesheet of its own from `styles/extra`: the named files, in order. @param {string[]} names */
-async function extraCss(names) {
-  const source = names.map((f) => readFileSync(join(crate, "styles", "extra", f), "utf8")).join("\n");
+/** A stylesheet of its own from `styles/extra` (or `from`): the named files, in order. @param {string[]} names */
+async function extraCss(names, from = join(crate, "styles", "extra")) {
+  const source = names.map((f) => readFileSync(join(from, f), "utf8")).join("\n");
   const out = await build({ stdin: { contents: source, loader: "css" }, minify: true, target: TARGET, write: false, legalComments: "none" });
   return Buffer.from(out.outputFiles[0].contents);
 }
@@ -128,6 +147,10 @@ const FILES = [
   ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
   ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
 ];
+// The sheets of `MODULE_STYLES`, each from its sources in `styles`; the phone's ships with its feature.
+for (const [name, sources] of Object.entries(MODULE_STYLES)) {
+  FILES.push([name, "css", "text/css; charset=utf-8", await extraCss(sources, join(crate, "styles")), name === "phone-styles" ? "phone" : undefined]);
+}
 
 /** Files kept byte for byte: no compression gain, or already compressed. */
 const STATIC = [

@@ -105,6 +105,26 @@ pub fn builder_layer() -> String {
     out
 }
 
+/// The token a paint is drawn in, as the builder's swatch draws it: a mix, a tint or a
+/// hover by the token it starts from.
+fn token_of(paint: super::Paint) -> Token {
+    match paint {
+        super::Paint::Token(token)
+        | super::Paint::Mix(token, _, _)
+        | super::Paint::Hover(token, _)
+        | super::Paint::Tint(token, _, _) => token,
+    }
+}
+
+/// The tokens `pick` finds in the pairs, each once, in the tokens' order: a swatch draws no
+/// others, so the builder's sheet has a rule for these alone.
+fn drawn(pick: impl Fn(&super::Pair) -> Option<Token>) -> Vec<Token> {
+    let mut tokens: Vec<Token> = super::pairs().iter().filter_map(pick).collect();
+    tokens.sort_unstable();
+    tokens.dedup();
+    tokens
+}
+
 fn helpers(out: &mut String) {
     for token in Token::ALL {
         let name = token.name();
@@ -113,7 +133,8 @@ fn helpers(out: &mut String) {
             ":where([data-token={name}]){{--token-bg:var(--{name})}}"
         );
     }
-    for token in Token::ALL {
+    // Text in a token: a pair's, in its main token. The preview's text is among them.
+    for token in drawn(|pair| Some(token_of(pair.text))) {
         let name = token.name();
         let _ = writeln!(out, ":where([data-fg={name}]){{color:var(--{name})}}");
     }
@@ -132,7 +153,10 @@ fn helpers(out: &mut String) {
         );
     }
     // A pair's swatch with a tint or mix on its surface: the tint's token and share.
-    for token in Token::ALL {
+    for token in drawn(|pair| match pair.on {
+        super::Paint::Tint(token, _, _) | super::Paint::Mix(token, _, _) => Some(token),
+        _ => None,
+    }) {
         let name = token.name();
         let _ = writeln!(out, ":where([data-tint={name}]){{--tint:var(--{name})}}");
     }
