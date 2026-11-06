@@ -30,7 +30,7 @@ use crate::view::View;
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";
 
 /// The cookie holding the session's CSRF token, when there is a session.
-const CSRF_COOKIE: &str = "XSRF-TOKEN";
+const CSRF_COOKIE: &str = navree_http::csrf::XSRF_COOKIE;
 
 /// The cookie the runtime sets when the sidebar collapses or expands.
 pub const SIDEBAR_COOKIE: &str = "navree_ui_sidebar";

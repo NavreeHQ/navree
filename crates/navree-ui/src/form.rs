@@ -1372,8 +1372,9 @@ impl<T: Form> FormView<T> {
     }
 }
 
-/// The name of the field that carries the CSRF token in a plain form.
-pub const CSRF_FIELD: &str = "_csrf";
+/// The name of the field that carries the CSRF token in a plain form: the one the session
+/// layer reads ([`navree_http::csrf::CSRF_FIELD`]).
+pub const CSRF_FIELD: &str = navree_http::csrf::CSRF_FIELD;
 
 /// The hidden field that carries `token`, for a form that is not a [`FormView`].
 pub fn csrf_field(token: impl Into<crate::node::AttrValue>) -> Element {
