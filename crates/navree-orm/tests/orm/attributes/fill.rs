@@ -527,7 +527,7 @@ fn mutators_also_run_through_generated_setters_and_set_attribute() {
     member.set_email(" Gauri@Example.com");
     assert_eq!(member.email, "gauri@example.com");
     let mut record = Record::new(Member::default());
-    record.set_attribute("email", "LINUS@example.com").unwrap();
+    record.set_attribute("email", "LAKSH@example.com").unwrap();
     assert_eq!(record.email, "laksh@example.com");
     record.set_attribute("is_admin", true).unwrap();
     assert!(record.is_admin, "set_attribute is not guarded");
@@ -537,14 +537,14 @@ fn mutators_also_run_through_generated_setters_and_set_attribute() {
 #[tokio::test]
 async fn mutators_can_write_several_columns() {
     let t = sqlite(SCHEMA).await;
-    let person = Person::create_from(&t.db, attrs! { "full_name" => "  Anu   King Lakhotia " })
+    let person = Person::create_from(&t.db, attrs! { "full_name" => "  Anu   Kaur Lakhotia " })
         .await
         .unwrap();
     assert_eq!(person.full_name, "Anu Kaur Lakhotia");
     let mut stored = Person::find_or_fail(&t.db, person.id).await.unwrap();
     assert_eq!(
         (stored.first_name.as_str(), stored.last_name.as_str()),
-        ("Anu", "King Lakhotia"),
+        ("Anu", "Kaur Lakhotia"),
         "set by the mutator, though not fillable"
     );
     stored.set_full_name("Gauri Hundal");

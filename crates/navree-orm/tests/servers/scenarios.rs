@@ -226,11 +226,11 @@ pub async fn queries(db: Db, server: Server) {
         ["Pricing upgrade", "Renewal for Agra"]
     );
     assert_eq!(
-        deals(Deal::query().where_like(Deal::TITLE, "%ACME%")).await,
+        deals(Deal::query().where_like(Deal::TITLE, "%AGRA%")).await,
         ["Renewal for Agra"]
     );
     assert!(
-        deals(Deal::query().where_like_case_sensitive(Deal::TITLE, "%ACME%"))
+        deals(Deal::query().where_like_case_sensitive(Deal::TITLE, "%AGRA%"))
             .await
             .is_empty()
     );

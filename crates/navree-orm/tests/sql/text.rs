@@ -26,6 +26,6 @@ fn ignoring_case_combines_with_other_conditions() {
                     .contains_ignore_case("agra")
                     .or(Company::COUNTRY.contains_ignore_case("agra"))
             )
-            .where_not(Company::NAME.eq_ignore_case("ACME Holdings"))
+            .where_not(Company::NAME.eq_ignore_case("AGRA Holdings"))
     ));
 }
