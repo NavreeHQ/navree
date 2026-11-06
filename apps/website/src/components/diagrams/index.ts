@@ -15,6 +15,7 @@ import { navreeUi } from "./navree-ui";
 import { ormParts } from "./orm-parts";
 import { requestLifecycle } from "./request-lifecycle";
 import { reverseEngineering } from "./reverse-engineering";
+import { transportChoice } from "./transport-choice";
 import { twoWays } from "./two-ways";
 import { workspaceIsolation } from "./workspace-isolation";
 import { workspaceResolution } from "./workspace-resolution";
@@ -40,6 +41,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "harbor-release": harborRelease,
   "orm-parts": ormParts,
   "jobs-and-events": jobsAndEvents,
+  "transport-choice": transportChoice,
 };
 
 /**

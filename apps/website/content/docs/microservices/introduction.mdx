@@ -22,6 +22,23 @@ What you get:
 
 gRPC and GraphQL have packages of their own that share the same modules, guards and access rules: see [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/).
 
+## Choosing a transport
+
+Your handlers and your `ServiceClient` calls never name the transport: it is the `micro.transport` setting, so a service can move from one to another with a configuration change and a restart.
+
+<Diagram name="transport-choice" />
+
+| Transport | Choose it when | Events |
+|---|---|---|
+| TCP | You have two services, no broker and want the lowest latency. | At most once |
+| NATS | You are starting out, or want one small server with built-in request-reply and durable events. | At least once with JetStream, else at most once |
+| Kafka | Your events are a high-volume stream with long retention that services replay. | At least once |
+| RabbitMQ | You route messages in detail, or already run RabbitMQ. | At least once |
+| Redis Streams | You already run Redis. | At least once |
+| MQTT | Your senders are devices, gateways or the edge. | At least once (QoS 1) |
+
+With no broker yet, start with NATS: it is one small binary, and `navree dock up` runs it for development (see [Dock](/docs/tools/dock/)). [Transports](/docs/microservices/transports/#choosing-a-transport) adds request-response, ordering and dead letters for each one.
+
 ## Installation
 
 `navree-micro` is the `micro` feature of the `navree` facade. Turn it on together with the feature of your transport:

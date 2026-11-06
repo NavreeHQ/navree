@@ -24,6 +24,7 @@ export const diagramNames = [
   "harbor-release",
   "orm-parts",
   "jobs-and-events",
+  "transport-choice",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];
