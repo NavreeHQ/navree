@@ -427,7 +427,7 @@ A summary that takes eight seconds to generate feels slow; the same summary appe
 | `StreamEvent::Text(String)` | A piece of the answer. |
 | `StreamEvent::Done(Completion)` | Last: the `model`, `provider`, `usage` and `finish` of the whole answer. |
 
-Agents stream three more kinds, `ToolCall`, `ToolResult` and `Approval`; see [streaming agents](/docs/ai/agents-and-tools/#streaming-a-run). `StreamEvent` is `#[non_exhaustive]`, so a `match` on it ends with `_ => ...`.
+Agents stream more kinds, `ToolCall`, `ToolResult` and `Approval`, and on a page `Surface` and `State`; see [streaming agents](/docs/ai/agents-and-tools/#streaming-a-run) and [generative UI](/docs/ai/generative-ui/). `StreamEvent` is `#[non_exhaustive]`, so a `match` on it ends with `_ => ...`.
 
 ### To the browser over SSE
 
@@ -500,6 +500,10 @@ export async function streamSummary(dealId: string, token: string, onText: (text
   }
 }
 ```
+
+### With Navree UI
+
+A Navree UI page doesn't read event payloads: a live part of a page hears that something changed and fetches what it shows again, so everything it draws comes from the server under the reader's own access. An agent's answer reaches such a page through [`navree_ai::ui`](/docs/ai/generative-ui/): the run writes the answer into the conversation's items as it streams, every 120 ms, and the live hub tells the reader's pages, which merge the growing answer in place. No script of yours reads the stream, and a page with JavaScript off shows where the answer is when it is drawn again.
 
 ### Saving what was streamed
 

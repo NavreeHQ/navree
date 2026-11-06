@@ -399,6 +399,7 @@ export const sections: DocsSection[] = [
       "docs-for-agents",
       "ai-sdk",
       "agents-and-tools",
+      "generative-ui",
       "embeddings-and-rag",
       "mcp-servers",
     ],

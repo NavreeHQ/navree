@@ -497,6 +497,8 @@ async fn approve(
 
 An unknown or already decided `call_id` is a 404. Approvals need memory: the pending call is stored with the conversation, so the run that stopped must have had a `.conversation(..)`.
 
+`.approve_stream(call_id)` and `.reject_stream(call_id, reason)` answer the same way and stream the rest of the run, as [`.stream`](#streaming-a-run) does: the approved tool's result, the model's text, any further tool calls and the end, so the user isn't left waiting for the whole run with nothing on screen. An unknown or already decided call fails `.await` with the same 404, before any event.
+
 The tool's access checks run when it executes, after the approval, against the access of the run that approves it. A new message instead of an answer rejects the pending call. The other calls of the step run at once; when the model asks for two calls that need approval in one step, the second is refused with a 409 telling the model to ask again after the user decides.
 
 ## Streaming a run
@@ -539,6 +541,10 @@ data: {"model":"smart","provider":"anthropic","usage":{"input_tokens":6120,"outp
 ```
 
 Tool results stay on the server: the browser learns that a tool ran and whether it succeeded, not the data it returned. A pending approval arrives as `event: approval` with the same fields as `pending_approval`. Inside Rust, an `AgentStream` is a `Stream` of `StreamEvent`, with the `ToolCall`, `ToolResult` and `Approval` variants besides `Text` and `Done`. Errors setting up the run (an unknown conversation, no user) fail `.stream(..).await`; later ones arrive as `event: error`. The run goes on in its own task and stops when the client disconnects.
+
+### With Navree UI
+
+On a Navree UI page, [generative UI](/docs/ai/generative-ui/) runs the agent for you: the answer streams into the page, a tool that needs approval gets its card in a place the page keeps for it, and Approve or Reject streams the rest of the run. The agent may also choose components from a closed catalogue you write, whose buttons act under the user's own access.
 
 ## Running agents in queued jobs
 

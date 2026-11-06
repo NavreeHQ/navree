@@ -1,0 +1,339 @@
+---
+title: "Generative UI"
+description: "An agent's answer streamed into a Navree UI page, components the model chooses from a closed catalogue you write in Rust, buttons that act under the reader's own access, approvals the page draws, and what the user is looking at, all checked on the server."
+---
+
+## Introduction
+
+<Badge feature="ai" /> An assistant on a page can do more than write. Asked "How did UPI do this week?", it can show a chart of the week's payments; asked "Refund order KK-1042", it can stop and ask the user to approve; asked "Show that order", it can draw the order with the buttons the user may press. `navree_ai::ui` (the `ui` feature of navree-ai) gives a Navree UI page all of that.
+
+One rule shapes everything: **a model never writes markup and never names an action.**
+
+- It chooses a component from a **catalogue** you wrote in Rust, and the values of that component's props from a closed set of types. A free string, raw HTML, a colour or a list with no bound does not compile as a prop.
+- The server checks every value before anything reaches the page, and tells the model what to repair when a value is wrong.
+- What a component shows is **loaded when the page is drawn, under the reader's own access**. The model picks "this week"; it never sees the numbers, and a reader who loses access to them sees nothing.
+- A component's buttons are signed for one reader, one conversation and one component, work once, and are checked again from scratch when pressed.
+- An approval is drawn by the page in a place of its own, never inside a conversation or a component the model chose.
+
+The examples come from the example app `apps/agent-demo`: the back office of a kitchenware shop in Ludhiana, whose assistant answers about orders and payments.
+
+## Setup
+
+Turn on the `ui` feature of navree-ai beside the facade's `ai` and `ui` features:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1.0", features = ["ui", "ai", "auth", "access", "session", "realtime", "db"] }
+navree-ai = { version = "1.0", features = ["ui"] }
+```
+
+Register the agent and its assistant in a module. The assistant's routes go under the path you give it:
+
+```rust title="src/lib.rs"
+use navree::ai::ModuleBuilderAiExt;
+use navree::ai::ui::{AssistantConfig, ModuleBuilderAssistantExt};
+
+impl Module for ShopModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.agent::<ShopAssistant>().assistant::<ShopAssistant>(
+            AssistantConfig::at("/assistant")
+                .catalog(catalog())
+                .tool_label("refund_order", "Refund an order")
+                .context("order", OrderContext),
+        );
+    }
+}
+```
+
+The app needs `AuthModule` and `AccessModule` (an assistant runs as the signed-in reader), `DatabaseModule` (conversations and their items), `SessionModule` (the forms' CSRF token), `UiModule`, and `RealtimeModule`, whose live hub tells open pages that a conversation changed.
+
+## Drawing a conversation
+
+The conversation's page is yours, in your own shell. `Assistant::page` gives you its three parts:
+
+```rust title="src/pages.rs"
+let page = assistant
+    .page(access.0.clone(), conversation, PageOptions {
+        csrf: Some(session.csrf_token()),
+        ..PageOptions::default()
+    })
+    .await?;
+
+shell.page("Assistant").body(Stack::gap(4).children((
+    page.conversation, // the messages, live
+    page.approval,     // the approval's place, outside the conversation
+    page.composer,     // where the reader writes
+)))
+```
+
+A page with no conversation yet draws `assistant.new_composer(user, options)`: its first message starts one, and the browser goes on to `/assistant/{id}`. `assistant.threads(user, current)` lists the reader's conversations.
+
+The assistant's routes, each for the signed-in reader's own conversations only:
+
+| Route | What it does |
+|---|---|
+| `POST /assistant` | Starts a conversation with `message`, then goes to its page |
+| `POST /assistant/{id}/messages` | Sends `message`, and the page's signed `context` |
+| `GET /assistant/{id}/items` | The conversation's items, by cursor or since a revision |
+| `GET /assistant/{id}/approval` | The approval's place, for its live region |
+| `POST /assistant/{id}/stop` | Stops the answer being written |
+| `POST /assistant/{id}/approve`, `/reject` | Answers the call that waits (`call_id`, `reason`) |
+| `POST /assistant/act?…` | A component's button, as the server signed it |
+
+`GET /assistant/{id}` is the one route the assistant leaves to you.
+
+## Streaming into the page
+
+A message starts the agent's run in a task of its own, outside the request. What the run says is written into the conversation's **items**: the reader's message, the answer as it grows, a card for each tool, each component, each approval, and a line when the reader stopped it.
+
+- **Text is flushed, not sent per token.** Every 120 ms (`flush_every`, from 50 ms to 1 s) the answer so far is written, and the live hub nudges the reader's pages. A page that hears the nudge asks for what changed since its revision and merges the answer in place, so the focus, the caret and what the reader is typing stay as they are. Two tabs on the same conversation see the same answer.
+- **Revisions are taken where they commit.** Each write takes the conversation's next revision inside its own transaction, from a row only one transaction may change at a time, so a page that asked for what changed never misses a write that commits later.
+- **Stop works from anywhere.** Stop is a form in the answer being written. It reaches the run in this process at once, and a run in another process within a second.
+- **One answer at a time.** A message sent while an answer is being written is refused with a 409, and the composer says so, keeping what was written.
+- **Finished answers are read out once.** A screen reader hears "The assistant answered" and the start of the answer when it is finished, politely, and nothing while it grows. A `log` role would read every change.
+
+With JavaScript off, the composer is a plain form and the conversation a plain list: a page drawn again shows where the answer is.
+
+## Components the model chooses
+
+### Props
+
+A component's props are a struct written with `props!`. Each field's doc comment tells the model what it means; the struct's doc comment, what the component shows:
+
+```rust
+navree::ui::choices! {
+    /// The days the payments cover, in IST.
+    pub enum Period {
+        /// Today so far.
+        Today = "today",
+        /// Monday to now.
+        ThisWeek = "this_week",
+        /// The first of the month to now.
+        ThisMonth = "this_month",
+    }
+}
+
+navree::ui::props! {
+    /// How the shop's payments did over a period, split by how customers paid, as a
+    /// donut with the total in the middle.
+    pub struct PaymentsProps {
+        /// The period.
+        pub period: Period,
+    }
+}
+```
+
+One declaration gives the JSON Schema the model reads, the check its answer passes, the value your code draws and an example the tests try, so they can't drift apart. A field must be one of these:
+
+| Type | What the model may send |
+|---|---|
+| `UserText<MAX>` | Plain text, at most `MAX` characters, with no control characters and none of the marks that turn text around. Drawn only as text. |
+| `Int<MIN, MAX>` | A whole number in the range |
+| `choices!` enums | One of the words you listed |
+| `Key<MAX>` | A record's key: letters, digits, `-` and `_` |
+| `Day` | A day, `2026-11-06` |
+| `List<P, MAX>` | At most `MAX` items, and at most 100 |
+| `AppLink` | A page of this app that matches one of the catalogue's `link` patterns |
+| `bool`, `Option<P>`, a `props!` struct | What they say; an `Option` may be left out |
+
+Anything else, a `String`, a `Vec`, `SafeHtml`, a URL or a colour, does not compile as a prop.
+
+### Surfaces
+
+A component is a `Surface`: its props, who may be offered it, the actions its buttons may take, and how it draws itself for the reader:
+
+```rust title="src/assistant.rs"
+pub struct PaymentsByMethod;
+
+impl Surface<AgentRun> for PaymentsByMethod {
+    type Props = PaymentsProps;
+    const NAME: &'static str = "payments_by_method";
+    const CAN: Option<(&'static str, &'static str)> = Some(("read", "Order"));
+
+    fn title(&self, _props: &PaymentsProps) -> String {
+        "Payments this week".to_owned()
+    }
+
+    fn render<'a>(
+        &'a self,
+        props: &'a PaymentsProps,
+        run: &'a AgentRun,
+    ) -> BoxFuture<'a, Result<SurfaceView, AppError>> {
+        Box::pin(async move {
+            // The orders the reader may read, loaded now, under their access.
+            let orders = run.accessible::<Order, Read>().apply(Order::query()).get(run.uow()).await?;
+            // ... sum them by method into a Donut
+            Ok(SurfaceView::new(donut))
+        })
+    }
+}
+
+pub fn catalog() -> Catalog<AgentRun> {
+    Catalog::new()
+        .surface(PaymentsByMethod)
+        .surface(OrderCard)
+        .action(MarkDelivered)
+        .action(RefundAction)
+        .link("/orders/{key}")
+}
+```
+
+The model is offered one tool per component, `show_<name>`, and only the components the reader may be offered (`CAN`). When it calls one:
+
+1. The arguments pass the catalogue's bounds (8 KB, 6 levels, 400 values by default) and the props' check. What is wrong goes back to the model with its path, `period: must be one of: today, this_week, this_month`, and it may try again. After two refusals in one answer it is told to answer in words.
+2. What passed is stored as the component's name and props, and the model reads back only that it was shown.
+3. The component is drawn when the page is, by your `render`, under the reader's access at that moment. A record the reader can't see is a 404 or a 403, and the frame shows its place and nothing else.
+
+An answer shows at most six components (`Limits::max_per_answer`). `Catalog::prompt_tokens` says what the catalogue costs in every request.
+
+### The frame
+
+A component is drawn in a frame of its own, named after its title, with a line that says the assistant chose it. What your `render` drew goes in the frame after everything that could act is taken out: forms, buttons, fields, dialogs and templates, with what is in them; commands, hotkeys, live sources and invoker commands; raw markup; and anything a conversation's parts drew, such as an approval card. Every id in it, and every reference to one, is put under the frame's own prefix. A chart keeps its tooltips and its table.
+
+## Buttons that act
+
+A component's buttons are actions you register in the catalogue. The input of each is a `props!` struct, checked like a model's props:
+
+```rust
+pub struct RefundAction;
+
+impl Action for RefundAction {
+    type Input = OrderInput;
+    const NAME: &'static str = "refund";
+    const CAN: Option<(&'static str, &'static str)> = Some(("update", "Order"));
+    const DESTRUCTIVE: bool = true;
+}
+
+impl RunAction<AgentRun> for RefundAction {
+    fn run<'a>(&'a self, input: OrderInput, run: &'a AgentRun) -> BoxFuture<'a, Result<ActionDone, AppError>> {
+        Box::pin(async move {
+            let mut order = run.authorize::<Order, Update>(input.order.as_str()).await?.into_inner();
+            // ... refund it
+            Ok(ActionDone::new("Refunded ₹1,250 for order KK-1042")
+                .note("The user refunded order KK-1042 from its card."))
+        })
+    }
+}
+```
+
+A component draws a button for an action it declares in `ACTIONS`, with the input your code chose:
+
+```rust
+view.action(
+    ActionButton::new::<RefundAction>("Refund ₹1,250", &input).confirm(
+        "Refund order KK-1042?",
+        "₹1,250 goes back to Harpreet Kaur by UPI.",
+        "Refund ₹1,250",
+    ),
+)
+```
+
+The frame draws the button and signs where it posts, for the reader, the conversation, the component, the action and its input, with a nonce. When it is pressed the server checks, again: the signature, that it is this reader's, that the item is a component of their conversation that declares the action, that the reader may take it now (`CAN`), and the input. The nonce is recorded in the action's own transaction, so the same post can't run twice, and is freed if the action fails. A destructive action opens a dialog the page draws, never one a component drew; with no script the server asks the question instead. The page shows `ActionDone`'s message, and the assistant hears its `note` before the reader's next message.
+
+## Approvals in the page
+
+A tool marked `#[tool(needs_approval)]` ([approvals](/docs/ai/agents-and-tools/#tools-that-need-approval)) stops the run. On a page, its card is drawn in `page.approval`: a live region outside the conversation, the one place an approval can appear. It names the tool in words (`tool_label`), lists the arguments the model chose as text, and has Approve and Reject, with a reason. Approve runs the tool, with its access checked again, and streams the rest of the run into the page; Reject tells the model why. The conversation itself shows only a line: "Waiting for your answer: Refund an order".
+
+## What the user is looking at
+
+A page can tell the assistant which record it is about. It signs a reference for the reader, and the composer sends it with every message:
+
+```rust
+let composer = assistant.new_composer(user, PageOptions {
+    csrf: Some(token),
+    context: Some(("order".to_owned(), order.id.to_string())),
+    ..PageOptions::default()
+});
+```
+
+The server checks the signature and that it was signed for this reader, then asks the `PageContext` registered for its kind, under the reader's access:
+
+```rust
+pub struct OrderContext;
+
+impl PageContext for OrderContext {
+    fn describe<'a>(&'a self, key: &'a str, run: &'a AgentRun) -> BoxFuture<'a, Result<String, AppError>> {
+        Box::pin(async move {
+            let order = run.authorize::<Order, Read>(key).await?.into_inner();
+            Ok(format!("order {} by {} of {}", order.number, order.customer, order.city))
+        })
+    }
+}
+```
+
+The model reads the description in its system prompt, marked as data and never as instructions. A reference that was changed, signed for someone else, of a kind with no resolver, or for a record the reader can't see refuses the message before the model is asked.
+
+## Working state
+
+A conversation can hold a typed working state that both sides change: a plan, a shortlist, the filters of a report.
+
+```rust
+AssistantConfig::at("/assistant").state::<Plan>()
+```
+
+`Plan` is a `props!` struct. The model is offered `update_state`, whose arguments pass `Plan`'s check like any component's. The page reads it with `assistant.state::<Plan>(user, id)` and changes it with `assistant.set_state(user, id, &plan)` from its own form; each change nudges the reader's pages. Each run reads the state when it starts.
+
+## The conversation's parts
+
+The parts are in `navree::ui::genui`, and each works with no script:
+
+| Part | What it is |
+|---|---|
+| `Conversation` | The messages oldest first, starting at the newest, loading earlier ones by cursor and merging live changes |
+| `ChatMessage` | A message: the reader's as text, the assistant's as untrusted Markdown, with Stop while it is written |
+| `PromptInput` | The composer: a form posting `message`, and the page's signed `context` |
+| `ToolCallCard` | A tool the assistant called: its name in words, whether it ran, its arguments folded, as text |
+| `Reasoning` | What the assistant thought, folded |
+| `Sources`, `Citation` | Links an answer drew on, with the host of each that leaves the site |
+| `Suggestions` | Messages to send with one press, as one form |
+| `ThreadList` | The reader's conversations |
+| `ApprovalCard` | A call waiting for the reader, drawn only by the page |
+| `SurfaceFrame` | Where a chosen component is drawn |
+
+Their words are in `ChatLabels` and `FrameLabels`, for translation.
+
+## Security
+
+| What could go wrong | What stops it |
+|---|---|
+| A model writes markup or a script | Its text is untrusted Markdown or plain text; props hold no markup type |
+| A model invents a component | Only the catalogue's tools exist; any other name is refused |
+| A model sends props a component didn't ask for | Unknown properties, wrong types, long text, deep or wide values are refused, with why |
+| A model links somewhere else | `AppLink` takes only the catalogue's page patterns |
+| A model reads data through a component | Components load data when drawn, under the reader's access; the model reads back only that it was shown |
+| A component draws a form or a fake approval | The frame takes out forms, fields, buttons, commands and the conversation's own parts |
+| A button is forged, changed, replayed or posted by someone else | It is signed for one reader, conversation, component, action and input, with a nonce used once |
+| Access changed since the button was drawn | The action checks `CAN` and loads its record under the reader's access when pressed |
+| A tool result tells the model to act | Tools run under the reader's access; destructive tools need approval; the prompt marks results and page context as data |
+| A page claims to be about someone else's record | The context is signed for the reader and resolved under their access |
+
+## Testing
+
+Script the model with [`AiFake`](/docs/ai/ai-sdk/#testing-with-aifake) and drive the assistant through its own methods: `start`, `send`, `items`, `approve`, `act`.
+
+```rust
+fake.respond_with([
+    FakeReply::tool_call("show_payments_by_method", json!({ "period": "this_week" })),
+    FakeReply::text("UPI took the most this week."),
+]);
+let id = assistant.start(simran.clone(), "How did UPI do this week?", None).await?;
+```
+
+navree-ai's own suite replays a corpus of what models answered through the catalogue's check and holds it to 95% valid at the first call and 99.5% after one repair, and runs every probe of an attack corpus: markup, unknown properties, forged actions, oversized and deep values, turned-around text, tools that don't exist. The example app's browser suites check the same in Chromium, Firefox and WebKit.
+
+## Reference
+
+| Item | What it does |
+|---|---|
+| `AssistantConfig::at(path)` | Where the routes go; `.catalog`, `.labels`, `.frame_labels`, `.tool_label`, `.flush_every`, `.context`, `.state` |
+| `m.assistant::<A>(config)` | Provides `Assistant<A>` and mounts its routes |
+| `Assistant::start`, `send`, `stop` | A conversation's messages |
+| `Assistant::approve`, `reject` | The call that waits |
+| `Assistant::page`, `new_composer`, `threads`, `items`, `approval` | What pages draw |
+| `Assistant::act` | A component's button's post |
+| `Assistant::context_ref` | A signed reference to what a page is about |
+| `Assistant::state`, `set_state` | The working state |
+| `Catalog`, `Surface`, `Action`, `RunAction` | The closed set of components and actions |
+| `props!`, `choices!`, `UserText`, `Int`, `Key`, `Day`, `List`, `AppLink` | What a model may choose |
+| `PageTools` | The hook a page uses to add checked tools to a streamed run |
+| `StreamEvent::Surface`, `StreamEvent::State` | A component chose and a state written, for API clients |
