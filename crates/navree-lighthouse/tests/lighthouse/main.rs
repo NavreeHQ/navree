@@ -6,6 +6,7 @@ mod support;
 
 mod alert_pages;
 mod alerts;
+mod browser;
 mod commands;
 mod dashboard;
 mod fake;

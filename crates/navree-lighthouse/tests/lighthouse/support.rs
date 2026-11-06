@@ -143,6 +143,12 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// its sign-in pages on Navree UI, access with the super-admin role `admin`,
 /// the demo routes, and Lighthouse configured from `lighthouse.*`.
 pub fn builder() -> TestAppBuilder {
+    builder_with_session(SessionOptions::default())
+}
+
+/// [`builder`] with the session set up as `session` says (a browser on a
+/// plain-HTTP test server needs a cookie without `Secure`).
+pub fn builder_with_session(session: SessionOptions) -> TestAppBuilder {
     crate::servers::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("app.key", navree_crypto::generate_key())
@@ -157,7 +163,7 @@ pub fn builder() -> TestAppBuilder {
         .config("lighthouse.thresholds.slow_request_ms", 60_000)
         .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
-        .module(SessionModule::for_root(SessionOptions::default()))
+        .module(SessionModule::for_root(session))
         .module(AuthModule::from_config())
         .module(UiModule)
         .module(AuthPages::new().app_name("Acme CRM"))
