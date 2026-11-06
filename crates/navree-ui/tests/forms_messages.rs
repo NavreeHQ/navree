@@ -1,4 +1,4 @@
-//! A form says what the API says (MOD-005): the app's `validation.messages`, its
+//! A form says what the API says: the app's `validation.messages`, its
 //! translator and its database rules reach `Submit`, with the form's labels as the
 //! fields' names, and a refused form still keeps what was posted.
 
@@ -133,7 +133,7 @@ fn fields(body: &Value) -> &Value {
     &body["ops"][0]["fields"]
 }
 
-// MOD-005: the app's `validation.messages` reach a form, with the form's label as the
+// The app's `validation.messages` reach a form, with the form's label as the
 // field's name (over `validation.attributes`), from the runtime and without it.
 #[tokio::test]
 async fn a_form_says_the_apps_messages_with_its_own_labels() {
@@ -177,7 +177,7 @@ async fn a_form_says_the_apps_messages_with_its_own_labels() {
     );
 }
 
-// MOD-005: a value of the wrong type has a rule key the app can override, for every
+// A value of the wrong type has a rule key the app can override, for every
 // field (`form.number`) or for one (`seats.form.number`).
 #[tokio::test]
 async fn a_type_error_takes_the_apps_words() {
@@ -237,7 +237,7 @@ impl MessageTranslator for Shouting {
     }
 }
 
-// MOD-005: a registered translator renders a form's messages: the rules', a type
+// A registered translator renders a form's messages: the rules', a type
 // error's, and its own names for fields win over the labels.
 #[tokio::test]
 async fn a_form_goes_through_the_apps_translator() {
@@ -269,7 +269,7 @@ async fn a_form_goes_through_the_apps_translator() {
     );
 }
 
-// MOD-005: the derive hands a type's `AsyncRules` to `Submit`; a type without them has
+// The derive hands a type's `AsyncRules` to `Submit`; a type without them has
 // none.
 #[test]
 fn the_derive_gives_a_forms_database_rules() {
@@ -288,7 +288,7 @@ fn the_derive_gives_a_forms_database_rules() {
     assert!(contact.database_rules().is_empty());
 }
 
-// MOD-005: a database rule that can't run (here, no unit of work: the app has no
+// A database rule that can't run (here, no unit of work: the app has no
 // database) is the app's error answer, not a field error; a null value needs no lookup.
 #[tokio::test]
 async fn a_database_rule_that_cannot_run_is_an_error_not_a_field_error() {
@@ -309,7 +309,7 @@ async fn a_database_rule_that_cannot_run_is_an_error_not_a_field_error() {
     assert!(fields(&response.json_value())["name"].is_array());
 }
 
-// MOD-005: `decode` keeps its English; `decode_with` says the app's words.
+// `decode` keeps its English; `decode_with` says the app's words.
 #[test]
 fn decode_with_takes_the_apps_messages() {
     let pairs = |seats: &str| {

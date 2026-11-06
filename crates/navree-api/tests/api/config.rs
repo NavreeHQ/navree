@@ -60,7 +60,7 @@ async fn security_scheme_uses_the_configured_session_cookie() {
     let sources = ConfigSources::new().set("session", json!({"cookie": "crm_session"}));
     let app = configured(sources).boot().await.unwrap();
     let doc = document(&app).await;
-    // MOD-001: named as navree-session sets it, with the `__Host-` prefix.
+    // Named as navree-session sets it, with the `__Host-` prefix.
     assert_eq!(
         doc["components"]["securitySchemes"]["cookie"]["name"],
         "__Host-crm_session"

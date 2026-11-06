@@ -1,4 +1,4 @@
-//! CONFIG-007: a boot that fails on a section names every invalid section,
+//! A boot that fails on a section names every invalid section,
 //! not only the first.
 
 use std::sync::Arc;

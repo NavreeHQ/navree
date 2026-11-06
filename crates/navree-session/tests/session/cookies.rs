@@ -96,7 +96,7 @@ async fn cookie_attributes_follow_the_options() {
     assert_eq!(cookie.domain(), Some("example.com"));
 }
 
-// MOD-001: the `__Host-` prefix only where browsers accept it, and the
+// The `__Host-` prefix only where browsers accept it, and the
 // cookie under the plain name is not read in its place.
 #[tokio::test]
 async fn the_host_prefix_follows_secure_and_domain() {

@@ -1,4 +1,4 @@
-//! CONFIG-007 and the production profile: `config:check` finds
+//! `config:check` under the production profile finds
 //! every problem at once, names unknown keys and sections, lists hidden
 //! `.env` values, and fails (exit code 1) on errors and unknown keys.
 

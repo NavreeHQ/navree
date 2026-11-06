@@ -238,7 +238,7 @@ fn lookup_and_fill_expose_the_templates() {
     );
 }
 
-// MOD-005: `AppMessages::of` is what the extractors render with: the app's
+// `AppMessages::of` is what the extractors render with: the app's
 // `validation.messages` and `validation.attributes`, and its translator when it has one.
 #[tokio::test]
 async fn app_messages_are_the_ones_the_extractors_use() {

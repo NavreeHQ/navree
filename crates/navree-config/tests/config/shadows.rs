@@ -1,4 +1,4 @@
-//! CONFIG-003: a key that `.env` and a config file both set with different
+//! A key that `.env` and a config file both set with different
 //! values. One of the two is used and the other has no effect, and the boot
 //! says so, naming the key and both sources. `.env` ranks above the config
 //! file in `ConfigSources::defaults`; the loader also reads them the other way
@@ -298,7 +298,7 @@ fn shadows_have_a_display_that_matches_their_message() {
 
 #[test]
 fn the_generated_apps_set_no_key_twice() {
-    // CONFIG-002: the `.env` and `config/app.toml` that `navree new` writes
+    // The `.env` and `config/app.toml` that `navree new` writes
     // (frozen under tests/fixtures/rendered) never disagree, whichever of the
     // two ranks higher.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rendered");

@@ -1,7 +1,7 @@
-//! Outbound attachments on every API transport (CONN-102): SES as raw MIME,
+//! Outbound attachments on every API transport: SES as raw MIME,
 //! Mailgun as a multipart form, Postmark and Resend as base64 JSON, each
-//! within its provider's size limit; and Resend's idempotency key
-//! (CONN-103). SMTP's MIME is checked in `smtp.rs` against a local server.
+//! within its provider's size limit; and Resend's idempotency key.
+//! SMTP's MIME is checked in `smtp.rs` against a local server.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -88,7 +88,6 @@ fn resend(server: &MockServer) -> ResendTransport {
     .expect("resend")
 }
 
-// CONN-102
 #[tokio::test]
 async fn ses_sends_a_message_with_attachments_as_raw_mime() {
     let server = server_answering(
@@ -132,7 +131,6 @@ async fn ses_sends_a_message_with_attachments_as_raw_mime() {
     );
 }
 
-// CONN-102
 #[tokio::test]
 async fn ses_without_attachments_still_sends_simple_content() {
     let server = server_answering(
@@ -153,7 +151,6 @@ async fn ses_without_attachments_still_sends_simple_content() {
     );
 }
 
-// CONN-102
 #[tokio::test]
 async fn mailgun_posts_attachments_as_a_multipart_form() {
     let server = server_answering(
@@ -195,7 +192,6 @@ async fn mailgun_posts_attachments_as_a_multipart_form() {
     assert!(body.windows(CSV.len()).any(|window| window == CSV));
 }
 
-// CONN-102
 #[tokio::test]
 async fn postmark_sends_attachments_as_base64() {
     let server = server_answering(
@@ -219,7 +215,6 @@ async fn postmark_sends_attachments_as_base64() {
     );
 }
 
-// CONN-102, CONN-103
 #[tokio::test]
 async fn resend_sends_attachments_and_the_idempotency_key() {
     let server = server_answering("/emails", json!({ "id": "49a3999c" })).await;
@@ -247,7 +242,6 @@ async fn resend_sends_attachments_and_the_idempotency_key() {
     );
 }
 
-// CONN-103
 #[tokio::test]
 async fn resend_sends_no_key_for_a_message_without_one() {
     let server = server_answering("/emails", json!({ "id": "49a3999d" })).await;
@@ -268,7 +262,6 @@ fn with_file_of(bytes: usize) -> Message {
     invoice().attach("scan.png", "image/png", vec![7_u8; bytes])
 }
 
-// CONN-102
 #[tokio::test]
 async fn every_api_transport_refuses_a_message_over_its_limit_before_sending() {
     let server = MockServer::start().await;
@@ -318,7 +311,6 @@ async fn every_api_transport_refuses_a_message_over_its_limit_before_sending() {
     );
 }
 
-// CONN-102
 #[test]
 fn blocked_or_malformed_attachments_fail_validation() {
     let base = || Message::new().from("a@example.in").to("b@example.in");
@@ -342,7 +334,6 @@ fn blocked_or_malformed_attachments_fail_validation() {
     }
 }
 
-// CONN-102
 #[test]
 fn a_queued_job_carries_its_attachments() {
     let message = invoice().idempotency_key("navree-mail-0199a1b2");
@@ -363,7 +354,6 @@ fn a_queued_job_carries_its_attachments() {
     assert!(plain.get("attachments").is_none() && plain.get("idempotency_key").is_none());
 }
 
-// CONN-102
 #[test]
 fn files_are_attached_from_disk_with_their_type() {
     let dir = std::env::temp_dir().join(format!("navree-mail-{}", uuid::Uuid::new_v4().simple()));
@@ -381,7 +371,6 @@ fn files_are_attached_from_disk_with_their_type() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-// CONN-103
 #[test]
 fn a_malformed_idempotency_key_fails_validation() {
     let base = || Message::new().from("a@example.in").to("b@example.in");

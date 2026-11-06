@@ -1,4 +1,4 @@
-//! The list-query grammar: the cases the JavaScript parser reads too (MOD-013),
+//! The list-query grammar: the cases the JavaScript parser reads too,
 //! hostile input, and the extractor in a running router.
 
 use http::{Method, StatusCode};

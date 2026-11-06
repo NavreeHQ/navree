@@ -1,4 +1,4 @@
-//! Where each value came from (CONFIG-004): `Config::origin` and
+//! Where each value came from: `Config::origin` and
 //! `Config::keys`, for every kind of source, and the precedence they report.
 
 use navree_config::{Config, ConfigSources, ValueOrigin};

@@ -1,4 +1,4 @@
-//! The payment half of the provider conformance suite (CONN-101): one-time
+//! The payment half of the provider conformance suite: one-time
 //! payments, payment links, refunds and their webhooks, on the fake, Stripe
 //! and Paddle. What a provider lists in `capabilities` must work, and what
 //! it does not list must answer `Unsupported`. A provider that implements
@@ -409,19 +409,16 @@ async fn payments_conform(case: Case) {
     );
 }
 
-// CONN-101
 #[tokio::test]
 async fn the_fake_takes_payments_like_stripe() {
     payments_conform(fake_case().await).await;
 }
 
-// CONN-101
 #[tokio::test]
 async fn stripe_takes_payments_links_and_refunds() {
     payments_conform(stripe_case().await).await;
 }
 
-// CONN-101
 #[tokio::test]
 async fn paddle_takes_payments_and_full_refunds() {
     let case = paddle_case().await;
@@ -466,7 +463,6 @@ impl BillingProvider for Minimal {
     }
 }
 
-// CONN-101
 #[tokio::test]
 async fn a_provider_implements_only_what_it_offers() {
     let minimal = Minimal;

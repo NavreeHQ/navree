@@ -1,4 +1,4 @@
-//! A Navree UI page on the app's live hub, through the facade (MOD-004): the
+//! A Navree UI page on the app's live hub, through the facade: the
 //! page draws its live parts on the hub's stream, a job a queue worker runs
 //! tells them, and a workspace topic reaches only the members reading in that
 //! workspace, as the workspace module resolves it.
@@ -145,13 +145,12 @@ const QUIET: Duration = Duration::from_millis(300);
 
 #[test]
 fn the_page_and_the_hub_agree_on_where_the_stream_is() {
-    // MOD-004
     assert_eq!(LIVE_STREAM_PATH, STREAM_PATH);
 }
 
 #[tokio::test]
 async fn a_page_on_the_hub_hears_a_job_a_queue_worker_ran() {
-    // MOD-004: the worker-to-page path.
+    // The worker-to-page path.
     let app = builder().build().await;
     let html = app
         .client()
@@ -184,7 +183,7 @@ async fn a_page_on_the_hub_hears_a_job_a_queue_worker_ran() {
 
 #[tokio::test]
 async fn a_workspace_topic_reaches_only_its_members_as_the_workspace_module_resolves_them() {
-    // MOD-004: the stream finds the reader's workspace with the workspace
+    // The stream finds the reader's workspace with the workspace
     // module's resolvers and membership rules (here the `X-Workspace` header).
     let app = builder().build().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());

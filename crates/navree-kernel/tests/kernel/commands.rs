@@ -369,7 +369,7 @@ fn commands_do_not_own_stdout_unless_marked() {
     assert!(noop("x").stdio().stdio);
 }
 
-/// An offline command (CONFIG-004, CONFIG-007) runs without booting the
+/// An offline command runs without booting the
 /// app: only the providers it asks for are built, and no lifecycle hook runs.
 struct OfflineProbe {
     journal: Arc<Journal>,

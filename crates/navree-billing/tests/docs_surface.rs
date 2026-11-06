@@ -368,7 +368,7 @@ fn the_names_the_page_mentions_in_passing() {
 }
 
 /// "One-time payments", "Payment links", "Refunds", "Retries and
-/// idempotency" and "Your own provider" (CONN-101, CONN-103).
+/// idempotency" and "Your own provider".
 #[allow(dead_code)]
 // The docs write rupee amounts in paise with Indian digit grouping (`2_50_000`).
 #[allow(clippy::inconsistent_digit_grouping)]

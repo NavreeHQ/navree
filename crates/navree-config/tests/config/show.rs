@@ -1,4 +1,4 @@
-//! CONFIG-004: `config:show`. The effective configuration with the origin of
+//! `config:show`. The effective configuration with the origin of
 //! every value, secrets masked, and no way to reveal them.
 
 use navree_config::show::{ShowOptions, defaults_tree, render};

@@ -1,7 +1,7 @@
-//! The browser journey of a Navree UI app on the session cookie (MOD-001,
-//! MOD-003), in a real Chrome: a guest meets the sign-in page, signs in with
-//! "remember me" and a second factor, switches workspace from the switcher,
-//! sees the page follow it, and signs out.
+//! The browser journey of a Navree UI app on the session cookie, in a real
+//! Chrome: a guest meets the sign-in page, signs in with "remember me" and a
+//! second factor, switches workspace from the switcher, sees the page follow
+//! it, and signs out.
 //!
 //! `cargo test -p navree --features sqlite,ui,auth,session,workspace,testing,browser --test ui_auth_browser`
 //!
@@ -90,7 +90,7 @@ fn totp(secret: &str, clock: &FixedClock) -> String {
         .generate(u64::try_from(clock.now().timestamp()).unwrap())
 }
 
-// MOD-001 + MOD-003: sign in, two-factor, switch workspace, sign out.
+// Sign in, two-factor, switch workspace, sign out.
 #[tokio::test]
 async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), BrowserError> {
     if let Err(error) = Browser::find_chrome() {

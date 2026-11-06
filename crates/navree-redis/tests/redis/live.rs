@@ -1,4 +1,4 @@
-//! MOD-004: live streams to pages over the Redis backplane
+//! Live streams to pages over the Redis backplane
 //! (`NAVREE_TEST_REDIS_URL`): a nudge published in one `serve` process
 //! reaches a page whose stream is held by another, and the page resumes on
 //! either with the same id.

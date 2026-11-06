@@ -1,4 +1,4 @@
-//! A Navree UI form checks a post as the API checks a body (MOD-005): the app's
+//! A Navree UI form checks a post as the API checks a body: the app's
 //! `validation.messages`, the reader's language through navree-i18n's translator, and
 //! the database rules (`unique`, `exists`) in the request's unit of work, each answered
 //! as a field error under its field, with what was posted kept.
@@ -139,7 +139,7 @@ fn fields(response: &TestResponse) -> Value {
     body["ops"][0]["fields"].clone()
 }
 
-// MOD-005: a reader who asks for French gets the rule's message in French, from the
+// A reader who asks for French gets the rule's message in French, from the
 // messages navree-i18n ships, with the form's label as the field's name.
 #[tokio::test]
 async fn a_french_reader_gets_french_field_errors() {
@@ -163,7 +163,7 @@ async fn a_french_reader_gets_french_field_errors() {
     );
 }
 
-// MOD-005: `unique` runs in the request's unit of work: a taken address is a field
+// `unique` runs in the request's unit of work: a taken address is a field
 // error (422), not the database's answer, from the runtime and without JavaScript, where
 // the form comes back with what was typed and never the password.
 #[tokio::test]
@@ -205,7 +205,7 @@ async fn a_taken_address_is_a_field_error_and_the_post_is_kept() {
     assert_eq!(response.text(), "welcome new@example.test");
 }
 
-// MOD-005: `exists` runs too, beside `unique`, and both failures land on their fields;
+// `exists` runs too, beside `unique`, and both failures land on their fields;
 // a field left empty is no value, so its rule needs no lookup.
 #[tokio::test]
 async fn a_team_that_does_not_exist_is_a_field_error() {
@@ -248,7 +248,7 @@ async fn a_team_that_does_not_exist_is_a_field_error() {
     assert!(errors.get("email").is_none(), "{errors}");
 }
 
-// MOD-005: the app's `validation.messages` override what a form says, and the form's
+// The app's `validation.messages` override what a form says, and the form's
 // label names the field over `validation.attributes`.
 #[tokio::test]
 async fn the_apps_messages_override_and_the_label_names_the_field() {

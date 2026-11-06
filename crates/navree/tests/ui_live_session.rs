@@ -1,4 +1,4 @@
-//! A Navree UI page's live stream follows the browser's session (MOD-003 with
+//! A Navree UI page's live stream follows the browser's session (with
 //! the app's live hub): a browser signed in on the session cookie switches
 //! workspace, and its stream on the hub hears only the workspace it switched
 //! to; the switch and signing out end the open streams, so every page
@@ -120,7 +120,7 @@ async fn open(client: &TestClient) -> Stream {
     )
 }
 
-// MOD-003 (live hub): the hub resolves a browser's stream with the session
+// The hub resolves a browser's stream with the session
 // resolver, a switch ends the open stream and the next one follows the new
 // workspace, and signing out ends it too.
 #[tokio::test]

@@ -52,7 +52,7 @@ async fn the_plain_module_reads_the_session_section() {
     let options = app.get::<SessionOptions>().await;
     assert_eq!(options.cookie, "crm_session");
     let response = app.client().get("/csrf-cookie").send().await;
-    // MOD-001: the cookie carries the `__Host-` prefix (secure, no domain).
+    // The cookie carries the `__Host-` prefix (secure, no domain).
     assert!(response.set_cookie("__Host-crm_session").is_some());
     assert!(response.set_cookie("crm_session").is_none());
     assert!(response.set_cookie(COOKIE).is_none());

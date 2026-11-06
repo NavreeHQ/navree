@@ -62,7 +62,7 @@ async fn queue_dispatches_send_job_and_job_sends() {
     let envelope = &envelopes[0];
     assert_eq!(envelope.job_type, "mail.send");
     assert_eq!(envelope.options.queue, "mail");
-    // CONN-103: the queued message carries an idempotency key, so every
+    // The queued message carries an idempotency key, so every
     // retry of the job sends the same one.
     let key = envelope.payload["message"]["idempotency_key"]
         .as_str()

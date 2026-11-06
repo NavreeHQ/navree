@@ -1,4 +1,4 @@
-//! Safe retries of writes (CONN-103): a `POST` or `PATCH` that carries an
+//! Safe retries of writes: a `POST` or `PATCH` that carries an
 //! idempotency key is retried like an idempotent method, with the same key,
 //! the same body, backoff and jitter; `Retry-After` is honoured on every
 //! retried request.
@@ -10,7 +10,6 @@ use navree_http_client::{FakeResponse, HttpClient, HttpClientError, HttpClientOp
 use serde_json::json;
 use tokio::time::Instant;
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_post_with_an_idempotency_key_is_retried_with_the_same_key_and_body() {
     let (client, server) = HttpClient::fake();
@@ -47,7 +46,6 @@ async fn a_post_with_an_idempotency_key_is_retried_with_the_same_key_and_body() 
     }
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_patch_with_an_idempotency_key_is_retried() {
     let (client, server) = HttpClient::fake();
@@ -68,7 +66,6 @@ async fn a_patch_with_an_idempotency_key_is_retried() {
     assert_eq!(server.recorded().len(), 2);
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_post_without_a_key_is_still_sent_once() {
     let (client, server) = HttpClient::fake();
@@ -86,7 +83,6 @@ async fn a_post_without_a_key_is_still_sent_once() {
     server.assert_not_sent(|request| request.header("idempotency-key").is_some());
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_provider_header_name_can_carry_the_key() {
     let (client, server) = HttpClient::fake();
@@ -112,7 +108,6 @@ async fn a_provider_header_name_can_carry_the_key() {
     }
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_keyed_post_backs_off_with_jitter() {
     let options = HttpClientOptions {
@@ -139,7 +134,6 @@ async fn a_keyed_post_backs_off_with_jitter() {
     assert!(spent < Duration::from_millis(2_800), "{spent:?}");
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_keyed_post_answered_with_a_client_error_is_not_retried() {
     let (client, server) = HttpClient::fake();
@@ -156,7 +150,6 @@ async fn a_keyed_post_answered_with_a_client_error_is_not_retried() {
     server.assert_sent_count(1);
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_timed_out_keyed_post_is_not_retried() {
     let (client, server) = HttpClient::fake();
@@ -181,7 +174,6 @@ async fn a_timed_out_keyed_post_is_not_retried() {
     server.assert_sent_count(1);
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn an_invalid_idempotency_key_fails_the_request_before_sending() {
     let (client, server) = HttpClient::fake();
@@ -203,7 +195,6 @@ async fn an_invalid_idempotency_key_fails_the_request_before_sending() {
     server.assert_nothing_sent();
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn retry_after_in_seconds_is_waited_for() {
     let (client, server) = HttpClient::fake();
@@ -227,7 +218,6 @@ async fn retry_after_in_seconds_is_waited_for() {
     assert!(spent < Duration::from_millis(5_500), "{spent:?}");
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn retry_after_on_a_keyed_post_is_waited_for() {
     let (client, server) = HttpClient::fake();
@@ -252,7 +242,6 @@ async fn retry_after_on_a_keyed_post_is_waited_for() {
     assert!(started.elapsed() >= Duration::from_secs(3));
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_short_retry_after_never_shortens_the_backoff() {
     let options = HttpClientOptions {
@@ -275,7 +264,6 @@ async fn a_short_retry_after_never_shortens_the_backoff() {
     assert!(started.elapsed() >= Duration::from_secs(2));
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn a_retry_after_beyond_thirty_seconds_returns_the_response_at_once() {
     let (client, server) = HttpClient::fake();
@@ -299,7 +287,6 @@ async fn a_retry_after_beyond_thirty_seconds_returns_the_response_at_once() {
     assert_eq!(started.elapsed(), Duration::ZERO);
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn retry_after_as_a_date_is_read() {
     // A date in the past asks for no wait: the backoff schedule decides.
@@ -345,7 +332,6 @@ async fn retry_after_as_a_date_is_read() {
     assert_eq!(count("future.example.com"), 1);
 }
 
-// CONN-103
 #[tokio::test(start_paused = true)]
 async fn an_unreadable_retry_after_is_ignored() {
     let (client, server) = HttpClient::fake();

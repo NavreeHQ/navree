@@ -203,7 +203,7 @@ async fn stripe_accepts_every_request_the_client_sends() {
     );
 }
 
-/// A one-time payment request for stripe-mock (CONN-101).
+/// A one-time payment request for stripe-mock.
 fn payment(reference: &str) -> PaymentRequest {
     PaymentRequest {
         billable: Some(("workspace".into(), Uuid::now_v7())),
@@ -225,7 +225,7 @@ fn payment(reference: &str) -> PaymentRequest {
     }
 }
 
-// CONN-101, CONN-103: one-time payments, payment links and refunds, each
+// One-time payments, payment links and refunds, each
 // write with its Idempotency-Key, as Stripe's own description accepts them.
 #[tokio::test]
 async fn stripe_accepts_the_payment_requests_the_client_sends() {

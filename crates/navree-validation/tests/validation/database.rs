@@ -314,7 +314,7 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Sc
     assert!(!plain.passes_in(&uow).await.unwrap());
 }
 
-// MOD-005: `check_async_rules` runs what `ValidAsync` runs, in the request's unit of
+// `check_async_rules` runs what `ValidAsync` runs, in the request's unit of
 // work, and hands the failures back instead of answering: a taken address, a missing
 // company, the route's `{id}` ignored, a null skipped.
 async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
@@ -391,7 +391,7 @@ async fn check_async_rules_returns_what_valid_async_refuses(scratch: Scratch) {
     );
 }
 
-// MOD-005: a rule that can't run is an error, not a failed field: no unit of work is a
+// A rule that can't run is an error, not a failed field: no unit of work is a
 // 500, and a rule with nothing to check needs none.
 #[tokio::test]
 async fn check_async_rules_without_a_unit_of_work_is_a_server_error() {

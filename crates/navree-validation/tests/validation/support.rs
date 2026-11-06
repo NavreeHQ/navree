@@ -303,7 +303,7 @@ impl Controller for DatabaseController {
                 |ValidAsync(Json(input)): ValidAsync<Json<Sneaky>>| async move { ok(&input) },
             )
             .public(),
-            // MOD-005: the database rules run on a path of their own, as forms run them.
+            // The database rules run on a path of their own, as forms run them.
             RouteDef::on(Method::POST, "/checked/users", checked_users).public(),
             RouteDef::on(Method::PATCH, "/checked/users/{id}", checked_users).public(),
             RouteDef::on(Method::POST, "/checked/deals", checked_deals).public(),

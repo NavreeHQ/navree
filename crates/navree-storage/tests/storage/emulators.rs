@@ -99,7 +99,6 @@ mod gcs {
         }
     }
 
-    // CONN-052
     #[tokio::test]
     async fn the_driver_reads_and_counts_what_the_bucket_holds() {
         let Some(bucket) = Bucket::open("the_driver_reads_and_counts_what_the_bucket_holds") else {
@@ -142,7 +141,6 @@ mod gcs {
         }
     }
 
-    // CONN-052
     #[tokio::test]
     async fn the_driver_lists_by_directory_and_under_its_prefix() {
         let Some(bucket) = Bucket::open("the_driver_lists_by_directory_and_under_its_prefix")
@@ -201,7 +199,6 @@ mod gcs {
         );
     }
 
-    // CONN-052
     #[tokio::test]
     async fn deleting_removes_the_file_and_a_missing_file_is_not_an_error() {
         let Some(bucket) =
@@ -220,7 +217,6 @@ mod gcs {
         assert!(disk.list("").await.unwrap().is_empty());
     }
 
-    // CONN-052
     #[tokio::test]
     async fn a_signed_download_link_reaches_the_object() {
         let Some(bucket) = Bucket::open("a_signed_download_link_reaches_the_object") else {
@@ -296,7 +292,6 @@ mod azure {
     const ACCOUNT_KEY: &str =
         "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
 
-    // CONN-053
     #[tokio::test]
     async fn azure_disk_conforms_on_azurite() {
         let Some(url) = service_url("NAVREE_TEST_AZURE_URL", "azure_disk_conforms_on_azurite")

@@ -330,7 +330,6 @@ fn rs256() -> navree_testing::TestAppBuilder {
         .config("oauth.id_token_signing_alg", "RS256")
 }
 
-// CONN-105
 #[tokio::test]
 async fn id_tokens_can_be_signed_with_rs256() {
     let world = World::with(rs256()).await;
@@ -364,7 +363,6 @@ async fn id_tokens_can_be_signed_with_rs256() {
     assert_eq!(claims["email"], "harpreet@acme.test");
 }
 
-// CONN-105
 #[tokio::test]
 async fn an_rsa_key_in_one_environment_line_signs_too() {
     let body: String = RSA_PEM
@@ -385,7 +383,6 @@ async fn an_rsa_key_in_one_environment_line_signs_too() {
     verify_rs256(&world, tokens.id_token.as_deref().unwrap()).await;
 }
 
-// CONN-105
 #[tokio::test]
 async fn moving_to_rs256_keeps_tokens_signed_with_the_old_key() {
     let old = SigningKey25519::generate();
@@ -405,7 +402,6 @@ async fn moving_to_rs256_keeps_tokens_signed_with_the_old_key() {
     verify(&after, &old_token).await;
 }
 
-// CONN-105
 #[tokio::test]
 async fn rs256_settings_that_cannot_work_fail_the_boot() {
     for (builder, key) in [
@@ -450,7 +446,6 @@ async fn rs256_settings_that_cannot_work_fail_the_boot() {
 /// npm ci --prefix e2e/oidc-jose --ignore-scripts
 /// cargo test -p navree-oauth --test oauth oidc::an_independent_jwt_library_verifies_the_id_tokens -- --ignored
 /// ```
-// CONN-105
 #[tokio::test]
 #[ignore = "needs Node.js and `npm ci --prefix e2e/oidc-jose`"]
 async fn an_independent_jwt_library_verifies_the_id_tokens() {

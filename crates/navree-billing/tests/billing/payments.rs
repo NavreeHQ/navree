@@ -1,6 +1,5 @@
 //! One-time payments, payment links and refunds through `Billing` on the
-//! fake provider (CONN-101), with idempotency keys honoured end to end
-//! (CONN-103).
+//! fake provider, with idempotency keys honoured end to end.
 
 use navree_billing::{
     BillingError, Capability, Money, PaymentAction, PaymentMethod, PaymentStatus, ProviderError,
@@ -10,7 +9,6 @@ use serde_json::json;
 
 use crate::support::World;
 
-// CONN-101
 #[tokio::test]
 async fn a_one_time_payment_is_created_paid_and_reported() {
     let world = World::new().await;
@@ -65,7 +63,6 @@ async fn a_one_time_payment_is_created_paid_and_reported() {
     assert_eq!(paid["metadata"]["order"], "42");
 }
 
-// CONN-101
 #[tokio::test]
 async fn failed_and_expired_payments_are_reported() {
     let world = World::new().await;
@@ -97,7 +94,6 @@ async fn failed_and_expired_payments_are_reported() {
     assert!(fake.complete_payment(&failed.id).await.is_err(), "settled");
 }
 
-// CONN-103
 #[tokio::test]
 async fn the_same_idempotency_key_creates_one_payment() {
     let world = World::new().await;
@@ -132,7 +128,6 @@ async fn the_same_idempotency_key_creates_one_payment() {
     assert_eq!(fake.payments().len(), 2);
 }
 
-// CONN-101
 #[tokio::test]
 async fn refunds_take_part_or_the_rest_of_a_payment_once() {
     let world = World::new().await;
@@ -190,7 +185,6 @@ async fn refunds_take_part_or_the_rest_of_a_payment_once() {
     assert_eq!(fake.refunds().len(), 2);
 }
 
-// CONN-101
 #[tokio::test]
 async fn a_payment_link_is_paid_and_reported_with_its_link() {
     let world = World::new().await;
@@ -235,7 +229,6 @@ async fn a_payment_link_is_paid_and_reported_with_its_link() {
     assert_eq!(paid["billable_id"], json!(ada.id));
 }
 
-// CONN-101
 #[tokio::test]
 async fn bad_payment_input_is_a_validation_error() {
     let world = World::new().await;

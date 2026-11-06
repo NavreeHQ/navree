@@ -146,7 +146,6 @@ async fn smtp_transport_delivers_to_a_local_server() {
     assert!(!data.contains("hidden@example.com"), "Bcc leaked:\n{data}");
 }
 
-// CONN-102
 #[tokio::test]
 async fn smtp_transport_sends_attachments_as_multipart_mixed() {
     let (port, server) = fake_smtp_server().await;
@@ -186,7 +185,6 @@ async fn smtp_transport_sends_attachments_as_multipart_mixed() {
     );
 }
 
-// CONN-102
 #[tokio::test]
 async fn smtp_transport_refuses_a_message_over_its_limit() {
     let transport = SmtpTransport::from_url("smtp://127.0.0.1:9").expect("url");

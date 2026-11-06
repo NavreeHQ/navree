@@ -1,4 +1,4 @@
-//! CONFIG-006: a key or section that nothing reads is named, with the
+//! A key or section that nothing reads is named, with the
 //! closest name that is read.
 
 use std::collections::HashMap;

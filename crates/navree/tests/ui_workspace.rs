@@ -1,4 +1,4 @@
-//! Workspaces in Navree UI pages (MOD-003), written as an app writes them
+//! Workspaces in Navree UI pages, written as an app writes them
 //! (the facade and its prelude): two workspaces, a browser switching between
 //! them through `POST /workspace/switch`, a page drawing the
 //! `WorkspaceSwitcher` with the current one marked, and a DataTable over a
@@ -194,7 +194,7 @@ async fn page(client: &TestClient) -> String {
         .text()
 }
 
-// MOD-003: switching in the browser moves the page, its switcher and its
+// Switching in the browser moves the page, its switcher and its
 // table to the chosen workspace, and only to one the user belongs to.
 #[tokio::test]
 async fn a_navree_ui_page_follows_the_workspace_the_browser_switched_to() {

@@ -1,4 +1,4 @@
-//! `Builder::list`: a list query read against a spec, on a model (MOD-013):
+//! `Builder::list`: a list query read against a spec, on a model:
 //! each operator, in and not_in, null, the sort allow-list, an unknown field,
 //! and numbered and cursor pages.
 

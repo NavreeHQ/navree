@@ -1,4 +1,4 @@
-//! CONFIG-008: the `app` section is typed. The short names (`APP_URL`,
+//! The `app` section is typed. The short names (`APP_URL`,
 //! `APP_ENV`, `APP_KEY`, ...) resolve into it, the section is validated, and
 //! the readers need no string lookups.
 

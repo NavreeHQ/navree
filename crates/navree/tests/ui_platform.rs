@@ -1,4 +1,4 @@
-//! A Navree UI app with the platform modules working together (MOD-027):
+//! A Navree UI app with the platform modules working together:
 //! sign-in on the session, two workspaces with a different role in each,
 //! the workspace a page opens in, what the role may do, the live hub telling
 //! only the workspace that changed, and the audit trail of it all.

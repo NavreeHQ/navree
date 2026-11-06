@@ -1,4 +1,4 @@
-//! Idempotency on Stripe (CONN-103): every write carries an
+//! Idempotency on Stripe: every write carries an
 //! `Idempotency-Key`, what creates something carries the request's own key,
 //! and a write that fails with a retryable answer is sent again with the
 //! same key and body.
@@ -67,7 +67,6 @@ fn payment_request(key: &str) -> PaymentRequest {
     }
 }
 
-// CONN-103
 #[tokio::test]
 async fn every_stripe_write_carries_an_idempotency_key() {
     let server = MockServer::start().await;
@@ -220,7 +219,6 @@ async fn every_stripe_write_carries_an_idempotency_key() {
     assert_eq!(unique.len(), toggles.len(), "{toggles:?}");
 }
 
-// CONN-103
 #[tokio::test]
 async fn a_stripe_write_answered_503_is_retried_with_the_same_key_and_body() {
     let server = MockServer::start().await;
@@ -266,7 +264,6 @@ async fn a_stripe_write_answered_503_is_retried_with_the_same_key_and_body() {
     assert_eq!(requests[0].body, requests[1].body);
 }
 
-// CONN-103
 #[tokio::test]
 async fn a_stripe_write_asked_to_wait_too_long_is_returned_not_retried() {
     let server = MockServer::start().await;

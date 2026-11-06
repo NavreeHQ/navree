@@ -138,7 +138,6 @@ pub(crate) fn mentions_the_certificate(text: &str) -> bool {
         || text.contains("unknown issuer")
 }
 
-// CONN-030
 #[tokio::test]
 async fn mailpit_receives_a_message_with_its_recipients_and_both_bodies() {
     let test = "mailpit_receives_a_message_with_its_recipients_and_both_bodies";
@@ -186,7 +185,6 @@ async fn mailpit_receives_a_message_with_its_recipients_and_both_bodies() {
     );
 }
 
-// CONN-030
 #[tokio::test]
 async fn mailpit_keeps_a_subject_and_body_that_are_not_ascii() {
     let test = "mailpit_keeps_a_subject_and_body_that_are_not_ascii";
@@ -218,7 +216,6 @@ async fn mailpit_keeps_a_subject_and_body_that_are_not_ascii() {
     );
 }
 
-// CONN-030
 #[tokio::test]
 async fn the_right_login_delivers_and_check_authenticates() {
     let test = "the_right_login_delivers_and_check_authenticates";
@@ -241,7 +238,6 @@ async fn the_right_login_delivers_and_check_authenticates() {
     assert_eq!(received["Subject"], subject.as_str());
 }
 
-// CONN-030
 #[tokio::test]
 async fn a_wrong_password_is_refused_without_echoing_it() {
     let test = "a_wrong_password_is_refused_without_echoing_it";
@@ -275,7 +271,6 @@ async fn a_wrong_password_is_refused_without_echoing_it() {
     assert!(!whole(&checked).contains("not-the-password"), "{checked}");
 }
 
-// CONN-030
 #[tokio::test]
 async fn a_server_that_wants_a_login_refuses_mail_without_one() {
     let test = "a_server_that_wants_a_login_refuses_mail_without_one";
@@ -296,7 +291,6 @@ async fn a_server_that_wants_a_login_refuses_mail_without_one() {
     assert!(whole(&error).contains("530"), "{error}");
 }
 
-// CONN-030
 #[tokio::test]
 async fn starttls_is_negotiated_and_a_certificate_nobody_signed_is_refused() {
     let test = "starttls_is_negotiated_and_a_certificate_nobody_signed_is_refused";
@@ -318,7 +312,6 @@ async fn starttls_is_negotiated_and_a_certificate_nobody_signed_is_refused() {
     assert!(mentions_the_certificate(&whole(&checked)), "{checked}");
 }
 
-// CONN-030
 #[tokio::test]
 async fn opportunistic_starttls_does_not_fall_back_to_plain_text_on_a_bad_certificate() {
     let test = "opportunistic_starttls_does_not_fall_back_to_plain_text_on_a_bad_certificate";
@@ -339,7 +332,6 @@ async fn opportunistic_starttls_does_not_fall_back_to_plain_text_on_a_bad_certif
     assert!(mentions_the_certificate(&whole(&error)), "{error}");
 }
 
-// CONN-030
 #[tokio::test]
 async fn plain_text_to_a_server_that_requires_starttls_is_refused() {
     let test = "plain_text_to_a_server_that_requires_starttls_is_refused";
@@ -359,7 +351,6 @@ async fn plain_text_to_a_server_that_requires_starttls_is_refused() {
     assert!(text.contains("530") || text.contains("starttls"), "{error}");
 }
 
-// CONN-030
 #[tokio::test]
 async fn tls_from_the_first_byte_checks_the_certificate_too() {
     let test = "tls_from_the_first_byte_checks_the_certificate_too";

@@ -1,9 +1,9 @@
-//! Browser sign-in for Navree UI pages (MOD-001), written as an app writes
+//! Browser sign-in for Navree UI pages, written as an app writes
 //! it (the facade and its prelude): a page that needs a signed-in user
 //! answers 401 with a page that links to sign in with `next`; the sign-in
 //! form posts with its `_csrf` field; the page then shows the user; signing
 //! out makes it 401 again. With workspaces on, the same browser also passes
-//! a second factor and switches workspace (MOD-003).
+//! a second factor and switches workspace.
 //!
 //! `cargo test -p navree --features sqlite,ui,auth,session,testing --test ui_auth_session`
 
@@ -104,7 +104,7 @@ async fn post(client: &TestClient, path: &str, form: &[(&str, &str)]) -> TestRes
         .await
 }
 
-// MOD-001: the whole loop a Navree UI app runs: 401 page with a sign-in
+// The whole loop a Navree UI app runs: 401 page with a sign-in
 // link, the sign-in page, the posted form, the page showing the user, and
 // signing out.
 #[tokio::test]
@@ -180,7 +180,7 @@ fn totp(secret: &str, clock: &FixedClock) -> String {
         .generate(u64::try_from(clock.now().timestamp()).unwrap())
 }
 
-// MOD-001 + MOD-003: one browser signs in with a second factor, switches
+// One browser signs in with a second factor, switches
 // between its two workspaces, can't switch into a third, and signs out.
 #[cfg(feature = "workspace")]
 #[tokio::test]

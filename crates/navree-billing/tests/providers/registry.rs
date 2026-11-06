@@ -1,4 +1,4 @@
-//! An open provider trait (CONN-101): a provider the app (or a crate)
+//! An open provider trait: a provider the app (or a crate)
 //! registers with `BillingModule::provider` is selected by
 //! `billing.provider`, reads its own section, takes UPI payments, and has
 //! its webhooks checked by its own scheme (an HMAC of the body, with the
@@ -228,7 +228,6 @@ fn signed(body: &[u8], event_id: &str) -> HeaderMap {
     headers
 }
 
-// CONN-101
 #[tokio::test]
 async fn a_registered_provider_takes_upi_payments_and_its_own_webhooks() {
     let app = app().module(acme_pay()).build().await;
@@ -319,7 +318,6 @@ async fn boot_error(builder: TestAppBuilder) -> String {
         .to_string()
 }
 
-// CONN-101
 #[tokio::test]
 async fn registration_mistakes_fail_the_boot() {
     let error = boot_error(app()).await;

@@ -1,4 +1,4 @@
-//! MOD-004: live streams to pages (`GET /broadcasting/stream`): topics
+//! Live streams to pages (`GET /broadcasting/stream`): topics
 //! scoped to the reader's user and workspace, channels under the same
 //! authorizers as a WebSocket, resuming with `Last-Event-ID`, backpressure
 //! and caps, and the path from a queue worker or another process to the page.
@@ -45,7 +45,6 @@ fn with_streams(streams: StreamOptions) -> RealtimeOptions {
 
 #[tokio::test]
 async fn a_public_topic_reaches_a_guest_with_its_name_and_never_the_data() {
-    // MOD-004
     let server = Server::start().await;
     let (mut guest, first) = server.listen("topics=orders", None, &[]).await;
     assert_eq!(
@@ -88,7 +87,6 @@ async fn a_public_topic_reaches_a_guest_with_its_name_and_never_the_data() {
 
 #[tokio::test]
 async fn the_stream_is_an_unbuffered_event_stream() {
-    // MOD-004
     let server = Server::start().await;
     let (stream, _) = server.listen("topics=orders", None, &[]).await;
     let header = |name: &str| {
@@ -112,7 +110,6 @@ async fn the_stream_is_an_unbuffered_event_stream() {
 
 #[tokio::test]
 async fn a_user_topic_reaches_only_that_user() {
-    // MOD-004
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
     let (mut ada_page, _) = server.listen("topics=inbox", Some(ada), &[]).await;
@@ -134,7 +131,6 @@ async fn a_user_topic_reaches_only_that_user() {
 
 #[tokio::test]
 async fn a_workspace_topic_reaches_only_the_members_of_that_workspace() {
-    // MOD-004
     let (acme, globex) = (Uuid::now_v7(), Uuid::now_v7());
     let (ada, bob, cy) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
     let workspaces = Workspaces::new([(acme, vec![ada]), (globex, vec![bob, cy])]);
@@ -181,7 +177,7 @@ async fn a_workspace_topic_reaches_only_the_members_of_that_workspace() {
 
 #[tokio::test]
 async fn a_page_cannot_name_the_channel_of_another_scope() {
-    // MOD-004: topics are reached through `topics`, which scopes them.
+    // Topics are reached through `topics`, which scopes them.
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
     for (query, user) in [
@@ -219,7 +215,7 @@ async fn a_page_cannot_name_the_channel_of_another_scope() {
 
 #[tokio::test]
 async fn private_channels_follow_the_channel_authorizers() {
-    // MOD-004: `users.{id}` lets only the user in, `broken` fails.
+    // `users.{id}` lets only the user in, `broken` fails.
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
     let own = format!("private-users.{ada}");
@@ -272,7 +268,6 @@ async fn private_channels_follow_the_channel_authorizers() {
 
 #[tokio::test]
 async fn a_presence_channel_is_heard_without_joining_it() {
-    // MOD-004
     let server = Server::start().await;
     let ada = Uuid::now_v7();
     let (mut page, _) = server
@@ -291,7 +286,6 @@ async fn a_presence_channel_is_heard_without_joining_it() {
 
 #[tokio::test]
 async fn public_channels_and_topics_share_one_stream() {
-    // MOD-004
     let server = Server::start().await;
     let (mut page, _) = server
         .listen("topics=orders&channels=news", None, &[])
@@ -313,7 +307,7 @@ async fn public_channels_and_topics_share_one_stream() {
 
 #[tokio::test]
 async fn the_probe_answers_what_the_stream_would_and_opens_nothing() {
-    // MOD-004: the runtime asks with `x-ui-probe` what a stream that failed answers.
+    // The runtime asks with `x-ui-probe` what a stream that failed answers.
     let server = Server::start().await;
     let probe = [("x-ui-probe", "1")];
     let refused = server
@@ -334,7 +328,7 @@ async fn the_probe_answers_what_the_stream_would_and_opens_nothing() {
 
 #[tokio::test]
 async fn a_stream_that_names_nothing_is_a_204() {
-    // MOD-004: the runtime does not try a 204 again.
+    // The runtime does not try a 204 again.
     let server = Server::start().await;
     for query in ["", "topics=", "topics=,%20,&channels="] {
         assert_eq!(
@@ -347,7 +341,6 @@ async fn a_stream_that_names_nothing_is_a_204() {
 
 #[tokio::test]
 async fn names_are_checked_and_capped() {
-    // MOD-004
     let server = Server::start_with(with_streams(StreamOptions {
         names: 3,
         ..StreamOptions::default()
@@ -386,7 +379,7 @@ async fn names_are_checked_and_capped() {
 
 #[tokio::test]
 async fn a_page_from_a_disallowed_origin_is_refused() {
-    // MOD-004: the same origins as the WebSocket.
+    // The same origins as the WebSocket.
     let server = Server::start().await;
     let refused = server
         .stream("topics=orders", None, &[("origin", "https://evil.example")])
@@ -400,7 +393,7 @@ async fn a_page_from_a_disallowed_origin_is_refused() {
 
 #[tokio::test]
 async fn a_user_holds_at_most_their_share_of_streams() {
-    // MOD-004: one stream per open tab, capped per user.
+    // One stream per open tab, capped per user.
     let server = Server::start_with(with_streams(StreamOptions {
         per_user: 2,
         ..StreamOptions::default()
@@ -429,7 +422,6 @@ async fn a_user_holds_at_most_their_share_of_streams() {
 
 #[tokio::test]
 async fn a_stream_that_comes_back_is_told_only_what_it_missed() {
-    // MOD-004
     let server = Server::start().await;
     let live = live(&server).await;
     let (mut page, _) = server.listen("topics=orders,stats", None, &[]).await;
@@ -467,7 +459,6 @@ async fn a_stream_that_comes_back_is_told_only_what_it_missed() {
 
 #[tokio::test]
 async fn a_resumed_stream_is_told_only_what_its_reader_may_hear() {
-    // MOD-004
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
     let (mut page, _) = server.listen("topics=inbox", Some(ada), &[]).await;
@@ -495,7 +486,7 @@ async fn a_resumed_stream_is_told_only_what_its_reader_may_hear() {
 
 #[tokio::test]
 async fn a_stream_that_cannot_be_resumed_starts_fresh() {
-    // MOD-004: an id it can't read, or one older than what is kept.
+    // An id it can't read, or one older than what is kept.
     let server = Server::start_with(with_streams(StreamOptions {
         replay: 2,
         ..StreamOptions::default()
@@ -545,7 +536,7 @@ async fn a_stream_that_cannot_be_resumed_starts_fresh() {
 
 #[tokio::test]
 async fn a_page_that_does_not_read_never_holds_a_broadcaster_up() {
-    // MOD-004: a stream keeps one unread nudge per name, however many come.
+    // A stream keeps one unread nudge per name, however many come.
     let server = Server::start().await;
     let mut page = server.stream("topics=orders,stats", None, &[]).await;
     assert_eq!(page.status, StatusCode::OK);
@@ -570,7 +561,7 @@ async fn a_page_that_does_not_read_never_holds_a_broadcaster_up() {
 
 #[tokio::test]
 async fn a_stream_ends_after_its_lifetime_and_resumes() {
-    // MOD-004: so a reader is authorized again now and then.
+    // A reader is authorized again now and then.
     let server = Server::start_with(with_streams(StreamOptions {
         lifetime_secs: 1,
         ..StreamOptions::default()
@@ -587,7 +578,7 @@ async fn a_stream_ends_after_its_lifetime_and_resumes() {
 
 #[tokio::test]
 async fn ending_a_users_subscriptions_ends_their_streams() {
-    // MOD-004: after a role change or a sign-out the page comes back and is
+    // After a role change or a sign-out the page comes back and is
     // authorized again.
     let server = Server::start().await;
     let (ada, bob) = (Uuid::now_v7(), Uuid::now_v7());
@@ -609,7 +600,6 @@ async fn ending_a_users_subscriptions_ends_their_streams() {
 
 #[tokio::test]
 async fn streams_end_when_the_app_shuts_down() {
-    // MOD-004
     let server = Server::start().await;
     let (mut page, _) = server.listen("topics=orders", None, &[]).await;
     let Server { app, .. } = server;
@@ -622,7 +612,7 @@ async fn streams_end_when_the_app_shuts_down() {
 
 #[tokio::test]
 async fn a_nudge_from_a_queue_worker_reaches_the_page() {
-    // MOD-004: the worker relays to the serving process, which tells its streams.
+    // The worker relays to the serving process, which tells its streams.
     let server = Server::start().await;
     let ada = Uuid::now_v7();
     let (mut page, _) = server
@@ -660,7 +650,7 @@ async fn node(backplane: &MemoryBackplane) -> Server {
 
 #[tokio::test]
 async fn a_page_hears_a_nudge_published_in_another_process_and_resumes_on_any() {
-    // MOD-004: several `serve` processes behind a load balancer.
+    // Several `serve` processes behind a load balancer.
     let backplane = MemoryBackplane::new();
     let (a, b) = (node(&backplane).await, node(&backplane).await);
     let (mut on_b, _) = b.listen("topics=orders", None, &[]).await;
@@ -715,7 +705,7 @@ impl Broadcaster for Recording {
 
 #[tokio::test]
 async fn a_nudge_in_a_unit_of_work_waits_for_its_commit_and_never_follows_a_rollback() {
-    // MOD-004: a page told before the commit would ask too soon and miss it.
+    // A page told before the commit would ask too soon and miss it.
     let recording = Arc::new(Recording::default());
     let live = Live::new(recording.clone());
     let db = Db::connect(&DbOptions {
@@ -776,7 +766,7 @@ async fn a_nudge_in_a_unit_of_work_waits_for_its_commit_and_never_follows_a_roll
 
 #[tokio::test]
 async fn an_app_without_an_authenticator_serves_public_topics_and_no_auth_route() {
-    // MOD-004: the demos sign nobody in.
+    // The demos sign nobody in.
     let server = Server::serve(
         Navree::app()
             .module(HttpModule::for_root(HttpOptions {
@@ -827,7 +817,7 @@ impl Module for Squatter {
 
 #[tokio::test]
 async fn a_channel_pattern_under_the_live_prefix_fails_the_boot() {
-    // MOD-004: no app authorizer may open another user's topics.
+    // No app authorizer may open another user's topics.
     let error = app(options())
         .module(Squatter)
         .boot()

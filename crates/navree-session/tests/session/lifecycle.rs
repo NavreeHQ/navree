@@ -230,7 +230,7 @@ async fn activity_extends_the_session() {
     assert_eq!(value, json!("ada"));
 }
 
-// MOD-001: "remember me" keeps the session, and its cookies, for the
+// "remember me" keeps the session, and its cookies, for the
 // lifetime the session set itself, past `session.lifetime_minutes`.
 #[tokio::test]
 async fn a_remembered_session_outlives_the_configured_lifetime() {
@@ -277,7 +277,7 @@ async fn a_remembered_session_outlives_the_configured_lifetime() {
     assert_eq!(value, Value::Null);
 }
 
-// MOD-001: a session that never set a lifetime keeps the configured one.
+// A session that never set a lifetime keeps the configured one.
 #[tokio::test]
 async fn a_session_without_its_own_lifetime_keeps_the_configured_one() {
     let clock = clock();
