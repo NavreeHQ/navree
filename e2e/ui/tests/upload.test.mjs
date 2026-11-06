@@ -39,7 +39,7 @@ inBrowsers(({ open, browserName }) => {
   const row = (page, id, state = "") => page.locator(`#${id} [data-slot=upload-item]${state ? `[data-state=${state}]` : ""}`);
   const said = (page, id) => page.locator(`#${id} [data-slot=upload-status]`).innerText();
 
-  // UI-GENUI-021
+
   test("an upload is a multipart form around a native file input that the label names and the limits describe", async () => {
     const { page, close } = await fresh();
     const form = page.locator("#up-photo");
@@ -414,6 +414,30 @@ inBrowsers(({ open, browserName }) => {
     assert.deepEqual((await stored(page)).map((f) => f.name), ["Navdeep-Grewal.png"]);
     assert.match(await page.locator("body").innerText(), /1 file sent\./);
     assert.equal(await page.locator("#up-docs [data-slot=upload-item] [data-slot=attachment-title]").first().innerText(), "Navdeep-Grewal.png");
+    await close();
+  });
+
+  test("a chosen picture is shown small before it is sent, read as a data URL under the page's policy, and a file that is no picture or too large is listed with its name only", async () => {
+    const { page, close } = await fresh();
+    const reports = [];
+    page.on("console", (message) => { if (/content security policy|refused to/i.test(message.text())) reports.push(message.text()); });
+    const tiny = {
+      name: "Harleen-Kaur.png",
+      mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"),
+    };
+    await page.locator("#up-preview-input").setInputFiles(tiny);
+    const picture = page.locator("#up-preview [data-slot=upload-item] [data-slot=upload-preview]");
+    await picture.waitFor({ state: "visible" });
+    assert.match(await picture.getAttribute("src"), /^data:image\/png;base64,/);
+    assert.equal(await picture.getAttribute("alt"), "", "the name beside it says what the file is");
+    assert.equal(await picture.evaluate((img) => img.complete && img.naturalWidth > 0), true, "the picture draws");
+    // A kind that is not a picture, and a picture too large to read into a page, show no preview.
+    await page.locator("#up-preview-input").setInputFiles(pdf("Aadhaar-Simran-Kaur.pdf"));
+    assert.equal(await page.locator("#up-preview [data-slot=upload-item] [data-slot=upload-preview]").evaluate((img) => img.hasAttribute("hidden") && !img.getAttribute("src")), true);
+    await page.locator("#up-preview-input").setInputFiles(png("Large.png", 3 * 1024 * 1024));
+    assert.equal(await page.locator("#up-preview [data-slot=upload-item] [data-slot=upload-preview]").evaluate((img) => img.hasAttribute("hidden")), true);
+    assert.deepEqual(reports, [], "no policy report");
     await close();
   });
 

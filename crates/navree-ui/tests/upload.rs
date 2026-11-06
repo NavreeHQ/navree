@@ -390,3 +390,30 @@ fn the_module_may_mark_the_root_ready_and_a_morph_keeps_the_mark() {
     let out = html(photo());
     assert!(out.contains(r#"data-ui-keep-attrs="data-ready""#), "{out}");
 }
+
+#[test]
+fn previews_are_asked_for_and_a_stored_file_can_show_its_own_picture() {
+    // Off unless asked: the row template has no picture and the module is told nothing.
+    let plain = html(photo());
+    assert!(!plain.contains("upload-preview") && !plain.contains("data-previews"), "{plain}");
+
+    // Asked for: the module is told, and the row it copies has a hidden picture first.
+    let asked = html(photo().previews());
+    assert!(asked.contains("data-previews"), "{asked}");
+    let template = asked.find("<template").expect("the row template");
+    let picture = asked[template..].find("upload-preview").expect("a picture in the row");
+    let name = asked[template..].find("attachment-title").expect("the name");
+    assert!(picture < name, "the picture comes before the name: {asked}");
+    assert!(
+        asked[template..].contains(r#"alt="" width="40" height="40" hidden"#),
+        "a picture with no description, hidden until it is read: {asked}"
+    );
+
+    // A file the server has: a picture from this site, and nothing from another.
+    let stored = html(photo().file(UploadedFile::new("Aadhaar-Simran-Kaur.png").thumbnail("/files/17/thumb")));
+    assert!(stored.contains(r#"<img data-slot="upload-preview" src="/files/17/thumb" alt="""#), "{stored}");
+    for off in ["https://elsewhere.example/x.png", "//elsewhere.example/x.png", "javascript:alert(1)"] {
+        let out = html(photo().file(UploadedFile::new("x.png").thumbnail(off)));
+        assert!(!out.contains("upload-preview"), "{off}: {out}");
+    }
+}

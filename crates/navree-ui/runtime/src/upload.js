@@ -56,7 +56,17 @@ function add(root, file, state) {
   for (const hidden of all(li, "[data-ui-sr]")) hidden.textContent = " " + file.name;
   part(root, "upload-list").append(li);
   show(job, state, size(file.size));
+  if (has(root, "data-previews")) preview(job);
   return job;
+}
+
+/** A picture is shown small, read as a `data:` URL (the page's policy allows no `blob:`): not above 2 MB, and never an SVG. @param {Job} job */
+function preview(job) {
+  const img = part(job.li, "upload-preview");
+  if (!img || !/^image\/(png|jpeg|gif|webp|avif)$/.test(job.file.type) || job.file.size > 2097152) return;
+  const read = new FileReader();
+  read.onload = () => { set(img, "src", String(read.result)); unset(img, "hidden"); };
+  read.readAsDataURL(job.file);
 }
 
 /** What a file breaks, in words, or nothing. @param {Element} root @param {File} file */

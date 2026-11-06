@@ -35,6 +35,7 @@ pub struct UploadedFile {
     size: Option<u64>,
     href: Option<Href>,
     remove: Option<Href>,
+    thumbnail: Option<String>,
 }
 
 impl UploadedFile {
@@ -45,6 +46,7 @@ impl UploadedFile {
             size: None,
             href: None,
             remove: None,
+            thumbnail: None,
         }
     }
 
@@ -57,6 +59,17 @@ impl UploadedFile {
     /// Links the name to the file.
     pub fn href(mut self, href: impl Into<Href>) -> Self {
         self.href = Some(href.into());
+        self
+    }
+
+    /// Shows a small picture of the file before its name: an address on this site that
+    /// serves a picture (the page's content security policy allows no other). Anything that
+    /// is not an address on this site is ignored. The picture has no description: the name
+    /// beside it says what the file is.
+    pub fn thumbnail(mut self, src: impl AsRef<str>) -> Self {
+        self.thumbnail = LocalHref::parse(src.as_ref())
+            .ok()
+            .map(|href| href.as_str().to_owned());
         self
     }
 
@@ -84,10 +97,19 @@ impl UploadedFile {
                 .uses(Uses::CORE);
             attachment = attachment.action(button);
         }
+        let picture = self.thumbnail.as_ref().map(|src| {
+            el("img")
+                .slot("upload-preview")
+                .attr("src", Href::from(src.as_str()))
+                .attr("alt", "")
+                .attr("width", 40_i64)
+                .attr("height", 40_i64)
+                .attr("loading", "lazy")
+        });
         el("li")
             .slot("upload-item")
             .attr("data-state", "done")
-            .child(attachment)
+            .children((picture, attachment))
             .into()
     }
 
@@ -155,6 +177,7 @@ pub struct Upload {
     required: bool,
     disabled: bool,
     compact: bool,
+    previews: bool,
     files: Vec<UploadedFile>,
 }
 
@@ -178,6 +201,7 @@ impl Upload {
             required: false,
             disabled: false,
             compact: false,
+            previews: false,
             files: Vec::new(),
         }
     }
@@ -270,6 +294,16 @@ impl Upload {
     /// A smaller drop area, for a form with little room.
     pub fn compact(mut self) -> Self {
         self.compact = true;
+        self
+    }
+
+    /// Shows a small picture of each chosen file that is a picture (PNG, JPEG, GIF, WebP or
+    /// AVIF, up to 2 MB), before it is sent. The browser reads the file into a `data:` address,
+    /// which the page's content security policy allows where it allows no `blob:`; a file
+    /// that is larger, or another kind, is listed with its name only. A file the server
+    /// already has gets its picture from [`UploadedFile::thumbnail`].
+    pub fn previews(mut self) -> Self {
+        self.previews = true;
         self
     }
 
@@ -403,6 +437,7 @@ impl Upload {
             .attr_opt("data-refresh", self.refresh.clone())
             .flag("data-manual", self.manual && standalone)
             .flag("data-compact", self.compact)
+            .flag("data-previews", self.previews)
             .flag("data-disabled", self.disabled)
             .flag("data-invalid", self.error.is_some())
             .attr("data-ui-keep-attrs", "data-ready")
@@ -416,7 +451,7 @@ impl Upload {
                 list,
                 status,
                 actions,
-                row_template(labels),
+                row_template(labels, self.previews),
             ))
             .into()
     }
@@ -425,11 +460,20 @@ impl Upload {
 into_node!(Upload);
 
 /// The row the module copies for each file it sends, with the page's words and icon in it.
-fn row_template(labels: &UploadLabels) -> Element {
+fn row_template(labels: &UploadLabels, previews: bool) -> Element {
+    let picture = previews.then(|| {
+        el("img")
+            .slot("upload-preview")
+            .attr("alt", "")
+            .attr("width", 40_i64)
+            .attr("height", 40_i64)
+            .flag("hidden", true)
+    });
     let row = el("li")
         .slot("upload-item")
         .attr("data-state", "queued")
         .children((
+            picture,
             Attachment::new("").meta(""),
             el("progress")
                 .slot("progress")

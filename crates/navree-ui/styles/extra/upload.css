@@ -42,3 +42,8 @@
 [data-slot=upload-status]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 [data-slot=upload][data-ready]:not([data-manual]) > [data-slot=upload-actions]{display:none}
 @media (prefers-reduced-motion:reduce){[data-slot=upload-zone]{transition:none}}
+
+/* The small picture of a file, before its name */
+[data-slot=upload-preview]{flex:none;box-sizing:border-box;width:2.5rem;height:2.5rem;border:1px solid var(--line-2);border-radius:var(--radius);object-fit:cover;background:var(--ink-2);
+  &[hidden]{display:none}
+}

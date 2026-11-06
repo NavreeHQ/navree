@@ -172,6 +172,12 @@ fn page(shell: &AppShell) -> AppPage {
         .id("up-slow")
         .action("/upload/slow")
         .limits(UploadLimits::new(20 * MB));
+    let preview = Upload::new("avatar", "Avatar, shown small when chosen")
+        .id("up-preview")
+        .action("/upload/photo")
+        .manual()
+        .previews()
+        .limits(UploadLimits::new(4 * MB).accept(["image/png", "image/jpeg"]));
     let states = (
         Upload::new("a", "Disabled")
             .id("up-disabled")
@@ -216,6 +222,7 @@ fn page(shell: &AppShell) -> AppPage {
                 ),
             ),
             section("manual", "Sent by hand", manual),
+            section("preview", "A picture shown before it is sent", preview),
             section("field", "A field in a form", field),
             section("slow", "A slow upload", slow),
             section("states", "States", states),
