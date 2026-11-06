@@ -23,6 +23,7 @@ export const diagramNames = [
   "workspace-isolation",
   "harbor-release",
   "orm-parts",
+  "jobs-and-events",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];

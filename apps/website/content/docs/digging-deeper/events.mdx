@@ -14,6 +14,8 @@ description: "A typed, in-process event bus: events, sync and queued listeners, 
 
 The bus is in-process. It doesn't send events to other processes or services; queued listeners reach workers through the queue's storage.
 
+<Diagram name="jobs-and-events" />
+
 ## Registering the module
 
 Add `EventsModule` once, in your app root. It has no options and is global, so feature modules subscribe listeners and inject the bus without importing it:

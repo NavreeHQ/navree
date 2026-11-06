@@ -6,6 +6,7 @@ import { designToUi } from "./design-to-ui";
 import { eventDriven } from "./event-driven";
 import type { DiagramSpec } from "./figure";
 import { harborRelease } from "./harbor-release";
+import { jobsAndEvents } from "./jobs-and-events";
 import { microservices } from "./microservices";
 import { modularMonolith } from "./modular-monolith";
 import { moduleGraph } from "./module-graph";
@@ -38,6 +39,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "workspace-isolation": workspaceIsolation,
   "harbor-release": harborRelease,
   "orm-parts": ormParts,
+  "jobs-and-events": jobsAndEvents,
 };
 
 /**
