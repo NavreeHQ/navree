@@ -15,9 +15,10 @@ const MOST = 10000;
 
 /** @type {Map<string, {at: number, epoch: number, cookies: string, page: Promise<Response>}>} */
 const prefetched = new Map();
-let generation = 0;
+/** Moves on with every page or region fetched; `paged` is the number of the newest page fetched. */
+let generation = 0, paged = 0;
 /** Moves on with every page or region shown: one that waited for its styles shows only if no later one began. */
-let shows = 0;
+let shows = 0, pageShown = 0;
 /** What a page's look hangs on, on `<html>`: the server writes them, and a swap brings them along. */
 const LOOK = ["data-theme", "data-mode", "data-density"];
 /** How long a swap waits for stylesheets it brings before it shows anyway. */
@@ -188,11 +189,16 @@ function dropSheets(wanted) {
  */
 export async function showPage(response, how = {}) {
   const url = how.url || response.url;
+  const id = how.region;
   const ticket = ++shows;
-  const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+  if (!id) pageShown = ticket;
+  const turn = id ? next(shown, id) : 0;
   // A page or region that began while this one's body was on its way is the newer: the address, the page and the
-  // title are its to make, and this one leaves them. A toast it brought is still shown.
-  if (ticket !== shows) {
+  // title are its to make, and this one leaves them. A toast it brought is still shown. A region is overtaken only
+  // by a page or by another show of itself: two tables sorted at once each show their own answer.
+  const newer = () => (id ? pageShown > ticket || shown.get(id) !== turn : ticket !== shows);
+  const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+  if (newer()) {
     clean(body(doc));
     adoptToasts(doc);
     return;
@@ -205,16 +211,16 @@ export async function showPage(response, how = {}) {
   }
   if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   clean(body(doc));
-  if (!how.region) swaps++;
+  if (!id) swaps++;
   // A toast the last request left joins the standing toaster; the page's own is never morphed.
   adoptToasts(doc);
   // The styles it brings first: a page or region shows only in its own theme.
   const sheets = sheetsOf(doc);
   const styles = mergeHead(doc);
   if (styles) await styles;
-  if (ticket !== shows) return;
-  if (how.region) {
-    const from = byId(how.region), to = byId(how.region, doc);
+  if (newer()) return;
+  if (id) {
+    const from = byId(id), to = byId(id, doc);
     if (from && to) {
       takeLook(doc);
       morph(from, to);
@@ -224,7 +230,7 @@ export async function showPage(response, how = {}) {
     }
   }
   takeLook(doc);
-  morph(body(), body(doc), { reset: !how.region && !how.keep });
+  morph(body(), body(doc), { reset: !id && !how.keep });
   // The title changes with what it names, never ahead of it.
   setTitle(titleOf(doc));
   dropSheets(sheets);
@@ -266,23 +272,35 @@ function tablePending(table, on) {
   else table?.removeAttribute("aria-busy");
 }
 
+/** The fetches that show the page as loading, each as its `stale` test: it shows so while one is still current. @type {Set<() => boolean>} */
+const loads = new Set();
+
 /** Goes to `url` like a boosted link. @param {string} url @param {{region?: string, push?: boolean}} [how] */
 export async function go(url, how = {}) {
   // Leaving the site is said by name: `leave`.
   if (!sameOrigin(url)) return;
+  const id = how.region;
   const mine = ++generation;
-  if (!how.region) swaps++;
-  // A fetch of the region that began before this is out of date.
-  else newest(how.region);
+  if (!id) {
+    paged = mine;
+    swaps++;
+  }
+  // A fetch of the region that began before this is out of date. So is a page's, whatever it was for, but a fetch
+  // of another region is not: a sort of one table overtaken by a sort of another still shows, and ends.
+  const turn = id ? newest(id) : 0;
+  const stale = () => (id ? paged > mine || regions.get(id) !== turn : mine !== generation);
   const html = root();
-  const region = how.region ? byId(how.region) : null;
+  const region = id ? byId(id) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
   // A table sorted here already shows the answer: the request only confirms it.
-  if (!table?.hasAttribute("data-ui-confirm")) html.setAttribute("data-ui-loading", "");
+  if (!table?.hasAttribute("data-ui-confirm")) {
+    loads.add(stale);
+    html.setAttribute("data-ui-loading", "");
+  }
   tablePending(table, true);
   try {
     const response = await fetchPage(url);
-    if (mine !== generation) return;
+    if (stale()) return;
     if (table && !response.ok) {
       tableFailed(table, url, response.status);
       return;
@@ -293,14 +311,15 @@ export async function go(url, how = {}) {
     }
     await showPage(response, { ...how, url: response.url || url });
   } catch {
-    if (mine !== generation) return;
+    if (stale()) return;
     if (table) tableFailed(table, url, 0);
     else location.assign(url);
   } finally {
-    if (mine === generation) {
-      html.removeAttribute("data-ui-loading");
-      tablePending(table, false);
-    }
+    loads.delete(stale);
+    for (const load of loads) if (load()) loads.delete(load);
+    if (!loads.size) html.removeAttribute("data-ui-loading");
+    // The table's own newest fetch is over: it is no longer busy, whatever else is on its way.
+    if (regions.get(id) === turn) tablePending(table, false);
   }
 }
 
@@ -317,15 +336,20 @@ export function setUrl(href, mode) {
   else history.pushState(null, "", href);
 }
 
-/** The newest fetch of each region: an older answer is dropped. @type {Map<string, number>} */
+/** The newest fetch of each region: an older answer is dropped. @type {Map<string | undefined, number>} */
 const regions = new Map();
+/** The newest show of each region. @type {Map<string | undefined, number>} */
+const shown = new Map();
 
-/** Starts a fetch of region `id`, and numbers it: every older one is out of date. @param {string} id */
-const newest = (id) => {
-  const n = (regions.get(id) || 0) + 1;
-  regions.set(id, n);
+/** Numbers the next of `id`'s turns in `turns`: every older one is out of date. @param {Map<string | undefined, number>} turns @param {string} id */
+function next(turns, id) {
+  const n = (turns.get(id) || 0) + 1;
+  turns.set(id, n);
   return n;
-};
+}
+
+/** Starts a fetch of region `id`, and numbers it. @param {string} id */
+const newest = (id) => next(regions, id);
 
 /** Statuses of a door that stays shut: a poll stops knocking on it. */
 const SHUT = [401, 403, 404, 410];

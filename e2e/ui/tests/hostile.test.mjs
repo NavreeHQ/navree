@@ -1108,6 +1108,52 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await context.close();
     });
 
+    test(`a sort of one table that a sort of another overtook still shows, and leaves neither table busy (${engine})`, async () => {
+      const name = key("tables");
+      const table = (id, text) => `<div id="${id}" data-ui-region data-ui-table data-ui-src="/${name}"><span id="${id}-what">${text}</span><a id="${id}-sort" href="/${name}-${id}" data-ui-in-region>sort</a></div>`;
+      route(`/${name}`, doc(table("ta", "start") + table("tb", "start")));
+      route(`/${name}-ta`, doc(table("ta", "a sorted") + table("tb", "start")));
+      route(`/${name}-tb`, doc(table("ta", "start") + table("tb", "b sorted")));
+      const { context, page, errors } = await fresh(`/${name}`);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-ta`) });
+      const busy = () => page.evaluate(() => ["ta", "tb"].map((id) => document.getElementById(id).hasAttribute("data-pending")));
+      await page.click("#ta-sort");
+      await late.arrived();
+      await page.click("#tb-sort");
+      await page.waitForFunction(() => document.getElementById("tb-what").textContent === "b sorted");
+      assert.deepEqual(await busy(), [true, false], "the second table is done; the first is still waiting for its own answer");
+      assert.equal(await attr(page, "data-ui-loading"), "", "the page still loads while the first table's answer is on its way");
+      await late.release();
+      await page.waitForFunction(() => document.getElementById("ta-what").textContent === "a sorted");
+      assert.equal(await page.textContent("#tb-what"), "b sorted", "the first table's answer leaves the second as it is");
+      assert.deepEqual(await busy(), [false, false], "neither table is left busy");
+      assert.equal(await attr(page, "data-ui-loading"), null, "nor the page loading");
+      assert.equal(await page.evaluate(() => document.getElementById("ta").getAttribute("aria-busy")), null);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a page followed while a table's sort is on its way leaves that sort's answer undrawn (${engine})`, async () => {
+      const name = key("leave");
+      const table = (text) => `<div id="ta" data-ui-region data-ui-table data-ui-src="/${name}"><span id="ta-what">${text}</span><a id="ta-sort" href="/${name}-sort" data-ui-in-region>sort</a></div>`;
+      route(`/${name}`, doc(`${table("start")}<a id="away" href="/${name}-away">away</a>`));
+      route(`/${name}-sort`, doc(table("sorted")));
+      route(`/${name}-away`, doc(`<h1 id="h">away</h1>${table("away")}`, { title: "away" }));
+      const { context, page, errors } = await fresh(`/${name}`);
+      const late = await lateBody(page, { url: new RegExp(`/${name}-sort`) });
+      await page.click("#ta-sort");
+      await late.arrived();
+      await page.click("#away");
+      await page.waitForFunction(() => document.title === "away");
+      await late.release();
+      await sleep(200);
+      assert.equal(await page.textContent("#ta-what"), "away", "the page followed after the sort is the newer");
+      assert.equal(await page.evaluate(() => location.pathname), `/${name}-away`);
+      assert.equal(await attr(page, "data-ui-loading"), null);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     /** A page with two links, `a` and `b`, which answer with `a` and `b` (`more` for the options of a's page); a's carries a toast. */
     function twoLinks(more = {}) {
       const name = key("twice");
