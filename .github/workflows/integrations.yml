@@ -16,7 +16,8 @@
 # - mail:     SMTP over TLS to Mailpit with a trusted certificate, SES to an
 #             emulator, mail fetched from IMAP and POP3, Gmail's Pub/Sub push.
 # - identity: SAML and OpenID Connect sign-in against Keycloak, the LDAP source
-#             against OpenLDAP.
+#             against OpenLDAP, the SCIM server driven by an independent SCIM
+#             client (scim2-cli).
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -141,6 +142,14 @@ jobs:
 
       - name: The LDAP source against OpenLDAP
         run: cargo test --locked -p navree-directory --test directory openldap -- --ignored --nocapture
+
+      - name: The SCIM server driven by scim2-cli
+        run: |
+          python3 -m pip install --user scim2-cli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          scim2 --help > /dev/null
+          NAVREE_TEST_SCIM2_CLI=scim2 cargo test --locked -p navree-directory --test directory scim_client -- --ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}

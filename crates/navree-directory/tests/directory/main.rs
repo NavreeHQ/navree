@@ -5,6 +5,7 @@ mod ldap_server;
 mod openldap;
 mod routes;
 mod scim;
+mod scim_client;
 mod servers;
 mod sources;
 mod support;
