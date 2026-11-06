@@ -567,8 +567,12 @@ fn to_app_error(error: NotifyError) -> AppError {
     }
 }
 
-/// The OpenAPI metadata shared by the routes.
-fn api(summary: &str, responses: &[u16], response: Option<navree_http::SchemaFn>) -> ApiMeta {
+/// The OpenAPI metadata shared by the routes (the bell's too).
+pub(crate) fn api(
+    summary: &str,
+    responses: &[u16],
+    response: Option<navree_http::SchemaFn>,
+) -> ApiMeta {
     ApiMeta {
         summary: Some(summary.to_owned()),
         tags: vec!["Notifications".to_owned()],

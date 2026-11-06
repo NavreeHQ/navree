@@ -131,3 +131,24 @@ async fn a_new_notification_nudges_the_recipients_live_pages() {
         "{nudges:?}"
     );
 }
+
+// `navree check` asks every route for its API documentation, the bell's too.
+#[tokio::test]
+async fn the_bell_routes_are_documented() {
+    let app = support::app().await;
+    let routes = navree_http::route_table(app.ctx()).await.unwrap();
+    let mut bell = 0;
+    for route in routes.iter().filter(|route| {
+        route
+            .name
+            .as_deref()
+            .is_some_and(|name| name.starts_with("notifications.bell"))
+    }) {
+        bell += 1;
+        let label = format!("{} {}", route.method, route.full_path);
+        let api = route.api.as_ref().unwrap_or_else(|| panic!("{label}"));
+        assert!(api.summary.is_some(), "{label}");
+        assert_eq!(api.tags, ["Notifications"], "{label}");
+    }
+    assert_eq!(bell, 3);
+}

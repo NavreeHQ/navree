@@ -22,12 +22,13 @@ use std::time::Duration;
 use http::Method;
 use navree_contracts::BoxFuture;
 use navree_db::{PageQuery, Uow};
-use navree_http::{AppError, Authenticator, Controller, CurrentPrincipal, Path, RouteDef};
+use navree_http::{ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Path, RouteDef};
 use navree_kernel::{Injectable, KernelError, ProviderKey, Resolver};
 use navree_ui::html::{Href, LocalHref};
 use navree_ui::{Badge, Button, LiveStream, Node, Region, Reply, Size, View, el};
 use uuid::Uuid;
 
+use crate::controller::api;
 use crate::{
     DatabaseNotification, INBOX_TOPIC, Notifiable, Notifier, NotifyOptions, USER_NOTIFIABLE_TYPE,
 };
@@ -349,7 +350,17 @@ impl Controller for NotificationBellController {
                 },
             )
             .authenticated()
-            .name("notifications.bell"),
+            .name("notifications.bell")
+            .api(ApiMeta {
+                description: Some(
+                    "The `NotificationBell` region as HTML: the unread count and the latest \
+                     notifications, each a link to what it is about. A page asks for it after it \
+                     paints, then again on a new notification (or once a minute without the live \
+                     hub)."
+                        .to_owned(),
+                ),
+                ..api("The signed-in user's notification bell", &[], None)
+            }),
             RouteDef::on(
                 Method::POST,
                 "!/notifications/{id}/mark-read",
@@ -367,7 +378,15 @@ impl Controller for NotificationBellController {
                 },
             )
             .authenticated()
-            .name("notifications.bell.read"),
+            .name("notifications.bell.read")
+            .api(ApiMeta {
+                description: Some(
+                    "Answers the bell drawn again for the page's script, or a redirect (303) to \
+                     `/` without it. Another user's notification is not found."
+                        .to_owned(),
+                ),
+                ..api("Marks a notification read", &[303, 404], None)
+            }),
             RouteDef::on(
                 Method::POST,
                 "!/notifications/read-all",
@@ -382,7 +401,15 @@ impl Controller for NotificationBellController {
                 },
             )
             .authenticated()
-            .name("notifications.bell.read_all"),
+            .name("notifications.bell.read_all")
+            .api(ApiMeta {
+                description: Some(
+                    "Answers the bell drawn again for the page's script, or a redirect (303) to \
+                     `/` without it."
+                        .to_owned(),
+                ),
+                ..api("Marks every notification read", &[303], None)
+            }),
         ]
     }
 }
