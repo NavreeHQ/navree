@@ -91,7 +91,7 @@ async fn receiver(received: Received) -> String {
     format!("http://{address}")
 }
 
-struct PingController;
+pub(crate) struct PingController;
 
 impl Injectable for PingController {
     fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
@@ -109,7 +109,7 @@ impl Controller for PingController {
     }
 }
 
-struct PingModule;
+pub(crate) struct PingModule;
 
 impl Module for PingModule {
     fn register(&self, m: &mut ModuleBuilder) {

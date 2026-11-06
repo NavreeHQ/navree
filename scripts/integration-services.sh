@@ -24,6 +24,7 @@
 #   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3),
 #             the Pub/Sub emulator
 #   identity  Keycloak (SAML and OpenID Connect), OpenLDAP
+#   infra     an OpenTelemetry Collector
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -77,11 +78,12 @@ group_services() {
   case "$1" in
     mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
     identity) echo "keycloak openldap" ;;
+    infra) echo "otel-collector" ;;
     *) return 1 ;;
   esac
 }
 
-ALL_GROUPS=(mail identity)
+ALL_GROUPS=(mail identity infra)
 COMMAND="${1:-}"
 shift || true
 WANTED_GROUPS=("$@")
@@ -157,6 +159,9 @@ NAVREE_TEST_LDAPS_URL=ldaps://127.0.0.1:13636
 NAVREE_TEST_LDAP_CA=$(consumer_path "$STATE/openldap/certs/ldap.crt")
 NAVREE_TEST_LDAP_BIND_DN=$LDAP_ADMIN_DN
 NAVREE_TEST_LDAP_PASSWORD=$LDAP_ADMIN_PASSWORD
+NAVREE_TEST_OTEL_HTTP_URL=http://127.0.0.1:14318
+NAVREE_TEST_OTEL_GRPC_URL=http://127.0.0.1:14317
+NAVREE_TEST_OTEL_FILE=$(consumer_path "$STATE/otel/traces.json")
 EOF
 }
 
@@ -195,6 +200,11 @@ localstack_ready() {
 # GreenMail answers on SMTP, IMAP and POP3.
 greenmail_ready() {
   tcp 13025 && tcp 13143 && tcp 13110
+}
+
+# The Collector accepts OTLP on both ports.
+otel_ready() {
+  tcp 14317 && tcp 14318
 }
 
 # OpenLDAP has loaded the directory of integrations/openldap/base.ldif.
@@ -265,6 +275,13 @@ prepare_state() {
     openssl dhparam -dsaparam -out "$ldap/dhparam.pem" 2048 >/dev/null 2>&1
   fi
   chmod -R a+rwX "$ldap"
+
+  # The Collector's file exporter (a user of its own in the container) appends
+  # to a file made here, so the tests can read it.
+  mkdir -p "$STATE/otel"
+  : >"$STATE/otel/traces.json"
+  chmod a+rwx "$STATE/otel"
+  chmod a+rw "$STATE/otel/traces.json"
 }
 
 start() {
@@ -282,6 +299,7 @@ start() {
   ready greenmail navree-int-greenmail greenmail_ready
   ready pubsub navree-int-pubsub curl --fail --silent http://127.0.0.1:18085/
   ready openldap navree-int-openldap openldap_ready
+  ready otel-collector navree-int-otel-collector otel_ready
   load_bulk_people
   # Keycloak answers once the realm is imported.
   ready keycloak navree-int-keycloak curl --fail --silent http://127.0.0.1:18081/realms/navree/.well-known/openid-configuration

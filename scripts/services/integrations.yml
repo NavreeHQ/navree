@@ -139,3 +139,14 @@ services:
     volumes:
       - ./integrations/openldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
       - ${NAVREE_INT_STATE:-./state}/openldap/certs:/container/service/slapd/assets/certs
+
+  # An OpenTelemetry Collector (the contrib build, which has the file exporter)
+  # that writes every export it receives to ${NAVREE_INT_STATE}/otel/traces.json.
+  # OTLP/gRPC on 14317, OTLP/HTTP on 14318.
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:0.116.1}
+    container_name: navree-int-otel-collector
+    ports: ["127.0.0.1:14317:4317", "127.0.0.1:14318:4318"]
+    volumes:
+      - ./integrations/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ${NAVREE_INT_STATE:-./state}/otel:/out

@@ -3,6 +3,8 @@
 
 mod support;
 
+#[cfg(feature = "otel")]
+mod collector;
 mod health;
 mod logs;
 mod metrics;

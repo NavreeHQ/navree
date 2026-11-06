@@ -18,6 +18,7 @@
 # - identity: SAML and OpenID Connect sign-in against Keycloak, the LDAP source
 #             against OpenLDAP, the SCIM server driven by an independent SCIM
 #             client (scim2-cli).
+# - infra:    spans exported to an OpenTelemetry Collector.
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -36,6 +37,10 @@ on:
         default: true
       identity:
         description: Identity (Keycloak, OpenLDAP)
+        type: boolean
+        default: true
+      infra:
+        description: Infrastructure (OpenTelemetry Collector)
         type: boolean
         default: true
 
@@ -150,6 +155,45 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           scim2 --help > /dev/null
           NAVREE_TEST_SCIM2_CLI=scim2 cargo test --locked -p navree-directory --test directory scim_client -- --ignored --nocapture
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  infra:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.infra)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binaries
+        run: |
+          scripts/integration-services.sh pull infra &
+          pulling=$!
+          cargo test --locked -p navree-observe --features otel --test observe --no-run
+          wait "$pulling"
+
+      - name: Start the servers
+        run: scripts/integration-services.sh start infra
+
+      - name: Spans exported to an OpenTelemetry Collector
+        run: cargo test --locked -p navree-observe --features otel --test observe collector -- --ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}
