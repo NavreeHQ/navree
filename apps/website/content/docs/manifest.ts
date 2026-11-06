@@ -61,6 +61,12 @@ export const sections: DocsSection[] = [
     ],
   },
   {
+    slug: "configuration",
+    title: "Configuration",
+    description: "Files per environment and per section, the commands that show and check the configuration, and the reference of every section the framework reads.",
+    pages: ["environments-and-files", "reference"],
+  },
+  {
     slug: "architecture",
     title: "Architecture concepts",
     description: "How a request travels through a Navree app to the screen, and how modules, providers, lifecycle hooks and crates fit together.",

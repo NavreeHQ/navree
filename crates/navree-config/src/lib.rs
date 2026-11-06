@@ -88,6 +88,7 @@ mod module;
 mod origin;
 mod publish;
 mod redact;
+mod reference;
 mod registry;
 mod schema;
 pub mod show;
@@ -105,6 +106,7 @@ pub use module::{ConfigModule, ConfigSection, ModuleBuilderConfigExt, defaults_o
 pub use navree_macros::{ConfigSection, ConfigTable};
 pub use origin::{Shadowed, ValueOrigin};
 pub use publish::{PublishOptions, render as render_publication, run as publish_section};
+pub use reference::reference_markdown;
 pub use registry::{
     ConfigClaim, ConfigRegistry, FRAMEWORK_SECTIONS, SectionInfo, SectionRegistration,
 };
