@@ -8442,6 +8442,7 @@
     },
     "/notifications/bell": {
       "get": {
+        "description": "The `NotificationBell` region as HTML: the unread count and the latest notifications, each a link to what it is about. A page asks for it after it paints, then again on a new notification (or once a minute without the live hub).",
         "operationId": "notifications.bell",
         "responses": {
           "200": {
@@ -8462,15 +8463,23 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "The signed-in user's notification bell",
+        "tags": [
+          "Notifications"
         ]
       }
     },
     "/notifications/read-all": {
       "post": {
+        "description": "Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it.",
         "operationId": "notifications.bell.read_all",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "303": {
+            "description": "See Other"
           },
           "401": {
             "content": {
@@ -8487,11 +8496,16 @@
           {
             "bearer": []
           }
+        ],
+        "summary": "Marks every notification read",
+        "tags": [
+          "Notifications"
         ]
       }
     },
     "/notifications/{id}/mark-read": {
       "post": {
+        "description": "Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it. Another user's notification is not found.",
         "operationId": "notifications.bell.read",
         "parameters": [
           {
@@ -8507,6 +8521,9 @@
           "200": {
             "description": "OK"
           },
+          "303": {
+            "description": "See Other"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -8516,12 +8533,26 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [
           {
             "bearer": []
           }
+        ],
+        "summary": "Marks a notification read",
+        "tags": [
+          "Notifications"
         ]
       }
     },

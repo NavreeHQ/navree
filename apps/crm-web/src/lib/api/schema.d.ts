@@ -2645,6 +2645,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * The signed-in user's notification bell
+         * @description The `NotificationBell` region as HTML: the unread count and the latest notifications, each a link to what it is about. A page asks for it after it paints, then again on a new notification (or once a minute without the live hub).
+         */
         get: operations["notifications.bell"];
         put?: never;
         post?: never;
@@ -2663,6 +2667,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Marks every notification read
+         * @description Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it.
+         */
         post: operations["notifications.bell.read_all"];
         delete?: never;
         options?: never;
@@ -2679,6 +2687,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Marks a notification read
+         * @description Answers the bell drawn again for the page's script, or a redirect (303) to `/` without it. Another user's notification is not found.
+         */
         post: operations["notifications.bell.read"];
         delete?: never;
         options?: never;
@@ -6313,6 +6325,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
                 headers: {
@@ -6342,8 +6361,24 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description See Other */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
