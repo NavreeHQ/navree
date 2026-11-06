@@ -32,7 +32,7 @@
 //! let now = 1_792_929_600;
 //! let code = totp.generate(now);
 //! assert_eq!(totp.check(&code, now + 20), Some(now / 30));
-//! assert!(totp.to_url()?.starts_with("otpauth://totp/Navree:ada%40example.com?secret="));
+//! assert!(totp.to_url()?.starts_with("otpauth://totp/Navree:anu%40example.com?secret="));
 //! # Ok::<(), navree_crypto::totp::TotpError>(())
 //! ```
 

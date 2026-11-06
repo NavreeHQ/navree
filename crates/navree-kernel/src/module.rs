@@ -71,7 +71,8 @@ pub trait Module: Send + Sync + 'static {
 /// assert_eq!(configured.id(), GreetingModule.id());
 /// assert!(configured.is_configured());
 /// let report = Navree::app().module(configured).validate().expect("valid");
-/// assert_eq!(report.modules.len(), 1);
+/// // The app's root module and GreetingModule.
+/// assert_eq!(report.modules.len(), 2);
 /// ```
 pub struct ConfiguredModule<M, O> {
     options: Option<O>,
