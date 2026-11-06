@@ -555,12 +555,15 @@ edit them, but what you write shapes them:
   `getting-started/installation` and `getting-started/your-first-app` into
   `HowTo` data. Renaming one of those headings fails the build until the list
   follows.
-- **The changelog** (`/changelog/` and its Atom feed) is written at build time
-  from the `feat` and `fix` commits of the branch. Write commit subjects a
-  reader can understand: they are the entries.
+- **The changelog** (`/changelog/` and its Atom feed) is written by hand in
+  `src/lib/changelog.ts`: one entry per week with a highlight of two lines
+  and the week's changes under the area of Navree they touch (the areas start
+  closed on the page). Write each change for a user of Navree and link it to
+  the release notes. A change in an internal scope (`INTERNAL_SCOPES`) is
+  never shown.
 
 After a build, `pnpm check` runs every check (`check:links`, `check:seo`,
-`check:geo`, `check:aeo`, `check:fresh`). `pnpm daily` runs the whole daily
+`check:geo`, `check:aeo`, `check:fresh`, `check:404`). `pnpm daily` runs the whole daily
 job: lint, typecheck, build, the checks and Lighthouse on four pages at its
 mobile settings, and writes `report/summary.md`. The `Site daily` workflow
 does the same every day and on every push to `main` that touches the website,
