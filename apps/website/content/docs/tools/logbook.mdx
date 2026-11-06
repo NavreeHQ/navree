@@ -48,7 +48,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`LogbookModule` is global and needs nothing but `HttpModule`. It records what the modules in your app do, so a module you leave out (say, `MailModule`) has nothing to show. It keeps its entries in a SQLite file of its own, `storage/logbook.db`, never in your app's database. That file store is part of the [`sqlite` feature](/docs/database/getting-started/#sqlite) of the `navree` facade, which compiles the bundled SQLite library: an app on SQLite has it (`navree new --database sqlite` writes it), and an app on PostgreSQL or MySQL adds it next to its driver to get the file, as in `features = ["postgres", "sqlite"]`. Without the feature Logbook keeps its entries in memory, and `logbook.store = "file"` stops the boot with a message naming the feature.
+`LogbookModule` is global and needs nothing but `HttpModule`. It records what the modules in your app do, so a module you leave out (say, `MailModule`) has nothing to show. It keeps its entries in a SQLite file of its own, `storage/logbook.db`, never in your app's database. That file store is part of the [`sqlite` feature](/docs/database/sqlite/) of the `navree` facade, which compiles the bundled SQLite library: an app on SQLite has it (`navree new --database sqlite` writes it), and an app on PostgreSQL or MySQL adds it next to its driver to get the file, as in `features = ["postgres", "sqlite"]`. Without the feature Logbook keeps its entries in memory, and `logbook.store = "file"` stops the boot with a message naming the feature.
 
 Start the app and open the timeline:
 

@@ -474,7 +474,7 @@ to get something done.
 - **Limits are behaviour.** On pages about built code, state what a
   feature doesn't do as plainly as what it does ("counters are kept per
   process"). Point forward-looking work at the matching section of the
-  roadmap, such as `/docs/prologue/roadmap/#long-term-support`. Packages that
+  roadmap, such as `/docs/prologue/roadmap/#versioning`. Packages that
   aren't built yet get a `status: "planned"` page (see
   [Front-matter](#pages-for-packages-in-development)), not a caveat.
 

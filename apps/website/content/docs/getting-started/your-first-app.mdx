@@ -14,12 +14,12 @@ You need Rust 1.95 or newer and the `navree` CLI. [Installation](/docs/getting-s
 ## Create the app
 
 ```sh
-navree new planner
+navree new planner --ui none
 cd planner
 navree dock up
 ```
 
-`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. It also puts a generated application key in `.env`, which encrypts data and signs tokens:
+`--ui none` makes the API alone: the Navree UI screens are added in [the last step](#draw-the-tasks-with-navree-ui). `navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. It also puts a generated application key in `.env`, which encrypts data and signs tokens:
 
 ```env title=".env"
 APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=

@@ -31,7 +31,7 @@ export const howTos: Record<string, HowToSpec> = {
       },
       {
         heading: "Running the application",
-        text: "Run navree key:generate and paste the key into .env as APP_KEY, then start the development server with navree dev. The API listens on http://127.0.0.1:8080.",
+        text: "Start the development server with navree dev. navree new has already put an application key in .env. The API listens on http://127.0.0.1:8080.",
       },
     ],
   },
@@ -42,7 +42,7 @@ export const howTos: Record<string, HowToSpec> = {
     steps: [
       {
         heading: "Create the app",
-        text: "Run navree new planner, then navree dock up and navree key:generate, and put the key in .env.",
+        text: "Run navree new planner --ui none, then navree dock up. The app's .env already has an application key.",
       },
       { heading: "Generate the tasks module", text: "Run navree make:module tasks --crud to generate a module with create, read, update and delete routes." },
       { heading: "Define the table", text: "Edit the generated migration so the tasks table has title and done columns." },
@@ -52,6 +52,7 @@ export const howTos: Record<string, HowToSpec> = {
       { heading: "Decide who may do what", text: "Run navree make:policy tasks task and write the rules that let a user act on their own tasks." },
       { heading: "Try it", text: "Start the app with navree dev, sign up with the register route, and call the tasks routes with the bearer token." },
       { heading: "Write a feature test", text: "Create tests/tasks.rs to test the whole app the way a client uses it: real sign-ups, real tokens and the real abilities." },
+      { heading: "Draw the tasks with Navree UI", text: "Add SessionModule, UiModule and AuthPages, write a TaskPages controller that returns a View, and open /tasks after signing in." },
     ],
   },
 };
