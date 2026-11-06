@@ -255,7 +255,7 @@ async fn ses_with_an_sns_action_delivers_the_message_in_the_notification() {
         vec!["reply+abc@in.acme.test"],
         "the receipt rule's recipients, not every destination"
     );
-    assert_eq!(received.envelope.sender.as_deref(), Some("anu@example.com"));
+    assert_eq!(received.envelope.sender.as_deref(), Some("ada@example.com"));
     assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
     assert_eq!(received.verdicts.dkim, Some(Verdict::Gray));
     assert_eq!(received.verdicts.dmarc, Some(Verdict::Fail));

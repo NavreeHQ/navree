@@ -150,7 +150,7 @@ async fn the_fake_plays_the_provider() {
         .unwrap();
 
     assert_eq!(mail.fake.sent().len(), 2);
-    assert_eq!(mail.fake.sent_to("BOB@example.com").len(), 2);
+    assert_eq!(mail.fake.sent_to("BAL@example.com").len(), 2);
     assert_eq!(mail.fake.sent_to("anu@example.com")[0].subject, "One");
 
     // The event goes to the last message sent to the recipient.

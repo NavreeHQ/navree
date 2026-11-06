@@ -397,7 +397,7 @@ mod tests {
             params("support@acme.test", "Support@ACME.test"),
             Some(vec![])
         );
-        assert_eq!(params("support@acme.test", "support@agra.testing"), None);
+        assert_eq!(params("support@acme.test", "support@acme.testing"), None);
         assert_eq!(params("support@acme.test", "xsupport@acme.test"), None);
         assert_eq!(
             params("a.b@acme.test", "axb@acme.test"),
@@ -417,7 +417,7 @@ mod tests {
             None
         );
         assert_eq!(
-            params("{user}@{tenant}.in.acme.test", "anu@globex.in.acme.test"),
+            params("{user}@{tenant}.in.acme.test", "anu@gulati.in.acme.test"),
             Some(vec![
                 ("user".into(), "anu".into()),
                 ("tenant".into(), "gulati".into())

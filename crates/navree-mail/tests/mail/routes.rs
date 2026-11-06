@@ -60,7 +60,7 @@ async fn clicks_go_through_a_signed_redirect() {
     let link = attribute(&html, "href");
     assert!(
         link.starts_with(&format!(
-            "https://links.acme.test/mail/t/c/{}?u=https%3A%2F%2Fagra.test%2Fpromo%3Fa%3D1%26b%3D2&expires=",
+            "https://links.acme.test/mail/t/c/{}?u=https%3A%2F%2Facme.test%2Fpromo%3Fa%3D1%26b%3D2&expires=",
             id.simple()
         )),
         "{link}"
@@ -518,7 +518,7 @@ async fn ses_messages_that_cannot_be_trusted_record_nothing() {
         bounce["Message"]
             .as_str()
             .unwrap()
-            .replace("anu@example.com", "gauri@example.com")
+            .replace("ada@example.com", "gauri@example.com")
     );
     post_ses(&mail, "ses-token", &tampered)
         .await
@@ -650,7 +650,7 @@ async fn suppressions_are_managed() {
 
     let created = client
         .post("/api/mail/suppressions")
-        .json(&json!({ "email": "Ela <EVE@example.com>", "workspace_id": workspace, "detail": "asked by phone" }))
+        .json(&json!({ "email": "Ela <ELA@example.com>", "workspace_id": workspace, "detail": "asked by phone" }))
         .send()
         .await
         .assert_status(201)

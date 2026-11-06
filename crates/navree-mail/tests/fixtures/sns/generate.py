@@ -13,6 +13,11 @@ signature version 1 (SHA-1) and 2 (SHA-256), the way SNS signs them, and
 one notification signed by another key, whose certificate is
 `other-cert.pem`. The Rust side never signs SHA-1, so these are its
 independent vectors.
+
+The receipt notification with the SNS action carries `../inbound/reply.eml`
+in base64 (its `content`), and the tests compare the two. Any edit to the
+text of a signed message, or to `reply.eml` and that `content` together,
+needs this script run again.
 """
 
 import base64

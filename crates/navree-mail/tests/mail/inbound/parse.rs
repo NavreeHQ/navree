@@ -25,14 +25,14 @@ fn a_reply_reads_its_headers_addresses_and_text() {
     assert_eq!(
         mail.from,
         Some(Address {
-            name: Some("Anu Lakhotia".into()),
-            email: "anu@example.com".into()
+            name: Some("Ada Lovelace".into()),
+            email: "ada@example.com".into()
         })
     );
     assert_eq!(mail.to[0].email, "reply+abc@in.acme.test");
-    assert_eq!(mail.to[0].name.as_deref(), Some("Agra Support"));
-    assert_eq!(mail.cc, vec![Address::new("gauri@example.com")]);
-    assert_eq!(mail.reply_to[0].email, "anu@home.example");
+    assert_eq!(mail.to[0].name.as_deref(), Some("Acme Support"));
+    assert_eq!(mail.cc, vec![Address::new("grace@example.com")]);
+    assert_eq!(mail.reply_to[0].email, "ada@home.example");
     assert_eq!(mail.subject.as_deref(), Some("Re: [#42] Printer on fire"));
     assert_eq!(
         mail.date,
@@ -77,7 +77,7 @@ fn recipients_list_the_envelope_then_the_delivery_headers() {
     let mut mail = InboundMail::parse(fixture("reply.eml")).unwrap();
     assert_eq!(
         mail.recipients(),
-        vec!["reply+abc@in.acme.test", "gauri@example.com"],
+        vec!["reply+abc@in.acme.test", "grace@example.com"],
         "without an envelope: Delivered-To, then To and Cc, without duplicates"
     );
 
@@ -441,7 +441,7 @@ fn a_from_that_is_not_an_address_or_a_named_address_is_no_from() {
         "ceo@.acme.test",
         ".ceo@acme.test",
         "ceo..x@acme.test",
-        "ceo@agra..test",
+        "ceo@acme..test",
         "ceo@",
         "@acme.test",
     ] {
