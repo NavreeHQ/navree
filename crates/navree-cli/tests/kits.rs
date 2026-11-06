@@ -248,7 +248,7 @@ fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
     // `@navree/next` reads both (it takes its settings from the environment when
     // the first request arrives) and forwards the client address.
     let navree = read(&root, "web/lib/navree.ts");
-    assert!(navree.contains("createNavree()"));
+    assert!(navree.contains("createNavree("));
     assert!(!navree.contains("trustedProxyHops"));
     // The API kit has no web app, so no proxy to trust.
     let (_dir2, api) = generate("agra", Kit::Api);
@@ -302,13 +302,12 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
     ] {
         assert!(read(&root, route).contains("navree.handlers"), "{route}");
     }
-    assert!(read(&root, "web/lib/navree.ts").contains("createNavree()"));
+    let navree = read(&root, "web/lib/navree.ts");
+    assert!(navree.contains("createNavree("));
     // The admin panel is behind sign-in in the proxy, and the sign-in page is the kit's.
+    assert!(navree.contains("signIn: \"/sign-in\""), "{navree}");
     let proxy = read(&root, "web/proxy.ts");
-    assert!(
-        proxy.contains("navree.proxy({ loginPath: \"/sign-in\" })"),
-        "{proxy}"
-    );
+    assert!(proxy.contains("navree.proxy()"), "{proxy}");
     assert!(proxy.contains("matcher: [\"/admin/:path*\"]"), "{proxy}");
     // Live updates and abilities use the packages' entry points.
     assert!(

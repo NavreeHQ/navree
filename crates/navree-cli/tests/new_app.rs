@@ -634,7 +634,7 @@ fn ui_next_runs_on_the_navree_packages_and_carries_no_bff_of_its_own() {
     let config = read(&root, "web/next.config.ts");
     for needle in [
         "\"/opt/navree/packages/js\"",
-        "turbopack: { root }",
+        "turbopack: {\n    root,",
         "outputFileTracingRoot: root",
         "transpilePackages: [\"@navree/next\", \"@navree/client\", \"@navree/bff\"]",
     ] {
