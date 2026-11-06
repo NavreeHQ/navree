@@ -53,7 +53,7 @@ fn the_docs_print_the_current_version() {
     );
     must_contain(
         "apps/website/content/docs/prologue/roadmap.mdx",
-        &format!("Where Navree goes after {series}:"),
+        &format!("Where Navree goes after {series}"),
     );
     must_contain(
         "apps/website/content/docs/prologue/release-notes.mdx",
