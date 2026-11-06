@@ -11,7 +11,7 @@ use navree_db::Db;
 use navree_fleet::{CompletedJob, MetricKind, MetricSnapshot, REDACTED};
 use navree_queue::AttemptOutcome;
 use navree_session::{SessionModule, SessionOptions};
-use navree_testing::{TestApp, TestClient, TestResponse};
+use navree_testing::{TestClient, TestResponse};
 use navree_ui::UiModule;
 use serde_json::{Value, json};
 

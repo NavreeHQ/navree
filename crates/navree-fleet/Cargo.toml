@@ -25,8 +25,8 @@ memory-stats = { workspace = true }
 metrics = { workspace = true }
 navree-access = { workspace = true }
 # `CurrentUser` names the signed-in user in the shell's menu, and `SIGN_OUT_PATH`
-# is where that menu signs out.
-navree-auth = { workspace = true }
+# (the `session` feature) is where that menu signs out.
+navree-auth = { workspace = true, features = ["session"] }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
