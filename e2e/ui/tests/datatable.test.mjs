@@ -1253,7 +1253,7 @@ for (const browserName of browsers) {
       assert.ok(count > 8, String(count));
       const requests = [];
       page.on("request", (request) => requests.push(request.url()));
-      await page.locator("#deals-m-company [data-ui-find-option]").fill("umb");
+      await page.locator("#deals-m-company [data-ui-find-option]").fill("uts");
       const shown = await options.evaluateAll((items) => items.filter((item) => !item.hidden).map((item) => item.innerText.trim()));
       assert.deepEqual(shown, ["Utsav"]);
       await page.waitForTimeout(350);
