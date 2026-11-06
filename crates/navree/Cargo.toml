@@ -774,7 +774,7 @@ tonic-prost = { workspace = true }
 # stops with the features to turn on, instead of compiling an empty file and
 # reporting no tests. `tests/feature_gates.rs` fails when a test file is gated
 # with `#![cfg(feature = ..)]` inside, or when a name here is not a feature.
-# `scripts/facade-tests.sh` lists, for a feature set, the targets it leaves out.
+# `scripts/facade-features.sh skipped` lists, for a feature set, the targets it leaves out.
 
 [[test]]
 name = "ai"
