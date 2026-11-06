@@ -6,9 +6,11 @@ use std::time::Duration;
 use chrono::Utc;
 use navree_logbook::{Content, EntryKind, Filter, JobOutcome, ListQuery, Term};
 use navree_telemetry::{
-    CacheEvent, CacheOperation, EventContext, EventEmitted, EventKind, ExceptionReported,
-    HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent,
-    RequestHandled, ScheduledTaskRan, TelemetryEvent, TelemetrySink, TraceContext,
+    AiCall, BroadcastSent, CacheEvent, CacheOperation, EventContext, EventEmitted, EventKind,
+    ExceptionReported, HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent,
+    NotificationSent, RequestHandled, ScheduledTaskRan, SearchMode, SearchQueried, SignInEvent,
+    SignInMethod, StorageOp, StorageOperation, TelemetryEvent, TelemetrySink, TraceContext,
+    UiOperation, UiOperationKind, WebhookDelivery,
 };
 use serde_json::json;
 
@@ -509,7 +511,7 @@ async fn a_disabled_logbook_wants_and_records_nothing() {
     assert!(logbook.last_request().await.is_none());
     assert!(logbook.count().await.is_err());
     let record_kinds: Vec<_> = navree_logbook::EntryKind::ALL.to_vec();
-    assert_eq!(record_kinds.len(), 13);
+    assert_eq!(record_kinds.len(), 20);
     let _ = Content::Dump;
 }
 
@@ -613,4 +615,350 @@ fn the_framework_switch_is_a_config_key() {
         "the routes keep their default"
     );
     assert!(navree_logbook::LogbookOptions::default().ignore.framework);
+}
+
+// ---------------------------------------------------------------------------
+// The platform watchers: AI calls, broadcasts, storage, webhooks, searches,
+// sign-ins and UI operations.
+
+fn ms(n: u64) -> Duration {
+    Duration::from_millis(n)
+}
+
+#[tokio::test]
+async fn model_calls_are_recorded_with_tokens_and_cost_but_no_text() {
+    let logbook = logbook();
+    let context = in_request("req-ai");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::AiCall(
+            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", ms(900))
+                .tokens(1200, 340)
+                .cached_tokens(800)
+                .cost_micros(5_400),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::AiCall(
+            AiCall::new("openai", "gpt-5", "stream", ms(40)).failed("rate_limited"),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-ai", "POST", "/api/v1/summaries", 200),
+    );
+    let batch = logbook.last_request().await.unwrap();
+    let calls = batch.ai_calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].provider, "anthropic");
+    assert_eq!(calls[0].input_tokens, Some(1200));
+    assert_eq!(calls[0].output_tokens, Some(340));
+    assert_eq!(calls[0].cached_input_tokens, Some(800));
+    assert_eq!(calls[0].cost_micros, Some(5_400));
+    assert_eq!(calls[1].error.as_deref(), Some("rate_limited"));
+    assert_eq!(batch.request().unwrap().summary.ai_calls, 2);
+    let entries = batch.entries();
+    assert!(!entries[0].failed);
+    assert!(entries[1].failed, "a refused call is a failed entry");
+    assert!((entries[0].duration_ms.unwrap() - 900.0).abs() < 0.01);
+    assert_eq!(entries[0].kind(), EntryKind::Ai);
+}
+
+#[tokio::test]
+async fn broadcasts_storage_and_webhooks_are_recorded() {
+    let logbook = logbook();
+    let context = in_request("req-platform");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::Broadcast(BroadcastSent::new(
+            ["private-crm.deals"],
+            "deal.updated",
+            4,
+            ms(1),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::StorageOp(
+            StorageOp::new("uploads", "local", StorageOperation::Write, "kyc/pan.pdf", ms(6))
+                .bytes(52_314),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::StorageOp(
+            StorageOp::new("uploads", "local", StorageOperation::Read, "kyc/gone.pdf", ms(1))
+                .failed("not found"),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::WebhookDelivery(WebhookDelivery::new(
+            "ep-1",
+            "invoice.paid",
+            2,
+            503,
+            ms(30),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-platform", "POST", "/invoices/7/pay", 200),
+    );
+    let batch = logbook.last_request().await.unwrap();
+
+    let broadcasts = batch.broadcasts();
+    assert_eq!(broadcasts[0].channels, ["private-crm.deals"]);
+    assert_eq!(broadcasts[0].delivered, 4);
+
+    let files = batch.storage_ops();
+    assert_eq!(files.len(), 2);
+    assert_eq!(files[0].operation, "write");
+    assert_eq!(files[0].bytes, Some(52_314));
+    assert_eq!(files[1].error.as_deref(), Some("not found"));
+
+    let hooks = batch.webhooks();
+    assert_eq!(hooks[0].attempt, 2);
+    assert_eq!(hooks[0].status, Some(503));
+    let hook_entry = batch
+        .entries()
+        .iter()
+        .find(|entry| entry.kind() == EntryKind::Webhook)
+        .unwrap();
+    assert!(hook_entry.failed, "a 503 is not a delivery");
+
+    let summary = &batch.request().unwrap().summary;
+    assert_eq!(
+        (summary.broadcasts, summary.storage_ops, summary.webhooks),
+        (1, 2, 1)
+    );
+}
+
+#[tokio::test]
+async fn searches_keep_the_length_of_the_term_and_never_the_term() {
+    let logbook = logbook();
+    let context = in_request("req-search");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::Search(
+            SearchQueried::new(
+                "meilisearch",
+                "contacts",
+                SearchMode::Text,
+                "Harpreet Kaur Ludhiana",
+                ms(5),
+            )
+            .hits(3),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-search", "GET", "/contacts", 200),
+    );
+    let batch = logbook.last_request().await.unwrap();
+    let searches = batch.searches();
+    assert_eq!(searches[0].engine, "meilisearch");
+    assert_eq!(searches[0].index, "contacts");
+    assert_eq!(searches[0].mode, "text");
+    assert_eq!(searches[0].term_length, 22);
+    assert_eq!(searches[0].hits, Some(3));
+    let stored = serde_json::to_string(batch.entries()).unwrap();
+    assert!(!stored.contains("Harpreet"), "{stored}");
+    assert!(!stored.contains("Ludhiana"), "{stored}");
+    assert_eq!(batch.request().unwrap().summary.searches, 1);
+}
+
+#[tokio::test]
+async fn sign_ins_name_the_user_only_when_they_worked() {
+    let logbook = logbook();
+    // A sign-in happens before the context knows its user.
+    let context = in_request("req-sign-in");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::SignIn(SignInEvent::refused(
+            SignInMethod::Password,
+            "invalid_credentials",
+            ms(80),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::SignIn(
+            SignInEvent::succeeded(SignInMethod::Social, "0199c1d2-user", ms(120))
+                .provider("github"),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-sign-in", "POST", "/sign-in", 303),
+    );
+    let batch = logbook.last_request().await.unwrap();
+    let sign_ins = batch.sign_ins();
+    assert_eq!(sign_ins.len(), 2);
+    assert_eq!(sign_ins[0].method, "password");
+    assert_eq!(sign_ins[0].outcome, "failure");
+    assert_eq!(sign_ins[0].reason.as_deref(), Some("invalid_credentials"));
+    assert_eq!(sign_ins[1].provider.as_deref(), Some("github"));
+
+    let entries: Vec<_> = batch
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind() == EntryKind::SignIn)
+        .collect();
+    assert!(entries[0].failed);
+    assert_eq!(entries[0].user_id, None, "a refusal names nobody");
+    assert!(!entries[1].failed);
+    assert_eq!(entries[1].user_id.as_deref(), Some("0199c1d2-user"));
+    assert_eq!(batch.request().unwrap().summary.sign_ins, 2);
+}
+
+#[tokio::test]
+async fn ui_operations_are_recorded_and_the_toolkits_tool_path_is_left_out() {
+    let logbook = logbook();
+    let context = in_request("req-ui");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::UiOperation(UiOperation::new(
+            "/deals/{id}/stage",
+            UiOperationKind::FormPost,
+            200,
+            3,
+            ms(9),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::UiOperation(UiOperation::new(
+            "/deals/{id}/stage",
+            UiOperationKind::Action,
+            500,
+            0,
+            ms(2),
+        )),
+    );
+    // Logbook's own pages are never recorded, as its requests are not.
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::UiOperation(UiOperation::new(
+            "/_logbook/rows",
+            UiOperationKind::LiveRegion,
+            200,
+            1,
+            ms(2),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-ui", "POST", "/deals/7/stage", 200),
+    );
+    let batch = logbook.last_request().await.unwrap();
+    let ops = batch.ui_operations();
+    assert_eq!(ops.len(), 2, "{ops:?}");
+    assert_eq!(ops[0].kind, "form_post");
+    assert_eq!(ops[0].ops, 3);
+    let entries: Vec<_> = batch
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind() == EntryKind::Ui)
+        .collect();
+    assert!(!entries[0].failed);
+    assert!(entries[1].failed, "a 5xx answer is a failed operation");
+    assert_eq!(batch.request().unwrap().summary.ui_ops, 2);
+}
+
+#[tokio::test]
+async fn the_new_kinds_filter_by_type_and_by_text() {
+    let logbook = logbook();
+    let outside = EventContext::default();
+    feed(
+        &logbook,
+        &outside,
+        TelemetryEvent::AiCall(AiCall::new("anthropic", "claude-sonnet-4-5", "generate", ms(5))),
+    );
+    feed(
+        &logbook,
+        &outside,
+        TelemetryEvent::SignIn(SignInEvent::refused(
+            SignInMethod::Passkey,
+            "policy_refused",
+            ms(1),
+        )),
+    );
+    feed(
+        &logbook,
+        &outside,
+        TelemetryEvent::Search(SearchQueried::new(
+            "memory",
+            "deals",
+            SearchMode::Hybrid,
+            "x",
+            ms(1),
+        )),
+    );
+    let count = |filter: &str| {
+        let logbook = logbook.clone();
+        let filter = Filter::parse(filter).unwrap();
+        async move {
+            logbook
+                .entries(&ListQuery::new(filter, 10))
+                .await
+                .unwrap()
+                .len()
+        }
+    };
+    assert_eq!(count("type:ai").await, 1);
+    assert_eq!(count("type:sign-ins").await, 1);
+    assert_eq!(count("type:searches").await, 1);
+    assert_eq!(count("type:ai type:sign_in").await, 2);
+    assert_eq!(count("type:broadcast").await, 0);
+    assert_eq!(count("anthropic").await, 1, "free text reaches the provider");
+    assert_eq!(count("policy_refused").await, 1, "and a sign-in's reason");
+    assert_eq!(count("failed").await, 1);
+    let counts = logbook.counts().await.unwrap();
+    assert_eq!(counts.get(&EntryKind::Ai), Some(&1));
+    assert_eq!(counts.get(&EntryKind::SignIn), Some(&1));
+}
+
+#[test]
+fn the_new_watchers_decide_the_interest_and_are_config_keys() {
+    let all = navree_logbook::LogbookOptions::default().interest();
+    for kind in [
+        EventKind::AiCall,
+        EventKind::Broadcast,
+        EventKind::StorageOp,
+        EventKind::WebhookDelivery,
+        EventKind::Search,
+        EventKind::SignIn,
+        EventKind::UiOperation,
+    ] {
+        assert!(all.contains(kind), "{kind}");
+    }
+    let options: navree_logbook::LogbookOptions = serde_json::from_value(json!({
+        "watchers": { "ai": false, "sign_ins": false, "ui": false }
+    }))
+    .unwrap();
+    let narrowed = options.interest();
+    assert!(!narrowed.contains(EventKind::AiCall));
+    assert!(!narrowed.contains(EventKind::SignIn));
+    assert!(!narrowed.contains(EventKind::UiOperation));
+    assert!(narrowed.contains(EventKind::Search));
+    assert!(narrowed.contains(EventKind::StorageOp));
 }

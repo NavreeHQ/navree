@@ -5,9 +5,10 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use crate::{
-    CacheEntry, Content, DumpEntry, Entry, EntryKind, EventEntry, ExceptionEntry, HttpClientEntry,
-    JobEntry, LogEntry, MailEntry, ModelEntry, NotificationEntry, QueryEntry, RequestEntry,
-    ScheduleEntry,
+    AiEntry, BroadcastEntry, CacheEntry, Content, DumpEntry, Entry, EntryKind, EventEntry,
+    ExceptionEntry, HttpClientEntry, JobEntry, LogEntry, MailEntry, ModelEntry, NotificationEntry,
+    QueryEntry, RequestEntry, ScheduleEntry, SearchEntry, SignInEntry, StorageEntry, UiEntry,
+    WebhookEntry,
 };
 
 /// A batch: the entries recorded while one request, job or scheduled task
@@ -192,6 +193,62 @@ impl Batch {
     pub fn dumps(&self) -> Vec<&DumpEntry> {
         self.pick(|c| match c {
             Content::Dump(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The calls to a model provider.
+    pub fn ai_calls(&self) -> Vec<&AiEntry> {
+        self.pick(|c| match c {
+            Content::Ai(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The broadcasts.
+    pub fn broadcasts(&self) -> Vec<&BroadcastEntry> {
+        self.pick(|c| match c {
+            Content::Broadcast(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The file operations.
+    pub fn storage_ops(&self) -> Vec<&StorageEntry> {
+        self.pick(|c| match c {
+            Content::Storage(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The webhook delivery attempts.
+    pub fn webhooks(&self) -> Vec<&WebhookEntry> {
+        self.pick(|c| match c {
+            Content::Webhook(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The searches.
+    pub fn searches(&self) -> Vec<&SearchEntry> {
+        self.pick(|c| match c {
+            Content::Search(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The sign-in attempts.
+    pub fn sign_ins(&self) -> Vec<&SignInEntry> {
+        self.pick(|c| match c {
+            Content::SignIn(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// The Navree UI operations.
+    pub fn ui_operations(&self) -> Vec<&UiEntry> {
+        self.pick(|c| match c {
+            Content::Ui(x) => Some(x),
             _ => None,
         })
     }

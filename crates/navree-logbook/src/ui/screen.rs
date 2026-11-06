@@ -52,6 +52,13 @@ fn icon_of(kind: EntryKind) -> navree_ui::icons::Icon {
         EntryKind::Model => icons::PENCIL,
         EntryKind::Schedule => icons::CLOCK,
         EntryKind::Dump => icons::BUG,
+        EntryKind::Ai => icons::SPARKLES,
+        EntryKind::Broadcast => icons::RADIO_TOWER,
+        EntryKind::Storage => icons::HARD_DRIVE,
+        EntryKind::Webhook => icons::WEBHOOK,
+        EntryKind::Search => icons::SEARCH,
+        EntryKind::SignIn => icons::LOG_IN,
+        EntryKind::Ui => icons::MOUSE_POINTER_CLICK,
     }
 }
 

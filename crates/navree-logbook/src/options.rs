@@ -151,6 +151,13 @@ impl LogbookOptions {
             (w.exceptions, EventKind::ExceptionReported),
             (w.logs, EventKind::Log),
             (w.events, EventKind::EventEmitted),
+            (w.ai, EventKind::AiCall),
+            (w.broadcasts, EventKind::Broadcast),
+            (w.storage, EventKind::StorageOp),
+            (w.webhooks, EventKind::WebhookDelivery),
+            (w.search, EventKind::Search),
+            (w.sign_ins, EventKind::SignIn),
+            (w.ui, EventKind::UiOperation),
         ];
         pairs
             .into_iter()
@@ -302,6 +309,22 @@ pub struct Watchers {
     pub models: bool,
     /// Scheduled task runs.
     pub schedule: bool,
+    /// Calls to model providers, with tokens and latency (never the prompt
+    /// or the answer).
+    pub ai: bool,
+    /// Events pushed to real-time channels (never their data).
+    pub broadcasts: bool,
+    /// File operations on storage disks (never the contents).
+    pub storage: bool,
+    /// Webhook delivery attempts (never the payload).
+    pub webhooks: bool,
+    /// Searches, with the length of the term and the hits (never the term).
+    pub search: bool,
+    /// Sign-in attempts (never an email address or a secret).
+    pub sign_ins: bool,
+    /// Navree UI operations: form posts, actions, table queries and region
+    /// fetches (never their values).
+    pub ui: bool,
 }
 
 impl Default for Watchers {
@@ -319,6 +342,13 @@ impl Default for Watchers {
             notifications: true,
             models: true,
             schedule: true,
+            ai: true,
+            broadcasts: true,
+            storage: true,
+            webhooks: true,
+            search: true,
+            sign_ins: true,
+            ui: true,
         }
     }
 }

@@ -8,7 +8,8 @@ use chrono::Utc;
 use http::StatusCode;
 use navree_logbook::{EntryKind, Logbook, LogbookModule};
 use navree_telemetry::{
-    EventContext, JobProcessed, MailSent, TelemetryEvent, TelemetryRecord, TelemetrySink,
+    AiCall, EventContext, JobProcessed, MailSent, SignInEvent, SignInMethod, StorageOp,
+    StorageOperation, TelemetryEvent, TelemetryRecord, TelemetrySink,
 };
 use serde_json::json;
 
@@ -596,4 +597,73 @@ async fn a_logbook_that_is_off_adds_no_route_and_no_layer() {
         .filter(|r| r.full_path.starts_with("/_logbook"))
         .count();
     assert!(count >= 11, "{count}");
+}
+
+#[tokio::test]
+async fn the_newer_kinds_show_in_the_list_and_in_the_request_that_made_them() {
+    let app = app().await;
+    let logbook = app.get::<Logbook>().await;
+    let context = in_request("req-platform");
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::AiCall(
+            AiCall::new("anthropic", "claude-sonnet-4-5", "generate", Duration::from_millis(900))
+                .tokens(1200, 340)
+                .cost_micros(5_400),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::SignIn(SignInEvent::refused(
+            SignInMethod::Password,
+            "invalid_credentials",
+            Duration::from_millis(80),
+        )),
+    );
+    feed(
+        &logbook,
+        &context,
+        TelemetryEvent::StorageOp(
+            StorageOp::new(
+                "uploads",
+                "local",
+                StorageOperation::Write,
+                "kyc/pan.pdf",
+                Duration::from_millis(6),
+            )
+            .bytes(52_314),
+        ),
+    );
+    feed(
+        &logbook,
+        &context,
+        request_event("req-platform", "POST", "/sign-in", 303),
+    );
+
+    // The request's row counts what it did.
+    let list = get(&app, "/_logbook").await;
+    assert!(list.contains("1 ai"), "{list}");
+    assert!(list.contains("1 auth"), "{list}");
+    assert!(list.contains("1 file"), "{list}");
+
+    // Open, it has a section for each kind, with what each did.
+    let id = head_id(&app, "type:request").await;
+    let page = get(&app, &format!("/_logbook/entries/{id}")).await;
+    for section in ["id=\"ai\"", "id=\"storage\"", "id=\"sign-ins\""] {
+        assert!(page.contains(section), "{section}: {page}");
+    }
+    assert!(page.contains("claude-sonnet-4-5 generate"), "{page}");
+    assert!(page.contains("1200 in, 340 out tokens"), "{page}");
+    assert!(page.contains("$0.0054"), "{page}");
+    assert!(page.contains("password sign-in failure"), "{page}");
+    assert!(page.contains("invalid_credentials"), "{page}");
+    assert!(page.contains("write kyc/pan.pdf"), "{page}");
+    assert!(page.contains("52314 bytes"), "{page}");
+
+    // Each kind has a list of its own, and a type filter reaches it.
+    let ai = get(&app, "/_logbook?type=ai").await;
+    assert!(ai.contains("claude-sonnet-4-5 generate"), "{ai}");
+    assert!(!ai.contains("kyc/pan.pdf"), "{ai}");
 }

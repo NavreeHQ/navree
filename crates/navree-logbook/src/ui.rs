@@ -404,6 +404,13 @@ fn row_label(kind: EntryKind) -> &'static str {
         EntryKind::Model => "Data change",
         EntryKind::Schedule => "Task",
         EntryKind::Dump => "Dump",
+        EntryKind::Ai => "AI call",
+        EntryKind::Broadcast => "Broadcast",
+        EntryKind::Storage => "Storage",
+        EntryKind::Webhook => "Webhook",
+        EntryKind::Search => "Search",
+        EntryKind::SignIn => "Sign-in",
+        EntryKind::Ui => "UI",
     }
 }
 
@@ -477,6 +484,13 @@ fn prefix_of(kind: EntryKind) -> Option<&'static str> {
         EntryKind::Model => Some("change"),
         EntryKind::Schedule => Some("task"),
         EntryKind::Dump => Some("dump"),
+        EntryKind::Ai => Some("ai"),
+        EntryKind::Broadcast => Some("broadcast"),
+        EntryKind::Storage => Some("storage"),
+        EntryKind::Webhook => Some("webhook"),
+        EntryKind::Search => Some("search"),
+        EntryKind::SignIn => Some("sign-in"),
+        EntryKind::Ui => Some("ui"),
     }
 }
 
@@ -488,6 +502,11 @@ fn status_of(entry: &Entry) -> String {
         Content::Job(job) => job.outcome.as_str().to_owned(),
         Content::Schedule(task) if task.error.is_some() => "failed".to_owned(),
         Content::Schedule(_) => "ran".to_owned(),
+        Content::SignIn(sign_in) => sign_in.outcome.clone(),
+        Content::Webhook(hook) => hook
+            .status
+            .map_or_else(|| "no answer".to_owned(), |status| status.to_string()),
+        Content::Ui(op) => op.status.to_string(),
         _ => String::new(),
     }
 }
@@ -516,6 +535,13 @@ fn row(state: &ListState<'_>, entry: &Entry) -> Row {
             (summary.notifications, "notif", "notifications"),
             (summary.models, "chg", "data changes"),
             (summary.dumps, "dump", "dumps"),
+            (summary.ai_calls, "ai", "AI calls"),
+            (summary.broadcasts, "bcast", "broadcasts"),
+            (summary.storage_ops, "file", "file operations"),
+            (summary.webhooks, "hook", "webhook attempts"),
+            (summary.searches, "srch", "searches"),
+            (summary.sign_ins, "auth", "sign-ins"),
+            (summary.ui_ops, "ui", "UI operations"),
         ] {
             if count > 0 {
                 counters.push(Counter {
@@ -1011,6 +1037,13 @@ impl LogbookController {
             (EntryKind::Notification, "notifications", "Notifications"),
             (EntryKind::Model, "models", "Data changes"),
             (EntryKind::Dump, "dumps", "Dumps"),
+            (EntryKind::Ai, "ai", "AI calls"),
+            (EntryKind::Broadcast, "broadcasts", "Broadcasts"),
+            (EntryKind::Storage, "storage", "Storage"),
+            (EntryKind::Webhook, "webhooks", "Webhooks"),
+            (EntryKind::Search, "searches", "Searches"),
+            (EntryKind::SignIn, "sign-ins", "Sign-ins"),
+            (EntryKind::Ui, "ui", "UI operations"),
         ];
         let mut sections = Vec::new();
         for (kind, id, label) in order {
@@ -1216,6 +1249,26 @@ fn message_view(message: &crate::HttpMessage) -> detail_page::Message {
     }
 }
 
+/// `1,200 in, 340 out tokens`, with what the provider said.
+fn tokens_text(input: Option<u64>, output: Option<u64>) -> Option<String> {
+    match (input, output) {
+        (None, None) => None,
+        (input, output) => Some(format!(
+            "{} in, {} out tokens",
+            input.map_or_else(|| "?".to_owned(), |n| n.to_string()),
+            output.map_or_else(|| "?".to_owned(), |n| n.to_string()),
+        )),
+    }
+}
+
+/// A cost kept in millionths of a US dollar, as `$0.0054`.
+fn cost_text(micros: u64) -> String {
+    format!("${}.{:06}", micros / 1_000_000, micros % 1_000_000)
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
+}
+
 /// One entry in a section.
 fn item(base: &str, entry: &Entry, selected: bool, link: bool) -> Item {
     let duration = entry.duration_ms.map(format_ms).unwrap_or_default();
@@ -1328,6 +1381,90 @@ fn item(base: &str, entry: &Entry, selected: bool, link: bool) -> Item {
             pretty(&d.value),
             String::new(),
         ),
+        Content::Ai(a) => (
+            format!("{} {}", a.model, a.operation),
+            [
+                Some(a.provider.clone()),
+                tokens_text(a.input_tokens, a.output_tokens),
+                a.cached_input_tokens
+                    .map(|cached| format!("{cached} from the prompt cache")),
+                a.cost_micros.map(cost_text),
+                Some(duration.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · "),
+            a.error.clone().unwrap_or_default(),
+            String::new(),
+        ),
+        Content::Broadcast(b) => (
+            format!("{} to {}", b.event, b.channels.join(", ")),
+            format!("{} delivered · {duration}", b.delivered),
+            b.error.clone().unwrap_or_default(),
+            String::new(),
+        ),
+        Content::Storage(s) => (
+            format!("{} {}", s.operation, s.path),
+            [
+                Some(format!("disk {} ({})", s.disk, s.driver)),
+                s.bytes.map(|bytes| format!("{bytes} bytes")),
+                Some(duration.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · "),
+            s.error.clone().unwrap_or_default(),
+            String::new(),
+        ),
+        Content::Webhook(w) => (
+            format!("{} to {}", w.event, w.endpoint),
+            format!(
+                "attempt {} · {} · {duration}",
+                w.attempt,
+                w.status
+                    .map_or_else(|| "no answer".to_owned(), |status| status.to_string())
+            ),
+            w.error.clone().unwrap_or_default(),
+            String::new(),
+        ),
+        Content::Search(s) => (
+            format!("{} search of {}", s.mode, s.index),
+            [
+                Some(s.engine.clone()),
+                Some(format!("a term of {} characters", s.term_length)),
+                s.hits.map(|hits| format!("{hits} hits")),
+                Some(duration.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · "),
+            s.error.clone().unwrap_or_default(),
+            String::new(),
+        ),
+        Content::SignIn(s) => (
+            format!("{} sign-in {}", s.method, s.outcome),
+            [
+                s.provider.clone(),
+                s.reason.clone(),
+                entry.user_id.as_ref().map(|user| format!("user {user}")),
+                Some(duration.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · "),
+            String::new(),
+            String::new(),
+        ),
+        Content::Ui(u) => (
+            format!("{} {}", u.kind, u.name),
+            format!("{} · {} operation(s) · {duration}", u.status, u.ops),
+            String::new(),
+            String::new(),
+        ),
         other => (
             entry.title(),
             duration.clone(),
@@ -1435,6 +1572,22 @@ mod tests {
         ] {
             assert_eq!(breakable(id), id);
         }
+    }
+
+    #[test]
+    fn tokens_and_costs_read_well() {
+        assert_eq!(
+            tokens_text(Some(1200), Some(340)).as_deref(),
+            Some("1200 in, 340 out tokens")
+        );
+        assert_eq!(
+            tokens_text(Some(10), None).as_deref(),
+            Some("10 in, ? out tokens")
+        );
+        assert_eq!(tokens_text(None, None), None);
+        assert_eq!(cost_text(5_400), "$0.0054");
+        assert_eq!(cost_text(2_000_000), "$2");
+        assert_eq!(cost_text(1_500_000), "$1.5");
     }
 
     #[test]

@@ -56,9 +56,10 @@ mod ui;
 
 pub use batch::{Batch, DuplicateQuery};
 pub use entry::{
-    BatchSummary, CacheEntry, CapturedBody, Content, DumpEntry, Entry, EntryKind, EventEntry,
-    ExceptionEntry, HttpClientEntry, HttpMessage, JobEntry, JobOutcome, LogEntry, MailEntry,
-    ModelEntry, NotificationEntry, QueryEntry, RequestEntry, ScheduleEntry,
+    AiEntry, BatchSummary, BroadcastEntry, CacheEntry, CapturedBody, Content, DumpEntry, Entry,
+    EntryKind, EventEntry, ExceptionEntry, HttpClientEntry, HttpMessage, JobEntry, JobOutcome,
+    LogEntry, MailEntry, ModelEntry, NotificationEntry, QueryEntry, RequestEntry, ScheduleEntry,
+    SearchEntry, SignInEntry, StorageEntry, UiEntry, WebhookEntry,
 };
 pub use error::LogbookError;
 pub use filter::{Comparison, Filter, FilterError, StatusMatch, Term};

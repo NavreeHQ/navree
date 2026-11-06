@@ -38,11 +38,25 @@ pub enum EntryKind {
     Schedule,
     /// A value recorded with [`Logbook::dump`](crate::Logbook::dump).
     Dump,
+    /// A call to a model provider.
+    Ai,
+    /// An event pushed to real-time channels.
+    Broadcast,
+    /// A file operation on a storage disk.
+    Storage,
+    /// One attempt to deliver a webhook.
+    Webhook,
+    /// A search.
+    Search,
+    /// A sign-in attempt.
+    SignIn,
+    /// A Navree UI operation.
+    Ui,
 }
 
 impl EntryKind {
     /// Every kind, in the order of the UI's filter buttons.
-    pub const ALL: [EntryKind; 13] = [
+    pub const ALL: [EntryKind; 20] = [
         EntryKind::Request,
         EntryKind::Query,
         EntryKind::Job,
@@ -56,6 +70,13 @@ impl EntryKind {
         EntryKind::Model,
         EntryKind::Schedule,
         EntryKind::Dump,
+        EntryKind::Ai,
+        EntryKind::Broadcast,
+        EntryKind::Storage,
+        EntryKind::Webhook,
+        EntryKind::Search,
+        EntryKind::SignIn,
+        EntryKind::Ui,
     ];
 
     /// The name used in filters and JSON (`query`, `http_client`).
@@ -74,6 +95,13 @@ impl EntryKind {
             EntryKind::Model => "model",
             EntryKind::Schedule => "schedule",
             EntryKind::Dump => "dump",
+            EntryKind::Ai => "ai",
+            EntryKind::Broadcast => "broadcast",
+            EntryKind::Storage => "storage",
+            EntryKind::Webhook => "webhook",
+            EntryKind::Search => "search",
+            EntryKind::SignIn => "sign_in",
+            EntryKind::Ui => "ui",
         }
     }
 
@@ -93,11 +121,19 @@ impl EntryKind {
             EntryKind::Model => "Data changes",
             EntryKind::Schedule => "Scheduled tasks",
             EntryKind::Dump => "Dumps",
+            EntryKind::Ai => "AI calls",
+            EntryKind::Broadcast => "Broadcasts",
+            EntryKind::Storage => "Storage",
+            EntryKind::Webhook => "Webhooks",
+            EntryKind::Search => "Searches",
+            EntryKind::SignIn => "Sign-ins",
+            EntryKind::Ui => "UI operations",
         }
     }
 
     /// A kind from its name, its plural or its watcher's name
-    /// (`query`, `queries`, `http_client`, `models`), case-insensitively.
+    /// (`query`, `queries`, `http_client`, `models`, `sign_ins`),
+    /// case-insensitively.
     pub fn parse(name: &str) -> Option<EntryKind> {
         let name = name.trim().to_ascii_lowercase().replace('-', "_");
         let kind = match name.as_str() {
@@ -114,6 +150,13 @@ impl EntryKind {
             "model" | "models" => EntryKind::Model,
             "schedule" | "scheduled" => EntryKind::Schedule,
             "dump" | "dumps" => EntryKind::Dump,
+            "ai" | "ai_call" | "ai_calls" => EntryKind::Ai,
+            "broadcast" | "broadcasts" => EntryKind::Broadcast,
+            "storage" | "storage_op" | "storage_ops" => EntryKind::Storage,
+            "webhook" | "webhooks" => EntryKind::Webhook,
+            "search" | "searches" => EntryKind::Search,
+            "sign_in" | "sign_ins" | "signin" | "signins" => EntryKind::SignIn,
+            "ui" | "ui_operation" | "ui_operations" => EntryKind::Ui,
             _ => return None,
         };
         Some(kind)
@@ -257,6 +300,13 @@ impl Entry {
             Content::Model(x) => format!("{} {} {}", x.entity, x.op, x.id),
             Content::Schedule(x) => x.task.clone(),
             Content::Dump(x) => x.label.clone(),
+            Content::Ai(x) => format!("{} {}", x.model, x.operation),
+            Content::Broadcast(x) => format!("{} to {}", x.event, x.channels.join(", ")),
+            Content::Storage(x) => format!("{} {}", x.operation, x.path),
+            Content::Webhook(x) => format!("{} to {}", x.event, x.endpoint),
+            Content::Search(x) => format!("{} search of {}", x.mode, x.index),
+            Content::SignIn(x) => format!("{} sign-in {}", x.method, x.outcome),
+            Content::Ui(x) => format!("{} {}", x.kind, x.name),
         }
     }
 
@@ -291,6 +341,27 @@ impl Entry {
                 if let Some(error) = &x.error {
                     text.push(' ');
                     text.push_str(error);
+                }
+            }
+            Content::Ai(x) => {
+                text.push(' ');
+                text.push_str(&x.provider);
+            }
+            Content::Storage(x) => {
+                text.push(' ');
+                text.push_str(&x.disk);
+            }
+            Content::Search(x) => {
+                text.push(' ');
+                text.push_str(&x.engine);
+            }
+            Content::SignIn(x) => {
+                for part in [x.provider.as_deref(), x.reason.as_deref()]
+                    .into_iter()
+                    .flatten()
+                {
+                    text.push(' ');
+                    text.push_str(part);
                 }
             }
             _ => {}
@@ -333,6 +404,20 @@ pub enum Content {
     Schedule(ScheduleEntry),
     /// A dumped value.
     Dump(DumpEntry),
+    /// A call to a model provider.
+    Ai(AiEntry),
+    /// A broadcast.
+    Broadcast(BroadcastEntry),
+    /// A file operation.
+    Storage(StorageEntry),
+    /// A webhook delivery attempt.
+    Webhook(WebhookEntry),
+    /// A search.
+    Search(SearchEntry),
+    /// A sign-in attempt.
+    SignIn(SignInEntry),
+    /// A Navree UI operation.
+    Ui(UiEntry),
 }
 
 impl Content {
@@ -352,6 +437,13 @@ impl Content {
             Content::Model(_) => EntryKind::Model,
             Content::Schedule(_) => EntryKind::Schedule,
             Content::Dump(_) => EntryKind::Dump,
+            Content::Ai(_) => EntryKind::Ai,
+            Content::Broadcast(_) => EntryKind::Broadcast,
+            Content::Storage(_) => EntryKind::Storage,
+            Content::Webhook(_) => EntryKind::Webhook,
+            Content::Search(_) => EntryKind::Search,
+            Content::SignIn(_) => EntryKind::SignIn,
+            Content::Ui(_) => EntryKind::Ui,
         }
     }
 }
@@ -386,6 +478,20 @@ pub struct BatchSummary {
     pub models: u32,
     /// Dumps.
     pub dumps: u32,
+    /// Calls to a model provider.
+    pub ai_calls: u32,
+    /// Broadcasts.
+    pub broadcasts: u32,
+    /// File operations.
+    pub storage_ops: u32,
+    /// Webhook delivery attempts.
+    pub webhooks: u32,
+    /// Searches.
+    pub searches: u32,
+    /// Sign-in attempts.
+    pub sign_ins: u32,
+    /// Navree UI operations.
+    pub ui_ops: u32,
 }
 
 impl BatchSummary {
@@ -402,6 +508,13 @@ impl BatchSummary {
             EntryKind::Notification => &mut self.notifications,
             EntryKind::Model => &mut self.models,
             EntryKind::Dump => &mut self.dumps,
+            EntryKind::Ai => &mut self.ai_calls,
+            EntryKind::Broadcast => &mut self.broadcasts,
+            EntryKind::Storage => &mut self.storage_ops,
+            EntryKind::Webhook => &mut self.webhooks,
+            EntryKind::Search => &mut self.searches,
+            EntryKind::SignIn => &mut self.sign_ins,
+            EntryKind::Ui => &mut self.ui_ops,
             EntryKind::Request | EntryKind::Job | EntryKind::Schedule => return,
         };
         *counter += 1;
@@ -675,6 +788,118 @@ pub struct DumpEntry {
     pub value: Value,
 }
 
+/// A call to a model provider. Never the prompt or the answer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AiEntry {
+    /// The provider (`anthropic`, `openai`).
+    pub provider: String,
+    /// The model.
+    pub model: String,
+    /// `generate`, `stream`, `embed` or `rerank`.
+    pub operation: String,
+    /// The input tokens, when the provider said.
+    pub input_tokens: Option<u64>,
+    /// The output tokens, when the provider said.
+    pub output_tokens: Option<u64>,
+    /// The part of the input read from the provider's prompt cache.
+    pub cached_input_tokens: Option<u64>,
+    /// The cost in millionths of a US dollar, when the app prices its models.
+    pub cost_micros: Option<u64>,
+    /// The failure, when the call failed.
+    pub error: Option<String>,
+}
+
+/// An event pushed to real-time channels. Never its data.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BroadcastEntry {
+    /// The channels.
+    pub channels: Vec<String>,
+    /// The event name (`deal.updated`).
+    pub event: String,
+    /// The deliveries queued to subscribers.
+    pub delivered: u64,
+    /// The failure, when the broadcast failed.
+    pub error: Option<String>,
+}
+
+/// A file operation on a storage disk. Never the contents.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StorageEntry {
+    /// The disk.
+    pub disk: String,
+    /// The disk's driver (`local`, `s3`).
+    pub driver: String,
+    /// `read`, `write`, `delete`, `list`, `copy`, `move` or `stat`.
+    pub operation: String,
+    /// The path, or the directory listed.
+    pub path: String,
+    /// The bytes read or written, when known.
+    pub bytes: Option<u64>,
+    /// The failure, when the operation failed.
+    pub error: Option<String>,
+}
+
+/// One attempt to deliver a webhook. Never the payload.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebhookEntry {
+    /// The endpoint.
+    pub endpoint: String,
+    /// The event delivered (`invoice.paid`).
+    pub event: String,
+    /// The attempt (1 for the first).
+    pub attempt: u32,
+    /// The status the endpoint answered; `None` when no answer came.
+    pub status: Option<u16>,
+    /// The failure, when the endpoint did not take it.
+    pub error: Option<String>,
+}
+
+/// A search. Never the term, only its length.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchEntry {
+    /// The engine.
+    pub engine: String,
+    /// The index searched.
+    pub index: String,
+    /// `text`, `hybrid`, `similar` or `across`.
+    pub mode: String,
+    /// The length of the term in characters.
+    pub term_length: u32,
+    /// The hits, when the engine said.
+    pub hits: Option<u64>,
+    /// The failure, when the search failed.
+    pub error: Option<String>,
+}
+
+/// A sign-in attempt. Never the email address or a secret; the entry's
+/// `user_id` is set only when the sign-in worked.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignInEntry {
+    /// `password`, `two_factor`, `magic_link`, `code`, `passkey`, `social`,
+    /// `sso` or `token_exchange`.
+    pub method: String,
+    /// The social provider, single sign-on connection or token issuer.
+    pub provider: Option<String>,
+    /// `success` or `failure`.
+    pub outcome: String,
+    /// Why it failed, as a code (`invalid_credentials`).
+    pub reason: Option<String>,
+}
+
+/// A Navree UI operation. Never the form's values or the markup.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiEntry {
+    /// The route template, or the operation's own name.
+    pub name: String,
+    /// `form_post`, `action`, `table_query`, `live_region`, `fragment` or
+    /// `upload`.
+    pub kind: String,
+    /// How many operations the answer held.
+    pub ops: u32,
+    /// The response status.
+    pub status: u16,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -689,6 +914,52 @@ mod tests {
         assert_eq!(EntryKind::parse("models"), Some(EntryKind::Model));
         assert_eq!(EntryKind::parse("http-client"), Some(EntryKind::HttpClient));
         assert_eq!(EntryKind::parse("nope"), None);
+    }
+
+    #[test]
+    fn the_newer_kinds_answer_to_their_plurals() {
+        for (name, kind) in [
+            ("ai_calls", EntryKind::Ai),
+            ("Broadcasts", EntryKind::Broadcast),
+            ("storage-op", EntryKind::Storage),
+            ("webhooks", EntryKind::Webhook),
+            ("searches", EntryKind::Search),
+            ("sign-ins", EntryKind::SignIn),
+            ("signin", EntryKind::SignIn),
+            ("ui_operation", EntryKind::Ui),
+        ] {
+            assert_eq!(EntryKind::parse(name), Some(kind), "{name}");
+        }
+        assert_eq!(EntryKind::ALL.len(), 20);
+    }
+
+    #[test]
+    fn the_summary_counts_the_newer_kinds() {
+        let mut summary = BatchSummary::default();
+        for kind in [
+            EntryKind::Ai,
+            EntryKind::Ai,
+            EntryKind::Broadcast,
+            EntryKind::Storage,
+            EntryKind::Webhook,
+            EntryKind::Search,
+            EntryKind::SignIn,
+            EntryKind::Ui,
+        ] {
+            summary.count(kind);
+        }
+        assert_eq!(summary.ai_calls, 2);
+        assert_eq!(
+            [
+                summary.broadcasts,
+                summary.storage_ops,
+                summary.webhooks,
+                summary.searches,
+                summary.sign_ins,
+                summary.ui_ops
+            ],
+            [1; 6]
+        );
     }
 
     #[test]

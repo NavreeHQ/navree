@@ -5,13 +5,14 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use navree_db::{ChangeEvent, ChangeObserver, DbError, Uow};
 use navree_kernel::BoxFuture;
-use navree_telemetry::{EventContext, Telemetry, TelemetryEvent, TelemetryRecord};
+use navree_telemetry::{EventContext, Outcome, Telemetry, TelemetryEvent, TelemetryRecord};
 
 use crate::logbook::Active;
 use crate::{
-    CacheEntry, Content, Entry, EventEntry, ExceptionEntry, HttpClientEntry, JobEntry, JobOutcome,
-    LogEntry, Logbook, MailEntry, ModelEntry, NotificationEntry, QueryEntry, RequestEntry,
-    ScheduleEntry,
+    AiEntry, BroadcastEntry, CacheEntry, Content, Entry, EventEntry, ExceptionEntry,
+    HttpClientEntry, JobEntry, JobOutcome, LogEntry, Logbook, MailEntry, ModelEntry,
+    NotificationEntry, QueryEntry, RequestEntry, ScheduleEntry, SearchEntry, SignInEntry,
+    StorageEntry, UiEntry, WebhookEntry,
 };
 
 /// Log lines of these targets are never recorded: Logbook's own lines.
@@ -19,6 +20,11 @@ const OWN_TARGET: &str = "navree::logbook";
 
 fn ms(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1000.0
+}
+
+/// Whether an operation's outcome marks its entry as failed.
+fn is_failure(outcome: Outcome) -> bool {
+    !outcome.is_success()
 }
 
 /// When something that ended at `end` after `duration` started.
@@ -124,6 +130,12 @@ impl Active {
             if event.workspace_id.is_some() {
                 entry.workspace_id.clone_from(&event.workspace_id);
             }
+        }
+        // A sign-in is made before the context knows its user: the event does.
+        if let TelemetryEvent::SignIn(event) = &record.event
+            && event.user_id.is_some()
+        {
+            entry.user_id.clone_from(&event.user_id);
         }
         entry.duration_ms = recorded.duration_ms;
         entry.failed = recorded.failed;
@@ -338,6 +350,116 @@ impl Active {
                 at,
             )
             .lasting(at, e.duration),
+            TelemetryEvent::AiCall(e) => {
+                let mut recorded = Recorded::new(
+                    Content::Ai(AiEntry {
+                        provider: e.provider.clone(),
+                        model: e.model.clone(),
+                        operation: e.operation.clone(),
+                        input_tokens: e.input_tokens,
+                        output_tokens: e.output_tokens,
+                        cached_input_tokens: e.cached_input_tokens,
+                        cost_micros: e.cost_micros,
+                        error: e.error.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::Broadcast(e) => {
+                let mut recorded = Recorded::new(
+                    Content::Broadcast(BroadcastEntry {
+                        channels: e.channels.clone(),
+                        event: e.event.clone(),
+                        delivered: e.delivered,
+                        error: e.error.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::StorageOp(e) => {
+                let mut recorded = Recorded::new(
+                    Content::Storage(StorageEntry {
+                        disk: e.disk.clone(),
+                        driver: e.driver.clone(),
+                        operation: e.operation.as_str().to_owned(),
+                        path: e.path.clone(),
+                        bytes: e.bytes,
+                        error: e.error.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::WebhookDelivery(e) => {
+                let mut recorded = Recorded::new(
+                    Content::Webhook(WebhookEntry {
+                        endpoint: e.endpoint.clone(),
+                        event: e.event.clone(),
+                        attempt: e.attempt,
+                        status: e.status,
+                        error: e.error.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::Search(e) => {
+                let mut recorded = Recorded::new(
+                    Content::Search(SearchEntry {
+                        engine: e.engine.clone(),
+                        index: e.index.clone(),
+                        mode: e.mode.as_str().to_owned(),
+                        term_length: e.term_length,
+                        hits: e.hits,
+                        error: e.error.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::SignIn(e) => {
+                let mut recorded = Recorded::new(
+                    Content::SignIn(SignInEntry {
+                        method: e.method.as_str().to_owned(),
+                        provider: e.provider.clone(),
+                        outcome: e.outcome.as_str().to_owned(),
+                        reason: e.reason.clone(),
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = is_failure(e.outcome);
+                recorded
+            }
+            TelemetryEvent::UiOperation(e) => {
+                if self.ignores_path(&e.name) {
+                    return None;
+                }
+                let mut recorded = Recorded::new(
+                    Content::Ui(UiEntry {
+                        name: e.name.clone(),
+                        kind: e.kind.as_str().to_owned(),
+                        ops: e.ops,
+                        status: e.status,
+                    }),
+                    at,
+                )
+                .lasting(at, e.duration);
+                recorded.failed = e.status >= 500;
+                recorded
+            }
             _ => return None,
         })
     }
