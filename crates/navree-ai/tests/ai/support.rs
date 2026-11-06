@@ -11,7 +11,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, field};
 use navree_ai::{AiModule, AiOptions, ModelConfig, ProviderConfig};
 use navree_auth::{AuthModule, AuthService};
-use navree_contracts::{Clock, FixedClock};
+use navree_contracts::{Clock, FixedClock, Secret};
 use navree_crypto::CryptoModule;
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
@@ -33,13 +33,15 @@ pub fn provider_options(driver: &str, url: &str, name: &str, model: &str) -> AiO
     let mut provider = ProviderConfig {
         driver: Some(driver.to_owned()),
         url: Some(url.to_owned()),
-        api_key: Some("test-key".to_owned()),
+        api_key: Some(Secret::new("test-key".to_owned())),
         ..ProviderConfig::default()
     };
     if driver == "bedrock" {
         provider.region = Some("us-east-1".to_owned());
         provider.access_key_id = Some("AKIDEXAMPLE".to_owned());
-        provider.secret_access_key = Some("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".to_owned());
+        provider.secret_access_key = Some(Secret::new(
+            "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".to_owned(),
+        ));
     }
     AiOptions {
         default: name.to_owned(),

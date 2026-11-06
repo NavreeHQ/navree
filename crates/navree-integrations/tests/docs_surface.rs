@@ -81,10 +81,10 @@ fn the_configuration_keys_have_their_documented_defaults() {
         apps,
     } = ProviderConfig::default();
     let _: (Option<ProviderType>, Option<bool>) = (kind, pkce);
-    let _: [Option<String>; 12] = [
+    let _: Option<Secret<String>> = client_secret;
+    let _: [Option<String>; 11] = [
         name,
         client_id,
-        client_secret,
         tenant,
         authorize_url,
         token_url,
@@ -103,7 +103,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
         client_id,
         client_secret,
     } = AppCredentials::default();
-    let _: (String, Option<String>) = (client_id, client_secret);
+    let _: (String, Option<Secret<String>>) = (client_id, client_secret);
 
     // The documented TOML, every key at once.
     let config = Config::load(&ConfigSources::new().set(

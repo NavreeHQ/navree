@@ -823,7 +823,7 @@ impl Vectors {
             VectorStoreKind::Memory => Arc::new(MemoryVectorStore::new(options.metric)),
             VectorStoreKind::Qdrant => Arc::new(QdrantStore::new(
                 options.url.as_deref().unwrap_or_default(),
-                options.key.clone(),
+                options.key.as_ref().map(|key| key.expose().clone()),
                 options.dimensions,
                 options.metric,
                 Duration::from_secs(search.timeout_secs),

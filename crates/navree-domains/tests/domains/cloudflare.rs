@@ -1,5 +1,6 @@
 //! The Cloudflare driver against a mock of the Cloudflare DNS API.
 
+use navree_contracts::Secret;
 use navree_domains::{CloudflareDns, CloudflareOptions, DnsProvider, DomainsError, RecordKind};
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -9,7 +10,7 @@ const RECORDS: &str = "/zones/zone-1/dns_records";
 
 fn driver(server: &MockServer) -> CloudflareDns {
     CloudflareDns::new(&CloudflareOptions {
-        api_token: Some("cf-token".into()),
+        api_token: Some(Secret::new("cf-token".to_owned())),
         zone_id: Some("zone-1".into()),
         api_url: server.uri(),
         ..CloudflareOptions::default()
@@ -160,7 +161,7 @@ fn the_driver_needs_a_token_and_a_zone() {
     let debug = format!(
         "{:?}",
         CloudflareDns::new(&CloudflareOptions {
-            api_token: Some("secret-token".into()),
+            api_token: Some(Secret::new("secret-token".to_owned())),
             zone_id: Some("zone-1".into()),
             ..CloudflareOptions::default()
         })

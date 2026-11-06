@@ -46,7 +46,10 @@ async fn models_and_providers_come_from_configuration_and_the_environment() {
     assert_eq!(options.models["smart"].fallbacks, ["fast", "backup"]);
     assert_eq!(options.models["fast"].max_tokens, 1024);
     assert_eq!(
-        options.providers["anthropic"].api_key.as_deref(),
+        options.providers["anthropic"]
+            .api_key
+            .as_ref()
+            .map(|key| key.expose().as_str()),
         Some("sk-ant-api03-test")
     );
     assert!(app.get::<Ai>().await.fake().is_none());

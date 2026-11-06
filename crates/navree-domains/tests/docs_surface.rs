@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use navree_contracts::Secret;
 use navree_domains::{
     AcmeClient, AcmeFake, AcmeOptions, AcmeOrder, AskQuery, CertificateOptions, CertificateProbe,
     CertificateRun, CloudflareDns, CloudflareOptions, CurrentDomain, CustomDomain,
@@ -368,7 +369,7 @@ async fn the_drivers_fakes_and_services_exist() {
     );
     let _: Arc<dyn DnsProvider> = Arc::new(
         CloudflareDns::new(&CloudflareOptions {
-            api_token: Some("t".into()),
+            api_token: Some(Secret::new("t".to_owned())),
             zone_id: Some("z".into()),
             ..CloudflareOptions::default()
         })

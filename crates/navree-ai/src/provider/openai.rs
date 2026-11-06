@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use futures_util::StreamExt;
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -32,7 +33,7 @@ pub(crate) enum Flavor {
 pub(crate) struct OpenAi {
     name: String,
     flavor: Flavor,
-    api_key: Option<String>,
+    api_key: Option<Secret<String>>,
     organization: Option<String>,
     base: String,
     /// A compatible server (custom `url` with the `openai` driver).
@@ -54,7 +55,10 @@ impl OpenAi {
         Self {
             name: name.to_owned(),
             flavor,
-            api_key: config.api_key.clone().filter(|key| !key.is_empty()),
+            api_key: config
+                .api_key
+                .clone()
+                .filter(|key| !key.expose().is_empty()),
             organization: config.organization.clone(),
             base: config
                 .url
@@ -70,7 +74,7 @@ impl OpenAi {
     fn post(&self, path: &str, body: &Value) -> Result<RequestBuilder, ProviderError> {
         let mut request = self.http.post(format!("{}{path}", self.base)).json(body);
         match &self.api_key {
-            Some(key) => request = request.bearer(key),
+            Some(key) => request = request.bearer(key.expose()),
             None if !self.compatible => {
                 return Err(ProviderError::Auth {
                     message: format!(
@@ -546,7 +550,7 @@ mod tests {
 
     fn driver(flavor: Flavor, url: Option<&str>) -> OpenAi {
         let config = ProviderConfig {
-            api_key: Some("k".into()),
+            api_key: Some(Secret::new("k".to_owned())),
             url: url.map(str::to_owned),
             ..ProviderConfig::default()
         };

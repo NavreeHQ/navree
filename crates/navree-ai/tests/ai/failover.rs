@@ -6,6 +6,7 @@ use std::time::Duration;
 use navree_ai::{
     Ai, AiError, AiFake, AiOptions, Attachment, FakeReply, ModelConfig, ProviderConfig,
 };
+use navree_contracts::Secret;
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -256,7 +257,7 @@ async fn models_that_cannot_read_an_attachment_are_skipped() {
         ProviderConfig {
             driver: Some("gemini".into()),
             url: Some(secondary.uri()),
-            api_key: Some("k".into()),
+            api_key: Some(Secret::new("k".to_owned())),
             ..ProviderConfig::default()
         },
     );

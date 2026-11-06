@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, HttpClientOptions, SsrfPolicy};
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path};
@@ -307,13 +308,13 @@ fn driver(fixture: &Fixture, server: &MockServer) -> std::sync::Arc<dyn Driver> 
     let mut config = ProviderConfig {
         driver: Some(fixture.driver.to_owned()),
         url: Some(server.uri()),
-        api_key: Some("test-key".into()),
+        api_key: Some(Secret::new("test-key".to_owned())),
         ..ProviderConfig::default()
     };
     if fixture.driver == "bedrock" {
         config.region = Some("us-east-1".into());
         config.access_key_id = Some("AKIDEXAMPLE".into());
-        config.secret_access_key = Some("secret".into());
+        config.secret_access_key = Some(Secret::new("secret".to_owned()));
     }
     build_driver(fixture.driver, &config, &http()).unwrap()
 }

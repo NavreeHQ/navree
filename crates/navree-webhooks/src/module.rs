@@ -11,8 +11,8 @@ use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_workspace::events::WorkspaceDeleted;
 
@@ -79,15 +79,13 @@ impl WebhooksModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: WebhooksOptions) -> impl Module {
-        ConfiguredWebhooksModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<WebhooksModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `webhooks` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredWebhooksModule { options: None }
+        ConfiguredModule::<WebhooksModule, WebhooksOptions>::from_config(register)
     }
 
     /// Makes event `E` a webhook: import it in the module that owns the
@@ -103,26 +101,6 @@ impl WebhooksModule {
 impl Module for WebhooksModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `WebhooksModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredWebhooksModule {
-    /// `None`: read from configuration.
-    options: Option<WebhooksOptions>,
-}
-
-impl Module for ConfiguredWebhooksModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<WebhooksModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

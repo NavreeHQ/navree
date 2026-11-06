@@ -57,7 +57,7 @@ impl NotifyCallbacksController {
         self.options
             .incoming
             .source(S::NAME)
-            .is_some_and(|source| !source.secret.trim().is_empty())
+            .is_some_and(|source| !source.secret.expose().trim().is_empty())
     }
 }
 

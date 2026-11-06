@@ -68,14 +68,14 @@ impl WebhookVerifier for MicrosoftGraph {
         body: &[u8],
         _tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, body)
+        Self::verify(source.secret.expose(), body)
     }
 
     async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
         if let Some(token) = request.query(Self::VALIDATION_TOKEN) {
             return Ok(Verdict::Handshake(Handshake::text(token)));
         }
-        Self::verify(&request.source().secret, request.body()).map(Verdict::Verified)
+        Self::verify(request.source().secret.expose(), request.body()).map(Verdict::Verified)
     }
 }
 

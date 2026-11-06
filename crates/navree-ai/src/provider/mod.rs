@@ -227,5 +227,8 @@ pub(crate) fn missing_key(name: &str, config: &ProviderConfig) -> bool {
     let custom_openai = driver == "openai" && config.url.is_some();
     matches!(driver, "anthropic" | "openai" | "gemini" | "mistral")
         && !custom_openai
-        && config.api_key.as_deref().is_none_or(str::is_empty)
+        && config
+            .api_key
+            .as_ref()
+            .is_none_or(|key| key.expose().is_empty())
 }

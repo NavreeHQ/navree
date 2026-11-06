@@ -9,8 +9,8 @@ use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::{OrganizationDeleted, WorkspaceDeleted};
@@ -76,15 +76,13 @@ impl IntegrationsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: IntegrationsOptions) -> impl Module {
-        ConfiguredIntegrationsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<IntegrationsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `integrations` section of `Config`
     /// at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredIntegrationsModule { options: None }
+        ConfiguredModule::<IntegrationsModule, IntegrationsOptions>::from_config(register)
     }
 
     /// Registers scope set `S` (import it in the feature module that needs
@@ -98,27 +96,6 @@ impl IntegrationsModule {
 impl Module for IntegrationsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `IntegrationsModule::for_root` / `from_config`: same module id,
-/// configured.
-struct ConfiguredIntegrationsModule {
-    /// `None`: read from configuration.
-    options: Option<IntegrationsOptions>,
-}
-
-impl Module for ConfiguredIntegrationsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<IntegrationsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

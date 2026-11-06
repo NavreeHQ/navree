@@ -3,8 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use navree_config::ConfigSection;
-use serde::{Deserialize, Deserializer, Serialize};
+use navree_config::{ConfigSection, ConfigTable};
+use navree_contracts::Secret;
+use serde::{Deserialize, Serialize};
 
 /// The provider drivers Navree ships, which are also the built-in provider
 /// names.
@@ -39,7 +40,8 @@ pub const DRIVERS: [&str; 6] = [
 /// ```
 ///
 /// Keys belong in the environment: `APP_AI__PROVIDERS__ANTHROPIC__API_KEY`.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ConfigSection)]
+#[config(key = "ai", docs = "/docs/ai/ai-sdk/", validate = Self::check_values)]
 #[serde(default)]
 pub struct AiOptions {
     /// The model a request uses when it names none (default: the first
@@ -58,6 +60,7 @@ pub struct AiOptions {
     /// for repair (default 2).
     pub structured_retries: u32,
     /// Per-user token budgets.
+    #[config(table)]
     pub budget: BudgetOptions,
     /// Log prompts and outputs at `debug` (default false).
     pub log_content: bool,
@@ -68,10 +71,13 @@ pub struct AiOptions {
     /// Models by the name code uses (`smart`, `fast`, `embed`).
     pub models: BTreeMap<String, ModelConfig>,
     /// [`Embeddings`](crate::Embeddings).
+    #[config(table)]
     pub embeddings: EmbeddingsOptions,
     /// [`VectorStore`](crate::VectorStore).
+    #[config(table)]
     pub vectors: VectorsOptions,
     /// Agent conversation memory.
+    #[config(table)]
     pub memory: MemoryOptions,
 }
 
@@ -96,7 +102,7 @@ impl Default for AiOptions {
 }
 
 /// Per-user token budgets (`ai.budget`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ConfigTable)]
 #[serde(default)]
 pub struct BudgetOptions {
     /// Input plus output tokens one user may spend per UTC day; `0` turns
@@ -106,31 +112,42 @@ pub struct BudgetOptions {
 
 /// One provider account (`ai.providers.<name>`). Set the keys you need; the
 /// rest have defaults.
-#[derive(Clone, Default, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Default, PartialEq, Deserialize, Serialize, ConfigTable)]
 #[serde(default)]
 pub struct ProviderConfig {
     /// The driver: `anthropic`, `openai`, `gemini`, `mistral`, `ollama` or
     /// `bedrock`. Defaults to the table's name, so `[ai.providers.openai]`
     /// needs none; a second account names it (`driver = "openai"`).
     pub driver: Option<String>,
-    /// The API key (Anthropic, OpenAI, Gemini, Mistral).
-    pub api_key: Option<String>,
+    /// The API key (Anthropic, OpenAI, Gemini, Mistral). Never serialized.
+    #[serde(skip_serializing)]
+    pub api_key: Option<Secret<String>>,
     /// Replaces the vendor's API address (a proxy, a gateway, an
     /// OpenAI-compatible server, Ollama's address).
     pub url: Option<String>,
     /// OpenAI: the organization header.
     pub organization: Option<String>,
-    /// Bedrock: the AWS region (`us-east-1`).
+    /// Bedrock: the AWS region (`us-east-1`; else `AWS_REGION`, else
+    /// `AWS_DEFAULT_REGION`).
+    #[config(env_fallback = "AWS_REGION")]
     pub region: Option<String>,
     /// Bedrock: the access key id (else `AWS_ACCESS_KEY_ID`, else the
     /// shared credentials file).
+    #[config(env_fallback = "AWS_ACCESS_KEY_ID")]
     pub access_key_id: Option<String>,
-    /// Bedrock: the secret access key.
-    pub secret_access_key: Option<String>,
-    /// Bedrock: a session token for temporary credentials.
-    pub session_token: Option<String>,
+    /// Bedrock: the secret access key (else `AWS_SECRET_ACCESS_KEY`). Never
+    /// serialized.
+    #[serde(skip_serializing)]
+    #[config(env_fallback = "AWS_SECRET_ACCESS_KEY")]
+    pub secret_access_key: Option<Secret<String>>,
+    /// Bedrock: a session token for temporary credentials (else
+    /// `AWS_SESSION_TOKEN`). Never serialized.
+    #[serde(skip_serializing)]
+    #[config(env_fallback = "AWS_SESSION_TOKEN")]
+    pub session_token: Option<Secret<String>>,
     /// Bedrock: the profile of the shared credentials file (default
     /// `AWS_PROFILE`, else `default`).
+    #[config(env_fallback = "AWS_PROFILE")]
     pub profile: Option<String>,
 }
 
@@ -138,7 +155,7 @@ impl ProviderConfig {
     /// Anthropic with `api_key`.
     pub fn anthropic(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: Some(api_key.into()),
+            api_key: Some(Secret::new(api_key.into())),
             ..Self::default()
         }
     }
@@ -146,7 +163,7 @@ impl ProviderConfig {
     /// OpenAI with `api_key`.
     pub fn openai(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: Some(api_key.into()),
+            api_key: Some(Secret::new(api_key.into())),
             ..Self::default()
         }
     }
@@ -164,7 +181,7 @@ impl ProviderConfig {
     /// Google Gemini with `api_key`.
     pub fn gemini(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: Some(api_key.into()),
+            api_key: Some(Secret::new(api_key.into())),
             ..Self::default()
         }
     }
@@ -172,7 +189,7 @@ impl ProviderConfig {
     /// Mistral with `api_key`.
     pub fn mistral(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: Some(api_key.into()),
+            api_key: Some(Secret::new(api_key.into())),
             ..Self::default()
         }
     }
@@ -213,10 +230,12 @@ impl ProviderConfig {
     }
 }
 
-/// Secrets are never printed.
+/// Secrets are never printed, and neither is the access key id.
 impl fmt::Debug for ProviderConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mask = |value: &Option<String>| value.as_ref().map(|_| "[redacted]");
+        fn mask<T>(value: &Option<T>) -> Option<&'static str> {
+            value.as_ref().map(|_| "[redacted]")
+        }
         f.debug_struct("ProviderConfig")
             .field("driver", &self.driver)
             .field("api_key", &mask(&self.api_key))
@@ -246,7 +265,7 @@ pub struct ModelConfig {
     pub temperature: Option<f32>,
     /// Models tried in order when this one is unavailable. A list, or a
     /// comma-separated string (from an environment variable).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub fallbacks: Vec<String>,
     /// This model's attempt limit (default `ai.timeout_secs`).
     pub timeout_secs: Option<u64>,
@@ -302,7 +321,7 @@ impl ModelConfig {
 }
 
 /// [`Embeddings`](crate::Embeddings) (`ai.embeddings`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ConfigTable)]
 #[serde(default)]
 pub struct EmbeddingsOptions {
     /// The model name in `ai.models` that embeds.
@@ -362,19 +381,22 @@ impl Metric {
 }
 
 /// [`VectorStore`](crate::VectorStore) (`ai.vectors`).
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ConfigTable)]
 #[serde(default)]
 pub struct VectorsOptions {
     /// `memory` (default), `pgvector` or `qdrant`.
+    #[config(one_of = "memory, pgvector, qdrant")]
     pub store: VectorStoreKind,
     /// The vector size of every collection (default 1536).
     pub dimensions: usize,
     /// `cosine` (default), `dot` or `euclidean`.
+    #[config(one_of = "cosine, dot, euclidean")]
     pub metric: Metric,
     /// The Qdrant server (`http://127.0.0.1:6333`).
     pub url: Option<String>,
-    /// The Qdrant API key.
-    pub key: Option<String>,
+    /// The Qdrant API key. Never serialized.
+    #[serde(skip_serializing)]
+    pub key: Option<Secret<String>>,
 }
 
 impl Default for VectorsOptions {
@@ -389,20 +411,8 @@ impl Default for VectorsOptions {
     }
 }
 
-impl fmt::Debug for VectorsOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("VectorsOptions")
-            .field("store", &self.store)
-            .field("dimensions", &self.dimensions)
-            .field("metric", &self.metric)
-            .field("url", &self.url)
-            .field("key", &self.key.as_ref().map(|_| "[redacted]"))
-            .finish()
-    }
-}
-
 /// Agent conversation memory (`ai.memory`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ConfigTable)]
 #[serde(default)]
 pub struct MemoryOptions {
     /// Messages the model sees before older ones are summarized (default
@@ -425,10 +435,9 @@ impl Default for MemoryOptions {
     }
 }
 
-impl ConfigSection for AiOptions {
-    const KEY: &'static str = "ai";
-
-    fn validate(&self) -> Result<(), String> {
+impl AiOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         let errors = self.check();
         if errors.is_empty() {
             Ok(())
@@ -436,9 +445,7 @@ impl ConfigSection for AiOptions {
             Err(errors.join("; "))
         }
     }
-}
 
-impl AiOptions {
     /// Every problem with these options, each naming its key.
     pub fn check(&self) -> Vec<String> {
         let mut errors = Vec::new();
@@ -639,26 +646,6 @@ impl AiOptions {
     }
 }
 
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrCsv {
-        List(Vec<String>),
-        Csv(String),
-    }
-    let items = match ListOrCsv::deserialize(deserializer)? {
-        ListOrCsv::List(items) => items,
-        ListOrCsv::Csv(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -795,7 +782,7 @@ mod tests {
     #[test]
     fn debug_never_prints_secrets() {
         let config = ProviderConfig {
-            secret_access_key: Some("s3cr3t".into()),
+            secret_access_key: Some(Secret::new("s3cr3t".to_owned())),
             ..ProviderConfig::anthropic("sk-ant-123")
         };
         let printed = format!("{config:?}");
@@ -804,10 +791,127 @@ mod tests {
             "{printed}"
         );
         let vectors = VectorsOptions {
-            key: Some("qdrant-key".into()),
+            key: Some(Secret::new("qdrant-key".to_owned())),
             ..VectorsOptions::default()
         };
         assert!(!format!("{vectors:?}").contains("qdrant-key"));
+    }
+
+    #[test]
+    fn serializing_never_writes_a_credential() {
+        let bedrock = ProviderConfig {
+            access_key_id: Some("AKIA4EXAMPLE7ID".into()),
+            secret_access_key: Some(Secret::new("aws-s3cr3t-access-key".to_owned())),
+            session_token: Some(Secret::new("aws-s3ssion-t0ken".to_owned())),
+            ..ProviderConfig::bedrock("eu-west-1")
+        };
+        let options = AiOptions {
+            providers: [
+                (
+                    "anthropic".to_owned(),
+                    ProviderConfig::anthropic("sk-ant-api-s3cr3t"),
+                ),
+                ("bedrock".to_owned(), bedrock),
+            ]
+            .into(),
+            vectors: VectorsOptions {
+                key: Some(Secret::new("qdrant-api-s3cr3t".to_owned())),
+                ..VectorsOptions::default()
+            },
+            ..AiOptions::default()
+        };
+        let json = serde_json::to_string(&options).unwrap();
+        for secret in [
+            "sk-ant-api-s3cr3t",
+            "aws-s3cr3t-access-key",
+            "aws-s3ssion-t0ken",
+            "qdrant-api-s3cr3t",
+        ] {
+            assert!(!json.contains(secret), "{secret} in {json}");
+        }
+        assert!(json.contains("eu-west-1"), "{json}");
+    }
+
+    #[test]
+    fn credentials_are_read_from_a_file_as_plain_text() {
+        let o = options(json!({
+            "providers": {
+                "anthropic": { "api_key": "sk-ant-1" },
+                "bedrock": { "secret_access_key": "aws-1", "session_token": "tok-1" }
+            },
+            "vectors": { "store": "qdrant", "url": "http://127.0.0.1:6333", "key": "q-1" }
+        }));
+        let key = o.providers["anthropic"].api_key.as_ref().unwrap();
+        assert_eq!(key.expose(), "sk-ant-1");
+        let bedrock = &o.providers["bedrock"];
+        assert_eq!(
+            bedrock.secret_access_key.as_ref().unwrap().expose(),
+            "aws-1"
+        );
+        assert_eq!(bedrock.session_token.as_ref().unwrap().expose(), "tok-1");
+        assert_eq!(o.vectors.key.as_ref().unwrap().expose(), "q-1");
+    }
+
+    #[test]
+    fn a_provider_describes_its_credentials_and_fallbacks() {
+        let fields = <ProviderConfig as ConfigTable>::fields();
+        let field = |name: &str| {
+            fields
+                .iter()
+                .find(|field| field.name == name)
+                .unwrap_or_else(|| panic!("{name}"))
+        };
+        for name in ["api_key", "secret_access_key", "session_token"] {
+            assert!(field(name).secret, "{name}");
+        }
+        assert!(!field("access_key_id").secret);
+        assert_eq!(
+            field("secret_access_key").env_fallback.as_deref(),
+            Some("AWS_SECRET_ACCESS_KEY")
+        );
+        assert_eq!(field("region").env_fallback.as_deref(), Some("AWS_REGION"));
+        let value = ConfigTable::to_json(&ProviderConfig::anthropic("sk-ant-api-s3cr3t"));
+        assert_eq!(value["api_key"], serde_json::Value::Null);
+        assert!(!value.to_string().contains("sk-ant-api-s3cr3t"), "{value}");
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = AiOptions::schema().expect("schema");
+        assert_eq!(schema.key, "ai");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/ai/ai-sdk/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "default",
+            "timeout_secs",
+            "providers",
+            "models",
+            "budget",
+            "embeddings",
+            "vectors",
+            "memory",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        assert_eq!(schema.secret_paths(), ["ai.vectors.key"]);
+        let store = schema
+            .leaves()
+            .into_iter()
+            .find(|(path, _)| path == "ai.vectors.store")
+            .map(|(_, field)| field.ty.clone());
+        assert_eq!(
+            store,
+            Some(navree_config::FieldType::choice(&[
+                "memory", "pgvector", "qdrant"
+            ]))
+        );
+        let defaults = AiOptions::defaults().expect("defaults");
+        assert_eq!(defaults["timeout_secs"], 60);
+        assert_eq!(defaults["vectors"]["key"], serde_json::Value::Null);
     }
 
     #[test]

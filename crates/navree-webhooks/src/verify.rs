@@ -161,7 +161,7 @@ pub trait WebhookVerifier: Send + Sync + 'static {
     /// by default `secret`. A request for a source that lacks it is answered
     /// with 500, and the error log names the key.
     fn missing_setting(source: &SourceOptions) -> Option<&'static str> {
-        source.secret.trim().is_empty().then_some("secret")
+        source.secret.expose().trim().is_empty().then_some("secret")
     }
 }
 
@@ -332,7 +332,7 @@ impl WebhookVerifier for StandardWebhooks {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body, tolerance)
+        Self::verify(source.secret.expose(), headers, body, tolerance)
     }
 }
 
@@ -411,7 +411,7 @@ impl WebhookVerifier for Stripe {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body, tolerance)
+        Self::verify(source.secret.expose(), headers, body, tolerance)
     }
 }
 
@@ -471,7 +471,7 @@ impl WebhookVerifier for GitHub {
         body: &[u8],
         _tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body)
+        Self::verify(source.secret.expose(), headers, body)
     }
 }
 
@@ -550,7 +550,7 @@ impl WebhookVerifier for Paddle {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body, tolerance)
+        Self::verify(source.secret.expose(), headers, body, tolerance)
     }
 }
 
@@ -620,7 +620,7 @@ impl Hmac {
         id: Option<&str>,
         body: &[u8],
     ) -> Result<String, VerifyError> {
-        require_secret(&source.secret)?;
+        require_secret(source.secret.expose())?;
         let scheme = HmacScheme::of(source)?;
         let timestamp = timestamp.map(|t| t.to_string()).unwrap_or_default();
         let signed = scheme
@@ -628,7 +628,11 @@ impl Hmac {
             .render(&timestamp, id.unwrap_or_default(), body);
         let signature = signing::encode(
             scheme.encoding,
-            &signing::hmac(scheme.algorithm, source.secret.as_bytes(), &[&signed]),
+            &signing::hmac(
+                scheme.algorithm,
+                source.secret.expose().as_bytes(),
+                &[&signed],
+            ),
         );
         let format = source.format.as_deref().unwrap_or("{signature}");
         Ok(format
@@ -644,7 +648,7 @@ impl Hmac {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        require_secret(&source.secret)?;
+        require_secret(source.secret.expose())?;
         let scheme = HmacScheme::of(source)?;
         let value = header(headers, scheme.header)?;
         let extracted = scheme
@@ -675,7 +679,11 @@ impl Hmac {
         let signed = scheme
             .signed
             .render(timestamp_text, id.as_deref().unwrap_or_default(), body);
-        let expected = signing::hmac(scheme.algorithm, source.secret.as_bytes(), &[&signed]);
+        let expected = signing::hmac(
+            scheme.algorithm,
+            source.secret.expose().as_bytes(),
+            &[&signed],
+        );
         if !any_matches([extracted.signature.as_str()], scheme.encoding, &expected) {
             return Err(VerifyError::SignatureMismatch);
         }

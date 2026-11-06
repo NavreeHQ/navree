@@ -80,12 +80,12 @@ impl WebhookVerifier for Slack {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body, tolerance)
+        Self::verify(source.secret.expose(), headers, body, tolerance)
     }
 
     async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
         let verified = Self::verify(
-            &request.source().secret,
+            request.source().secret.expose(),
             request.headers(),
             request.body(),
             request.tolerance(),

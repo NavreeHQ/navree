@@ -2,6 +2,7 @@
 //! `:streamGenerateContent`, `:batchEmbedContents`).
 
 use futures_util::StreamExt;
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -22,7 +23,7 @@ const DEFAULT_URL: &str = "https://generativelanguage.googleapis.com";
 /// A Gemini account.
 pub(crate) struct Gemini {
     name: String,
-    api_key: Option<String>,
+    api_key: Option<Secret<String>>,
     base: String,
     http: HttpClient,
 }
@@ -31,7 +32,10 @@ impl Gemini {
     pub(crate) fn new(name: &str, config: &ProviderConfig, http: HttpClient) -> Self {
         Self {
             name: name.to_owned(),
-            api_key: config.api_key.clone().filter(|key| !key.is_empty()),
+            api_key: config
+                .api_key
+                .clone()
+                .filter(|key| !key.expose().is_empty()),
             base: config
                 .url
                 .clone()
@@ -43,13 +47,17 @@ impl Gemini {
     }
 
     fn post(&self, url: String, body: &Value) -> Result<RequestBuilder, ProviderError> {
-        let key = self.api_key.as_deref().ok_or_else(|| ProviderError::Auth {
+        let key = self.api_key.as_ref().ok_or_else(|| ProviderError::Auth {
             message: format!(
                 "no API key: set APP_AI__PROVIDERS__{}__API_KEY",
                 self.name.to_uppercase()
             ),
         })?;
-        Ok(self.http.post(url).header("x-goog-api-key", key).json(body))
+        Ok(self
+            .http
+            .post(url)
+            .header("x-goog-api-key", key.expose().as_str())
+            .json(body))
     }
 
     fn url(&self, model: &str, method: &str) -> String {

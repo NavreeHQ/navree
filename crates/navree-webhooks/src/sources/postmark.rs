@@ -68,7 +68,7 @@ impl WebhookVerifier for Postmark {
         body: &[u8],
         _tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body)
+        Self::verify(source.secret.expose(), headers, body)
     }
 }
 

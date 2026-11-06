@@ -112,7 +112,7 @@ impl WebhookVerifier for Vonage {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body, tolerance)
+        Self::verify(source.secret.expose(), headers, body, tolerance)
     }
 }
 

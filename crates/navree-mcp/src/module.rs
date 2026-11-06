@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 
 use crate::http::{McpController, challenge_layer};
 use crate::item::McpServer;
@@ -49,40 +51,19 @@ impl McpModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: McpOptions) -> impl Module {
-        ConfiguredMcpModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<McpModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `mcp` section of `Config` at boot
     /// (the same as a plain `McpModule`).
     pub fn from_config() -> impl Module {
-        ConfiguredMcpModule { options: None }
+        ConfiguredModule::<McpModule, McpOptions>::from_config(register)
     }
 }
 
 impl Module for McpModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `McpModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredMcpModule {
-    options: Option<McpOptions>,
-}
-
-impl Module for ConfiguredMcpModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<McpModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

@@ -6,7 +6,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 
@@ -59,39 +59,18 @@ impl AiModule {
     /// The module with explicit options, without reading configuration.
     /// Invalid options fail the boot, naming the key.
     pub fn for_root(options: AiOptions) -> impl Module {
-        ConfiguredAiModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<AiModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `ai` section at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredAiModule { options: None }
+        ConfiguredModule::<AiModule, AiOptions>::from_config(register)
     }
 }
 
 impl Module for AiModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `AiModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredAiModule {
-    options: Option<AiOptions>,
-}
-
-impl Module for ConfiguredAiModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<AiModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

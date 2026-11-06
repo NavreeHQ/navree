@@ -67,7 +67,8 @@ impl Meta {
     ) -> Result<Handshake, VerifyError> {
         let expected = source
             .verify_token
-            .as_deref()
+            .as_ref()
+            .map(|token| token.expose().as_str())
             .filter(|t| !t.is_empty())
             .ok_or_else(|| {
                 VerifyError::Rejected(
@@ -90,7 +91,7 @@ impl WebhookVerifier for Meta {
         body: &[u8],
         _tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, headers, body)
+        Self::verify(source.secret.expose(), headers, body)
     }
 
     async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
@@ -99,8 +100,12 @@ impl WebhookVerifier for Meta {
             let challenge = request.query("hub.challenge").unwrap_or_default();
             return Self::handshake(request.source(), &token, &challenge).map(Verdict::Handshake);
         }
-        Self::verify(&request.source().secret, request.headers(), request.body())
-            .map(Verdict::Verified)
+        Self::verify(
+            request.source().secret.expose(),
+            request.headers(),
+            request.body(),
+        )
+        .map(Verdict::Verified)
     }
 }
 
@@ -168,7 +173,7 @@ mod tests {
     #[test]
     fn the_handshake_echoes_the_challenge_for_the_right_token() {
         let source = SourceOptions {
-            verify_token: Some("my-verify-token".to_owned()),
+            verify_token: Some(navree_contracts::Secret::new("my-verify-token".to_owned())),
             ..SourceOptions::new(SECRET)
         };
         let headers = HeaderMap::new();

@@ -78,7 +78,7 @@ impl WebhookVerifier for Mailgun {
         body: &[u8],
         tolerance: Option<Tolerance>,
     ) -> Result<Verified, VerifyError> {
-        Self::verify(&source.secret, body, tolerance)
+        Self::verify(source.secret.expose(), body, tolerance)
     }
 }
 

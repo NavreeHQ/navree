@@ -2,7 +2,8 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
+use navree_contracts::Secret;
 use serde::{Deserialize, Serialize};
 
 use crate::host::normalize_host;
@@ -63,13 +64,19 @@ impl TlsMode {
 ///
 /// Every key also comes from the environment:
 /// `APP_DOMAINS__TLS=acme`, `APP_DOMAINS__DNS__CLOUDFLARE__API_TOKEN=...`.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(
+    key = "domains",
+    docs = "/docs/packages/custom-domains/",
+    validate = Self::check_values
+)]
 #[serde(default)]
 pub struct DomainsOptions {
     /// Mount the `{http.api_prefix}/domains` routes (default true;
     /// permission `domains.manage`).
     pub routes: bool,
     /// How domains get certificates (default `on_demand`).
+    #[config(one_of = "on_demand, acme, off")]
     pub tls: TlsMode,
     /// The ask endpoint an on-demand TLS proxy calls with `?domain=`
     /// (default `/_domains/allow`; mounted when `tls = "on_demand"`).
@@ -80,12 +87,12 @@ pub struct DomainsOptions {
     pub target: Option<String>,
     /// The IP addresses an apex domain (which can't have a CNAME) points at
     /// with A and AAAA records (a list, or a comma-separated string).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub addresses: Vec<String>,
     /// Domains no workspace may add, with their subdomains
     /// (`["example.com"]`). The host of `app.url`, `workspace.base_domain`
     /// and `target` are reserved too.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub reserved: Vec<String>,
     /// The most domains one workspace may have (default 10; 0 for no
     /// limit).
@@ -94,12 +101,16 @@ pub struct DomainsOptions {
     /// 0 asks the database every time).
     pub cache_secs: u64,
     /// DNS verification.
+    #[config(table)]
     pub verification: VerificationOptions,
     /// Certificate checks and expiry reports.
+    #[config(table)]
     pub certificates: CertificateOptions,
     /// In-process certificates (`tls = "acme"`).
+    #[config(table)]
     pub acme: AcmeOptions,
     /// A DNS provider that manages a zone of your own.
+    #[config(table)]
     pub dns: DnsOptions,
 }
 
@@ -123,7 +134,7 @@ impl Default for DomainsOptions {
 }
 
 /// DNS verification (`domains.verification`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct VerificationOptions {
     /// The label in front of the domain that holds the TXT record
@@ -163,7 +174,7 @@ impl Default for VerificationOptions {
 }
 
 /// Certificate checks and expiry reports (`domains.certificates`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CertificateOptions {
     /// Report certificates that expire within this many days (default 14):
@@ -188,14 +199,14 @@ impl Default for CertificateOptions {
 }
 
 /// In-process certificates from an ACME CA (`domains.acme`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct AcmeOptions {
     /// The CA's ACME directory (default Let's Encrypt's production
     /// directory, [`LETS_ENCRYPT`]).
     pub directory_url: String,
     /// Contact addresses for the ACME account (`ops@example.com`).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub contact: Vec<String>,
     /// You agree to the CA's terms of service (required with
     /// `tls = "acme"`).
@@ -208,7 +219,7 @@ pub struct AcmeOptions {
     /// Renew a certificate this many days before it expires (default 30).
     pub renew_days: u32,
     /// Your own hosts that get certificates too (`["app.example.com"]`).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub hosts: Vec<String>,
     /// A PEM file with an extra root certificate for the directory's HTTPS
     /// (a private CA, or a test CA such as Pebble's).
@@ -236,7 +247,7 @@ impl Default for AcmeOptions {
 /// A DNS provider that manages a zone of your own (`domains.dns`): a
 /// domain added inside `zone` gets its CNAME from the provider and is
 /// verified at once.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct DnsOptions {
     /// `cloudflare`, or unset for none.
@@ -244,15 +255,16 @@ pub struct DnsOptions {
     /// The zone the provider manages (`links.example.com`).
     pub zone: Option<String>,
     /// The Cloudflare driver.
+    #[config(table)]
     pub cloudflare: CloudflareOptions,
 }
 
 /// The Cloudflare driver (`domains.dns.cloudflare`).
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct CloudflareOptions {
     /// An API token with `Zone.DNS:Edit` on the zone.
-    pub api_token: Option<String>,
+    pub api_token: Option<Secret<String>>,
     /// The zone's id (Overview page of the zone).
     pub zone_id: Option<String>,
     /// The API's base URL (default `https://api.cloudflare.com/client/v4`).
@@ -288,6 +300,11 @@ impl std::fmt::Debug for CloudflareOptions {
 }
 
 impl DomainsOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Every problem with the options, naming the configuration keys.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -396,7 +413,11 @@ impl DomainsOptions {
                     errors.push("domains.dns.zone is required with a DNS provider".to_owned());
                 }
                 let cloudflare = &dns.cloudflare;
-                if cloudflare.api_token.as_deref().is_none_or(str::is_empty) {
+                if cloudflare
+                    .api_token
+                    .as_ref()
+                    .is_none_or(|token| token.expose().is_empty())
+                {
                     errors.push(
                         "domains.dns.cloudflare.api_token is required with provider = \"cloudflare\""
                             .to_owned(),
@@ -427,14 +448,6 @@ impl DomainsOptions {
     }
 }
 
-impl ConfigSection for DomainsOptions {
-    const KEY: &'static str = "domains";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
-    }
-}
-
 /// One DNS label: letters, digits, `-` and `_`, 1 to 63 characters.
 fn is_label(label: &str) -> bool {
     !label.is_empty()
@@ -442,26 +455,6 @@ fn is_label(label: &str) -> bool {
         && label
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum ListOrCsv {
-        List(Vec<String>),
-        Csv(String),
-    }
-    Ok(match ListOrCsv::deserialize(deserializer)? {
-        ListOrCsv::List(items) => items,
-        ListOrCsv::Csv(text) => text
-            .split(',')
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    })
 }
 
 #[cfg(test)]
@@ -587,5 +580,62 @@ mod tests {
         let printed = format!("{options:?}");
         assert!(!printed.contains("cf-api-t0ken-s3cret"), "{printed}");
         assert!(printed.contains("zone-1"), "{printed}");
+    }
+
+    #[test]
+    fn the_api_token_is_read_as_plain_text() {
+        let options = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_DOMAINS__DNS__PROVIDER", "cloudflare"),
+                ("APP_DOMAINS__DNS__ZONE", "links.example.com"),
+                ("APP_DOMAINS__DNS__CLOUDFLARE__API_TOKEN", "cf-token-1"),
+                ("APP_DOMAINS__DNS__CLOUDFLARE__ZONE_ID", "zone-1"),
+            ],
+        ))
+        .unwrap();
+        let token = options.dns.cloudflare.api_token.as_ref().unwrap();
+        assert_eq!(token.expose(), "cf-token-1");
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = DomainsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "domains");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/packages/custom-domains/")
+        );
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "routes",
+            "tls",
+            "ask_path",
+            "target",
+            "addresses",
+            "verification",
+            "certificates",
+            "acme",
+            "dns",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        assert_eq!(schema.secret_paths(), ["domains.dns.cloudflare.api_token"]);
+        let tls = schema.fields.iter().find(|f| f.name == "tls").unwrap();
+        assert_eq!(
+            tls.ty,
+            navree_config::FieldType::choice(&["on_demand", "acme", "off"])
+        );
+        let defaults = DomainsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["ask_path"], "/_domains/allow");
+        assert_eq!(defaults["max_per_workspace"], 10);
+        assert_eq!(
+            defaults["dns"]["cloudflare"]["api_token"],
+            serde_json::Value::Null
+        );
     }
 }

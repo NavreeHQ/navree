@@ -7,6 +7,7 @@ use std::fmt;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, HttpClientError, Response};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -220,13 +221,13 @@ fn client_auth(
     entry: &ProviderEntry,
     request: navree_http_client::RequestBuilder,
     form: &mut Vec<(&'static str, String)>,
-    (client_id, secret): (String, Option<String>),
+    (client_id, secret): (String, Option<Secret<String>>),
 ) -> navree_http_client::RequestBuilder {
     match (entry.config.client_auth, secret) {
         (ClientAuth::Basic, Some(secret)) => {
             let encode =
                 |v: &str| form_urlencoded::byte_serialize(v.as_bytes()).collect::<String>();
-            let credentials = format!("{}:{}", encode(&client_id), encode(&secret));
+            let credentials = format!("{}:{}", encode(&client_id), encode(secret.expose()));
             request.header(
                 "authorization",
                 format!("Basic {}", STANDARD.encode(credentials)),
@@ -235,7 +236,7 @@ fn client_auth(
         (_, secret) => {
             form.push(("client_id", client_id));
             if let Some(secret) = secret {
-                form.push(("client_secret", secret));
+                form.push(("client_secret", secret.into_inner()));
             }
             request
         }

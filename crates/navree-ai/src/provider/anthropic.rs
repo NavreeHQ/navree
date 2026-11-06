@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use futures_util::StreamExt;
+use navree_contracts::Secret;
 use navree_http_client::HttpClient;
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -29,7 +30,7 @@ pub(crate) const DRIVER: &str = "anthropic";
 /// An Anthropic account.
 pub(crate) struct Anthropic {
     name: String,
-    api_key: Option<String>,
+    api_key: Option<Secret<String>>,
     url: String,
     http: HttpClient,
 }
@@ -38,7 +39,10 @@ impl Anthropic {
     pub(crate) fn new(name: &str, config: &ProviderConfig, http: HttpClient) -> Self {
         Self {
             name: name.to_owned(),
-            api_key: config.api_key.clone().filter(|key| !key.is_empty()),
+            api_key: config
+                .api_key
+                .clone()
+                .filter(|key| !key.expose().is_empty()),
             url: config
                 .url
                 .clone()
@@ -51,7 +55,7 @@ impl Anthropic {
 
     /// The request, or a key error.
     fn request(&self, body: &Value) -> Result<navree_http_client::RequestBuilder, ProviderError> {
-        let key = self.api_key.as_deref().ok_or_else(|| ProviderError::Auth {
+        let key = self.api_key.as_ref().ok_or_else(|| ProviderError::Auth {
             message: format!(
                 "no API key: set APP_AI__PROVIDERS__{}__API_KEY",
                 self.name.to_uppercase()
@@ -60,7 +64,7 @@ impl Anthropic {
         Ok(self
             .http
             .post(format!("{}/v1/messages", self.url))
-            .header("x-api-key", key)
+            .header("x-api-key", key.expose().as_str())
             .header("anthropic-version", API_VERSION)
             .json(body))
     }

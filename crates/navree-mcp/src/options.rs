@@ -3,8 +3,7 @@
 
 use std::fmt;
 
-use navree_config::{Config, ConfigSection};
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
+use navree_config::{Config, ConfigSection, ConfigTable};
 use serde::{Deserialize, Serialize};
 
 /// How MCP clients authenticate (`mcp.auth`).
@@ -64,36 +63,39 @@ impl fmt::Display for McpAuth {
 ///
 /// Environment variables are strings, so the lists also accept a
 /// comma-separated value (`APP_MCP__ALLOWED_ORIGINS=https://a.example,https://b.example`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "mcp", docs = "/docs/ai/mcp-servers/", validate = Self::check_values)]
 #[serde(default)]
 pub struct McpOptions {
     /// Where the HTTP transport is served (default `/mcp`). Absolute: no
     /// API prefix, no version.
     pub path: String,
-    /// The server name clients show; default the `app.name` setting, else
-    /// the executable's name.
+    /// The server name clients show. Unset, it is the `app.name` setting,
+    /// else the executable's name (resolved at boot).
     pub name: Option<String>,
-    /// A display title; default the name.
+    /// A display title. Unset, it is the name (resolved at boot).
     pub title: Option<String>,
-    /// The server version clients see; default the `app.version` setting,
-    /// else `0.0.0`.
+    /// The server version clients see. Unset, it is the `app.version`
+    /// setting, else `0.0.0` (resolved at boot).
     pub version: Option<String>,
     /// Text the client gives the model about the server: what it is for
     /// and how its data is shaped.
     pub instructions: Option<String>,
     /// `bearer` (default) or `oauth`.
+    #[config(one_of = "bearer, oauth")]
     pub auth: McpAuth,
     /// Browser origins allowed to call the endpoint (`https://crm.example.com`).
     /// A request with any other `Origin` header gets a 403; requests without
     /// one (MCP clients are not browsers) pass. A list, or a comma-separated
     /// string.
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub allowed_origins: Vec<String>,
     /// How long an idle session lives, in seconds (default 3600).
     pub session_ttl_secs: u64,
     /// The largest JSON-RPC message accepted, in bytes (default 1 MiB).
     pub max_request_bytes: usize,
     /// The OAuth settings, used with `auth = "oauth"`.
+    #[config(table)]
     pub oauth: McpOAuthOptions,
 }
 
@@ -115,25 +117,31 @@ impl Default for McpOptions {
 }
 
 /// The `mcp.oauth` section: what the protected resource metadata says.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct McpOAuthOptions {
     /// The resource identifier clients request tokens for: the endpoint's
-    /// absolute URL. Default: the `app.url` setting followed by
-    /// [`McpOptions::path`].
+    /// absolute URL. Unset, it is the `app.url` setting followed by
+    /// [`McpOptions::path`] (resolved at boot).
     pub resource: Option<String>,
     /// The issuers of the authorization servers that grant tokens for it.
-    /// Default: `[app.url]` (the app's own OAuth server).
-    #[serde(deserialize_with = "list_or_csv")]
+    /// Unset, it is `[app.url]`, the app's own OAuth server (resolved at
+    /// boot).
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub authorization_servers: Vec<String>,
-    /// The scopes clients may request, listed as `scopes_supported`.
-    /// Default: the names of the app's OAuth server scopes (the
-    /// `oauth.scopes` section), else none.
-    #[serde(deserialize_with = "list_or_csv")]
+    /// The scopes clients may request, listed as `scopes_supported`. Unset,
+    /// they are the names of the app's OAuth server scopes (the
+    /// `oauth.scopes` section), else none (resolved at boot).
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub scopes: Vec<String>,
 }
 
 impl McpOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// Checks every key; each problem names its key.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -181,14 +189,6 @@ impl McpOptions {
         } else {
             Err(errors)
         }
-    }
-}
-
-impl ConfigSection for McpOptions {
-    const KEY: &'static str = "mcp";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
     }
 }
 
@@ -390,41 +390,6 @@ fn split_origin(url: &str) -> (&str, &str) {
     }
 }
 
-/// A list, or a comma-separated string (from an environment variable).
-fn list_or_csv<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct ListOrCsv;
-
-    impl<'de> Visitor<'de> for ListOrCsv {
-        type Value = Vec<String>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a list or a comma-separated string")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<Vec<String>, E> {
-            Ok(value
-                .split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(str::to_owned)
-                .collect())
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<String>, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element::<String>()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-    }
-
-    deserializer.deserialize_any(ListOrCsv)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,6 +434,57 @@ mod tests {
             ["https://a.example", "https://b.example"]
         );
         assert_eq!(options.oauth.scopes, ["deals.read"]);
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = McpOptions::schema().expect("schema");
+        assert_eq!(schema.key, "mcp");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/ai/mcp-servers/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        assert!(schema.secret_paths().is_empty());
+        for name in [
+            "path",
+            "name",
+            "title",
+            "version",
+            "instructions",
+            "auth",
+            "allowed_origins",
+            "session_ttl_secs",
+            "max_request_bytes",
+            "oauth",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let auth = schema.fields.iter().find(|f| f.name == "auth").unwrap();
+        assert_eq!(
+            auth.ty,
+            navree_config::FieldType::choice(&["bearer", "oauth"])
+        );
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        for path in ["mcp.oauth.resource", "mcp.oauth.scopes"] {
+            assert!(leaves.contains(&path.to_owned()), "{path} in {leaves:?}");
+        }
+        // The names are resolved at boot, so the defaults leave them unset.
+        let defaults = McpOptions::defaults().expect("defaults");
+        assert_eq!(defaults["path"], "/mcp");
+        assert_eq!(defaults["session_ttl_secs"], 3600);
+        assert_eq!(defaults["name"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn lists_are_trimmed_and_blank_items_dropped() {
+        let options: McpOptions = config(json!({
+            "mcp": { "allowed_origins": [" https://a.example ", ""] }
+        }))
+        .typed()
+        .expect("mcp section");
+        assert_eq!(options.allowed_origins, ["https://a.example"]);
     }
 
     #[test]

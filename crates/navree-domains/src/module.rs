@@ -8,8 +8,8 @@ use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::middleware::from_fn;
 use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Lifecycle, Module,
-    ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Lifecycle,
+    Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::WorkspaceDeleted;
@@ -81,40 +81,19 @@ impl DomainsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: DomainsOptions) -> impl Module {
-        ConfiguredDomainsModule {
-            options: Some(options),
-        }
+        ConfiguredModule::<DomainsModule, _>::for_root(options, register)
     }
 
     /// The module configured from the `domains` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredDomainsModule { options: None }
+        ConfiguredModule::<DomainsModule, DomainsOptions>::from_config(register)
     }
 }
 
 impl Module for DomainsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `DomainsModule::for_root` / `from_config`: same module id, configured.
-struct ConfiguredDomainsModule {
-    options: Option<DomainsOptions>,
-}
-
-impl Module for ConfiguredDomainsModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<DomainsModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

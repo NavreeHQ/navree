@@ -3,7 +3,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
+use navree_contracts::Secret;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +32,8 @@ use crate::template::{SignatureFormat, SignedTemplate};
 /// ```
 ///
 /// Every key also comes from the environment: `APP_WEBHOOKS__REQUIRE_HTTPS=false`.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(key = "webhooks", docs = "/docs/packages/webhooks/", validate = Self::check)]
 #[serde(default)]
 pub struct WebhooksOptions {
     /// The queue of the fan-out and delivery jobs (default `default`).
@@ -53,6 +55,7 @@ pub struct WebhooksOptions {
     /// `webhooks.manage`).
     pub routes: bool,
     /// Incoming webhooks.
+    #[config(table)]
     pub incoming: IncomingOptions,
 }
 
@@ -71,10 +74,9 @@ impl Default for WebhooksOptions {
     }
 }
 
-impl ConfigSection for WebhooksOptions {
-    const KEY: &'static str = "webhooks";
-
-    fn validate(&self) -> Result<(), String> {
+impl WebhooksOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
         if self.queue.trim().is_empty() {
             return Err("`queue` must not be empty".to_owned());
         }
@@ -90,7 +92,8 @@ impl ConfigSection for WebhooksOptions {
 
 /// Incoming webhooks (`webhooks.incoming`): the shared limits, and one
 /// table per source (`webhooks.incoming.<source>`) with its secret.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ConfigTable)]
+#[config(default)]
 pub struct IncomingOptions {
     /// The accepted age of a signed timestamp, in seconds, in either
     /// direction (default 300).
@@ -101,7 +104,9 @@ pub struct IncomingOptions {
     /// How long [`mark_processed`](crate::VerifiedWebhook::mark_processed)
     /// receipts are kept, in days (default 30).
     pub receipt_days: u64,
-    /// The sources, by name (`stripe`, `github`, `mail_events`).
+    /// The sources, by name (`stripe`, `github`, `mail_events`). In a file
+    /// each source is a table next to the limits, not a key called `sources`.
+    #[config(skip)]
     pub sources: BTreeMap<String, SourceOptions>,
 }
 
@@ -137,7 +142,7 @@ impl IncomingOptions {
             return Err("`incoming.max_body_bytes` must be at least 1".to_owned());
         }
         for (name, source) in &self.sources {
-            if source.secret.trim().is_empty() && !source.is_keyless() {
+            if source.secret.expose().trim().is_empty() && !source.is_keyless() {
                 return Err(format!(
                     "`incoming.{name}.secret` is empty: set webhooks.incoming.{name}.secret (APP_WEBHOOKS__INCOMING__{}__SECRET)",
                     name.to_ascii_uppercase()
@@ -231,22 +236,24 @@ impl<'de> Deserialize<'de> for IncomingOptions {
 /// ([`Meta`](crate::Meta)).
 ///
 /// `Debug` never shows the secret or the verify token.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct SourceOptions {
     /// The signing secret (the auth token, signing key, `clientState` or
     /// `username:password`, depending on the sender). Required, except for
     /// [`AwsSns`](crate::AwsSns) and [`GooglePubSub`](crate::GooglePubSub),
     /// which verify with the sender's public keys.
-    pub secret: String,
+    pub secret: Secret<String>,
     /// The accepted age of this source's signatures, in seconds, instead of
     /// `webhooks.incoming.tolerance_secs`.
     pub tolerance_secs: Option<u64>,
     /// [`Hmac`](crate::Hmac): the header carrying the signature.
     pub header: Option<String>,
     /// [`Hmac`](crate::Hmac): the HMAC hash (default `sha256`).
+    #[config(one_of = "sha1, sha256, sha512")]
     pub algorithm: HmacAlgorithm,
     /// [`Hmac`](crate::Hmac): how the signature is written (default `hex`).
+    #[config(one_of = "hex, base64")]
     pub encoding: SignatureEncoding,
     /// [`Hmac`](crate::Hmac): the shape of the header value, with
     /// `{signature}` and optionally `{timestamp}` (default `{signature}`).
@@ -271,7 +278,7 @@ pub struct SourceOptions {
     /// [`AwsSns`](crate::AwsSns): the topic ARNs accepted. Required: SNS
     /// signs every topic's messages with the same keys. From the
     /// environment, a comma-separated list.
-    #[serde(deserialize_with = "list_or_comma_separated")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub topics: Vec<String>,
     /// [`AwsSns`](crate::AwsSns): confirm subscriptions (and acknowledge
     /// unsubscriptions) without running the handler (default true).
@@ -287,13 +294,13 @@ pub struct SourceOptions {
     /// handshake (`hub.verify_token`), chosen when the webhook is set up in
     /// the app dashboard. Without it the handshake is refused. Never shown
     /// in `Debug`.
-    pub verify_token: Option<String>,
+    pub verify_token: Option<Secret<String>>,
 }
 
 impl Default for SourceOptions {
     fn default() -> Self {
         Self {
-            secret: String::new(),
+            secret: Secret::new(String::new()),
             tolerance_secs: None,
             header: None,
             algorithm: HmacAlgorithm::default(),
@@ -317,7 +324,7 @@ impl SourceOptions {
     /// A source with `secret` and default settings.
     pub fn new(secret: impl Into<String>) -> Self {
         Self {
-            secret: secret.into(),
+            secret: Secret::new(secret.into()),
             ..Self::default()
         }
     }
@@ -353,28 +360,6 @@ impl fmt::Debug for SourceOptions {
             )
             .finish()
     }
-}
-
-/// A list, or one comma-separated string (what an environment variable
-/// holds); entries are trimmed and empty ones dropped.
-fn list_or_comma_separated<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Entries {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let entries = match Entries::deserialize(deserializer)? {
-        Entries::List(entries) => entries,
-        Entries::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(entries
-        .into_iter()
-        .map(|entry| entry.trim().to_owned())
-        .filter(|entry| !entry.is_empty())
-        .collect())
 }
 
 /// The hash of an HMAC signature.
@@ -448,7 +433,7 @@ mod tests {
         }));
         assert_eq!(options.incoming.tolerance_secs, 60);
         assert_eq!(
-            options.incoming.source("stripe").unwrap().secret,
+            options.incoming.source("stripe").unwrap().secret.expose(),
             "whsec_abc"
         );
         let calendly = options.incoming.source("calendly").unwrap();
@@ -571,6 +556,75 @@ mod tests {
         assert!(
             shown.contains("stripe") && shown.contains("meta"),
             "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_source_prints_nothing_secret_even_when_its_secret_is_set_in_code() {
+        let source = SourceOptions {
+            verify_token: Some(Secret::new("verify-s3cr3t".to_owned())),
+            ..SourceOptions::new("signing-s3cr3t")
+        };
+        let shown = format!("{source:?}");
+        assert!(
+            !shown.contains("signing-s3cr3t") && !shown.contains("verify-s3cr3t"),
+            "{shown}"
+        );
+        let json = ConfigTable::to_json(&source).to_string();
+        assert!(
+            !json.contains("signing-s3cr3t") && !json.contains("verify-s3cr3t"),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = WebhooksOptions::schema().expect("schema");
+        assert_eq!(schema.key, "webhooks");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/webhooks/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "queue",
+            "timeout_secs",
+            "require_https",
+            "disable_after_days",
+            "max_payload_bytes",
+            "retain_days",
+            "routes",
+            "incoming",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let leaves: Vec<String> = schema.leaves().into_iter().map(|(path, _)| path).collect();
+        assert!(
+            leaves.contains(&"webhooks.incoming.tolerance_secs".to_owned()),
+            "{leaves:?}"
+        );
+        assert!(
+            !leaves.iter().any(|path| path.ends_with(".sources")),
+            "{leaves:?}"
+        );
+        let defaults = WebhooksOptions::defaults().expect("defaults");
+        assert_eq!(defaults["queue"], "default");
+        assert_eq!(defaults["timeout_secs"], 15);
+        assert_eq!(defaults["incoming"]["tolerance_secs"], 300);
+    }
+
+    #[test]
+    fn a_source_marks_its_secret_and_verify_token() {
+        let fields = <SourceOptions as ConfigTable>::fields();
+        for name in ["secret", "verify_token"] {
+            let field = fields.iter().find(|f| f.name == name).unwrap();
+            assert!(field.secret, "{name}");
+        }
+        let algorithm = fields.iter().find(|f| f.name == "algorithm").unwrap();
+        assert_eq!(
+            algorithm.ty,
+            navree_config::FieldType::choice(&["sha1", "sha256", "sha512"])
         );
     }
 }

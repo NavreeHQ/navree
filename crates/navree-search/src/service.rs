@@ -828,13 +828,17 @@ fn make_engine(
             }
             Arc::new(DatabaseEngine::new(db.clone(), pg.clone()))
         }
-        Engine::Meilisearch { url, key } => {
-            Arc::new(MeilisearchEngine::new(url, key.clone(), timeout)?)
-        }
+        Engine::Meilisearch { url, key } => Arc::new(MeilisearchEngine::new(
+            url,
+            key.as_ref().map(|key| key.expose().clone()),
+            timeout,
+        )?),
         Engine::Typesense { url, nodes, key } => Arc::new(TypesenseEngine::new(
             url,
             nodes,
-            key.clone().unwrap_or_default(),
+            key.as_ref()
+                .map(|key| key.expose().clone())
+                .unwrap_or_default(),
             timeout,
         )?),
         #[cfg(feature = "tantivy")]

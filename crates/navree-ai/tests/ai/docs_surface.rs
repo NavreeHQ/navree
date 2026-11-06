@@ -393,7 +393,10 @@ model = "qwen3-32b"
     assert_eq!(options.vectors.metric, Metric::Cosine);
     assert_eq!(options.providers["local"].driver.as_deref(), Some("openai"));
     assert_eq!(
-        options.providers["anthropic"].api_key.as_deref(),
+        options.providers["anthropic"]
+            .api_key
+            .as_ref()
+            .map(|key| key.expose().as_str()),
         Some("sk-ant-api03-...")
     );
 
@@ -456,7 +459,14 @@ fn every_documented_key_and_default() {
     assert_eq!(options.embeddings.batch_size, 32);
     assert_eq!(options.embeddings.cache_ttl_days, 0);
     assert_eq!(options.vectors.metric, Metric::Dot);
-    assert_eq!(options.vectors.key.as_deref(), Some("q"));
+    assert_eq!(
+        options
+            .vectors
+            .key
+            .as_ref()
+            .map(|key| key.expose().as_str()),
+        Some("q")
+    );
     assert_eq!(options.memory.summary_model.as_deref(), Some("fast"));
     assert_eq!(options.memory.retention_days, 30);
 

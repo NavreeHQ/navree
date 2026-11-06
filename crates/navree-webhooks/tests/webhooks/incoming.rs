@@ -416,7 +416,7 @@ async fn secrets_come_from_the_environment() {
         .await;
     let options = app.get::<navree_webhooks::WebhooksOptions>().await;
     assert_eq!(
-        options.incoming.source("github").unwrap().secret,
+        options.incoming.source("github").unwrap().secret.expose(),
         "from-env"
     );
     assert_eq!(options.incoming.tolerance_secs, 120);

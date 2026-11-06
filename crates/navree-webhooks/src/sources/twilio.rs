@@ -96,7 +96,7 @@ impl Twilio {
 impl WebhookVerifier for Twilio {
     async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
         Self::verify(
-            &request.source().secret,
+            request.source().secret.expose(),
             request.url(),
             request.headers(),
             request.body(),

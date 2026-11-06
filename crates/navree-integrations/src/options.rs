@@ -3,9 +3,10 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable};
+use navree_contracts::Secret;
 use navree_openapi::ToSchema;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 /// Options of the integrations module (configuration section
 /// `integrations`).
@@ -30,7 +31,12 @@ use serde::{Deserialize, Deserializer, Serialize};
 ///
 /// Every key also comes from the environment:
 /// `APP_INTEGRATIONS__CHECK_INTERVAL_MINS=30`.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
+#[config(
+    key = "integrations",
+    docs = "/docs/packages/integrations/",
+    validate = Self::check_values
+)]
 #[serde(default)]
 pub struct IntegrationsOptions {
     /// The front end's callback page: a provider sends the browser back to
@@ -45,6 +51,7 @@ pub struct IntegrationsOptions {
     /// extractor use: the request's workspace (default), its organization,
     /// or the app's own. Without `WorkspaceModule` in the app, `workspace`
     /// means the app's own.
+    #[config(one_of = "workspace, organization, app")]
     pub level: Level,
     /// Lifetime of a sealed connect state, in seconds (default 600).
     pub state_ttl_secs: u64,
@@ -65,6 +72,7 @@ pub struct IntegrationsOptions {
     /// Watched mailboxes (crate feature `mail`): where Microsoft Graph and
     /// Gmail send their notifications.
     #[cfg(feature = "mail")]
+    #[config(table)]
     pub mailboxes: crate::MailboxesOptions,
 }
 
@@ -86,6 +94,11 @@ impl Default for IntegrationsOptions {
 }
 
 impl IntegrationsOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
+        self.check().map_err(|errors| errors.join("; "))
+    }
+
     /// The configuration of provider `key`, if any.
     pub fn provider(&self, key: &str) -> Option<&ProviderConfig> {
         self.providers.get(key)
@@ -127,14 +140,6 @@ impl IntegrationsOptions {
         } else {
             Err(errors)
         }
-    }
-}
-
-impl ConfigSection for IntegrationsOptions {
-    const KEY: &'static str = "integrations";
-
-    fn validate(&self) -> Result<(), String> {
-        self.check().map_err(|errors| errors.join("; "))
     }
 }
 
@@ -241,13 +246,13 @@ pub enum ClientAuth {
 /// (`integrations.providers.<key>.apps.<scope set>`): Microsoft app-only
 /// tokens carry every permission the registration holds, so a scope set
 /// that must stay apart (mail send, directory read) gets its own.
-#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct AppCredentials {
     /// The registration's client id.
     pub client_id: String,
     /// Its secret (from `.env`).
-    pub client_secret: Option<String>,
+    pub client_secret: Option<Secret<String>>,
 }
 
 impl fmt::Debug for AppCredentials {
@@ -260,28 +265,30 @@ impl fmt::Debug for AppCredentials {
 }
 
 /// One provider (`integrations.providers.<key>`).
-#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct ProviderConfig {
     /// `microsoft`, `google`, `slack`, `oauth2` or `api_key`; defaults to
     /// the key for the three built-in keys.
     #[serde(rename = "type")]
+    #[config(one_of = "microsoft, google, slack, oauth2, api_key")]
     pub kind: Option<ProviderType>,
     /// The display name (default: the provider's, else the key).
     pub name: Option<String>,
     /// The OAuth client id.
     pub client_id: Option<String>,
     /// The OAuth client secret (from `.env`).
-    pub client_secret: Option<String>,
+    pub client_secret: Option<Secret<String>>,
     /// Microsoft: the tenant whose admins may consent (`organizations`,
     /// `common` or a tenant id; default `organizations`).
     pub tenant: Option<String>,
     /// Microsoft: `app` (admin consent, app-only tokens; default) or
     /// `delegated`.
+    #[config(one_of = "app, delegated")]
     pub mode: MicrosoftMode,
     /// Scopes of the default scope set (a list, or a comma-separated
     /// string).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub scopes: Vec<String>,
     /// Extra authorization URL parameters.
     pub params: BTreeMap<String, String>,
@@ -289,6 +296,7 @@ pub struct ProviderConfig {
     pub pkce: Option<bool>,
     /// How the client authenticates at the token endpoint (`post` or
     /// `basic`).
+    #[config(one_of = "post, basic")]
     pub client_auth: ClientAuth,
     /// The authorization endpoint (`oauth2`; overrides the built-in ones).
     pub authorize_url: Option<String>,
@@ -342,7 +350,7 @@ impl ProviderConfig {
     /// Sets the OAuth client.
     pub fn client(mut self, id: impl Into<String>, secret: impl Into<String>) -> Self {
         self.client_id = Some(id.into());
-        self.client_secret = Some(secret.into());
+        self.client_secret = Some(Secret::new(secret.into()));
         self
     }
 
@@ -459,26 +467,6 @@ pub(crate) fn is_provider_key(key: &str) -> bool {
 
 fn is_http_url(value: &str) -> bool {
     url::Url::parse(value).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
-}
-
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Items {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let items = match Items::deserialize(deserializer)? {
-        Items::List(items) => items,
-        Items::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
 }
 
 #[cfg(test)]
@@ -617,7 +605,7 @@ mod tests {
             "mail".to_owned(),
             AppCredentials {
                 client_id: "m".into(),
-                client_secret: Some("other-secret".into()),
+                client_secret: Some(Secret::new("other-secret".to_owned())),
             },
         );
         let config = ProviderConfig { apps, ..config };
@@ -647,7 +635,7 @@ mod tests {
             "mail".to_owned(),
             AppCredentials {
                 client_id: "mail-app".into(),
-                client_secret: Some("mail-app-cl1ent-s3cret".into()),
+                client_secret: Some(Secret::new("mail-app-cl1ent-s3cret".to_owned())),
             },
         );
         let microsoft = ProviderConfig {
@@ -669,5 +657,79 @@ mod tests {
             assert!(!printed.contains(secret), "{secret} in {printed}");
         }
         assert!(printed.contains("ms-app"), "{printed}");
+    }
+
+    #[test]
+    fn client_secrets_are_read_from_configuration_as_plain_text() {
+        let options = options(json!({
+            "providers": {
+                "slack": { "client_id": "b", "client_secret": "slack-secret" },
+                "microsoft": {
+                    "client_id": "a",
+                    "apps": { "mail_send": { "client_id": "m", "client_secret": "mail-secret" } }
+                }
+            },
+            "redirect_base": "https://app.acme.test/cb"
+        }))
+        .unwrap();
+        let slack = options.provider("slack").unwrap();
+        assert_eq!(
+            slack.client_secret.as_ref().unwrap().expose(),
+            "slack-secret"
+        );
+        let app = &options.provider("microsoft").unwrap().apps["mail_send"];
+        assert_eq!(app.client_secret.as_ref().unwrap().expose(), "mail-secret");
+    }
+
+    #[test]
+    fn the_section_describes_itself() {
+        let schema = IntegrationsOptions::schema().expect("schema");
+        assert_eq!(schema.key, "integrations");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/integrations/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "redirect_base",
+            "routes",
+            "level",
+            "state_ttl_secs",
+            "check_interval_mins",
+            "providers",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        let level = schema.fields.iter().find(|f| f.name == "level").unwrap();
+        assert_eq!(
+            level.ty,
+            navree_config::FieldType::choice(&["workspace", "organization", "app"])
+        );
+        #[cfg(feature = "mail")]
+        assert_eq!(
+            schema.secret_paths(),
+            ["integrations.mailboxes.gmail_token"]
+        );
+        let defaults = IntegrationsOptions::defaults().expect("defaults");
+        assert_eq!(defaults["state_ttl_secs"], 600);
+        assert_eq!(defaults["routes"], true);
+    }
+
+    #[test]
+    fn a_provider_marks_its_client_secrets() {
+        let provider = <ProviderConfig as ConfigTable>::fields();
+        let secret = provider
+            .iter()
+            .find(|field| field.name == "client_secret")
+            .unwrap();
+        assert!(secret.secret);
+        let apps = <AppCredentials as ConfigTable>::fields();
+        assert!(apps.iter().any(|f| f.name == "client_secret" && f.secret));
+        let value = ConfigTable::to_json(
+            &ProviderConfig::new(ProviderType::Slack).client("id", "super-secret"),
+        );
+        assert_eq!(value["client_secret"], serde_json::Value::Null);
+        assert!(!value.to_string().contains("super-secret"), "{value}");
     }
 }

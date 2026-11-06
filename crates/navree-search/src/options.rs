@@ -5,7 +5,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use navree_config::ConfigSection;
+use navree_config::{ConfigSection, ConfigTable, SectionSchema};
+use navree_contracts::Secret;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::engine::SearchEngine;
@@ -26,7 +27,7 @@ pub enum SyncMode {
 }
 
 /// Options of the `postgres` engine (`search.postgres`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct PostgresOptions {
     /// The text search configuration (default `english`).
@@ -55,7 +56,7 @@ impl Default for PostgresOptions {
 }
 
 /// Options of the `tantivy` engine (`search.tantivy`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct TantivyOptions {
     /// The directory holding one directory per index (default
@@ -86,7 +87,7 @@ pub enum Engine {
         /// The server URL.
         url: String,
         /// The API key.
-        key: Option<String>,
+        key: Option<Secret<String>>,
     },
     /// A Typesense server or cluster.
     Typesense {
@@ -95,7 +96,7 @@ pub enum Engine {
         /// The other nodes of a cluster.
         nodes: Vec<String>,
         /// The API key (required).
-        key: Option<String>,
+        key: Option<Secret<String>>,
     },
     /// An embedded Tantivy index on local disk (the `tantivy` feature).
     Tantivy(TantivyOptions),
@@ -150,7 +151,7 @@ impl Engine {
     pub fn key(mut self, value: impl Into<String>) -> Engine {
         match &mut self {
             Engine::Meilisearch { key, .. } | Engine::Typesense { key, .. } => {
-                *key = Some(value.into());
+                *key = Some(Secret::new(value.into()));
             }
             _ => {}
         }
@@ -192,7 +193,7 @@ impl Default for Engine {
 
 impl fmt::Debug for Engine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let redacted = |key: &Option<String>| key.as_ref().map(|_| "<redacted>");
+        let redacted = |key: &Option<Secret<String>>| key.as_ref().map(|_| "<redacted>");
         match self {
             Engine::Postgres(options) => f.debug_tuple("Postgres").field(options).finish(),
             Engine::Meilisearch { url, key } => f
@@ -257,9 +258,9 @@ pub struct VectorOptions {
     /// The Qdrant server.
     #[serde(default)]
     pub url: Option<String>,
-    /// The Qdrant API key.
-    #[serde(default)]
-    pub key: Option<String>,
+    /// The Qdrant API key. Never serialized.
+    #[serde(default, skip_serializing)]
+    pub key: Option<Secret<String>>,
     /// The vector size; must match the embedding model (default 1536).
     #[serde(default = "default_dimensions")]
     pub dimensions: usize,
@@ -305,7 +306,7 @@ pub struct IndexOverrides {
     /// Synonyms: `{ "acme" = ["acme corp"] }`.
     pub synonyms: BTreeMap<String, Vec<String>>,
     /// Words the index ignores (a list, or a comma-separated string).
-    #[serde(deserialize_with = "list_or_csv")]
+    #[serde(deserialize_with = "navree_config::comma_list")]
     pub stop_words: Vec<String>,
 }
 
@@ -395,7 +396,7 @@ impl SearchOptions {
                 for node in nodes {
                     check_url("search.nodes", node, "typesense")?;
                 }
-                if key.as_deref().is_none_or(str::is_empty) {
+                if key.as_ref().is_none_or(|key| key.expose().is_empty()) {
                     return Err(
                         "`search.key` is required when `search.engine` is typesense".to_owned()
                     );
@@ -457,11 +458,29 @@ fn check_url(key: &str, url: &str, engine: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The section is written by hand: a file holds `RawSearchOptions` (the engine
+/// is a name there, and its address and key sit beside it), so the
+/// description comes from that struct.
 impl ConfigSection for SearchOptions {
     const KEY: &'static str = "search";
 
     fn validate(&self) -> Result<(), String> {
         self.check()
+    }
+
+    fn defaults() -> Option<serde_json::Value> {
+        Some(ConfigTable::to_json(&RawSearchOptions::default()))
+    }
+
+    fn schema() -> Option<SectionSchema> {
+        Some(
+            SectionSchema::new(
+                Self::KEY,
+                "Options of the search module (configuration section `search`).",
+                <RawSearchOptions as ConfigTable>::fields(),
+            )
+            .with_docs("/docs/packages/search/"),
+        )
     }
 }
 
@@ -473,23 +492,46 @@ impl<'de> Deserialize<'de> for SearchOptions {
 }
 
 /// The `search` section as written.
-#[derive(Deserialize)]
+#[derive(Deserialize, ConfigTable)]
 #[serde(default)]
 struct RawSearchOptions {
+    /// The engine: `postgres` (default; `database` is the same), `meilisearch`,
+    /// `typesense`, `tantivy` or `memory`.
+    #[config(one_of = "postgres, meilisearch, typesense, tantivy, memory")]
     engine: String,
+    /// The server URL (`meilisearch` and `typesense`).
     url: Option<String>,
-    key: Option<String>,
-    #[serde(deserialize_with = "list_or_csv")]
+    /// The API key of the server (`meilisearch`; required by `typesense`).
+    key: Option<Secret<String>>,
+    /// The other nodes of a Typesense cluster (a list, or a comma-separated
+    /// string).
+    #[serde(deserialize_with = "navree_config::comma_list")]
     nodes: Vec<String>,
+    /// Put in front of every index name (default empty).
     prefix: String,
+    /// The queue of `search.sync` jobs (default `default`).
     queue: String,
+    /// When indexes follow changes (default `queued`).
+    #[config(one_of = "queued, inline, off")]
     sync: SyncMode,
+    /// The window in which sync jobs for the same records collapse, in
+    /// seconds (default 5).
     unique_for_secs: u64,
+    /// Rows per batch for imports (default 500).
     chunk_size: u64,
+    /// Time allowed for one engine request, in seconds (default 5).
     timeout_secs: u64,
+    /// The `postgres` engine.
+    #[config(table)]
     postgres: PostgresOptions,
+    /// The `tantivy` engine.
+    #[config(table)]
     tantivy: TantivyOptions,
+    /// Vector search; off without `vectors.store`.
+    #[config(table)]
     vectors: RawVectorOptions,
+    /// Synonyms and stop words per index (keyed by the index name before
+    /// the prefix).
     indexes: BTreeMap<String, IndexOverrides>,
 }
 
@@ -515,13 +557,21 @@ impl Default for RawSearchOptions {
     }
 }
 
-#[derive(Deserialize)]
+/// `search.vectors` as written.
+#[derive(Deserialize, ConfigTable)]
 #[serde(default)]
 struct RawVectorOptions {
+    /// Where vectors live (unset: no vector search).
+    #[config(one_of = "pgvector, qdrant, memory")]
     store: Option<VectorStoreKind>,
+    /// The Qdrant server.
     url: Option<String>,
-    key: Option<String>,
+    /// The Qdrant API key.
+    key: Option<Secret<String>>,
+    /// The vector size; must match the embedding model (default 1536).
     dimensions: usize,
+    /// How vectors are compared (default `cosine`).
+    #[config(one_of = "cosine, dot, euclidean")]
     metric: Metric,
 }
 
@@ -540,7 +590,7 @@ impl Default for RawVectorOptions {
 impl RawSearchOptions {
     fn into_options(self) -> Result<SearchOptions, String> {
         let url = self.url.unwrap_or_default();
-        let key = self.key.filter(|k| !k.is_empty());
+        let key = self.key.filter(|k| !k.expose().is_empty());
         let engine = match self.engine.trim().to_ascii_lowercase().as_str() {
             "postgres" | "database" => Engine::Postgres(self.postgres),
             "meilisearch" => Engine::Meilisearch { url, key },
@@ -560,7 +610,7 @@ impl RawSearchOptions {
         let vectors = self.vectors.store.map(|store| VectorOptions {
             store,
             url: self.vectors.url,
-            key: self.vectors.key.filter(|k| !k.is_empty()),
+            key: self.vectors.key.filter(|k| !k.expose().is_empty()),
             dimensions: self.vectors.dimensions,
             metric: self.vectors.metric,
         });
@@ -576,26 +626,6 @@ impl RawSearchOptions {
             indexes: self.indexes,
         })
     }
-}
-
-/// A list, or one comma-separated string (what an environment variable
-/// holds).
-fn list_or_csv<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Items {
-        List(Vec<String>),
-        Joined(String),
-    }
-    let items = match Items::deserialize(deserializer)? {
-        Items::List(items) => items,
-        Items::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
-    };
-    Ok(items
-        .into_iter()
-        .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
-        .collect())
 }
 
 #[cfg(test)]
@@ -654,7 +684,10 @@ mod tests {
         };
         assert_eq!(url, "https://ts-1:8108");
         assert_eq!(nodes, &["https://ts-2:8108", "https://ts-3:8108"]);
-        assert_eq!(key.as_deref(), Some("secret"));
+        assert_eq!(
+            key.as_ref().map(|key| key.expose().as_str()),
+            Some("secret")
+        );
         assert_eq!(options.index_name("contacts"), "crm_contacts");
         assert!(
             !format!("{options:?}").contains("secret"),
@@ -713,7 +746,7 @@ mod tests {
     fn the_section_never_shows_a_key_in_debug_output() {
         let mut vectors = VectorOptions::new(VectorStoreKind::Qdrant);
         vectors.url = Some("http://127.0.0.1:6333".to_owned());
-        vectors.key = Some("qdrant-api-s3cret".to_owned());
+        vectors.key = Some(Secret::new("qdrant-api-s3cret".to_owned()));
         let options = SearchOptions {
             vectors: Some(vectors),
             ..SearchOptions::from(
@@ -732,5 +765,67 @@ mod tests {
             assert!(!printed.contains(secret), "{secret} in {printed}");
         }
         assert!(printed.contains("http://127.0.0.1:7700"), "{printed}");
+    }
+
+    #[test]
+    fn serializing_vector_options_never_writes_the_key() {
+        let mut vectors = VectorOptions::new(VectorStoreKind::Qdrant);
+        vectors.url = Some("http://127.0.0.1:6333".to_owned());
+        vectors.key = Some(Secret::new("qdrant-api-s3cret".to_owned()));
+        let json = serde_json::to_string(&vectors).unwrap();
+        assert!(!json.contains("qdrant-api-s3cret"), "{json}");
+        assert!(json.contains("6333"), "{json}");
+    }
+
+    #[test]
+    fn keys_are_read_from_configuration_as_plain_text() {
+        let options = parse(json!({
+            "engine": "meilisearch",
+            "url": "http://127.0.0.1:7700",
+            "key": "meili-key",
+            "vectors": {"store": "qdrant", "url": "http://127.0.0.1:6333", "key": "qdrant-key"}
+        }))
+        .unwrap();
+        let Engine::Meilisearch { key, .. } = &options.engine else {
+            panic!()
+        };
+        assert_eq!(key.as_ref().unwrap().expose(), "meili-key");
+        let vectors = options.vectors.unwrap();
+        assert_eq!(vectors.key.as_ref().unwrap().expose(), "qdrant-key");
+    }
+
+    #[test]
+    fn the_section_describes_the_keys_a_file_holds() {
+        let schema = SearchOptions::schema().expect("schema");
+        assert_eq!(schema.key, "search");
+        assert_eq!(schema.docs.as_deref(), Some("/docs/packages/search/"));
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        for name in [
+            "engine", "url", "key", "nodes", "prefix", "queue", "sync", "postgres", "tantivy",
+            "vectors", "indexes",
+        ] {
+            assert!(schema.fields.iter().any(|f| f.name == name), "{name}");
+        }
+        assert_eq!(schema.secret_paths(), ["search.key", "search.vectors.key"]);
+        let engine = schema.fields.iter().find(|f| f.name == "engine").unwrap();
+        assert_eq!(
+            engine.ty,
+            navree_config::FieldType::choice(&[
+                "postgres",
+                "meilisearch",
+                "typesense",
+                "tantivy",
+                "memory"
+            ])
+        );
+        let defaults = SearchOptions::defaults().expect("defaults");
+        assert_eq!(defaults["engine"], "postgres");
+        assert_eq!(defaults["queue"], "default");
+        assert_eq!(defaults["key"], serde_json::Value::Null);
+        assert_eq!(defaults["postgres"]["language"], "english");
     }
 }

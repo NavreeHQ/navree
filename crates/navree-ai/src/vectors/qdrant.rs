@@ -3,6 +3,7 @@
 //! kept in the payload with the text and metadata.
 
 use http::Method;
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -16,7 +17,7 @@ use crate::options::Metric;
 /// A Qdrant server.
 pub(crate) struct Qdrant {
     base: String,
-    key: Option<String>,
+    key: Option<Secret<String>>,
     dimensions: usize,
     metric: Metric,
     http: HttpClient,
@@ -25,14 +26,14 @@ pub(crate) struct Qdrant {
 impl Qdrant {
     pub(crate) fn new(
         url: String,
-        key: Option<String>,
+        key: Option<Secret<String>>,
         dimensions: usize,
         metric: Metric,
         http: HttpClient,
     ) -> Self {
         Self {
             base: url.trim_end_matches('/').to_owned(),
-            key: key.filter(|k| !k.is_empty()),
+            key: key.filter(|k| !k.expose().is_empty()),
             dimensions,
             metric,
             http,
@@ -45,7 +46,7 @@ impl Qdrant {
             .request(method, format!("{}{path}", self.base))
             .retries(0);
         if let Some(key) = &self.key {
-            request = request.header("api-key", key.as_str());
+            request = request.header("api-key", key.expose().as_str());
         }
         request
     }

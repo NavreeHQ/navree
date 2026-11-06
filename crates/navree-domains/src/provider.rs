@@ -6,6 +6,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use navree_contracts::Secret;
 use navree_kernel::BoxFuture;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -76,7 +77,7 @@ pub struct CloudflareDns {
     http: reqwest::Client,
     api_url: String,
     zone_id: String,
-    token: String,
+    token: Secret<String>,
     proxied: bool,
     ttl: u32,
 }
@@ -123,7 +124,7 @@ impl CloudflareDns {
         let token = options
             .api_token
             .clone()
-            .filter(|token| !token.is_empty())
+            .filter(|token| !token.expose().is_empty())
             .ok_or_else(|| missing("api_token"))?;
         let zone_id = options
             .zone_id
@@ -158,7 +159,7 @@ impl CloudflareDns {
         request: reqwest::RequestBuilder,
     ) -> Result<Option<T>, DomainsError> {
         let response = request
-            .bearer_auth(&self.token)
+            .bearer_auth(self.token.expose())
             .send()
             .await
             .map_err(|error| DomainsError::DnsProvider(format!("Cloudflare: {error}")))?;

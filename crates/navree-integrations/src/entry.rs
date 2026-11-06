@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use navree_contracts::Secret;
 use url::Url;
 
 use crate::options::MicrosoftMode;
@@ -235,7 +236,7 @@ impl ProviderEntry {
     pub(crate) fn client(
         &self,
         scope_set: &str,
-    ) -> Result<(String, Option<String>), IntegrationsError> {
+    ) -> Result<(String, Option<Secret<String>>), IntegrationsError> {
         if let Some(app) = self.config.apps.get(scope_set) {
             return Ok((app.client_id.clone(), app.client_secret.clone()));
         }
@@ -408,12 +409,12 @@ mod tests {
     fn scope_sets_may_have_their_own_app_registration() {
         let ms = entry("microsoft", |c| {
             c.client_id = Some("main".into());
-            c.client_secret = Some("s1".into());
+            c.client_secret = Some(Secret::new("s1".to_owned()));
             c.apps.insert(
                 "mail_send".into(),
                 crate::AppCredentials {
                     client_id: "mail".into(),
-                    client_secret: Some("s2".into()),
+                    client_secret: Some(Secret::new("s2".to_owned())),
                 },
             );
         });
@@ -421,7 +422,7 @@ mod tests {
         assert_eq!(ms.client("directory").unwrap().0, "main");
         assert_eq!(
             ms.client("mail_send").unwrap(),
-            ("mail".into(), Some("s2".into()))
+            ("mail".into(), Some(Secret::new("s2".to_owned())))
         );
     }
 

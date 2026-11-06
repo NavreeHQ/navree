@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 
 use chrono::Utc;
 use futures_util::StreamExt;
+use navree_contracts::Secret;
 use navree_http_client::{HttpClient, RequestBuilder};
 use navree_kernel::BoxFuture;
 use serde_json::{Value, json};
@@ -35,7 +36,11 @@ pub(crate) struct Bedrock {
     name: String,
     region: Option<String>,
     base: Option<String>,
-    explicit: (Option<String>, Option<String>, Option<String>),
+    explicit: (
+        Option<String>,
+        Option<Secret<String>>,
+        Option<Secret<String>>,
+    ),
     profile: Option<String>,
     credentials: OnceLock<Option<Credentials>>,
     role: RoleCredentials,
@@ -76,8 +81,14 @@ impl Bedrock {
                 sigv4::resolve_credentials(
                     (
                         self.explicit.0.as_deref(),
-                        self.explicit.1.as_deref(),
-                        self.explicit.2.as_deref(),
+                        self.explicit
+                            .1
+                            .as_ref()
+                            .map(|secret| secret.expose().as_str()),
+                        self.explicit
+                            .2
+                            .as_ref()
+                            .map(|token| token.expose().as_str()),
                     ),
                     self.profile.as_deref(),
                     |name| std::env::var(name).ok(),

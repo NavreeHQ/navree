@@ -31,8 +31,12 @@ impl WebhookVerifier for Partner {
         if let Some(challenge) = request.query("challenge") {
             return Ok(Verdict::Handshake(Handshake::text(challenge)));
         }
-        GitHub::verify(&request.source().secret, request.headers(), request.body())
-            .map(Verdict::Verified)
+        GitHub::verify(
+            request.source().secret.expose(),
+            request.headers(),
+            request.body(),
+        )
+        .map(Verdict::Verified)
     }
 }
 

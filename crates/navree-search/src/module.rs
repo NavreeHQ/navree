@@ -7,7 +7,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::error::map_search_error;
@@ -58,15 +58,13 @@ impl SearchModule {
     /// The module with an engine, or full [`SearchOptions`] (configure it
     /// once, in the app root).
     pub fn for_root(options: impl Into<SearchOptions>) -> impl Module {
-        ConfiguredSearchModule {
-            options: Some(options.into()),
-        }
+        ConfiguredModule::<SearchModule, _>::for_root(options.into(), register)
     }
 
     /// The module configured from section `search` of the app
     /// configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredSearchModule { options: None }
+        ConfiguredModule::<SearchModule, SearchOptions>::from_config(register)
     }
 
     /// Registers model `M`: its index is added to the commands, its
@@ -79,27 +77,6 @@ impl SearchModule {
 impl Module for SearchModule {
     fn register(&self, m: &mut ModuleBuilder) {
         register(m, None);
-    }
-}
-
-/// `SearchModule::for_root(..)` / `from_config()`: same module id,
-/// configured.
-struct ConfiguredSearchModule {
-    /// `None`: read from configuration.
-    options: Option<SearchOptions>,
-}
-
-impl Module for ConfiguredSearchModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<SearchModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
     }
 }
 

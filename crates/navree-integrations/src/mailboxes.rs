@@ -19,6 +19,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use chrono::{DateTime, TimeDelta, Utc};
 use http::{Method, StatusCode, header};
+use navree_config::ConfigTable;
 use navree_contracts::Secret;
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
@@ -65,7 +66,7 @@ const MAX_MESSAGES: usize = 500;
 /// gmail_token = "..."          # the Pub/Sub push endpoint's ?token=
 /// renew_before_hours = 24      # integrations:mailboxes --renew renews watches expiring sooner
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigTable)]
 #[serde(default)]
 pub struct MailboxesOptions {
     /// The public URL of `POST /api/mail/inbound/graph`, which Graph posts
