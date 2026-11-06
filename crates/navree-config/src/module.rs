@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
     ProviderKey, Resolver,
 };
 use serde::de::DeserializeOwned;
@@ -47,7 +47,7 @@ pub struct ConfigModule;
 impl ConfigModule {
     /// The module configured with `sources` (configure it once, in the app root).
     pub fn for_root(sources: ConfigSources) -> impl Module {
-        ConfiguredConfigModule { sources }
+        ConfiguredModule::<ConfigModule, _>::for_root(sources, register_sources)
     }
 }
 
@@ -57,23 +57,10 @@ impl Module for ConfigModule {
     }
 }
 
-/// `ConfigModule::for_root(...)`: same module id, configured.
-struct ConfiguredConfigModule {
-    sources: ConfigSources,
-}
-
-impl Module for ConfiguredConfigModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<ConfigModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.sources.clone());
-    }
+/// `for_root(sources)` registers with those sources; the plain module with
+/// [`ConfigSources::defaults`].
+fn register_sources(m: &mut ModuleBuilder, sources: Option<ConfigSources>) {
+    register(m, sources.unwrap_or_else(ConfigSources::defaults));
 }
 
 /// Global; provides and exports the singleton [`Config`], loaded from

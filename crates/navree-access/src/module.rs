@@ -7,7 +7,7 @@ use std::sync::Arc;
 use navree_contracts::PermissionCheck;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{ModuleBuilderHttpExt, RouteAuthorizer};
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::authorizer::AccessAuthorizer;
 use crate::commands::commands;
@@ -65,7 +65,7 @@ pub struct AccessModule;
 impl AccessModule {
     /// The module with `options` (configure it once, in the app root).
     pub fn for_root(options: AccessOptions) -> impl Module {
-        ConfiguredAccessModule { options }
+        ConfiguredModule::<AccessModule, _>::for_root(options, register_options)
     }
 
     /// Registers `S` as a subject: its permission prefix maps to its
@@ -97,23 +97,10 @@ impl Module for AccessModule {
     }
 }
 
-/// `AccessModule::for_root`: same module id, configured.
-struct ConfiguredAccessModule {
-    options: AccessOptions,
-}
-
-impl Module for ConfiguredAccessModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<AccessModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.options.clone());
-    }
+/// `for_root(options)` registers with the options, the plain module with
+/// [`AccessOptions::default`].
+fn register_options(m: &mut ModuleBuilder, options: Option<AccessOptions>) {
+    register(m, options.unwrap_or_default());
 }
 
 fn register(m: &mut ModuleBuilder, options: AccessOptions) {

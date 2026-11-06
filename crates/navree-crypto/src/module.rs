@@ -5,7 +5,7 @@ use std::sync::Arc;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::Secret;
 use navree_kernel::{
-    BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    BoxError, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
 use crate::{AppKey, Encrypter, Hasher, HashingOptions};
@@ -148,17 +148,13 @@ pub struct CryptoModule;
 impl CryptoModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: CryptoOptions) -> impl Module {
-        ConfiguredCryptoModule {
-            source: Source::Options(Arc::new(options)),
-        }
+        ConfiguredModule::<CryptoModule, _>::for_root(options, register_options)
     }
 
     /// The module configured from the app's `Config` at boot (see
     /// [`CryptoOptions::from_config`]).
     pub fn from_config() -> impl Module {
-        ConfiguredCryptoModule {
-            source: Source::Config,
-        }
+        ConfiguredModule::<CryptoModule, CryptoOptions>::from_config(register_options)
     }
 }
 
@@ -207,23 +203,14 @@ impl Source {
     }
 }
 
-/// `CryptoModule::for_root(...)` / `from_config()`: same module id, configured.
-struct ConfiguredCryptoModule {
-    source: Source,
-}
-
-impl Module for ConfiguredCryptoModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::of::<CryptoModule>()
-    }
-
-    fn is_configured(&self) -> bool {
-        true
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        register(m, self.source.clone());
-    }
+/// `for_root(options)` registers with the options, `from_config()` reads them
+/// from `Config` at boot.
+fn register_options(m: &mut ModuleBuilder, options: Option<CryptoOptions>) {
+    let source = match options {
+        Some(options) => Source::Options(Arc::new(options)),
+        None => Source::Config,
+    };
+    register(m, source);
 }
 
 /// Global; provides and exports `Encrypter` and `Hasher`; adds `key:generate`.
