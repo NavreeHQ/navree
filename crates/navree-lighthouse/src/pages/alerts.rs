@@ -315,13 +315,15 @@ pub(crate) async fn change(
                     "Pick at least one kind, or mute the channel.",
                 ));
             }
-            c.configure
+            let _ = c
+                .configure
                 .change_channel(actor, name, json!({ "on": kinds }))
                 .await?;
             Ok(back.toast(ToastTone::Success, format!("Saved what {name} gets.")))
         }
         "reset-kinds" => {
-            c.configure
+            let _ = c
+                .configure
                 .change_channel(actor, name, json!({ "on": Value::Null }))
                 .await?;
             Ok(back.toast(
@@ -339,11 +341,12 @@ pub(crate) async fn change(
                 }
                 None => json!({ "muted": true }),
             };
-            c.configure.change_channel(actor, name, body).await?;
+            let _ = c.configure.change_channel(actor, name, body).await?;
             Ok(back.toast(ToastTone::Success, format!("Muted {name}.")))
         }
         "unmute" => {
-            c.configure
+            let _ = c
+                .configure
                 .change_channel(actor, name, json!({ "muted": false }))
                 .await?;
             Ok(back.toast(ToastTone::Success, format!("Unmuted {name}.")))

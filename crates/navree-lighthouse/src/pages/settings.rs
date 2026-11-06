@@ -246,7 +246,8 @@ pub(crate) async fn change(
         return Ok(back.toast(ToastTone::Info, "Nothing changed."));
     }
     let actor = Actor::new(viewer.user_id, ip, &viewer.headers);
-    c.configure
+    let _ = c
+        .configure
         .change_settings(actor, SettingsInput::from_changes(changes))
         .await?;
     Ok(back.toast(
