@@ -133,17 +133,13 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
             "web/app/(app)/w/[workspace]/settings/security/page.tsx",
             "web/app/(app)/w/[workspace]/settings/notifications/page.tsx",
             "web/app/api/[...path]/route.ts",
-            "web/app/api/auth/email/verify/[id]/[hash]/route.ts",
             "web/app/admin/[[...path]]/route.ts",
-            "web/app/auth/callback/[provider]/route.ts",
-            "web/app/auth/social/[provider]/route.ts",
+            "web/app/auth/[...path]/route.ts",
             "web/app/broadcasting/auth/route.ts",
             "web/app/invitations/accept/page.tsx",
             "web/components/workspace-switcher.tsx",
             "web/components/ui/button.tsx",
             "web/lib/navree.ts",
-            "web/lib/social.ts",
-            "web/lib/social.test.ts",
             "web/lib/api/client.ts",
             "web/next.config.ts",
             "web/proxy.ts",
@@ -336,7 +332,8 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
     let config = read(&root, "web/next.config.ts");
     for needle in [
         "\"/opt/navree/packages/js\"",
-        "turbopack: { root }",
+        "root,",
+        "resolveAlias: { next: \"./node_modules/next\", \"next/*\": \"./node_modules/next/*\" }",
         "outputFileTracingRoot: root",
         "transpilePackages: [\"@navree/next\", \"@navree/client\", \"@navree/bff\"]",
         "cacheComponents: false",
@@ -348,8 +345,8 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
     assert!(!read(&root, "web/pnpm-lock.yaml").contains("@navree/"));
     assert!(read(&root, "web/README.md").contains("without `--frozen-lockfile`"));
 
-    // No file of the web app keeps tokens or the token cookies itself. (Only the social
-    // sign-in, which the package does not have, writes the cookies of its own flow.)
+    // No file of the web app keeps tokens or the token cookies itself: `@navree/next`
+    // answers sign-in, the social sign-in and the verification link.
     for file in &files {
         let Ok(text) = std::fs::read_to_string(root.join(file)) else {
             continue;
@@ -360,15 +357,9 @@ fn the_saas_kits_web_app_runs_on_the_navree_packages_and_carries_no_bff_of_its_o
             "createBff(",
             "originAllowed",
         ] {
-            let allowed = file == "web/lib/social.test.ts" && needle == "createBff(";
-            assert!(
-                allowed || !text.contains(needle),
-                "{file} mentions {needle}"
-            );
+            assert!(!text.contains(needle), "{file} mentions {needle}");
         }
-        if file != "web/lib/social.ts" && file != "web/lib/social.test.ts" {
-            assert!(!text.contains("navree_at"), "{file} mentions navree_at");
-        }
+        assert!(!text.contains("navree_at"), "{file} mentions navree_at");
     }
 }
 
@@ -426,8 +417,6 @@ fn no_template_carries_a_backend_for_frontend_of_its_own() {
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
-        // The only tests that name `createBff` give the social routes a BFF with a scripted API.
-        let test_of_social = name == "kits/web/lib/social.test.ts";
         for implementation in [
             "export function createBff",
             "function callNavreeRefresh",
@@ -442,10 +431,7 @@ fn no_template_carries_a_backend_for_frontend_of_its_own() {
                 "{name} contains {implementation}"
             );
         }
-        assert!(
-            test_of_social || !text.contains("createBff("),
-            "{name} calls createBff"
-        );
+        assert!(!text.contains("createBff("), "{name} calls createBff");
     }
 }
 
