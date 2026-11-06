@@ -18,8 +18,10 @@
 
 use std::sync::Arc;
 
+use http::request::Parts;
 use http::{HeaderMap, Method};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Controller, CurrentPrincipal, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_ui::form::csrf_field;
@@ -159,6 +161,17 @@ fn first_party(token: &Option<OAuthToken>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The app's shell when it has one: the page is drawn in it, else on its own.
+struct MaybeShell(Option<AppShell>);
+
+impl FromRequestParts for MaybeShell {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        Ok(Self(AppShell::from_request_parts(parts).await.ok()))
+    }
+}
+
 /// `?request=<id>`: the authorization request the browser was sent with.
 #[derive(Debug, Deserialize)]
 struct ConsentQuery {
@@ -201,7 +214,7 @@ impl Controller for ConsentController {
         let core = self.core.clone();
         let show = move |CurrentPrincipal(me): CurrentPrincipal,
                          token: Option<OAuthToken>,
-                         shell: Option<AppShell>,
+                         MaybeShell(shell): MaybeShell,
                          headers: HeaderMap,
                          Query(query): Query<ConsentQuery>| {
             let requests = Requests { core: core.clone() };

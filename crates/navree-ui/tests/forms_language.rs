@@ -311,7 +311,7 @@ fn a_draft_and_a_test_view_read_in_a_language() {
     let hindi = draft.read_for::<Mix>("mix", &hindi_language()).unwrap_err();
     assert!(hindi["volume"].iter().any(|t| t == "100 या उससे कम चुनें।"));
 
-    let view = TestView::of_node(FormView::<Mix>::new().with_values(pairs(&[("volume", "500")])));
+    let view = TestView::of_node(FormView::<Mix>::new()).fill("volume", "500");
     let errors = view.submit_as_for::<Mix>(&hindi_language()).unwrap_err();
     assert!(errors["volume"].iter().any(|t| t == "100 या उससे कम चुनें।"));
 }
