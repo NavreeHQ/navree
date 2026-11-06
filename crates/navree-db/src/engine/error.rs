@@ -334,7 +334,9 @@ fn database_kind(
         (Backend::MySql, "1062" | "1586" | "1859") => ErrorKind::UniqueViolation,
         (Backend::MySql, "1451" | "1452" | "1216" | "1217") => ErrorKind::ForeignKeyViolation,
         (Backend::MySql, "1048") => ErrorKind::NotNullViolation,
-        (Backend::MySql, "3819") => ErrorKind::CheckViolation,
+        // ER_CHECK_CONSTRAINT_VIOLATED on MySQL, ER_CONSTRAINT_FAILED on
+        // MariaDB.
+        (Backend::MySql, "3819" | "4025") => ErrorKind::CheckViolation,
         (Backend::MySql, "1213") => ErrorKind::Deadlock,
         (Backend::MySql, "1205" | "3572") => ErrorKind::LockUnavailable,
         (Backend::MySql, "3024" | "1969") => ErrorKind::Timeout,
@@ -375,6 +377,61 @@ mod tests {
         let lost = DbError::from_sqlx(sqlx::Error::Io(io), Some(Backend::Postgres));
         assert!(lost.is_connection_lost());
         assert!(std::error::Error::source(&lost).is_some());
+    }
+
+    /// A server error the driver did not classify.
+    #[derive(Debug)]
+    struct Unclassified;
+
+    impl fmt::Display for Unclassified {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("refused")
+        }
+    }
+
+    impl std::error::Error for Unclassified {}
+
+    impl sqlx::error::DatabaseError for Unclassified {
+        fn message(&self) -> &str {
+            "refused"
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    #[test]
+    fn mysql_and_mariadb_error_numbers_are_classified() {
+        for (number, kind) in [
+            ("1062", ErrorKind::UniqueViolation),
+            ("1452", ErrorKind::ForeignKeyViolation),
+            ("3819", ErrorKind::CheckViolation),
+            // MariaDB's number for a failed CHECK (and a JSON column's
+            // `JSON_VALID` check).
+            ("4025", ErrorKind::CheckViolation),
+            ("1213", ErrorKind::Deadlock),
+            ("1969", ErrorKind::Timeout),
+            ("1927", ErrorKind::ConnectionLost),
+        ] {
+            assert_eq!(
+                database_kind(&Unclassified, Some(number), Some(Backend::MySql)),
+                kind,
+                "{number}"
+            );
+        }
     }
 
     #[test]

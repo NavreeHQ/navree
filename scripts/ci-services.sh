@@ -25,7 +25,7 @@
 #                                        notices, and the failed tests
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 1025-1027,
-# 1465, 1883, 3306, 3307, 4222, 4443, 5432, 5433, 5672, 6333, 6379, 7700, 8025,
+# 1465, 1883, 3306, 3307, 3308, 4222, 4443, 5432, 5433, 5672, 6333, 6379, 7700, 8025,
 # 8026, 8108, 9000, 9092, 10000, 12111, 14000 and 27017 on 127.0.0.1. The
 # containers are called navree-ci-<service>.
 #
@@ -92,7 +92,7 @@ SMTP_PASSWORD=navree-secret
 DOCK_IMAGES=(redis:7)
 
 ALL_SERVICES=(
-  postgres pgvector mysql mariadb mongodb redis s3 gcs azurite qdrant typesense
+  postgres pgvector mysql mariadb mariadb-10-6 mongodb redis s3 gcs azurite qdrant typesense
   meilisearch stripe-mock pebble nats mqtt kafka rabbitmq mailpit mailpit-auth
   mailpit-starttls mailpit-tls
 )
@@ -166,6 +166,7 @@ NAVREE_TEST_POSTGRES_URL=$POSTGRES_URL
 NAVREE_TEST_PGVECTOR_URL=postgres://postgres:$PASSWORD@127.0.0.1:5433/navree_test
 NAVREE_TEST_MYSQL_URL=$MYSQL_URL
 NAVREE_TEST_MARIADB_URL=mariadb://root:$PASSWORD@127.0.0.1:3307/navree_test
+NAVREE_TEST_MARIADB_10_6_URL=mariadb://root:$PASSWORD@127.0.0.1:3308/navree_test
 NAVREE_TEST_MONGODB_URL=$MONGODB_URL
 NAVREE_TEST_REDIS_URL=redis://127.0.0.1:6379
 NAVREE_TEST_S3_URL=http://$S3_ACCESS_KEY:$S3_SECRET_KEY@127.0.0.1:9000/$S3_BUCKET
@@ -342,6 +343,7 @@ start() {
   ready pgvector navree-ci-pgvector docker exec navree-ci-pgvector pg_isready --host 127.0.0.1 --username postgres --dbname navree_test
   ready mysql "$MYSQL_CONTAINER" docker exec "$MYSQL_CONTAINER" mysqladmin --host 127.0.0.1 --user root --password="$PASSWORD" ping
   ready mariadb navree-ci-mariadb docker exec navree-ci-mariadb mariadb-admin --host 127.0.0.1 --user root --password="$PASSWORD" ping
+  ready mariadb-10-6 navree-ci-mariadb-10-6 docker exec navree-ci-mariadb-10-6 mariadb-admin --host 127.0.0.1 --user root --password="$PASSWORD" ping
   if managed mongodb; then
     start_mongodb
   fi

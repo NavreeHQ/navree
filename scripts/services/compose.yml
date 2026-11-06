@@ -68,8 +68,8 @@ services:
       - --innodb_buffer_pool_size=256M
       - --innodb_flush_log_at_trx_commit=2
 
-  # MariaDB, on the port after MySQL's. Change the version with MARIADB_IMAGE
-  # (for example mariadb:10.6 for the oldest supported release).
+  # MariaDB 11.4, on the port after MySQL's. Change the version with
+  # MARIADB_IMAGE.
   mariadb:
     image: ${MARIADB_IMAGE:-mariadb:11.4}
     container_name: navree-ci-mariadb
@@ -83,6 +83,24 @@ services:
       - --max_connections=300
       - --skip-log-bin
       - --innodb_buffer_pool_size=256M
+      - --innodb_flush_log_at_trx_commit=2
+
+  # MariaDB 10.6, the oldest release Navree supports (the first with SKIP
+  # LOCKED), on the port after MariaDB 11.4's. Change the version with
+  # MARIADB_10_6_IMAGE.
+  mariadb-10-6:
+    image: ${MARIADB_10_6_IMAGE:-mariadb:10.6}
+    container_name: navree-ci-mariadb-10-6
+    ports: ["127.0.0.1:3308:3306"]
+    environment:
+      MARIADB_ROOT_PASSWORD: navree
+      MARIADB_DATABASE: navree_test
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=300
+      - --skip-log-bin
+      - --innodb_buffer_pool_size=128M
       - --innodb_flush_log_at_trx_commit=2
 
   # MongoDB refuses to start on Linux kernels 6.19 through 7.0.13 (a TCMalloc

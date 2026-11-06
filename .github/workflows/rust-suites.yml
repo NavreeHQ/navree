@@ -1,10 +1,10 @@
 # Every Rust test suite in the workspace, on Linux and on Windows.
 #
 # Linux runs against real servers: SQLite, PostgreSQL 17 with TimescaleDB,
-# MySQL 8.4, MariaDB and MongoDB 8.0 (replica set rs0), plus Redis, an S3
-# server, Google Cloud Storage and Azure Blob emulators, Qdrant, pgvector,
-# Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka, RabbitMQ and
-# four Mailpit servers (plain, with login, STARTTLS, TLS).
+# MySQL 8.4, MariaDB 11.4 and 10.6, and MongoDB 8.0 (replica set rs0), plus
+# Redis, an S3 server, Google Cloud Storage and Azure Blob emulators, Qdrant,
+# pgvector, Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka,
+# RabbitMQ and four Mailpit servers (plain, with login, STARTTLS, TLS).
 # scripts/ci-services.sh starts them from scripts/services/compose.yml; the
 # suites find them through NAVREE_TEST_* variables.
 # NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server, Chrome, Node.js or
@@ -19,9 +19,12 @@
 #    name them (unit tests, integration tests, doctests);
 # 2. the 26 crates that take their database from NAVREE_TEST_DATABASE again on
 #    PostgreSQL and on MySQL;
-# 3. the crates with code that only exists when a feature is off, on their
+# 3. the MySQL suites of navree-db, navree-orm and navree-schema, and those 26
+#    crates, on MariaDB 11.4 and on MariaDB 10.6 (NAVREE_TEST_MYSQL_URL set to
+#    the MariaDB server);
+# 4. the crates with code that only exists when a feature is off, on their
 #    default features;
-# 4. the navree-mcp suite that drives the official TypeScript SDK.
+# 5. the navree-mcp suite that drives the official TypeScript SDK.
 #
 # Windows runs the workspace on SQLite (a hosted Windows runner has no Linux
 # containers, so the suites that name a server print SKIPPED and pass), with
@@ -210,6 +213,36 @@ jobs:
           for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
           cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output 2>&1 | tee target/logs/mysql.log
 
+      - name: Test on MariaDB 11.4 and 10.6
+        # The MySQL suites against MariaDB: the database crates' own MySQL
+        # suites, then the crates that take their database from
+        # NAVREE_TEST_DATABASE.
+        if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        shell: bash
+        run: |
+          packages=()
+          for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
+          status=0
+          for server in 11.4 10.6; do
+            if [ "$server" = 11.4 ]; then
+              url="$NAVREE_TEST_MARIADB_URL"
+            else
+              url="$NAVREE_TEST_MARIADB_10_6_URL"
+            fi
+            {
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-db --test mysql --test engine --test migrator -- --show-output || status=1
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-orm --test servers --test differential --test integration -- --show-output || status=1
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-schema --test servers -- --show-output || status=1
+              NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL="$url" cargo test --locked \
+                --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output || status=1
+              exit "$status"
+            } 2>&1 | tee "target/logs/mariadb-$server.log" || status=1
+          done
+          exit "$status"
+
       - name: Count the skipped service tests
         # With NAVREE_TEST_REQUIRE_SERVICES=1 a service test fails instead of
         # skipping, so a "skipped" notice that is not on the list of by-design
@@ -219,7 +252,8 @@ jobs:
         shell: bash
         run: |
           status=0
-          for log in target/logs/sqlite.log target/logs/postgres.log target/logs/mysql.log; do
+          for log in target/logs/sqlite.log target/logs/postgres.log target/logs/mysql.log \
+            target/logs/mariadb-11.4.log target/logs/mariadb-10.6.log; do
             echo "::group::$log"
             scripts/ci-services.sh check-skips "$log" || status=1
             echo "::endgroup::"
@@ -231,7 +265,8 @@ jobs:
         shell: bash
         run: |
           scripts/ci-services.sh summary target/logs/sqlite.log target/logs/postgres.log \
-            target/logs/mysql.log | tee -a "$GITHUB_STEP_SUMMARY"
+            target/logs/mysql.log target/logs/mariadb-11.4.log target/logs/mariadb-10.6.log |
+            tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the test logs
         if: ${{ !cancelled() }}
