@@ -1,5 +1,9 @@
 //! What the database says about a workspace table: its columns, which
 //! columns lead an index, and (PostgreSQL) whether row-level security is on.
+//!
+//! Read from the catalogs with statements: these are questions about the
+//! database, not rows of a model, and the row-level security flags are not
+//! part of what the schema builder's introspection reports.
 
 use navree_db::{Backend, Db, DbError, Executor, Row, Statement, Value};
 

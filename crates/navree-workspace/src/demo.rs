@@ -200,6 +200,9 @@ impl DemoSeed {
             .await
     }
 
+    // Statements, not the ORM's builder: the caller names the table, which
+    // under schema isolation is qualified with the workspace's schema, and
+    // the result stays a `DbError`.
     async fn delete_rows(&self, table: &str, column: &str) -> Result<u64, DbError> {
         let backend = Executor::backend(&self.uow);
         let statement = match (&self.isolation, &self.schema) {

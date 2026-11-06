@@ -2,9 +2,11 @@
 //! record the change events audit trails read.
 //!
 //! The events carry each model's `Serialize` form, so a field kept out of
-//! it (an invitation's token digest) never reaches an observer; an update
-//! records only the fields that changed. Rows are read back after a write, so callers get them as the
-//! database stored them (timestamps at its precision).
+//! it (an invitation's token digest) never reaches an observer; the ORM's
+//! own `save` records the stored column values and would pass it on. An
+//! update records only the fields that changed. Rows are read back after a
+//! write, so callers get them as the database stored them (timestamps at
+//! its precision).
 
 use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_orm::{Assignment, Model, OrmError, PrimaryKey};
