@@ -1,12 +1,16 @@
 //! The Rust examples of `packages/localization.mdx`, run against the
 //! docs' Fluent files (`tests/fixtures/locales`). Every app in this file
 //! has the same locales, because code outside a request uses the app
-//! booted last.
+//! booted last; and the tests take turns, because an app that shuts down
+//! takes that away from a test still running.
 
 use navree_i18n::{I18n, I18nModule, Locale, args, t};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_validation::ValidationModule;
 use serde_json::json;
+
+/// One test at a time: see the top of the file.
+static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The docs' app configuration.
 fn docs_app() -> TestAppBuilder {
@@ -23,6 +27,7 @@ pub fn import_summary(created: usize) -> String {
 
 #[tokio::test]
 async fn translating_in_code() {
+    let _turn = TURN.lock().await;
     let app = docs_app().module(I18nModule::from_config()).build().await;
     assert_eq!(import_summary(4), "4 deals created");
 
@@ -43,6 +48,7 @@ async fn translating_in_code() {
 
 #[tokio::test]
 async fn plurals_follow_the_language() {
+    let _turn = TURN.lock().await;
     let app = docs_app().module(I18nModule::from_config()).build().await;
     Locale::scope("fr", async {
         assert_eq!(t!("deal-created", count = 1), "Une affaire créée");
@@ -54,6 +60,7 @@ async fn plurals_follow_the_language() {
 
 #[tokio::test]
 async fn formatting_and_fluent_functions() {
+    let _turn = TURN.lock().await;
     let app = docs_app().module(I18nModule::from_config()).build().await;
     let i18n = app.get::<I18n>().await;
     let money = navree_i18n::Money::new(4_200_000, "EUR");
@@ -85,6 +92,7 @@ async fn formatting_and_fluent_functions() {
 
 #[tokio::test]
 async fn validation_errors_are_in_the_requested_language() {
+    let _turn = TURN.lock().await;
     use navree_http::Json;
     use navree_macros::{controller, injectable, module};
     use navree_validation::Valid;
