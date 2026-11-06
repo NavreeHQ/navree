@@ -918,8 +918,8 @@ mod tests {
     fn the_section_never_shows_a_credential_in_debug_output() {
         let bedrock = ProviderConfig {
             access_key_id: Some("AKIA4EXAMPLE7ID".into()),
-            secret_access_key: Some("aws-s3cr3t-access-key".into()),
-            session_token: Some("aws-s3ssion-t0ken".into()),
+            secret_access_key: Some(Secret::new("aws-s3cr3t-access-key".to_owned())),
+            session_token: Some(Secret::new("aws-s3ssion-t0ken".to_owned())),
             ..ProviderConfig::bedrock("eu-west-1")
         };
         let options = AiOptions {
@@ -932,7 +932,7 @@ mod tests {
             ]
             .into(),
             vectors: VectorsOptions {
-                key: Some("qdrant-api-s3cr3t".into()),
+                key: Some(Secret::new("qdrant-api-s3cr3t".to_owned())),
                 ..VectorsOptions::default()
             },
             ..AiOptions::default()
