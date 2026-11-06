@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-# Embeds the agent skills (`skills/`) and the docs (`apps/website/content/docs`).
+# Embeds the agent skills (`skills/`), the docs (`apps/website/content/docs`) and
+# the UI component catalog (`apps/website/content/ui/catalog.json`).
 build = "build.rs"
 
 [lints]
@@ -15,6 +16,8 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 futures-util = { workspace = true }
+# Reads the HTML of a page the app drew, for `render_page`'s outline.
+html5ever = { workspace = true }
 # Reads the app's configuration exactly as the app does.
 navree-config = { workspace = true }
 # The settings `navree dev` passes to the app when it has a `dock.toml`.
@@ -32,6 +35,10 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
+
+[build-dependencies]
+# Cuts the UI component catalog down to what `list_components` answers with.
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

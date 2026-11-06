@@ -5509,6 +5509,7 @@ version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
+ "html5ever",
  "navree-config",
  "navree-dock",
  "reqwest",

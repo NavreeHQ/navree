@@ -1,18 +1,24 @@
-//! Embeds the agent skills and the docs into the crate, so `navree
-//! skills:install` and Navigator's docs search work offline and always match
-//! this version of Navree.
+//! Embeds the agent skills, the docs and the UI component catalog into the
+//! crate, so `navree skills:install`, Navigator's docs search and
+//! `list_components` work offline and always match this version of Navree.
 //!
 //! - Skills: every file of the `navree` and `navree-*` folders of the
 //!   repository's `skills/` (or of a `skills/` copy next to this manifest,
 //!   which a published crate carries).
 //! - Docs: every `.mdx` page of `apps/website/content/docs` (or of a `docs/`
 //!   copy next to this manifest), keyed by its slug (`ai/navigator`).
+//! - Components: `apps/website/content/ui/catalog.json` (or a `catalog.json`
+//!   copy next to this manifest), cut down to each component's id, name,
+//!   group, summary, Rust types and docs slug.
 //!
 //! The generated `embedded.rs` holds two tables of `include_bytes!` /
-//! `include_str!` entries; Cargo reruns this script when a file changes.
+//! `include_str!` entries and the compact catalog; Cargo reruns this script
+//! when a file changes.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+
+use serde_json::{Value, json};
 
 fn main() {
     let manifest =
@@ -24,6 +30,10 @@ fn main() {
     let docs = first_dir(&[
         manifest.join("docs"),
         manifest.join("../../apps/website/content/docs"),
+    ]);
+    let catalog = first_file(&[
+        manifest.join("catalog.json"),
+        manifest.join("../../apps/website/content/ui/catalog.json"),
     ]);
 
     let mut code = String::new();
@@ -74,9 +84,74 @@ fn main() {
     } else {
         println!("cargo:warning=no docs directory found: Navigator embeds no docs");
     }
-    code.push_str("];\n");
+    code.push_str("];\n\n");
+
+    code.push_str("/// The component catalog as compact JSON (empty when the build found none).\n");
+    let compact = catalog.as_deref().and_then(|file| {
+        println!("cargo:rerun-if-changed={}", file.display());
+        compact_catalog(file)
+    });
+    if let Some(compact) = compact {
+        let file = out.join("ui_catalog.json");
+        std::fs::write(&file, compact).expect("write ui_catalog.json");
+        let _ = writeln!(
+            code,
+            "pub(crate) static UI_CATALOG: &str = include_str!({:?});",
+            file.display().to_string()
+        );
+    } else {
+        println!("cargo:warning=no ui/catalog.json found: `list_components` lists nothing");
+        code.push_str("pub(crate) static UI_CATALOG: &str = \"\";\n");
+    }
 
     std::fs::write(out.join("embedded.rs"), code).expect("write embedded.rs");
+}
+
+/// The first of `candidates` that is a file.
+fn first_file(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates.iter().find(|file| file.is_file()).cloned()
+}
+
+/// The group of the catalog's entries that are in no group (the foundations
+/// and guides: themes, icons, flags...).
+const GUIDES: &str = "guides";
+
+/// The catalog at `file`, cut down to what `list_components` answers with:
+/// `{"groups": [{id, title}], "components": [{id, name, group, summary,
+/// docs, types}]}`. The examples (most of the file) stay out; `docs` is the
+/// slug `read_doc` takes, empty for a page that isn't under `/docs/`. An
+/// entry in no group goes into [`GUIDES`]. `None` when the file isn't a
+/// catalog.
+fn compact_catalog(file: &Path) -> Option<String> {
+    let catalog: Value = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
+    let mut groups: Vec<Value> = catalog["groups"]
+        .as_array()?
+        .iter()
+        .map(|group| json!({ "id": group["id"], "title": group["title"] }))
+        .collect();
+    let components: Vec<Value> = catalog["components"]
+        .as_array()?
+        .iter()
+        .filter(|component| component["id"].as_str().is_some_and(|id| !id.is_empty()))
+        .map(|component| {
+            let url = component["url"].as_str().unwrap_or_default();
+            let docs = url
+                .strip_prefix("/docs/")
+                .map_or("", |slug| slug.trim_matches('/'));
+            json!({
+                "id": component["id"],
+                "name": component["name"].as_str().unwrap_or_default(),
+                "group": component["group"].as_str().unwrap_or(GUIDES),
+                "summary": component["summary"].as_str().unwrap_or_default(),
+                "docs": docs,
+                "types": component.get("types").filter(|types| types.is_array()).cloned().unwrap_or_else(|| json!([])),
+            })
+        })
+        .collect();
+    if components.iter().any(|component| component["group"] == GUIDES) {
+        groups.push(json!({ "id": GUIDES, "title": "Foundations and guides" }));
+    }
+    Some(json!({ "groups": groups, "components": components }).to_string())
 }
 
 /// The first of `candidates` that is a directory.
