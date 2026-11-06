@@ -2693,6 +2693,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * An operation's progress, drawn for a page
+         * @description The `OperationProgress` region as HTML: a page asks for it again while the operation runs.
+         */
         get: operations["operations.progress"];
         put?: never;
         post?: never;
@@ -6369,6 +6373,15 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

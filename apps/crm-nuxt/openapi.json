@@ -8527,6 +8527,7 @@
     },
     "/operations/{id}/progress": {
       "get": {
+        "description": "The `OperationProgress` region as HTML: a page asks for it again while the operation runs.",
         "operationId": "operations.progress",
         "parameters": [
           {
@@ -8551,12 +8552,26 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [
           {
             "bearer": []
           }
+        ],
+        "summary": "An operation's progress, drawn for a page",
+        "tags": [
+          "Operations"
         ]
       }
     }
