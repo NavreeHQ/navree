@@ -1085,7 +1085,19 @@ impl Domains {
             Ok(())
         })
         .await?;
-        self.get(id).await.or(Ok(view))
+        // A locking read, which sees what others committed since this unit
+        // of work's transaction first read: the winner may have closed the
+        // claim meanwhile (on MariaDB also while this transaction is open),
+        // and then a plain read on MySQL or MariaDB still shows it pending.
+        match models::Domain::query()
+            .where_(models::Domain::ID.eq(id))
+            .lock_for_update()
+            .first(&*rt.db)
+            .await
+        {
+            Ok(Some(row)) => Ok(self.view(&row.into_inner())),
+            _ => Ok(view),
+        }
     }
 
     /// Closes the other pending claims on `winner`'s host (see
