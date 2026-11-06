@@ -207,6 +207,48 @@ async fn every_route_is_documented_with_its_schemas() {
             );
         }
     }
+    // ... and the operations carry them as parameters too: `filter` (written
+    // `filter[field]=value`), `sort`, `search` and the paging.
+    let parameter_names = |path: &str| -> Vec<String> {
+        paths[path]["get"]["parameters"]
+            .as_array()
+            .map(|list| {
+                list.iter()
+                    .filter(|p| p["in"] == "query")
+                    .filter_map(|p| p["name"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    for path in ["/api/v1/companies", "/api/v1/contacts"] {
+        let names = parameter_names(path);
+        for expected in ["filter", "sort", "search", "page", "per_page"] {
+            assert!(names.iter().any(|n| n == expected), "{path}: {names:?}");
+        }
+    }
+    let companies_filter = paths["/api/v1/companies"]["get"]["parameters"]
+        .as_array()
+        .and_then(|list| list.iter().find(|p| p["name"] == "filter"))
+        .expect("a filter parameter");
+    assert_eq!(companies_filter["style"], "deepObject");
+    assert!(companies_filter["schema"]["properties"]["industry"].is_object());
+    // The export reads the filters but is not paged, and answers with a CSV file.
+    assert_eq!(
+        parameter_names("/api/v1/contacts/export"),
+        ["filter", "sort", "search"].map(str::to_owned)
+    );
+    assert!(
+        paths["/api/v1/contacts/export"]["get"]["responses"]["200"]["content"]["text/csv"]
+            ["schema"]
+            .is_object()
+    );
+    // The CRM's clients send a bearer token: the document has no cookie scheme.
+    assert_eq!(
+        doc["components"]["securitySchemes"]
+            .as_object()
+            .map(|schemes| schemes.keys().cloned().collect::<Vec<_>>()),
+        Some(vec!["bearer".to_owned()])
+    );
     // `__type` is the CASL subject type.
     assert_eq!(
         schemas["Company"]["properties"]["__type"]["enum"],

@@ -19,6 +19,7 @@ mod resource;
 mod service;
 
 use crm_core::{CrmCoreModule, User};
+use navree::api::{ModuleBuilderApiExt, RouteDoc};
 use navree::prelude::*;
 
 pub use controller::{MeController, UsersController};
@@ -39,6 +40,7 @@ pub struct UsersModule;
 impl UsersModule {
     /// The `roles` extension of the auth user resource.
     fn wire(&self, m: &mut ModuleBuilder) {
+        m.api_route(RouteDoc::get("/api/v1/users").list::<UserList>());
         m.user_resource_extension::<UserRolesExtension>();
     }
 }

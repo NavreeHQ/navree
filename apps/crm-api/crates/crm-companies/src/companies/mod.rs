@@ -6,6 +6,7 @@ mod resource;
 mod service;
 
 use crm_core::CrmCoreModule;
+use navree::api::{ModuleBuilderApiExt, RouteDoc};
 use navree::prelude::*;
 
 pub use controller::CompaniesController;
@@ -19,5 +20,13 @@ pub use service::CompanyService;
     providers = [CompanyService],
     controllers = [CompaniesController],
     exports = [CompanyService],
+    register = Self::wire,
 )]
 pub struct CompaniesModule;
+
+impl CompaniesModule {
+    /// The list query of `GET /api/v1/companies`, in the document.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.api_route(RouteDoc::get("/api/v1/companies").list::<CompanyList>());
+    }
+}

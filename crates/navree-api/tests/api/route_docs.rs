@@ -61,6 +61,23 @@ fn a_list_route_documents_its_query() {
 }
 
 #[test]
+fn a_route_that_picks_rows_without_paging_documents_filter_sort_and_search_only() {
+    let routes = [route("GET", "/api/v1/deals/export", None, false)];
+    let doc = document(
+        &routes,
+        &[RouteDoc::get("/api/v1/deals/export").filters::<Deals>()],
+        None,
+    );
+    let names: Vec<&str> = doc["paths"]["/api/v1/deals/export"]["get"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["name"].as_str())
+        .collect();
+    assert_eq!(names, ["filter", "sort", "search"]);
+}
+
+#[test]
 fn query_parameters_follow_the_path_parameters() {
     let routes = [route("GET", "/api/v1/deals/{id}/notes", None, false)];
     let doc = document(
@@ -133,6 +150,7 @@ fn another_success_status_replaces_the_default_one() {
 #[test]
 fn a_doc_can_add_a_response_with_a_type() {
     #[derive(navree_openapi::ToSchema)]
+    #[allow(dead_code)]
     struct Receipt {
         number: String,
     }

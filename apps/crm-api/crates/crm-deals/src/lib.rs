@@ -47,6 +47,8 @@ mod service;
 mod stages;
 
 use crm_core::CrmCoreModule;
+use navree::api::{ModuleBuilderApiExt, RouteDoc};
+use navree::openapi::{Parameter, Schema};
 use navree::prelude::*;
 
 pub use controller::DealsController;
@@ -73,6 +75,14 @@ impl DealsModule {
     /// The owner notifications (a queued listener of both events), their
     /// mail template and the deals part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
+        m.api_route(RouteDoc::get("/api/v1/deals").list::<DealList>());
+        // The board is not a list: `owner_id` is a plain parameter.
+        m.api_route(
+            RouteDoc::get("/api/v1/deals/board").query(
+                Parameter::query("owner_id", Schema::string().format("uuid"))
+                    .described("Only this owner's deals."),
+            ),
+        );
         m.listen::<DealAssigned, NotifyDealOwner>()
             .on::<DealWon, NotifyDealOwner>()
             .templates(notification::TEMPLATES);

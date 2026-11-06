@@ -289,8 +289,7 @@ pub(crate) fn build(
 }
 
 /// Whether `doc` describes `route`.
-fn doc_matches(doc: &RouteDoc, route: &(&RouteMeta, String)) -> bool {
-    let route = route.0;
+fn doc_matches(doc: &RouteDoc, route: &RouteMeta) -> bool {
     match &doc.target {
         Target::Name(name) => route.name.as_deref() == Some(name.as_str()),
         Target::Path { method, path } => {

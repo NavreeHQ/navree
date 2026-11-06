@@ -40,6 +40,7 @@ mod resource;
 mod service;
 
 use crm_core::CrmCoreModule;
+use navree::api::{ModuleBuilderApiExt, RouteDoc};
 use navree::prelude::*;
 
 pub use controller::ActivitiesController;
@@ -77,6 +78,7 @@ impl ActivitiesModule {
     /// The reminder command, its mail templates, the schedule and the
     /// activities part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
+        m.api_route(RouteDoc::get("/api/v1/activities").list::<ActivityList>());
         m.mcp_server::<ActivitiesMcp>();
         m.command(reminders::reminders_command());
         m.templates(&reminders::TEMPLATES);

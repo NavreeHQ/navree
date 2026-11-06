@@ -156,6 +156,18 @@ impl RouteDoc {
         self
     }
 
+    /// The `filter`, `sort` and `search` of `R`'s [`ListSpec`] and no paging: for a route that
+    /// reads the list query to pick rows but answers with all of them (a CSV export).
+    #[must_use]
+    pub fn filters<R: ListResource>(mut self) -> Self {
+        self.query.extend(
+            list_parameters(&R::SPEC)
+                .into_iter()
+                .filter(|parameter| matches!(parameter.name.as_str(), "filter" | "sort" | "search")),
+        );
+        self
+    }
+
     /// The status of the success response, when it is not the one `#[api]` says (a WebSocket
     /// upgrade answers 101).
     #[must_use]
