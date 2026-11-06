@@ -173,7 +173,7 @@ function measureSticky(root) {
   const el = /** @type {HTMLElement} */ (root);
   markScroll(root);
   // A table with nothing sticky but its boxes needs no offsets.
-  if (!root.querySelector('[data-sticky="1"],tr[data-sticky-row]')) return;
+  if (!root.querySelector('[data-sticky="1"],[data-sticky=e2],tr[data-sticky-row]')) return;
   let at = root.querySelector(`thead ${STICKY_SELECT}`)?.getBoundingClientRect().width || 0;
   el.style.setProperty("--s0", at + "px");
   const head = root.querySelector("thead");
@@ -183,6 +183,14 @@ function measureSticky(root) {
     if (name === "s" || name === "e" || name === "e1") continue;
     el.style.setProperty("--s" + name, at + "px");
     at += th.getBoundingClientRect().width;
+  }
+  // End columns the other way: each ends where those after it begin.
+  let end = root.querySelector("thead th[data-sticky=e]")?.getBoundingClientRect().width || 0;
+  for (const th of [...root.querySelectorAll("thead tr:not([data-slot=group-row]) th[data-sticky^=e]")].reverse()) {
+    const name = th.getAttribute("data-sticky");
+    if (name === "e") continue;
+    el.style.setProperty("--" + name, end + "px");
+    end += th.getBoundingClientRect().width;
   }
 }
 

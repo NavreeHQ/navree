@@ -27,7 +27,7 @@ use navree_orm::{
 };
 use serde_json::{Value as Json, json};
 
-use super::query::{FilterValue, SortTerm};
+use super::query::{FilterValue, SearchMode, SortTerm};
 use super::{
     BulkMode, BulkRefusal, BulkRequest, Column, Count, Direction, FilterBar, FilterKind, SavedView,
     TablePage, TableQuery, TableRow, Total, ValueKind, write_csv_field,
@@ -353,13 +353,25 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The search and filters, on `builder`.
     pub fn apply<M: Model>(&self, mut builder: Builder<M>) -> Builder<M> {
         if let Some(q) = &self.state.q {
-            let searches: Vec<Filter> = R::COLUMNS
-                .iter()
-                .filter(|column| column.search)
-                .map(|column| col_as::<String>(column.source).contains_ignore_case(q.clone()))
-                .collect();
-            if !searches.is_empty() {
-                builder = builder.where_(Filter::any(searches));
+            let searched = R::COLUMNS.iter().filter(|column| column.search);
+            match self.search_mode {
+                SearchMode::Contains => {
+                    let searches: Vec<Filter> = searched
+                        .map(|column| {
+                            col_as::<String>(column.source).contains_ignore_case(q.clone())
+                        })
+                        .collect();
+                    if !searches.is_empty() {
+                        builder = builder.where_(Filter::any(searches));
+                    }
+                }
+                SearchMode::Words => {
+                    let sources: Vec<&'static str> =
+                        searched.map(|column| column.source).collect();
+                    if !sources.is_empty() {
+                        builder = builder.where_full_text(sources, q.clone());
+                    }
+                }
             }
         }
         for active in &self.state.filters {

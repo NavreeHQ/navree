@@ -58,7 +58,8 @@ mod view;
 pub use csv::write_csv_field;
 pub use edit::EditCell;
 pub use query::{
-    ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SortTerm, TableQuery,
+    ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SearchMode, SortTerm,
+    TableQuery,
 };
 pub use region::Region;
 pub use saved::{SavedView, ViewOp, ViewPost};

@@ -796,3 +796,80 @@ async fn mongodb_counts_like_memory() {
     .await;
     mongo.database().drop().await.unwrap();
 }
+
+/// A measure per row of a table: one grouped query for the keys of a page, each key's
+/// series what `measure_by` gives for the same key, and a key that is a number works.
+#[tokio::test]
+async fn sqlite_measures_each_key_of_a_page_in_one_query() {
+    let dir = std::env::temp_dir().join(format!("ui-reports-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db = connect(format!("sqlite://{}?mode=rwc", dir.join("r.db").display())).await;
+    seed(
+        &db,
+        "CREATE TABLE rp_events (id BIGINT PRIMARY KEY, kind TEXT NOT NULL, amount BIGINT NOT NULL, at TEXT NOT NULL, at_s BIGINT NOT NULL)",
+    )
+    .await;
+    let report = &reports()[0].1;
+    let kinds = [
+        Value::String("opened".to_owned()),
+        Value::String("clicked".to_owned()),
+    ];
+    let rows = report
+        .measure_rows(SqlEvent::query(), "at", "kind", &kinds, Metric::Count, &db)
+        .await
+        .unwrap();
+    let grouped = report
+        .measure_by(
+            SqlEvent::query(),
+            "at",
+            "kind",
+            &["opened", "clicked"],
+            Metric::Count,
+            &db,
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2, "one series for each key, and no Other");
+    assert_eq!(rows[0], grouped[0]);
+    assert_eq!(rows[1], grouped[1]);
+    assert!(rows[0].iter().flatten().sum::<f64>() > 0.0);
+
+    // A key that is a number: three row ids, each counted in at most one period.
+    let ids = [Value::I64(1), Value::I64(2), Value::I64(3)];
+    let by_id = report
+        .measure_rows(SqlEvent::query(), "at", "id", &ids, Metric::Count, &db)
+        .await
+        .unwrap();
+    assert_eq!(by_id.len(), 3);
+    for series in &by_id {
+        assert_eq!(series.len(), report.buckets().len());
+        assert!(series.iter().flatten().sum::<f64>() <= 1.0, "{series:?}");
+    }
+
+    // No keys is no query; too many keys is refused; a column that is no plain name is too.
+    let none = report
+        .measure_rows(SqlEvent::query(), "at", "id", &[], Metric::Count, &db)
+        .await
+        .unwrap();
+    assert!(none.is_empty());
+    let many: Vec<Value> = (0..501).map(Value::I64).collect();
+    let refused = report
+        .measure_rows(SqlEvent::query(), "at", "id", &many, Metric::Count, &db)
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("at most 500"), "{refused}");
+    let refused = report
+        .measure_rows(
+            SqlEvent::query(),
+            "at",
+            "id; DROP TABLE rp_events",
+            &ids,
+            Metric::Count,
+            &db,
+        )
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("plain names"), "{refused}");
+    db.close().await.unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}

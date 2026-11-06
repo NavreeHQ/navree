@@ -2701,20 +2701,33 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     fn into_node(mut self) -> Node {
         self.local = self.local_columns();
         let state = &self.query.state;
-        // Sticky start columns are numbered, so the stylesheet can place each by
-        // its own offset variable.
+        // Sticky start columns are numbered from the start, and sticky end columns from the
+        // end, so the stylesheet can place each by its own offset variable. The row's menu,
+        // when there is one, is the last of the end columns (`e`): the one before it is `e1`.
+        // With no menu the last end column is `e` and the one before it `e1`. The sheet has
+        // four of each.
+        let menu = self.has_actions();
+        let ends = state
+            .cols
+            .iter()
+            .filter(|at| TableQuery::<R, F>::column(**at).sticky == Sticky::End)
+            .count();
         let mut starts = 0;
+        let mut ended = 0;
         let sticky: Vec<Option<String>> = state
             .cols
             .iter()
             .map(|at| match TableQuery::<R, F>::column(*at).sticky {
                 Sticky::No => None,
-                // The row's menu is the last sticky column; this one stays beside it.
-                Sticky::End => Some(if self.has_actions() {
-                    "e1".to_owned()
-                } else {
-                    "e".to_owned()
-                }),
+                Sticky::End => {
+                    ended += 1;
+                    let after = ends - ended;
+                    Some(match (after, menu) {
+                        (0, false) => "e".to_owned(),
+                        (after, false) => format!("e{}", after.min(4)),
+                        (after, true) => format!("e{}", (after + 1).min(4)),
+                    })
+                }
                 Sticky::Start => {
                     starts += 1;
                     Some(starts.to_string())
@@ -2751,6 +2764,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .uses(Uses::CORE.with(Uses::TABLE));
         if self.live_from.is_some() {
             root = root.uses(Uses::LIVE);
+        }
+        // Past one sticky end column, the offsets of the others are in the parts sheet.
+        if ends > 1 {
+            root = root.uses(Uses::PARTS_STYLES);
         }
         // The rows are written straight to a string, so the page is told here what their menus
         // need, whether or not this page of rows has any yet: a later page will.

@@ -170,3 +170,12 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
   & > [data-slot=flag]{--flag-w:20px}
 }
 [data-slot=flag-sprite]{position:absolute;width:0;height:0;overflow:hidden}
+
+/* A table with more than one sticky column at its end: each ends where the one after it
+   begins, as the table module measures (the numbers are the first guess, with a row menu of
+   2.75rem beside them). */
+[data-slot=table] [data-sticky=e1]{inset-inline-end:var(--e1,2.75rem)}
+[data-slot=table] [data-sticky=e2]{inset-inline-end:var(--e2,5.5rem)}
+[data-slot=table] [data-sticky=e3]{inset-inline-end:var(--e3,8.25rem)}
+[data-slot=table] [data-sticky=e4]{inset-inline-end:var(--e4,11rem)}
+[data-scrolled-end] [data-sticky=e2],[data-scrolled-end] [data-sticky=e3],[data-scrolled-end] [data-sticky=e4]{box-shadow:inset 1px 0 var(--line-2)}

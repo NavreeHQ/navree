@@ -627,3 +627,74 @@ fn a_flag_by_pointer_is_small_and_the_sprite_holds_each_flag_once() {
     // A code nobody knows is drawn in full, whatever is asked.
     assert!(!html(Flag::country("??").sprite()).contains("<use"));
 }
+
+#[derive(Clone, navree_ui::TableRow)]
+#[table(per = 10)]
+struct Ledger {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, sticky, label = "Account")]
+    account: String,
+    #[col(numeric, label = "Debit")]
+    debit: i64,
+    #[col(numeric, sticky_end, label = "Balance")]
+    balance: i64,
+    #[col(numeric, sticky_end, label = "Limit")]
+    limit: i64,
+}
+
+#[derive(Clone, navree_ui::TableRow)]
+#[table(per = 10)]
+struct OneEnd {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, label = "Account")]
+    account: String,
+    #[col(numeric, sticky_end, label = "Balance")]
+    balance: i64,
+}
+
+#[test]
+fn a_table_can_keep_several_columns_at_its_end_and_numbers_them_from_the_end() {
+    use navree_ui::{DataTable, RowAction, TableQuery};
+    let rows: Vec<Ledger> = (1..=3)
+        .map(|id| Ledger {
+            id,
+            account: format!("Gurdwara Road {id}"),
+            debit: id * 1_00_000,
+            balance: id * 2_50_000,
+            limit: id * 10_00_000,
+        })
+        .collect();
+    let query = TableQuery::<Ledger>::parse("/ledger", "");
+
+    // No row menu: the last column is `e`, the one before it `e1`.
+    let plain = html(DataTable::new("ledger", &query, &rows));
+    let heads = plain.split("<thead>").nth(1).and_then(|part| part.split("</thead>").next()).expect("a head");
+    assert_eq!(count(heads, r#"data-sticky="e1""#), 1, "{heads}");
+    assert_eq!(count(heads, r#"data-sticky="e""#), 1, "{heads}");
+    assert!(heads.find(r#"data-sticky="e1""#) < heads.find(r#"data-sticky="e""#), "balance comes before limit: {heads}");
+    assert_eq!(count(&plain, r#"data-sticky="e1""#), 1 + 3, "the head and a cell in each row: {plain}");
+    assert!(uses(DataTable::new("ledger", &query, &rows)).has(Uses::PARTS_STYLES));
+
+    // With a row menu, which is the last of them: the two columns are `e2` and `e1`.
+    let menu = html(
+        DataTable::new("ledger", &query, &rows)
+            .row_actions(|row: &Ledger| vec![RowAction::link("Open", format!("/ledger/{}", row.id))])
+            .csrf("tok"),
+    );
+    let heads = menu.split("<thead>").nth(1).and_then(|part| part.split("</thead>").next()).expect("a head");
+    for name in ["e2", "e1", "e"] {
+        assert_eq!(count(heads, &format!(r#"data-sticky="{name}""#)), 1, "{name}: {heads}");
+    }
+    assert!(
+        heads.find(r#"data-sticky="e2""#) < heads.find(r#"data-sticky="e1""#)
+            && heads.find(r#"data-sticky="e1""#) < heads.find(r#"data-sticky="e""#),
+        "{heads}"
+    );
+
+    // One column at the end needs nothing more than the sheet every page has.
+    let one: Vec<OneEnd> = vec![OneEnd { id: 1, account: "Sector 17".to_owned(), balance: 5_00_000 }];
+    let one_query = TableQuery::<OneEnd>::parse("/ledger", "");
+    assert!(!uses(DataTable::new("one", &one_query, &one)).has(Uses::PARTS_STYLES));
+}

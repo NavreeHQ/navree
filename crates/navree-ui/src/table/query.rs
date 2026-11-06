@@ -138,7 +138,28 @@ pub struct TableQuery<R, F = NoFilter> {
     pub(crate) path: String,
     pub(crate) state: State,
     pub(crate) filter: F,
+    pub(crate) search_mode: SearchMode,
     marker: PhantomData<fn() -> R>,
+}
+
+/// How the search box matches the columns marked `search`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SearchMode {
+    /// The text anywhere in the value, whatever its case: `LOWER(col) LIKE '%text%'`. It
+    /// works on every database with no index, and no index can serve it, so the whole
+    /// table is read. That is fine to some tens of thousands of rows; MySQL takes about
+    /// eight seconds at a million. The default.
+    #[default]
+    Contains,
+    /// The words of the text, in any order, through the database's full-text index:
+    /// PostgreSQL's text search, and `MATCH ... AGAINST` on MySQL and MariaDB over a
+    /// `FULLTEXT` index that covers exactly the searched columns. A million rows answer in
+    /// milliseconds. It finds words, not fragments (`renew` does not find `renewal`), and
+    /// SQLite has no full-text condition, so there it is an error at load. Create the
+    /// index in a migration: on MySQL `FULLTEXT (title, notes)` over the same columns, in
+    /// the same order, as the `#[col(search)]` fields.
+    Words,
 }
 
 /// Whether `name` is one of the list query's parameters, which the table reads from
@@ -648,6 +669,7 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {
             path: path.into(),
             state,
             filter,
+            search_mode: SearchMode::Contains,
             marker: PhantomData,
         }
     }
@@ -670,6 +692,35 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The page's path.
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    /// How the search box matches. [`SearchMode::Words`] answers a million rows in
+    /// milliseconds through a full-text index, where the default reads the whole table.
+    ///
+    /// ```
+    /// use navree_ui::table::SearchMode;
+    /// use navree_ui::{TableQuery, TableRow};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Customer {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     #[col(search, sortable)]
+    ///     name: String,
+    /// }
+    ///
+    /// let query = TableQuery::<Customer>::parse("/customers", "search=sharma")
+    ///     .search_mode(SearchMode::Words);
+    /// assert_eq!(query.search_mode_in_use(), SearchMode::Words);
+    /// ```
+    pub fn search_mode(mut self, mode: SearchMode) -> Self {
+        self.search_mode = mode;
+        self
+    }
+
+    /// The mode the search box matches in.
+    pub fn search_mode_in_use(&self) -> SearchMode {
+        self.search_mode
     }
 
     /// The first sort term: its column's name, and which way.
