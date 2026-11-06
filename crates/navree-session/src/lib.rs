@@ -126,5 +126,6 @@ pub use session::{Session, SessionError};
 const PRUNE_EVERY: u64 = 100;
 
 /// The cookie holding the CSRF token for JavaScript clients (not
-/// `HttpOnly`); send its URL-decoded value back as `X-XSRF-TOKEN`.
-pub const XSRF_COOKIE: &str = "XSRF-TOKEN";
+/// `HttpOnly`); send its URL-decoded value back as `X-XSRF-TOKEN`. The name
+/// is navree-http's ([`navree_http::csrf`]), which pages and forms use too.
+pub const XSRF_COOKIE: &str = navree_http::csrf::XSRF_COOKIE;

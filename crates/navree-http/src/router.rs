@@ -826,11 +826,11 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
         "if-none-match",
         "traceparent",
         "tracestate",
-        "x-csrf-token",
+        crate::csrf::CSRF_HEADER,
         "x-request-id",
         "x-requested-with",
         "x-socket-id",
-        "x-xsrf-token",
+        crate::csrf::XSRF_HEADER,
     ]
     .map(HeaderName::from_static);
     let expose_headers = [

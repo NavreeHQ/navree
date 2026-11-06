@@ -31,7 +31,7 @@ use crate::session::Session;
 use crate::{SameSite, SessionOptions, XSRF_COOKIE};
 
 /// The header carrying the CSRF token as is.
-static X_CSRF_TOKEN: HeaderName = HeaderName::from_static("x-csrf-token");
+static X_CSRF_TOKEN: HeaderName = HeaderName::from_static(navree_http::csrf::CSRF_HEADER);
 
 /// At most this many same-name session cookies of a request are tried.
 const MAX_SESSION_COOKIES: usize = 4;
@@ -40,7 +40,7 @@ const MAX_SESSION_COOKIES: usize = 4;
 static SEC_FETCH_SITE: HeaderName = HeaderName::from_static("sec-fetch-site");
 
 /// The header carrying the URL-encoded `XSRF-TOKEN` cookie value.
-static X_XSRF_TOKEN: HeaderName = HeaderName::from_static("x-xsrf-token");
+static X_XSRF_TOKEN: HeaderName = HeaderName::from_static(navree_http::csrf::XSRF_HEADER);
 
 /// What the session layer needs, resolved once at boot.
 pub(crate) struct SessionManager {
@@ -368,8 +368,9 @@ impl CsrfFailure {
     }
 }
 
-/// The field a plain HTML form carries the CSRF token in.
-pub const CSRF_FIELD: &str = "_csrf";
+/// The field a plain HTML form carries the CSRF token in (navree-http's
+/// name, which navree-ui's forms use too).
+pub const CSRF_FIELD: &str = navree_http::csrf::CSRF_FIELD;
 
 /// The most of a urlencoded body read to find the token field. A larger body
 /// has to send the header (a script can).
