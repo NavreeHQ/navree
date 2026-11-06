@@ -385,3 +385,10 @@ path = "fuzz_targets/ui_theme.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "ui_surface_validate"
+path = "fuzz_targets/ui_surface_validate.rs"
+test = false
+doc = false
+bench = false

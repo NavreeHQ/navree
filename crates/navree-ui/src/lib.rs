@@ -83,6 +83,7 @@ pub mod dates;
 pub mod flags;
 pub mod flow;
 pub mod form;
+pub mod genui;
 pub mod html;
 pub mod icons;
 pub mod island;
