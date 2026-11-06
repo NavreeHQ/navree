@@ -428,10 +428,11 @@ export const sections: DocsSection[] = [
   {
     slug: "testing",
     title: "Testing",
-    description: "Test routes, the database and workspace isolation with fakes, and run the conformity checks that keep an app consistent.",
+    description: "Test routes, Navree UI pages, the database and workspace isolation with fakes, and run the conformity checks that keep an app consistent.",
     pages: [
       "getting-started",
       "http-tests",
+      "ui-pages",
       "database-tests",
       "fakes",
       "isolation-tests",

@@ -1,0 +1,162 @@
+---
+title: "Testing Navree UI pages"
+description: "Test a Navree UI page with TestView in a plain test, over HTTP in process, on its live stream, and in a real browser, from the quickest check to the most real."
+---
+
+A Navree UI page is a value until it is rendered, and the handler that returns it is a handler like any other. So most of a page can be tested without a browser. This page goes from the quickest check to the most real one:
+
+| To check | Use | It runs |
+|---|---|---|
+| What a page or a component shows, what a click does, what a form decodes to | [`TestView`](#a-page-in-a-plain-test) | In a plain test, with no app |
+| A route end to end: the redirect to sign in, the HTML a browser gets, a form post, the CSRF check | [`TestApp` and `TestClient`](#a-route-over-http) | In process, on a fresh SQLite file |
+| A live region and its event stream | [The same client](#a-live-region-and-its-stream) | In process |
+| What only a browser settles: focus, layout, scripts, JavaScript off | [`navree-browser`](#in-a-real-browser) | In a real Chrome |
+
+## A page in a plain test
+
+`TestView` reads a page the way a person would. It needs no app, no database and no server:
+
+```rust
+use navree::ui::test_view::Clicked;
+use navree::ui::{Button, TestView, View};
+
+let page = TestView::of(&View::new("Deal").body(Button::primary("Edit").href("/edit")));
+assert!(page.sees("Edit"));
+assert_eq!(page.click("Edit"), Clicked::Link("/edit".to_owned()));
+```
+
+`TestView::of_node` takes one component instead of a page. `click(name)` finds a link or a button by its text or its `aria-label` and says what it does: `Clicked::Link`, `Submit`, `Commands`, `Target` (a dialog or popover it opens natively) or `Nothing`.
+
+It drives a form too. `fill` types into a control by its name, and `submit_as::<T>()` decodes what the form would post through the same code `Submit<T>` uses, so a test sees the field errors or the struct your handler would get. `NewDeal` here is a [form struct](/docs/ui/forms/):
+
+```rust
+let view = View::new("New deal").body(FormView::<NewDeal>::new().post("/deals").submit("Create"));
+let page = TestView::of(&view);
+
+assert!(page.sees("Deal name"));
+assert_eq!(page.click("Create"), Clicked::Submit);
+
+let errors = page.clone().fill("title", "").fill("amount", "1").submit_as::<NewDeal>().unwrap_err();
+assert!(errors.contains_key("title"));
+
+let deal = page.fill("title", "Acme").fill("amount", "1").submit_as::<NewDeal>().unwrap();
+assert_eq!(deal.title, "Acme");
+```
+
+`shows_error(Some("title"))` asks whether a control shows an error, and `form_values()` lists what the form would post. A control that is not filled posts its own value, and a select starts on its first choice.
+
+`TestView` knows nothing about CSS, scripts or layout. For what a page loads, ask the view: `View::uses()` says which modules the markup needs, and `View::to_html()` is the page as sent, so a page that should ship no script can assert `!html.contains("<script")`.
+
+## A route over HTTP
+
+Boot the real app with `TestApp` and send requests through the whole pipeline, as in [HTTP tests](/docs/testing/http-tests/). A browser asks for a page with `Accept: text/html`, so add the header to see what a browser sees. A client that asks for JSON gets the JSON error from the same route.
+
+```rust
+let (url, _db) = temp_sqlite_url();
+let sources = ConfigSources::new()
+    .set("app.key", generate_key())
+    .set("database.url", url)
+    .set("database.migrate_on_boot", true)
+    .set("http.per_ip_rate_limit", Value::Null)
+    .set("session.store", "database")
+    .set("ui.sign_in_redirect", true);
+let app = TestApp::from_builder(shop::app(sources)).await;
+let client = app.client();
+
+// A guest asking for a page is sent to sign in, and back to the page afterwards.
+let response = client.get("/customers").header("accept", "text/html").send().await;
+assert_eq!(response.status(), 303);
+assert_eq!(response.header("location"), Some("/sign-in?next=%2Fcustomers"));
+
+// A client that wants JSON gets the JSON error.
+client.get("/customers").send().await.assert_status(401);
+```
+
+A browser signs in by opening the form, which gives it a session and the token to post back, and then posting the form. A test does the same with one client, which keeps the cookies:
+
+```rust
+client.get("/sign-in").header("accept", "text/html").send().await.assert_status(200);
+let response = client
+    .post("/sign-in")
+    .header("accept", "text/html")
+    .xsrf()
+    .form(&[("email", email), ("password", password), ("next", "/customers")])
+    .send()
+    .await;
+assert_eq!(response.status(), 303);
+```
+
+`.xsrf()` sends the session's CSRF token back, as the page's script or a hidden field does. Leave it out to prove the check works: a post without the token is a 403, and so is one marked `sec-fetch-site: cross-site`. See [sessions and CSRF](/docs/basics/sessions-and-csrf/#csrf-protection).
+
+A form that fails comes back as the page again, with what was typed and the errors under the fields, and a status of 422. The body holds the text, so assert on it. (To the runtime, the same rejection is a 422 with ops that put the errors under the fields.) A good post answers with a redirect, as the next example shows.
+
+```rust
+let rejected = client.post("/customers/new").header("accept", "text/html").xsrf().form(&fields).send().await;
+assert_eq!(rejected.status(), 422);
+assert!(rejected.text().contains("field-error"));
+```
+
+### With and without JavaScript
+
+The runtime marks every action and fragment fetch with a request header, `x-navree-ui`. A route that answers with a `Reply` sends the runtime a list of ops, and a browser with JavaScript off a redirect or a page. A test chooses by adding the header or leaving it out, so one handler is tested on both paths:
+
+```rust
+// With JavaScript off: a redirect.
+let plain = client.post("/customers/new").header("accept", "text/html").xsrf().form(&fields).send().await;
+assert_eq!(plain.status(), 303);
+
+// With the runtime: ops, as `application/vnd.navree.ops+json`.
+let ops = client.post("/customers/new").header("x-navree-ui", "1").xsrf().form(&fields).send().await;
+assert_eq!(ops.header("content-type"), Some("application/vnd.navree.ops+json"));
+```
+
+## A live region and its stream
+
+A live region is two things: a source that answers with the HTML to show, and a stream that says when to fetch it again. Both are plain routes.
+
+The source is a `GET` like any page, so test it as one: what it shows for a signed-in reader, and that it shows what that reader may see. The stream is an event stream. `send_stream` returns the response with its body unread, so a test can make a change and then wait for the stream to speak:
+
+```rust
+let response = client
+    .get("/customers/events")
+    .header("accept", "text/event-stream")
+    .send_stream()
+    .await;
+assert_eq!(response.status(), 200);
+let mut stream = response.into_body().into_data_stream();
+
+add(&client, "Live Test", "live.test@example.com").await;
+
+let mut heard = String::new();
+while !heard.contains("event: customers") {
+    let chunk = tokio::time::timeout(Duration::from_secs(10), stream.next())
+        .await
+        .expect("the stream spoke in time")
+        .expect("the stream is still open")
+        .expect("a chunk");
+    heard.push_str(&String::from_utf8_lossy(&chunk));
+}
+```
+
+An event is a nudge and carries no data, so assert on its name, and test what the page shows in the source's own test. A guest asking for the stream is a 401, which is worth a line: `app.client().get("/customers/events").header("accept", "text/event-stream").send().await.assert_status(401)`.
+
+## In a real browser
+
+Some things only a browser settles: where focus lands, whether a layout holds on a phone, how a page behaves with JavaScript off or after the runtime morphs it. [Browser testing](/docs/packages/browser-testing/) drives Chrome from the same `cargo test` run, with automatic waiting, phone viewports and a screenshot when a step fails. Use it for the few journeys that matter most, and leave the rest to the faster levels above.
+
+Navree runs the toolkit itself through a larger set of browser suites, in `e2e/ui`, in Chromium, Firefox and WebKit. They prove what your pages rely on: a morph keeps focus, the caret, the selection and typed values; components are checked with JavaScript off; each state passes the axe accessibility checks at a phone width and a desktop width, in light and dark; and the runtime holds up against hostile markup and a hostile server, under the page's content security policy. You don't repeat them. They run against the toolkit's proof app, with `npm test` in `e2e/ui` once the proof app is serving.
+
+<LinkCards>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    The client, the assertions, acting as a user.
+  </LinkCard>
+  <LinkCard href="/docs/packages/browser-testing/" title="Browser testing">
+    Drive a real Chrome from your Rust tests.
+  </LinkCard>
+  <LinkCard href="/docs/ui/overview/" title="Navree UI">
+    The toolkit, its budgets and its security rules.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/ui-runtime/" title="The UI runtime">
+    What the browser does with a page once it arrives.
+  </LinkCard>
+</LinkCards>
