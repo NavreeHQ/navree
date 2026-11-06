@@ -15,7 +15,7 @@ fn html(upload: Upload) -> String {
     render(&upload.into())
 }
 
-// UI-GENUI-021: a standalone upload is a real multipart form, so it posts with JavaScript off.
+// A standalone upload is a real multipart form, so it posts with JavaScript off.
 #[test]
 fn an_upload_with_an_action_is_a_multipart_form_around_a_native_file_input() {
     let out = html(photo());
@@ -36,7 +36,7 @@ fn an_upload_with_an_action_is_a_multipart_form_around_a_native_file_input() {
     assert!(out.contains(r#"data-slot="upload-actions""#), "{out}");
 }
 
-// UI-GENUI-021: without an action the upload is a field inside the caller's form.
+// Without an action the upload is a field inside the caller's form.
 #[test]
 fn an_upload_without_an_action_is_a_field_for_the_form_around_it() {
     let out = html(Upload::new("resume", "Résumé").limits(UploadLimits::new(5 * MB)));
@@ -47,7 +47,7 @@ fn an_upload_without_an_action_is_a_field_for_the_form_around_it() {
     assert!(out.contains(r#"type="file" name="resume""#), "{out}");
 }
 
-// UI-GENUI-021: the input is named by the label, described by the hint and the status.
+// The input is named by the label, described by the hint and the status.
 #[test]
 fn the_input_is_named_and_described() {
     let out = html(photo());
@@ -77,7 +77,7 @@ fn the_input_is_named_and_described() {
     );
 }
 
-// UI-GENUI-021: the limits are said in words, and a single file does not say "one file".
+// The limits are said in words, and a single file does not say "one file".
 #[test]
 fn the_limits_are_written_as_a_sentence() {
     let out = html(photo());
@@ -108,7 +108,7 @@ fn the_limits_are_written_as_a_sentence() {
     assert!(!any.contains("accept="), "{any}");
 }
 
-// UI-GENUI-021: the limits object itself.
+// The limits object itself.
 #[test]
 fn limits_are_clamped_and_cleaned() {
     assert_eq!(UploadLimits::new(10).max_files(0).files(), 1);
@@ -133,7 +133,7 @@ fn limits_are_clamped_and_cleaned() {
     assert!(UploadLimits::new(10).allows("anything/at-all"));
 }
 
-// UI-GENUI-021: sizes read the same on the server and in the page.
+// Sizes read the same on the server and in the page.
 #[test]
 fn sizes_are_written_in_binary_units_without_a_trailing_zero() {
     for (bytes, text) in [
@@ -151,7 +151,7 @@ fn sizes_are_written_in_binary_units_without_a_trailing_zero() {
     }
 }
 
-// UI-GENUI-021: the page learns the limits as hints; the server decides.
+// The page learns the limits as hints; the server decides.
 #[test]
 fn the_markup_carries_the_limits_as_hints_for_the_module() {
     let out = html(
@@ -176,7 +176,7 @@ fn the_markup_carries_the_limits_as_hints_for_the_module() {
     );
 }
 
-// UI-GENUI-021: a chunk address from outside the site goes nowhere.
+// A chunk address from outside the site goes nowhere.
 #[test]
 fn a_chunk_address_that_leaves_the_site_is_refused() {
     for bad in [
@@ -196,7 +196,7 @@ fn a_chunk_address_that_leaves_the_site_is_refused() {
     assert!(!out.contains("javascript"), "{out}");
 }
 
-// UI-GENUI-021: the words reach the module as JSON, and every word is the app's to translate.
+// The words reach the module as JSON, and every word is the app's to translate.
 #[test]
 fn the_words_for_the_module_are_json_and_translatable() {
     let labels = UploadLabels {
@@ -228,7 +228,7 @@ fn the_words_for_the_module_are_json_and_translatable() {
     assert!(out.contains("Profile photo"), "{out}");
 }
 
-// UI-GENUI-021: the module clones a row it is given; the page's words and icons are in it.
+// The module clones a row it is given; the page's words and icons are in it.
 #[test]
 fn a_template_holds_the_row_the_module_clones() {
     let out = html(photo());
@@ -255,7 +255,7 @@ fn a_template_holds_the_row_the_module_clones() {
     assert!(template.matches("data-ui-sr").count() >= 3, "{template}");
 }
 
-// UI-GENUI-021: files the server already has are rows of the list.
+// Files the server already has are rows of the list.
 #[test]
 fn files_already_stored_are_listed_as_attachments() {
     let out = html(
@@ -284,7 +284,7 @@ fn files_already_stored_are_listed_as_attachments() {
     assert!(!list.contains("<button"), "{list}");
 }
 
-// UI-GENUI-021: a stored file removes itself with a post through the page's one post form.
+// A stored file removes itself with a post through the page's one post form.
 #[test]
 fn a_removable_file_posts_through_the_pages_post_form_and_needs_the_core_runtime() {
     let upload = photo().file(UploadedFile::new("a.png").remove("/files/17/remove"));
@@ -298,7 +298,7 @@ fn a_removable_file_posts_through_the_pages_post_form_and_needs_the_core_runtime
     assert!(page.to_html().contains(r#"id="ui-post""#));
 }
 
-// UI-GENUI-021: hostile file names, labels and hints are text.
+// Hostile file names, labels and hints are text.
 #[test]
 fn hostile_text_is_escaped_everywhere() {
     let evil = "<img src=x onerror=alert(1)><script>alert(2)</script>";
@@ -320,7 +320,7 @@ fn hostile_text_is_escaped_everywhere() {
     );
 }
 
-// UI-GENUI-021: states.
+// States.
 #[test]
 fn disabled_invalid_required_and_compact_are_said_in_attributes() {
     let out = html(photo().disabled(true));
@@ -347,7 +347,7 @@ fn disabled_invalid_required_and_compact_are_said_in_attributes() {
     assert!(out.contains("data-compact"), "{out}");
 }
 
-// UI-GENUI-021: what a page loads.
+// What a page loads.
 #[test]
 fn a_page_with_an_upload_loads_the_upload_module_and_its_styles_only() {
     let page = View::new("x").body(photo());
@@ -369,7 +369,7 @@ fn a_page_with_an_upload_loads_the_upload_module_and_its_styles_only() {
     );
 }
 
-// UI-GENUI-021: the token reaches the plain form.
+// The token reaches the plain form.
 #[test]
 fn the_session_token_goes_in_a_hidden_field_of_the_form() {
     let out = html(photo().csrf("tok\"><x>"));
@@ -384,7 +384,7 @@ fn the_session_token_goes_in_a_hidden_field_of_the_form() {
     );
 }
 
-// UI-GENUI-021: the module reads the markup it keeps through a morph.
+// The module reads the markup it keeps through a morph.
 #[test]
 fn the_module_may_mark_the_root_ready_and_a_morph_keeps_the_mark() {
     let out = html(photo());

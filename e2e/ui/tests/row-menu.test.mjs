@@ -96,7 +96,6 @@ for (const browserName of browsers) {
       return key;
     }
 
-    // UI-GENUI-012
     test("a row's button names its row and opens a menu with the roles of a menu", async () => {
       await post("/__t/reset");
       const { page, close } = await open("/deals?sort=title&per_page=10");
@@ -116,7 +115,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("the keys of a menu: arrows, Home, End, type-ahead, Escape back to the button, Tab out", async () => {
       await post("/__t/reset");
       const { page, close } = await open("/deals?sort=title&per_page=10");
@@ -147,7 +145,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("View is a link, Archive posts, Delete posts and is marked, each from the keyboard", async () => {
       await post("/__t/reset");
       const { page, close } = await open("/deals?sort=title&per_page=10");
@@ -174,7 +171,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("a pointer opens it with focus on the menu, and hover lights an item", async () => {
       const { page, close } = await open("/deals?sort=title&per_page=10");
       const key = (await keys(page))[0];
@@ -188,7 +184,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("a thousand rows: a menu each, no control tied to a form, and the first opens at once", async () => {
       const { page, close } = await open("/thousand?per_page=1000");
       assert.equal(await page.locator("#thousand [role=menu]").count(), 1000);
@@ -203,7 +198,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("a menu on the last visible row opens above its button when there is no room below", async () => {
       const { page, close } = await open("/deals?per_page=100", { viewport: { width: 1440, height: 700 } });
       const key = (await keys(page)).at(-1);
@@ -215,7 +209,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("a table with no actions loads no menus module", async () => {
       const { page, close } = await open("/viewer");
       assert.equal(await page.locator("[data-slot=cell-actions]").count(), 0);
@@ -223,7 +216,6 @@ for (const browserName of browsers) {
       await close();
     });
 
-    // UI-GENUI-012
     test("with JavaScript off the button opens the menu, a post is a form that works, and Escape closes it", async () => {
       await post("/__t/reset");
       const { page, close } = await open("/deals?sort=title&per_page=10", { js: false });
@@ -245,7 +237,6 @@ for (const browserName of browsers) {
       ["dark on a phone", { viewport: PHONE }],
       ["light on a phone", { light: true, viewport: PHONE }],
     ]) {
-      // UI-GENUI-012
       test(`axe finds nothing with a row's menu open (${label})`, async () => {
         await post("/__t/reset");
         const { page, close } = await open("/deals?sort=title&per_page=10", options);

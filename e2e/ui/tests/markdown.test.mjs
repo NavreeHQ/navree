@@ -6,7 +6,6 @@
 //   cargo run --release -p ui-proof -- serve          # UI_PROOF_URL, default http://127.0.0.1:8090
 //   UI_BROWSERS=chromium,firefox,webkit node --test tests/markdown.test.mjs
 //
-// UI-GENUI-024
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

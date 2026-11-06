@@ -144,7 +144,7 @@ async fn stored_files(disk: &Disk) -> Vec<String> {
 
 // ---- A plain post ------------------------------------------------------------------------------
 
-// UI-GENUI-021: a file inside the limits is stored under a name of the server's own.
+// A file inside the limits is stored under a name of the server's own.
 #[tokio::test]
 async fn a_good_file_is_stored_under_a_random_name_with_the_type_it_has() {
     let (uploads, disk) = uploads(images(MB, 2));
@@ -182,7 +182,7 @@ async fn a_good_file_is_stored_under_a_random_name_with_the_type_it_has() {
     );
 }
 
-// UI-GENUI-021: the type is read from the bytes, never from the name or the header.
+// The type is read from the bytes, never from the name or the header.
 #[tokio::test]
 async fn a_renamed_program_and_a_script_dressed_as_an_image_are_refused() {
     let (uploads, disk) = uploads(images(MB, 3));
@@ -221,7 +221,7 @@ async fn a_renamed_program_and_a_script_dressed_as_an_image_are_refused() {
     assert!(stored_files(&disk).await.is_empty(), "nothing was written");
 }
 
-// UI-GENUI-021: the size is counted while the bytes stream in, and a partial file is thrown away.
+// The size is counted while the bytes stream in, and a partial file is thrown away.
 #[tokio::test]
 async fn a_file_over_the_limit_is_refused_and_leaves_nothing_behind() {
     let (uploads, disk) = uploads(images(MB, 2));
@@ -245,7 +245,7 @@ async fn a_file_over_the_limit_is_refused_and_leaves_nothing_behind() {
     assert!(stored_files(&disk).await.is_empty());
 }
 
-// UI-GENUI-021: an empty file is an empty file, not a stored zero.
+// An empty file is an empty file, not a stored zero.
 #[tokio::test]
 async fn an_empty_file_is_refused_in_words() {
     let (uploads, disk) = uploads(images(MB, 1));
@@ -261,7 +261,7 @@ async fn an_empty_file_is_refused_in_words() {
     assert!(stored_files(&disk).await.is_empty());
 }
 
-// UI-GENUI-021: the count limit holds for one request, and the app can say how many places are left.
+// The count limit holds for one request, and the app can say how many places are left.
 #[tokio::test]
 async fn files_past_the_count_are_refused_one_by_one() {
     let (uploads, disk) = uploads(images(MB, 2));
@@ -291,7 +291,7 @@ async fn files_past_the_count_are_refused_one_by_one() {
     assert_eq!(body["refused"][0]["code"], "too_many");
 }
 
-// UI-GENUI-021: a name is for display only.
+// A name is for display only.
 #[tokio::test]
 async fn hostile_file_names_are_cut_to_a_plain_name_and_never_become_a_path() {
     let (uploads, disk) = uploads(UploadLimits::new(MB).max_files(10));
@@ -330,7 +330,7 @@ async fn hostile_file_names_are_cut_to_a_plain_name_and_never_become_a_path() {
     }
 }
 
-// UI-GENUI-021: two files with one name are two files.
+// Two files with one name are two files.
 #[tokio::test]
 async fn two_files_with_one_name_are_stored_apart() {
     let (uploads, disk) = uploads(images(MB, 2));
@@ -348,7 +348,7 @@ async fn two_files_with_one_name_are_stored_apart() {
     assert_eq!(files.len(), 2, "{files:?}");
 }
 
-// UI-GENUI-021: text parts are not files, and an empty choice is nothing.
+// Text parts are not files, and an empty choice is nothing.
 #[tokio::test]
 async fn text_parts_and_an_empty_choice_are_not_files() {
     let (uploads, disk) = uploads(images(MB, 2));
@@ -368,7 +368,7 @@ async fn text_parts_and_an_empty_choice_are_not_files() {
     assert!(stored_files(&disk).await.is_empty());
 }
 
-// UI-GENUI-021: when the whole body is refused, what the request had stored is taken back.
+// When the whole body is refused, what the request had stored is taken back.
 #[tokio::test]
 async fn a_body_over_the_route_limit_removes_what_the_request_stored() {
     let (uploads, disk) = uploads(images(MB, 3));
@@ -389,7 +389,7 @@ async fn a_body_over_the_route_limit_removes_what_the_request_stored() {
     );
 }
 
-// UI-GENUI-021: the route's own limit follows the upload's.
+// The route's own limit follows the upload's.
 #[test]
 fn the_route_limits_follow_the_upload_limits() {
     let (uploads, _) = uploads(images(2 * MB, 1));
@@ -399,7 +399,7 @@ fn the_route_limits_follow_the_upload_limits() {
 
 // ---- Words -------------------------------------------------------------------------------------
 
-// UI-GENUI-021: every refusal is in the app's words.
+// Every refusal is in the app's words.
 #[tokio::test]
 async fn refusals_use_the_apps_labels() {
     let disk = memory_disk();
@@ -422,7 +422,7 @@ async fn refusals_use_the_apps_labels() {
 
 // ---- What the page gets back ---------------------------------------------------------------------
 
-// UI-GENUI-021: the module asks for JSON; a browser with no script gets a redirect and a toast.
+// The module asks for JSON; a browser with no script gets a redirect and a toast.
 #[test]
 fn the_answer_is_json_for_the_module_and_a_redirect_for_a_plain_post() {
     let received = Received {
@@ -454,7 +454,7 @@ fn the_answer_is_json_for_the_module_and_a_redirect_for_a_plain_post() {
     );
 }
 
-// UI-GENUI-021: a toast says what happened.
+// A toast says what happened.
 #[test]
 fn the_summary_says_what_was_kept_and_what_was_not() {
     let labels = UploadLabels::default();
@@ -500,7 +500,7 @@ async fn put_all(
     }
 }
 
-// UI-GENUI-021: the server names the part and the number of parts; the id cannot be guessed.
+// The server names the part and the number of parts; the id cannot be guessed.
 #[tokio::test]
 async fn a_session_names_the_part_size_and_an_id_that_cannot_be_guessed() {
     let (uploads, _) = uploads(UploadLimits::new(20 * MB));
@@ -526,7 +526,7 @@ async fn a_session_names_the_part_size_and_an_id_that_cannot_be_guessed() {
     assert_ne!(ticket.id, other.id);
 }
 
-// UI-GENUI-021: the real flow, with a small part so a test file needs only a few.
+// The real flow, with a small part so a test file needs only a few.
 #[tokio::test]
 async fn a_file_sent_in_parts_is_put_together_and_the_parts_are_removed() {
     let disk = memory_disk();
@@ -562,7 +562,7 @@ async fn a_file_sent_in_parts_is_put_together_and_the_parts_are_removed() {
     assert_eq!(again.code, UploadCode::Unknown);
 }
 
-// UI-GENUI-021: somebody else's session is not found, whatever they send.
+// Somebody else's session is not found, whatever they send.
 #[tokio::test]
 async fn another_users_session_and_made_up_ids_are_not_found() {
     let disk = memory_disk();
@@ -612,7 +612,7 @@ async fn another_users_session_and_made_up_ids_are_not_found() {
         .unwrap();
 }
 
-// UI-GENUI-021: the size of every part is the one the server named.
+// The size of every part is the one the server named.
 #[tokio::test]
 async fn parts_of_the_wrong_size_or_number_are_refused() {
     let disk = memory_disk();
@@ -670,7 +670,7 @@ async fn parts_of_the_wrong_size_or_number_are_refused() {
         .unwrap();
 }
 
-// UI-GENUI-021: a file with a part missing is not finished, and can still be.
+// A file with a part missing is not finished, and can still be.
 #[tokio::test]
 async fn a_missing_part_stops_the_finish_and_a_retry_completes_it() {
     let disk = memory_disk();
@@ -688,7 +688,7 @@ async fn a_missing_part_stops_the_finish_and_a_retry_completes_it() {
     assert_eq!(stored.size, data.len() as u64);
 }
 
-// UI-GENUI-021: the totals are held at the start, before a byte is sent.
+// The totals are held at the start, before a byte is sent.
 #[tokio::test]
 async fn a_file_over_the_limit_or_empty_is_refused_when_it_begins() {
     let disk = memory_disk();
@@ -708,7 +708,7 @@ async fn a_file_over_the_limit_or_empty_is_refused_when_it_begins() {
     );
 }
 
-// UI-GENUI-021: the type is checked on the assembled bytes, with the plain post's sniffer.
+// The type is checked on the assembled bytes, with the plain post's sniffer.
 #[tokio::test]
 async fn parts_that_make_a_program_are_refused_and_removed() {
     let disk = memory_disk();
@@ -732,7 +732,7 @@ async fn parts_that_make_a_program_are_refused_and_removed() {
     );
 }
 
-// UI-GENUI-021: a person can take back a file they were sending.
+// A person can take back a file they were sending.
 #[tokio::test]
 async fn aborting_removes_the_parts() {
     let disk = memory_disk();
@@ -748,7 +748,7 @@ async fn aborting_removes_the_parts() {
     assert!(disk.list("photos").await.unwrap().is_empty());
 }
 
-// UI-GENUI-021: a session that is not finished in time is gone, and sweeping finds it.
+// A session that is not finished in time is gone, and sweeping finds it.
 #[tokio::test]
 async fn an_old_session_expires_and_a_sweep_removes_it() {
     let disk = memory_disk();
@@ -773,7 +773,7 @@ async fn an_old_session_expires_and_a_sweep_removes_it() {
     assert!(disk.list("photos").await.unwrap().is_empty());
 }
 
-// UI-GENUI-021: a name from the client is cut to a plain name when a session begins.
+// A name from the client is cut to a plain name when a session begins.
 #[tokio::test]
 async fn the_name_of_a_chunked_file_is_a_plain_name() {
     let disk = memory_disk();
@@ -795,7 +795,7 @@ async fn the_name_of_a_chunked_file_is_a_plain_name() {
     );
 }
 
-// UI-GENUI-021: the two ways in cannot disagree: the same name and bytes get the same answer.
+// The two ways in cannot disagree: the same name and bytes get the same answer.
 #[tokio::test]
 async fn a_plain_post_and_a_chunked_one_accept_and_refuse_the_same_files() {
     let cases: Vec<(&str, Vec<u8>, bool)> = vec![
@@ -845,7 +845,7 @@ async fn a_plain_post_and_a_chunked_one_accept_and_refuse_the_same_files() {
     }
 }
 
-// UI-GENUI-021: the answer to a failed step is JSON the module can read.
+// The answer to a failed step is JSON the module can read.
 #[tokio::test]
 async fn an_error_is_json_with_a_message() {
     let (uploads, _) = uploads(images(MB, 1));

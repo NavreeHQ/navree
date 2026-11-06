@@ -658,7 +658,7 @@ for (const name of NAMES) {
       );
     });
 
-    // ---- The app's live hub: several names, and coming back from the last id (MOD-004) --------
+    // ---- The app's live hub: several names, and coming back from the last id --------
 
     /** Two regions on one stream: `r` hears `r`, `s` hears `s`. */
     const pair = (r = "r", s = "s") =>
@@ -697,7 +697,7 @@ for (const name of NAMES) {
       for (const res of [...srv.sse.clients]) res.destroy();
     };
 
-    test("MOD-004 a region listens for each of its names on one connection, and only those", async () => {
+    test("a region listens for each of its names on one connection, and only those", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(pair("conversation.42 clock", "customer.7"))));
         srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
@@ -721,7 +721,7 @@ for (const name of NAMES) {
       });
     });
 
-    test("MOD-004 a hub stream that comes back resumes from its last id and fetches only what it missed", async () => {
+    test("a hub stream that comes back resumes from its last id and fetches only what it missed", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
         srv.routes.set("/frag-r", (req, res) => srv.html(res, "r" + srv.count("/frag-r")));
@@ -747,7 +747,7 @@ for (const name of NAMES) {
       });
     });
 
-    test("MOD-004 a hub that cannot resume starts fresh, and every region catches up once", async () => {
+    test("a hub that cannot resume starts fresh, and every region catches up once", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
         srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
@@ -765,7 +765,7 @@ for (const name of NAMES) {
       });
     });
 
-    test("MOD-004 a hub that says nothing when it comes back is caught up with after 2.5 s", async () => {
+    test("a hub that says nothing when it comes back is caught up with after 2.5 s", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(pair())));
         srv.routes.set("/frag-r", (req, res) => srv.html(res, "r1"));
@@ -785,7 +785,7 @@ for (const name of NAMES) {
       });
     });
 
-    test("MOD-004 a stream that is not the hub is caught up at once, ids or not, and never asked to resume", async () => {
+    test("a stream that is not the hub is caught up at once, ids or not, and never asked to resume", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
         srv.routes.set("/frag", (req, res) => srv.html(res, "v" + srv.count("/frag")));
@@ -806,7 +806,7 @@ for (const name of NAMES) {
       });
     });
 
-    test("MOD-004 a changed session reopens the hub stream fresh, never resuming the last reader's", async () => {
+    test("a changed session reopens the hub stream fresh, never resuming the last reader's", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(pair() + `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>sign in</button></div>`), { "set-cookie": "XSRF-TOKEN=a; Path=/" }));
         srv.routes.set("/auth", (req, res) => srv.html(res, `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>signed in</button></div>`, { "set-cookie": "XSRF-TOKEN=b; Path=/" }));

@@ -1,7 +1,6 @@
 //! The one-time code field: its markup, what a page with it loads, and what the server
 //! makes of a posted code.
 
-// UI-GENUI-020
 
 use navree_ui::{Field, InputOtp, OtpError, OtpKind, OtpRules, Uses, View, assets, render};
 
@@ -18,7 +17,6 @@ fn attr_of(html: &str, name: &str) -> Option<String> {
     Some(tag[at..at + tag[at..].find('"')?].to_owned())
 }
 
-// UI-GENUI-020
 #[test]
 fn a_code_field_is_one_text_input_that_a_phone_can_fill_in() {
     let out = html(InputOtp::new("code", 6));
@@ -41,7 +39,6 @@ fn a_code_field_is_one_text_input_that_a_phone_can_fill_in() {
     assert!(!out.contains("password"), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn the_slots_are_drawn_by_the_wrapper_and_not_by_extra_inputs() {
     let out = html(InputOtp::new("code", 6));
@@ -54,7 +51,6 @@ fn the_slots_are_drawn_by_the_wrapper_and_not_by_extra_inputs() {
     assert!(!out.contains("<script"), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn letters_and_digits_ask_for_the_text_keyboard_and_capitals() {
     let out = html(InputOtp::new("code", 8).kind(OtpKind::Alphanumeric));
@@ -69,7 +65,6 @@ fn letters_and_digits_ask_for_the_text_keyboard_and_capitals() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_length_is_held_to_three_through_twelve_in_the_field_and_in_the_check() {
     for (asked, held) in [
@@ -89,7 +84,6 @@ fn a_length_is_held_to_three_through_twelve_in_the_field_and_in_the_check() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_group_divides_the_slots_only_where_it_fits() {
     let grouped = html(InputOtp::new("code", 6).group(3));
@@ -104,7 +98,6 @@ fn a_group_divides_the_slots_only_where_it_fits() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_page_with_a_code_field_loads_its_script_and_styles_and_nothing_else() {
     let page = View::new("Sign in").body(InputOtp::new("code", 6));
@@ -126,7 +119,6 @@ fn a_page_with_a_code_field_loads_its_script_and_styles_and_nothing_else() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_page_without_one_loads_neither_the_script_nor_the_styles() {
     let page = View::new("Plain").body(Field::new("name", "Name"));
@@ -136,7 +128,6 @@ fn a_page_without_one_loads_neither_the_script_nor_the_styles() {
     assert!(!out.contains(assets::OTP_STYLES_URL), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn a_field_gives_the_input_its_id_its_label_and_its_error() {
     let out = html_node(
@@ -171,7 +162,6 @@ fn html_node(node: impl Into<navree_ui::Node>) -> String {
     render(&node.into())
 }
 
-// UI-GENUI-020
 #[test]
 fn states_are_flags_on_the_input() {
     let out = html(
@@ -203,7 +193,6 @@ fn states_are_flags_on_the_input() {
     assert!(!on.contains("data-ui-submit"), "{on}");
 }
 
-// UI-GENUI-020
 #[test]
 fn a_value_is_kept_only_as_far_as_the_code_could_hold_it() {
     assert_eq!(
@@ -243,7 +232,6 @@ fn a_value_is_kept_only_as_far_as_the_code_could_hold_it() {
     );
 }
 
-// UI-GENUI-020
 #[test]
 fn hostile_text_is_escaped_or_dropped() {
     let out = html(
@@ -256,7 +244,6 @@ fn hostile_text_is_escaped_or_dropped() {
     assert_eq!(attr_of(&out, "value").as_deref(), Some("12"), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn the_root_attribute_and_id_go_to_the_input() {
     let out = html(
@@ -278,7 +265,6 @@ fn digits(length: u8) -> OtpRules {
     OtpRules::new(length, OtpKind::Digits)
 }
 
-// UI-GENUI-020
 #[test]
 fn a_posted_code_is_trimmed_and_read_without_its_separators() {
     for posted in [
@@ -298,7 +284,6 @@ fn a_posted_code_is_trimmed_and_read_without_its_separators() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_code_of_the_wrong_length_or_with_nothing_in_it_is_refused() {
     assert_eq!(digits(6).check(""), Err(OtpError::Empty));
@@ -309,7 +294,6 @@ fn a_code_of_the_wrong_length_or_with_nothing_in_it_is_refused() {
     assert_eq!(digits(4).check("482915"), Err(OtpError::WrongLength));
 }
 
-// UI-GENUI-020
 #[test]
 fn only_ascii_digits_are_digits() {
     for posted in [
@@ -350,7 +334,6 @@ fn only_ascii_digits_are_digits() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_code_with_letters_reads_capitals_from_ascii_letters_only() {
     let rules = OtpRules::new(6, OtpKind::Alphanumeric);
@@ -375,7 +358,6 @@ fn a_code_with_letters_reads_capitals_from_ascii_letters_only() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_huge_post_is_not_walked() {
     assert_eq!(
@@ -399,7 +381,6 @@ fn a_huge_post_is_not_walked() {
     );
 }
 
-// UI-GENUI-020
 #[test]
 fn nothing_but_ascii_digits_of_the_right_length_ever_comes_out() {
     // Every character of the first three planes, at the end of a code that is one short.
@@ -426,7 +407,6 @@ fn nothing_but_ascii_digits_of_the_right_length_ever_comes_out() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn the_field_and_the_check_hold_the_same_rules() {
     let otp = InputOtp::new("code", 40).kind(OtpKind::Alphanumeric);
@@ -436,7 +416,6 @@ fn the_field_and_the_check_hold_the_same_rules() {
     assert_eq!(rules.check("ABCDEFGHJKL"), Err(OtpError::WrongLength));
 }
 
-// UI-GENUI-020
 #[test]
 fn a_refusal_says_what_is_wrong_in_words() {
     for error in [

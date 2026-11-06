@@ -1,4 +1,4 @@
-//! MOD-004: live parts of a page on the app's live hub. A `LiveStream` names
+//! Live parts of a page on the app's live hub. A `LiveStream` names
 //! the page's topics and channels once; each region, table, list and sidebar
 //! group listens for its own names on it (several at once), and loads the
 //! live module.
@@ -30,7 +30,6 @@ fn inbox_stream() -> LiveStream {
 
 #[test]
 fn the_stream_is_the_hubs_route_with_the_pages_topics_and_channels() {
-    // MOD-004
     assert_eq!(LIVE_STREAM_PATH, "/broadcasting/stream");
     let stream = inbox_stream().with_channels(["private-crm.deals"]);
     assert_eq!(
@@ -41,7 +40,6 @@ fn the_stream_is_the_hubs_route_with_the_pages_topics_and_channels() {
 
 #[test]
 fn a_region_listens_for_one_name_or_several_on_one_stream() {
-    // MOD-004
     let stream = inbox_stream();
     let list = render(
         &Region::new("list")
@@ -96,7 +94,6 @@ fn a_region_listens_for_one_name_or_several_on_one_stream() {
 
 #[test]
 fn every_live_part_loads_the_live_module() {
-    // MOD-004
     let stream = LiveStream::topics(["orders", "activity"]);
     let rows = vec![Row {
         id: 1,
@@ -165,7 +162,6 @@ fn every_live_part_loads_the_live_module() {
 
 #[test]
 fn a_sidebar_group_keeps_its_counts_on_the_hub() {
-    // MOD-004
     let stream = LiveStream::topics(["conversations"]);
     let shell = Shell::new("Inbox").group(
         NavGroup::new("Inboxes")

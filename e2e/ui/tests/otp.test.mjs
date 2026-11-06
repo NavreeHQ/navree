@@ -4,7 +4,6 @@
 // pixels), groups, twelve boxes on a phone, right to left, JavaScript off, the server's
 // reading of a posted code, and axe in dark and light at 1440 and 390 px.
 //
-// UI-GENUI-020
 //
 //   cargo run --release -p ui-proof -- serve          # UI_PROOF_URL, default http://127.0.0.1:8090
 //   UI_BROWSERS=chromium,firefox,webkit node --test tests/otp.test.mjs

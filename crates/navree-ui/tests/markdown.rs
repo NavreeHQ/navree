@@ -1,7 +1,6 @@
 //! Markdown and code blocks on a page: what a page loads for them, what they write, and
 //! how a real reply from a model reads. The hostile cases are in `security.rs`.
 
-// UI-GENUI-024
 
 use navree_ui::{CodeBlock, Markdown, MarkdownLabels, Uses, View, assets, render};
 

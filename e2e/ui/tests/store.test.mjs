@@ -369,7 +369,7 @@ for (const name of NAMES) {
       await page.done();
     });
 
-    test("MOD-004 every live part of a page listens on the app's live hub, on one connection", async () => {
+    test("every live part of a page listens on the app's live hub, on one connection", async () => {
       for (const [path, region] of [["/", "activity-region"], ["/orders", "orders"], ["/inventory", "products"]]) {
         const page = await open(path);
         await live(page, region);

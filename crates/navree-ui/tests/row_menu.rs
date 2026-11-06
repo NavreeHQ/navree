@@ -53,7 +53,6 @@ fn draw(rows: &[Row], with: impl Fn(&Row) -> Vec<RowAction>) -> String {
     render(&table(&query, rows, with).into())
 }
 
-// UI-GENUI-012
 #[test]
 fn a_rows_actions_are_a_menu_opened_by_a_button_that_names_the_row() {
     let html = draw(&rows(2), actions);
@@ -86,7 +85,6 @@ fn a_rows_actions_are_a_menu_opened_by_a_button_that_names_the_row() {
     assert_eq!(html.matches(r#"role="menuitem""#).count(), 8, "{html}");
 }
 
-// UI-GENUI-012
 #[test]
 fn a_link_is_a_menu_item_and_a_post_is_a_small_form_with_the_token_around_a_menu_item() {
     let html = draw(&rows(1), actions);
@@ -117,7 +115,6 @@ fn a_link_is_a_menu_item_and_a_post_is_a_small_form_with_the_token_around_a_menu
     assert!(!html.contains(r#"form="ui-post""#), "{html}");
 }
 
-// UI-GENUI-012
 #[test]
 fn an_action_that_cannot_be_taken_stays_in_the_menu_and_does_nothing() {
     let html = draw(&rows(1), actions);
@@ -130,7 +127,6 @@ fn an_action_that_cannot_be_taken_stays_in_the_menu_and_does_nothing() {
     assert!(!html.contains("/deals/1/waive"), "{html}");
 }
 
-// UI-GENUI-012
 #[test]
 fn the_buttons_words_are_the_tables_and_come_with_the_rows_first_column() {
     let query = TableQuery::<Row>::parse("/deals", "per=1000");
@@ -143,7 +139,6 @@ fn the_buttons_words_are_the_tables_and_come_with_the_rows_first_column() {
     assert!(html.contains(r#"aria-label="Deal 1 ke kaam""#), "{html}");
 }
 
-// UI-GENUI-012
 #[test]
 fn text_from_the_row_and_from_the_actions_is_escaped_and_an_unsafe_link_goes_nowhere() {
     let mut data = rows(1);
@@ -160,7 +155,6 @@ fn text_from_the_row_and_from_the_actions_is_escaped_and_an_unsafe_link_goes_now
     assert!(html.contains("&lt;i&gt;Open&lt;/i&gt;"), "{html}");
 }
 
-// UI-GENUI-012
 #[test]
 fn a_row_with_no_actions_draws_no_menu_at_all() {
     let html = draw(&rows(2), |row| {
@@ -185,7 +179,6 @@ fn tied(html: &str) -> usize {
     html.matches(" form=\"").count()
 }
 
-// UI-GENUI-012
 #[test]
 fn rows_add_no_form_attribute_and_no_control_to_a_shared_form() {
     let few = draw(&rows(3), actions);
@@ -197,7 +190,6 @@ fn rows_add_no_form_attribute_and_no_control_to_a_shared_form() {
     assert_eq!(many.matches("<form method=\"post\"").count(), 300 * 2);
 }
 
-// UI-GENUI-012
 #[test]
 fn a_thousand_rows_keep_every_id_apart_and_every_button_tied_to_its_menu() {
     let html = draw(&rows(1000), actions);
@@ -222,7 +214,6 @@ fn a_thousand_rows_keep_every_id_apart_and_every_button_tied_to_its_menu() {
     assert_eq!(ids.len(), 2000, "an id is used twice");
 }
 
-// UI-GENUI-012
 #[test]
 fn a_table_loads_the_menus_module_only_when_its_rows_have_a_menu() {
     let query = TableQuery::<Row>::parse("/deals", "per=1000");

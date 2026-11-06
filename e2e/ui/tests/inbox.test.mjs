@@ -385,7 +385,7 @@ for (const name of NAMES) {
       await page.done();
     });
 
-    test("MOD-004 a conversation's page listens on the app's live hub: the lists, its conversation, its customer and the clock, on one connection", async () => {
+    test("a conversation's page listens on the app's live hub: the lists, its conversation, its customer and the clock, on one connection", async () => {
       const id = await firstOpen();
       const page = await open(`/inbox/${id}`);
       await live(page, "conversation-list");

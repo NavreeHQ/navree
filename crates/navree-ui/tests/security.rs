@@ -1302,7 +1302,7 @@ async fn markup_the_app_wrote_asks_for_no_more_than_four_either() {
 
 // ---- Markdown ------------------------------------------------------------------------------
 //
-// UI-GENUI-024: text from a model or a visitor is Markdown, and Markdown must not be a way
+// Text from a model or a visitor is Markdown, and Markdown must not be a way
 // to put markup, a script, a request to another site or a link to one into the page.
 
 /// Every `href` value in `html`.

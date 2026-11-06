@@ -223,7 +223,6 @@ mod tests {
 
     #[test]
     fn a_stream_names_its_topics_and_channels_once_and_drops_bad_ones() {
-        // MOD-004
         let stream = LiveStream::topics(["orders", "orders", "has space", "ui:live", ""])
             .with_channels(["private-crm.deals", "private-a=b"])
             .with_topics(["stats"]);
@@ -247,7 +246,7 @@ mod tests {
 
     #[test]
     fn a_live_part_listens_for_several_names() {
-        // MOD-004: the inbox's heading hears its conversation and the clock.
+        // The inbox's heading hears its conversation and the clock.
         let stream = LiveStream::topics(["conversation.42", "clock"]);
         let live = stream.on("conversation.42").event("clock").event("clock");
         assert_eq!(live.events(), ["conversation.42", "clock"]);

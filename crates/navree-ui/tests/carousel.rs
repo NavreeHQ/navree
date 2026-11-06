@@ -1,7 +1,6 @@
 //! The carousel: its roles and labels, the ids that tie its parts together, the
 //! markup that works with no script, and what a page with one loads.
 
-// UI-GENUI-020
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -36,7 +35,6 @@ fn values(html: &str, name: &str) -> Vec<String> {
     out
 }
 
-// UI-GENUI-020
 #[test]
 fn a_carousel_is_a_labelled_region_of_slides() {
     let out = html(offers("c"));
@@ -64,7 +62,6 @@ fn a_carousel_is_a_labelled_region_of_slides() {
     assert!(out.contains("Phulkari dupatta") && out.contains("Desi ghee, 1 kg"));
 }
 
-// UI-GENUI-020
 #[test]
 fn the_track_can_be_reached_and_scrolled_by_keyboard_and_names_its_slides() {
     let out = html(offers("c"));
@@ -74,7 +71,6 @@ fn the_track_can_be_reached_and_scrolled_by_keyboard_and_names_its_slides() {
     );
 }
 
-// UI-GENUI-020
 #[test]
 fn previous_and_next_are_buttons_that_name_the_track_they_move() {
     let out = html(offers("c"));
@@ -93,7 +89,6 @@ fn previous_and_next_are_buttons_that_name_the_track_they_move() {
     assert!(out.find("data-carousel=\"next\"").unwrap() < out.find("carousel-track").unwrap());
 }
 
-// UI-GENUI-020
 #[test]
 fn the_words_can_be_set_for_another_language() {
     let punjabi = CarouselLabels {
@@ -109,7 +104,6 @@ fn the_words_can_be_set_for_another_language() {
     assert!(out.contains(r#"aria-label="ਸਲਾਈਡਾਂ""#), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn pickers_are_tabs_that_are_links_to_their_slides() {
     let out = html(offers("c").pickers());
@@ -139,7 +133,6 @@ fn pickers_are_tabs_that_are_links_to_their_slides() {
     assert!(!out.contains(r#"aria-label="1 of 3""#), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn a_picker_is_named_by_its_slide_title_or_its_number() {
     let out = html(
@@ -152,7 +145,6 @@ fn a_picker_is_named_by_its_slide_title_or_its_number() {
     assert!(out.contains(r#"aria-label="Slide 2""#), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn pickers_are_left_out_where_they_would_not_make_sense() {
     // Several slides in view at once: a tab for each would claim panels that are all showing.
@@ -167,7 +159,6 @@ fn pickers_are_left_out_where_they_would_not_make_sense() {
     assert!(one.contains(r#"aria-label="1 of 1""#), "{one}");
 }
 
-// UI-GENUI-020
 #[test]
 fn ids_are_unique_and_tied_on_a_page_with_two_carousels() {
     let page = html_of((
@@ -192,7 +183,6 @@ fn html_of(nodes: impl navree_ui::IntoNodes) -> String {
     render(&navree_ui::Node::list(nodes))
 }
 
-// UI-GENUI-020
 #[test]
 fn rotation_always_comes_with_a_pause_button_and_a_quiet_live_region() {
     let out = html(offers("c").autoplay(Duration::from_secs(5)));
@@ -227,7 +217,6 @@ fn rotation_always_comes_with_a_pause_button_and_a_quiet_live_region() {
     assert!(still.contains(r#"aria-live="polite""#), "{still}");
 }
 
-// UI-GENUI-020
 #[test]
 fn rotation_is_held_between_two_seconds_and_a_minute() {
     for (asked, held) in [
@@ -246,7 +235,6 @@ fn rotation_is_held_between_two_seconds_and_a_minute() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn looping_orientation_and_slides_in_view_are_attributes() {
     let out = html(offers("c").loop_around());
@@ -283,7 +271,6 @@ fn looping_orientation_and_slides_in_view_are_attributes() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_page_with_a_carousel_loads_its_script_and_styles_and_nothing_else() {
     let page = View::new("Offers").body(offers("c").pickers().autoplay(Duration::from_secs(5)));
@@ -305,7 +292,6 @@ fn a_page_with_a_carousel_loads_its_script_and_styles_and_nothing_else() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_page_without_one_loads_neither() {
     let page = View::new("Plain").body(Text::new("Nothing to slide."));
@@ -317,7 +303,6 @@ fn a_page_without_one_loads_neither() {
     );
 }
 
-// UI-GENUI-020
 #[test]
 fn the_markup_needs_no_script_to_be_used() {
     let out = html(offers("c").pickers());
@@ -330,7 +315,6 @@ fn the_markup_needs_no_script_to_be_used() {
     assert!(!out.contains("data-ready"), "{out}");
 }
 
-// UI-GENUI-020
 #[test]
 fn hostile_text_is_escaped_in_every_place_it_can_go() {
     let hostile = r#""><script>alert(1)</script>"#;
@@ -359,7 +343,6 @@ fn hostile_text_is_escaped_in_every_place_it_can_go() {
     }
 }
 
-// UI-GENUI-020
 #[test]
 fn a_slide_keeps_whatever_it_is_given() {
     let out = html(
@@ -374,7 +357,6 @@ fn a_slide_keeps_whatever_it_is_given() {
     );
 }
 
-// UI-GENUI-020
 #[test]
 fn a_carousel_with_no_slides_draws_nothing() {
     assert_eq!(html(Carousel::new("c", "Empty")), "");

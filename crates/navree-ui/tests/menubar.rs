@@ -62,7 +62,6 @@ fn orders_menu() -> ContextMenu {
         )
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_is_a_region_and_a_menu_that_the_module_opens() {
     let html = render(&orders_menu().into());
@@ -95,7 +94,6 @@ fn a_context_menu_is_a_region_and_a_menu_that_the_module_opens() {
     ids_are_unique_and_tied(&html);
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_region_takes_the_keyboard_only_when_asked() {
     let plain = render(&orders_menu().into());
@@ -110,7 +108,6 @@ fn a_context_menu_region_takes_the_keyboard_only_when_asked() {
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_loads_the_menus_module_and_its_own_and_only_what_it_uses() {
     let plain = page(orders_menu());
@@ -144,7 +141,6 @@ fn a_context_menu_loads_the_menus_module_and_its_own_and_only_what_it_uses() {
     assert!(with_sub.to_html().contains(OVERLAY_URL));
 }
 
-// UI-GENUI-019
 #[test]
 fn a_page_without_these_menus_loads_none_of_their_module() {
     let plain = page(Button::primary("Go").href("/x"));
@@ -156,7 +152,6 @@ fn a_page_without_these_menus_loads_none_of_their_module() {
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_has_the_entries_of_a_dropdown_menu() {
     let html = render(
@@ -183,7 +178,6 @@ fn a_context_menu_has_the_entries_of_a_dropdown_menu() {
     ids_are_unique_and_tied(&html);
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_escapes_every_text_and_refuses_an_unsafe_link() {
     let html = render(
@@ -200,7 +194,6 @@ fn a_context_menu_escapes_every_text_and_refuses_an_unsafe_link() {
     assert!(!html.contains("javascript"), "{html}");
 }
 
-// UI-GENUI-019
 #[test]
 fn a_context_menu_of_five_hundred_items_draws_them_all() {
     let mut menu = ContextMenu::new("big", "Cities").content("Area");
@@ -240,7 +233,6 @@ fn editor_bar() -> Menubar {
         .link("Help", "/help")
 }
 
-// UI-GENUI-019
 #[test]
 fn a_menubar_is_a_menubar_of_menu_buttons_each_tied_to_its_menu() {
     let html = render(&editor_bar().into());
@@ -280,7 +272,6 @@ fn a_menubar_is_a_menubar_of_menu_buttons_each_tied_to_its_menu() {
     ids_are_unique_and_tied(&html);
 }
 
-// UI-GENUI-019
 #[test]
 fn a_menubar_works_without_script_every_button_is_a_tab_stop_and_opens_its_popover() {
     let html = render(&editor_bar().into());
@@ -295,7 +286,6 @@ fn a_menubar_works_without_script_every_button_is_a_tab_stop_and_opens_its_popov
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_disabled_menubar_menu_stays_in_the_bar_and_opens_nothing() {
     let html = render(&editor_bar().into());
@@ -308,7 +298,6 @@ fn a_disabled_menubar_menu_stays_in_the_bar_and_opens_nothing() {
     assert!(!html.contains(r#"id="editor-bar-m3""#), "{html}");
 }
 
-// UI-GENUI-019
 #[test]
 fn a_bar_level_link_is_a_menuitem_that_goes_to_its_page() {
     let html = render(&editor_bar().into());
@@ -318,7 +307,6 @@ fn a_bar_level_link_is_a_menuitem_that_goes_to_its_page() {
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_menubar_loads_the_menus_overlay_and_its_own_module_and_not_the_core_runtime() {
     let bar = page(
@@ -339,7 +327,6 @@ fn a_menubar_loads_the_menus_overlay_and_its_own_module_and_not_the_core_runtime
     assert!(page(editor_bar()).uses().has(Uses::CORE));
 }
 
-// UI-GENUI-019
 #[test]
 fn a_menubar_escapes_every_text_and_refuses_an_unsafe_link() {
     let html = render(
@@ -358,7 +345,6 @@ fn a_menubar_escapes_every_text_and_refuses_an_unsafe_link() {
     assert!(!html.contains("data:text"), "{html}");
 }
 
-// UI-GENUI-019
 #[test]
 fn a_menubar_with_nothing_in_it_and_a_very_wide_one_both_draw() {
     let empty = render(&Menubar::new("e", "Nothing").into());
@@ -401,7 +387,6 @@ fn site_menu() -> NavigationMenu {
         .item(NavMenuItem::link("Docs", "/docs").current(true))
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_is_a_nav_of_links_and_disclosure_buttons_not_a_menu() {
     let html = render(&site_menu().into());
@@ -434,7 +419,6 @@ fn a_navigation_menu_is_a_nav_of_links_and_disclosure_buttons_not_a_menu() {
     ids_are_unique_and_tied(&html);
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_marks_the_current_page_and_the_section_that_holds_it() {
     let html = render(&site_menu().into());
@@ -448,7 +432,6 @@ fn a_navigation_menu_marks_the_current_page_and_the_section_that_holds_it() {
     assert!(!html[start..company].contains("data-active"), "{html}");
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_panel_holds_links_with_their_words_and_a_featured_block() {
     let html = render(&site_menu().into());
@@ -476,7 +459,6 @@ fn a_navigation_menu_panel_holds_links_with_their_words_and_a_featured_block() {
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_opens_its_panels_with_no_script_and_loads_its_own_module() {
     let page = page(site_menu());
@@ -510,7 +492,6 @@ fn page_of_links() -> View {
     page(NavigationMenu::new("n", "Links").item(NavMenuItem::link("Home", "/")))
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_escapes_every_text_and_refuses_an_unsafe_link() {
     let html = render(
@@ -535,7 +516,6 @@ fn a_navigation_menu_escapes_every_text_and_refuses_an_unsafe_link() {
     );
 }
 
-// UI-GENUI-019
 #[test]
 fn a_navigation_menu_of_many_panels_keeps_every_id_apart() {
     let mut menu = NavigationMenu::new("big", "Big");

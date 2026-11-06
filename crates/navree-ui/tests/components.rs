@@ -300,7 +300,6 @@ fn all() -> Vec<(&'static str, Node)> {
             )
             .into(),
     ));
-    // UI-GENUI-019, UI-GENUI-020, UI-GENUI-021, UI-GENUI-024
     out.push((
         "markdown",
         Markdown::new("**Sat Sri Akal** [docs](/docs)").into(),
