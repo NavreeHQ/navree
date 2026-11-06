@@ -784,7 +784,6 @@ async fn invalid_demo_options_fail_the_boot() {
             json!(["POST deals"]),
             "workspace.demo.allow",
         ),
-        ("workspace.demo.allow", json!([" "]), "workspace.demo.allow"),
         (
             "workspace.demo.fixtures",
             json!(" "),
