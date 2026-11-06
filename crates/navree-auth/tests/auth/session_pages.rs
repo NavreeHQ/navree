@@ -139,7 +139,7 @@ async fn the_setup_page_sets_two_factor_up_for_a_user_a_policy_requires_it_of() 
     .await
     .assert_status(422)
     .text();
-    assert!(wrong.contains("That code didn't work."), "{wrong}");
+    assert!(wrong.contains("That code didn&#39;t work."), "{wrong}");
     let secret_again = first_code(&wrong);
     assert_ne!(secret, secret_again, "a new key");
     whoami(&browser)
@@ -354,7 +354,7 @@ async fn an_emailed_code_signs_a_browser_in() {
     .await
     .assert_status(422)
     .text();
-    assert!(wrong.contains("That code didn't work."), "{wrong}");
+    assert!(wrong.contains("That code didn&#39;t work."), "{wrong}");
     whoami(&browser).await.assert_status(401);
 
     let response = post_form(
