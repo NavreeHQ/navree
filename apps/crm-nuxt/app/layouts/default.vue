@@ -15,9 +15,11 @@ import { useCurrentUser } from "@/features/auth/queries";
  * Everything behind sign-in: loads the user (a 401 goes to /login through the
  * API client), connects real time and renders the shell. The user's CASL rules
  * come from the `@navree/nuxt` module, which loads them once the user is signed
- * in; everything that asks `can(...)` re-renders when they arrive.
+ * in; the shell waits for them (`useAbilityReady`) so no screen or button is drawn
+ * from an empty rule set and then changes.
  */
 const user = useCurrentUser();
+const abilitiesReady = useAbilityReady();
 
 const unauthenticated = computed(() => isNavreeError(user.error.value) && user.error.value.status === 401);
 </script>
@@ -25,7 +27,7 @@ const unauthenticated = computed(() => isNavreeError(user.error.value) && user.e
 <template>
   <a href="#content" class="skip-link">Skip to content</a>
   <ApiUnavailable v-if="user.isError.value && !unauthenticated" @retry="user.refetch()" />
-  <ShellSkeleton v-else-if="!user.data.value" />
+  <ShellSkeleton v-else-if="!user.data.value || !abilitiesReady" />
   <div v-else class="flex min-h-dvh">
     <AppSidebar :user="user.data.value" />
     <div class="flex min-w-0 flex-1 flex-col">

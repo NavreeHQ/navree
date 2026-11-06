@@ -18,6 +18,11 @@ export default defineNuxtPlugin({
     const ready = provideAbilityReady(nuxtApp.vueApp);
 
     const load = async () => {
+      // Not known yet whether anyone is signed in: nothing is loaded, and nothing is decided.
+      if (auth.status.value === "unknown") {
+        ready.value = false;
+        return;
+      }
       if (!auth.signedIn.value) {
         ability.update([]);
         ready.value = true;
@@ -32,7 +37,7 @@ export default defineNuxtPlugin({
         ready.value = true;
       }
     };
-    watch([auth.signedIn, workspace.workspace], () => void load(), { immediate: true });
+    watch([auth.status, workspace.workspace], () => void load(), { immediate: true });
     return { provide: { ability } };
   },
 });

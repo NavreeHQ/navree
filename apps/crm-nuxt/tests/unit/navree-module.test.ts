@@ -93,11 +93,12 @@ describe("the Navree module runs the backend-for-frontend", () => {
     expect(config).toMatch(/fs:\s*\{\s*allow:/);
   });
 
-  it("lets Nitro bundle the linked packages", () => {
+  it("lets Nitro bundle the linked packages, with Nitro's own h3", () => {
     const config = read("nuxt.config.ts");
     for (const name of ["@navree/nuxt", "@navree/bff", "@navree/client"]) {
       expect(config).toMatch(new RegExp(`inline:\\s*\\[[^\\]]*"${name}"`));
     }
+    expect(config).toMatch(/alias:\s*\{\s*h3\s*\}/);
   });
 });
 
@@ -125,6 +126,11 @@ describe("the app carries no copy of the packages' code", () => {
 
   it("opens no socket and builds no ability itself", () => {
     expect(filesMatching("app", /from ["']pusher-js["']|new Pusher\(|createMongoAbility|abilitiesPlugin/)).toEqual([]);
+  });
+
+  it("maps validation errors through the module's applyFieldErrors, and waits for the rules before drawing the shell", () => {
+    expect(read("app/lib/api/form-errors.ts")).toContain('from "@navree/nuxt/vue"');
+    expect(read("app/layouts/default.vue")).toContain("useAbilityReady()");
   });
 
   it("signs in, listens and checks permissions through the module", () => {

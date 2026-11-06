@@ -24,7 +24,8 @@ const READY: InjectionKey<Readonly<Ref<boolean>>> = Symbol("navree-ability-ready
 /**
  * Provides the "rules loaded" flag to the app and returns the ref that sets it. `true` once the
  * rules for the current user and workspace are in, `false` while they load (after sign-in and after
- * a workspace switch). Signed out there is nothing to load, so it is `true`.
+ * a workspace switch) and while it is not yet known whether anyone is signed in. Signed out there is
+ * nothing to load, so it is `true`.
  */
 export function provideAbilityReady(app: App): Ref<boolean> {
   const ready = ref(false);

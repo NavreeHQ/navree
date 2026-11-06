@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { navreeOptions } from "./navree.options";
@@ -5,6 +7,23 @@ import { navreeOptions } from "./navree.options";
 /** This app, and the Navree front-end packages (`packages/js`) that are installed into it with `link:` (see README). */
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const navreePackages = fileURLToPath(new URL("../../packages/js", import.meta.url));
+
+/**
+ * The `h3` that Nitro (Nuxt's server) is built on. `@navree/nuxt` is linked from the checkout, so its
+ * server handlers would otherwise bundle the `h3` of `packages/js/nuxt/node_modules` beside Nitro's own.
+ * `undefined` when it can't be found, which leaves the bundler to resolve it.
+ */
+function nitroH3(): string | undefined {
+  try {
+    const fromApp = createRequire(import.meta.url);
+    const fromNuxt = createRequire(fromApp.resolve("nuxt/package.json"));
+    const fromNitro = createRequire(fromNuxt.resolve("nitropack/package.json"));
+    return dirname(fromNitro.resolve("h3/package.json"));
+  } catch {
+    return undefined;
+  }
+}
+const h3 = nitroH3();
 
 /**
  * Navree CRM on Nuxt 4.
@@ -98,5 +117,7 @@ export default defineNuxtConfig({
     compressPublicAssets: true,
     // Bundle the linked packages into the server instead of loading them from the checkout at run time.
     externals: { inline: ["@navree/nuxt", "@navree/bff", "@navree/client"] },
+    // ... with Nitro's own h3, so the handlers and the server share one.
+    ...(h3 ? { alias: { h3 } } : {}),
   },
 });
