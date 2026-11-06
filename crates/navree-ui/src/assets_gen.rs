@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "0468333e7ab8";
+pub const BUILD: &str = "df2634a880eb";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-1eda0837195f.js";
@@ -51,7 +51,7 @@ pub const LAZY_URL: &str = "/_navree/ui/lazy-3f1d3edb24f6.js";
 pub const SORTABLE_URL: &str = "/_navree/ui/sortable-6ce83eead470.js";
 
 /// The URL of `upload.js`.
-pub const UPLOAD_URL: &str = "/_navree/ui/upload-7be3fb9ac3f5.js";
+pub const UPLOAD_URL: &str = "/_navree/ui/upload-2a1b85f2036b.js";
 
 /// The URL of `otp.js`.
 pub const OTP_URL: &str = "/_navree/ui/otp-4d21a9f06aae.js";
@@ -89,7 +89,7 @@ pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-846f20b5316f.css";
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 
 /// The URL of `theme-builder.css`.
-pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-290a9c67c5b7.css";
+pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-28cded4d619c.css";
 
 /// The URL of `markdown.css`.
 pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
@@ -292,7 +292,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload",
         ext: "js",
-        hash: "7be3fb9ac3f5",
+        hash: "2a1b85f2036b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/upload.js"),
         gzip: Some(include_bytes!("../dist/upload.js.gz")),
@@ -402,7 +402,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "theme-builder",
         ext: "css",
-        hash: "290a9c67c5b7",
+        hash: "28cded4d619c",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/theme-builder.css"),
         gzip: Some(include_bytes!("../dist/theme-builder.css.gz")),

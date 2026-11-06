@@ -4,7 +4,7 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { all, attr, byId, closest, cookie, every, has, holds, on, set, unset } from "./dom.js";
+import { T, all, attr, byId, closest, cookie, every, has, holds, on, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-upload]";
 const ROW = "[data-slot=upload-item]";
@@ -47,7 +47,7 @@ const waiting = /** @type {WeakMap<Element, number>} */ (new WeakMap());
 function show(job, state, text) {
   job.state = state;
   set(job.li, "data-state", state);
-  all(job.li, "[data-slot=attachment-description]")[0].textContent = text;
+  part(job.li, "attachment-description").textContent = text;
 }
 
 /** Adds a row for `file`. @param {Element} root @param {File} file @param {string} state */
@@ -57,7 +57,7 @@ function add(root, file, state) {
   /** @type {Job} */
   const job = { root, file, li, state };
   jobs.set(li, job);
-  all(li, "[data-slot=attachment-title]")[0].textContent = file.name;
+  part(li, "attachment-title").textContent = file.name;
   for (const hidden of all(li, "[data-ui-sr]")) hidden.textContent = " " + file.name;
   part(root, "upload-list").append(li);
   show(job, state, size(file.size));
@@ -166,8 +166,9 @@ async function run(job) {
     tell(root, words);
     try {
       const r = await (attr(root, "data-chunks") && file.size >= num(root, "data-chunk-from") ? chunked(job) : whole(job));
-      // In a form of the page's, the form posts the stored file's key in its place.
-      const key = attr(root, "data-send") ? keyField(root) : undefined;
+      // In a form of the page's, the form posts the stored file's key in its place. Only such
+      // a root has a key field, and one that sends at all sends to `data-send`.
+      const key = keyField(root);
       const sent = r.json?.stored?.[0]?.key;
       if (r.status < 300 && key) {
         if (typeof sent === "string" && sent) {
@@ -189,7 +190,7 @@ async function run(job) {
   // When the last file is over, the region that lists the files draws them again.
   const region = attr(root, "data-refresh");
   const target = !left && region ? byId(region) : null;
-  if (target) EventTarget.prototype.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true }));
+  if (target) T.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true }));
 }
 
 /** Puts `job` at the end of its root's line. @param {Job} job */
@@ -248,9 +249,9 @@ function leave(job) {
   }
   // A file a form's upload sent is no longer the form's.
   const key = keyField(root);
-  if (key && attr(root, "data-send") && job.state === "done") {
+  if (key && job.state === "done") {
     key.value = "";
-    if (input) input.required = has(root, "data-required");
+    input.required = has(root, "data-required");
   }
   job.li.remove();
   tell(root, say(root, "removed", { name: job.file.name }));
@@ -272,15 +273,17 @@ on(document, "submit", (e) => {
   const files = [...(input.files || [])];
   if (!files.length) return;
   e.preventDefault();
-  for (const li of all(root, "[data-state=chosen]")) li.remove();
+  // The field is emptied, so the rows of the chosen files give way to the rows that send them.
   input.value = "";
+  chosen(root);
   start(root, files);
 }, true);
 
 // A form of the page's waits while one of its uploads is still sending: its key isn't there yet.
+// (An upload in a form of the page's sends only when it has a `data-send` route.)
 on(document, "submit", (e) => {
   const form = /** @type {Element} */ (e.target);
-  for (const root of all(form, ROOT + "[data-send]")) {
+  for (const root of all(form, ROOT)) {
     const busy = all(root, ROW + "[data-state=sending]," + ROW + "[data-state=queued]")[0];
     const job = busy && jobs.get(busy);
     if (job) {
