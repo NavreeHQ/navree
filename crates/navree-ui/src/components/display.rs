@@ -1538,13 +1538,13 @@ impl TableRowEl {
 }
 
 /// A table of data. The wrapper scrolls on narrow screens, and a keyboard can
-/// reach it to scroll it: it is a tab stop, a region named by [`Table::label`]
-/// ("Table" until one is given).
+/// reach it to scroll it: it is a tab stop. Named with [`Table::label`], it is
+/// also a region a screen reader lists (two regions of one page need two names).
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Table {
     el: Element,
-    label: String,
+    label: Option<String>,
     caption: Option<Node>,
     head: Vec<Node>,
     rows: Vec<Node>,
@@ -1556,7 +1556,7 @@ impl Table {
     pub fn new() -> Self {
         Self {
             el: el("table").slot("table"),
-            label: "Table".to_owned(),
+            label: None,
             caption: None,
             head: Vec::new(),
             rows: Vec::new(),
@@ -1564,9 +1564,10 @@ impl Table {
         }
     }
 
-    /// The name a screen reader gives the scrolling region around the table.
+    /// Names the scrolling box around the table, which makes it a region a
+    /// screen reader lists.
     pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = label.into();
+        self.label = Some(label.into());
         self
     }
 
@@ -1600,11 +1601,12 @@ impl Table {
             el("thead").child(el("tr").child(self.head)),
             el("tbody").attr_opt("id", self.body_id).child(self.rows),
         ));
+        let named = self.label.is_some();
         el("div")
             .slot("table-container")
             .attr("tabindex", 0_i64)
-            .attr("role", "region")
-            .attr("aria-label", self.label)
+            .attr_opt("role", named.then_some("region"))
+            .attr_opt("aria-label", self.label)
             .child(table)
             .into()
     }
