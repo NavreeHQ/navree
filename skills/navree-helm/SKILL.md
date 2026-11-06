@@ -22,8 +22,10 @@ page's examples through the facade). The page is
 
 ## Steps: add the panel to an app
 
-1. The app root needs `DatabaseModule`, `CryptoModule` (the session cookie),
-   `AuthModule` (sign-in) and `AccessModule` (every check). Add Helm last:
+1. The app root needs `DatabaseModule`, `CryptoModule`, `AccessModule` (every
+   check) and the app's browser sign-in: `SessionModule`, `AuthModule`,
+   `UiModule` and `AuthPages` (the panel has no sign-in screen of its own; a
+   guest is sent to `/sign-in?next=..`). Add Helm last:
 
 ```rust,ignore
 Navree::app()
@@ -31,7 +33,10 @@ Navree::app()
     .module(CryptoModule::from_config())
     .module(HttpModule::from_config())
     .module(DatabaseModule::from_config())
+    .module(SessionModule::from_config())
     .module(AuthModule::from_config())
+    .module(UiModule)
+    .module(AuthPages::new().app_name("Acme CRM"))
     .module(AccessModule::for_root(access()))
     // ... feature modules
     .module(HelmModule::from_config()) // section `helm`; or HelmModule::for_root(HelmOptions { .. })
@@ -303,7 +308,9 @@ token.
   has `read` (and `create`, `update`, `delete`, action names) on the subject.
 - A test acts as a restricted user and asserts a 403 on what they may not
   change: hiding a button is never the protection, the API checks too.
-- If the app uses `SessionModule`, add `session.csrf_except = ["/admin/*"]`.
+- Browsers send the session's CSRF token (`_csrf` in a form, or the
+  `X-CSRF-Token` header); never add `/admin/*` to `session.csrf_except`, as the
+  session layer is the only check.
 
 ## Gotchas
 
@@ -373,9 +380,11 @@ token.
 - **"Helm cannot make a new X from a form":** a field's type has no
   `Default` (an enum without `#[default]`, a custom type); give it one or
   override `create`.
-- **Sign-in refused at the panel:** the app's `SignInPolicy`s are asked as for
-  `POST /api/auth/login` (a domain that enforces single sign-on can't use a
-  password), and the login throttle counts the same attempts.
+- **Sign-in refused:** the app's sign-in page (`AuthPages`) asks the app's
+  `SignInPolicy`s as for `POST /api/auth/login` (a domain that enforces single
+  sign-on can't use a password), and the login throttle counts the same
+  attempts. Signing out, a password change and offboarding end the session on
+  the server.
 - **Action records skipped:** records the user can't act on are left out
   (`skipped` in the result); none left is a 403.
 - **File fields** store `{slug}/{random}.{ext}` on the field's disk after
@@ -387,7 +396,7 @@ token.
 - **Messages name a field by its label** (`Project should not be empty`); a
   record with no `TITLE` value is `Report #3f9a1c2e`, not a UUID.
 - **Config:** `helm.path` (`/admin`), `title`, `logo`, `accent`, `per_page`
-  (1 to 100), `metrics_cache_secs`, `dashboard`, `session_minutes`, `export_max_secs`; env
+  (1 to 100), `metrics_cache_secs`, `dashboard`, `export_max_secs`; env
   `APP_HELM__TITLE`, `APP_HELM__PER_PAGE`.
 - **The look** follows Navree's app UI rules (sidebar shell, 4px corners,
   ink selection, green only for primary actions, focus and positive data).

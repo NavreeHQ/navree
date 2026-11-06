@@ -26,7 +26,11 @@ Navree::app()
     .module(HttpModule::from_config())
     .module(DatabaseModule::from_config())
     .module(QueueModule::from_config())
-    .module(AuthModule::from_config())                       // the dashboard signs in through it
+    .module(CryptoModule::from_config())
+    .module(SessionModule::from_config())                    // the dashboard's pages sign in on the session
+    .module(AuthModule::from_config())
+    .module(UiModule::from_config())
+    .module(AuthPages::new())                                // the sign-in page a guest is sent to
     .module(AccessModule::for_root(AccessOptions::default())) // the dashboard checks abilities
     .module(FleetModule::from_config())                      // section `fleet`
 ```
@@ -111,10 +115,13 @@ let charts = fleet.metrics(MetricsPeriod::Hour).await?;
 
 ## The dashboard
 
-- `GET /_fleet` (page) and `/_fleet/assets/fleet-<content hash>.{js,css}` are
-  public and hold no data. The page signs in through
-  `{http.api_prefix}{auth.routes_prefix}/login` (navree-auth, 2FA too) or
-  a pasted token, and calls `/_fleet/api/*` with `Authorization: Bearer`.
+- The pages (`GET /_fleet`, `/supervisors`, `/jobs`, `/jobs/{id}`, `/failed`,
+  `/failed/{id}`, `/metrics`) are Navree UI pages on the app's browser
+  session (`view`). Their forms (`POST /_fleet/failed/{id}/retry`,
+  `/failed/{id}/forget`, `/failed/retry`, `/pause`, `/continue`) need
+  `operate` and the session's CSRF token, and work without JavaScript. A
+  guest is sent to the app's sign-in page. `/_fleet/api/*` is JSON and
+  also takes `Authorization: Bearer`.
 - Abilities on subject `Fleet` (prefix `fleet`): `view` for every `GET`
   (`overview`, `masters`, `jobs`, `jobs/{id}`, `failed`, `failed/{id}`,
   `metrics?period=hour|day|week`), `operate` for `POST failed/{id}/retry`,
@@ -122,12 +129,12 @@ let charts = fleet.metrics(MetricsPeriod::Hour).await?;
   `POST continue` (body `{"supervisor": "x"}` or none).
   Grant with `navree access:grant manager fleet.view`, or in code
   `rules.can("view", "Fleet")`.
-- The overview groups the workload table by supervisor (`default · auto ·
-  1-8 processes`) with a square per process (filled while it works the
-  queue), charts one queue's jobs per minute for the last 30 minutes (from
-  the stored snapshots, `fleet.snapshot_secs`), and lists the five newest
-  failed jobs with attempts, error, Retry and Forget (Retry all asks first
-  and retries every failed job). `GET /_fleet/api/overview` carries it:
+- The overview shows one card per supervisor (`default · auto · 1-8
+  processes`) with a bar for its processes, charts one queue's jobs per
+  minute for the last 30 minutes (from the stored snapshots,
+  `fleet.snapshot_secs`), and lists the five newest failed jobs with
+  attempts, error, Retry and Forget (Retry all retries every failed job).
+  `GET /_fleet/api/overview` carries it:
   `supervisors` (`queues`, `balance`, `min_processes`, `max_processes`,
   `processes_label`, `paused`, `processes`, `slots`), `masters`,
   `throughput[].per_minute` (30 counts, oldest first), `failed_total`,
