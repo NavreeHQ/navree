@@ -3,6 +3,23 @@
   "version": "1.0.0",
   "description": "A typed client for Navree APIs on the app's OpenAPI document, Navree's error shape with codes, list queries, pagination, operations and real time.",
   "license": "MIT OR Apache-2.0",
+  "author": "Amritpal Singh",
+  "homepage": "https://navree.com/docs/frontend/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavreeHQ/navree.git",
+    "directory": "packages/js/client"
+  },
+  "bugs": {
+    "url": "https://github.com/NavreeHQ/navree/issues"
+  },
+  "keywords": [
+    "navree",
+    "openapi",
+    "typed-client",
+    "fetch",
+    "list-query"
+  ],
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -53,5 +70,8 @@
     "pusher-js": "8.6.0",
     "typescript": "5.9.3",
     "vitest": "5.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
