@@ -9,6 +9,30 @@ description: "A local debugging timeline of every request, query, job, mail, eve
 
 Logbook is for development. It records full request and response bodies, which is what you want on your machine and never on a server. In a release build it is off: it records nothing and serves nothing, unless you [turn it on deliberately](#release-builds).
 
+<ToolMock name="logbook" />
+
+## Quick start
+
+<Steps>
+<Step title="Check the module is in the app">
+
+An app made with `navree new` already has `LogbookModule`. In another app, add `LogbookModule::from_config()` to `src/app.rs`. See [Installation](#installation).
+
+</Step>
+<Step title="Start the app">
+
+```sh
+navree dev
+```
+
+</Step>
+<Step title="Open the timeline">
+
+Use the app, then open `http://127.0.0.1:8080/_logbook`. Choose a request to see its queries, events, mail and log lines beside the list. Logbook answers requests from your own machine only. See [The timeline](#the-timeline).
+
+</Step>
+</Steps>
+
 ## Installation
 
 The `logbook` feature of the `navree` facade brings the crate `navree-logbook`. It is part of `full`, the default, and an app made with `navree new` already includes the module. To add it to an existing app:

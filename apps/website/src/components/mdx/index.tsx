@@ -9,6 +9,7 @@ import { FileTree } from "./file-tree";
 import { LinkCard, LinkCards } from "./link-card";
 import { Step, Steps } from "./steps";
 import { CodeGroup, Tab, Tabs } from "./tabs";
+import { ToolMock } from "./tool-mock";
 import { UiA11y, UiAnatomy, UiAssets, UiBudgets, UiChoose, UiCsp, UiFlagWeights, UiGrid, UiPreview, UiProps, UiTokens } from "@/components/ui-docs";
 
 /**
@@ -78,6 +79,7 @@ export const mdxComponents = {
   Steps,
   Tab,
   Tabs,
+  ToolMock,
   UiA11y,
   UiAnatomy,
   UiAssets,

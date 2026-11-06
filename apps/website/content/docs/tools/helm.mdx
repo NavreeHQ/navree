@@ -15,6 +15,35 @@ Helm works with what your app already has:
 
 The screens are rendered on the server from templates, with a small stylesheet and script embedded in the crate: there is nothing to build and no front-end toolchain. They work without the script, which only adds conveniences such as confirmations, local times, searchable pickers, the command menu and the collapsible sidebar.
 
+<ToolMock name="helm" />
+
+## Quick start
+
+<Steps>
+<Step title="Add the module">
+
+Put `HelmModule::from_config()` after `AuthModule`, `AccessModule` and your feature modules in `src/app.rs`. See [Installation](#installation).
+
+</Step>
+<Step title="Let a role in">
+
+```sh
+navree access:role manager
+navree access:grant manager helm.view
+```
+
+</Step>
+<Step title="Make a resource for a model that is an access subject">
+
+```sh
+navree make:resource deals Deal
+```
+
+Open `http://127.0.0.1:8080/admin` and sign in with your app's account. See [Your first resource](#your-first-resource).
+
+</Step>
+</Steps>
+
 ## Installation
 
 The `helm` feature of the `navree` facade brings the crate `navree-helm`. It is part of `full`, the default. Add the module to your app root:

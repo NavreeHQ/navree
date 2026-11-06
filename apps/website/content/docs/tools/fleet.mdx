@@ -11,6 +11,42 @@ You describe your workers once, in configuration, as **supervisors**: which queu
 
 Fleet builds on navree-queue's database driver. Its workers run jobs with the same code as `queue:work`, so jobs, retries, backoff, time limits and failed jobs behave exactly as the [queues](/docs/digging-deeper/queues/) page describes.
 
+<ToolMock name="fleet" />
+
+## Quick start
+
+<Steps>
+<Step title="Add the module">
+
+Put `FleetModule::from_config()` after `QueueModule` in `src/app.rs`, then create Fleet's tables with `navree migrate`. See [Installation](#installation).
+
+</Step>
+<Step title="Declare a supervisor">
+
+Name the queues it works and how many processes it may use, under `[fleet.supervisors.default]` in `config/app.toml`. See [Supervisors](#supervisors).
+
+</Step>
+<Step title="Let a role in">
+
+```sh
+navree access:role manager
+navree access:grant manager fleet.view
+```
+
+Users with the super-admin role need no grant. See [Access](#access).
+
+</Step>
+<Step title="Start Fleet and open the dashboard">
+
+```sh
+navree fleet
+```
+
+Open `http://127.0.0.1:8080/_fleet` and sign in with your app's account.
+
+</Step>
+</Steps>
+
 ## Installation
 
 The `fleet` feature of the `navree` facade brings the crate `navree-fleet`. It is part of `full`, the default, and needs no system library. Add the module after `QueueModule`:

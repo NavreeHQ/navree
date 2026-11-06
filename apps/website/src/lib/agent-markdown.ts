@@ -20,6 +20,7 @@
  * | `<LinkCards>` / `<LinkCard>` | a list of links |
  * | `<FileTree>` | a `text` code block |
  * | `<Diagram name>` | one sentence that says what the diagram shows |
+ * | `<ToolMock name>` | one sentence that says what the tool's picture shows |
  * | `<Badge>` | plain text: "(Feature: `queue`)" |
  * | `<UiPreview example>` | the example's Rust code block |
  * | `<UiProps type>` | the type's table |
@@ -553,6 +554,19 @@ function quote(text: string): string {
 const isElement = (name: string) => (node: MdNode) =>
   (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") && node.name === name;
 
+/** What the picture at the top of each tool's page shows, in one sentence. */
+const toolMocks: Record<string, string> = {
+  fleet:
+    "Fleet's dashboard for the example CRM: two supervisors running queue workers, moving processes to the mail queue when a newsletter puts 3,000 mails on it, with mail jobs per minute spiking and a list of failed jobs that offers Retry and Forget.",
+  harbor:
+    "Harbor deploying the example CRM with navree deploy: it builds, uploads, migrates, starts the new release in the green slot, waits for the health check, switches Caddy from blue to green, drains blue and restarts the workers, beside the server's two slots and the releases kept for rollbacks.",
+  helm: "Helm, the admin panel of the example CRM, on the Deals resource: a sidebar of resources, metric cards, search and filters, and a table of deals with three ticked and the bulk action Mark as won.",
+  lighthouse:
+    "Lighthouse's dashboard for the example CRM: requests per minute, error rate, p95 latency, failed jobs and open issues, a 24-hour timeline, issues such as a slow contacts query, and a live feed of new occurrences.",
+  logbook:
+    "Logbook open on the request POST /api/v1/deals: a list of recent requests and jobs, one marked for duplicate queries, beside the request's timeline of its access check, queries, event, queued job and mail, cache call, log line and 201 response.",
+};
+
 const calloutKinds: Record<string, string> = { note: "Note", tip: "Tip", warning: "Warning" };
 
 /** What each architecture diagram shows, in one sentence. */
@@ -641,6 +655,11 @@ function element(ctx: Ctx, node: MdNode, mode: "flow" | "text"): string {
       const name = attr(node, "name") ?? "";
       const sentence = diagrams[name] ?? `A diagram of ${name.replace(/-/g, " ")}.`;
       return mode === "flow" ? `*Diagram: ${sentence}*` : sentence;
+    }
+    case "ToolMock": {
+      const name = attr(node, "name") ?? "";
+      const sentence = toolMocks[name] ?? `A picture of ${name}.`;
+      return mode === "flow" ? `*Picture: ${sentence}*` : sentence;
     }
     case "Badge": {
       const feature = attr(node, "feature");

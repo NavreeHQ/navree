@@ -15,7 +15,7 @@ import remarkGfm from "remark-gfm";
 import { sections } from "../content/docs/manifest.ts";
 
 const COMPONENTS = new Set([
-  "Badge", "Callout", "CodeGroup", "Diagram", "FileTree", "LinkCard", "LinkCards", "Step", "Steps", "Tab", "Tabs",
+  "Badge", "Callout", "CodeGroup", "Diagram", "FileTree", "LinkCard", "LinkCards", "Step", "Steps", "Tab", "Tabs", "ToolMock",
   "UiA11y", "UiAnatomy", "UiAssets", "UiBudgets", "UiChoose", "UiCsp", "UiFlagWeights", "UiGrid", "UiPreview", "UiProps", "UiTokens",
 ]);
 const LANGUAGES = new Set([

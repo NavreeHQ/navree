@@ -13,6 +13,32 @@ Lighthouse runs inside your app and stores its data in your database. There is n
 - **No code changes.** Lighthouse reads what the framework already produces: the request pipeline and its exceptions and panics, query timings from navree-db, job outcomes from navree-queue, scheduled runs, mail, cache calls and the HTTP client. You add the module; the rest is configuration.
 - **Off the request path, and exact.** Recording adds the request to in-memory counters on the thread that handled it, with no I/O and nothing queued, and puts the details worth keeping in a bounded queue. A background task writes both to the database every second, so a request never waits for Lighthouse and no count is lost, however hard the app is pushed ([how](#under-load)).
 
+<ToolMock name="lighthouse" />
+
+## Quick start
+
+<Steps>
+<Step title="Check the module is in the app">
+
+An app made with `navree new` already has `LighthouseModule`. In another app, add it after the modules it builds on. See [Installation](#installation).
+
+</Step>
+<Step title="Create the tables and give a role access">
+
+```sh
+navree migrate
+navree access:role manager
+navree access:grant manager lighthouse.view
+```
+
+</Step>
+<Step title="Open the dashboard">
+
+Open `http://127.0.0.1:8080/_lighthouse` and sign in with your app's account. Issues appear as the app records exceptions, slow requests and failed jobs. See [The dashboard](#the-dashboard).
+
+</Step>
+</Steps>
+
 ## Installation
 
 The `lighthouse` feature of the `navree` facade brings the crate `navree-lighthouse`. It is part of `full`, the default, so an app made with `navree new` already has it, and its `src/app.rs` already includes the module. To add it to an existing app, put `LighthouseModule` after the modules it builds on:
