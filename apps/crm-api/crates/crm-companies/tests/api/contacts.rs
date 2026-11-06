@@ -608,11 +608,7 @@ async fn contact_filters_take_their_operators() {
         ["Anu Lakhotia", "arun Tiwari"]
     );
     assert_eq!(
-        names(&[
-            ("search", "kavita joshi"),
-            ("filter[company_id]", &agra)
-        ])
-        .await,
+        names(&[("search", "kavita joshi"), ("filter[company_id]", &agra)]).await,
         ["Kavita Joshi"]
     );
     // The list has no `sort`: contacts always come by last name.

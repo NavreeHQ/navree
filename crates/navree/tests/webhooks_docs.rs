@@ -3,12 +3,12 @@
 
 use http::Method;
 use navree::BoxFuture;
+use navree::contracts::{Clock, FixedClock};
 use navree::db::Db;
 use navree::events::{Event, EventBus};
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::queue::Queue;
-use navree::contracts::{Clock, FixedClock};
 use navree::testing::{TestApp, TestAppBuilder};
 use navree::webhooks::{
     AwsSns, GitHub, NewEndpoint, SnsMessage, StandardWebhooks, VerifiedWebhook, WebhookContext,
@@ -287,9 +287,7 @@ async fn ses_events_arrive_verified_through_sns() {
         FakeResponse::new(200).text(sns_fixture("signer-cert.pem")),
     );
     // A minute after the fixture's messages were published: an older one is a replay.
-    let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(
-        "2026-10-26T08:00:30Z".parse().unwrap(),
-    ));
+    let clock: Arc<dyn Clock> = Arc::new(FixedClock::new("2026-10-26T08:00:30Z".parse().unwrap()));
     let app = builder(client)
         .override_value::<dyn Clock>(clock)
         .build()

@@ -237,7 +237,9 @@ async fn every_route_is_documented_with_its_schemas() {
         }
     }
     assert!(
-        !parameter_names("/api/v1/contacts").iter().any(|n| n == "sort"),
+        !parameter_names("/api/v1/contacts")
+            .iter()
+            .any(|n| n == "sort"),
         "contacts are listed in one order"
     );
     let companies_filter = paths["/api/v1/companies"]["get"]["parameters"]
