@@ -250,6 +250,8 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 .every_minute()
                 .without_overlapping();
         });
+    #[cfg(feature = "ui")]
+    m.controller::<crate::ui::NotificationBellController>();
 }
 
 /// The scheduled `notify:release`: skipped with

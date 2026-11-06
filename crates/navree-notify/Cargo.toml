@@ -14,6 +14,9 @@ workspace = true
 # The database drivers of the gated server tests (`tests/notify/servers.rs`).
 postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
+## `navree_notify::ui::NotificationBell`: the signed-in user's stored notifications in a Navree UI
+## shell, and the routes it uses. The facade turns it on when both `ui` and `notify` are on.
+ui = ["dep:navree-ui"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -38,12 +41,15 @@ navree-mail = { workspace = true }
 # database channel through the ORM, like the delivery log, the opt-outs and
 # the push subscriptions.
 navree-orm = { workspace = true }
+# A new stored notification is told to the recipient's pages on the live hub.
+navree-realtime = { workspace = true }
 # `notify:release` every minute on the app's scheduler.
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 # Quiet hours, send windows and digests on the recipient's clock (`Zone`,
 # `SendWindow`, the `Zones` of users and workspaces).
 navree-time = { workspace = true }
+navree-ui = { workspace = true, optional = true }
 # The digest templates, and workspace overrides rendered from text.
 navree-view = { workspace = true }
 # Numbers in E.164 (`Phone`) for the SMS and WhatsApp channels.
@@ -58,6 +64,8 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests draw the bell.
+navree-notify = { workspace = true, features = ["ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

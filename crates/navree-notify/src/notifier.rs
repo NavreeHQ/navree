@@ -30,6 +30,10 @@ use crate::{
 /// The event the broadcast channel sends.
 pub const NOTIFICATION_CREATED: &str = "notification.created";
 
+/// The topic of the live hub a page hears new stored notifications on: `notifications`, told to the
+/// recipient's own pages. A nudge carries nothing; the page fetches its list again.
+pub const INBOX_TOPIC: &str = "notifications";
+
 /// Sends notifications: asks each [`Notification`] for its channels and
 /// renders it for each one, then delivers (or queues) the result.
 ///
@@ -207,6 +211,23 @@ impl Notifier {
                     store(uow, job, data).await?;
                 }
             }
+            // The recipients' pages that follow their notifications through the live hub ask
+            // again, once the rows can be read.
+            let inboxes: Vec<(String, String)> = stored
+                .iter()
+                .map(|job| (job.notifiable_type.clone(), job.notifiable_id.clone()))
+                .collect();
+            let app = self.app.clone();
+            uow.after_commit(move || {
+                Box::pin(async move {
+                    let Some(ctx) = app.upgrade() else {
+                        return;
+                    };
+                    for (kind, id) in &inboxes {
+                        nudge_inbox(&ctx, kind, id).await;
+                    }
+                })
+            });
             if self.telemetry.enabled(EventKind::NotificationSent) {
                 // Stored with the transaction: reported once it commits.
                 let telemetry = self.telemetry.clone();
@@ -300,6 +321,7 @@ impl Notifier {
                     .await
                     .ok_or_else(|| unavailable(Channel::Database, "add DatabaseModule"))?;
                 store(&*db, job, data).await?;
+                nudge_inbox(ctx, &job.notifiable_type, &job.notifiable_id).await;
                 Ok(true)
             }
             Delivery::Mail { mail } => {
@@ -930,6 +952,35 @@ async fn store<E: Executor + ?Sized>(
     };
     notifications::Model::insert_or_ignore(exec, [row]).await?;
     Ok(())
+}
+
+/// Tells the pages of the user a notification was stored for that their list changed, through the
+/// live hub. Only an app with the hub (`RealtimeModule`) has anyone to tell, and only a notification
+/// for a user (the notifiable type `user`) has pages to tell.
+async fn nudge_inbox(ctx: &AppContext, notifiable_type: &str, notifiable_id: &str) {
+    if notifiable_type != crate::USER_NOTIFIABLE_TYPE {
+        return;
+    }
+    let Ok(user) = Uuid::parse_str(notifiable_id) else {
+        return;
+    };
+    if ctx.try_get::<navree_realtime::Live>().await.is_none() {
+        return;
+    }
+    let Some(broadcaster) = ctx.try_get::<dyn Broadcaster>().await else {
+        return;
+    };
+    let channel = navree_realtime::Topic::user(user, INBOX_TOPIC).channel();
+    if let Err(error) = broadcaster
+        .broadcast(
+            vec![channel],
+            navree_realtime::NUDGE_EVENT.to_owned(),
+            json!({}),
+        )
+        .await
+    {
+        tracing::warn!(target: "navree::notify", %error, "cannot tell the live hub a notification arrived");
+    }
 }
 
 /// [`NotifyError::Unavailable`] for `channel`.

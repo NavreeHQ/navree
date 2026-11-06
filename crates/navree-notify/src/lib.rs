@@ -189,6 +189,8 @@ mod store;
 mod stored;
 mod timing;
 mod tokens;
+#[cfg(feature = "ui")]
+pub mod ui;
 
 pub use callbacks::{
     ChannelCallback, InboundMessage, Keyword, OPT_IN_KEYWORDS, OPT_OUT_KEYWORDS, StatusUpdate,
@@ -232,7 +234,7 @@ pub use module::NotifyModule;
 pub use navree_macros::notification;
 pub use notifiable::Notifiable;
 pub use notification::Notification;
-pub use notifier::{NOTIFICATION_CREATED, Notifier};
+pub use notifier::{INBOX_TOPIC, NOTIFICATION_CREATED, Notifier};
 pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
 pub use options::{
     DeferredOptions, DigestOptions, MetaOptions, NotifyOptions, PreferenceOptions, SlackOptions,

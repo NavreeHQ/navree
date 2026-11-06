@@ -24,4 +24,6 @@ mod recipient;
 mod rendering;
 mod servers;
 mod telemetry;
+#[cfg(feature = "ui")]
+mod ui;
 mod uow;
