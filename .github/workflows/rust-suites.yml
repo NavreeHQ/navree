@@ -25,7 +25,9 @@
 #    the MariaDB server);
 # 4. the crates with code that only exists when a feature is off, on their
 #    default features;
-# 5. the navree-mcp suite that drives the official TypeScript SDK.
+# 5. the navree-mcp suite that drives the official TypeScript SDK, and
+#    navree-oauth's ID tokens verified by the jose library (also on every
+#    change to navree-oauth: oidc-jose.yml).
 #
 # Windows runs the workspace on SQLite (a hosted Windows runner has no Linux
 # containers, so the suites that name a server print SKIPPED and pass), with
@@ -292,6 +294,12 @@ jobs:
         run: |
           npm ci --prefix e2e/mcp-sdk --ignore-scripts
           cargo test --locked --workspace --all-features --test sdk_conformance -- --ignored --nocapture
+
+      - name: Verify navree-oauth's ID tokens with the jose library
+        if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        run: |
+          npm ci --prefix e2e/oidc-jose --ignore-scripts
+          cargo test --locked --all-features --package navree-oauth --test oauth             oidc::an_independent_jwt_library_verifies_the_id_tokens -- --ignored --exact --nocapture
 
       - name: Test billing on the Stripe test mode and the Paddle sandbox
         # Opt-in: runs only when the repository has the secrets (a Stripe

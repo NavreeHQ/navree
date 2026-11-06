@@ -1,0 +1,57 @@
+# navree-oauth's ID tokens checked by an independent JWT library: `jose`
+# (panva, pinned in e2e/oidc-jose/package.json), the library the certified
+# openid-client is built on, verifies RS256 and EdDSA tokens against the
+# published JWKS with the issuer, audience and algorithm pinned
+# (crates/navree-oauth/tests/oauth/oidc.rs, e2e/oidc-jose/verify.mjs).
+name: ID tokens
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-oauth/**"
+      - "crates/navree-crypto/**"
+      - "e2e/oidc-jose/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/oidc-jose.yml"
+  pull_request:
+    paths:
+      - "crates/navree-oauth/**"
+      - "crates/navree-crypto/**"
+      - "e2e/oidc-jose/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/oidc-jose.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install the library
+        run: npm ci --prefix e2e/oidc-jose --ignore-scripts
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Verify the ID tokens
+        run: >-
+          cargo test --locked -p navree-oauth --test oauth
+          oidc::an_independent_jwt_library_verifies_the_id_tokens
+          -- --ignored --exact --nocapture
