@@ -289,7 +289,7 @@ fn full_text_runs_first() {
     ));
     insta::assert_snapshot!(show(&Deal::query().where_full_text_with(
         [Deal::TITLE.expr()],
-        "ACME support",
+        "AGRA support",
         FullText::phrase().language("english"),
     )));
 }

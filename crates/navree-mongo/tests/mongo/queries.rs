@@ -73,7 +73,7 @@ async fn seed(mongo: &MongoDb) -> (Vec<Company>, Vec<Deal>) {
             (2026, 12, 31),
         ),
         (
-            "ACME support",
+            "AGRA support",
             agra,
             15_000,
             Stage::Lost,
@@ -137,7 +137,7 @@ async fn conditions_become_filter_documents() {
     );
     assert_eq!(
         titles(mongo, q().where_in(Deal::STAGE, [Stage::Lead, Stage::Lost])).await,
-        ["ACME support", "Pilot"]
+        ["AGRA support", "Pilot"]
     );
     assert_eq!(
         titles(
@@ -150,12 +150,12 @@ async fn conditions_become_filter_documents() {
     );
     assert_eq!(
         titles(mongo, q().where_between(Deal::AMOUNT, 10_000, 50_000)).await,
-        ["ACME support", "Expansion"]
+        ["AGRA support", "Expansion"]
     );
     // LIKE ignores case on every database.
     assert_eq!(
         titles(mongo, q().where_like(Deal::TITLE, "agra%")).await,
-        ["ACME support"]
+        ["AGRA support"]
     );
     assert_eq!(
         titles(mongo, q().where_like(Deal::TITLE, "%PLAN")).await,
@@ -168,7 +168,7 @@ async fn conditions_become_filter_documents() {
     );
     assert_eq!(
         titles(mongo, q().where_not_like(Deal::TITLE, "%e%")).await,
-        ["Pilot"]
+        ["AGRA support", "Pilot"]
     );
     // Paths into embedded documents and arrays.
     assert_eq!(
@@ -297,7 +297,7 @@ async fn conditions_become_filter_documents() {
         .unwrap();
     assert_eq!(
         titles(mongo, q().where_month(Deal::CLOSES_ON, "<", 6)).await,
-        ["ACME support", "Renewal"]
+        ["AGRA support", "Renewal"]
     );
     assert_eq!(
         titles(mongo, q().where_json_length("tags", Operator::Lt, 1)).await,
@@ -336,7 +336,7 @@ async fn orders_values_and_aggregates() {
         .unwrap();
     assert_eq!(page, ["Expansion", "Renewal"]);
     let newest = q().latest().first(mongo).await.unwrap().unwrap();
-    assert_eq!(newest.title, "ACME support", "created last");
+    assert_eq!(newest.title, "AGRA support", "created last");
     assert_eq!(
         q().where_(Deal::TITLE.eq("Pilot"))
             .value(mongo, Deal::AMOUNT)
@@ -599,7 +599,7 @@ async fn subqueries_joins_and_unions_use_lookups() {
         ),
     )
     .await;
-    assert_eq!(norwegian, ["ACME support", "Expansion", "Renewal"]);
+    assert_eq!(norwegian, ["AGRA support", "Expansion", "Renewal"]);
     // A subquery per row: each company's deal count.
     let counts = Company::query()
         .select_sub(
@@ -718,7 +718,7 @@ async fn mass_writes_update_and_delete_in_one_command() {
     assert_eq!(capped, 2);
     assert_eq!(
         titles(mongo, Deal::query().where_(Deal::STAGE.eq(Stage::Lost))).await,
-        ["ACME support", "Pilot"]
+        ["AGRA support", "Pilot"]
     );
     let bumped = Deal::query()
         .where_(Deal::AMOUNT.lt(20_000))
@@ -858,12 +858,12 @@ async fn full_text_runs_on_text_indexes() {
         mongo,
         Deal::query().where_full_text_with(
             [Deal::TITLE.expr()],
-            "ACME support",
+            "AGRA support",
             FullText::phrase(),
         ),
     )
     .await;
-    assert_eq!(phrase, ["ACME support"]);
+    assert_eq!(phrase, ["AGRA support"]);
     let error = Deal::query()
         .where_(Deal::STAGE.eq(Stage::Won))
         .or_where_full_text([Deal::TITLE.expr()], "plan")
