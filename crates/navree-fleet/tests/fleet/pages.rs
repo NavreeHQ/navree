@@ -222,7 +222,11 @@ async fn the_overview_draws_the_shell_the_figures_and_the_failed_jobs() {
     assert!(!page.contains("<script>"), "no inline script: {page}");
     assert!(!page.contains(" style=\""), "no style attribute: {page}");
     // The columns a phone can do without are marked, so it keeps the rest.
-    assert!(page.contains("data-hide-mobile"), "{page}");
+    for hidden in ["Wait", "Clears in", "Jobs/min"] {
+        let marked = format!("data-hide-mobile>{hidden}</th>");
+        assert!(page.contains(&marked), "{marked}: {page}");
+    }
+    assert!(!page.contains("data-hide-mobile>Queue</th>"), "{page}");
 }
 
 #[tokio::test]
@@ -322,6 +326,16 @@ async fn every_page_draws_with_the_data_behind_the_api() {
         list.contains(&format!("href=\"/_fleet/failed/{}\"", failed.id)),
         "{list}"
     );
+    // A phone keeps the type, the queue and the buttons, and leaves out what
+    // can wait.
+    for hidden in ["Failed", "Error"] {
+        let marked = format!("data-hide-mobile>{hidden}</th>");
+        assert!(list.contains(&marked), "{marked}: {list}");
+    }
+    for kept in ["Type", "Queue", "Actions"] {
+        let marked = format!("data-hide-mobile>{kept}</th>");
+        assert!(!list.contains(&marked), "{marked}: {list}");
+    }
     let none = get(&browser, "/_fleet/failed?search=nothing-like-it")
         .await
         .assert_status(200)
