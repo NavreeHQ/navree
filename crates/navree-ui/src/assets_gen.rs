@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "6940a2cfef40";
+pub const BUILD: &str = "ad4b3cafcb3f";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-0538966b6d61.js";
+pub const CORE_URL: &str = "/_navree/ui/core-1eda0837195f.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-4e91853b1fde.js";
@@ -15,19 +15,19 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-4e91853b1fde.js";
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-f8832385aa7b.js";
 
 /// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-b44af55d0043.js";
+pub const TABLE_URL: &str = "/_navree/ui/table-e5f4f1ed877b.js";
 
 /// The URL of `live.js`.
 pub const LIVE_URL: &str = "/_navree/ui/live-b5bf5db25bbc.js";
 
 /// The URL of `select.js`.
-pub const SELECT_URL: &str = "/_navree/ui/select-fe52a1ca13b0.js";
+pub const SELECT_URL: &str = "/_navree/ui/select-fb6868775411.js";
 
 /// The URL of `dates.js`.
 pub const DATES_URL: &str = "/_navree/ui/dates-5ffd94240418.js";
 
 /// The URL of `menus.js`.
-pub const MENUS_URL: &str = "/_navree/ui/menus-dffd26363290.js";
+pub const MENUS_URL: &str = "/_navree/ui/menus-ee8886fb1f12.js";
 
 /// The URL of `slider.js`.
 pub const SLIDER_URL: &str = "/_navree/ui/slider-d8871271c231.js";
@@ -51,7 +51,7 @@ pub const LAZY_URL: &str = "/_navree/ui/lazy-3f1d3edb24f6.js";
 pub const SORTABLE_URL: &str = "/_navree/ui/sortable-6ce83eead470.js";
 
 /// The URL of `upload.js`.
-pub const UPLOAD_URL: &str = "/_navree/ui/upload-72e99f2b1e00.js";
+pub const UPLOAD_URL: &str = "/_navree/ui/upload-7be3fb9ac3f5.js";
 
 /// The URL of `otp.js`.
 pub const OTP_URL: &str = "/_navree/ui/otp-4d21a9f06aae.js";
@@ -65,6 +65,15 @@ pub const MENUBAR_URL: &str = "/_navree/ui/menubar-028fc9f298d6.js";
 /// The URL of `charts.js`.
 pub const CHARTS_URL: &str = "/_navree/ui/charts-ae65fa48e1f4.js";
 
+/// The URL of `islands.js`.
+pub const ISLANDS_URL: &str = "/_navree/ui/islands-2d119c7fc7a4.js";
+
+/// The URL of `parts.js`.
+pub const PARTS_URL: &str = "/_navree/ui/parts-0a62ee012bee.js";
+
+/// The URL of `genui.js`.
+pub const GENUI_URL: &str = "/_navree/ui/genui-7fb078086391.js";
+
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
 pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
@@ -74,19 +83,19 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-e2a3d75a1a00.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-846f20b5316f.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
 
 /// The URL of `theme-builder.css`.
-pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-b526443e9626.css";
+pub const THEME_BUILDER_URL: &str = "/_navree/ui/theme-builder-169eddf4db2a.css";
 
 /// The URL of `markdown.css`.
 pub const MARKDOWN_URL: &str = "/_navree/ui/markdown-d0ca9ef3eb37.css";
 
 /// The URL of `upload-styles.css`.
-pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-151746b6ed76.css";
+pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-660ce718286f.css";
 
 /// The URL of `otp-styles.css`.
 pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-bb2761698471.css";
@@ -98,7 +107,41 @@ pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-b75b29f68c27.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
 
 /// The URL of `charts-styles.css`.
-pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-3009f7d59ff1.css";
+pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-1598c397895d.css";
+
+/// The URL of `parts-styles.css`.
+pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-71c739ec974b.css";
+
+/// The URL of `table-styles.css`.
+pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-554c86edce25.css";
+
+/// The URL of `select-styles.css`.
+pub const SELECT_STYLES_URL: &str = "/_navree/ui/select-styles-4ca9053735a0.css";
+
+/// The URL of `phone-styles.css`.
+#[cfg(feature = "phone")]
+pub const PHONE_STYLES_URL: &str = "/_navree/ui/phone-styles-c1ecf192eb6c.css";
+
+/// The URL of `slider-styles.css`.
+pub const SLIDER_STYLES_URL: &str = "/_navree/ui/slider-styles-c68078b420ec.css";
+
+/// The URL of `menus-styles.css`.
+pub const MENUS_STYLES_URL: &str = "/_navree/ui/menus-styles-8ce6d31c7e84.css";
+
+/// The URL of `split-styles.css`.
+pub const SPLIT_STYLES_URL: &str = "/_navree/ui/split-styles-7cb3a5a9232d.css";
+
+/// The URL of `tree-styles.css`.
+pub const TREE_STYLES_URL: &str = "/_navree/ui/tree-styles-f5fca42ceb18.css";
+
+/// The URL of `lazy-styles.css`.
+pub const LAZY_STYLES_URL: &str = "/_navree/ui/lazy-styles-36f9654d9680.css";
+
+/// The URL of `toolbar-styles.css`.
+pub const TOOLBAR_STYLES_URL: &str = "/_navree/ui/toolbar-styles-c7d3d0ed61e9.css";
+
+/// The URL of `dates-styles.css`.
+pub const DATES_STYLES_URL: &str = "/_navree/ui/dates-styles-a5d83db3ea9e.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -114,7 +157,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "0538966b6d61",
+        hash: "1eda0837195f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -141,7 +184,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table",
         ext: "js",
-        hash: "b44af55d0043",
+        hash: "e5f4f1ed877b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/table.js"),
         gzip: Some(include_bytes!("../dist/table.js.gz")),
@@ -159,7 +202,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select",
         ext: "js",
-        hash: "fe52a1ca13b0",
+        hash: "fb6868775411",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/select.js"),
         gzip: Some(include_bytes!("../dist/select.js.gz")),
@@ -177,7 +220,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menus",
         ext: "js",
-        hash: "dffd26363290",
+        hash: "ee8886fb1f12",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/menus.js"),
         gzip: Some(include_bytes!("../dist/menus.js.gz")),
@@ -249,7 +292,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload",
         ext: "js",
-        hash: "72e99f2b1e00",
+        hash: "7be3fb9ac3f5",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/upload.js"),
         gzip: Some(include_bytes!("../dist/upload.js.gz")),
@@ -291,6 +334,33 @@ pub static FILES: &[Asset] = &[
         gzip: Some(include_bytes!("../dist/charts.js.gz")),
         brotli: Some(include_bytes!("../dist/charts.js.br")),
     },
+    Asset {
+        name: "islands",
+        ext: "js",
+        hash: "2d119c7fc7a4",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/islands.js"),
+        gzip: Some(include_bytes!("../dist/islands.js.gz")),
+        brotli: Some(include_bytes!("../dist/islands.js.br")),
+    },
+    Asset {
+        name: "parts",
+        ext: "js",
+        hash: "0a62ee012bee",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/parts.js"),
+        gzip: Some(include_bytes!("../dist/parts.js.gz")),
+        brotli: Some(include_bytes!("../dist/parts.js.br")),
+    },
+    Asset {
+        name: "genui",
+        ext: "js",
+        hash: "7fb078086391",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/genui.js"),
+        gzip: Some(include_bytes!("../dist/genui.js.gz")),
+        brotli: Some(include_bytes!("../dist/genui.js.br")),
+    },
     #[cfg(feature = "phone")]
     Asset {
         name: "phone",
@@ -314,7 +384,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "e2a3d75a1a00",
+        hash: "846f20b5316f",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -332,7 +402,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "theme-builder",
         ext: "css",
-        hash: "b526443e9626",
+        hash: "169eddf4db2a",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/theme-builder.css"),
         gzip: Some(include_bytes!("../dist/theme-builder.css.gz")),
@@ -350,7 +420,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload-styles",
         ext: "css",
-        hash: "151746b6ed76",
+        hash: "660ce718286f",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/upload-styles.css"),
         gzip: Some(include_bytes!("../dist/upload-styles.css.gz")),
@@ -386,11 +456,111 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts-styles",
         ext: "css",
-        hash: "3009f7d59ff1",
+        hash: "1598c397895d",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/charts-styles.css"),
         gzip: Some(include_bytes!("../dist/charts-styles.css.gz")),
         brotli: Some(include_bytes!("../dist/charts-styles.css.br")),
+    },
+    Asset {
+        name: "parts-styles",
+        ext: "css",
+        hash: "71c739ec974b",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/parts-styles.css"),
+        gzip: Some(include_bytes!("../dist/parts-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/parts-styles.css.br")),
+    },
+    Asset {
+        name: "table-styles",
+        ext: "css",
+        hash: "554c86edce25",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/table-styles.css"),
+        gzip: Some(include_bytes!("../dist/table-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/table-styles.css.br")),
+    },
+    Asset {
+        name: "select-styles",
+        ext: "css",
+        hash: "4ca9053735a0",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/select-styles.css"),
+        gzip: Some(include_bytes!("../dist/select-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/select-styles.css.br")),
+    },
+    #[cfg(feature = "phone")]
+    Asset {
+        name: "phone-styles",
+        ext: "css",
+        hash: "c1ecf192eb6c",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/phone-styles.css"),
+        gzip: Some(include_bytes!("../dist/phone-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/phone-styles.css.br")),
+    },
+    Asset {
+        name: "slider-styles",
+        ext: "css",
+        hash: "c68078b420ec",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/slider-styles.css"),
+        gzip: Some(include_bytes!("../dist/slider-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/slider-styles.css.br")),
+    },
+    Asset {
+        name: "menus-styles",
+        ext: "css",
+        hash: "8ce6d31c7e84",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/menus-styles.css"),
+        gzip: Some(include_bytes!("../dist/menus-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/menus-styles.css.br")),
+    },
+    Asset {
+        name: "split-styles",
+        ext: "css",
+        hash: "7cb3a5a9232d",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/split-styles.css"),
+        gzip: Some(include_bytes!("../dist/split-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/split-styles.css.br")),
+    },
+    Asset {
+        name: "tree-styles",
+        ext: "css",
+        hash: "f5fca42ceb18",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/tree-styles.css"),
+        gzip: Some(include_bytes!("../dist/tree-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/tree-styles.css.br")),
+    },
+    Asset {
+        name: "lazy-styles",
+        ext: "css",
+        hash: "36f9654d9680",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/lazy-styles.css"),
+        gzip: Some(include_bytes!("../dist/lazy-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/lazy-styles.css.br")),
+    },
+    Asset {
+        name: "toolbar-styles",
+        ext: "css",
+        hash: "c7d3d0ed61e9",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/toolbar-styles.css"),
+        gzip: Some(include_bytes!("../dist/toolbar-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/toolbar-styles.css.br")),
+    },
+    Asset {
+        name: "dates-styles",
+        ext: "css",
+        hash: "a5d83db3ea9e",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/dates-styles.css"),
+        gzip: Some(include_bytes!("../dist/dates-styles.css.gz")),
+        brotli: Some(include_bytes!("../dist/dates-styles.css.br")),
     },
     Asset {
         name: "geist",
