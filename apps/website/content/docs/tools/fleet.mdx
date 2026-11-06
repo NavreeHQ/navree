@@ -5,7 +5,7 @@ description: "A queue dashboard and worker supervisor: auto-balanced workers per
 
 ## Introduction
 
-<Badge feature="fleet" /> Fleet runs your [queue](/docs/digging-deeper/queues/) workers and shows you what they are doing. One command, `navree fleet`, starts a supervisor that keeps the right number of worker processes on each queue, moves workers to the queues that need them, restarts workers that exit and recycles them before they grow. A dashboard at `/_fleet`, served by your app, shows each queue's throughput, wait time and runtimes, every failed job with a button to retry or forget it, and controls to pause and continue the workers.
+<Badge feature="fleet" /> Fleet runs your [queue](/docs/digging-deeper/queues/) workers and shows you what they are doing. One command, `navree fleet`, starts a supervisor that keeps the right number of worker processes on each queue, moves workers to the queues that need them, restarts workers that exit and recycles them before they grow. A dashboard at `/_fleet`, served by your app and drawn with [Navree UI](/docs/ui/overview/), shows each queue's throughput, wait time and runtimes, every failed job with a button to retry or forget it, and controls to pause and continue the workers. People sign in to it the way they sign in to the rest of your app.
 
 You describe your workers once, in configuration, as **supervisors**: which queues they work, how many processes they may use and how they balance. Every server runs the same `navree fleet` command with the same configuration, and the dashboard shows all of them together.
 
@@ -63,7 +63,16 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`FleetModule` is global and provides the `Fleet` service. It needs `DatabaseModule` and `QueueModule`; the `fleet` command refuses the `memory` queue driver, whose jobs only exist in one process. Its dashboard routes declare access, so with the dashboard on (the default) the app also needs an authenticator (`AuthModule`) and navree-access's route authorizer (`AccessModule`); set `fleet.dashboard = false` in an app without them. With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
+`FleetModule` is global and provides the `Fleet` service. It needs `DatabaseModule` and `QueueModule`; the `fleet` command refuses the `memory` queue driver, whose jobs only exist in one process. Its dashboard routes declare access, so with the dashboard on (the default) the app also needs an authenticator (`AuthModule`) and navree-access's route authorizer (`AccessModule`); set `fleet.dashboard = false` in an app without them.
+
+The pages sign people in on the app's browser session, so the app also has what any Navree UI app has for signing in: `SessionModule`, `UiModule` and `AuthPages`. A browser that asks for a page without a session is sent to the sign-in page and comes back to the page it asked for; the JSON API under `/_fleet/api` also takes the bearer tokens of your API clients.
+
+```rust title="src/app.rs"
+.module(SessionModule::from_config())
+.module(AuthModule::from_config())
+.module(UiModule)
+.module(AuthPages::new().app_name("Acme Operations"))
+``` With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
 
 The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables) the last two are hypertables on their Unix millisecond columns, an hour and a day per chunk, and trimming drops whole chunks; on PostgreSQL, MySQL and SQLite they are regular tables with an index on that column, and trimming deletes the old rows.
 
@@ -198,9 +207,9 @@ let paused = fleet.paused().await?; // the paused supervisors
 
 ## The dashboard
 
-The dashboard is a page served by your app at `fleet.path` (`/_fleet`), outside the API prefix: HTML rendered with navree-view, with its script and styles compiled into the crate and served from `/_fleet/assets/`. It reads the JSON API under `/_fleet/api` and refreshes every 5 seconds. The sidebar is a drawer on a phone, an icon rail between 761 and 1023 pixels (until you open it, which the page remembers) and full width above; every page sets its own tab title (`Failed jobs · Fleet`).
+The dashboard is a set of pages served by your app at `fleet.path` (`/_fleet`), outside the API prefix. They are drawn on the server with [Navree UI](/docs/ui/overview/), in its app shell: the sidebar lists the pages with the number of failed jobs and of running processes beside them, collapses to icons and becomes a drawer on a phone, and ends with the signed-in person's menu and **Sign out**. The pages work without JavaScript: every button is a form that posts with the session's CSRF token and comes back to the page it was on with a message. The parts that change redraw themselves every 5 seconds while the page is open (the charts every 30 seconds).
 
-- **Overview.** A row of figures: Fleet's status (running, paused when every supervisor is paused, or inactive when no master has reported for 30 seconds), jobs per minute, jobs in the past hour, failed jobs in the past seven days, and the longest current wait with the queue it is on. Below, the **workload** table, grouped by supervisor: a header such as `default · auto · 1-8 processes`, then one row per queue with a square for each process the supervisor may run on the running servers, filled while a process works the queue and outlined while it is free (amber while the supervisor is paused), its pending jobs, the wait of its oldest job, the time it would take to clear and its jobs per minute. Under the table, **jobs per minute** draws a bar for each of the last 30 minutes for one queue, the busiest unless you pick another, and **Failed jobs** lists the five newest with their attempts (`3/3`), the first line of their error, and **Retry** and **Forget**; **Retry all** asks for confirmation, then retries every failed job, not only the five shown. The bars are the stored [snapshots](#metrics) summed per minute, so with the default `fleet.snapshot_secs` of 60 each bar is one minute's finished attempts; the newest bar fills when the next snapshot is stored. On a phone the table keeps the queue, its squares and its pending jobs.
+- **Overview.** A row of figures: Fleet's status (running, paused when every supervisor is paused, or inactive when no master has reported for 30 seconds), jobs per minute, jobs in the past hour, failed jobs in the past seven days, and the longest current wait with the queue it is on. Below, one card per supervisor, such as `default`, with `auto · 1-8 processes · 3 of 8 running` under its name and a **Pause** or **Continue** button, and a table with one row per queue: a bar and a count for the processes working the queue out of those the supervisor may run on the running servers, its pending jobs, the wait of its oldest job, the time it would take to clear and its jobs per minute. A queue whose oldest job has waited past its `fleet.long_wait` threshold says so. Under the table, **jobs per minute** draws a bar for each of the last 30 minutes for one queue, the busiest unless you pick another, and **Failed jobs** lists the five newest with their attempts (`3/3`), the first line of their error, and **Retry** and **Forget**; **Retry all** retries every failed job, not only the five shown. The bars are the stored [snapshots](#metrics) summed per minute, so with the default `fleet.snapshot_secs` of 60 each bar is one minute's finished attempts; the newest bar fills when the next snapshot is stored. On a phone each table keeps its first columns and leaves out the ones that can wait.
 - **Supervisors.** Every master, by server, with its supervisors, a button to pause or continue each, and their processes. Each process shows its queue, its pid, its memory, the jobs it has run and when it started.
 - **Jobs.** Pending jobs (waiting, delayed and running) and job attempts finished within `fleet.trim.recent_minutes` (the last hour), with their type, queue, outcome, runtime and when they ran. Search by job type or queue, and open a pending job to see its payload and attempts.
 - **Failed jobs.** Every job in `failed_jobs`, newest first, with its type, queue, attempts, when it failed and its error. Search by type, queue, error or payload text. Open one to read the full error and the payload, then **Retry** it or **Forget** it. **Retry all** retries every failed job matching the search, so one click puts back every `contacts.export` that failed while the mail server was down.
@@ -212,7 +221,7 @@ Payload values whose names contain a fragment of `log.redact` (`password`, `toke
 
 ### Access
 
-The page and its assets are public and hold no data. The page signs in through your app's sign-in route, navree-auth's `POST {http.api_prefix}{auth.routes_prefix}/login` (`/api/auth/login`, two-factor codes included), keeps the access and refresh tokens in the browser tab's session storage, and sends `Authorization: Bearer` to the API; you can also paste an access token. It is served with a strict Content Security Policy (no inline scripts) and `X-Frame-Options: DENY`. Fleet registers the subject `Fleet` with the permission prefix `fleet`, and every API route checks an ability on it:
+The pages hold nothing for a guest: a browser without a session is sent to the app's sign-in page (two-factor codes included) and brought back, and one without the ability is shown a "no access" page. The session is the app's own, so signing out of Fleet signs out of the app, a password change ends it, and one sign-in opens every tool. The pages are served with a strict Content Security Policy (no inline scripts). Fleet registers the subject `Fleet` with the permission prefix `fleet`, and every page and API route checks an ability on it:
 
 | Action | Allows | Permission |
 |---|---|---|
@@ -226,6 +235,8 @@ navree access:grant admin fleet.operate
 
 | Route | Ability |
 |---|---|
+| `GET /_fleet`, `/_fleet/supervisors`, `/_fleet/jobs`, `/_fleet/jobs/{id}`, `/_fleet/failed`, `/_fleet/failed/{id}`, `/_fleet/metrics` (the pages) | `view` |
+| `POST /_fleet/failed/{id}/retry`, `/_fleet/failed/{id}/forget`, `/_fleet/failed/retry`, `/_fleet/pause`, `/_fleet/continue` (the pages' forms) | `operate` |
 | `GET /_fleet/api/overview`, `/masters`, `/jobs`, `/jobs/{id}`, `/failed`, `/failed/{id}`, `/metrics?period=hour\|day\|week` | `view` |
 | `POST /_fleet/api/failed/{id}/retry`, `POST /_fleet/api/failed/retry?search=`, `DELETE /_fleet/api/failed/{id}` | `operate` |
 | `POST /_fleet/api/pause`, `POST /_fleet/api/continue` (body `{"supervisor": "exports"}`, or none for every supervisor) | `operate` |
