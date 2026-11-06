@@ -14,7 +14,8 @@ workspace = true
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
 ## `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`,
-## `redis`, `micro`, `i18n`, `dock`, `navigator`, `browser`).
+## `mongo`, `redis`, `micro`, `i18n`, `dock`, `harbor`, `navigator`, `browser`,
+## `otel`).
 full = [
     "access",
     "api",

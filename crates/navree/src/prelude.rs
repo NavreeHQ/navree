@@ -71,6 +71,8 @@ pub use navree_time::{
     CurrentZone, DayRange, LocalDay, ModuleBuilderTimeExt as _, SendWindow, TimeModule, WithZone,
     Zone,
 };
+#[cfg(feature = "ui")]
+pub use navree_ui::UiModule;
 
 #[cfg(feature = "access")]
 pub use navree_access::{

@@ -1076,3 +1076,17 @@ fn documents_is_reexported_with_its_feature() {
     let pdf = navree::documents::Pdf::from_lines(["Invoice 42"]);
     assert_eq!(pdf.page_count().unwrap(), 1);
 }
+
+/// `UiModule` comes with the prelude when `ui` is on, and the country flags have a name
+/// that cannot be taken for `navree::flags`, the feature flags
+/// (`cargo test -p navree --test facade`).
+#[cfg(feature = "ui")]
+#[test]
+fn ui_module_is_in_the_prelude_and_country_flags_have_their_own_name() {
+    assert!(same::<UiModule, navree::ui::UiModule>());
+    assert!(same::<
+        navree::ui::country_flags::CountryCode,
+        navree::ui::flags::CountryCode,
+    >());
+    assert_eq!(navree::ui::country_flags::IN.to_string(), "IN");
+}

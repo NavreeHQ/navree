@@ -103,6 +103,9 @@ pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
+/// Country flags under the name the facade documents: `navree::flags` is feature flags,
+/// so an app that has both writes `navree::ui::country_flags::IN`.
+pub use flags as country_flags;
 pub use flow::{
     Draft, DraftStore, MemoryDrafts, Slider, SliderError, SliderLabels, SliderSpec, Step,
     StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
