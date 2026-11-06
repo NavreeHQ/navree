@@ -11,18 +11,19 @@ use crate::names::AppName;
 use crate::scaffold::FileSet;
 use crate::templates::{TemplateError, render};
 
-/// The front end created next to the API.
+/// The front end created next to the API. Navree UI is the default: a new app
+/// without `--ui` and without a kit draws its screens on the server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum Ui {
     /// A Next.js app in `web/` that talks to the API through its own server
     /// (backend-for-frontend), keeping the tokens in httpOnly cookies.
     Next,
     /// Screens drawn on the server with Navree UI, in `src/` next to the API:
-    /// sign-in, a customers table and forms, a home page with live figures. No
-    /// `web/` folder and no Node.
+    /// sign-in with two-factor authentication, workspaces, a customers table
+    /// and forms, a home page with live figures. No `web/` folder and no Node.
+    #[default]
     Navree,
     /// API only.
-    #[default]
     None,
 }
 

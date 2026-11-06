@@ -328,6 +328,12 @@ fn find_model(module_dir: &Path, entity: &Name) -> Option<String> {
     })
 }
 
+/// Whether the app has the Navree UI kit's `Desk` extractor in `src/ui/shell.rs`.
+fn uses_desk(root: &Path) -> bool {
+    std::fs::read_to_string(join(root, "src/ui/shell.rs"))
+        .is_ok_and(|src| declares_struct(&src, "Desk"))
+}
+
 /// The module `make:page`, `make:form` and `make:table` use without
 /// `--module`: the one module the app has under `modules_dir`.
 pub fn default_module(root: &Path, modules_dir: &str) -> anyhow::Result<Name> {
@@ -491,6 +497,12 @@ pub fn make_ui_item(
 
     let mut hints = edits.hints.clone();
     hints.extend(next_steps(kind, &ctx, stem, &relative(root, &module_dir)));
+    if uses_desk(root) {
+        hints.push(
+            "this app's pages take `Desk` (src/ui/shell.rs), which also draws the signed-in              person, the workspace and the workspace switcher: use it where the generated code              takes `AppShell`"
+                .to_owned(),
+        );
+    }
 
     if !options.dry_run {
         for file in files.iter() {

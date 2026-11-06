@@ -207,13 +207,14 @@ pub struct NewArgs {
     /// alone) or `micro` (a microservice); default: the minimal app.
     #[arg(long, value_enum, value_name = "KIT")]
     pub kit: Option<Kit>,
-    /// The front end to create next to the API: `next` (a Next.js app in
-    /// `web/`), `navree` (screens drawn on the server with Navree UI, in
-    /// `src/`; no Node) or `none`. With a kit, only `saas` has a front end,
-    /// and it is Next.js (`--kit saas --ui next` is the same as `--kit saas`);
-    /// `--ui navree` goes with no kit.
-    #[arg(long, value_enum, default_value_t = Ui::None)]
-    pub ui: Ui,
+    /// The front end to create next to the API: `navree` (screens drawn on
+    /// the server with Navree UI, in `src/`; no Node; the default for the
+    /// minimal app), `next` (a Next.js app in `web/`) or `none` (the API
+    /// alone). With a kit, only `saas` has a front end, and it is Next.js
+    /// (`--kit saas --ui next` is the same as `--kit saas`); `--ui navree`
+    /// goes with no kit.
+    #[arg(long, value_enum)]
+    pub ui: Option<Ui>,
     /// The database: TimescaleDB (PostgreSQL with time-series hypertables,
     /// run by `navree dock up`), plain PostgreSQL, MySQL/MariaDB, or SQLite
     /// (a file; nothing to install). The kits run on TimescaleDB or
@@ -568,7 +569,7 @@ mod tests {
             panic!("expected new");
         };
         assert_eq!(args.name, "blog");
-        assert_eq!(args.ui, Ui::Next);
+        assert_eq!(args.ui, Some(Ui::Next));
         assert_eq!(
             args.navree_path.as_deref(),
             Some(std::path::Path::new("../navree"))
@@ -576,15 +577,16 @@ mod tests {
         let Command::New(args) = parse(&["new", "blog", "--ui=none"]) else {
             panic!("expected new");
         };
-        assert_eq!(args.ui, Ui::None);
+        assert_eq!(args.ui, Some(Ui::None));
         let Command::New(args) = parse(&["new", "blog", "--ui", "navree"]) else {
             panic!("expected new");
         };
-        assert_eq!(args.ui, Ui::Navree);
+        assert_eq!(args.ui, Some(Ui::Navree));
+        // Nothing said: the app resolves it (Navree UI, or a kit's own).
         let Command::New(args) = parse(&["new", "blog"]) else {
             panic!("expected new");
         };
-        assert_eq!(args.ui, Ui::None);
+        assert_eq!(args.ui, None);
         assert_eq!(args.kit, None);
         assert_eq!(args.database, Database::Timescaledb);
     }
@@ -612,7 +614,7 @@ mod tests {
         let Command::New(args) = parse(&["new", "acme", "--kit", "saas", "--ui", "next"]) else {
             panic!("expected new");
         };
-        assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Ui::Next));
+        assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Some(Ui::Next)));
         let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
     }

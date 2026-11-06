@@ -19,7 +19,7 @@ use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make
 use crate::make_ui::{UiOptions, UiReport, default_module, make_ui_item};
 use crate::names::{AppName, Name};
 use crate::new_app::{
-    NavreeSource, NewApp, Repository, create_app, created_message, init_repository,
+    NavreeSource, NewApp, Repository, Ui, create_app, created_message, init_repository,
     write_harbor_key,
 };
 use crate::openapi_client;
@@ -32,7 +32,13 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
         Command::New(args) => {
             let app = NewApp {
                 name: AppName::parse(&args.name)?,
-                ui: args.ui,
+                // A kit brings its own front end, or none; the minimal app
+                // draws its screens with Navree UI unless told otherwise.
+                ui: args.ui.unwrap_or(if args.kit.is_some() {
+                    Ui::None
+                } else {
+                    Ui::default()
+                }),
                 kit: args.kit,
                 database: args.database,
                 navree: NavreeSource::resolve(args.navree_path.as_deref())?,
