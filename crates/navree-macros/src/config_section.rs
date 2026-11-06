@@ -511,7 +511,9 @@ fn first_paragraph(attrs: &[Attribute]) -> String {
         let Lit::Str(text) = &lit.lit else {
             continue;
         };
-        for line in text.value().lines() {
+        // A bare `///` is `#[doc = ""]`: a blank line that ends a paragraph.
+        // `str::lines` gives nothing for an empty string, so split on `\n`.
+        for line in text.value().split('\n') {
             lines.push(line.trim().to_owned());
         }
     }
