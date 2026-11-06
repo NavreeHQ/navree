@@ -113,3 +113,29 @@ services:
     volumes:
       - ./integrations/keycloak:/opt/keycloak/data/import:ro
     command: ["start-dev", "--import-realm"]
+
+  # OpenLDAP (osixia/openldap, the slapd image people test LDAP clients with).
+  # The directory is scripts/services/integrations/openldap/base.ldif; the
+  # script adds 600 people. TLS uses the certificate the script writes into
+  # ${NAVREE_INT_STATE}/openldap/certs (it names localhost and 127.0.0.1 and is
+  # its own authority): StartTLS on 13389, LDAPS on 13636.
+  openldap:
+    image: ${OPENLDAP_IMAGE:-osixia/openldap:1.5.0}
+    container_name: navree-int-openldap
+    command: ["--copy-service"]
+    ports: ["127.0.0.1:13389:389", "127.0.0.1:13636:636"]
+    environment:
+      LDAP_ORGANISATION: Acme Traders
+      LDAP_DOMAIN: acme.test
+      LDAP_ADMIN_PASSWORD: admin-secret
+      LDAP_CONFIG_PASSWORD: config-secret
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ca.crt
+      LDAP_TLS_DH_PARAM_FILENAME: dhparam.pem
+      LDAP_TLS_VERIFY_CLIENT: never
+      LDAP_TLS_ENFORCE: "false"
+    volumes:
+      - ./integrations/openldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+      - ${NAVREE_INT_STATE:-./state}/openldap/certs:/container/service/slapd/assets/certs

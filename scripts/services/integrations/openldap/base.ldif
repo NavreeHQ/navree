@@ -1,0 +1,74 @@
+# The directory the OpenLDAP suite reads (base DN dc=acme,dc=test; the
+# organisation entry exists already). scripts/integration-services.sh adds
+# 600 more people under ou=bulk, to pass the server's size limit of 500.
+
+dn: ou=people,dc=acme,dc=test
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=acme,dc=test
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=bulk,dc=acme,dc=test
+objectClass: organizationalUnit
+ou: bulk
+
+dn: uid=gurpreet.kaur,ou=people,dc=acme,dc=test
+objectClass: inetOrgPerson
+uid: gurpreet.kaur
+cn: Gurpreet Kaur
+givenName: Gurpreet
+sn: Kaur
+mail: gurpreet.kaur@acme.test
+title: Principal engineer
+departmentNumber: Engineering
+
+dn: uid=harpreet.singh,ou=people,dc=acme,dc=test
+objectClass: inetOrgPerson
+uid: harpreet.singh
+cn: Harpreet Singh
+givenName: Harpreet
+sn: Singh
+mail: harpreet.singh@acme.test
+title: Site reliability engineer
+departmentNumber: Engineering
+
+dn: uid=simran.sandhu,ou=people,dc=acme,dc=test
+objectClass: inetOrgPerson
+uid: simran.sandhu
+cn: Simran Sandhu
+givenName: Simran
+sn: Sandhu
+mail: simran.sandhu@acme.test
+departmentNumber: Operations
+
+dn: uid=manpreet.gill,ou=people,dc=acme,dc=test
+objectClass: inetOrgPerson
+uid: manpreet.gill
+cn: Manpreet Gill
+givenName: Manpreet
+sn: Gill
+mail: manpreet.gill@acme.test
+title: Accounts lead
+departmentNumber: Operations
+
+dn: cn=engineering,ou=groups,dc=acme,dc=test
+objectClass: groupOfNames
+cn: engineering
+description: Builds the product
+member: uid=gurpreet.kaur,ou=people,dc=acme,dc=test
+member: uid=harpreet.singh,ou=people,dc=acme,dc=test
+
+dn: cn=operations,ou=groups,dc=acme,dc=test
+objectClass: groupOfUniqueNames
+cn: operations
+uniqueMember: uid=simran.sandhu,ou=people,dc=acme,dc=test
+uniqueMember: uid=manpreet.gill,ou=people,dc=acme,dc=test
+
+dn: cn=support,ou=groups,dc=acme,dc=test
+objectClass: posixGroup
+cn: support
+gidNumber: 5000
+memberUid: simran.sandhu
+memberUid: harpreet.singh

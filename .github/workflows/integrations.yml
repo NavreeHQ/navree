@@ -15,7 +15,8 @@
 #
 # - mail:     SMTP over TLS to Mailpit with a trusted certificate, SES to an
 #             emulator, mail fetched from IMAP and POP3, Gmail's Pub/Sub push.
-# - identity: SAML and OpenID Connect sign-in against Keycloak.
+# - identity: SAML and OpenID Connect sign-in against Keycloak, the LDAP source
+#             against OpenLDAP.
 #
 # The schedule is weekly, after rust-suites.yml. Run it by hand
 # (workflow_dispatch) after changing one of the connectors, and before a
@@ -33,7 +34,7 @@ on:
         type: boolean
         default: true
       identity:
-        description: Identity (Keycloak)
+        description: Identity (Keycloak, OpenLDAP)
         type: boolean
         default: true
 
@@ -129,6 +130,7 @@ jobs:
           scripts/integration-services.sh pull identity &
           pulling=$!
           cargo test --locked -p navree-sso --test sso --no-run
+          cargo test --locked -p navree-directory --test directory --no-run
           wait "$pulling"
 
       - name: Start the servers
@@ -136,6 +138,9 @@ jobs:
 
       - name: SAML and OpenID Connect sign-in against Keycloak
         run: cargo test --locked -p navree-sso --test sso keycloak -- --ignored --nocapture --test-threads 1
+
+      - name: The LDAP source against OpenLDAP
+        run: cargo test --locked -p navree-directory --test directory openldap -- --ignored --nocapture
 
       - name: Show the servers' logs after a failure
         if: ${{ failure() }}

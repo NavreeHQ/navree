@@ -33,7 +33,7 @@ const TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
 
 /// A user as every source must give it: id, sign-in name, active, name,
 /// email, title, department.
-type UserCore = (
+pub(crate) type UserCore = (
     String,
     String,
     bool,
@@ -43,7 +43,7 @@ type UserCore = (
     Option<String>,
 );
 /// A group: id, name, members.
-type GroupCore = (String, String, Vec<String>);
+pub(crate) type GroupCore = (String, String, Vec<String>);
 
 fn expected() -> (Vec<UserCore>, Vec<GroupCore>) {
     let user = |id: &str, name: &str, active: bool, full: &str, title: Option<&str>, dept: &str| {
@@ -100,7 +100,7 @@ fn expected() -> (Vec<UserCore>, Vec<GroupCore>) {
 }
 
 /// What the directory holds for connection `id`, as compared.
-async fn synced(directory: &Directory, id: Uuid) -> (Vec<UserCore>, Vec<GroupCore>) {
+pub(crate) async fn synced(directory: &Directory, id: Uuid) -> (Vec<UserCore>, Vec<GroupCore>) {
     let users = directory
         .users(id)
         .await
@@ -851,7 +851,7 @@ const BIND_DN: &str = "CN=navree-sync,OU=Service,DC=acme,DC=test";
 
 /// The fixture servers listen on 127.0.0.1, which the LDAP host policy
 /// refuses unless it is allowed.
-fn loopback_ldap(builder: TestAppBuilder) -> TestAppBuilder {
+pub(crate) fn loopback_ldap(builder: TestAppBuilder) -> TestAppBuilder {
     builder.config("directory.ldap.allow_hosts", json!(["127.0.0.1"]))
 }
 
@@ -881,7 +881,7 @@ async fn ldap_connections_may_not_reach_the_apps_own_network_by_default() {
     assert!(server.searches().is_empty() && server.binds().is_empty());
 }
 
-async fn ldap_connection(h: &Harness, settings: Value, secret: Option<&str>) -> Uuid {
+pub(crate) async fn ldap_connection(h: &Harness, settings: Value, secret: Option<&str>) -> Uuid {
     let mut connection = NewConnection::new("Acme AD", "ldap").settings(settings);
     if let Some(secret) = secret {
         connection = connection.secret(secret);

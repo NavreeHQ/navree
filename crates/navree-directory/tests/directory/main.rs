@@ -2,6 +2,7 @@
 
 mod flow;
 mod ldap_server;
+mod openldap;
 mod routes;
 mod scim;
 mod servers;

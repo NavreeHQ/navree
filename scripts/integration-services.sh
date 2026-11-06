@@ -23,7 +23,7 @@
 #
 #   mail      Mailpit over TLS, LocalStack (SES), GreenMail (SMTP, IMAP, POP3),
 #             the Pub/Sub emulator
-#   identity  Keycloak (SAML and OpenID Connect)
+#   identity  Keycloak (SAML and OpenID Connect), OpenLDAP
 #
 # Needs Docker with Compose v2, curl and openssl, and free ports 12222, 13027,
 # 13465 and 18027 to 18465 on 127.0.0.1. The containers are called
@@ -69,12 +69,14 @@ export NAVREE_INT_STATE="$STATE"
 
 SMTP_USER=navree
 SMTP_PASSWORD=navree-secret
+LDAP_ADMIN_DN=cn=admin,dc=acme,dc=test
+LDAP_ADMIN_PASSWORD=admin-secret
 
 # The services of a group.
 group_services() {
   case "$1" in
     mail) echo "mailpit-starttls mailpit-tls localstack greenmail pubsub" ;;
-    identity) echo "keycloak" ;;
+    identity) echo "keycloak openldap" ;;
     *) return 1 ;;
   esac
 }
@@ -150,6 +152,11 @@ NAVREE_TEST_GREENMAIL_IMAP=127.0.0.1:13143
 NAVREE_TEST_GREENMAIL_POP3=127.0.0.1:13110
 NAVREE_TEST_PUBSUB_URL=http://127.0.0.1:18085
 NAVREE_TEST_KEYCLOAK_URL=http://127.0.0.1:18081
+NAVREE_TEST_LDAP_URL=ldap://127.0.0.1:13389
+NAVREE_TEST_LDAPS_URL=ldaps://127.0.0.1:13636
+NAVREE_TEST_LDAP_CA=$(consumer_path "$STATE/openldap/certs/ldap.crt")
+NAVREE_TEST_LDAP_BIND_DN=$LDAP_ADMIN_DN
+NAVREE_TEST_LDAP_PASSWORD=$LDAP_ADMIN_PASSWORD
 EOF
 }
 
@@ -190,6 +197,33 @@ greenmail_ready() {
   tcp 13025 && tcp 13143 && tcp 13110
 }
 
+# OpenLDAP has loaded the directory of integrations/openldap/base.ldif.
+openldap_ready() {
+  docker exec navree-int-openldap ldapsearch -x -H ldap://localhost -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" \
+    -b dc=acme,dc=test "(cn=support)" dn | grep -q '^dn: cn=support'
+}
+
+# 600 more people for the LDAP suite, to pass the server's size limit of 500.
+bulk_people() {
+  local given=(Gurpreet Harpreet Simran Manpreet Jaspreet Amandeep Navdeep Rajinder Balwinder Kuldeep)
+  local family=(Singh Kaur Sandhu Gill Dhillon Grewal Sidhu Bajwa Randhawa Brar)
+  local i uid first last
+  for i in $(seq 1 600); do
+    uid=$(printf 'user%04d' "$i")
+    first=${given[$((i % 10))]}
+    last=${family[$(((i / 10) % 10))]}
+    printf 'dn: uid=%s,ou=bulk,dc=acme,dc=test\nobjectClass: inetOrgPerson\nuid: %s\ncn: %s %s\ngivenName: %s\nsn: %s\nmail: %s@acme.test\n\n' \
+      "$uid" "$uid" "$first" "$last" "$first" "$last" "$uid"
+  done
+}
+
+load_bulk_people() {
+  if ! selected openldap; then
+    return 0
+  fi
+  bulk_people | docker exec -i navree-int-openldap ldapadd -x -H ldap://localhost -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" >/dev/null
+}
+
 # Retries a pull that fails (a registry hiccup) twice more.
 pull() {
   local _try
@@ -218,6 +252,19 @@ prepare_state() {
   fi
   printf '%s:%s\n' "$SMTP_USER" "$SMTP_PASSWORD" >"$dir/auth.txt"
   chmod a+r "$dir/cert.pem" "$dir/key.pem" "$dir/auth.txt"
+
+  # OpenLDAP's certificate, its own authority, and the Diffie-Hellman
+  # parameters its TLS setup asks for.
+  local ldap="$STATE/openldap/certs"
+  mkdir -p "$ldap"
+  if [ ! -s "$ldap/ldap.crt" ] || [ ! -s "$ldap/ldap.key" ]; then
+    openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+      -keyout "$ldap/ldap.key" -out "$ldap/ldap.crt" -subj "/CN=localhost" \
+      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+    cp "$ldap/ldap.crt" "$ldap/ca.crt"
+    openssl dhparam -dsaparam -out "$ldap/dhparam.pem" 2048 >/dev/null 2>&1
+  fi
+  chmod -R a+rwX "$ldap"
 }
 
 start() {
@@ -234,6 +281,8 @@ start() {
   ready localstack navree-int-localstack localstack_ready
   ready greenmail navree-int-greenmail greenmail_ready
   ready pubsub navree-int-pubsub curl --fail --silent http://127.0.0.1:18085/
+  ready openldap navree-int-openldap openldap_ready
+  load_bulk_people
   # Keycloak answers once the realm is imported.
   ready keycloak navree-int-keycloak curl --fail --silent http://127.0.0.1:18081/realms/navree/.well-known/openid-configuration
 
