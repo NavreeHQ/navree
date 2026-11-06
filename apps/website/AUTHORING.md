@@ -14,7 +14,8 @@ pnpm dev            # http://localhost:3210, reloads when you save
 
 - Open **http://localhost:3210/styleguide/** to see every component and
   Markdown element rendered with the site's styles. Its source,
-  `content/styleguide.mdx`, is a good file to copy examples from.
+  `content/styleguide.mdx`, is a good file to copy examples from. The page
+  exists only while `pnpm dev` runs; the built site has no such route.
 - Before you finish, run `pnpm build`. It fails if a page in the manifest is
   missing, has no title or description, or isn't valid MDX.
 

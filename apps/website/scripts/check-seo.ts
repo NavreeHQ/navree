@@ -21,7 +21,7 @@
  *   whose last step is the page (`scripts/lib/jsonld.ts`);
  * - HTML under 650 KB, before compression.
  *
- * Pages marked noindex (the 404, the styleguide, redirects) are only
+ * Pages marked noindex (the 404, redirects) are only
  * checked for the noindex. Also checks that robots.txt points at the
  * sitemap, that the sitemap lists every indexable page and nothing else,
  * each with a valid `lastmod` that is not in the future, and that the 404

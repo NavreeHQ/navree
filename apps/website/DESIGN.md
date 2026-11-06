@@ -4,7 +4,7 @@ One page for everyone building navree.com. The tokens live in
 `src/app/globals.css`, the fonts in `src/app/fonts.ts`, the primitives in
 `src/components/ui/` (shadcn/ui) and the motion pieces in
 `src/components/magicui/` (Magic UI). All restyled to the brand: neon green
-on black, dark only. `/styleguide/` shows the docs components.
+on black, dark only. `/styleguide/` shows the docs components (while `pnpm dev` runs; the built site has no such page).
 
 ## 1. Color
 

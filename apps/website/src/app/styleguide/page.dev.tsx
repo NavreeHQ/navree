@@ -11,12 +11,15 @@ import { SiteComponents } from "./site-components";
 
 export const metadata: Metadata = {
   title: "Components preview",
+  description: "Every docs component and Markdown element, rendered with the site's styles. Shown only while the site runs in development.",
   robots: { index: false, follow: false },
 };
 
 /**
  * Renders `content/styleguide.mdx` (every docs component, for authors),
- * then the site building blocks: shadcn/ui and Magic UI, as restyled.
+ * then the site building blocks: shadcn/ui and Magic UI, as restyled. The
+ * file is `page.dev.tsx`, so this route exists only under `next dev` (see
+ * `next.config.ts`).
  */
 export default async function Styleguide() {
   const file = fs.readFileSync(path.join(process.cwd(), "content", "styleguide.mdx"), "utf8");

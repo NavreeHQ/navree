@@ -150,7 +150,6 @@ for (const fact of keyFacts()) {
 
 // No page names the project's old names or a 0.x release.
 for (const page of all) {
-  if (page.url === "/styleguide/") continue;
   for (const [pattern, why] of [
     // The old names, written in pieces so that this file never spells them.
     [new RegExp(`\\b(?:${["Ke" + "el", "Na" + "vis"].join("|")})\\b`), "an old name"],

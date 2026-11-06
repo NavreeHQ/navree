@@ -21,7 +21,6 @@ const pages: [string, string][] = [
   ["docs-index", "/docs/"],
   ["docs-validation", "/docs/basics/validation/"],
   ["docs-authentication", "/docs/security/authentication/"],
-  ["styleguide", "/styleguide/"],
   ["ecosystem", "/ecosystem/"],
   ["architecture", "/architecture/"],
   ["ai", "/ai/"],
