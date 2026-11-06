@@ -117,7 +117,7 @@ The binary runs one command and exits, except for the long-running ones. Every c
 | `routes [--json]` | Lists the routes and their access rules. |
 | `openapi:export [path]` | Writes the OpenAPI document to a file. |
 | `access:role`, `access:grant`, `access:explain` | Creates roles, grants permissions and explains access decisions. |
-| `key:generate` | Prints a new application key. |
+| `key:generate` | Prints a new application key; `key:generate --write` puts it in the `.env` of the working directory instead. |
 | `check [--graph]` | Validates the module graph without starting anything. |
 
 Modules add their own. With `ScheduleModule` in the app you get `schedule:work`, `schedule:run` and `schedule:list`, and with `AuditModule` you get `audit:prune`. A new app includes `ScheduleModule` (it schedules `model:prune` daily) but not `AuditModule`. See [Console commands and the CLI](/docs/digging-deeper/cli/).

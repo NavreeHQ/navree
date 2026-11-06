@@ -124,7 +124,6 @@ It depends on navree at /home/you/code/navree/crates/navree.
 Next steps:
   cd blog
   navree dock up             # TimescaleDB on 127.0.0.1:5432
-  navree key:generate        # then set APP_KEY in .env
   navree dev                 # http://127.0.0.1:8080/api/docs
 
 Initialized a Git repository (nothing committed yet).
@@ -158,7 +157,7 @@ navree new acme --kit saas
 
 ## Local services with Dock
 
-A new app runs on TimescaleDB, and its `dock.toml` tells [Dock](/docs/tools/dock/) to run it in a container (Docker or Podman). Start it before anything that boots the app, `navree key:generate` included:
+A new app runs on TimescaleDB, and its `dock.toml` tells [Dock](/docs/tools/dock/) to run it in a container (Docker or Podman). Start it before anything that boots the app, `navree dev` included:
 
 ```sh
 cd blog
@@ -169,23 +168,13 @@ When your app also uses Redis, Meilisearch, Mailpit, MinIO or NATS, `navree dock
 
 ## Running the application
 
-With the database running, generate an application key. It encrypts data and signs tokens; without it, every restart invalidates the access tokens already issued.
-
-```sh
-navree key:generate
-```
-
-```text
-base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
-```
-
-The first run compiles the framework, which takes a few minutes; later builds are incremental. The command boots the app, so log lines may appear before the key. Paste the key into `.env`:
+`navree new` has already put an application key in the app's `.env`. It encrypts data and signs tokens; without it, every restart invalidates the access tokens already issued. Keep it out of Git (`.gitignore` already lists `.env`), and use another key on each server: `navree key:generate` prints one, and `navree key:generate --write` fills an empty `APP_KEY` in `.env` ([the application key](/docs/getting-started/configuration/#the-application-key)).
 
 ```env title=".env"
 APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
 ```
 
-Then start the development server:
+With the database running, start the development server. The first run compiles the framework, which takes a few minutes; later builds are incremental.
 
 ```sh
 navree dev

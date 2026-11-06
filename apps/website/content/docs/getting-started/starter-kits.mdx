@@ -38,7 +38,6 @@ It depends on navree at /home/ada/code/navree/crates/navree.
 Next steps:
   cd acme
   navree dock up                 # TimescaleDB and Mailpit
-  navree key:generate            # then set APP_KEY in .env
   navree migrate:fresh --seed    # tables and a demo workspace
   pnpm --dir /home/ada/code/navree/packages/js install # the Navree packages (not on npm yet)
   pnpm --dir /home/ada/code/navree/packages/js build # once; the web app links them
@@ -51,12 +50,7 @@ Initialized a Git repository (nothing committed yet).
 <Steps>
 <Step title="Start the local services">
 
-`navree dock up` reads `dock.toml` and starts TimescaleDB (PostgreSQL with hypertables, Navree's default database) and Mailpit in containers. `navree new` already wrote their settings into `.env`, between the `# dock:start` and `# dock:end` markers: `APP_DATABASE__URL` points at the database and `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`.
-
-</Step>
-<Step title="Set the application key">
-
-`navree key:generate` prints a key; put it in `.env` as `APP_KEY`. It encrypts cookies and secrets, and signs tokens, so keep it out of git (`.gitignore` already lists `.env`).
+`navree dock up` reads `dock.toml` and starts TimescaleDB (PostgreSQL with hypertables, Navree's default database) and Mailpit in containers. `navree new` already wrote their settings into `.env`, between the `# dock:start` and `# dock:end` markers: `APP_DATABASE__URL` points at the database and `APP_MAIL__TRANSPORT` at Mailpit's SMTP port. Mail the app sends shows up at `http://localhost:8025`. `navree new` also wrote an application key into `.env` as `APP_KEY`. It encrypts cookies and secrets, and signs tokens, so keep it out of git (`.gitignore` already lists `.env`) and use another key on each server ([the application key](/docs/getting-started/configuration/#the-application-key)).
 
 </Step>
 <Step title="Create the tables and the demo data">
@@ -358,7 +352,6 @@ The service also serves `/health/live`, `/health/ready` (with a `micro` check th
 navree new shop --ui navree
 cd shop
 navree dock up            # the database
-navree key:generate       # paste the key into APP_KEY in .env
 navree dev                # http://127.0.0.1:8080
 ```
 

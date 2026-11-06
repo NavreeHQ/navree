@@ -17,14 +17,15 @@ You need Rust 1.95 or newer and the `navree` CLI. [Installation](/docs/getting-s
 navree new planner
 cd planner
 navree dock up
-navree key:generate
 ```
 
-`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. `navree dock up` starts the app's database. `navree key:generate` compiles the app (a few minutes the first time) and prints a key. Put it in `.env`:
+`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. It also puts a generated application key in `.env`, which encrypts data and signs tokens:
 
 ```env title=".env"
 APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
 ```
+
+`navree dock up` starts the app's database.
 
 The app already has accounts: `AuthModule` serves `/api/auth/register`, `/api/auth/login` and the rest, and stores users in its own `users` table. You add the tasks.
 

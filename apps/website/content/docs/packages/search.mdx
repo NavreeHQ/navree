@@ -168,7 +168,7 @@ nodes = ["https://typesense-2.internal:8108", "https://typesense-3.internal:8108
 # key: APP_SEARCH__KEY (required)
 ```
 
-Every index is a Typesense collection behind an alias, so `search:import --fresh` (and `search:flush`) builds a new collection and moves the alias in one step. `nodes` lists the other nodes of a cluster; requests fail over between them. Typesense doesn't index null values: `filter_null` isn't available on it (a 400), and `filter_not` doesn't match records without a value.
+Every index is a Typesense collection behind an alias, so `search:import --fresh` (and `search:flush`) builds a new collection and moves the alias in one step. `nodes` lists the other nodes of a cluster; requests fail over between them. Typesense doesn't index null values: `filter_null` isn't available on it (a 400), and `filter_not` doesn't match records without a value. Each sort field is sorted by a typed key Navree keeps next to it (`_sort_<field>`), so numbers, dates and text all sort; Typesense compares text lower-cased and without punctuation.
 
 </Tab>
 <Tab label="Tantivy">

@@ -60,10 +60,10 @@ Environment values are strings. Typed sections convert them when they read the t
 
 ## The `.env` file
 
-`.env` holds the settings of one machine: secrets and local overrides. `navree new` writes it as a copy of `.env.example`, and `.gitignore` excludes it. Commit `.env.example` instead, with the keys and no secrets.
+`.env` holds the settings of one machine: secrets and local overrides. `navree new` writes it as a copy of `.env.example` with a generated `APP_KEY`, and `.gitignore` excludes it. Commit `.env.example` instead, with the keys and no secrets.
 
 ```env title=".env"
-# Encrypts data and signs tokens. Generate one with `navree key:generate`.
+# Encrypts data and signs tokens. `navree new` writes one; `navree key:generate` makes another.
 APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
 
 # The sender of every mail.
@@ -157,7 +157,7 @@ Read the section in code with `config.app()`, which returns the validated `AppOp
 
 ## The application key
 
-The application key is the app's master secret. It is 32 random bytes written as `base64:...`, and `key:generate` prints a new one:
+The application key is the app's master secret. It is 32 random bytes written as `base64:...`. `navree new` puts a generated key into the new app's `.env` (and leaves `APP_KEY=` empty in the committed `.env.example`), so a new app signs and encrypts from its first run. `key:generate` makes another:
 
 ```sh
 navree key:generate
@@ -167,14 +167,14 @@ navree key:generate
 base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
 ```
 
-Set it as `APP_KEY` in `.env` or in the environment; Navree reads `app.key`, falling back to the top-level `key` that `APP_KEY` maps to. Several modules depend on it:
+`navree key:generate` prints a key for you to put in the environment of a server. `navree key:generate --write` puts it in the `.env` of the working directory instead, when `APP_KEY` there is empty or missing; if a key is set, it refuses, and `--force` replaces it. A new key can't read what the old one encrypted, so move the old key to `app.previous_keys` first ([rotating the key](#rotating-the-key)). Set the key as `APP_KEY` in `.env` or in the environment; Navree reads `app.key`, falling back to the top-level `key` that `APP_KEY` maps to. Several modules depend on it:
 
 - `CryptoModule`'s encrypter uses it for AES-256-GCM encryption, for example of two-factor secrets.
 - `AuthModule` derives the JWT signing key from it, unless you set `auth.jwt.secret`.
 - `HttpModule` derives the key for signed URLs from it, unless you set `http.signing_key`.
 - `RealtimeModule` derives the key that signs broadcasts relayed between processes, unless you set `realtime.secret`.
 
-Without a key the app still boots, so that `key:generate` can run, and logs a warning. Encryption then fails, and JWTs and signed URLs use a random key per process: every restart invalidates the access tokens already issued (clients ask for new ones with their refresh tokens) and breaks every signed link. Every process of an app (the server, queue workers, the scheduler) needs the same key.
+Without a key the app still boots and logs a warning. Encryption then fails, and JWTs and signed URLs use a random key per process: every restart invalidates the access tokens already issued (clients ask for new ones with their refresh tokens) and breaks every signed link. Every process of an app (the server, queue workers, the scheduler) needs the same key.
 
 A malformed key fails the boot, naming `app.key`.
 
@@ -368,13 +368,15 @@ fn sources() -> ConfigSources {
 
 ## Environments
 
-There are no per-environment files by default: each machine's settings come from its own `.env` file and environment variables. One setting names the environment: `env`, set with the `APP_ENV` variable or with `app.env` in a file. These modules read it, and `production` (in any letter case) changes what they do:
+There are no per-environment files by default: each machine's settings come from its own `.env` file and environment variables. One setting names the environment: `env`, set with the `APP_ENV` variable or with `app.env` in a file. These modules read it, and `production` and `staging` (in any letter case) change what they do, so a rehearsal behaves like the real thing:
 
-| Module | In production |
+| Module | In production and staging |
 |---|---|
-| Database and MongoDB | `migrate:rollback`, `migrate:reset`, `migrate:refresh` and `migrate:fresh` refuse to run without `--force`. See [Running migrations](/docs/database/running-migrations/#in-production). |
+| Database and MongoDB | `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh` and `db:seed` refuse to run without `--force`. See [Running migrations](/docs/database/running-migrations/#in-production). |
 | ORM | The strict modes are off unless you set `orm.strict`. See [the ORM's options](/docs/orm/getting-started/). |
 | API | The OpenAPI document and the docs UI are off unless you set `api.openapi_json` and `api.docs_ui`. See [OpenAPI](/docs/digging-deeper/openapi/). |
+| Navree UI | Error pages never show an error's details, whatever `ui.debug` says. See [Errors and states](/docs/ui/errors-and-states/). |
+| `config:check` | Applies the production profile to the configuration, which `config:check --env staging` does too. |
 
 Two defaults depend on how the binary was built, not on `env`:
 
