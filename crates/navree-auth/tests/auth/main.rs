@@ -22,6 +22,7 @@ mod platform;
 mod profile;
 mod refresh;
 mod register;
+mod session_pages;
 mod session_strategy;
 mod sessions;
 mod sign_in_policy;

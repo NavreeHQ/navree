@@ -895,7 +895,7 @@ impl TwoFactorPolicy for EveryoneTwoFactor {
     }
 }
 
-struct EveryoneTwoFactorModule;
+pub(crate) struct EveryoneTwoFactorModule;
 
 impl Module for EveryoneTwoFactorModule {
     fn register(&self, m: &mut ModuleBuilder) {
