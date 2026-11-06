@@ -748,8 +748,9 @@ impl Uploads {
         removed
     }
 
-    /// How many uploads `owner` (whose key is `key`) has unfinished: the ones that expired are
-    /// removed instead of counted.
+    /// How many uploads `owner` (whose key is `key`) has unfinished: the ones that expired, or
+    /// have no note, are removed instead of counted. One whose note the storage cannot read just
+    /// now counts, and stays.
     async fn unfinished(&self, owner: &str, key: &str) -> Result<usize, StorageError> {
         let root = self.at(&format!("{PARTS}/{key}"));
         let lead = format!("{root}/");
@@ -765,26 +766,32 @@ impl Uploads {
         let mut open = 0;
         for id in ids {
             match self.note(key, &id).await {
-                Some(session) if !self.expired(session.at) => {
+                Ok(Some(session)) if !self.expired(session.at) => {
                     open += usize::from(session.owner == owner);
                 }
-                _ => self.discard(key, &id).await,
+                Ok(_) => self.discard(key, &id).await,
+                Err(_) => open += 1,
             }
         }
         Ok(open)
     }
 
-    /// Whether the session `id` of the owner `key` is past its time, or has no note to say.
+    /// Whether the session `id` of the owner `key` is past its time, or has no note to say. One
+    /// whose note the storage cannot read just now is not.
     async fn stale(&self, key: &str, id: &str) -> bool {
-        self.note(key, id)
-            .await
-            .is_none_or(|session| self.expired(session.at))
+        match self.note(key, id).await {
+            Ok(note) => note.is_none_or(|session| self.expired(session.at)),
+            Err(_) => false,
+        }
     }
 
-    /// The note of the session `id` of the owner `key`, if it can be read.
-    async fn note(&self, key: &str, id: &str) -> Option<Session> {
-        let bytes = self.disk.get(&self.part(key, id, "note")).await.ok()?;
-        serde_json::from_slice(&bytes).ok()
+    /// The note of the session `id` of the owner `key`: `None` when it is not there or does not
+    /// parse.
+    ///
+    /// # Errors
+    /// The storage could not say: the upload may still be under way.
+    async fn note(&self, key: &str, id: &str) -> Result<Option<Session>, StorageError> {
+        note_in(self.disk.get(&self.part(key, id, "note")).await)
     }
 
     /// The session `id` of `owner`: not found for a made-up id, another owner's, an expired
@@ -822,6 +829,17 @@ impl Uploads {
                 let _ = self.disk.delete(&file).await;
             }
         }
+    }
+}
+
+/// The session a read of its note gives: `None` when the note is not there or does not parse,
+/// and the error when the storage could not say, which may be for a moment (a timeout, a bucket
+/// that answers 503), so the upload is left alone.
+fn note_in(read: Result<Bytes, StorageError>) -> Result<Option<Session>, StorageError> {
+    match read {
+        Ok(bytes) => Ok(serde_json::from_slice(&bytes).ok()),
+        Err(StorageError::NotFound { .. }) => Ok(None),
+        Err(error) => Err(error),
     }
 }
 
@@ -960,6 +978,32 @@ mod tests {
             ..session
         };
         assert_eq!([0, 1].map(|index| part_size(&exact, index)), [100, 100]);
+    }
+
+    /// Only a note that is not there, or does not parse, says an upload is gone. Any other error
+    /// of the storage may be for a moment, and the upload is left alone.
+    #[test]
+    fn only_a_missing_or_broken_note_says_an_upload_is_gone() {
+        let session = Session {
+            owner: "u".to_owned(),
+            name: "a.png".to_owned(),
+            size: 5,
+            chunk: 5,
+            at: 0,
+        };
+        let note = Bytes::from(serde_json::to_vec(&session).unwrap());
+        assert!(matches!(note_in(Ok(note)), Ok(Some(read)) if read.owner == "u"));
+        assert!(matches!(note_in(Ok(Bytes::from_static(b"{"))), Ok(None)));
+        let missing = StorageError::NotFound {
+            disk: "scratch".to_owned(),
+            path: "note".to_owned(),
+        };
+        assert!(matches!(note_in(Err(missing)), Ok(None)));
+        let slow = StorageError::Backend {
+            disk: "scratch".to_owned(),
+            source: "503 Slow Down".into(),
+        };
+        assert!(note_in(Err(slow)).is_err());
     }
 
     #[test]

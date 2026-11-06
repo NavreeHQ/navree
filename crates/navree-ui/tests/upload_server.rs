@@ -1018,3 +1018,49 @@ async fn a_burst_of_begins_opens_no_more_than_the_limit() {
     }
     assert_eq!(opened, 3);
 }
+
+/// A note the storage cannot read for a moment (a timeout, a bucket that answers 503) is not a
+/// note that is gone: neither a begin nor a sweep removes the upload, it still counts, and it
+/// finishes once its note reads again.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_upload_whose_note_cannot_be_read_for_now_is_kept_and_counted() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let local = local_disk();
+    let uploads = Uploads::new(local.disk.clone(), "photos", images(MB, 1))
+        .chunk_bytes(PART as u64)
+        .chunk_sessions(1);
+    let data = png(PART + 7);
+    let ticket = uploads
+        .begin("u", start("a.png", data.len()))
+        .await
+        .unwrap();
+    put_all(&uploads, "u", &ticket.id, &data, &[0, 1], PART).await;
+    let files = local.disk.list("photos").await.unwrap();
+    let note = files
+        .iter()
+        .find(|path| path.ends_with(&format!("{}/note", ticket.id)))
+        .expect("the upload's note");
+    let note = local.root.join(note);
+    std::fs::set_permissions(&note, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read(&note).is_ok() {
+        println!("this user reads every file, so the note still reads");
+    }
+
+    let refused = uploads.begin("u", start("b.png", PART)).await.unwrap_err();
+    assert_eq!(refused.code, UploadCode::TooMany, "{}", refused.message);
+    assert_eq!(uploads.sweep().await, 0, "a sweep leaves it alone");
+    assert_eq!(
+        local.disk.list("photos").await.unwrap(),
+        files,
+        "nothing was removed"
+    );
+
+    std::fs::set_permissions(&note, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let stored = uploads
+        .finish("u", &ticket.id)
+        .await
+        .expect("the upload was kept whole");
+    assert_eq!(stored.size, data.len() as u64);
+}
