@@ -647,17 +647,27 @@ function commit(root, c, st) {
   if (c.mode === "range") {
     const a = w.from !== null && w.to !== null ? iso(w.from) : "", b = a ? iso(w.to) : "";
     const changed = (f.from?.value ?? "") !== a || (f.to?.value ?? "") !== b;
-    if (f.from) f.from.value = a;
-    if (f.to) f.to.value = b;
+    put(f.from, a);
+    put(f.to, b);
     if (changed) tell(f.to || f.from);
   } else {
     const v = [...w.set].sort((a, b) => a - b).map(iso).join(",");
     const changed = (f.main?.value ?? "") !== v;
-    if (f.main) f.main.value = v;
+    put(f.main, v);
     if (changed) tell(f.main);
   }
   const h = host(root);
   if (h) hostChanged(h, "pick");
+}
+/**
+ * Puts `v` in a field the form posts. WebKit keeps an emptied date or time field's old validity until it is asked
+ * again, and then won't submit its form, for a reason it can't show on a hidden field: so it is asked again.
+ * @param {HTMLInputElement | undefined | null} el @param {string} v
+ */
+function put(el, v) {
+  if (!el) return;
+  el.value = v;
+  el.setCustomValidity("");
 }
 /** The page hears one `input` and one `change`, as for any field. @param {Element | undefined} el */
 function tell(el) {
@@ -682,8 +692,8 @@ function choose(root, z) {
       if (!confirming(c)) {
         st.stash = { from: w.from, to: w.to };
         const f = fields(root);
-        if (f.from) f.from.value = "";
-        if (f.to) f.to.value = "";
+        put(f.from, "");
+        put(f.to, "");
       }
       st.work = { from: z, to: null };
       st.hover = null;
@@ -716,8 +726,8 @@ function abandon(root) {
   if (half && !confirming(c)) {
     const back = st.stash || { from: null, to: null };
     const f = fields(root), whole = back.from !== null && back.to !== null;
-    if (f.from) f.from.value = whole ? iso(back.from) : "";
-    if (f.to) f.to.value = whole ? iso(back.to) : "";
+    put(f.from, whole ? iso(back.from) : "");
+    put(f.to, whole ? iso(back.to) : "");
   }
   if (half || confirming(c)) {
     st.work = readWork(c);
@@ -952,7 +962,7 @@ function onAct(el) {
       textOf(h)?.focus();
     } else {
       const n = nativeOf(h), t = textOf(h);
-      if (n && n.value) { n.value = ""; tell(n); }
+      if (n && n.value) { put(n, ""); tell(n); }
       if (t) t.value = "";
       hostChanged(h, "sync");
       closePop(h);
@@ -1059,21 +1069,21 @@ function textDate(h) {
   const raw = t.value.trim();
   if (!raw) {
     good(h);
-    if (n.value) { n.value = ""; tell(n); }
+    if (n.value) { put(n, ""); tell(n); }
     hostChanged(h, "sync");
     return;
   }
   const r = parseDate(L, raw, c.today);
   if (r.z === undefined) {
-    n.value = "";
+    put(n, "");
     bad(h, L.L[16].replace("{example}", fmt(L, days(2026, 11, 30))));
   } else if (blocked(c.R, r.z)) {
-    n.value = "";
+    put(n, "");
     bad(h, L.L[17]);
   } else {
     good(h);
     const v = iso(r.z);
-    if (n.value !== v) { n.value = v; tell(n); }
+    if (n.value !== v) { put(n, v); tell(n); }
     t.value = fmt(L, r.z);
     h.toggleAttribute("data-has-value", true);
     const label = q(h, "[data-ui-label]");
@@ -1131,7 +1141,7 @@ function setTime(h, t) {
   const v = t === null ? "" : timeValue(t, secs);
   x.value = t === null ? "" : fmtTime(L, t, secs);
   good(h);
-  if (n.value !== v) { n.value = v; tell(n); }
+  if (n.value !== v) { put(n, v); tell(n); }
   h.toggleAttribute("data-has-value", !!v);
 }
 /** @param {Element} h @param {number} t */
@@ -1148,10 +1158,10 @@ function textTime(h) {
   if (!raw) { setTime(h, null); return; }
   const r = parseTime(L, raw);
   if (r.t === undefined) {
-    n.value = "";
+    put(n, "");
     bad(h, L.L[18].replace("{example}", fmtTime(L, 14 * 3600 + 30 * 60, false)));
   } else if (timeBlocked(trules(h), r.t)) {
-    n.value = "";
+    put(n, "");
     bad(h, L.L[19]);
   } else setTime(h, r.t);
 }
