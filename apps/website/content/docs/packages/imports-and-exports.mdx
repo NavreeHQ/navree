@@ -687,7 +687,7 @@ let import = imports
     .upload(
         &uow,
         "contacts",
-        Upload::new("contacts.csv", "Email address,Name\nada@example.com,Anu Lakhotia\n"),
+        Upload::new("contacts.csv", "Email address,Name\nanu@example.com,Anu Lakhotia\n"),
         UploadOptions::default().owner(ADMIN),
     )
     .await?;

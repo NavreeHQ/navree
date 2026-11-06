@@ -208,7 +208,7 @@ let db = app.get::<Db>().await;
 
 let uow = db.uow(Some(ADMIN), None).await;
 let import = imports
-    .upload(&uow, "contacts", Upload::new("contacts.csv", "Email,Name\nada@example.com,Anu\n"),
+    .upload(&uow, "contacts", Upload::new("contacts.csv", "Email,Name\nanu@example.com,Anu\n"),
             UploadOptions::default().owner(ADMIN))
     .await?;
 uow.commit().await?;

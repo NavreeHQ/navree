@@ -372,7 +372,7 @@ async fn contacts_are_uploaded_and_exported_over_the_api() {
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"importer\"\r\n\r\ncontacts\r\n\
          --{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contacts.csv\"\r\n\r\n\
-         Email,Name\nada@example.com,Anu\ngrace@example.com,Gauri\n\r\n--{boundary}--\r\n"
+         Email,Name\nanu@example.com,Anu\ngauri@example.com,Gauri\n\r\n--{boundary}--\r\n"
     );
     let uploaded = client
         .post("/api/imports")

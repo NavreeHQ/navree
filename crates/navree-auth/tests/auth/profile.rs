@@ -150,7 +150,7 @@ async fn update_profile_changes_name_and_email() {
     update_profile(
         &client,
         &access,
-        json!({ "email": "Anu.King@Example.com", "current_password": PASSWORD }),
+        json!({ "email": "Anu.Kaur@Example.com", "current_password": PASSWORD }),
     )
     .await
     .assert_status(200)
