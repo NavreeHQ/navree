@@ -112,6 +112,7 @@ export const sections: DocsSection[] = [
     title: "Security",
     description: "Sign-in, sessions, passwordless and single sign-on, authorization, encryption, signatures and the audit log.",
     pages: [
+      "secure-by-default",
       "authentication",
       "account-flows",
       "sessions",

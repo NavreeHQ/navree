@@ -15,6 +15,7 @@ import { navreeUi } from "./navree-ui";
 import { ormParts } from "./orm-parts";
 import { requestLifecycle } from "./request-lifecycle";
 import { reverseEngineering } from "./reverse-engineering";
+import { tokenAndSession } from "./token-and-session";
 import { transportChoice } from "./transport-choice";
 import { twoWays } from "./two-ways";
 import { workspaceIsolation } from "./workspace-isolation";
@@ -42,6 +43,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "orm-parts": ormParts,
   "jobs-and-events": jobsAndEvents,
   "transport-choice": transportChoice,
+  "token-and-session": tokenAndSession,
 };
 
 /**

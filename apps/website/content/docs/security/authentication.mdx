@@ -12,6 +12,8 @@ Navree authenticates API requests with tokens. A client signs in with an email a
 - When the access token expires, the client posts its refresh token to `POST /api/auth/refresh` and gets a new pair. The old refresh token stops working; presenting it again revokes the whole session.
 - `POST /api/auth/logout` revokes the session's refresh tokens.
 
+<Diagram name="token-and-session" />
+
 A browser app shouldn't hold the tokens in JavaScript at all. Pages your app draws, such as [Navree UI](/docs/ui/overview/) pages, sign the browser in on its [session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session) instead, with the same policies, throttles, two-factor authentication and audit trail. A separate web front end uses the [BFF pattern](#browser-apps-the-bff-pattern) below, which keeps the tokens in httpOnly cookies on your web server, as the reference CRM does.
 
 ## Setting up
