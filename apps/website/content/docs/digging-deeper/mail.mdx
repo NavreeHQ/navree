@@ -86,7 +86,7 @@ Navree::app()
 
 | Transport | Short form | Table form |
 |---|---|---|
-| SMTP | `"smtps://user:pass@host"` or `"smtp://..."` | `{ type = "smtp", url = "smtps://user:pass@host", dkim = { .. } }` |
+| SMTP | `"smtps://user:pass@host"` or `"smtp://..."` | `{ type = "smtp", url = "smtps://user:pass@host", dkim = { .. }, ca = "..." }` |
 | SES | `"ses://KEY_ID:SECRET@eu-west-1"` | `{ type = "ses", region, access_key_id, secret_access_key }` |
 | Mailgun | `"mailgun://API_KEY@mg.example.com"` | `{ type = "mailgun", domain, api_key }` |
 | Postmark | `"postmark://SERVER_TOKEN@api.postmarkapp.com"` | `{ type = "postmark", server_token }` |
@@ -109,6 +109,17 @@ The URL says how to connect: `scheme://user:password@host:port?tls=mode`.
 | `smtp://localhost:1025` | none | 25 |
 
 Use plain `smtp://` only for a local relay or a development mail catcher: credentials would travel unencrypted. Percent-encode reserved characters in the user name and password (`@` is `%40`). The URL never appears in `Debug` output, errors or logs.
+
+A relay with a private certificate, or one signed by your own authority, needs that certificate trusted as well. The table form takes `ca`, the certificate or authority as PEM text; the public authorities stay trusted, and the server's name must still match its certificate:
+
+```toml title="config/app.toml"
+[mail.transport]
+type = "smtp"
+url = "smtps://hello%40acme.test:app-password@relay.acme.internal"
+ca = "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+```
+
+In Rust, `SmtpTransport::from_url(url)?.with_root_certificate(pem)?` does the same for a transport you build yourself, and `TransportConfig::smtp(url).with_ca(pem)` for a configuration. A transport without TLS (a plain `smtp://` URL) refuses a `ca`, as it has no certificate to trust.
 
 When a message has both an HTML and a text body, SMTP sends them as `multipart/alternative`, so mail clients show the one they prefer. Bcc recipients go in the SMTP envelope only, never in the headers.
 

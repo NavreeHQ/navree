@@ -467,7 +467,7 @@ println!("{} TXT \"{}\"", signer.record_name(), signer.dns_record());
 // mail._domainkey.acme.test TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
 ```
 
-Tenant SMTP transports take the same `dkim` table, so each customer's domain signs with its own key.
+Tenant SMTP transports take the same `dkim` table, so each customer's domain signs with its own key. An SMTP transport also takes `ca`, the PEM text of a certificate to trust for a relay with a private certificate (see [SMTP](/docs/digging-deeper/mail/#smtp)).
 
 ## Sending domains
 
@@ -497,7 +497,7 @@ if !report.ready() {
 | DKIM at `<selector>._domainkey.<domain>` | there is none, the key is revoked (empty `p=`) or isn't base64, or the key type is unknown | an RSA key is shorter than 2048 bits |
 | DMARC at `_dmarc.<domain>` | there is none or more than one, it has no policy, or the policy is unknown | the policy is `p=none`, `pct` is below 100, or there is no `rua=` address |
 
-Each `RecordCheck` has a `status` (`pass`, `warn` or `fail`), the `name` looked up, the `record` found and its `problems`. `ready()` is true when nothing fails. The report is `Serialize`, so a settings page can return it as it is. Lookups go through `dyn DnsResolver`: `SystemResolver` asks the system's resolvers, and `StaticResolver` answers from a table in tests.
+Each `RecordCheck` has a `status` (`pass`, `warn` or `fail`), the `name` looked up, the `record` found and its `problems`. `ready()` is true when nothing fails. The report is `Serialize`, so a settings page can return it as it is. Lookups go through `dyn DnsResolver`: `SystemResolver` asks the system's resolvers, and `StaticResolver` answers from a table in tests. `SystemResolver::with_nameserver(addr)` asks one name server on any port instead, for a private resolver.
 
 The command does the same from a terminal:
 

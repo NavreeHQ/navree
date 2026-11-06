@@ -102,7 +102,11 @@ user names (`%40`). Put the URL in the environment
 (`APP_MAIL__TRANSPORT=smtps://...`) or in `.env`, not in `config/app.toml`;
 `.env` overrides the TOML `transport` that a new app sets. The
 `log` transport logs bodies only with `APP_LOG__LEVELS=navree::mail::body=debug`.
-Point it at a local catcher (Mailpit) with `smtp://localhost:1025`.
+Point it at a local catcher (Mailpit) with `smtp://localhost:1025`. A relay with
+a private certificate needs `ca` (PEM text) in the table form
+(`{ type = "smtp", url = "smtps://..", ca = "-----BEGIN CERTIFICATE-----.." }`), or
+`SmtpTransport::from_url(url)?.with_root_certificate(pem)?` in code; the name
+must still match, and a transport without TLS refuses a `ca`.
 
 `queue` renders and validates at once (template and address errors return
 immediately), then dispatches `mail.send`; with no queue in the app it
