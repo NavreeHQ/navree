@@ -1,6 +1,8 @@
 //! `FRAMEWORK_SECTIONS` names every section the framework's crates read, so
-//! `config:check` does not report one as unknown. This test keeps the list
-//! equal to the `ConfigSection` impls under `crates/*/src`.
+//! `config:check` does not report one as unknown when the app does not use
+//! the module that reads it. This test keeps the list equal to the
+//! `ConfigSection` impls and `#[config(key = "..")]` derives under
+//! `crates/*/src`.
 
 use std::path::{Path, PathBuf};
 
@@ -27,8 +29,37 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The `KEY` of every `impl ConfigSection for ...` in `src`.
+/// The key of every section in `src`: derived (`#[config(key = ".."`) and
+/// written by hand.
 fn section_keys(src: &str) -> Vec<String> {
+    let mut keys = derived_keys(src);
+    keys.extend(hand_written_keys(src));
+    keys
+}
+
+/// The key of every `#[derive(ConfigSection)]` in `src`: the `key = ".."` of
+/// a `#[config(..)]` attribute (it may span lines).
+fn derived_keys(src: &str) -> Vec<String> {
+    const ATTRIBUTE: &str = "#[config(";
+    const KEY: &str = "key = \"";
+    let mut keys = Vec::new();
+    let mut rest = src;
+    while let Some(at) = rest.find(ATTRIBUTE) {
+        let after = &rest[at + ATTRIBUTE.len()..];
+        let attribute = &after[..after.find(")]").unwrap_or(after.len())];
+        if let Some(key_at) = attribute.find(KEY) {
+            let value = &attribute[key_at + KEY.len()..];
+            if let Some(end) = value.find('"') {
+                keys.push(value[..end].to_owned());
+            }
+        }
+        rest = after;
+    }
+    keys
+}
+
+/// The `KEY` of every `impl ConfigSection for ...` in `src`.
+fn hand_written_keys(src: &str) -> Vec<String> {
     const IMPL: &str = "impl ConfigSection for ";
     const KEY: &str = "const KEY: &'static str = \"";
     let mut keys = Vec::new();
@@ -55,6 +86,10 @@ fn section_keys(src: &str) -> Vec<String> {
 fn the_list_covers_every_config_section_of_the_framework() {
     let mut files = Vec::new();
     for entry in std::fs::read_dir(crates_dir()).expect("crates").flatten() {
+        // The macros' own tests expand made-up sections.
+        if entry.file_name() == "navree-macros" {
+            continue;
+        }
         let src = entry.path().join("src");
         if src.is_dir() {
             rust_files(&src, &mut files);

@@ -20,4 +20,5 @@ mod registry;
 mod sections;
 mod shadows;
 mod show;
+mod strict;
 mod unused_keys;

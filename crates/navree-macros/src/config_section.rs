@@ -725,7 +725,9 @@ fn json_statement(field: &FieldInfo, config: &TokenStream) -> TokenStream {
         };
     }
     let name = &field.name;
-    let expr = if field.shape.secret || field.args.secret {
+    // A `Secret<..>` describes itself as `null` (a list of them as a list of
+    // `null`), so only a plain type marked `#[config(secret)]` is cut here.
+    let expr = if field.args.secret {
         quote!(#value::Null)
     } else if let Some(text) = &field.args.default {
         quote!(#value::String(::std::string::String::from(#text)))
@@ -897,9 +899,13 @@ mod tests {
         }
         // The container has `serde(default)`: nothing is required.
         assert!(!has(&out, ". required ()"), "{out}");
-        // A credential's default is `null`, never its value.
+        // A credential's default is `null`, never its value: a `Secret` field
+        // describes itself, a field marked `#[config(secret)]` is cut.
         assert!(
-            has(&out, ":: navree_config :: __private :: Value :: Null"),
+            has(
+                &out,
+                ":: navree_config :: DescribeValue :: describe (& self . api_key)"
+            ),
             "{out}"
         );
     }

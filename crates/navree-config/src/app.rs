@@ -154,7 +154,8 @@ impl<'de> Deserialize<'de> for Environment {
 ///
 /// A blank value counts as not set. Read it with [`Config::app`]; the module
 /// registry validates it at boot.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, ConfigSection)]
+#[config(key = "app", docs = "/docs/getting-started/configuration/", validate = Self::check_values)]
 #[serde(default)]
 pub struct AppOptions {
     /// The app's name.
@@ -177,12 +178,16 @@ pub struct AppOptions {
     /// comma-separated string.
     #[serde(deserialize_with = "key_list")]
     pub previous_keys: Vec<Secret<String>>,
+    /// Refuse to start when the configuration has a key nothing reads, or,
+    /// in an environment that behaves like production, a setting the
+    /// production profile fails (no `app.key`, a SQLite database, mail that
+    /// goes to the log). Off by default: the boot only logs them.
+    pub strict_config: bool,
 }
 
-impl ConfigSection for AppOptions {
-    const KEY: &'static str = "app";
-
-    fn validate(&self) -> Result<(), String> {
+impl AppOptions {
+    /// Checks the values (the boot calls this).
+    fn check_values(&self) -> Result<(), String> {
         let mut problems = Vec::new();
         if let Some(url) = &self.url
             && !is_absolute_http_url(url)
@@ -203,17 +208,6 @@ impl ConfigSection for AppOptions {
         } else {
             Err(problems.join("; "))
         }
-    }
-
-    fn defaults() -> Option<serde_json::Value> {
-        Some(serde_json::json!({
-            "name": null,
-            "url": null,
-            "version": null,
-            "env": null,
-            "key": null,
-            "previous_keys": [],
-        }))
     }
 }
 

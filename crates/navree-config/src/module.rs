@@ -97,8 +97,17 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
         }))
         .factory(
             Factory::<ConfigDiagnostics>::new(|r: Resolver| async move {
+                // A registered section is never a typo, also when an app
+                // replaced the provider that reads it (a test's fake).
+                let claims = r
+                    .app()
+                    .contributions::<SectionRegistration>()
+                    .into_iter()
+                    .map(|contributed| contributed.value.key())
+                    .collect();
                 Ok(Arc::new(ConfigDiagnostics {
                     config: r.get::<Config>().await?,
+                    claims,
                 }))
             })
             .deps(vec![ProviderKey::of::<Config>()]),
@@ -113,17 +122,25 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
 }
 
 /// Reports, once the app has booted, what loading the configuration noticed:
-/// keys that `.env` and a config file both set with different values, and
-/// keys and sections that
-/// nothing reads. It waits until every module has built its sections (and so
-/// read its keys), and for the logger to be installed.
+/// keys that `.env` and a config file both set with different values, keys
+/// and sections that nothing reads, and, in an environment that behaves like
+/// production, the settings the production profile fails. It waits until
+/// every module has built its sections (and so read its keys), and for the
+/// logger to be installed.
+///
+/// With `app.strict_config` the unknown keys and the failed settings stop
+/// the boot instead of being logged.
 struct ConfigDiagnostics {
     config: Arc<Config>,
+    /// The keys of the sections the modules registered.
+    claims: Vec<&'static str>,
 }
 
 impl Lifecycle for ConfigDiagnostics {
     fn on_bootstrap(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
+            let strict = self.config.app().is_ok_and(|app| app.strict_config);
+            let mut problems: Vec<String> = Vec::new();
             for shadow in self.config.shadowed() {
                 tracing::warn!(
                     target: "navree::config",
@@ -134,7 +151,7 @@ impl Lifecycle for ConfigDiagnostics {
                     shadow.message()
                 );
             }
-            for unused in self.config.unused() {
+            for unused in self.config.unused_with(&self.claims) {
                 tracing::warn!(
                     target: "navree::config",
                     key = %unused.key,
@@ -142,6 +159,29 @@ impl Lifecycle for ConfigDiagnostics {
                     "{}",
                     unused.message()
                 );
+                problems.push(unused.message());
+            }
+            if self.config.behaves_like_production() {
+                for finding in crate::check::production_profile(&self.config)
+                    .into_iter()
+                    .filter(|finding| finding.fail)
+                {
+                    tracing::error!(
+                        target: "navree::config",
+                        key = finding.key,
+                        "unsafe in production: {}: {}",
+                        finding.key,
+                        finding.message
+                    );
+                    problems.push(format!("{}: {}", finding.key, finding.message));
+                }
+            }
+            if strict && !problems.is_empty() {
+                return Err(BoxError::from(format!(
+                    "app.strict_config is on and the configuration has {} problem(s):\n  {}",
+                    problems.len(),
+                    problems.join("\n  ")
+                )));
             }
             Ok(())
         })
