@@ -809,12 +809,7 @@ mod tests {
             summary: Some("Show a deal".to_owned()),
             description: Some("Returns **one** deal.".to_owned()),
             operation_id: Some("deals.show".to_owned()),
-            parameters: vec![Parameter {
-                name: "id".to_owned(),
-                location: "path".to_owned(),
-                required: true,
-                schema: Schema::string(),
-            }],
+            parameters: vec![Parameter::path("id", Schema::string())],
             security: vec![BTreeMap::from([("bearer".to_owned(), Vec::new())])],
             ..Operation::default()
         };

@@ -97,6 +97,69 @@ pub struct Parameter {
     pub required: bool,
     /// Its schema.
     pub schema: Schema,
+    /// What it means (Markdown).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// How an array or an object is written: `form`, `deepObject` and so on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    /// Whether each member of an array or object is a parameter of its own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explode: Option<bool>,
+}
+
+impl Parameter {
+    /// A required path parameter.
+    pub fn path(name: impl Into<String>, schema: Schema) -> Self {
+        Self::new(name, "path", true, schema)
+    }
+
+    /// An optional query parameter.
+    pub fn query(name: impl Into<String>, schema: Schema) -> Self {
+        Self::new(name, "query", false, schema)
+    }
+
+    fn new(name: impl Into<String>, location: &str, required: bool, schema: Schema) -> Self {
+        Self {
+            name: name.into(),
+            location: location.to_owned(),
+            required,
+            schema,
+            description: None,
+            style: None,
+            explode: None,
+        }
+    }
+
+    /// Sets `description`.
+    #[must_use]
+    pub fn described(mut self, text: impl Into<String>) -> Self {
+        self.description = Some(text.into());
+        self
+    }
+
+    /// Marks the parameter as required.
+    #[must_use]
+    pub fn required(mut self) -> Self {
+        self.required = true;
+        self
+    }
+
+    /// An object written as `name[key]=value` (`style: deepObject`, `explode: true`).
+    #[must_use]
+    pub fn deep_object(mut self) -> Self {
+        self.style = Some("deepObject".to_owned());
+        self.explode = Some(true);
+        self
+    }
+
+    /// A list written as one comma-separated value (`style: form`, `explode: false`).
+    #[must_use]
+    pub fn comma_separated(mut self) -> Self {
+        self.style = Some("form".to_owned());
+        self.explode = Some(false);
+        self
+    }
 }
 
 /// A request body.

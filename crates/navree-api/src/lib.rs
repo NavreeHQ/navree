@@ -20,8 +20,15 @@
 //!   `statusCode`, `message`, `error`, the machine-readable `code`, and
 //!   `errors` for validation errors);
 //!   non-public routes carry the `cookie` (session)
-//!   and `bearer` (JWT access token) security schemes. See [`openapi_document`] for the
+//!   and `bearer` (JWT access token) security schemes, or the ones the app
+//!   says it uses ([`ModuleBuilderApiExt::api_security`]). See [`openapi_document`] for the
 //!   full mapping.
+//! - What `#[api]` cannot say is added with a [`RouteDoc`]
+//!   ([`ModuleBuilderApiExt::api_route`]): the list query a route reads
+//!   (`filter`, `sort`, `search`, paging, from its `ListSpec`), a response that is
+//!   not JSON, another success status, or the security a route needs. The module
+//!   documents the routes of navree's own modules this way: health, metrics, the
+//!   real-time endpoints and the abilities.
 //! - Documentation mistakes stop the boot: two different schemas with one
 //!   name ([`ApiError::SchemaConflict`]) or a reference to a schema nothing
 //!   registered ([`ApiError::MissingSchemas`]; register generic type
@@ -57,17 +64,23 @@ mod conformity;
 mod docs;
 mod document;
 mod ext;
+mod framework_docs;
 #[doc(hidden)]
 pub mod markdown;
 mod module;
 mod options;
 mod reference;
 mod resource;
+mod route_doc;
+mod shapes;
 
 pub use document::{
     ApiError, DEFAULT_SESSION_COOKIE, HttpError, HttpErrorMessage, openapi_document,
+    openapi_document_with,
 };
 pub use ext::ModuleBuilderApiExt;
 pub use module::{ApiDocs, ApiModule};
 pub use options::ApiOptions;
 pub use resource::{ApiResource, TYPE_FIELD, mask_fields, resource_json};
+pub use route_doc::RouteDoc;
+pub use shapes::{AbilityRule, PageMeta};

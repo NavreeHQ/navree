@@ -19,6 +19,8 @@ use crate::conformity::{docs_check, documented_routes, require_docs_error, undoc
 use crate::docs::DocsController;
 use crate::document::build;
 use crate::ext::ApiSchema;
+use crate::framework_docs::framework_docs;
+use crate::route_doc::{ApiRouteDoc, ApiSecurity};
 use crate::{ApiOptions, DEFAULT_SESSION_COOKIE};
 
 /// The API module: builds the app's OpenAPI 3.1 document at boot and
@@ -242,7 +244,23 @@ impl ApiDocs {
                     Some(config) => session_cookie(&config),
                     None => DEFAULT_SESSION_COOKIE.to_owned(),
                 };
-                let document = build(&routes, &extra, &self.options, &cookie)?;
+                // The framework's own routes first, then each module's docs for its routes.
+                let mut docs = framework_docs();
+                docs.extend(
+                    ctx.contributions::<ApiRouteDoc>()
+                        .into_iter()
+                        .map(|c| c.value.0.clone()),
+                );
+                let mut schemes: Vec<String> = Vec::new();
+                for contributed in ctx.contributions::<ApiSecurity>() {
+                    for scheme in &contributed.value.0 {
+                        if !schemes.contains(scheme) {
+                            schemes.push(scheme.clone());
+                        }
+                    }
+                }
+                let security = (!schemes.is_empty()).then_some(schemes.as_slice());
+                let document = build(&routes, &extra, &docs, security, &self.options, &cookie)?;
                 let value = serde_json::to_value(&document)?;
                 let mut json = serde_json::to_vec_pretty(&value)?;
                 json.push(b'\n');

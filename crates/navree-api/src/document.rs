@@ -12,6 +12,7 @@ use navree_openapi::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::route_doc::{Media, RouteDoc, Target};
 use crate::ApiOptions;
 
 /// The HTTP methods an OpenAPI path item has operations for.
@@ -24,6 +25,9 @@ const METHODS: [&str; 8] = [
 const REFERENCED: &str = navree_openapi::__private::COMPONENTS;
 const COMPONENT_TYPES: &str = navree_openapi::__private::COMPONENT_TYPES;
 const COMPONENT_CONFLICTS: &str = navree_openapi::__private::COMPONENT_CONFLICTS;
+
+/// The security schemes the document can name.
+pub(crate) const SCHEMES: [&str; 2] = ["cookie", "bearer"];
 
 /// The session cookie navree-session sets by default: `session.cookie`
 /// (`navree_session`) with the `__Host-` prefix the default options
@@ -57,6 +61,20 @@ pub enum ApiError {
         /// Each missing schema name and the first route (or component) that
         /// refers to it.
         missing: Vec<(String, String)>,
+    },
+    /// A [`RouteDoc`] names a route the app does not have.
+    #[error(
+        "a RouteDoc describes {route}, which the app does not have; fix the name or the path, or call `.optional()` on the doc when another module may not mount the route"
+    )]
+    UnknownRoute {
+        /// The route, as the doc names it.
+        route: String,
+    },
+    /// A security requirement names a scheme the document does not define.
+    #[error("`{scheme}` is not a security scheme of the document (`cookie` and `bearer` are)")]
+    UnknownSecurityScheme {
+        /// The name.
+        scheme: String,
     },
 }
 
@@ -100,7 +118,25 @@ fn missing_message(missing: &[(String, String)]) -> String {
 /// schema nothing registered (see
 /// [`api_schema`](crate::ModuleBuilderApiExt::api_schema)).
 pub fn openapi_document(routes: &[RouteMeta], options: &ApiOptions) -> Result<Value, ApiError> {
-    let document = build(routes, &[], options, DEFAULT_SESSION_COOKIE)?;
+    let document = build(routes, &[], &[], None, options, DEFAULT_SESSION_COOKIE)?;
+    Ok(serde_json::to_value(document).unwrap_or_default())
+}
+
+/// [`openapi_document`] with the [`RouteDoc`]s that describe more than `#[api]` can, and the
+/// security schemes the app uses (`None`: every scheme the document has).
+///
+/// # Errors
+///
+/// As [`openapi_document`], and [`ApiError::UnknownRoute`] for a doc that names a route
+/// the table does not have (unless the doc is optional), [`ApiError::UnknownSecurityScheme`]
+/// for a scheme the document does not define.
+pub fn openapi_document_with(
+    routes: &[RouteMeta],
+    docs: &[RouteDoc],
+    security: Option<&[String]>,
+    options: &ApiOptions,
+) -> Result<Value, ApiError> {
+    let document = build(routes, &[], docs, security, options, DEFAULT_SESSION_COOKIE)?;
     Ok(serde_json::to_value(document).unwrap_or_default())
 }
 
@@ -109,6 +145,8 @@ pub fn openapi_document(routes: &[RouteMeta], options: &ApiOptions) -> Result<Va
 pub(crate) fn build(
     routes: &[RouteMeta],
     extra_schemas: &[(SchemaFn, String)],
+    docs: &[RouteDoc],
+    security: Option<&[String]>,
     options: &ApiOptions,
     session_cookie: &str,
 ) -> Result<Document, ApiError> {
@@ -117,6 +155,37 @@ pub(crate) fn build(
         .filter_map(|route| method_of(route).map(|method| (route, method)))
         .collect();
 
+    // Which docs describe which route; a doc that describes none is a mistake.
+    let schemes: Vec<String> = match security {
+        Some(names) => names.to_vec(),
+        None => SCHEMES.iter().map(|name| (*name).to_owned()).collect(),
+    };
+    let mut applied: Vec<Vec<usize>> = vec![Vec::new(); routes.len()];
+    let mut used = vec![false; docs.len()];
+    for (at, (route, _)) in routes.iter().enumerate() {
+        for (d, doc) in docs.iter().enumerate() {
+            if doc_matches(doc, route) {
+                applied[at].push(d);
+                used[d] = true;
+            }
+        }
+    }
+    if let Some(d) = (0..docs.len()).find(|d| !used[*d] && !docs[*d].optional) {
+        return Err(ApiError::UnknownRoute {
+            route: docs[d].target.describe(),
+        });
+    }
+    for name in schemes
+        .iter()
+        .chain(docs.iter().flat_map(|doc| doc.security.iter().flatten()))
+    {
+        if !SCHEMES.contains(&name.as_str()) {
+            return Err(ApiError::UnknownSecurityScheme {
+                scheme: name.clone(),
+            });
+        }
+    }
+
     // First every referenced schema, so each `$ref` names the right one.
     let mut schemas = Schemas::default();
     for (f, label) in extra_schemas {
@@ -124,6 +193,35 @@ pub(crate) fn build(
         schemas.register(body.name, body.schema, body.rust_type.as_deref(), label)?;
     }
     let error = Body::collect(schema_fn::<HttpError>, "error responses", &mut schemas)?;
+    let mut prepared: Vec<Vec<Prepared>> = Vec::with_capacity(docs.len());
+    for (d, doc) in docs.iter().enumerate() {
+        let label = format!("a RouteDoc for {}", doc.target.describe());
+        let mut responses = Vec::new();
+        if used[d] {
+            for response in &doc.responses {
+                let media = match &response.content {
+                    Some((content_type, Media::Type(f))) => Some((
+                        content_type.clone(),
+                        PreparedMedia::Body(Body::collect(*f, &label, &mut schemas)?),
+                    )),
+                    Some((content_type, Media::Inline(schema))) => {
+                        Some((content_type.clone(), PreparedMedia::Inline(schema.clone())))
+                    }
+                    None => None,
+                };
+                responses.push(Prepared {
+                    status: response.status,
+                    description: response.description.clone(),
+                    media,
+                });
+            }
+            for f in &doc.components {
+                let body = Body::collect(*f, &label, &mut schemas)?;
+                schemas.register(body.name, body.schema, body.rust_type.as_deref(), &label)?;
+            }
+        }
+        prepared.push(responses);
+    }
     let mut bodies = Vec::with_capacity(routes.len());
     for (route, _) in &routes {
         let label = format!("{} {}", route.method, route.full_path);
@@ -142,12 +240,18 @@ pub(crate) fn build(
         error,
         operation_ids: HashSet::new(),
         tags: Vec::new(),
+        schemes: schemes.clone(),
     };
     let mut paths: IndexMap<String, IndexMap<String, Operation>> = IndexMap::new();
     let mut references = Vec::new();
-    for ((route, method), (label, request, response)) in routes.into_iter().zip(bodies) {
+    for (at, ((route, method), (label, request, response))) in
+        routes.into_iter().zip(bodies).enumerate()
+    {
         let (path, params) = openapi_path(&route.full_path);
-        let operation = builder.operation(route, &label, &params, request, response)?;
+        let mut operation = builder.operation(route, &label, &params, request, response)?;
+        for d in &applied[at] {
+            builder.apply(&mut operation, &docs[*d], &prepared[*d], &label)?;
+        }
         let refs = schema_refs(&serde_json::to_value(&operation).unwrap_or_default());
         references.push((label, refs));
         paths.entry(path).or_default().insert(method, operation);
@@ -179,9 +283,32 @@ pub(crate) fn build(
                 .into_iter()
                 .map(|(name, schema)| (name, read_schema(schema)))
                 .collect(),
-            security_schemes: security_schemes(session_cookie),
+            security_schemes: security_schemes(session_cookie, &schemes),
         },
     })
+}
+
+/// Whether `doc` describes `route`.
+fn doc_matches(doc: &RouteDoc, route: &(&RouteMeta, String)) -> bool {
+    let route = route.0;
+    match &doc.target {
+        Target::Name(name) => route.name.as_deref() == Some(name.as_str()),
+        Target::Path { method, path } => {
+            route.method.eq_ignore_ascii_case(method) && route.full_path == *path
+        }
+    }
+}
+
+/// A response a doc adds, its body schemas registered.
+struct Prepared {
+    status: u16,
+    description: Option<String>,
+    media: Option<(String, PreparedMedia)>,
+}
+
+enum PreparedMedia {
+    Body(Body),
+    Inline(Schema),
 }
 
 /// A schema a [`SchemaFn`] returned. One that isn't a JSON object says nothing.
@@ -208,8 +335,8 @@ fn method_of(route: &RouteMeta) -> Option<String> {
 
 /// The `cookie` (first-party session, navree-session) and `bearer` (JWT
 /// access token, navree-auth) security schemes.
-fn security_schemes(session_cookie: &str) -> IndexMap<String, SecurityScheme> {
-    IndexMap::from([
+fn security_schemes(session_cookie: &str, used: &[String]) -> IndexMap<String, SecurityScheme> {
+    let mut all = IndexMap::from([
         (
             "cookie".to_owned(),
             SecurityScheme {
@@ -238,7 +365,9 @@ fn security_schemes(session_cookie: &str) -> IndexMap<String, SecurityScheme> {
                 ),
             },
         ),
-    ])
+    ]);
+    all.retain(|name, _| used.contains(name));
+    all
 }
 
 /// The body of every Navree error response, in Navree's JSON error shape
@@ -307,6 +436,8 @@ struct Builder {
     error: Body,
     operation_ids: HashSet<String>,
     tags: Vec<String>,
+    /// The security schemes the app uses, in the order operations list them.
+    schemes: Vec<String>,
 }
 
 impl Builder {
@@ -344,12 +475,7 @@ impl Builder {
         }
         operation.parameters = params
             .iter()
-            .map(|name| Parameter {
-                name: name.clone(),
-                location: "path".to_owned(),
-                required: true,
-                schema: Schema::string(),
-            })
+            .map(|name| Parameter::path(name.clone(), Schema::string()))
             .collect();
         if let Some(request) = request {
             let schema = read_schema(self.schemas.use_body(request, label)?);
@@ -360,10 +486,7 @@ impl Builder {
         }
         operation.responses = self.responses(route, label, response)?;
         if !route.access.public {
-            operation.security = vec![
-                BTreeMap::from([("cookie".to_owned(), Vec::new())]),
-                BTreeMap::from([("bearer".to_owned(), Vec::new())]),
-            ];
+            operation.security = requirements(&self.schemes);
         }
         operation.extensions.extend(
             route
@@ -372,6 +495,64 @@ impl Builder {
                 .map(|(name, value)| (name.clone(), value.clone())),
         );
         Ok(operation)
+    }
+
+    /// Adds what a [`RouteDoc`] says to an operation: its query parameters, another success
+    /// status, more responses and its own security.
+    fn apply(
+        &mut self,
+        operation: &mut Operation,
+        doc: &RouteDoc,
+        responses: &[Prepared],
+        label: &str,
+    ) -> Result<(), ApiError> {
+        operation.parameters.extend(doc.query.iter().cloned());
+        if let Some(status) = doc.success {
+            let key = status.to_string();
+            let current = operation.responses.keys().next().cloned();
+            if let Some(current) = current
+                && current != key
+                && let Some(mut response) = operation.responses.shift_remove(&current)
+            {
+                response.description = reason(status).to_owned();
+                let rest = std::mem::take(&mut operation.responses);
+                operation.responses.insert(key, response);
+                operation.responses.extend(rest);
+            }
+        }
+        for prepared in responses {
+            let mut response = Response {
+                description: prepared
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| reason(prepared.status).to_owned()),
+                content: IndexMap::new(),
+            };
+            match &prepared.media {
+                Some((content_type, PreparedMedia::Body(body))) => {
+                    let schema = read_schema(self.schemas.use_body(body.clone(), label)?);
+                    response
+                        .content
+                        .insert(content_type.clone(), MediaType { schema });
+                }
+                Some((content_type, PreparedMedia::Inline(schema))) => {
+                    response.content.insert(
+                        content_type.clone(),
+                        MediaType {
+                            schema: schema.clone(),
+                        },
+                    );
+                }
+                None => {}
+            }
+            operation
+                .responses
+                .insert(prepared.status.to_string(), response);
+        }
+        if let Some(schemes) = &doc.security {
+            operation.security = requirements(schemes);
+        }
+        Ok(())
     }
 
     /// The success response, the documented errors, 401 for non-public
@@ -618,6 +799,14 @@ fn take_referenced(schema: &mut Value) -> Referenced {
         out.conflicts.extend(nested.conflicts);
     }
     out
+}
+
+/// Security requirements for `schemes`: any one of them is enough.
+fn requirements(schemes: &[String]) -> Vec<BTreeMap<String, Vec<String>>> {
+    schemes
+        .iter()
+        .map(|name| BTreeMap::from([(name.clone(), Vec::new())]))
+        .collect()
 }
 
 /// The reason phrase of a status code, as a response description.

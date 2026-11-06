@@ -8,5 +8,6 @@ mod conformity;
 mod document;
 mod environment;
 mod export;
+mod route_docs;
 mod routes;
 mod schemas;
