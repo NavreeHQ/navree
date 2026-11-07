@@ -110,7 +110,7 @@ described form also compiles for databases without TimescaleDB.
 
 ## Everywhere else
 
-The same migration runs on plain PostgreSQL, MySQL and SQLite (MariaDB untested): a
+The same migration runs on plain PostgreSQL, MySQL, MariaDB and SQLite: a
 regular table with a `(time DESC)` index, aggregates as plain views, and a
 notice for each skipped policy, so tests run the production migrations on
 SQLite. `schema.timescaledb = "require"` (production) fails instead of

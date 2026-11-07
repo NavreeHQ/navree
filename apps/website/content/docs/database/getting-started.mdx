@@ -21,7 +21,7 @@ Navree supports four SQL databases and, through the ORM's document driver, Mongo
 | TimescaleDB | `postgres` | `navree dock up` starts it in a container | You want the default, or you keep time-series data: the audit log, events, metrics | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
 | PostgreSQL | `postgres` | Your server; `navree dock up` runs one too | You want PostgreSQL without the extension: hypertables become regular tables | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
 | MySQL | `mysql` | Your server | Your organization runs MySQL 8.4 | [MySQL and MariaDB](/docs/database/mysql/) |
-| MariaDB | `mysql` | Your server | You have to use it; no Navree suite has run against a MariaDB server yet | [MySQL and MariaDB](/docs/database/mysql/) |
+| MariaDB | `mysql` | Your server | Your organization runs MariaDB 11.4 or 10.6 | [MySQL and MariaDB](/docs/database/mysql/) |
 | SQLite | `sqlite` | Nothing: the feature compiles SQLite into your app | Tests, tools and single-writer apps | [SQLite](/docs/database/sqlite/) |
 | MongoDB | `mongo` | Your server | You store documents through the ORM's document driver | [MongoDB](/docs/orm/mongodb/) |
 
@@ -138,7 +138,7 @@ export APP_DATABASE__URL=postgres://crm:secret@db.internal:5432/crm
 export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
 ```
 
-Navree's suites run on MySQL 8.4. MariaDB connects through the same driver but is untested: no Navree suite has run against a MariaDB server yet. [MySQL and MariaDB](/docs/database/mysql/) covers TLS, the SQL mode, the types and collations and how Navree behaves on MySQL.
+Navree's MySQL suites run in CI on MySQL 8.4 and on MariaDB 11.4 and 10.6. MariaDB connects through the same driver. [MySQL and MariaDB](/docs/database/mysql/) covers TLS, the SQL mode, the types and collations and how Navree behaves on MySQL.
 
 ## SQLite
 

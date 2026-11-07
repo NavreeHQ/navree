@@ -3,7 +3,7 @@
 An app depends on the `navree` crate alone (plus `serde` for its derives,
 and `chrono` and `uuid`). Its default `full`
 feature turns every module on; each module is also its own feature.
-`postgres` adds the PostgreSQL driver, `mysql` the MySQL (and, untested, MariaDB)
+`postgres` adds the PostgreSQL driver, `mysql` the MySQL and MariaDB
 driver and `sqlite` the SQLite driver (the bundled library). None is on by
 default: a PostgreSQL or MySQL build compiles no SQLite, and tests, which
 run on SQLite, turn `sqlite` on in `[dev-dependencies]`. `mongo` (opt-in) adds

@@ -101,7 +101,7 @@ To use Navree in a Cargo package you already have, add it from the Git repositor
 cargo add --git https://github.com/NavreeHQ/navree navree
 ```
 
-This adds a Git dependency with every module, since the `full` feature is on by default. No database driver is on by default, so turn on the one you use with `--features`: `postgres` (TimescaleDB and PostgreSQL), `mysql` (MySQL; MariaDB is [untested](/docs/database/mysql/)) or `sqlite` (a file, nothing to install; it also compiles the bundled SQLite library):
+This adds a Git dependency with every module, since the `full` feature is on by default. No database driver is on by default, so turn on the one you use with `--features`: `postgres` (TimescaleDB and PostgreSQL), `mysql` ([MySQL and MariaDB](/docs/database/mysql/)) or `sqlite` (a file, nothing to install; it also compiles the bundled SQLite library):
 
 ```sh
 cargo add --git https://github.com/NavreeHQ/navree navree --features postgres
@@ -142,7 +142,7 @@ The app is complete and working: a root module with every common platform module
 |---|---|---|
 | `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
 | `--ui <next\|navree\|none>` | `navree` | The front end. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`: sign-in, workspaces, a customers table and forms, and a home page with live figures, with no `web/` folder and no Node ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `next` creates a Next.js front end in `web/` instead; its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. `none` is the API alone. With a kit, only `saas` takes `next` (its front end is Next.js already); `api` and `micro` have no front end, and `navree` goes with no kit. |
-| `--database <db>` | `timescaledb` | The database: `timescaledb` (PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, run by `navree dock up` too), `mysql` (MySQL on a server of yours; MariaDB is [untested](/docs/database/mysql/)) or `sqlite` (a file in `storage/`, nothing to install). It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only the driver you chose is compiled into the app) and, for the first two, `dock.toml`. Tests of every app run on SQLite files, so `navree new` also turns `sqlite` on in the app's `[dev-dependencies]`. The kits run on `timescaledb` or `postgres`. |
+| `--database <db>` | `timescaledb` | The database: `timescaledb` (PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, run by `navree dock up` too), `mysql` ([MySQL or MariaDB](/docs/database/mysql/) on a server of yours) or `sqlite` (a file in `storage/`, nothing to install). It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only the driver you chose is compiled into the app) and, for the first two, `dock.toml`. Tests of every app run on SQLite files, so `navree new` also turns `sqlite` on in the app's `[dev-dependencies]`. The kits run on `timescaledb` or `postgres`. |
 | `--navree-path <path>` | the checkout the CLI was built from | Depends on the Navree checkout at `<path>`: the repository or its `crates/navree`. |
 
 ```sh

@@ -228,9 +228,9 @@ MongoDB from portable archives.
 
 `.github/workflows/rust-suites.yml` runs every suite on demand and on a
 schedule: weekly on Linux against all of those servers, with each
-database-switchable crate on SQLite, PostgreSQL and MySQL, and monthly on
-Windows against SQLite. It also builds the projects `navree new` generates once
-a month.
+database-switchable crate on SQLite, PostgreSQL, MySQL and MariaDB (11.4 and
+10.6), and monthly on Windows against SQLite. It also builds the projects
+`navree new` generates once a month.
 
 The connectors that need more than one container run against real servers and
 emulators in a second workflow, `.github/workflows/integrations.yml` (weekly,

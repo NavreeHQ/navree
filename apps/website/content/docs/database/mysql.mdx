@@ -1,6 +1,6 @@
 ---
 title: "MySQL and MariaDB"
-description: "Connect to MySQL 8.4, or MariaDB: the feature, the URL, TLS, SQL mode, how Navree behaves, types and collations, and what has run."
+description: "Connect to MySQL 8.4 or to MariaDB 11.4 or 10.6: the feature, the URL, TLS, SQL mode, how Navree behaves, types and collations, and what has run."
 ---
 
 [Getting started](/docs/database/getting-started/) covers what every database shares (the `database` section, the module, queries and errors). This page covers MySQL and MariaDB.
@@ -20,13 +20,9 @@ Then point `database.url` at the server. `mariadb://` works the same as `mysql:/
 export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
 ```
 
-Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree's suites run on MySQL 8.4; earlier MySQL 8.0 releases are expected to work but are not tested.
+Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree's suites run on MySQL 8.4, MariaDB 11.4 and MariaDB 10.6; earlier MySQL 8.0 releases are expected to work but are not tested.
 
-<Callout type="warning" title="MariaDB is untested">
-
-Navree reads `mariadb://` URLs, opens MariaDB connections with the MySQL driver and writes MariaDB's own SQL for UUID, vector and spatial columns, but none of it has run against a MariaDB server yet: not the migrations, not the ORM's SQL, not the row locks. Until a MariaDB run of the suites passes, treat MariaDB as untested and use MySQL 8.4 in production. If you try MariaDB (10.6 or later, for `SKIP LOCKED`), run your app's own tests against it first.
-
-</Callout>
+MariaDB 11.4 and 10.6 are supported and tested in CI, beside MySQL 8.4. Navree reads `mariadb://` URLs, opens MariaDB connections with the MySQL driver and writes MariaDB's own SQL for UUID, vector and spatial columns. MariaDB 10.6 is the oldest version tested, and the first with `SKIP LOCKED`.
 
 ## Connections
 
@@ -119,4 +115,8 @@ The other modules' suites (auth, queue, audit, workspaces and the rest) run on M
 NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features test-mysql
 ```
 
-MariaDB connects through the same code but hasn't been run against a MariaDB server yet: treat it as untested.
+The MySQL suites of navree-db, the ORM and the schema builder also run against MariaDB 11.4 and 10.6, in the CI step "Test on MariaDB 11.4 and 10.6", and they pass. The same step runs the suites of the crates that own tables again on each MariaDB version. MariaDB connects through the same code as MySQL. To run the suites against your own MariaDB server, give `NAVREE_TEST_MYSQL_URL` a `mariadb://` URL:
+
+```sh
+NAVREE_TEST_MYSQL_URL=mariadb://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-db --features mysql --test mysql
+```

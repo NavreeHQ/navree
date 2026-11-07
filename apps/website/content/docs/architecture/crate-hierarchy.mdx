@@ -51,7 +51,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L2 | `navree-view` | Templates for mail and other text, on navree-template |
 | L2 | `navree-cache` | Cache stores (memory on navree-bounded), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
-| L2 | `navree-schema` | The schema builder for PostgreSQL (with TimescaleDB), MySQL (MariaDB untested) and SQLite; hypertables and continuous aggregates; introspection; schema dumps; migration files |
+| L2 | `navree-schema` | The schema builder for PostgreSQL (with TimescaleDB), MySQL, MariaDB and SQLite; hypertables and continuous aggregates; introspection; schema dumps; migration files |
 | L2 | `navree-navigator` | [Navigator](/docs/ai/navigator/): the MCP server behind `navree mcp` and the agent skills behind `navree skills:install`. A tool the CLI runs outside your app; it reads the app's configuration with navree-config |
 | L3 | `navree-db` | Connections and pools on sqlx (`Executor`, `Statement`, `Row`), per-request unit of work, the migrator, seeders, pagination |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |

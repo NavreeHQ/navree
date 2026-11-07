@@ -21,7 +21,7 @@ schema
     .await?;
 ```
 
-The MariaDB SQL in these tables is what the builder writes; it has not been run against a MariaDB server yet ([MariaDB is untested](/docs/database/mysql/)).
+The MariaDB SQL in these tables is what the builder writes, and the builder's suite runs against MariaDB 11.4 and 10.6 in CI ([what has been run](/docs/database/mysql/#what-has-been-run)).
 
 Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't have fails before any SQL runs, with a message saying what to use instead: "PostgreSQL does not support `set` columns (column `tags`): `set` is a MySQL type; use a `jsonb` array or a join table".
 

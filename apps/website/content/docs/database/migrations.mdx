@@ -3,7 +3,7 @@ title: "Migrations"
 description: "Module-owned migrations written with the schema builder: generating them, `up` and `down`, their order, transactions, data changes and rewriting one."
 ---
 
-Migrations are version control for your schema: each one changes the database a step and records that it ran, so every copy of the database (yours, a colleague's, CI's, production's) reaches the same structure by running the same steps. In Navree a migration is a Rust type with an `up` method that applies a change and a `down` method that reverses it, written with the [schema builder](/docs/database/schema-builder/), which writes the right SQL for PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL and SQLite (and MariaDB's own SQL, [untested](/docs/database/mysql/)).
+Migrations are version control for your schema: each one changes the database a step and records that it ran, so every copy of the database (yours, a colleague's, CI's, production's) reaches the same structure by running the same steps. In Navree a migration is a Rust type with an `up` method that applies a change and a `down` method that reverses it, written with the [schema builder](/docs/database/schema-builder/), which writes the right SQL for PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite.
 
 Each module owns its migrations as a `MigrationSet`, says which modules' tables it needs first, and one migrator runs every set of the app in order. Navree's own modules ship their tables the same way, so adding `AuthModule` to an app brings the `users` table with it.
 
