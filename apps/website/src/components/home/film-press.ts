@@ -6,3 +6,6 @@
  * a client component's file.
  */
 export const PRESSED_EARLY = "__navreeFilmPress";
+
+/** The function the catcher leaves on `window` that removes its listener, called by the player once it is hydrated. */
+export const STOP_CATCHING = "__navreeFilmPressStop";

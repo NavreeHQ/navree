@@ -45,6 +45,8 @@ function facts() {
 export function Hero() {
   return (
     <section aria-labelledby="hero-title" className="relative overflow-hidden">
+      {/* Before anything of the hero, so the browser never pauses on it mid-hero (see FilmPressCatcher). */}
+      <FilmPressCatcher />
       {/* Background: a hairline grid fading out from the top right, and one soft bloom behind the film. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <GridPattern
@@ -108,7 +110,6 @@ export function Hero() {
               describedBy="hero-film-about"
             />
           </div>
-          <FilmPressCatcher />
           <figcaption id="hero-film-about" className="mt-5 text-sm leading-relaxed text-fg-2">
             <p className="text-pretty">{film.description}</p>
             <details className="group mt-3">

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { PRESSED_EARLY } from "./film-press";
+import { PRESSED_EARLY, STOP_CATCHING } from "./film-press";
 
 export type FilmSource = { readonly src: string; readonly type: string };
 
@@ -48,7 +48,7 @@ const DISC = "inline-flex size-8 items-center justify-center rounded-full sm:siz
  * any other refused `play()`.
  */
 
-type EarlyWindow = Window & { [PRESSED_EARLY]?: boolean };
+type EarlyWindow = Window & { [PRESSED_EARLY]?: boolean; [STOP_CATCHING]?: () => void };
 export function FilmPlayer({
   title,
   poster,
@@ -131,6 +131,7 @@ export function FilmPlayer({
   // runs the same `start` as a press, with the same choice of file.
   useEffect(() => {
     const early = window as EarlyWindow;
+    early[STOP_CATCHING]?.();
     if (!early[PRESSED_EARLY]) return;
     early[PRESSED_EARLY] = false;
     buttonRef.current?.click();
