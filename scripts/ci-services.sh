@@ -229,6 +229,9 @@ ready() {
     sleep 2
   done
   say "$service did not start:"
+  # Why the container stopped, if it did: its exit code, whether the kernel
+  # killed it for memory, and Docker's own error.
+  docker inspect --format 'state {{.State.Status}}, exit code {{.State.ExitCode}}, killed for memory {{.State.OOMKilled}} {{.State.Error}}' "$container" >&2 2>/dev/null || true
   docker logs "$container" 2>&1 | tail -n 40 >&2
   return 1
 }
