@@ -32,7 +32,8 @@ hmac = { workspace = true }
 http = { workspace = true }
 metrics = { workspace = true }
 navree-access = { workspace = true }
-navree-auth = { workspace = true }
+# `SIGN_OUT_PATH` (the `session` feature) is where the dashboard's menu signs out.
+navree-auth = { workspace = true, features = ["session"] }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
