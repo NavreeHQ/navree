@@ -21,7 +21,13 @@ import localFont from "next/font/local";
  * through `declarations` and the browser picks the right file by weight and
  * style (scripts/postbuild.ts fails the build if a family has no face). Each
  * family gets a fallback face metric-matched to its web font
- * (`adjustFontFallback`), so swapping fonts doesn't move the layout.
+ * (`adjustFontFallback`), so swapping fonts moves the layout as little as it can.
+ *
+ * That fallback is built on Arial, which Android and Linux don't have. There a
+ * swap of the body face rewraps paragraphs, and on the home page it moved the
+ * film on a phone's first screen. So Geist is `optional`: preloaded, it is
+ * usually there for the first paint; when it is late, the page keeps the
+ * fallback for that view instead of swapping under the reader.
  */
 export const monaSans = localFont({
   src: [{ path: "./fonts/mona-sans-display.woff2", weight: "500 650", style: "normal" }],
@@ -33,7 +39,7 @@ export const monaSans = localFont({
 export const geist = localFont({
   src: [{ path: "./fonts/geist.woff2", weight: "400 700", style: "normal" }],
   variable: "--font-geist",
-  display: "swap",
+  display: "optional",
   fallback: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
 });
 

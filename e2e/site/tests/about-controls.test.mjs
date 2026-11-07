@@ -86,8 +86,8 @@ describe("the About picture", { concurrency: false }, () => {
   });
 
   test("the opening is marked as seen for this visit and a pause button is offered", async () => {
-    await page.waitForTimeout(3500);
-    assert.equal(await page.evaluate(() => sessionStorage.getItem("navree:about-opening")), "1");
+    // The opening's own clock marks it seen when it settles; on a slow machine that clock runs behind real time.
+    await page.waitForFunction(() => sessionStorage.getItem("navree:about-opening") === "1", null, { timeout: 30_000 });
     assert.equal(await button.getAttribute("aria-label"), "Pause the animation");
   });
 
