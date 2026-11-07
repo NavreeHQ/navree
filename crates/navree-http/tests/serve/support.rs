@@ -141,28 +141,35 @@ pub async fn connect(addr: SocketAddr) -> TcpStream {
 /// The request head of `GET /`.
 pub const GET: &[u8] = b"GET / HTTP/1.1\r\nHost: test\r\n\r\n";
 
-/// Reads one response, with its `content-length` body.
+/// Reads one response, with its `content-length` body, and nothing after it:
+/// the head a byte at a time, then exactly the body, so a pipelined response
+/// that arrived in the same packet stays in the socket for the next call.
 pub async fn read_response(stream: &mut TcpStream) -> String {
     timeout(PATIENCE, async {
         let mut seen = Vec::new();
-        let mut chunk = [0_u8; 4096];
-        loop {
-            if let Some(end) = find(&seen, b"\r\n\r\n") {
-                let head = String::from_utf8_lossy(&seen[..end]).to_ascii_lowercase();
-                let length = head
-                    .lines()
-                    .find_map(|line| line.strip_prefix("content-length: "))
-                    .and_then(|length| length.trim().parse::<usize>().ok())
-                    .unwrap_or(0);
-                if seen.len() >= end + 4 + length {
-                    return String::from_utf8_lossy(&seen).into_owned();
-                }
-            }
-            match stream.read(&mut chunk).await {
+        let mut byte = [0_u8; 1];
+        while find(&seen, b"\r\n\r\n").is_none() {
+            match stream.read(&mut byte).await {
                 Ok(0) | Err(_) => return String::from_utf8_lossy(&seen).into_owned(),
-                Ok(read) => seen.extend_from_slice(&chunk[..read]),
+                Ok(_) => seen.push(byte[0]),
             }
         }
+        let head = String::from_utf8_lossy(&seen).to_ascii_lowercase();
+        let length = head
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length: "))
+            .and_then(|length| length.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut body = vec![0_u8; length];
+        let mut filled = 0;
+        while filled < length {
+            match stream.read(&mut body[filled..]).await {
+                Ok(0) | Err(_) => break,
+                Ok(read) => filled += read,
+            }
+        }
+        seen.extend_from_slice(&body[..filled]);
+        String::from_utf8_lossy(&seen).into_owned()
     })
     .await
     .expect("a response arrives")
