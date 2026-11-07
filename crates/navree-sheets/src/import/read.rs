@@ -1418,13 +1418,19 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn reading_leaves_the_async_thread_free() {
         // On a one-thread runtime, a task spawned before the reading only
-        // runs if the reading gave the thread up.
+        // runs if the reading gave the thread up. The file is long enough
+        // that the reading is still going when the runtime first asks for it
+        // (a two-line file can be read before that, and then nothing waits).
         let other = tokio::spawn(async {});
-        let file = Bytes::from_static(b"a,b\n1,2\n");
-        let table = read_table_blocking(file, "x.csv".to_owned(), &options())
+        let file = Bytes::from(format!("a,b\n{}", "1,2\n".repeat(20_000)));
+        let many = ReadOptions {
+            max_rows: 50_000,
+            ..options()
+        };
+        let table = read_table_blocking(file, "x.csv".to_owned(), &many)
             .await
             .unwrap();
-        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows.len(), 20_000);
         assert!(other.is_finished(), "the reading ran on the async thread");
     }
 }
