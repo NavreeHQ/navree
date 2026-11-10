@@ -66,8 +66,8 @@
   "dependencies": {
     "@navree/bff": "workspace:*",
     "@navree/client": "workspace:*",
-    "@nuxt/kit": "^4.6.3",
-    "@nuxt/schema": "^4.6.3",
+    "@nuxt/kit": "^4.6.4",
+    "@nuxt/schema": "^4.6.4",
     "@tanstack/vue-table": "^9.3.1",
     "defu": "^6.1.7",
     "h3": "^1.15.11"
@@ -92,15 +92,15 @@
     }
   },
   "devDependencies": {
-    "@casl/ability": "7.0.2",
-    "@casl/vue": "3.0.1",
+    "@casl/ability": "7.1.1",
+    "@casl/vue": "3.1.0",
     "@types/node": "^24.19.2",
     "@vue/test-utils": "2.5.1",
     "happy-dom": "21.0.4",
     "pusher-js": "8.6.0",
     "typescript": "5.9.3",
-    "vitest": "5.0.5",
-    "vue": "3.5.44",
+    "vitest": "5.1.0",
+    "vue": "3.5.45",
     "vue-router": "5.4.0"
   },
   "publishConfig": {
