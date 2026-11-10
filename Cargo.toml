@@ -378,7 +378,7 @@ icu_segmenter = { version = "2.4.0", default-features = false, features = ["comp
 # PDF reading and writing (navree-pdf): the filters (flate2, already in the
 # tree, and LZW through weezl, which gif uses) and, for files encrypted
 # without a password to open them, RustCrypto's RC4, AES-CBC, MD5 and SHA-2.
-weezl = "0.1.12"
+weezl = "0.2.1"
 rc4 = "0.2.0"
 aes = "0.9.3"
 cbc = "0.2.1"
