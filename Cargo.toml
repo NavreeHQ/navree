@@ -333,7 +333,7 @@ zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2
 # feature, which builds C), and encoding detection for uploaded CSV files
 # (encoding_rs decodes, chardetng guesses). XLSX, XLSB, ODS and XLS are read
 # by navree-sheets itself, with zip, quick-xml and encoding_rs.
-rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["chrono", "constant_memory"] }
+rust_xlsxwriter = { version = "0.102.0", default-features = false, features = ["chrono", "constant_memory"] }
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
