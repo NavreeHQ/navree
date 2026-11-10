@@ -1,0 +1,27 @@
+[package]
+name = "theme-demo"
+description = "The live theme builder the docs frame at navree.com/demo/ui/: the toolkit's themes pages and nothing else, keeping nothing between visitors."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "theme-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+http = { workspace = true }
+# A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
+# cannot turn off default features that the workspace entry leaves on.
+navree = { path = "../../crates/navree", default-features = false, features = ["ui"] }
+
+[dev-dependencies]
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "testing"] }
+serde_json = { workspace = true }
+tokio = { workspace = true }

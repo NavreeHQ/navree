@@ -1,0 +1,1 @@
+0{% set a, b = [1, 2] %}{{ (a + b) * 2 }}{{ map|tojson(indent=2) }}{{ "x"|replace("x", "y") }}{{ list[1:] }}{{ n if t else f }}

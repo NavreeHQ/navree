@@ -1,0 +1,208 @@
+---
+title: "Scopes and soft deletes"
+description: "Local and global scopes, soft deletes with trashing, restoring and force deleting, and pruning old records with `model:prune`."
+---
+
+A **scope** is a piece of a query you reuse. Local scopes are conditions you name and call where you need them (`Deal::query().open().owned_by(me)`); global scopes apply to every query of a model unless a query removes them. Soft deletes are a global scope too: trashed records stay in the table and out of your queries.
+
+## Local scopes
+
+Write scopes as functions of a builder in a `#[scopes]` block (from `navree::orm::prelude`), each marked `#[scope]`:
+
+```rust title="src/modules/deals/models/deal.rs"
+#[scopes]
+impl Deal {
+    /// Deals not closed yet.
+    #[scope]
+    fn open(query: Builder<Self>) -> Builder<Self> {
+        query.where_(Deal::CLOSED_AT.is_null())
+    }
+
+    /// Deals owned by `owner`.
+    #[scope]
+    fn owned_by(query: Builder<Self>, owner: Uuid) -> Builder<Self> {
+        query.where_(Deal::OWNER_ID.eq(owner))
+    }
+
+    /// Deals worth at least `cents`.
+    #[scope]
+    fn worth(query: Builder<Self>, cents: i64) -> Builder<Self> {
+        query.where_(Deal::AMOUNT_CENTS.gte(cents))
+    }
+}
+```
+
+The block generates a trait, `DealScopes`, with one method per scope. Import it, and the scopes chain on every query of the model, relation queries included:
+
+```rust
+use crate::modules::deals::models::deal::DealScopes;
+
+let mine = Deal::query().open().owned_by(me).worth(10_000).latest().get(&db).await?;
+let open_at_agra = agra.deals().open().get(&db).await?;
+```
+
+A scope takes any extra parameters after the builder; `Self` in them means the model. The trait is public unless `#[scopes(vis = "pub(crate)")]` says otherwise, and `#[scopes(name = "OpenDeals")]` renames it. For a one-off, `query.scope(|q| ..)` applies any function of the builder.
+
+## Global scopes
+
+A global scope is a condition every query of a model gets. It implements `GlobalScope<M>`:
+
+```rust
+/// Only projects that are not archived.
+pub struct NotArchived;
+
+impl GlobalScope<Project> for NotArchived {
+    fn apply(&self, query: Builder<Project>) -> Builder<Project> {
+        query.where_(Project::ARCHIVED.eq(false))
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "projects", global_scopes(NotArchived))]
+pub struct Project {
+    pub id: Uuid,
+    pub name: String,
+    pub archived: bool,
+}
+```
+
+A module can add one at boot, by name, which `OrmModule` installs for the whole process when the app starts:
+
+```rust
+m.model::<Project>()
+    .global_scope::<Project>("named", |q| q.where_(Project::NAME.ne("")));
+```
+
+Global scopes apply when a query runs, once, in this order: the model's own, the ones modules registered, soft deletes, then [workspace scoping](/docs/orm/workspaces-and-access/#workspace-scoping). They apply to counts, aggregates, relation queries, eager loads, existence subqueries, mass updates and route bindings alike. A scope never changes the meaning of the conditions around it: when an `OR` is involved, the scope's conditions are grouped, so `where a OR b` plus a scope's `c` is `(a OR b) AND c`.
+
+A query removes them when it must see everything:
+
+```rust
+let all = Project::query().without_global_scope::<NotArchived>().get(&db).await?;
+let by_name = Project::query().without_global_scope_named("named").get(&db).await?;
+let none = Project::query().without_global_scopes().get(&db).await?;
+let some = Project::query().without_global_scopes_except(["named"]).get(&db).await?;
+```
+
+`Project::global_scope_names()` lists a model's scopes, and `model:show` prints them. `refresh` and `fresh` read records back without global scopes, so a record you hold reloads even after it stopped matching one.
+
+## Soft deletes
+
+A soft-deleting model keeps deleted records in its table, marked with the time they were deleted, so they can be restored and the history stays intact. Add `soft_deletes` and a nullable `deleted_at` field (the schema builder's `soft_deletes_tz()` adds the column):
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "notes", timestamps, soft_deletes)]
+pub struct Note {
+    pub id: i64,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+```
+
+`soft_deletes = "archived_at"` names another column. Now deleting a record trashes it:
+
+```rust
+note.delete(&uow).await?;        // sets deleted_at (and updated_at); the row stays
+assert!(note.trashed());
+note.restore(&uow).await?;       // deleted_at back to NULL
+note.force_delete(&uow).await?;  // the row is gone
+```
+
+| Query | Reads |
+|---|---|
+| `Note::query()` | live records only |
+| `.with_trashed()` | live and trashed records |
+| `.only_trashed()` | trashed records only |
+| `.with_trashed_if(condition)` | trashed records too when `condition` is true |
+| `.without_trashed()` | live records only, again |
+
+The trashed choice applies last, even after `without_global_scopes()`. Queries read the same way through relations, eager loads and bindings: a trashed company is a 404 on `/companies/{company}` unless the route [binds with `WithTrashed`](/docs/orm/route-model-binding/#soft-deleted-records).
+
+Each step fires its [events](/docs/orm/events-and-observers/): a soft delete runs `deleting`, `trashed`, `deleted`; `restore` runs `restoring`, the save, `restored`; `force_delete` runs `force_deleting`, `deleting`, the `DELETE`, `deleted`, `force_deleted`, and listeners can tell it apart with `record.is_force_deleting()`.
+
+Queries restore and force delete many records in one statement, without events:
+
+```rust
+let restored: u64 = Note::query().only_trashed().where_key_in(ids).restore(&uow).await?;
+let removed: u64 = Note::query().only_trashed().force_delete(&uow).await?;
+```
+
+A query's `delete` on a soft-deleting model trashes the rows. `Note::force_destroy(&uow, ids)` loads and force deletes records one by one, with their events. `restore_or_create(exec, values, fill)` finds a record among the trashed too and restores it, or creates it; `create_or_restore` tries the insert first.
+
+Restoring needs a soft-deleting model: `restore` and `only_trashed` don't compile on one without `soft_deletes`. `with_trashed`, `without_trashed` and `force_delete` work on every model, so generic code can call them.
+
+<Callout type="note" title="Unique columns and trashed rows">
+
+A trashed row still holds its values, so a unique index on `email` refuses a new record with the email of a trashed one. Either restore the trashed record (`restore_or_create`), or make the index partial on PostgreSQL and SQLite: `t.unique(["email"]).where_raw("deleted_at IS NULL")`.
+
+</Callout>
+
+## Pruning models
+
+Records that are no longer needed (old login attempts, notes trashed a month ago) are deleted by pruning. A model says which of its records are prunable:
+
+```rust
+use navree::orm::prune::Prunable;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "notes", timestamps, soft_deletes, prunable)]
+pub struct Note { /* .. */ }
+
+impl Prunable for Note {
+    /// Trashed notes are gone for good after 30 days.
+    fn prunable(query: Builder<Self>) -> Builder<Self> {
+        query.only_trashed().where_(Note::DELETED_AT.lt(Utc::now() - Duration::days(30)))
+    }
+
+    async fn pruning(&self, _ctx: &ExecContext) -> Result<()> {
+        // remove the note's attachments before the record goes
+        Ok(())
+    }
+}
+```
+
+A `Prunable` model's records are loaded in chunks by key and deleted one by one, with their events, after its `pruning` hook ran; on a soft-deleting model they are removed for good. A record that fails is logged and reported, and the run goes on. For large tables, `MassPrunable` deletes a chunk per statement instead, without loading records or firing events:
+
+```rust
+use navree::orm::prune::MassPrunable;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "login_attempts", timestamps, mass_prunable)]
+pub struct LoginAttempt { /* .. */ }
+
+impl MassPrunable for LoginAttempt {
+    const CHUNK_SIZE: Option<u64> = Some(5_000);
+
+    fn prunable(query: Builder<Self>) -> Builder<Self> {
+        query.where_(LoginAttempt::CREATED_AT.lt(Utc::now() - Duration::days(90)))
+    }
+}
+```
+
+`navree model:prune` prunes every prunable model the app's modules register (`m.model::<Note>()`):
+
+```sh
+navree model:prune                       # every registered prunable model
+navree model:prune --model Note          # only these (repeat the option)
+navree model:prune --except LoginAttempt
+navree model:prune --chunk 500 --pretend # count what would go, delete nothing
+```
+
+The chunk size is the model's `CHUNK_SIZE`, else `--chunk`, else `[orm] prune_chunk` (1000). Every chunk emits a `ModelsPruned` event with a running total, and the command emits `ModelPruningStarting` and `ModelPruningFinished`, through navree-events. An app made by `navree new` schedules `model:prune` daily at 03:00 (the `Housekeeping` module in `src/app.rs`). In code, `Note::prune_all(&db, 500)` prunes one model.
+
+For time-series tables on TimescaleDB, `navree::db::prune_time_series` drops whole chunks instead of deleting rows: see [TimescaleDB](/docs/database/timescaledb/).
+
+<LinkCards>
+  <LinkCard href="/docs/orm/query-builder/" title="Query builder">
+    The conditions scopes are made of.
+  </LinkCard>
+  <LinkCard href="/docs/orm/events-and-observers/" title="Events and observers">
+    What runs when records are trashed, restored and removed.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Scheduling">
+    Running `model:prune` every night.
+  </LinkCard>
+</LinkCards>

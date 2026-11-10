@@ -1,0 +1,63 @@
+---
+title: "Popover"
+description: "A popup by its button, on the browser's `popover`: a click outside or Esc closes it."
+---
+
+<UiPreview example="popover/default" />
+
+`Popover` draws a button and a popup that the button opens with `popovertarget`. The browser handles opening, closing on a click outside and on `Esc`, and the top layer. The `overlay` module, under 1 KB compressed, places the popup beside its button and flips it when there's no room.
+
+The preview shows the popup in place. Press **Change owner** to open it for real.
+
+```rust
+use navree::ui::*;
+
+Popover::new("deal-owner", "Change owner")
+    .align(PopupAlign::Start)
+    .body(Input::search("owner").placeholder("Search people"))
+```
+
+## When to use it
+
+Use a popover for a few controls that belong to one button: a quick edit, a filter. For text only, use a [Tooltip](/docs/components/tooltip/); for a task that should hold focus, a [Dialog](/docs/components/dialog/).
+
+<UiChoose name="hint" current="Popover" />
+
+## Anatomy
+
+<UiAnatomy component="popover" />
+
+## Sides
+
+`.side(Side::Top)` and the others choose the side it opens on; `.align(PopupAlign::Start)` lines it up with the start of its button.
+
+<UiPreview example="popover/sides" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space` on the button | Opens it and moves focus into it. |
+| `Tab` | Moves through its controls. |
+| `Esc` | Closes it and returns focus to the button. |
+
+- The popup has `role="dialog"`, and the button `aria-haspopup="dialog"`. `.label(text)` names the popup when the button's text doesn't say what it holds.
+- `.variant` and `.size` style its button like any [Button](/docs/components/button/).
+
+</UiA11y>
+
+## API
+
+### Popover
+
+<UiProps type="Popover" />
+
+### Side
+
+<UiProps type="Side" />
+
+### PopupAlign
+
+<UiProps type="PopupAlign" />

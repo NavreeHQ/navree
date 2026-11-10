@@ -1,0 +1,12 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: out
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = $1
+  values: [String("NZ")]
+MySQL: SELECT /*+ MAX_EXECUTION_TIME(1501) */ `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`country` = ?
+  values: [String("NZ")]
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = ?
+  values: [String("NZ")]
+count: SELECT /*+ MAX_EXECUTION_TIME(1501) */ COUNT(*) AS `aggregate` FROM `companies` WHERE `companies`.`country` = ?
+exists: SELECT /*+ MAX_EXECUTION_TIME(1501) */ EXISTS (SELECT 1 FROM `companies` WHERE `companies`.`country` = ?) AS `exists`

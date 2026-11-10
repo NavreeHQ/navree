@@ -1,0 +1,25 @@
+[package]
+name = "docs-snippets"
+description = "Compiles the Rust code blocks of the website's UI and component pages against the current `navree` crate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+# Writes every compiled block of the pages to OUT_DIR as a module.
+build = "build.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+# What the pages' compiled blocks use, as an app would depend on it: the facade with the
+# features they name, and the libraries they import. A block that needs more adds it here.
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, features = ["full", "sqlite"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

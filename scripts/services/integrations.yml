@@ -1,0 +1,194 @@
+# Servers for the connectors that scripts/services/compose.yml does not cover,
+# on 127.0.0.1 only: a real SMTP server over TLS, an IMAP and POP3 server, an
+# AWS emulator, an identity provider, an LDAP server, an OpenTelemetry
+# Collector, a DNS server, a Pub/Sub emulator and an Ubuntu host with systemd
+# and sshd.
+#
+# scripts/integration-services.sh drives this file: it writes the files the
+# containers mount, starts them, waits until each answers, sets up the data the
+# suites expect and prints the NAVREE_TEST_* variables they read. The tests
+# that use these servers are marked #[ignore]; the integrations workflow
+# (.github/workflows/integrations.yml) runs them with `-- --ignored`.
+#
+# The containers are called navree-int-<service> and use ports from 12222 up,
+# so they can run beside the servers of scripts/services/compose.yml. The
+# throwaway credentials below only guard servers that live for one job on the
+# loopback interface.
+name: navree-int
+
+services:
+  # Mailpit, twice more, with its HTTP API published so a test can read back
+  # what arrived (compose.yml's two TLS servers publish SMTP only). Both ask
+  # for a login (navree / navree-secret) and answer with a certificate that
+  # scripts/integration-services.sh writes into ${NAVREE_INT_STATE}/mailpit,
+  # signed by an authority of its own there (ca.pem), which the transport
+  # trusts with its `ca` setting.
+  #
+  #   mailpit-starttls  SMTP 13027, API 18027: STARTTLS required
+  #   mailpit-tls       SMTP 13465, API 18465: TLS from the first byte
+  mailpit-starttls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-int-mailpit-starttls
+    ports: ["127.0.0.1:13027:1025", "127.0.0.1:18027:8025"]
+    volumes:
+      - ${NAVREE_INT_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-starttls
+
+  mailpit-tls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-int-mailpit-tls
+    ports: ["127.0.0.1:13465:1025", "127.0.0.1:18465:8025"]
+    volumes:
+      - ${NAVREE_INT_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-tls
+
+  # SES and SES v2 from Moto's server, an open-source emulator of the AWS APIs.
+  # It accepts the SigV4 requests of the SES v2 API without checking the
+  # signature and keeps every message it was sent, which the suites read back
+  # at /moto-api/data.json.
+  ses:
+    image: ${SES_IMAGE:-motoserver/moto:5.2.5}
+    container_name: navree-int-ses
+    ports: ["127.0.0.1:14566:5000"]
+
+  # GreenMail: SMTP, IMAP and POP3 in one JVM. It makes a mailbox for every
+  # address it receives mail for and accepts any password.
+  greenmail:
+    image: ${GREENMAIL_IMAGE:-greenmail/standalone:2.1.9}
+    container_name: navree-int-greenmail
+    ports:
+      - "127.0.0.1:13025:3025"
+      - "127.0.0.1:13110:3110"
+      - "127.0.0.1:13143:3143"
+    environment:
+      GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
+
+  # Google's Pub/Sub emulator. A push subscription posts to the app on the
+  # host, which the container reaches as host.docker.internal.
+  pubsub:
+    image: ${PUBSUB_IMAGE:-gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators}
+    container_name: navree-int-pubsub
+    ports: ["127.0.0.1:18085:8085"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command:
+      - gcloud
+      - beta
+      - emulators
+      - pubsub
+      - start
+      - --host-port=0.0.0.0:8085
+      - --project=acme-prod
+
+  # Keycloak, with the realm `navree` imported at start: a SAML client for
+  # https://api.acme.test/api/sso/saml/keycloak/metadata, an OpenID Connect
+  # client (navree-oidc) and the user harpreet.kaur@example.in
+  # (scripts/services/integrations/keycloak/navree-realm.json). The service
+  # provider URLs are the ones navree-sso tests use; nothing is served there.
+  keycloak:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4}
+    container_name: navree-int-keycloak
+    ports: ["127.0.0.1:18081:8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-secret
+    volumes:
+      - ./integrations/keycloak:/opt/keycloak/data/import:ro
+    command: ["start-dev", "--import-realm"]
+
+  # OpenLDAP (osixia/openldap, the slapd image people test LDAP clients with).
+  # The directory is scripts/services/integrations/openldap/base.ldif; the
+  # script adds 600 people. TLS uses the certificate the script writes into
+  # ${NAVREE_INT_STATE}/openldap/certs (it names localhost and 127.0.0.1 and is
+  # its own authority): StartTLS on 13389, LDAPS on 13636.
+  openldap:
+    image: ${OPENLDAP_IMAGE:-osixia/openldap:1.5.0}
+    container_name: navree-int-openldap
+    command: ["--copy-service"]
+    ports: ["127.0.0.1:13389:389", "127.0.0.1:13636:636"]
+    environment:
+      LDAP_ORGANISATION: Acme Traders
+      LDAP_DOMAIN: acme.test
+      LDAP_ADMIN_PASSWORD: admin-secret
+      LDAP_CONFIG_PASSWORD: config-secret
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ca.crt
+      LDAP_TLS_DH_PARAM_FILENAME: dhparam.pem
+      LDAP_TLS_VERIFY_CLIENT: never
+      LDAP_TLS_ENFORCE: "false"
+    volumes:
+      - ./integrations/openldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+      - ${NAVREE_INT_STATE:-./state}/openldap/certs:/container/service/slapd/assets/certs
+
+  # An OpenTelemetry Collector (the contrib build, which has the file exporter)
+  # that writes every export it receives to ${NAVREE_INT_STATE}/otel/traces.json.
+  # OTLP/gRPC on 14317, OTLP/HTTP on 14318.
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:0.116.1}
+    container_name: navree-int-otel-collector
+    ports: ["127.0.0.1:14317:4317", "127.0.0.1:14318:4318"]
+    volumes:
+      - ./integrations/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ${NAVREE_INT_STATE:-./state}/otel:/out
+
+  # CoreDNS serving the zone acme.test (scripts/services/integrations/coredns):
+  # UDP and TCP on 15353. Any other zone is refused.
+  coredns:
+    image: ${COREDNS_IMAGE:-coredns/coredns:1.12.1}
+    container_name: navree-int-coredns
+    ports: ["127.0.0.1:15353:1053/udp", "127.0.0.1:15353:1053/tcp"]
+    volumes:
+      - ./integrations/coredns:/etc/coredns:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+
+  # A DNS-over-HTTPS server (m13253/dns-over-https) in front of CoreDNS, with
+  # the JSON API (application/dns-json) the single sign-on domain proof uses.
+  doh:
+    image: ${DOH_IMAGE:-satishweb/doh-server:latest}
+    container_name: navree-int-doh
+    ports: ["127.0.0.1:18053:8053"]
+    environment:
+      UPSTREAM_DNS_SERVER: "udp:coredns:1053"
+      DOH_HTTP_PREFIX: /dns-query
+      DOH_SERVER_LISTEN: ":8053"
+      DOH_SERVER_TIMEOUT: "10"
+      DOH_SERVER_TRIES: "3"
+      DOH_SERVER_VERBOSE: "false"
+    depends_on: [coredns]
+
+  # An Ubuntu 24.04 host with systemd and sshd, for Harbor
+  # (scripts/services/integrations/harbor/Dockerfile). systemd needs the
+  # container privileged and the host's cgroups. Root logs in with the key
+  # scripts/integration-services.sh makes. sshd listens on 12222 inside the
+  # container too: Harbor's firewall opens the port it is told to use for ssh
+  # and no other.
+  harbor-host:
+    build: ./integrations/harbor
+    image: navree-int-harbor-host:local
+    container_name: navree-int-harbor-host
+    privileged: true
+    cgroup: host
+    ports: ["127.0.0.1:12222:12222"]
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp

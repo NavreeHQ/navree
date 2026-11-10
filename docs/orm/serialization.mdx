@@ -1,0 +1,210 @@
+---
+title: "Serialization"
+description: "What a record's JSON holds, hiding and appending fields, date formats, API resources with a `__type`, OpenAPI schemas and records in queued jobs."
+---
+
+Records serialize to JSON with serde, so a handler returns `Json(record)`, `Json(collection)` or a page as it is. A record's JSON is its model's, plus what the ORM knows about it: extra columns, appended accessors and loaded relations. The model decides what clients see: fields it hides never leave the server.
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "users", timestamps, hidden(password_hash, two_factor_secret), appends(initials))]
+pub struct User {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    #[model(cast = "hashed")]
+    pub password_hash: String,
+    #[model(cast = "encrypted")]
+    pub two_factor_secret: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[accessors]
+impl User {
+    #[accessor]
+    pub fn initials(&self) -> String {
+        self.name.split_whitespace().filter_map(|word| word.chars().next()).collect()
+    }
+}
+```
+
+```json
+{
+  "id": "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e",
+  "name": "Anu Lakhotia",
+  "email": "anu@example.com",
+  "created_at": "2026-10-27T08:30:00.000000Z",
+  "updated_at": "2026-10-27T08:30:00.000000Z",
+  "initials": "AL"
+}
+```
+
+## What a record's JSON holds
+
+In this order:
+
+1. the model's fields, as the model's own `Serialize` writes them, so serde attributes keep working (`rename`, `skip_serializing_if`, `serialize_with`);
+2. where a [cast](/docs/orm/casts-and-accessors/) decides a field's output, the cast's form (a formatted date, a decimal as a string);
+3. date-times in one format, RFC 3339 in UTC with microseconds (`2026-10-27T08:30:00.000000Z`);
+4. the extra columns the query selected, such as `activities_count`;
+5. the appended accessors;
+6. the loaded relations, under their names, each related record applying its own rules (`null` for an empty to-one relation, `[]` for an empty to-many one; a many-to-many record carries its `pivot`).
+
+Then only the names the model makes `visible` are kept, when it lists any, and the `hidden` ones are left out. `record.to_json()`, `to_json_pretty()` and `to_value()` give the same JSON as text or as a `serde_json::Value`; a collection serializes as an array of them, and a page as `{data, meta}`.
+
+## Hiding fields
+
+`hidden(..)` lists what never appears in a record's JSON; `visible(..)` lists the only things that do, for models where a field added later should stay private until someone shows it:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "api_keys", visible(id, name, last_used_at))]
+pub struct ApiKey {
+    pub id: Uuid,
+    pub name: String,
+    pub token_hash: String,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+```
+
+Names are fields or columns (matched to serde's keys), or output keys: accessors, extras, relations. `#[model(hidden)]` on a field adds it to the list. Hide every secret: [encrypted fields](/docs/orm/casts-and-accessors/#encrypted-and-hashed-fields) hold their plain value in the record, so their JSON would too. `#[serde(skip)]` on a field also keeps it out, for every serializer, while `hidden` is the ORM's rule and can be lifted per record.
+
+## Appending computed values
+
+`appends(..)` adds [accessors](/docs/orm/casts-and-accessors/#accessors) to every record's JSON, after the fields and extras. Each name must be an accessor of the model, or the model doesn't compile.
+
+## Per-record changes
+
+A record, or a whole collection, can change the rules before it is serialized:
+
+```rust
+user.make_visible(["two_factor_secret"]);     // off the hidden list
+user.make_hidden(["email"]);
+user.make_hidden_if(!is_admin, ["created_at"]);
+user.append(["initials"])?;                   // an error for a name that isn't an accessor
+user.without_appends();
+```
+
+`set_hidden`, `merge_hidden`, `set_visible`, `merge_visible`, `set_appends` and `merge_appends` replace or extend the lists, and the `_if` forms take a `bool` or a function of the record. `hidden()`, `visible()`, `appends()` and `has_appended(name)` read them. A collection has `make_hidden`, `merge_hidden`, `set_hidden`, `make_visible`, `merge_visible`, `set_visible`, `append`, `set_appends` and `without_appends`, and applies them to every record; the `_if` forms and the readers are on records only.
+
+`record.only(["id", "email"])` and `record.except(["password_hash"])` return a JSON map of some values, whatever the rules: for building an audit entry or a message, not a response.
+
+## Dates
+
+Every date-time serializes as RFC 3339 in UTC with microseconds, whatever the database returned, so responses don't change with the database. A field with a [`datetime_format` cast](/docs/orm/casts-and-accessors/#built-in-casts) keeps its own format. To format a model's dates another way, name a function:
+
+```rust
+/// Dates as Unix seconds.
+fn unix_seconds(at: &DateTime<FixedOffset>) -> serde_json::Value {
+    serde_json::json!(at.timestamp())
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "events", timestamps, serialize_dates_with = unix_seconds)]
+pub struct Event {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+```json
+{"id":"0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e","name":"signed_in","created_at":1793089800,"updated_at":1793089800}
+```
+
+## API resources
+
+When the JSON a client gets differs from the model, or front-end permission checks need the subject's type, return a resource. `to_resource_json()` is the record's JSON plus navree-api's `"__type"`:
+
+```json
+{"__type":"Deal","amount_cents":120000,"id":"0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e","title":"Renewal"}
+```
+
+A dedicated shape is a type implementing `Resource<M>` (an `ApiResource` built from a record), which a model can name as its own:
+
+```rust
+use navree::api::ApiResource;
+use navree::orm::attributes::Resource;
+
+/// What the front end receives for a deal.
+#[derive(Serialize, navree::openapi::ToSchema)]
+pub struct DealResource {
+    pub id: Uuid,
+    pub title: String,
+    pub amount: String,
+}
+
+impl ApiResource for DealResource {
+    const TYPE: &'static str = "Deal";
+}
+
+impl Resource<Deal> for DealResource {
+    fn from_record(deal: &Record<Deal>) -> Self {
+        DealResource {
+            id: deal.id,
+            title: deal.title.clone(),
+            amount: format!("{:.2}", deal.amount_cents as f64 / 100.0),
+        }
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", resource = DealResource)]
+pub struct Deal { /* .. */ }
+```
+
+`deal.resource()` and `deals.resources()` build the model's resource, `to_resource::<R>()` any other, and `to_resource_json_as::<R>()` its JSON with `__type`. `to_value_masked(Some(&fields))` keeps only the fields an ability permits, for [field-level access](/docs/basics/access-control/). In a handler, `Ok(Json(deal.resource()))`, or `page.map(|deal| deal.resource())` for a page.
+
+## OpenAPI schemas
+
+`Record<M>` implements `ToSchema`, named after the model, so routes document their responses from the model itself:
+
+```rust
+#[get("/{user}")]
+#[api(summary = "Show a user", tag = "Users", response = Record<User>)]
+async fn show(&self, user: Bound<User>) -> Json<Record<User>> {
+    Json(user.into_inner())
+}
+
+#[get("/feed")]
+#[api(summary = "The event feed", tag = "Users", response = CursorPage<Record<Event>>)]
+async fn feed(&self, uow: Uow, cursor: CursorRequest) -> Result<CursorPage<Record<Event>>> {
+    Ok(Event::query().latest().cursor_paginate(&uow, cursor).await?)
+}
+```
+
+The schema has one property per serialized field under its serde key, typed from the field or its cast, with hidden fields left out, the visible list respected, `Option` fields nullable, `skip_serializing_if` fields not required, and the appended accessors. `#[model(schema = Type)]` on a field and `#[accessor(schema = Type)]` give an exact schema, such as an enum's values. `SimplePage<T>` and `CursorPage<T>` have schemas too; for navree-db's `Page`, `navree::orm::attributes::page_schema::<Record<Deal>>` is a `SchemaFn` for routes registered by hand, and [OpenAPI](/docs/digging-deeper/openapi/) shows the named page type `#[api]` takes.
+
+## Records in queued jobs
+
+A job carries a record's identity rather than its values, and reads the record again when it runs, so it sees the record as it is then:
+
+```rust
+use navree::orm::attributes::ModelRef;
+
+/// Emails a deal's owner (serialized into the queue).
+#[derive(Serialize, Deserialize)]
+pub struct NotifyOwner {
+    pub deal: ModelRef<Deal>,
+}
+
+let job = NotifyOwner { deal: deal.to_ref()? };
+// ... when the job runs:
+let deal = job.deal.restore(&uow).await?; // ModelNotFound if it was deleted since
+```
+
+A `ModelRef` serializes as `{"model": "Deal", "key": ..}`, with the names of the record's loaded relations and its connection. `restore` reads from the writer, without global scopes; `restore_or_skip` returns `None` for a deleted record. `collection.to_refs()` and `ModelRefs::restore` do the same for many records, in order, leaving out deleted ones.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/casts-and-accessors/" title="Casts and accessors">
+    How fields are stored and computed.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/openapi/" title="OpenAPI">
+    The document, `#[api]` and the docs UI.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses">
+    Status codes and response types.
+  </LinkCard>
+</LinkCards>

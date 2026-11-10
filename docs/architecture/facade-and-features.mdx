@@ -1,0 +1,366 @@
+---
+title: "The facade and features"
+description: "The `navree` crate: one dependency that re-exports every module, a prelude, one Cargo feature per module (`full` by default), and using a single crate on its own."
+---
+
+## Introduction
+
+Navree is split into [small crates](/docs/architecture/crate-hierarchy/), but an app doesn't have to know that. The `navree` crate, the facade, is the one dependency an app needs: it re-exports every module crate, the attribute macros and a prelude of everyday names. Each module crate sits behind a Cargo feature of the same name. The default feature, `full`, turns on all of them except the opt-in ecosystem libraries, tools and database drivers, so you can start with everything and trim later.
+
+## Depending on Navree
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = "1"
+serde = { version = "1", features = ["derive"] }
+```
+
+`cargo add navree` adds it for you. An app created with `navree new` depends on the published crate at the CLI's version, or on a local checkout of Navree (a `path` dependency) when you pass `--navree-path`; see [where new apps get Navree from](/docs/getting-started/installation/#where-new-apps-get-navree-from).
+
+`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde` directly when you use its derives, because derive macros name their own crate. `#[derive(Validate)]` and `#[derive(ToSchema)]` come with `navree`.
+
+Then one import brings the usual names into scope:
+
+```rust title="src/main.rs"
+use navree::prelude::*;
+
+#[injectable]
+pub struct GreetingController;
+
+#[controller("/greeting", version = "1")]
+impl GreetingController {
+    #[get("/{name}")]
+    #[public]
+    async fn show(&self, Path(name): Path<String>) -> Json<String> {
+        Json(format!("Hello, {name}!"))
+    }
+}
+
+#[module(controllers = [GreetingController])]
+pub struct GreetingModule;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(HttpModule::from_config()) // GET /api/v1/greeting/{name}
+        .module(GreetingModule)
+        .run()
+}
+```
+
+## What the facade contains
+
+Every module crate is re-exported whole, as a module of the facade. `navree::db::Uow` is `navree_db::Uow`, the very same type.
+
+| Path | Crate | Feature | What it brings |
+|---|---|---|---|
+| `navree::kernel` | navree-kernel | always | Module graph, DI container, lifecycle, commands |
+| `navree::bounded` | navree-bounded | always | The bounded in-process `Cache`: a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
+| `navree::glob` | navree-glob | always | The glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
+| `navree::contracts` | navree-contracts | always | Cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
+| `navree::config` | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
+| `navree::telemetry` | navree-telemetry | `telemetry` | Typed telemetry events, sinks and W3C trace context (turned on by the modules that emit them) |
+| `navree::http` | navree-http | `http` | `HttpModule`, controllers, `AppError` |
+| `navree::log` | navree-log | `log` | `LoggerModule` |
+| `navree::crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, the app key; `jose` (JWS and JWK), `totp` and `qr` |
+| `navree::events` | navree-events | `events` | `EventsModule`: events and queued listeners |
+| `navree::view` | navree-view | `view` | `ViewModule`: templates |
+| `navree::template` | navree-template | `template` (`view`, `i18n` and `harbor` turn it on) | The template engine under views, mail and translated messages: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
+| `navree::cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
+| `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
+| `navree::schema` | navree-schema | `schema` | The [schema builder](/docs/database/schema-builder/): tables, columns, indexes, foreign keys, [TimescaleDB](/docs/database/timescaledb/) hypertables, schema dumps |
+| `navree::db` | navree-db | `db` | `DatabaseModule`: pools and statements on sqlx (drivers behind `postgres`, `mysql` and `sqlite`), the unit of work, migrations, seeders, pagination |
+| `navree::orm` | navree-orm | `orm` | `OrmModule`: the [ORM](/docs/orm/getting-started/), models, the query builder, records, relationships, factories and testing helpers |
+| `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
+| `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
+| `navree::openapi` | navree-openapi | always | The OpenAPI document model and `ToSchema` (trait and derive) |
+| `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and the API reference page |
+| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports (SMTP, SES, Mailgun, Postmark, Resend), queued mail, the delivery log, suppressions, tracking; [inbound mail](/docs/digging-deeper/inbound-mail/) with `mail-inbound` |
+| `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
+| `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
+| `navree::time` | navree-time | `time` | `TimeModule`: [time zones](/docs/digging-deeper/time-zones/), `CurrentZone`, local days, send windows, holidays |
+| `navree::session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
+| `navree::validation` | navree-validation | `validation` | `#[derive(Validate)]` rules and `Valid` extractors |
+| `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
+| `navree::audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
+| `navree::access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
+| `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
+| `navree::notify` | navree-notify | `notify` | `NotifyModule`: notifications over mail, the database, broadcasts, Slack, Teams, SMS, WhatsApp and web push, with preferences, digests, quiet hours and send windows |
+| `navree::ui` | navree-ui | `ui` | `UiModule`: the UI toolkit: typed components, the app shell, forms and tables, embedded assets |
+| `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless sign-in and passkeys |
+| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation and demo workspaces |
+| `navree::mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: [MongoDB](/docs/orm/mongodb/) connections, the ORM's document driver, collections and their migrations |
+| `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
+| `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
+| `navree::sso` | navree-sso | `sso` | `SsoModule`: [single sign-on](/docs/security/single-sign-on/) with SAML 2.0 and OpenID Connect per organization or workspace, verified domains, just-in-time provisioning |
+| `navree::settings` | navree-settings, plus `#[derive(Settings)]` | `settings` | `SettingsModule`: [typed settings](/docs/packages/settings/) per global, organization, workspace and user scope, inherited down the chain, with the source of every value |
+| `navree::integrations` | navree-integrations | `integrations` | `IntegrationsModule`: [connections to third-party APIs](/docs/packages/integrations/) per workspace or organization, with consent flows, encrypted credentials, scope sets, health checks and typed clients |
+| `navree::sheets` | navree-sheets, plus `#[derive(Exportable)]` and `#[derive(Importable)]` | `sheets` | `SheetsModule`: [CSV and Excel exports and imports](/docs/packages/imports-and-exports/) with header mapping, a staging preview and error files |
+| `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
+| `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
+| `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
+| `navree::graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: [GraphQL](/docs/microservices/graphql/) with `#[resolver]` (in `navree::graphql`), dataloaders and subscriptions |
+| `navree::grpc` | navree-grpc, plus `#[grpc_service]` | `grpc` (opt-in) | `GrpcModule`: [gRPC](/docs/microservices/grpc/) services with gRPC-Web, Connect, health and reflection |
+| `navree::ai` | navree-ai, plus `#[agent]` | `ai` (opt-in) | `AiModule`: the [AI SDK](/docs/ai/ai-sdk/), [agents and tools](/docs/ai/agents-and-tools/), [embeddings and vector stores](/docs/ai/embeddings-and-rag/) |
+| `navree::micro` | navree-micro, plus `#[message_handlers]` | `micro` (opt-in), with `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis` and `micro-mqtt` | `MicroModule`, `ServiceClient`: [messages and events between services](/docs/microservices/introduction/) over TCP or a broker |
+| `navree::documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: [PDF from HTML templates or `PdfDocument`, DOCX, merge and stamps](/docs/packages/documents/) |
+| `navree::markdown` | navree-markdown | `markdown` (opt-in; `ui` and `api` turn it on) | Markdown read into events with no raw HTML, checked links and pictures only from this site: the reader behind `Markdown` and the API reference's descriptions |
+| `navree::pdf` | navree-pdf | `pdf` (opt-in; `documents` and `media` turn it on) | PDF files read, edited and read for their text within a budget of memory and work |
+| `navree::media` | navree-media | `media` (opt-in), with `media-ffmpeg` | `MediaModule`: [files attached to models](/docs/packages/media/) in collections, image conversions and responsive variants, safe remote downloads, zip archives, text from PDF, DOCX and HTML, and video through FFmpeg |
+| `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
+| `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search over models](/docs/packages/search/), `#[derive(Searchable)]` |
+| `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
+| `navree::i18n` | navree-i18n, with `t!`, `args!` and `embed_locales!` | `i18n` (opt-in) | `I18nModule`: [localization](/docs/packages/localization/) with Fluent files, the request's `Locale`, translated validation messages, templates and notifications |
+| `navree::lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: [application monitoring](/docs/tools/lighthouse/), issues, traces, alerts and the `/_lighthouse` dashboard |
+| `navree::logbook` | navree-logbook | `logbook` | `LogbookModule`: the [local debugging timeline](/docs/tools/logbook/) at `/_logbook`, with filters and request replay |
+| `navree::fleet` | navree-fleet | `fleet` | `FleetModule`: [supervised queue workers](/docs/tools/fleet/), metrics, failed jobs and the `/_fleet` dashboard |
+| `navree::helm` | navree-helm | `helm` | `HelmModule`: [Helm](/docs/tools/helm/), the admin panel generated from your navree-orm models |
+| `navree::workflows` | navree-workflows, plus `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` | `workflows` | `WorkflowsModule`: [durable workflows](/docs/packages/workflows/) and [end-user automations](/docs/packages/automations/) |
+| `navree::directory` | navree-directory | `directory` | `DirectoryModule`: [directory sync](/docs/packages/directory-sync/), a SCIM 2.0 server and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory |
+| `navree::domains` | navree-domains | `domains` | `DomainsModule`: [custom domains](/docs/packages/custom-domains/), workspaces on their own domains with DNS verification, automatic TLS and the `domain` workspace resolver |
+| `navree::browser` | navree-browser | `browser` (opt-in) | [Browser testing](/docs/packages/browser-testing/): `Browser`, `Page`, `TestServer` and `FrontEnd` over the Chrome DevTools Protocol. Turn it on in `[dev-dependencies]` |
+| `navree::dock` | navree-dock | `dock` (opt-in) | [Dock](/docs/tools/dock/) as a library: `dock.toml`, the services' settings and the Compose file, for tools and tests |
+| `navree::harbor` | navree-harbor | `harbor` (opt-in) | [Harbor](/docs/tools/harbor/) as a library: `harbor.toml`, provisioning, deploys and secrets. The `navree` CLI has it built in |
+| `navree::navigator` | navree-navigator | `navigator` (opt-in) | [Navigator](/docs/ai/navigator/) as a library: the MCP server behind `navree mcp` and the agent skills behind `navree skills:install`, for tools and tests |
+
+The facade's root also has:
+
+- **The macros:** `navree::module`, `navree::injectable` and `navree::controller`, with the route attributes `get`, `post`, `put`, `patch` and `delete` (which `#[controller]` consumes, so you don't import them). With `micro`, `navree::message_handlers` and the `message_pattern` and `event_pattern` attributes it consumes. With `orm` and `testing`, `#[navree::test]`, an `async fn` test on a runtime of its own that gets a database of its own when it takes a `TestDb` parameter.
+- **The kernel types** apps use most: `Navree`, `App`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `ModuleId`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `ProviderKey`, `Scope`, `KernelError`, `BoxError` and `BoxFuture`.
+- **`navree::Result<T, E = AppError>`**, a handler's result type (with `http`).
+
+The `http` crate's types (`StatusCode`, `HeaderMap`, `Method`) come from `http`, which you add to your own dependencies.
+
+## The prelude
+
+`use navree::prelude::*` brings the names almost every file uses. Each is there only when the feature of its crate is on:
+
+| Group | Names |
+|---|---|
+| Std | `Arc` |
+| Macros | `module`, `injectable`, `controller` |
+| Kernel | `Navree`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `BoxError` |
+| Config | `ConfigModule`, `ConfigSources` |
+| OpenAPI | `ToSchema` |
+| HTTP | `Result`, `AppError`, `Json`, `Created`, `NoContent`, `Scoped`, `Path`, `Query`, `HttpModule` |
+| Database (`db`) | `DatabaseModule`, `Uow`, `Page`, `PageQuery`, `MigrationSet` |
+| ORM (`orm`) | `Model` (the trait and the derive), `Record`, `Collection`, `Builder`, `OrmModule`, `ModelFactory`, `Attributes`, `accessors`, `attrs`; the model lifecycle methods are in scope. `navree::orm::prelude` has the rest of the ORM's names |
+| Queue (`queue`) | `QueueModule`, `Batch`, `Operation`, `Operations` |
+| Time (`time`) | `TimeModule`, `CurrentZone`, `Zone`, `LocalDay`, `DayRange`, `SendWindow`, `WithZone` |
+| Validation | `Valid`, `ValidAsync`, `Validate` (the derive), `ValidationModule` |
+| Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
+| Workspaces (`workspace`) | `WorkspaceModule`, `CurrentWorkspace`, `CurrentOrganization`, `CurrentPartition`, `InWorkspace`, `InOrganization`, `WorkspaceScoped`, `PartitionScoped`, `PartitionScope`, `WorkspaceRepo`, `OrgRepo`, `PartitionRepo`, `WorkspaceUow`, `Library`, `LibraryRepo`, `LibraryScope` |
+| MCP (with `mcp`) | `McpModule` (and `m.mcp_server::<S>()`) |
+| Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
+| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WebhooksModule`, `SsoModule`, `LogbookModule` |
+| Inbound mail (`mail-inbound`) | `InboundMail`, `MailboxContext` |
+| Settings (`settings`) | `SettingsModule`, `Setting` |
+| Social sign-in (`social`) | `SocialModule` |
+| MongoDB (`mongo`) | `MongoModule`, `MongoDb` |
+| OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
+| Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
+| GraphQL (with `graphql`) | `GraphqlModule` |
+| gRPC (`grpc`) | `GrpcModule` |
+| AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
+| Microservices (`micro`) | `MicroModule`, `ServiceClient`, `Payload`, `message_handlers` |
+| Documents (`documents`) | `DocumentsModule` |
+| Media (`media`) | `MediaModule`, `Media`, `HasMedia` (and `m.media_model::<M>()` through `ModuleBuilderMediaExt`) |
+| Integrations (`integrations`) | `IntegrationsModule` (and `m.integration_scope_set::<S>()` through `ModuleBuilderIntegrationsExt`) |
+| Imports and exports (`sheets`) | `SheetsModule` (and `m.export::<E>()`, `m.importer::<I>()` through `ModuleBuilderSheetsExt`) |
+| Billing (`billing`) | `BillingModule` |
+| Localization (`i18n`) | `I18nModule`, `Locale` |
+| Search (`search`) | `SearchModule` |
+| Lighthouse (`lighthouse`) | `LighthouseModule` (and `m.alert_channel::<C>()`) |
+| Redis (`redis`) | `RedisModule` |
+| Fleet (`fleet`) | `FleetModule` |
+| Helm (`helm`) | `HelmModule`, and its builder extension, so `m.resource::<R>()` and `m.helm_page(..)` work |
+| Workflows (`workflows`) | `WorkflowsModule` (and `m.workflow::<W>()`, `m.workflow_event::<E>()`, `m.trigger::<T>()`, `m.condition::<C>()`, `m.action::<A>()` through `ModuleBuilderWorkflowsExt`) |
+| Directory sync (`directory`) | `DirectoryModule` (and `m.directory_sink::<S>()`, `m.directory_source(name, source)` through `ModuleBuilderDirectoryExt`) |
+| Custom domains (`domains`) | `DomainsModule` and the `CurrentDomain` extractor |
+
+It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()`, and with `micro`, `m.message_handlers::<T>()` and `m.forward_event::<E>()`, work without naming the traits.
+
+Three details to know:
+
+- **`Result` is Navree's.** With `http`, the prelude's `Result<T>` is `navree::Result<T>`, whose error type defaults to `AppError`, and it shadows the standard prelude's `Result`. Name the error type when it isn't an `AppError`: `fn main() -> Result<(), BoxError>`.
+- **Two factories.** `Factory` is the kernel's provider factory. The ORM's model factory trait (for test data) is `ModelFactory` in the prelude, with `orm`; the rest of the factory API is in `navree::orm::factory`.
+- **Test helpers aren't in the prelude.** Import them from `navree::testing`.
+
+## Cargo features
+
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries, packages and tools (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, `mongo`, `micro` with its transports, `dock`, `harbor`, `navigator` and `browser`), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`), and so are the database drivers and `otel`. To build only what you use, turn the defaults off and list the modules:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", default-features = false, features = ["http", "log"] }
+```
+
+`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+
+| Feature | Also turns on |
+|---|---|
+| `crypto`, `schema`, `telemetry`, `template` | Nothing else |
+| `markdown` (`ui` and `api` turn it on) | Nothing else |
+| `pdf` (opt-in; `documents` and `media` turn it on) | Nothing else |
+| `view` | `template` |
+| `http` | `telemetry` |
+| `log`, `events`, `cache`, `http-client` | `telemetry` |
+| `db` | `http`, `schema` |
+| `testing`, `observe` | `http` |
+| `api` | `http`, `markdown` |
+| `time` | `http`, `db`; with `validation` on too, the `Validate` rules of its zones and days |
+| `mail` | `telemetry`, `view`, `http`, `crypto`, `events`, `http-client`, `db` |
+| `mail-inbound` (in `full`) | `mail`, `storage`, and navree-mail's inbound mail; with `integrations` on, watched Microsoft 365 and Gmail mailboxes |
+| `realtime`, `storage` | `http`, `crypto`, `telemetry` |
+| `session` | `http`, `crypto`, `db` |
+| `validation`, `access` | `http`, `db` |
+| `audit` | `http`, `db`, `orm` |
+| `queue` | `http`, `db`, `realtime`, `schedule`, `orm` |
+| `schedule` | `db`, `time` |
+| `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`, `realtime`; with `webhooks`, `integrations` or `settings` on too, their notification features |
+| `ui` | `http`, `telemetry`, `validation`, `markdown`; with `orm` on too, the data table's backend; with `ai` on too, the assistant's pages (`navree::ai::ui`) |
+| `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
+| `auth` | `http`, `telemetry`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
+| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule`, `orm` |
+| `settings` | `http`, `cache`, `db`, `events`, `validation`, `audit`, `access`, `workspace`; with `helm` on too, the panel's Settings screens |
+| `webhooks` | `http`, `telemetry`, `crypto`, `events`, `http-client`, `db`, `workspace`, `orm` |
+| `sso` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `workspace` |
+| `integrations` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `schedule`, `workspace`, `orm` |
+| `sheets` | `http`, `db`, `storage`, `validation`, `queue`, `workspace`; with `i18n` on too, translated export headers |
+| `social` (opt-in, not in `full`) | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `orm` |
+| `oauth` (opt-in, not in `full`) | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `orm` |
+| `flags` (opt-in, not in `full`) | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth`, `orm` |
+| `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
+| `grpc` (opt-in, not in `full`) | `http`, `db`, `validation` |
+| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`, `pdf`, and all three parts below; with `queue` on too, renders queued behind an operation |
+| `documents-native`, `documents-chrome`, `documents-docx` (opt-in) | `http`, `view`, `storage`, `pdf`, and one part of navree-documents: the native PDF engine, headless Chrome for PDF, or DOCX files. Use one or more of them in place of `documents` to compile only what the app uses |
+| `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue`, `pdf` |
+| `media-ffmpeg` (opt-in) | `media`, and its FFmpeg sidecar for video and audio |
+| `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace`, `orm`, `webhooks` |
+| `search` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `db`, `orm`, `queue`, `access`, `workspace` |
+| `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
+| `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |
+| `ai` (opt-in, not in `full`) | `http`, `telemetry`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth`; with `search` on too, search's embeddings and vectors on the AI SDK (`search.vectors.store = "ai"`) |
+| `i18n` (opt-in, not in `full`) | `template`, `http`, `view`, `db`, `validation`, `notify`, `workspace`; with `sheets` on too, translated export headers |
+| `lighthouse` | `telemetry`, `http`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth`, `orm`, `session`, `ui`; with `domains` on too, certificates close to expiry become issues |
+| `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
+| `mongo` (opt-in, not in `full`) | `telemetry`, `schema`, `db`, `orm` |
+| `mongodb` (opt-in) | `mongo`, the same feature by the database's name |
+| `logbook` | `telemetry`, `http`, `ui`, `db`, `auth` |
+| `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `validation` |
+| `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
+| `fleet` | `telemetry`, `http`, `events`, `db`, `observe`, `queue`, `access`, `auth`, `session`, `ui` |
+| `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth`, `orm`, `session`, `time`, `ui` |
+| `helm-all-icons` (opt-in) | `helm`, and any Lucide icon by name for a resource's or a page's `ICON` (the whole icon set, about 640 KB in a release build) |
+| `workflows` | `http`, `db`, `events`, `schedule`, `workspace` |
+| `directory` | `http`, `crypto`, `events`, `db`, `orm`, `queue`, `schedule`, `workspace`, `integrations` |
+| `domains` | `http`, `crypto`, `events`, `db`, `orm`, `schedule`, `workspace` (with `lighthouse` on too, certificates close to expiry are reported to Lighthouse) |
+| `sqlite` (opt-in) | `db`, navree-db's SQLite driver (the bundled library), and `logbook`'s SQLite file store |
+| `postgres` (opt-in) | `db`, and navree-db's PostgreSQL driver |
+| `mysql` (opt-in) | `db`, and navree-db's MySQL driver (which also opens MariaDB) |
+| `validation-phone` | `validation`, `phone` (navree-phone: Navree's own phone number parser on libphonenumber's numbering plans), navree-validation's `Phone`; with `ui` on too, the `PhoneInput`; with `orm` on too, phone numbers as fields |
+| `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized by Navree's own sanitizer on html5ever) |
+| `storage-s3` (in `full`) | `storage`, and navree-storage's S3 driver (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces) |
+| `storage-gcs`, `storage-azure` (opt-in) | `storage`, and navree-storage's Google Cloud Storage or Azure Blob Storage driver |
+| `otel` (opt-in) | `observe`, and navree-observe's OTLP exporter for the spans of `observe.tracing` |
+| `browser` (opt-in) | `http` |
+| `dock` (opt-in) | Nothing else |
+| `harbor` (opt-in) | `template` |
+| `navigator` (opt-in) | `dock` |
+
+`validation-phone` and `validation-html` are part of `full`. They add the [international types](/docs/basics/international-input/) that need a dependency of their own; names, digits, countries and locales come with `validation` alone.
+
+With `workspace` on too, `testing` also adds `navree::workspace::testing`, the [isolation suites](/docs/testing/isolation-tests/); neither feature turns the other on.
+
+The test kits of the opt-in modules come with `testing` and with nothing else: `navree::oauth::testing`, `navree::grpc::testing`, `navree::mcp::testing` and `MicroFake` are in your build only when `testing` is on. `full` turns it on, so tests in an app with the default features find them. An app that turns the defaults off and builds a release binary with `oauth`, `grpc`, `mcp` or `micro` links no test code, and lists `testing` in the `[dev-dependencies]` entry for `navree` that its tests use.
+
+The database drivers are features of their own, and none is in `full`. Each turns on `db` and the matching driver of navree-db: `postgres` adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL, `mysql` the driver for MySQL and MariaDB, and `sqlite` the SQLite driver, with the bundled SQLite library compiled from C source (it also turns on the `file` store of `logbook` when that is on). A build with `postgres` or `mysql` and without `sqlite` compiles no SQLite code at all; an app opens a database only with a driver it was built with, and otherwise stops with a message naming the feature to enable. A new app's tests run on SQLite, so `navree new` turns `sqlite` on in `[dev-dependencies]` only. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/postgresql/) list which PostgreSQL-only paths to try in staging first.
+
+Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`, `mongo`, `dock`, `harbor`, `navigator`, `browser`), which you list yourself: `features = ["billing"]`. A scheduled job (`.github/workflows/features.yml`) compiles the facade with each feature on its own, and with the sets the starter kits and the tools use, so a missing feature edge in a smaller build is found. Every test file in `crates/navree/tests` names the features it needs in `Cargo.toml` (`required-features`), so a build that lacks one leaves that test out and names it; `scripts/facade-features.sh skipped --no-default-features --features ui` lists what a feature set leaves out.
+
+<Callout type="note">
+
+Turning a feature off removes the module's crate from the build, along with its re-export, its prelude names and its third-party dependencies. Features only decide what is compiled: a module that is compiled in does nothing until the app adds it with `.module(..)` or a module imports it.
+
+</Callout>
+
+## How the macros find the crates
+
+`#[module]`, `#[injectable]` and `#[controller]` expand into code that calls the runtime crates. They look in your `Cargo.toml` to decide how to name them:
+
+1. If the crate depends on `navree`, the code names `::navree::kernel`, `::navree::http` and `::navree::access`. A renamed dependency is honoured: with `framework = { package = "navree", version = "1" }`, the code names `::framework::kernel`.
+2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
+3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
+
+`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`), and `#[agent]` needs navree-ai (`::navree::ai`); with the facade, that means the `http`, `access`, `flags` and `ai` features. `#[mcp_server]` names `::navree::mcp` (or `::navree_mcp`), so it needs the `mcp` feature; import it from `navree::mcp`.
+
+## Using a crate on its own
+
+Every module crate is a normal library you can depend on directly, without the facade. The kernel alone gives you modules, dependency injection, lifecycle hooks and commands:
+
+```rust
+use navree_kernel::{Module, ModuleBuilder, Navree};
+
+struct GreetingModule;
+
+impl Module for GreetingModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(String::from("hello")).exports::<String>();
+    }
+}
+
+fn main() -> Result<(), navree_kernel::BoxError> {
+    Navree::app().module(GreetingModule).run()
+}
+```
+
+The macros work with the individual crates too. This is the greeting app without the facade:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree-kernel = "1"
+navree-config = "1"
+navree-http = "1"
+navree-macros = "1"
+```
+
+```rust title="src/main.rs"
+use navree_config::{ConfigModule, ConfigSources};
+use navree_http::{HttpModule, Json, Path};
+use navree_kernel::{BoxError, Navree};
+use navree_macros::{controller, injectable, module};
+
+#[injectable]
+pub struct GreetingController;
+
+#[controller("/greeting", version = "1")]
+impl GreetingController {
+    #[get("/{name}")]
+    #[public]
+    async fn show(&self, Path(name): Path<String>) -> Json<String> {
+        Json(format!("Hello, {name}!"))
+    }
+}
+
+#[module(controllers = [GreetingController])]
+pub struct GreetingModule;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(HttpModule::from_config())
+        .module(GreetingModule)
+        .run()
+}
+```
+
+You give up the prelude and the single version to keep in step, so the facade with `default-features = false` is usually the better way to build a small app. Depending on one crate directly makes sense for a library that extends one module, such as a new cache store or authentication strategy: it then depends only on the crates it extends.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/crate-hierarchy/" title="The crate hierarchy">
+    The layers and the rules between them.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/installation/" title="Installation">
+    Install the CLI and create an app.
+  </LinkCard>
+</LinkCards>

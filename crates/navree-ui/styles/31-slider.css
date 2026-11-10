@@ -1,0 +1,66 @@
+/*
+ * navree-ui's stylesheet: Slider. Written for Navree on native range inputs. The
+ * filled part and the ticks are SVG whose percentages are attributes, so no inline
+ * style is needed. The thumb has the 4px control corner.
+ */
+[data-slot=slider]{container-type:inline-size;--thumb-w:14px;--thumb-h:24px;display:grid;grid-template-columns:minmax(0,1fr) 4.5rem;align-items:center;column-gap:.875rem;row-gap:0;width:100%;min-width:0;
+  &[data-range]{grid-template-columns:minmax(0,1fr) 7.5rem}
+  &[data-labelled]{padding-inline:.75rem}
+}
+[data-slot=slider-control]{position:relative;grid-column:1;height:24px;min-width:0}
+/* The track and fill sit inside the half a thumb on each side that the thumb's centre never reaches. */
+[data-slot=slider-graphic],[data-slot=slider-marks]{display:block;position:absolute;inset-inline-start:calc(var(--thumb-w) / 2);width:calc(100% - var(--thumb-w));overflow:visible;pointer-events:none}
+[data-slot=slider-graphic]:dir(rtl){scale:-1 1}
+[data-slot=slider-graphic]{inset-block-start:0;height:24px}
+[data-slot=slider-track]{fill:var(--ink-3)}
+[data-slot=slider-fill]{fill:var(--accent)}
+[data-disabled] [data-slot=slider-fill]{fill:var(--fg-3)}
+[data-disabled] [data-slot=slider-control],[data-disabled] [data-slot=slider-marks]{opacity:.5}
+[data-invalid] [data-slot=slider-fill]{fill:var(--danger)}
+
+[data-slot=slider-input]{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer;touch-action:none;
+  &::-webkit-slider-runnable-track{height:24px;background:transparent;border:0}
+  &::-moz-range-track{height:24px;background:transparent;border:0}
+  &::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:var(--thumb-w);height:var(--thumb-h);margin-top:0;border:1px solid var(--line-3);border-radius:var(--radius);background:var(--fg);box-shadow:0 1px 2px #0006;cursor:grab}
+  &::-moz-range-thumb{box-sizing:border-box;width:var(--thumb-w);height:var(--thumb-h);border:1px solid var(--line-3);border-radius:var(--radius);background:var(--fg);box-shadow:0 1px 2px #0006;cursor:grab}
+  &:active::-webkit-slider-thumb{cursor:grabbing}
+  &:active::-moz-range-thumb{cursor:grabbing}
+  &:hover::-webkit-slider-thumb{border-color:var(--fg-2)}
+  &:hover::-moz-range-thumb{border-color:var(--fg-2)}
+  &:focus{outline:0}
+  &:focus-visible::-webkit-slider-thumb{outline:2px solid var(--accent);outline-offset:2px}
+  &:focus-visible::-moz-range-thumb{outline:2px solid var(--accent);outline-offset:2px}
+  &:disabled{cursor:default}
+  &:disabled::-webkit-slider-thumb{cursor:default;background:var(--fg-3)}
+  &:disabled::-moz-range-thumb{cursor:default;background:var(--fg-3)}
+  &[aria-invalid=true]::-webkit-slider-thumb{border-color:var(--danger)}
+  &[aria-invalid=true]::-moz-range-thumb{border-color:var(--danger)}
+}
+/* Two thumbs on one track: only the thumbs take the pointer, and the one that can move away is on top. */
+[data-range] [data-slot=slider-input]{pointer-events:none;
+  &::-webkit-slider-thumb{pointer-events:auto}
+  &::-moz-range-thumb{pointer-events:auto}
+}
+[data-range][data-top=min] [data-thumb=min]{z-index:2}
+[data-range][data-top=max] [data-thumb=max]{z-index:2}
+
+[data-slot=slider-marks]{position:static;grid-column:1;grid-row:2;margin-inline:calc(var(--thumb-w) / 2);width:calc(100% - var(--thumb-w));color:var(--fg-3)}
+[data-slot=slider-marks] line{stroke:var(--line-3);stroke-width:1;shape-rendering:crispEdges}
+[data-slot=slider-marks] text{fill:var(--fg-3);font:12px/1 var(--font-sans);font-variant-numeric:tabular-nums}
+/* The marks are drawn from each side; the one that fits the direction shows. */
+[data-slot=slider-marks] > g[data-dir=rtl]{display:none}
+[data-slot=slider-marks]:dir(rtl) > g[data-dir=ltr]{display:none}
+[data-slot=slider-marks]:dir(rtl) > g[data-dir=rtl]{display:inline}
+[data-slot=slider-value]{grid-column:2;grid-row:1;min-width:2.5ch;color:var(--fg-1);font-size:13px;font-variant-numeric:tabular-nums;text-align:end;unicode-bidi:plaintext;overflow-wrap:anywhere}
+
+/* Many labels on a narrow track: every other one, then three of four, so none overlap. */
+@container (max-width:30rem){[data-slot=slider-mark-labels] text:nth-child(even){display:none}}
+@container (max-width:16rem){[data-slot=slider-mark-labels] text:nth-child(4n+3){display:none}}
+[data-slot=slider-marks][data-labels="2"] text,[data-slot=slider-marks][data-labels="3"] text{display:revert!important}
+
+@media (forced-colors:active){
+  [data-slot=slider-track]{fill:ButtonText;opacity:.4}
+  [data-slot=slider-fill]{fill:Highlight}
+  [data-slot=slider-input]::-webkit-slider-thumb{background:ButtonText;border-color:ButtonText;forced-color-adjust:none}
+  [data-slot=slider-input]::-moz-range-thumb{background:ButtonText;border-color:ButtonText;forced-color-adjust:none}
+}

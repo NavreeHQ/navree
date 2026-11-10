@@ -1,0 +1,121 @@
+//! # navree-testing
+//!
+//! The testing kit for Navree apps, which tests through the real pipeline:
+//!
+//! Items hidden from this documentation are not public API: Navree's own
+//! macros and crates use them, and they can change in any release.
+//!
+//! - [`TestApp`] boots an app for one test. [`TestApp::builder`] assembles
+//!   it from modules, with hermetic configuration
+//!   ([`TestAppBuilder::config`]), a private SQLite database
+//!   ([`TestAppBuilder::temp_database`]; navree-db's `sqlite` feature must
+//!   be on in the test build), provider overrides and values that live as
+//!   long as the app ([`TestAppBuilder::hold`]); [`TestApp::from_builder`]
+//!   boots an app root built elsewhere (for example
+//!   `crm_api::app(sources)`).
+//! - [`TestClient`] sends requests in-process through the app's full router
+//!   (request id, CORS, session, authentication, unit of work, ...), with a
+//!   cookie jar, `Accept: application/json`, the app's first CORS origin as
+//!   `Origin`, bearer tokens and the SPA CSRF handshake
+//!   ([`TestClient::csrf_cookie`], [`TestRequest::xsrf`]).
+//! - [`TestResponse`] holds the collected response; its assertions show the
+//!   status and body when they fail.
+//! - [`TestAuthenticator`] and [`TestApp::acting_as`] authenticate requests
+//!   as any `Principal` ([`principal`] builds a plain test user).
+//! - [`temp_sqlite_url`], [`TempDirGuard`] and [`FixedClock`] provide
+//!   databases and controllable time. Every test folder is named
+//!   `navree-test-<random>` under the system temporary directory; folders
+//!   that cannot be deleted at once (an open database file on Windows) are
+//!   retried in the background and swept by later runs.
+//! - [`TestApp::isolation_suite`] generates cross-tenant tests from a
+//!   module's route table: from one tenant, another tenant's records are a
+//!   404, are not listed and cannot be created into ([`Tenancy`] creates the
+//!   tenants; navree-workspace provides one for workspaces).
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use http::Method;
+//! use navree_http::{Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef};
+//! use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+//! use navree_testing::{TestApp, principal};
+//! use serde_json::json;
+//!
+//! struct MeController;
+//!
+//! impl Injectable for MeController {
+//!     fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+//!         Box::pin(async { Ok(MeController) })
+//!     }
+//! }
+//!
+//! impl Controller for MeController {
+//!     fn prefix(&self) -> &'static str {
+//!         "/me"
+//!     }
+//!
+//!     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+//!         vec![
+//!             RouteDef::on(Method::GET, "/", |CurrentPrincipal(me): CurrentPrincipal| async move {
+//!                 Json(json!({ "id": me.user_id }))
+//!             })
+//!             .authenticated(),
+//!         ]
+//!     }
+//! }
+//!
+//! struct MeModule;
+//!
+//! impl Module for MeModule {
+//!     fn register(&self, m: &mut ModuleBuilder) {
+//!         m.controller::<MeController>();
+//!     }
+//! }
+//!
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
+//! let app = TestApp::builder().module(MeModule).build().await;
+//! let alice = uuid::Uuid::now_v7();
+//!
+//! app.acting_as(principal(alice))
+//!     .get("/api/me")
+//!     .send()
+//!     .await
+//!     .assert_status(200)
+//!     .assert_json_path("id", json!(alice));
+//!
+//! app.client()
+//!     .get("/api/me")
+//!     .send()
+//!     .await
+//!     .assert_error(401, "Unauthorized");
+//! # }
+//! ```
+#![forbid(unsafe_code)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
+mod app;
+mod auth;
+mod client;
+mod cookies;
+mod isolation;
+mod response;
+mod temp;
+#[cfg(test)]
+mod temp_tests;
+
+pub use app::{TestApp, TestAppBuilder};
+pub use auth::{ActingAs, TestAuthenticator, principal};
+pub use client::{TestClient, TestRequest};
+pub use isolation::{
+    IsolationOutcome, IsolationReport, IsolationSuite, RecordContext, RouteResult, Tenancy, Tenant,
+};
+pub use response::TestResponse;
+pub use temp::{TempDirGuard, temp_sqlite_url};
+
+/// A clock that stands still until moved; register it with
+/// `override_value::<dyn Clock>(Arc::new(FixedClock::new(now)))`.
+pub use navree_contracts::FixedClock;
+
+/// The `cookie` crate, for [`TestResponse::set_cookie`].
+pub use cookie;

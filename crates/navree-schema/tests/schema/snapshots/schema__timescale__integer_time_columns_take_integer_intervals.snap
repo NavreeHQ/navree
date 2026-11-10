@@ -1,0 +1,13 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 92
+expression: sql
+---
+-- timescaledb
+CREATE TABLE "ticks" ("epoch_ms" BIGINT NOT NULL, "price" INTEGER NOT NULL);
+SELECT create_hypertable('ticks', by_range('epoch_ms', 86400000));
+
+-- sqlite
+CREATE TABLE "ticks" ("epoch_ms" INTEGER NOT NULL, "price" INTEGER NOT NULL);
+CREATE INDEX "ticks_epoch_ms_index" ON "ticks" ("epoch_ms" DESC);
+-- notice: SQLite does not support TimescaleDB: `ticks` is a regular table with an index on `epoch_ms`

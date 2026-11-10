@@ -1,0 +1,457 @@
+---
+title: "Sessions and CSRF"
+description: "Encrypted session cookies, memory, database and Redis stores, CSRF protection, browser sign-in through AuthModule, and sessions versus bearer tokens."
+---
+
+`SessionModule` (crate `navree-session`, feature `session`) gives each browser a server-side session identified by an encrypted cookie, and protects cookie-carrying requests against cross-site request forgery. Single-page apps use a cookie-to-header handshake: the client fetches a CSRF cookie once, then sends its value back in a header on every state-changing request.
+
+The module is **optional**. API clients sign in with bearer tokens from `AuthModule` and need no session; the reference CRM doesn't import this module. With both modules in the app, browsers [sign in on their session](#signing-in-with-a-session) through `AuthModule`, with the same two-factor authentication, throttles, sign-in policies and audit trail as tokens. Read [when to use sessions](#sessions-or-bearer-tokens) first.
+
+## Sessions or bearer tokens
+
+| | Sessions (`SessionModule`) | Bearer tokens (`AuthModule`) |
+|---|---|---|
+| The browser holds | an `HttpOnly` session cookie | an access token your code stores and sends in `Authorization` |
+| State | on the server, in the session store | in the signed JWT; refresh tokens in the database |
+| CSRF protection | needed, and built in | not needed: browsers don't attach `Authorization` by themselves |
+| Clients | browsers on your site | anything: mobile apps, other servers, CLIs, browsers |
+| Sign-in | built in: `AuthPages` or `AuthService::sign_in_session` ([below](#signing-in-with-a-session)), with 2FA | built in: `/api/auth/login`, refresh, logout, 2FA |
+
+Use sessions when a browser talks to the app directly and you want the credential in an `HttpOnly` cookie: [Navree UI](/docs/ui/overview/) pages and other server-rendered pages, or a single-page app on the same site as the API. Use bearer tokens for everything else.
+
+The CRM takes a third route, a backend-for-frontend: its Next.js server keeps the bearer tokens in `HttpOnly` cookies on its own domain and calls the API with `Authorization: Bearer`. The browser never holds a token and the API needs no sessions or CSRF checks. See [authentication](/docs/security/authentication/).
+
+## Setting up
+
+Add `SessionModule` after `CryptoModule`, which encrypts the cookie with the app key, and `HttpModule`:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app() -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(SessionModule::from_config())
+}
+```
+
+`DatabaseModule` is only needed for the database store, and [`RedisModule`](/docs/digging-deeper/redis/) for the Redis store. The app needs an application key (`APP_KEY`, from `navree key:generate`). Without one the app boots with a warning, but every request that writes a session fails with a 500.
+
+## Configuration
+
+```toml title="config/app.toml"
+[session]
+store = "database"          # memory (default), database or redis
+cookie = "navree_session"
+lifetime_minutes = 120      # idle lifetime; activity extends it
+secure = true               # send the cookies over HTTPS only
+same_site = "lax"           # strict, lax or none
+domain = ".example.com"     # share the cookies with sibling hosts
+host_prefix = true          # name the cookie __Host-navree_session when it can
+csrf_except = ["/webhooks/*"]
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `session.store` | `memory` | where session data lives; see [stores](#stores) |
+| `session.cookie` | `navree_session` | the session cookie's name (letters, digits, `-`, `_`, `.`; not `XSRF-TOKEN`, and without a `__Host-` or `__Secure-` prefix: see `host_prefix`) |
+| `session.lifetime_minutes` | `120` | how long an idle session lives (1 minute to about a year) |
+| `session.secure` | `true` | the cookies' `Secure` attribute; browsers accept `Secure` cookies from `http://localhost` |
+| `session.same_site` | `lax` | the cookies' `SameSite` attribute; `none` needs `secure = true` |
+| `session.domain` | none (the API host only) | the cookies' `Domain`, to share them with sibling hosts such as `app.example.com` and `api.example.com` |
+| `session.host_prefix` | `true` | names the session cookie `__Host-` and `session.cookie` (`__Host-navree_session`) whenever `secure` is on and `domain` is unset: browsers then take that cookie only from your host, over HTTPS, so a sibling subdomain can't plant a session of its own |
+| `session.csrf_except` | `[]` | path globs exempt from CSRF checks (`*` matches any characters, `?` one) |
+
+From the environment: `APP_SESSION__STORE=database`, `APP_SESSION__SECURE=false`, and `APP_SESSION__CSRF_EXCEPT=/webhooks/*,/stripe/*` as a comma-separated list. Invalid options stop the boot.
+
+In code, use `SessionModule::for_root`:
+
+```rust
+use navree::session::{SameSite, SessionOptions, SessionStoreKind};
+
+.module(SessionModule::for_root(SessionOptions {
+    store: SessionStoreKind::Database,
+    lifetime_minutes: 60,
+    same_site: SameSite::Strict,
+    csrf_except: vec!["/webhooks/*".to_owned()],
+    ..SessionOptions::default()
+}))
+```
+
+## Using the session
+
+Take `Session` as an extractor. Values are stored as JSON, so anything `Serialize` and `Deserialize` fits:
+
+```rust title="src/cart/controller.rs"
+use navree::prelude::*;
+use navree::session::Session;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Cart {
+    pub items: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct AddItem {
+    pub sku: String,
+}
+
+#[injectable]
+pub struct CartController;
+
+#[controller("/cart")]
+#[public]
+impl CartController {
+    #[get("/")]
+    async fn show(&self, session: Session) -> Json<Cart> {
+        Json(session.get::<Cart>("cart").unwrap_or_default())
+    }
+
+    #[post("/items")]
+    async fn add(&self, session: Session, Json(input): Json<AddItem>) -> Result<Json<Cart>> {
+        let mut cart: Cart = session.get("cart").unwrap_or_default();
+        cart.items.push(input.sku);
+        session.insert("cart", &cart)?;
+        Ok(Json(cart))
+    }
+
+    #[delete("/")]
+    async fn clear(&self, session: Session) -> NoContent {
+        session.remove("cart");
+        NoContent
+    }
+}
+```
+
+| Method | What it does |
+|---|---|
+| `get::<T>(key)` | the value, or `None` when it's missing or not a `T` |
+| `insert(key, &value)` | stores a value; fails for values that aren't JSON and for the reserved keys `_token` and `_lifetime` |
+| `remove(key)` | removes a value and returns it |
+| `contains(key)` | whether a value is stored |
+| `regenerate()` | a new session id and CSRF token, keeping the values: call it when a user signs in |
+| `invalidate()` | a new id and CSRF token, and no values: call it when a user signs out |
+| `flush()` | removes every value, keeping the id and the CSRF token |
+| `csrf_token()` | the session's CSRF token, created on first use |
+| `set_lifetime(duration)` | makes this session live that long when idle, in place of `lifetime_minutes`, with cookies that last as long: what "remember me" sets. `clear_lifetime()` goes back; `lifetime()` reads it |
+| `id()` | the session id; it's a credential, so never log it |
+
+The session is saved after the response, only when it changed. `Option<Session>` gives `None` instead of a 500 in apps without the module. `Session::detached()` makes a session no request carries, for unit tests of code that takes a `&Session`.
+
+### How the cookie works
+
+The session cookie holds only the session **id**, encrypted with the app key (AES-256-GCM); the data stays on the server, in the store. The cookie is `HttpOnly`, with `Path=/`, the configured `SameSite`, `Secure` and `Domain`, and `Max-Age` equal to the lifetime. With the defaults (`Secure`, no `Domain`) its name carries the `__Host-` prefix:
+
+```http wrap
+set-cookie: __Host-navree_session=v1.pZTn5I8q.20o7YKPD-xXLxsE8.2mhcHownkjVq3bdWk9g5KKe5vI3...; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=7200
+set-cookie: XSRF-TOKEN=PONeR2ziCPrjirwcliGhp5dkEkcwsWp5ZW2MhsOG; SameSite=Lax; Secure; Path=/; Max-Age=7200
+```
+
+- A cookie that doesn't decrypt, or names an expired or unknown session, starts a new session with a new id. Navree never adopts an id the client chose.
+- Sessions expire after `lifetime_minutes` without requests, or the lifetime a session set itself with `set_lifetime`. Each request extends the session, with at most one store write a minute when nothing else changed.
+- Changing the app key signs everyone out, unless you move the old key to `app.previous_keys` (see [encryption](/docs/security/encryption-and-hashing/)).
+
+## Stores
+
+| Store | `session.store` | Notes |
+|---|---|---|
+| `MemoryStore` | `memory` | in the process: fast, but lost on restart and not shared between instances |
+| `DatabaseStore` | `database` | the `sessions` table (`id`, `data` as JSON text, `expires_at`), created by the module's `session` migration set; survives restarts and is shared by every instance |
+| `RedisSessionStore` (`navree::redis`) | `redis` | one Redis key per session that expires with it; shared by every instance, no migration and no pruning. See [the Redis store](#the-redis-store) |
+
+Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). The memory and database stores delete expired sessions on every hundredth save; `prune_expired()` on either does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
+
+To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`.
+
+### The Redis store
+
+<Badge feature="redis" /> `session.store = "redis"` keeps each session in Redis, as a JSON string under `<redis.prefix>session:<id>` whose expiry is the session's. Redis removes idle sessions by itself, so there is nothing to prune, and every instance behind your load balancer sees the same sessions. Add [`RedisModule`](/docs/digging-deeper/redis/):
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())
+    .module(HttpModule::from_config())
+    .module(RedisModule::from_config())
+    .module(SessionModule::from_config())
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://127.0.0.1:6379"
+
+[session]
+store = "redis"
+```
+
+In code: `SessionOptions { store: SessionStoreKind::Redis, ..SessionOptions::default() }`. A record whose expiry has passed by the app's clock is never loaded, even if Redis still holds it, and a record saved already expired isn't stored. The store uses the connection `redis.connections.session` when you define one. Sessions can hold sign-ins, so give Redis a `maxmemory-policy` that won't evict them under memory pressure before they expire (see [running Redis](/docs/digging-deeper/redis/#running-redis)).
+
+## CSRF protection
+
+A browser attaches cookies to requests that other sites trigger: a form on `evil.example` can post to your API, and the browser sends the session cookie along. CSRF protection makes sure state-changing requests come from your own front end.
+
+### The rule
+
+A request with a state-changing method (anything but `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie must send the session's CSRF token in one of these:
+
+- `X-XSRF-TOKEN`: the value of the `XSRF-TOKEN` cookie (URL-decoded by the server), as Axios sends it;
+- `X-CSRF-TOKEN`: the token as is, for example from `session.csrf_token()` rendered into a page;
+- a `_csrf` field, for a plain HTML form that has no script to set a header: the token once in the body of an `application/x-www-form-urlencoded` request (`navree::session::CSRF_FIELD` is the name). Navree takes the field out before the handler reads the body. It counts only when the request sends neither header, the body is 256 KiB or less, and the field appears once; a wrong header is not rescued by the field.
+- the same `_csrf` field as the first part of a `multipart/form-data` body, for a form with a file field and no script. Navree UI's forms put the field first; in a form you write yourself, put `<input type="hidden" name="_csrf" value="...">` before every other field. Only that part is read, and it must end within the body's first 8 KiB, so no file is read or held to find it; the body then reaches the handler as it was sent, the field included. Another field or a file first, anything before the first boundary line, and a part that could be read two ways do not count.
+
+Otherwise it gets a 403 before any handler runs:
+
+```json title="403 Forbidden"
+{
+  "statusCode": 403,
+  "message": "Invalid CSRF token",
+  "error": "Forbidden",
+  "code": "csrf_token_mismatch"
+}
+```
+
+- Requests with an `Authorization: Bearer` token skip the check: they can't be forged by another site.
+- A state-changing request **without** a session cookie has no token to send and passes, unless the browser marks it `Sec-Fetch-Site: cross-site` and its `Origin` isn't in `http.cors.allowed_origins`. That stops a forged form from signing a victim in to the attacker's account (login CSRF).
+- Paths matching `session.csrf_except` skip both checks. Use it for webhooks, which authenticate with signatures instead.
+- Tokens are compared in constant time and never logged. Each failure is logged at `WARN` on `navree::security` (`CSRF token mismatch`, with the reason `missing`, `mismatch` or `cross_site`) and, with the audit module, written to the audit trail as `csrf.mismatch`.
+
+### The CSRF cookie
+
+`GET /csrf-cookie` (no API prefix) answers `204 No Content` with the `XSRF-TOKEN` cookie, starting a session if there is none. The cookie isn't `HttpOnly`, so your JavaScript can read it. A single-page app calls it once before its first state-changing request:
+
+```ts title="app/api.ts"
+function xsrfToken(): string {
+  const cookie = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="));
+  return cookie ? decodeURIComponent(cookie.slice("XSRF-TOKEN=".length)) : "";
+}
+
+await fetch("/csrf-cookie", { credentials: "include" });
+await fetch("/api/cart/items", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json", "X-XSRF-TOKEN": xsrfToken() },
+  body: JSON.stringify({ sku: "A-1" }),
+});
+```
+
+Axios does the header part for you on same-origin requests, and on cross-origin ones with `withXSRFToken: true`. The response to any request that saves the session also refreshes the `XSRF-TOKEN` cookie.
+
+<Callout type="note" title="Front end on another host">
+
+With `SameSite=Lax` (the default), browsers only send the cookies to the API when the page is on the same **site**, such as `app.example.com` and `api.example.com`. Set `session.domain = ".example.com"` so the page can read `XSRF-TOKEN`, and list the page's origin in [`http.cors.allowed_origins`](/docs/basics/cors-and-security-headers/). A front end on a different site needs `same_site = "none"`, which many browsers restrict for third-party cookies; a backend-for-frontend is the sturdier choice there.
+
+</Callout>
+
+## Signing in with a session
+
+With `SessionModule` and `AuthModule` in the app (the facade's `session` and `auth` features, both in `full`), browsers sign in on their session through `AuthModule` itself. You write no authenticator. A browser sign-in takes the same steps as `POST /api/auth/login`: the [sign-in policies](/docs/security/authentication/#sign-in-policies), the [login throttle](/docs/security/authentication/#the-login-throttle), the password, [two-factor authentication](/docs/security/account-flows/) and its throttle, and the [audit trail](/docs/security/audit-log/). What the browser gets is its session, never a token.
+
+### The pages
+
+`AuthPages` (the facade's `ui` feature) draws the sign-in pages with [Navree UI](/docs/ui/overview/). Add it next to the modules it uses:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+use navree::auth::AuthPages;
+use navree::ui::UiModule;
+
+pub fn app() -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(SessionModule::from_config())
+        .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Agra CRM"))
+}
+```
+
+| Route | What it does |
+|---|---|
+| `GET /sign-in?next=` | the sign-in form: email, password and "Keep me signed in on this device"; a browser that is signed in already goes on to `next` |
+| `POST /sign-in` | signs the browser in and goes to `next`, or to the two-factor page when the account uses two-factor authentication |
+| `GET`, `POST /sign-in/two-factor` | the code from the authenticator app, or a recovery code |
+| `GET`, `POST /forgot-password` | mails a link to choose a new password; the answer is the same for every address |
+| `GET /reset-password?token=&email=`, `POST /reset-password` | sets the new password, which signs every session of the user out |
+| `POST /sign-out` | signs the browser out, then shows the sign-in page |
+
+- The sign-in page is where Navree UI's [sign-in state and 401 page](/docs/ui/errors-and-states/) send people: it follows `ui.sign_in` (`/sign-in` by default), or `AuthPages::sign_in_path`. After signing in, the browser goes back to `next`, else to `ui.home`. A `next` only ever leads to a page of your site, and never back to the sign-in pages.
+- Every form carries the session's CSRF token in its `_csrf` field, and every page works with JavaScript off.
+- Point `auth.password_reset.url` at the reset page (`https://app.example.com/reset-password`), so the reset mail links to it.
+- Put the sign-out button in the shell's user menu: `UserMenu::action("Sign out", "/sign-out")` posts there with the token.
+- A wrong password shows "These details don't match an account" whether or not the address has an account. After `auth.login_throttle_per_minute` failures the page answers 429 with `Retry-After`.
+
+### What a sign-in does
+
+- **It regenerates the session.** The session gets a new id and a new CSRF token, so an id someone planted or saw before the sign-in signs nobody in. The cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and, with the default options, named `__Host-navree_session`.
+- **It starts a session on the server.** The sign-in is one of the user's sessions in [`GET /api/auth/sessions`](/docs/security/sessions/), and every request checks that it is still live. Signing out, ending the session from another device (`DELETE /api/auth/sessions/{id}`), changing or resetting the password, signing out everywhere and [offboarding](/docs/security/authentication/#offboarding-a-user-or-a-domain) end it at once, for a copy of the cookie too. A browser whose sign-in ended is a guest from its next request.
+- **"Remember me"** keeps the browser signed in for `auth.session.remember_days` (30 by default), however long it sits idle. Without it, the sign-in ends when the session idles out (`session.lifetime_minutes`), and at the latest `auth.session.lifetime_hours` (24) after it started.
+- **The same guards hold.** The strategy sets the same request data as a token, so `#[authenticated]`, `CurrentUser`, `#[recent_auth]`, `#[not_while_impersonating]` and the two-factor setup rule work the same for a browser. A request that also sends a bearer token is the token's.
+- **It is audited.** `auth.login` has `metadata.via = "session"`, `remember` and, after a second factor, `two_factor`; `auth.logout` has `via = "session"`. Failures are the usual `auth.login_failed`, `auth.two_factor_failed`, `auth.throttled` and `auth.login_refused`.
+- **Signing out ends the user's real-time subscriptions**, so no open page keeps receiving.
+
+```toml title="config/app.toml"
+[auth.session]
+lifetime_hours = 24   # the longest a sign-in lasts without "remember me"
+remember_days = 30    # how long "remember me" keeps a browser signed in
+```
+
+A user whom a [two-factor policy](/docs/security/account-flows/) requires to set up two-factor authentication reaches only the setup routes (`POST /api/auth/2fa/enable` and `/confirm`, with `X-XSRF-TOKEN`) and `POST /sign-out` until they do; other routes answer 403 `two_factor_required`.
+
+### The JSON routes from a browser
+
+A signed-in browser calls the auth routes with its cookie and `X-XSRF-TOKEN`. Three of them answer it differently from a token client:
+
+| Route | For a browser |
+|---|---|
+| `POST /api/auth/logout` | signs the browser out of its session; with `{"all": true}` every other session ends too |
+| `PATCH /api/auth/me/password` | ends every other session and keeps this browser signed in on a new one; `204`, no tokens |
+| `POST /api/auth/confirm` | the sign-in counts as recent from now, for `#[recent_auth]` routes; `204`, no token |
+
+### Your own sign-in page
+
+To draw the pages yourself, call the same flows on `AuthService` with the request's `Session`:
+
+```rust title="src/sign_in/controller.rs"
+use std::sync::Arc;
+
+use navree::auth::{AuthError, AuthService, ClientMeta, SessionSignIn, TwoFactorProof};
+use navree::prelude::*;
+use navree::session::Session;
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+#[derive(Deserialize)]
+pub struct SignIn {
+    pub email: String,
+    pub password: String,
+    #[serde(default)]
+    pub remember: bool,
+}
+
+#[derive(Deserialize)]
+pub struct Code {
+    pub code: String,
+}
+
+#[injectable]
+pub struct SignInController {
+    auth: Arc<AuthService>,
+}
+
+#[controller("!/session")]
+#[public]
+impl SignInController {
+    #[post("/")]
+    async fn sign_in(&self, session: Session, meta: ClientMeta, Json(input): Json<SignIn>) -> Result<Json<Value>> {
+        let outcome = self
+            .auth
+            .sign_in_session(&session, &input.email, &input.password, input.remember, &meta)
+            .await
+            .map_err(AuthError::into_app_error)?;
+        Ok(Json(match outcome {
+            SessionSignIn::SignedIn(user) => json!({ "user_id": user.id }),
+            SessionSignIn::TwoFactorRequired => json!({ "two_factor_required": true }),
+        }))
+    }
+
+    #[post("/two-factor")]
+    async fn two_factor(&self, session: Session, meta: ClientMeta, Json(input): Json<Code>) -> Result<Json<Value>> {
+        let user = self
+            .auth
+            .verify_two_factor_session(&session, TwoFactorProof::Code(input.code), &meta)
+            .await
+            .map_err(AuthError::into_app_error)?;
+        Ok(Json(json!({ "user_id": user.id })))
+    }
+
+    #[delete("/")]
+    async fn sign_out(&self, session: Session, meta: ClientMeta) -> Result<NoContent> {
+        self.auth
+            .sign_out_session(&session, &meta)
+            .await
+            .map_err(AuthError::into_app_error)?;
+        Ok(NoContent)
+    }
+}
+```
+
+A single-page app on the same site calls `GET /csrf-cookie` once, then sends `X-XSRF-TOKEN` with each post, the sign-in included. The challenge of a two-factor sign-in waits in the session, never in the browser.
+
+| `AuthService` method | What it does |
+|---|---|
+| `sign_in_session(&session, email, password, remember, &meta)` | the password sign-in: `SessionSignIn::SignedIn(user)` or `SessionSignIn::TwoFactorRequired` |
+| `verify_two_factor_session(&session, proof, &meta)` | the second step, with `TwoFactorProof::Code` or `TwoFactorProof::RecoveryCode`; a wrong code leaves the sign-in waiting |
+| `two_factor_pending(&session)` | whether a sign-in waits for its second factor |
+| `sign_in_to_session(&session, &user, method, remember, &meta)` | signs in a user another flow checked (a magic link, a social provider, single sign-on), after the sign-in policies |
+| `start_session(&session, &user, remember, &meta)` | binds the session to a user whose sign-in was already checked, with no policy and no audit entry |
+| `sign_out_session(&session, &meta)` | ends the sign-in on the server and invalidates the session |
+| `change_password_session(&session, current, new, &meta)` | changes the password, ends every other session and keeps this one |
+| `confirm_session(&session, proof, &meta)` | step-up: the sign-in counts as recent from now |
+| `session_user(&session)` | the signed-in user the session names, as stored (`SessionUser`) |
+
+Every route still needs its access declaration: `#[authenticated]` routes accept the signed-in browser, and `#[public]` routes see it in `CurrentPrincipal` when there is one.
+
+## Testing
+
+The test client keeps cookies between requests and has two helpers: `csrf_cookie()` calls `GET /csrf-cookie`, and `.xsrf()` on a request sends the `XSRF-TOKEN` cookie back as `X-XSRF-TOKEN`:
+
+```rust title="tests/cart.rs"
+use navree::crypto::generate_key;
+use navree::testing::TestApp;
+
+let app = TestApp::builder()
+    .config("app.key", generate_key())
+    .module(CryptoModule)
+    .module(SessionModule::for_root(SessionOptions::default()))
+    .module(ShopModule)
+    .build()
+    .await;
+let client = app.client();
+
+client.csrf_cookie().await;
+client
+    .post("/api/cart/items")
+    .json(&json!({ "sku": "A-1" }))
+    .send()
+    .await
+    .assert_error(403, "Invalid CSRF token");
+client
+    .post("/api/cart/items")
+    .xsrf()
+    .json(&json!({ "sku": "A-1" }))
+    .send()
+    .await
+    .assert_status(200);
+client
+    .get("/api/cart")
+    .send()
+    .await
+    .assert_json_path("items", json!(["A-1"]));
+```
+
+Test apps have no app key unless you set one, which is why the example sets `app.key`.
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    JWT access and refresh tokens, the default for Navree APIs.
+  </LinkCard>
+  <LinkCard href="/docs/ui/errors-and-states/" title="Errors and states">
+    The 401 page and the sign-in state that lead to the sign-in page.
+  </LinkCard>
+  <LinkCard href="/docs/basics/cors-and-security-headers/" title="CORS and security headers">
+    Allowing a front end on another origin.
+  </LinkCard>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    The app key that encrypts the session cookie.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    The test client and its cookie jar.
+  </LinkCard>
+</LinkCards>

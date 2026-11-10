@@ -1,0 +1,125 @@
+---
+title: "Sortable"
+description: "Lists and boards whose items move by mouse, touch or keys. Each move is posted to your server, which checks it; the page puts the item back if the server says no."
+---
+
+<UiPreview example="sortable/board" />
+
+`Sortable` draws one list or many, and lets people move items within a list and between lists: with a mouse, with a finger, or with the keyboard alone. Each move is posted to your server as a `Move`. The page moves the item at once, and puts it back with a toast if your handler refuses it. The [board example app](/showcase/board/) moves its cards this way.
+
+```rust
+use navree::ui::*;
+
+Sortable::new("launch", "Launch board")
+    .board()
+    .post("/launch/moves")
+    .list(SortList::new("ready", "Ready").item(SortItem::new("11", "Pick the launch date")))
+    .list(SortList::new("doing", "In progress").limit(3))
+```
+
+Without `.post(...)` the lists are drawn as they are, with no handles, no forms and no script.
+
+## When to use it
+
+Use it when the order of things is the point: a board of work moving from column to column, a set list, the steps of a checklist. To choose one item from a list, use [Select](/docs/components/select/); to sort a table by a column, the [DataTable](/docs/ui/data-table/) does that from its headers.
+
+## Anatomy
+
+<UiAnatomy component="sortable" />
+
+## A single list
+
+One list, its title kept for screen readers with `.hide_title()` when the page already names it. Items move up and down.
+
+<UiPreview example="sortable/default" />
+
+## Limits and refusals
+
+`.limit(n)` shows the count beside the list's title as `2/3`, and a drop into a full list is refused while the item is still being dragged: the list says why, and the item goes back. `.refuse(reason)` closes a list to items from other lists, such as Done for someone who can't close work. `SortItem::locked(reason)` keeps one item where it is.
+
+<UiPreview example="sortable/limits" />
+
+These only show the rules. Your handler holds the move to them again, with the same `ListState::limit` and `ListState::refuse`.
+
+## Long lists
+
+A list of thousands draws its first items and loads the rest as it is scrolled. `.total(n)` says how many the list holds, so its count and limit read true. `.more(action, fields)` ends the list with a **Load more** button that the page presses as it comes into sight: a `GET` with a cursor. Answer it with `Sortable::page(key)`, two ops that add the next items and replace the button. `.end_note(text)` ends the list when the page holds as many as it should. With JavaScript off, **Load more** is a plain form.
+
+<UiPreview example="sortable/long" />
+
+## Moving with the keys
+
+Each item has a handle, a button named "Move" and the item's name. Press **Space** or **Enter** to pick the item up, the **arrow keys** to move it (left and right go to the next list that takes it), **Home** and **End** to go to the ends, **Space** or **Enter** to drop it, and **Escape** to put it back. Leaving the handle with **Tab** puts it back too.
+
+Every step is said: "Picked up Fix the sign-in redirect. Position 1 of 4 in Ready." then "Position 2 of 4 in Ready." then "Dropped Fix the sign-in redirect at position 2 of 4 in Ready." A full list that the item passes is named: "In progress holds at most 3." Change the words with `SortLabels`.
+
+## With JavaScript off
+
+Each item carries a small form behind a **Move** disclosure: a list to move it to and a position. It posts the same `Move` your handler already reads. Answer with `Move::done(page)` and the browser goes back to the page; a refusal from `Move::refused(page, why)` shows on that page as a toast.
+
+## The server's side
+
+```rust
+async fn moves(db: Db, mv: Move) -> Result<Reply> {
+    // READ COMMITTED, the lists' rows locked first, then this: two moves at once
+    // run one after the other.
+    let checked = mv
+        .transaction(&db, &Column::KEY, |uow| {
+            let mv = mv.clone();
+            async move {
+                let lists = board_lists(&uow).await?; // Vec<ListState>, under the lock
+                let checked = mv.check(&lists);
+                if let Ok(landing) = &checked {
+                    save_order(&uow, landing).await?;
+                }
+                Ok(checked)
+            }
+        })
+        .await?;
+    Ok(match checked {
+        Ok(_) => mv.done("/board"),
+        Err(refusal) => mv.refused("/board", refusal.message()),
+    })
+}
+```
+
+`Move` reads a form post and refuses forgery the way [`Submit`](/docs/ui/forms/) does. `Move::transaction` (the `orm` feature) is the transaction to check it in: it begins at READ COMMITTED, locks a row per list the move touches before anything is read, and runs again when the database asks. `check` refuses a move when the item is no longer in the list the browser saw it in, when the item it was dropped beside has left that list, when the list is full or closed to it, and when the item or list is gone. For lists too long to read whole, `Move::place` reads only the neighbours it needs and gives the item a rank between theirs. [Drag and drop](/docs/ui/drag-and-drop/) explains both.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The sortable is a group named by its label. Each list is a `section` named by its title, and its items are an ordered list, so a screen reader reads their number and order.
+- Each handle is a real `button`, at least 24 by 24 pixels and 32 on a touch screen, described by the instructions above.
+- Every step of a move is said in the sortable's own live region, and focus stays on the handle of the item that moves.
+- A count with a limit reads as words: "2 of at most 3".
+- Moving never relies on dragging: the keys and, with JavaScript off, the move form do everything a drag does.
+- With reduced motion, items jump to their places instead of sliding.
+
+</UiA11y>
+
+## API
+
+### Sortable
+
+<UiProps type="Sortable" />
+
+### SortList
+
+<UiProps type="SortList" />
+
+### SortItem
+
+<UiProps type="SortItem" />
+
+### SortLabels
+
+<UiProps type="SortLabels" />
+
+### Move
+
+<UiProps type="Move" />
+
+### ListState
+
+<UiProps type="ListState" />

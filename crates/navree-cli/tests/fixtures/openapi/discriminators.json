@@ -1,0 +1,56 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "t", "version": "1"},
+  "paths": {
+    "/pets": {
+      "get": {
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}},
+          "201": {"description": "OK", "content": {"application/json": {"schema": {"oneOf": [{"$ref": "#/components/schemas/Cat"}, {"$ref": "#/components/schemas/Dog"}], "discriminator": {"propertyName": "kind"}}}}}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Pet": {
+        "oneOf": [{"$ref": "#/components/schemas/Cat"}, {"$ref": "#/components/schemas/Dog"}, {"$ref": "#/components/schemas/Bird"}],
+        "discriminator": {"propertyName": "petType", "mapping": {"kitty": "#/components/schemas/Cat", "dog": "#/components/schemas/Dog"}}
+      },
+      "Cat": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "petType": {"type": "string", "description": "already here"}}},
+      "Dog": {"allOf": [{"$ref": "#/components/schemas/Base"}, {"type": "object", "properties": {"bark": {"type": "boolean"}}}]},
+      "Bird": {"type": "object", "properties": {"wings": {"type": "integer"}}},
+      "Base": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}},
+      "Shape": {
+        "type": "object",
+        "required": ["shapeType"],
+        "properties": {"shapeType": {"type": "string"}},
+        "discriminator": {"propertyName": "shapeType", "mapping": {"circle": "#/components/schemas/Circle", "sq": "#/components/schemas/Square"}}
+      },
+      "Circle": {"allOf": [{"$ref": "#/components/schemas/Shape"}, {"type": "object", "properties": {"r": {"type": "number"}}}]},
+      "Square": {"allOf": [{"$ref": "#/components/schemas/Shape"}, {"type": "object", "properties": {"side": {"type": "number"}}}]},
+      "Tri": {"allOf": [{"$ref": "#/components/schemas/Shape"}, {"type": "object", "properties": {"base": {"type": "number"}}}]},
+      "Animal": {
+        "type": "object",
+        "required": ["t"],
+        "properties": {"t": {"type": "string"}},
+        "discriminator": {"propertyName": "t"}
+      },
+      "Fish": {"allOf": [{"$ref": "#/components/schemas/Animal"}, {"type": "object", "properties": {"fins": {"type": "integer"}}}]},
+      "Inline": {
+        "allOf": [
+          {"type": "object", "discriminator": {"propertyName": "k"}, "properties": {"k": {"type": "string"}}},
+          {"type": "object", "properties": {"z": {"type": "string"}}}
+        ]
+      },
+      "InlineChild": {"allOf": [{"$ref": "#/components/schemas/Inline"}, {"type": "object", "properties": {"q": {"type": "string"}}}]},
+      "Wrapper": {
+        "type": "object",
+        "properties": {
+          "animal": {"$ref": "#/components/schemas/Animal"},
+          "either": {"oneOf": [{"$ref": "#/components/schemas/Fish"}, {"$ref": "#/components/schemas/Tri"}], "discriminator": {"propertyName": "t"}}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+//! Request and response bodies of `/api/v1/profile`.
+
+use navree::validation::Validate;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use navree::orm::Record;
+
+use super::entity::Profile;
+
+/// The time zone of users who have not chosen one.
+pub const DEFAULT_TIMEZONE: &str = "UTC";
+
+/// The body of `PUT /api/v1/profile`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateProfile {
+    /// At most 1000 characters.
+    #[validate(length(max = 1000))]
+    pub bio: Option<String>,
+    /// 1 to 64 characters, e.g. `Asia/Kolkata`.
+    #[validate(length(min = 1, max = 64))]
+    pub timezone: Option<String>,
+}
+
+/// A profile as the API returns it.
+#[derive(Debug, Serialize)]
+pub struct ProfileResponse {
+    pub user_id: Uuid,
+    pub bio: Option<String>,
+    pub timezone: String,
+}
+
+impl ProfileResponse {
+    /// The profile of a user who has not saved one yet.
+    pub fn empty(user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            bio: None,
+            timezone: DEFAULT_TIMEZONE.to_owned(),
+        }
+    }
+}
+
+impl From<Record<Profile>> for ProfileResponse {
+    fn from(profile: Record<Profile>) -> Self {
+        Self {
+            user_id: profile.user_id,
+            bio: profile.bio.clone(),
+            timezone: profile.timezone.clone(),
+        }
+    }
+}

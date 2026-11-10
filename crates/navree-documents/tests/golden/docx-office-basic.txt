@@ -1,0 +1,20 @@
+Quarterly audit report
+Summary
+Prepared for Acme Ltd by the audit team.
+Tab	separated	cells and a
+line break and    four spaces.
+Specials: A & B < C > D "quoted" 'single' &amp; &lt;tag&gt;
+Leading and trailing spaces
+
+After an empty paragraph
+Every control was tested
+Two findings are open
+Rotate the keys
+Restore a backup
+Second page: scripts
+Arabic: تقرير التدقيق كل الضوابط ناجحة
+Hebrew: דוח ביקורת
+Hindi: नमस्ते दुनिया
+CJK: 你好，世界 こんにちは 안녕하세요
+Emoji and astral: 😀 𝔘𝔫𝔦𝔠𝔬𝔡𝔢 𠜎
+Combining: é and a ligature ﬁ

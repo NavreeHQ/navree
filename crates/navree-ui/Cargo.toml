@@ -1,0 +1,93 @@
+[package]
+name = "navree-ui"
+description = "Navree's UI toolkit: typed components rendered to HTML on the server, one stylesheet, and a small owned runtime that loads only when a page needs it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "(MIT OR Apache-2.0) AND ISC AND MIT AND OFL-1.1 AND Unicode-3.0 AND Apache-2.0"
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "ui", "components", "html", "server-side"]
+categories = ["web-programming", "gui"]
+readme = "README.md"
+include = ["src/**", "assets/**", "dist/**", "THIRD_PARTY.md", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["access", "orm", "phone", "storage", "time"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The table's backend: `TableQuery::load`, `export_csv`, `BulkRequest::resolve`
+## and stored views, through navree-orm; and the sortable's moves in a unit of
+## work of navree-db's (`sortable::transaction`). The facade turns it on when both
+## `ui` and `orm` are on.
+orm = ["dep:navree-orm", "dep:navree-db", "dep:base64"]
+## `PhoneInput` and the phone widget of forms: a country picker, formatting
+## as you type and E.164, on navree-phone. The facade turns it on when both
+## `ui` and `validation-phone` are on.
+phone = ["dep:navree-phone", "navree-validation/phone"]
+## `Uploads`: the files an `Upload` sends, received through navree-storage with the
+## size, count and type limits checked on the server, and large files put together
+## from chunks. The facade turns it on when both `ui` and `storage` are on.
+storage = ["dep:navree-storage"]
+## The reader's zone from navree-time: `today_in(&CurrentZone)` on the date pickers and the
+## calendar, `zone(&CurrentZone)` on a timeline and an activity feed, `FormView::dates_in`. The
+## facade turns it on when both `ui` and `time` are on.
+time = ["dep:navree-time"]
+## Show or hide what a reader may not use, by navree-access's abilities
+## (`navree_ui::ability`). The facade turns it on when both `ui` and `access` are on.
+access = ["dep:navree-access"]
+
+[dependencies]
+base64 = { workspace = true, optional = true }
+navree-db = { workspace = true, optional = true }
+navree-access = { workspace = true, optional = true }
+navree-time = { workspace = true, optional = true }
+# A report names its zone to the database from the zone itself.
+chrono-tz = { workspace = true }
+navree-orm = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
+navree-storage = { workspace = true, optional = true }
+brotli = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+# The page of an error never waits on the app's own shell builder for long: a deadline and a
+# panic guard around it.
+futures-util = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+navree-config = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# `Markdown`: CommonMark read into safe events by navree-markdown (the reader the API reference
+# uses too), written back through the toolkit's one escaping path.
+navree-markdown = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-ui-macros = { workspace = true }
+navree-validation = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+# `ui:render` sends one request through the app's router.
+tower = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+serde_urlencoded = { workspace = true }
+http-body-util = { workspace = true }
+# Its own `phone` and `storage` features, for the tests of the phone input and the uploads.
+navree-ui = { path = ".", features = ["phone", "storage", "time", "access"] }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+# A paused clock, for a test of something that never answers.
+tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true }
+# The independent URL parser the return address is checked against.
+url = { workspace = true }

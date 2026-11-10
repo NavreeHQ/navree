@@ -1,0 +1,24 @@
+multipart/form-data; boundary=a6e7d53355dd96b0f66778d00f492e0c
+--a6e7d53355dd96b0f66778d00f492e0c
+Content-Disposition: form-data; name="a"
+
+1
+--a6e7d53355dd96b0f66778d00f492e0c
+Content-Disposition: form-data; name="b"
+
+two
+lines
+--a6e7d53355dd96b0f66778d00f492e0c
+Content-Disposition: form-data; name="e"
+
+
+--a6e7d53355dd96b0f66778d00f492e0c
+Content-Disposition: form-data; name="f"; filename="C:\dir\a.txt"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+--a6e7d53355dd96b0f66778d00f492e0c--

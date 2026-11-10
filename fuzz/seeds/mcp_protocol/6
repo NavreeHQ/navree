@@ -1,0 +1,1 @@
+È{"jsonrpc":"2.0","id":8,"method":"resources/read","params":{"uri":"fuzz://items/%zz"}}

@@ -1,0 +1,374 @@
+---
+title: "HTTP client"
+description: "Outgoing HTTP requests with retries, per-attempt timeouts, an SSRF guard and a fake for tests."
+---
+
+<Badge feature="http-client" /> Most apps call other services: a payment provider, a webhook, an exchange-rate API. `navree-http-client` gives you one shared `HttpClient` for that, injected like any other service. It is built on [reqwest](https://docs.rs/reqwest) with rustls, and it adds what you would otherwise write by hand: retries with backoff, a timeout per attempt, a response size limit, a guard against server-side request forgery, logs that never contain secrets, and a fake for tests.
+
+## Configuration
+
+Add `HttpClientModule` to your app. It is global: every module can inject `Arc<HttpClient>` without importing it.
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpClientModule::from_config()) // section `http_client`
+}
+```
+
+Every key of the `http_client` section is optional:
+
+```toml title="config/app.toml"
+[http_client]
+timeout_secs = 30
+connect_timeout_secs = 5
+retries = 2
+retry_base_ms = 200
+max_response_bytes = 10485760
+user_agent = "crm/1.0"
+
+[http_client.ssrf]
+block_private = true
+allow_hosts = ["billing.internal", "*.svc.cluster.local", "10.20.0.0/16"]
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `timeout_secs` | `30` | Time allowed for each attempt, from connecting to the last body byte (at least 1). |
+| `connect_timeout_secs` | `5` | Time allowed to open a connection (at least 1). |
+| `retries` | `2` | Retries after the first attempt, for idempotent requests and requests with an idempotency key only. |
+| `retry_base_ms` | `200` | The first retry delay; each later one doubles up to 30 s, and each gets up to as much again in random jitter. |
+| `max_response_bytes` | `10485760` (10 MiB) | The largest response body read into memory (at least 1). |
+| `user_agent` | `navree-http-client/<version>` | The `User-Agent` sent when a request doesn't set its own (`<version>` is the crate's version, for example `navree-http-client/1.0.0`). |
+| `ssrf.block_private` | `true` | Refuse internal addresses (see [the SSRF policy](#the-ssrf-policy)). |
+| `ssrf.allow_hosts` | `[]` | Hosts, host globs, IP addresses and CIDR networks that bypass the policy. |
+
+From the environment, use the usual `APP_` names: `APP_HTTP_CLIENT__TIMEOUT_SECS=10`, and `APP_HTTP_CLIENT__SSRF__ALLOW_HOSTS=billing.internal,10.20.0.0/16` as a comma-separated list. Invalid options fail the boot, naming the section and the key.
+
+To configure the client in code instead, use `for_root`. Build the options from their default:
+
+```rust title="src/app.rs"
+use navree::http_client::{HttpClientOptions, SsrfPolicy};
+
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpClientModule::for_root(HttpClientOptions {
+        timeout_secs: 10,
+        retries: 3,
+        ssrf: SsrfPolicy {
+            allow_hosts: vec!["billing.internal".into(), "10.20.0.0/16".into()],
+            ..SsrfPolicy::default()
+        },
+        ..HttpClientOptions::default()
+    }))
+```
+
+## Making requests
+
+Inject the client and start a request with `get`, `post`, `put`, `patch`, `delete`, or `request(method, url)` for any other method. Nothing is sent until you await `send`:
+
+```rust title="src/modules/rates/service.rs"
+use std::collections::BTreeMap;
+
+use navree::http_client::{HttpClient, HttpClientError};
+use navree::prelude::*;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct Rates {
+    pub base: String,
+    pub rates: BTreeMap<String, f64>,
+}
+
+#[injectable]
+pub struct ExchangeRates {
+    http: Arc<HttpClient>,
+}
+
+impl ExchangeRates {
+    pub async fn latest(&self, base: &str) -> Result<Rates, HttpClientError> {
+        self.http
+            .get("https://rates.example.com/latest")
+            .query(&[("base", base)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+    }
+}
+
+#[module(providers = [ExchangeRates], exports = [ExchangeRates])]
+pub struct RatesModule;
+```
+
+The builder methods are:
+
+| Method | What it does |
+|---|---|
+| `header(name, value)` | Adds a header (repeated names are kept). `Authorization`, `Proxy-Authorization` and `Cookie` values are marked sensitive. |
+| `bearer(token)` | Sets `Authorization: Bearer <token>`, marked sensitive. |
+| `with_request_id(&id)` | Sets `X-Request-Id`, so the other service can tie its logs to yours. |
+| `query(&value)` | Appends to the query string: a struct, a map or a slice of pairs. |
+| `json(&value)` | Sends a JSON body with `Content-Type: application/json`. |
+| `form(&value)` | Sends a URL-encoded form. |
+| `body(bytes)` | Sends a raw body (set `Content-Type` with `header`). |
+| `timeout(duration)` | This request's timeout per attempt. |
+| `retries(n)` | This request's number of retries (ignored for a `POST` or `PATCH` without an idempotency key). |
+| `idempotency_key(key)` | Sends `Idempotency-Key: <key>` and lets a `POST` or `PATCH` be retried (see [Retries and timeouts](#retries-and-timeouts)). |
+| `idempotency_key_header(name, key)` | The same, under the header name a provider uses instead (`x-idempotency-key`). |
+| `secret_url()` | The whole URL is a secret, as an incoming webhook's is: errors, logs, `Debug` output and the `HttpClientRequest` event show its scheme and host alone (`https://hooks.example.com/[hidden]`). Without it they show the path, never the query string or credentials. |
+
+Builder methods never fail. The first problem (an invalid URL, header or body) is kept and returned by `send` as `HttpClientError::Build`. Only `http` and `https` URLs are accepted.
+
+Here is a webhook call that authenticates, forwards the current request id and sends JSON:
+
+```rust
+use navree::contracts::RequestId;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Debug, Serialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub amount_cents: i64,
+}
+
+impl ExchangeRates {
+    pub async fn notify(
+        &self,
+        token: &str,
+        request_id: &RequestId,
+        event: &DealWon,
+    ) -> Result<(), HttpClientError> {
+        self.http
+            .post("https://hooks.example.com/crm/deals")
+            .bearer(token)
+            .with_request_id(request_id)
+            .idempotency_key(format!("deal-won-{}", event.deal_id))
+            .json(event)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+}
+```
+
+<Callout type="note" title="Request ids are not forwarded automatically">
+
+The client can't see the incoming request, so call `with_request_id` yourself. In a handler, take the id with `Extension(request_id): Extension<RequestId>` (`navree::http::Extension`, `navree::contracts::RequestId`).
+
+</Callout>
+
+## Responses
+
+`send` reads the whole body before it returns, so a `Response`'s accessors are synchronous and can be called any number of times:
+
+```rust
+let response = self.http.get("https://rates.example.com/status").send().await?;
+
+response.status();             // StatusCode
+response.is_success();         // true for 2xx
+response.header("retry-after"); // Option<&str>, case-insensitive
+response.headers();            // &HeaderMap
+response.url();                // the final URL, after redirects
+response.text();               // String
+response.bytes();              // Bytes
+let body: Rates = response.json()?;
+```
+
+A `4xx` or `5xx` status is **not** an error: you get the response and decide. Call `error_for_status()` to turn it into `HttpClientError::Status`.
+
+A body larger than `max_response_bytes` fails with `HttpClientError::BodyTooLarge` as soon as the limit is passed, so a misbehaving server can't fill your memory.
+
+### Streaming responses
+
+For server-sent events and other long responses, `send_streaming` returns a `StreamingResponse` as soon as the headers arrive, and you read the body as it comes:
+
+```rust
+let mut response = self
+    .http
+    .post("https://models.example.com/v1/stream")
+    .json(&request)
+    .send_streaming()
+    .await?;
+
+response.status();                       // the same header accessors as Response
+while let Some(chunk) = response.chunk().await? {
+    // chunk: Bytes, in the order the server sent them
+}
+// or: response.into_stream() for a Stream of Result<Bytes, HttpClientError>
+// or: response.bytes().await? to read the rest, up to max_response_bytes
+```
+
+A streaming request goes through the same SSRF policy, carries the same `traceparent`, and is logged and reported like any other, at the moment its headers arrive. It is sent once and never retried, the timeout covers the wait for the headers only, and the body has no size limit except through `bytes()`. Dropping the response closes the connection.
+
+## Retries and timeouts
+
+Idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`) are retried when the connection fails or the server answers `5xx` or `429`. The delay starts at `retry_base_ms` and doubles each time until it reaches 30 seconds. Each delay also gets a random share of itself added (jitter), so a delay lasts between once and twice its size and clients that failed together do not retry together.
+
+A `POST` or `PATCH` is sent once, because sending it twice could charge a card twice. Give it an idempotency key and it is retried like the others:
+
+```rust
+let charge = self
+    .http
+    .post("https://payments.example.com/v1/charges")
+    .bearer(token)
+    .idempotency_key(format!("invoice-{}-charge", invoice.id))
+    .json(&body)
+    .send()
+    .await?;
+```
+
+Every attempt carries the same `Idempotency-Key` header and the same body. A provider that supports keys (Stripe, Resend and most payment APIs do) answers a key it has seen with the first answer instead of acting again. Derive the key from the operation, not from the attempt: a queued job that runs again then sends the same key, and the provider still acts once. Keys are 1 to 255 visible ASCII characters without spaces; another key fails the request with `HttpClientError::Build` before anything is sent. For a provider that names the header differently, use `idempotency_key_header("x-idempotency-key", key)`.
+
+When a retryable answer carries `Retry-After`, in seconds or as an HTTP date, the client waits at least that long, and never less than the backoff schedule says. If it asks for more than 30 seconds, the client stops retrying and returns that answer at once, so you can try again later (a queued job's own backoff is the usual place). When the last attempt still gets a `5xx` or `429`, that response is returned as it is.
+
+Each attempt has its own timeout, from connecting to the last body byte. A timed-out attempt fails with `HttpClientError::Timeout` and is **not** retried, so a server that hangs costs you one timeout, not one per retry. Opening the connection has its own, shorter limit (`connect_timeout_secs`), and a connection that can't be opened is retried. Override the timeout and the retries per request:
+
+```rust
+let response = self
+    .http
+    .get("https://rates.example.com/status")
+    .timeout(Duration::from_secs(2))
+    .retries(0)
+    .send()
+    .await?;
+```
+
+## Errors
+
+Every failure is an `HttpClientError`. URLs in its messages have no query string or credentials, and header values and bodies never appear.
+
+| Variant | When | Retried |
+|---|---|---|
+| `Build` | Invalid URL, header, body or scheme | No |
+| `Blocked { host, reason }` | The SSRF policy refused the destination | No |
+| `Connect` | Connection refused or reset, DNS failure, connect timeout | Yes (idempotent methods, and requests with an idempotency key) |
+| `Timeout` | An attempt took longer than its timeout | No |
+| `BodyTooLarge` | The body is over `max_response_bytes` | No |
+| `Request` | Any other transport failure, including more than 10 redirects | No |
+| `Status` | `error_for_status()` on a `4xx` or `5xx` | |
+| `Decode` | `json()` on a body that isn't the expected JSON | |
+| `NoFakeResponse` | A [fake client](#testing) got a request no stub matches | |
+
+Propagated with `?` from a handler, an `HttpClientError` becomes a logged `500`. When the other service failing is not your server's fault, answer something more precise:
+
+```rust
+use http::StatusCode;
+
+let rates = self.rates.latest(&base).await.map_err(|error| {
+    AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailable", "Bad Gateway").with_source(error)
+})?;
+```
+
+The client sees `{"statusCode": 502, "message": "Bad Gateway", "error": "Bad Gateway", "code": "rates_unavailable"}`, and the cause is logged with the request.
+
+## The SSRF policy
+
+If a URL comes from a user (a webhook address, an avatar URL to fetch), an attacker can point it at your internal network or at the cloud metadata service. With `ssrf.block_private` on (the default) the client refuses:
+
+- loopback, private (RFC 1918), link-local, carrier-grade NAT, unique-local, multicast, documentation, benchmarking and other reserved ranges, in IPv4 and IPv6;
+- IPv6 addresses that embed one of those IPv4 addresses (IPv4-mapped, IPv4-compatible, NAT64, 6to4);
+- the cloud metadata endpoints `169.254.169.254`, `169.254.170.2`, `100.100.100.200`, `192.0.0.192` and `fd00:ec2::254`, **even with `block_private` off**.
+
+The check runs on literal IP URLs before anything is sent, on every address a host name resolves to (connections only go to the addresses that were checked, so DNS rebinding can't slip through), and on every redirect hop (at most 10). A refused request fails with `HttpClientError::Blocked`, naming the range and the address.
+
+To call an internal service, list it in `ssrf.allow_hosts`:
+
+- a host name, `billing.internal` (case-insensitive): every address it resolves to is accepted;
+- a host glob, `*.svc.cluster.local`;
+- an IP address, `127.0.0.1`, or a CIDR network, `10.20.0.0/16`.
+
+An allow-listed name is trusted with every address it resolves to, the cloud metadata endpoints included, so the list is as strong as the control you have over those names. A glob matches the text of a host name, and `*` matches dots too: `*.svc.cluster.local` fits `a.b.svc.cluster.local`, and `api.internal.*` fits `api.internal.example`, a name whoever owns `example` can point at any address. End a glob in a domain you own, and write a network as a CIDR network (`10.20.0.0/16`), never as a glob (`10.20.*`, which fits `10.20.attacker.example`). To allow an address range without trusting any name, list the range and not the name.
+
+Set `block_private = false` only when the client never sees user-supplied URLs. The client also ignores the system's proxy settings (`HTTP_PROXY` and friends), so requests go where the policy checked.
+
+To refuse a bad address when you store it, such as a webhook endpoint or a callback URL a user enters, check it without sending anything:
+
+```rust
+self.http.check_destination(&endpoint).await?;
+```
+
+`check_destination` applies the same policy as a request: a malformed URL or a scheme other than `http` or `https` fails with `HttpClientError::Build`, a refused destination with `Blocked`, and a host name that doesn't resolve with `Connect`. A fake client checks IP literals only. Requests are checked again when they are sent, since DNS answers change.
+
+## Logging
+
+Each request is logged at `debug` level with its method, its URL without query string or credentials, the status, the number of attempts and the time taken; each retry is logged too. Header values and bodies are never logged, so tokens in headers or query strings stay out of your logs. To see them, set `levels = { navree_http_client = "debug" }` in the `log` section (or `APP_LOG__LEVELS=navree_http_client=debug`); see [Logging](/docs/basics/logging/).
+
+## Testing
+
+`HttpClient::fake()` returns a client that never touches the network and the `FakeServer` that answers it. Stub responses with `on`, swap the fake into your app with `override_value`, and assert on what was sent:
+
+```rust title="src/modules/rates/tests/mod.rs"
+use http::Method;
+use navree::http_client::{FakeResponse, HttpClient};
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn latest_rates_come_from_the_provider() {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        "https://rates.example.com/latest?*",
+        FakeResponse::new(200).json(&json!({ "base": "EUR", "rates": { "USD": 1.08 } })),
+    );
+    let app = TestApp::builder()
+        .module(RatesModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let rates = app.get::<ExchangeRates>().await.latest("EUR").await.unwrap();
+
+    assert_eq!(rates.rates["USD"], 1.08);
+    server.assert_sent(|request| request.url().query() == Some("base=EUR"));
+    server.assert_sent_count(1);
+    app.shutdown().await.unwrap();
+}
+```
+
+- **Stubs** match a method and a glob over the full URL, query string included (`*` is any characters, `?` one character). They are tried in the order you register them. A request no stub matches fails with `HttpClientError::NoFakeResponse`.
+- **`on_sequence(method, glob, [responses])`** answers with each response in turn, one per attempt (retries included), then repeats the last one.
+- **`FakeResponse`**: `new(status)`, then `.json(&value)`, `.text(..)`, `.body(..)` and `.header(name, value)`; `.delay(duration)` to test timeouts; `FakeResponse::connection_failed()` for a refused connection.
+- **Assertions**: `assert_sent(predicate)`, `assert_not_sent(predicate)`, `assert_sent_count(n)` (retries count) and `assert_nothing_sent()`. `recorded()` returns every `RecordedRequest`, with `method()`, `url()`, `header(name)`, `headers()`, `body()`, `text()` and `json()`.
+
+Retries, timeouts and the size limit behave as they do on a real client; `HttpClient::fake_with(options)` takes options. The SSRF policy applies to literal IP URLs only, since a fake resolves no host names. Backoff delays and `.delay(..)` are real time, so pause Tokio's clock to keep tests fast (this needs Tokio's `test-util` feature in your dev-dependencies):
+
+```rust
+#[tokio::test(start_paused = true)]
+async fn a_flaky_provider_is_retried() {
+    let (client, server) = HttpClient::fake();
+    server.on_sequence(
+        Method::GET,
+        "https://rates.example.com/status",
+        [FakeResponse::new(503), FakeResponse::connection_failed(), FakeResponse::new(200)],
+    );
+
+    let response = client.get("https://rates.example.com/status").send().await.unwrap();
+
+    assert_eq!(response.status(), 200);
+    server.assert_sent_count(3);
+}
+```
+
+See [Fakes](/docs/testing/fakes/) for the other fakes Navree ships.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    Swapping services for fakes in tests.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    How errors become responses.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
+    A readiness check that calls another service.
+  </LinkCard>
+</LinkCards>

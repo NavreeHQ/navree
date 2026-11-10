@@ -1,0 +1,96 @@
+---
+title: "Tables and forms described at run time"
+description: "The DataTable and the form, drawn from columns and fields your code lists as it runs: an admin panel's resources, a report builder, data no struct knows."
+---
+
+The [DataTable](/docs/ui/data-table/) and [forms](/docs/ui/forms/) take their columns and fields from a struct: `#[derive(TableRow)]` and `#[derive(Form)]`. Some screens only know them while they run: an admin panel drawing each resource an app registers ([Helm](/docs/tools/helm/) is one), a report whose columns a user picks, a tool over another app's data. `navree::ui::described` describes them at run time and hands the description to the same `DataTable` and `FormView`.
+
+They are the typed components, not copies of them: the markup, the URL, the behaviour with JavaScript on and off, the words, the accessibility and the budgets are the same. A test in the toolkit draws a typed table and the same table described, and compares the two pages byte for byte.
+
+## A table
+
+A `DescribedTable` lists the columns, each a `ColumnSpec` with what `#[col(...)]` says, and the table's settings, what `#[table(...)]` says. `query` reads a URL against them, as `TableQuery::parse` does for a derived row, and a `DescribedRow` holds one cell for each column, in their order:
+
+```rust title="src/reports/table.rs"
+use navree::ui::described::{ColumnSpec, DescribedCell, DescribedRow, DescribedTable};
+use navree::ui::table::{Direction, FilterKind, ValueKind};
+use navree::ui::{Badge, DataTable, Node, Tone};
+
+fn deals_table(path: &str, query: &str, deals: &[(i64, &str, &str, i64)]) -> Node {
+    let shape = DescribedTable::new()
+        .column(ColumnSpec::new("title", "Deal").sortable().search().locked())
+        .column(
+            ColumnSpec::new("stage", "Stage")
+                .filter(FilterKind::Multi)
+                .options([("lead", "Lead"), ("won", "Won")]),
+        )
+        .column(
+            ColumnSpec::new("amount", "Amount (₹)")
+                .kind(ValueKind::Int)
+                .sortable()
+                .numeric()
+                .filter(FilterKind::Range),
+        )
+        .sort("amount", Direction::Desc);
+    let table = shape.query(path, query);
+    let rows: Vec<DescribedRow> = deals
+        .iter()
+        .map(|(id, title, stage, amount)| {
+            DescribedRow::new(
+                id.to_string(),
+                vec![
+                    DescribedCell::text(*title),
+                    DescribedCell::node(Badge::new(stage.to_string()).tone(Tone::Info), *stage),
+                    DescribedCell::plain(amount.to_string()),
+                ],
+            )
+        })
+        .collect();
+    DataTable::new("deals", &table, &rows).caption("Deals").into()
+}
+```
+
+- `ColumnSpec` has the flags of `#[col(...)]`: `sortable`, `numeric`, `search` (the table shows its search box when a column is searched), `hidden`, `locked`, `truncate`, `wrap`, `strong`, `sticky`, `align`, `width`, `group`, `filter` with its `options`, `kind` (how values in the URL bind) and `source`.
+- `DescribedTable` takes `sort`, `per` and `per_pages`, `cursor`, `count`, `key_kind` (`ValueKind::Text` for keys that aren't numbers) and `version`.
+- A cell is `DescribedCell::text` (what a user wrote, with a direction of its own), `plain` (a number, a date, a label) or `node` (any component, with the text a file or a label reads), as the derive writes a field's cell.
+- `keep("via[company_id]")` keeps a parameter of the page's own in every link and form of the table, as a [`FilterBar`](/docs/ui/data-table/) keeps a page's filters.
+- Bulk actions post as for a typed table: `DescribedTable::bulk` reads the post against the same columns.
+
+The setters of `DataTable` that name a column or an action take a `&'static str`: `options`, `cell` and `foot` a column, `BulkAction::new` an action, `DataTable::new` the table. For a name known at run time, `described::name` gives one, kept for the life of the program. So are the description's own names and labels, each text once, however often a description is built: build one per request without a second thought, and keep values (rows, choices a page looks up, what a user typed) out of names.
+
+## A form
+
+A `DescribedForm` lists the fields, each a `FieldSpec` with what a struct's field, its doc comment, `#[form(...)]` and `#[validate(...)]` say. `view` is its `FormView`, with every setter a typed one has:
+
+```rust title="src/reports/form.rs"
+use navree::ui::described::{DescribedForm, FieldSpec};
+use navree::ui::form::Widget;
+use navree::ui::{InputKind, Node};
+
+fn customer_form(csrf: &str) -> Node {
+    DescribedForm::new("customer")
+        .field(
+            FieldSpec::new("name", "Name", Widget::Input(InputKind::Text))
+                .required()
+                .length(None, Some(120)),
+        )
+        .field(
+            FieldSpec::new("city", "City", Widget::Select)
+                .options([("ludhiana", "Ludhiana"), ("jalandhar", "Jalandhar")])
+                .prompt("Pick a city"),
+        )
+        .field(
+            FieldSpec::new("credit", "Credit limit (₹)", Widget::Input(InputKind::Number))
+                .optional()
+                .range(Some("0"), Some("1000000")),
+        )
+        .view()
+        .post("/customers")
+        .csrf(csrf)
+        .hidden("_step", "review")
+        .submit("Save customer")
+        .into()
+}
+```
+
+A field must be filled in unless it is `optional`, as a struct's field that isn't an `Option` must. Its rules (`required`, `length`, `range`, `format`, `browser_pattern`) are what the browser checks before anything is sent; the page reads the post back against its own description and checks it again, as the server always does. `FormView::hidden` adds a field of the page's own, such as an id or the step a form is at, to any form.

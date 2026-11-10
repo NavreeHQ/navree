@@ -1,0 +1,81 @@
+//! The {{ words }} page of the {{ module_words }} module, booted in a shell of its own.
+
+use std::sync::Arc;
+
+use navree::access::AccessModule;
+use navree::db::DatabaseModule;
+use navree::kernel::{Factory, Module, ModuleBuilder};
+{% if public %}
+use navree::testing::TestApp;
+use navree::ui::{Shell, UiModule};
+{% else %}
+use navree::testing::{TestApp, principal};
+use navree::ui::{Shell, UiModule};
+use uuid::Uuid;
+{% endif %}
+
+use super::super::{{ module_struct }};
+
+/// The shell `AppShell` reads. The app registers its own, in a global module so
+/// that every module's pages can see it; a test needs only a name.
+struct TestShell;
+
+impl Module for TestShell {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.global();
+        m.factory(Factory::<Shell>::new(|_| async {
+            Ok(Arc::new(Shell::new("Sutlej Supply")))
+        }))
+        .exports::<Shell>();
+    }
+}
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(AccessModule)
+        .module(UiModule)
+        .module(TestShell)
+        .module({{ module_struct }})
+        .build()
+        .await
+}
+
+{% if public %}
+#[tokio::test]
+async fn guests_may_open_the_page() {
+    let app = app().await;
+    let page = app
+        .client()
+        .get("/{{ route }}")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(page.contains("{{ title }}"), "{page}");
+}
+{% else %}
+#[tokio::test]
+async fn guests_must_sign_in() {
+    let app = app().await;
+    app.client()
+        .get("/{{ route }}")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn signed_in_users_open_the_page() {
+    let app = app().await;
+    let page = app
+        .acting_as(principal(Uuid::now_v7()))
+        .get("/{{ route }}")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(page.contains("{{ title }}"), "{page}");
+}
+{% endif %}

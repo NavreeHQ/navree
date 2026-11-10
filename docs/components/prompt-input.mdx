@@ -1,0 +1,49 @@
+---
+title: "PromptInput"
+description: "Where the reader writes to the assistant: a form that posts the message, and the page's signed context, to the composer's route. It works with no script."
+---
+
+<UiPreview example="prompt-input/default" />
+
+`PromptInput` is the composer of a [Conversation](/docs/components/conversation/). It is a form with a labelled text area and a Send button. It posts one field, `message`, to the route you name, and the route answers by adding the message to the conversation.
+
+```rust
+use navree::ui::genui::*;
+
+PromptInput::new("assistant-composer", "/assistant/7/messages")
+    .csrf("session-csrf-token")
+```
+
+The first argument names the form, and the second is the route that takes the post. Both have to stay on your site: the route is a `LocalHref`. `.csrf(token)` puts the session's CSRF token in the form, as it does for any [form](/docs/ui/forms/).
+
+## What it sends
+
+The text area holds up to 4,000 characters (`MAX_MESSAGE`), is required, and is named "Message" for assistive technology. With JavaScript, Enter sends the message and Shift+Enter writes a new line. Without it, the Send button is a plain submit button.
+
+`.context(signed)` sends what the page is about with every message: a reference your server signed. The server checks the signature and resolves the reference under the reader's access before the assistant hears of it, so a reader cannot make the assistant talk about a record they may not see. See [Generative UI](/docs/ai/generative-ui/) for how a page gives its context.
+
+## When the server refuses the message
+
+Draw the composer again with what the reader wrote in `.value(..)` and the reason in `.error(..)`. The reason is shown under the text area, the text area is marked invalid, and the reason is its description, so a screen reader speaks it with the field.
+
+<UiPreview example="prompt-input/error" />
+
+## Words
+
+The label, the hint and the button are in `ChatLabels`, which `.labels(..)` replaces for another language.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The text area has a visible label and is required. An error is shown under it, the text area is marked invalid, and the error is its description.
+- Enter sends and Shift+Enter writes a new line when the page has JavaScript. A reader who tabs to Send and presses it gets the same result with or without a script.
+- The form is a plain form: it can be posted again after the page reloads, and the message the reader wrote is kept when the server refuses it.
+
+</UiA11y>
+
+## API
+
+### PromptInput
+
+<UiProps type="PromptInput" />

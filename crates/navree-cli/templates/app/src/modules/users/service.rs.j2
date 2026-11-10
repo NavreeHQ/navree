@@ -1,0 +1,61 @@
+//! Reads and writes profiles.
+
+use navree::db::Uow;
+use navree::injectable;
+use navree::orm::{Model as _, OrmError, Record};
+use uuid::Uuid;
+
+use super::dto::{DEFAULT_TIMEZONE, UpdateProfile};
+use super::entity::Profile;
+
+/// Profiles, read and written in the caller's unit of work.
+#[injectable]
+pub struct ProfileService;
+
+impl ProfileService {
+    /// The saved profile of `user_id`, if any.
+    pub async fn find(
+        &self,
+        uow: &Uow,
+        user_id: Uuid,
+    ) -> Result<Option<Record<Profile>>, OrmError> {
+        Profile::query().where_key(user_id).first(uow).await
+    }
+
+    /// Saves the fields present in `input`, creating the profile on first use.
+    pub async fn update(
+        &self,
+        uow: &Uow,
+        user_id: Uuid,
+        input: UpdateProfile,
+    ) -> Result<Record<Profile>, OrmError> {
+        match self.find(uow, user_id).await? {
+            Some(mut profile) => {
+                if let Some(bio) = input.bio {
+                    profile.bio = Some(bio);
+                }
+                if let Some(timezone) = input.timezone {
+                    profile.timezone = timezone;
+                }
+                // The ORM sets `updated_at` and records the change for the
+                // audit log.
+                profile.save(uow).await?;
+                Ok(profile)
+            }
+            None => {
+                Profile::create(
+                    uow,
+                    Profile {
+                        user_id,
+                        bio: input.bio,
+                        timezone: input
+                            .timezone
+                            .unwrap_or_else(|| DEFAULT_TIMEZONE.to_owned()),
+                        ..Profile::default()
+                    },
+                )
+                .await
+            }
+        }
+    }
+}

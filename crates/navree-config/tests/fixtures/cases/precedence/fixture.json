@@ -1,0 +1,8 @@
+{
+  "sources": [
+    "dotenv:.env",
+    "file:config/app.toml",
+    "file:config/production.toml",
+    "env"
+  ]
+}

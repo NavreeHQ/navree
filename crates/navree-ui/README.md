@@ -1,0 +1,653 @@
+# navree-ui
+
+Navree's UI toolkit. Typed Rust components render to HTML on the server, a small
+owned runtime handles behaviour, and a page with nothing interactive ships no
+JavaScript. No per-tab server state, no WASM, no Node at run time or in
+`cargo build`.
+
+```rust
+use navree::ui::*;
+
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell
+        .page("Deals")
+        .actions(Button::primary("New deal").icon(icons::PLUS).href("/deals/new"))
+        .body(DataTable::new("deals", &query, &page)))
+}
+```
+
+## What's here
+
+- **The tree.** Every component builds one non-generic `Node`. Variants are Rust
+  enums, so a typo can't compile. `render` writes a tree in one pass to one
+  `String`, sized ahead of time. Text goes through one escaping path; URLs go
+  through `Href`, which refuses `javascript:` and every other unknown scheme.
+- **The attribute contract.** `data-slot` says what a part is, `data-variant`,
+  `data-size` and `data-tone` are closed choices, `data-open`, `data-invalid`,
+  `data-pending` and the like are states, `data-ui-*` are the runtime's hooks. The
+  stylesheet and the runtime read nothing else.
+- **Components.** Static: Alert, AspectRatio, Attachment, Avatar, Badge, Breadcrumb,
+  Bubble, Button, ButtonGroup, Card, Checkbox, Direction, Empty, Field, Input,
+  InputGroup, Item, Kbd, Label, Marker, Message, NativeSelect, Pagination, Progress,
+  RadioGroup, Separator, Skeleton, Spinner, Switch, Table, Textarea, Toggle, Heading,
+  Text, and for activity: Timeline, ActivityFeed, FactCard, FactGrid, and Badge's dot,
+  tones and outcome chips. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
+  HoverCard, Popover, ScrollArea, Sheet, Tooltip. Menus and messages: Tabs, ToggleGroup,
+  DropdownMenu, Toast and Toaster. Layout: Stack, Row, Grid, Container.
+  Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
+  Flow (`navree_ui::flow`): Stepper, Wizard (steps that are derived forms, with a
+  `Draft` kept on the server), Slider (one value or a range, with `SliderSpec` to
+  check a post), Tree (children from the server, choices that post) and Toolbar.
+  Panes: `SplitPane` and `Pane`, with `SplitSizes` and `SplitSave` for sizes kept on the server.
+  Sortable lists and boards: Sortable, SortList, SortItem, and the Move each drop posts.
+  Charts (`navree_ui::charts`): `Chart` (line, area and bar), `Donut` (and a pie),
+  `Sparkline`, `Funnel`, and `Report`.
+  Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
+  list and the number, formatted as typed, read on the server in the country chosen.
+  Components carry no outer margin: layout
+  belongs to the layout primitives.
+- **A shell for a module's own pages.** A module that serves pages and must not register
+  a `Shell` for the whole app (a debugging tool) builds its own and applies it with
+  `Shell::for_request(path, &headers)`, which does what the `AppShell` extractor does:
+  the active link, a collapsed sidebar, the toast the last page left. `NavItem::current`
+  says which link is the current page when several differ only in their query.
+  `data-hide-mobile` hides any element below 768px, a pane of two as well as a table column;
+  `data-pane` keeps a pane of a two-pane page in view on wide screens and scrolls it on its own.
+- **Forms.** `#[derive(Validate, Form)]` on one struct: doc comments are labels, types
+  pick widgets, rules set `required`, `maxlength` and `min` in the browser and run
+  again on the server. A `pattern` reaches the page only when its rule says
+  `pattern("...", browser)`. `FormView` draws it, `Submit<T>` reads it back and answers
+  field errors under the inputs, or the page again with JavaScript off. A form on its
+  way ignores a second submit that sends the same thing, and sends the latest one that
+  differs when the first answer is back, to the same record on the same page. When it
+  can't, a toast says the change wasn't saved, and what was typed stays in the field.
+- **Errors and states.** A request for a page that ends in a 401, 403, 404, 405, 409, 410,
+  419, 422, 429, 500 or 503 gets a page, not JSON: in the shell for a signed-in user, on its
+  own (one `h1`, no script) for a guest, a 401, a 429, a 503 and a panic. `UiModule` draws it
+  for every page route; an API route, a route marked `json_only()` and a client that asks for
+  JSON alone keep the JSON error. A region that gets an error shows the state in place, and an
+  action gets one toast. A 5xx never shows its source, SQL, paths or panic text, and every page
+  shows the request id. `ErrorPage`, `State`, `Forbidden`, `NotFound`, `SignInRequired`,
+  `SessionEnded` and `EmptyState` are the same markup for a card, a tab, a region or a table
+  row (`.row(columns)`), and `ReturnTo` checks the `next` of a sign-in so it cannot be an open
+  redirect. See `navree_ui::pages` and the docs page "Errors and states".
+- **Tables.** One definition, `#[derive(TableRow)]`, drives the URL, the query, the
+  drawing, the export and bulk actions. See [The data table](#the-data-table).
+- **The wire.** `Cmd` is the closed list of what an element does in the browser with
+  no request: show, hide, open, focus, submit, copy, set a state attribute, and write
+  text (`text`, `count`, `value` for a hidden field marked `settable`, `fill` a dialog from a row). The
+  text commands set `textContent`, so nothing they write is read as markup, and they
+  refuse scripts, styles, the page's title, options, the fields a user types in and
+  editable content. `Op` is the closed list of what
+  a server action sends back, with rendered HTML as payload. `Reply` carries ops and a
+  fallback for JavaScript off.
+  `Reply::redirect` and `Op::navigate` stay on this site, so a `next` from a request
+  can't send a user away; `redirect_external` and `navigate_external` leave by name.
+- **Assets.** One stylesheet and the runtime's modules, embedded with brotli and gzip
+  forms, at content-hash URLs, immutable. Rendered pages of 32 KiB or more go out in
+  brotli quality 5, with a window that holds the whole page; smaller ones in the HTTP pipeline's gzip.
+- **Tests.** `TestView` drives a page in a plain test. `e2e/ui` runs morph properties,
+  axe in every state, keyboard scripts and a hostile suite in real browsers.
+
+## What ships to the browser
+
+| Page | Script |
+|---|---|
+| Nothing interactive | None. Links marked with `prefetch` are fetched ahead through a `Speculation-Rules` header. |
+| A dialog, an accordion, a switch | None: `<dialog>`, `command`, `<details>`, `<input>`. |
+| A popover, tooltip or hover card | `overlay`: placing and hover delay. |
+| A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
+| A select, combobox, multi-select or command palette | `overlay`, `select`. |
+| Tabs, a toggle group, a dropdown menu | `menus`: the keys of each pattern, switching tabs in the page, submenus. A menu also loads `overlay`. |
+| A toast | `core`: the toaster, its time, pause and swipe are a CSS animation and a few lines. |
+| A data table | `core`, `table`, `overlay`. |
+| A live region, or a table that follows a stream | `core` and `live`: the stream, its reconnects and the fetches. |
+| A line, area, bar, donut or funnel chart, or one that is loading, failed or empty | `charts` and its stylesheet: the tooltip, the crosshair and the keys. |
+| A sparkline | None: the toolkit's own sheet draws it. |
+| A calendar | `dates`. |
+| A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
+| A phone input | `phone`, `overlay`; the numbering plans on first focus. |
+| A stepper, a wizard | None of their own: a wizard is forms, so it has `core` for the runtime's posting. |
+| A slider | `slider`: the filled part, the value text, a gap between thumbs. It posts with no script. |
+| A tree | `tree`: the roles, the keys, children fetched as a branch opens. A tree is a plain nested list with no script. |
+| A toolbar | `toolbar`, `menus`, `overlay`: one tab stop and the arrow keys, and a More menu for what does not fit. |
+| A split pane | `split`: dragging, the separator's keys, collapsing and saving the sizes. |
+| A hotkey | `keys`: single keys that click or focus what names them, never while someone types. |
+| A lazy list | `lazy`: pages by cursor at either end, the reader's place kept, a cap on what stays in the page; with `live` for a live one. |
+| A sortable list or board | `core`, `sortable`: drags by mouse, touch and keys, and the moves posted one at a time. |
+| Markdown or a code block | None: the `markdown` stylesheet, linked only on a page that draws one. A copy button adds `core`. |
+| An upload | `upload` and its stylesheet: the drop area, the file list, progress and chunks. A plain form works with no script. |
+| A context menu, a menu bar, the navigation menu | `menubar` and its stylesheet, with `menus` and `overlay`. The navigation menu's panels open with no script. |
+| A one-time code | `otp` and its stylesheet: digits only and a cleaned paste. The field and its boxes work with no script. |
+| A carousel | `carousel` and its stylesheet: buttons, pickers and rotation that stops for the reader. The track scrolls with no script. |
+| The app shell | `core`, `sidebar`. |
+| The theme menu | `core` and `overlay`: a plain form that applies a choice as it is made. |
+| The theme builder | `core`, and the `theme-builder` stylesheet, linked only on its page. |
+| An error page, or a state that shows no copy button | None. A page in the shell has a Copy button for the reference, which is the `core` the shell loads anyway. |
+
+Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
+`tests/budgets.rs` holds the sizes, and a regression fails the build.
+
+## Long lists: lazy by default
+
+```rust
+async fn inbox(query: LazyQuery, uow: Uow) -> Result<LazyPage> {
+    // `query.ask()`: the first page, what comes before or after a cursor, or what
+    // changed since a revision. Answer a page by keyset, never by offset.
+    let (rows, more) = page_of(&uow, query.ask(), 50).await?;
+    Ok(LazyPage::new(rows.iter().map(row_item), more))
+}
+
+LazyList::new("conversations", "Conversations", "/inbox/rows")
+    .items(first_page.iter().map(row_item))
+    .more_after("/inbox?before=0001793793600000000042")
+    .since(revision)
+    .live_from("/inbox/events", Some("conversations"), LazyEnd::Start)
+```
+
+A list that can grow without end loads as it is read. The page draws the first page; the
+`lazy` module asks for the next one when the reader nears either end, by the cursor of the
+item at that end, so a page deep in the list costs what the first does. Older items added
+above keep the reader where they are. Past `max` items (300 by default) the far end is
+dropped and fetched again on the way back, so the page holds the same few hundred nodes
+after thousands of items. A live list merges what changed since its revision: new items in
+their place, changed ones moved, gone ones out, none twice. With JavaScript off each end is a
+link to the page that holds the next part.
+
+Choose a `DataTable` instead when people compare and act on rows: sort by any column, filter
+by many, select across pages, export. Choose a `LazyList` for a stream read in one order: an
+inbox, a conversation, a feed, a log.
+
+## Panes and hotkeys
+
+```rust
+fn layout() -> SplitPane {
+    SplitPane::new("inbox")
+        .height(SplitHeight::Screen)
+        .stack_below(SplitWidth::Md)
+        .save_to("/inbox/panes")
+        .pane(Pane::new("list", "Conversations").size(28).min(20).max(40))
+        .pane(Pane::fill("thread", "Conversation").min(30))
+        .pane(Pane::new("customer", "Customer").size(24).min(16).max(36).collapse_below(SplitWidth::Lg))
+}
+
+async fn save(save: SplitSave, uow: Uow) -> Result<StatusCode> {
+    let Some(sizes) = save.sizes_for(&layout()) else {
+        return Ok(StatusCode::BAD_REQUEST);
+    };
+    // Keep `sizes.to_text()` for this user, and draw the next page with
+    // `layout().sizes(&SplitSizes::from_text(&kept, &layout())?)`.
+    Ok(StatusCode::NO_CONTENT)
+}
+```
+
+- **A separator** is the WAI-ARIA window splitter: the arrows move it (Shift for more), Home
+  and End take its pane to its least and most, and Enter collapses a collapsible pane and
+  brings it back. It moves the sized pane beside it; one pane fills the rest.
+- **Sizes are drawn by the server**, so the first paint is right and a page with no script
+  keeps its layout. `SplitSave` reads a save as a form is read, with the same answer to
+  forgery, and `SplitSizes` holds it to the layout's limits again.
+- **Small screens.** `stack_below(width)` shows one pane at a time below a width of the split
+  itself: the one marked `current`. `SplitPane::stacked_only` holds what shows only then, such as
+  a link back to the list. `Pane::collapse_below` hides a pane below a width until a
+  `SplitPane::toggle` or Enter opens it.
+- **Hotkeys.** `.hotkey("j")` on a link, a button or a field makes one key click it or focus it.
+  A key never fires while someone types in a field, edits text, uses a menu's or a list's own
+  letters, composes with an input method, holds Ctrl, Alt or Meta, or has a modal dialog open
+  that the element is outside of. `aria-keyshortcuts` says it to assistive technology.
+
+## The data table
+
+```rust
+#[derive(Clone, Model, TableRow, serde::Serialize)]
+#[table(sort = "-closed_on,title", per = 25, per_pages(10, 25, 50, 100), version = "version")]
+struct Deal {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, search, sticky, filter = text, link = "/deals/{id}")]
+    title: String,
+    #[col(sortable, filter = multi, options = STAGES, badge = tone)]
+    stage: String,
+    #[col(sortable, numeric, filter = range)]
+    amount: Option<i64>,
+    #[col(sortable, filter = date)]
+    closed_on: Option<chrono::NaiveDate>,
+    #[col(filter = boolean)]
+    active: bool,
+    #[col(skip)]
+    version: i64,
+}
+
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell.page("Deals").body(
+        DataTable::new("deals", &query, &page)
+            .caption("Deals")
+            .sticky_header()
+            .export("/deals/export")
+            .bulk("/deals/bulk", [
+                BulkAction::new("archive", "Archive"),
+                BulkAction::new("delete", "Delete").destructive().confirm("Delete {n} deals?"),
+            ]),
+    ))
+}
+
+async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
+    let target = match request.resolve(Deal::query(), &uow).await? {
+        Ok(target) => target,
+        Err(refusal) => return Ok(request.refused(StatusCode::CONFLICT, refusal.message())),
+    };
+    let count = target.delete(&uow).await?;
+    Ok(request.done(format!("Deleted {count}.")))
+}
+```
+
+| Column option | Means |
+|---|---|
+| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` when the cell shows something other than the column queried; `source = "companies.name"` when the column has another name |
+| `sticky`, `sticky_end`, `hidden`, `locked`, `hide_on_mobile`, `width = 240`, `group = "Address"` | where it sits |
+| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads |
+
+| On the table | Means |
+|---|---|
+| `#[table(cursor)]` | keyset pages, for huge tables |
+| `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't, with Previous and Next only |
+| `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
+| `.filter_row()` | filters under the headers, not in a popover from each |
+| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
+| `.keyboard_grid()` | one tab stop, arrow keys, Home, End, Page Up and Down |
+| `.filter_bar()` | filters in a bar over the table; the user picks which show, and their order |
+| `.cell(name, fn)`, `.live(every)`, `.live_from(url)`, `.refreshable()` | see below |
+| `.views(&views, url)`, `.export(url)`, `.foot(col, cell)`, `.labels(&labels)`, `.can_select(bool)`, `.failed(msg)`, `.loading()` | the rest |
+
+**The URL holds everything but the selection:** `search`, `sort=-amount,title`, `page` and `per_page` (or `cursor`, `before` and `limit` on a cursor table), `filter[col]...`, `cols`, `w`, `fb`, `density`, `open`. Search, sort, filters and paging are the list query every Navree list reads. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
+
+**Speed.** Keep a table paged: 25 rows a page is the default. A page that holds every
+row of its result sorts a column of numbers or dates in the browser at once, and the
+server's answer to the same link confirms the order and redraws the rest; text and
+relations, which the database orders by its own rules, ask the server. Ticks and choices filter at once; typing
+waits for a 100 ms pause, or `.debounce(wait)`. A row's actions are links or one small
+form each: a submit button in every row tied to one form by `form=` costs Chromium work
+across the whole page for each row moved.
+
+**Selection** is per tab, in `sessionStorage`. Ticked keys survive pages, sort and filter changes. "All that match" survives pages and sort, ends on any filter change, and takes exclusions. Actions post the state, the exclusions and the count the user saw; `resolve` runs the same definition on your scoped query and refuses if the count, or the version, differs. Nothing a hover can fire changes anything: whatever writes is a POST.
+
+**NULL is the smallest value on every store.** Ascending NULLs first, descending NULLs last, because that's what MySQL, SQLite and MongoDB do by themselves and one index serves both directions. On PostgreSQL write the index as `(col NULLS FIRST, id)`. Ties go by key, in the direction of the last term. Text sorts by the column's collation, so accents and punctuation order as the database says.
+
+**A huge table** wants an index per sort column, ending in the key. Deep numbered pages read from the nearer end of the index and find keys before rows; `#[table(cursor)]` costs the same at any depth. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages a row added or deleted between pages moves what follows by one: cursor pages don't.
+
+**Stored views** are kept where the table's rows are. On an SQL database they are rows of `navree_ui_table_views` (`SavedViewModel`: `id, owner, table_id, name, query, is_default`; create the table in a migration); on MongoDB they are documents of the collection of the same name (`SavedViewDocument`, the same fields, the id as `_id`; the collection appears with the first view, and an index on `(owner, table_id)` keeps a long list quick). Save through `save_view`, read through `list_views` and delete through `delete_view`, with the executor the table loads from, and open with `query.or_default_view(&views)`.
+
+**Cells.** `#[col(cell = draw)]` or `.cell("name", |row| ...)` draws a column from the whole row into anything that becomes a `Node`; a field of type `Computed` is a column with no value of its own. Files still read the field's text. `EditCell::text`, `number`, `date` and `select` edit in place: the value shows at once and posts itself, and a status of 400 or more, or a failed post, puts it back. The handler's toast says why.
+
+**Live regions.** `Region::live_from(url)` refetches a region, or with `.feed(...)` fetches only the new rows, when a server-sent event stream speaks. One module, `live.js`, handles the stream for every region and every live table: one connection per address, closed while the page is hidden, reconnecting after 1 s, 2 s, 4 s up to 30 s, and never reading an event's payload.
+
+**Live.** `.live(every)` polls while the page is visible; `.live_from(url)` refetches when a server-sent event stream speaks; both show that it's live, with Refresh now. Typing, focus, open menus and the selection are kept, and an answer overtaken by a newer choice is dropped.
+
+**Other files.** `query.export_rows(builder, &exec, limit, map, sink)` walks the state's rows a chunk at a time, for any writer: `&mut Vec<R>` collects them for one built whole. Hand them to `navree_sheets::write_xlsx` for Excel; `apps/ui-table-proof` shows it in 30 lines.
+
+**Other sources.** `navree-orm` is the path built for this table: allow-list, keyset, NULL order, bulk checks, exports. Rows from anywhere else can go straight to `DataTable`, and `TableSource` is the shape for a reusable one; the source then owns scoping and checks.
+
+**One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
+
+## Selects, comboboxes and the command palette
+
+```rust
+Field::new("deal-owner", "Owner").control(
+    Combobox::new("owner_id")
+        .placeholder("Search people")
+        .search("/people/options")
+        .selected_choice(("7", "Gauri Hundal")),
+)
+
+async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
+    Ok(PEOPLE.find(Person::query(), &query, &uow, "/people/options", |r| {
+        let person = r.into_inner();
+        Choice::new(person.id.to_string(), person.name)
+    }).await?)
+}
+```
+
+`Select` is a styled listbox for a small fixed list, `Combobox` finds one choice by
+typing, `MultiSelect` keeps many as chips, and `Command` is a palette in a modal dialog
+(`Ctrl` or `Cmd` and `K`). Each is server-rendered markup that the `select` module
+drives, with a real `<select>` carrying the value: forms, `required`, reset and `change`
+behave as for any select, and with JavaScript off the `<select>` is what shows.
+
+- **Keys and names.** The WAI-ARIA select-only and editable combobox patterns: focus stays
+  on the control, the list is followed with `aria-activedescendant`, and result counts,
+  picks, removals and failures are announced.
+- **Options in the page or on the server.** A list in the page holds every option, filters
+  over all of them (case, accents, words in any order, keywords) and draws at most 200
+  matches. A searched list asks `GET url?q=text`: debounced, the previous request
+  cancelled, only the newest answer used, busy and failed states, `Show more`, and
+  nothing filtered again in the browser. `OptionQuery` clips the text, caps the limit
+  (50) and the offset, and never fails; `OptionSource` (with the `orm` feature) searches
+  the columns your code names, binds the text, and starts from the scoped query you give
+  it, so workspace scoping and row-level security hold.
+- **Replies are options and nothing else.** The runtime rebuilds a reply from the
+  elements and attributes a list is drawn with: no script, form, `id`, off-site link or
+  stray picture survives.
+- **Creating.** `.creatable()` makes the typed text the value; `.create_url(url)` has the
+  server make the record and answer the option; `.create_denied(reason)` shows the row
+  switched off with its reason.
+- **In forms.** `#[form(widget = listbox | combobox | multiselect)]`, `FormView::search`,
+  and a field of type `Many<T>` for a multi-select.
+- **Palette.** Items are links, posted forms or browser commands, with icons, keywords,
+  shortcuts (a chord needs a modifier), recent items kept in the browser and a server
+  source. The page builds only the items the person may use.
+
+## Sortable lists and boards
+
+```rust
+Sortable::new("sprint", "Sprint board")
+    .board()
+    .post("/board/moves")
+    .list(SortList::new("ready", "Ready").limit(5).items(cards))
+
+async fn moves(db: Db, mv: Move) -> Result<Reply> {
+    // READ COMMITTED, a row per list locked first, then the check and the write.
+    let checked = mv.transaction(&db, &Column::KEY, |uow| {
+        let mv = mv.clone();
+        async move {
+            let checked = mv.check(&lists_now(&uow).await?);
+            if let Ok(landing) = &checked { save(&uow, landing).await?; }
+            Ok(checked)
+        }
+    }).await?;
+    Ok(match checked {
+        Ok(_) => mv.done("/board"),
+        Err(refusal) => mv.refused("/board", refusal.message()),
+    })
+}
+```
+
+- **Mouse, touch and keys.** A press that moves 4 px drags; on touch the handle drags at once and a press
+  held still for 300 ms anywhere on the item does. Space or Enter on the handle picks an item up, the
+  arrows move it (left and right to the next list that takes it), Space or Enter drops it, Escape puts
+  it back. Every step is said in the sortable's own live region.
+- **The server decides.** A drop moves the item at once and posts a `Move` through the item's own form,
+  one at a time per sortable. A refusal puts it back where the server last had it. A failure, or no
+  answer in 15 s, may have landed: the item stays where it was dropped, the lists are drawn again from
+  the server, and only a move that didn't land is said. `Move::check` holds a move to the lists as they
+  are now: the item is where the browser saw it, the item it was dropped beside is still there, and the
+  list has room and takes items.
+- **Two moves at once.** `Move::transaction` (the `orm` feature) runs the check and the write at READ
+  COMMITTED with a row per list locked first, so two moves at once run one after the other, and runs
+  again when the database asks. A list's keys must be the caller's own: scope them to the board.
+- **Long lists.** `SortList::total`, `more` and `end_note` draw a list a page at a time, and
+  `Sortable::page` answers the next page as ops. `Move::place` checks a move against lists kept by rank,
+  reading only the neighbours it needs.
+- **JavaScript off.** Each item carries a form to move it: a list and a position.
+
+## Dates and times
+
+```rust
+use navree::ui::dates::*;
+
+Field::new("due", "Due date").control(DatePicker::new("due").today(today).clearable())
+
+DateRangePicker::new("from", "to").today(today).title("Created") // in a GET form: the window is the query
+
+Field::new("starts", "Starts at").control(TimePicker::new("starts").step_minutes(15))
+```
+
+- **A day is three integers.** The browser module counts days from 1970-01-01 and never builds a `Date`,
+  so no zone or clock moves a day. `.today(date)` is the page's own idea of today.
+- **The server decides.** A picker posts an ISO date or `HH:MM`; `DateRules` and `TimeRules` draw the
+  calendar and check every value that comes back. In a `#[derive(Form)]`, `widget = date_picker` and
+  `widget = time_picker` draw the pickers, and `date_rules = path` or `time_rules = path` gives a picker rules
+  that the server holds the posted value to as well.
+- **One definition for a range.** `RangeRules` holds the days that can't be chosen and the least and most days a
+  range may hold: `DateRangePicker::limits(...)` draws it for the browser and `DateRangeQuery::checked(...)` holds
+  the request to it.
+- **JavaScript off.** A native `date` or `time` field stands in and posts the same value; `@media (scripting: none)` picks.
+- **Languages.** `DateLocale` holds names, the order of a typed date, the first weekday, the clock and
+  the words on the controls, for 19 locales; `DateLocale::custom` takes any other.
+- **A window is whole days.** `DateRange::utc_bounds(zone)` gives `[start, end)` right across 23- and 25-hour days.
+- **A time is on a wall.** `dates::zoned::resolve(date, time, &zone)` turns it into an instant and says
+  when clock changes make it absent or doubled.
+
+## Charts and reports
+
+```rust
+use navree::ui::charts::*;
+
+Chart::line("Opens and clicks")
+    .days(days)
+    .series(Series::new("Opens", opens))
+    .series(Series::new("Clicks", clicks))
+    .annotation(Annotation::target(500, "Goal"))
+
+Stat::new("Opened", "4,120").chart(Sparkline::new("Opens, last 12 hours", hourly).area())
+
+// A report: the window comes from the URL, held to the rules of the range picker that wrote it.
+let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
+let opened = report.count(opens);
+report.chart(Chart::bar("Opens")).series(report.series("Opens", &opened))
+```
+
+- **Drawn on the server.** A chart is a `<figure>` with a title, a legend, an SVG, a text
+  summary and the same numbers as a table. The table is hidden from sight and read by screen
+  readers, and a "Show table" switch (a checkbox, so it works with JavaScript off) shows it.
+  There is no `style` attribute anywhere, so the page's content security policy holds.
+- **Six kinds.** Line, area and bar, with several series, stacks, stacks to 100%, negative
+  values and horizontal bars. A donut or a pie. A funnel. A sparkline beside a figure.
+- **Data rules.** Every series shares the chart's x values. A `None`, NaN or infinite value is a
+  gap. A chart draws at most eight series and folds the rest into Other. A line with more than
+  640 points is reduced with largest-triangle-three-buckets. Bars past 120 merge their neighbours,
+  or fold the tail of a list of categories into Other.
+- **Keys.** A chart is one tab stop. The arrow keys move between values, Home and End go to the
+  ends, Escape hides the tooltip, and each move is announced. Legend toggles work with
+  JavaScript off. Status colors add an icon to the legend, so color is never alone.
+- **Words and numbers.** `NumberFormat` and `NumberLocale` write counts, shares, money and
+  durations for a language (`de`, `en-IN`, `fr`, `ar` and more), and `ChartLabels` holds every
+  word a chart writes. A right-to-left chart is mirrored with `.rtl()`.
+- **A report.** `Report` reads `from`, `to` and `grain` from the URL with the same `RangeRules`
+  as the `DateRangePicker`, picks a grain from the window's length, and cuts the window into
+  periods on a time zone's clock, so a day is a day across a clock change. `count` and `sum`
+  count rows held in memory. With the `orm` feature, `measure` and `measure_by` count in the
+  database, on the app's scoped query: TimescaleDB's `time_bucket` on PostgreSQL when it is
+  installed and the report names its zone, exact bound comparisons on any SQL database, and hourly
+  buckets folded in Rust on MongoDB.
+
+## Fetching ahead of a click
+
+A `GET` can change state: a sign-out written as a link, a delete. And a fetch ahead costs
+a request the user may never need. So nothing is fetched ahead of a click unless the page
+asks, link by link: `Element::prefetch`, `Button::prefetch`, `NavItem::prefetch`,
+`Breadcrumb::prefetch`, `AppPage::prefetch_crumbs`, `Shell::prefetch_home`, and
+`DataTable::prefetch` for a table's own sort, page and filter links (never a cell's link).
+`NavItem::no_prefetch` undoes it for one item, and `data-ui-noboost` keeps a link out of
+boosting altogether: it loads for real.
+
+- Nothing is fetched with no hover unless a link asks: `prefetch_eager()` on an element, a
+  `Button` or a `NavItem` fetches it as soon as the page is quiet, at most four a page, and
+  none on a slow or data-saving connection. It costs that page's bytes on every visit, and
+  pays most for a page the same for every user, served with `max-age`.
+- Pages with the runtime fetch on hover, focus or touch, and send `x-navree-prefetch: 1`.
+  Pages with no script use Speculation Rules, where the browser sends `Sec-Purpose: prefetch`
+  and Firefox and Safari do nothing. `navree_ui::is_prefetch(&headers)` is true for both.
+- Something that changes state is a form: `UserMenu::action` is a button that posts.
+- An answer stands in for the click only while it is still true. Any write in any tab,
+  a form's post, or a change in the cookies scripts can see drops it. A redirect, an
+  error or an answer that isn't HTML is never used. `Cache-Control` sets how long it
+  lasts: `no-store` (the default) gives 3 s as a head start on that click, `max-age` that
+  long up to 10 s, and `no-cache` never: `View::cache("no-store, no-cache")` opts a page out.
+
+## What a form accepts
+
+`Submit<T>` answers forgery itself, with or without a session. A body from another site
+is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send
+that, unless its `Origin` is in `http.cors.allowed_origins`, the list navree-session reads.
+A body that isn't a urlencoded form gets 415, and `GET` and `HEAD` get 405. Only the
+struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach, and
+past 1,000 pairs a body gets 413. A rejected form never writes a password back, and
+`Rejected`'s `Debug` holds field names and errors, not values.
+
+## Fonts
+
+Geist is the one web font, with `font-display: optional` and a preload. Monospace text
+uses the system stack (`ui-monospace`, SF Mono, Menlo, Consolas), which costs no bytes.
+A second face (Monaspace Neon, 44 KB) was tried and left out: a page that shows any
+monospace text then waits on it before `load`, and that moved the first keyboard stop
+in the conformance run. Pages that want it can declare it in their own stylesheet.
+
+## The browser side
+
+`runtime/src` holds plain ES modules with JSDoc types, `styles/` the stylesheet's
+sources. Their build output is committed in `dist/`, with `src/assets_gen.rs`, so
+`cargo build` needs no Node. After changing either:
+
+```sh
+cd crates/navree-ui/runtime
+npm ci
+node build.mjs            # --check fails when the committed output is stale
+```
+
+A module reaches the core runtime through four events on `document`, not through new
+commands: `ui:refresh` asks it to fetch a region again (a tab shown for the first time; a
+`detail` object on the event gets `done`, a promise that settles when the fetch has),
+`ui:region-error` says a region could not be fetched, `ui:popstate`, which can be
+cancelled, lets a module claim a history entry it made itself (tabs), and `ui:stale` says
+something was written, here or in another tab, or the page was shown again from the
+back-forward cache: an answer a module asked for before it may be from before the write,
+and is asked for again rather than shown. Everything a module reads from the page goes
+through the prototypes, so a field named like a method can't change what it does.
+
+`src/tokens.rs` is the design tokens' one source, and a test fails when
+`styles/tokens.css` differs from it.
+
+## Themes
+
+`src/theme/` holds themes as typed values: seven built-in themes in the stylesheet,
+each colour written as `light-dark(light, dark)`, so a mode (`Mode::Light`, `Dark`,
+`System`) only sets `color-scheme` and System needs no script. `Shell::appearance` sets
+the app's default; a workspace, the reader (the app's store, or the `navree_ui_theme`
+cookie set by `ThemeMenu`'s route) and `?theme=`/`?mode=` lie over it. The server writes
+`data-theme` and `data-mode` on `<html>`, so the first paint is right. A theme of your
+own (`Theme::custom`, or the builder's export) is served at
+`/_navree/ui/theme/<short form>.css`, whose name is the theme, read by a strict parser,
+immutable. `Shell::layout` (sidebar, inset, floating, header) and `Shell::collapse`
+(icons, offcanvas, never) place the navigation. `ThemeBuilder` and `BuilderDraft` are the
+theme builder. A swap that brings a stylesheet waits for it before it shows, so a theme
+change never paints between two themes.
+
+## Icons and flags
+
+Every Lucide icon and every flag is a constant (`icons::MAIL_OPEN`, `flags::AE`), so a
+binary holds the ones its code names. `lucide!("mail-open")` and `flag!("AE")` check a
+name while the app compiles; `icon_file!` and `icon_set!` turn your own SVG files into
+icons the same way, refusing anything but shapes.
+
+The artwork is generated, never edited. `icons.lock.json` pins each source release by
+its SHA-512 and records the checksum of each generated file:
+
+```sh
+node runtime/icons.mjs            # fetch, verify, regenerate
+node runtime/icons.mjs --check    # fails when a generated file differs from a fresh one
+node runtime/icons.mjs pin lucide 1.68.0   # pin another release, then regenerate
+```
+
+`cargo build` needs neither Node nor the network. A test fails when a generated file
+differs from the checksum in the lock.
+
+## Editing fast
+
+Changing a label means compiling and relinking, so the loop is worth setting up. Time
+from saving a file to the new page being served, on a generated app of 100 pages and
+20,000 lines, median of six rebuilds on one machine (a Windows 11 laptop, 8 cores, with
+other builds running, so read the order and not the decimals):
+
+| Where the build runs | One crate | Pages in 10 crates |
+|---|---|---|
+| Windows, `rust-lld` | 6.0 s | 4.1 s |
+| Windows, `link.exe` | 7.1 s | |
+| WSL, sources on WSL's own disk | 2.3 s | |
+| WSL, sources under `/mnt/c` | | 8.7 s |
+
+- **Windows:** the repository's `.cargo/config.toml` links with `rust-lld`, which ships
+  with rustc. It saves about a second on a large app; on a small one the two linkers are
+  within noise of each other.
+- **Split the pages into crates.** Rebuilding one small crate and relinking is cheaper
+  than rebuilding one big one. Give each area of the app (deals, contacts, reports) its
+  own crate holding its pages, and keep the binary crate to routing and start-up.
+- **WSL:** keep the sources on WSL's own disk (`~/src`, not `/mnt/c/...`) and the target
+  directory there too. Compiling across the `/mnt/c` mount is two to four times slower
+  and is not a supported way to work.
+- `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (the workspace profile sets it) and
+  incremental builds stay on.
+
+The stylesheet and the runtime rebuild on their own: `node build.mjs` in `runtime/`.
+
+## Proof pages
+
+`apps/ui-table-proof` is the data table against a real database, and `apps/ui-proof`
+is a form, a 1,000-row table, a dashboard and every component in its states, as one
+binary:
+
+```sh
+cargo run --release -p ui-proof -- serve    # http://127.0.0.1:8090; PORT sets the port
+cargo run --release -p ui-proof -- bench    # render times, no server
+```
+
+## Known limits
+
+- Error pages draw only in an app that names `UiModule` itself. A module that borrows the
+  toolkit with `UiOnDemand` keeps the JSON errors. A panic or a timeout cannot say who the
+  user was, so it is drawn on its own, not in the shell. A shell built for each request needs
+  an `ErrorShell`, which has one second: one that is slower, panics or returns `None` leaves
+  the page on its own. In `production` (the app's `env` or `app.env`) the development details
+  are never shown, whatever asks for them.
+- A route's `page()` or `json_only()` mark decides its errors, including one raised before the
+  route ran (a refused CSRF token, a limit, a 405). The runtime's `X-Navree-UI` header decides
+  for its own requests whatever `Accept` says, except on a `json_only()` route.
+- A 404 does not show the address that was asked for: it is the address bar's text, and
+  echoing it would let a link write words on the page.
+- There is no Back button: it needs a command the core does not have, and Home and Try again
+  work without a script.
+
+- Behind navree-session a plain form proves itself with the token field:
+  `FormView::csrf(session.csrf_token())`, or `form::csrf_field` in any other form.
+  The session layer reads that field from a urlencoded body of at most 256 KiB;
+  a multipart form or a larger body has to send the header, which the runtime does.
+- Rules run only once every field has the right type, so a form with a wrong-typed
+  value reports the type errors (all of them) first and the rules after the fix.
+- `Toggle` is a checkbox underneath rather than a button with `aria-pressed`, so that
+  it posts and keeps state with no script.
+- `ToggleGroup` is radios or checkboxes in a labelled group, for the same reason: a screen
+  reader says "checked", not "pressed".
+- A toast raised while a modal dialog is open stands inside the dialog until it closes,
+  since the page behind a modal is inert. A hidden tab pauses toasts by a runtime
+  listener, which the browser suite doesn't drive.
+- A tab that fails to load a panel on demand says so with an alert and Retry; with
+  JavaScript off a lazy tab is only a link, so draw the open tab's panel with the page.
+
+See `THIRD_PARTY.md` for where the structure, the icons and the font come from.
+
+<!-- crate-readme:start -->
+## Use it
+
+It is part of `navree`'s default `full` feature set, as `navree::ui`:
+
+```sh
+cargo add navree
+```
+
+You can also depend on it alone with `cargo add navree-ui`.
+
+## Documentation
+
+- [The guide on navree.com](https://navree.com/docs/ui/overview/)
+- [API reference on docs.rs](https://docs.rs/navree-ui)
+- [Source and issues on GitHub](https://github.com/NavreeHQ/navree/tree/main/crates/navree-ui)
+
+## Rust version and licence
+
+This crate needs Rust 1.95 or later.
+
+Navree's own code is licensed under either of the MIT licence ([LICENSE-MIT](LICENSE-MIT)) or the Apache licence, version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)), at your option. The licence expression of this crate is `(MIT OR Apache-2.0) AND ISC AND MIT AND OFL-1.1 AND Unicode-3.0 AND Apache-2.0`.
+
+It bundles Lucide icons (ISC), flag-icons (MIT), the Geist font (OFL-1.1) and Unicode CLDR and libphonenumber data. Their notices are in `THIRD_PARTY.md`.
+<!-- crate-readme:end -->

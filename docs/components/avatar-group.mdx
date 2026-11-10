@@ -1,0 +1,32 @@
+---
+title: "AvatarGroup"
+description: "Avatars side by side, each overlapping the one before, with a +N tile for the people left out."
+---
+
+<UiPreview example="avatar-group/more" />
+
+`AvatarGroup` shows who is involved at a glance: the reviewers of a change, the members of a branch.
+
+```rust
+use navree::ui::*;
+
+AvatarGroup::new("Reviewers")
+    .max(3)
+    .children((
+        Avatar::placeholder("Gurpreet Kaur"),
+        Avatar::placeholder("Harjot Singh"),
+        Avatar::placeholder("Simran Arora"),
+    ))
+```
+
+The group is named, and assistive technology reads that name before the people. Each avatar is named too, as `Avatar::placeholder` and `Avatar::image` require, so the group can be read person by person.
+
+## When there are more than fit
+
+`.max(n)` shows at most `n` avatars (5 by default). The rest become one tile, `+N`, which a reader hears as "N more". When you only draw the first few of a longer list, `.total(count)` tells the group how many there are in all, so the tile counts from that and not from the avatars you drew.
+
+<UiPreview example="avatar-group/default" />
+
+## A picture that does not load
+
+`Avatar::image(..).fallback()` shows the person icon when the picture fails. It needs the `parts` module, so a page with one loads a small script. Without `.fallback()` an avatar draws nothing extra and a picture that fails shows the browser's own broken-image mark.

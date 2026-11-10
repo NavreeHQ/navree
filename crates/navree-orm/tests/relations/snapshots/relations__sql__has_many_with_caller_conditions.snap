@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "per_dialect(|dialect|\n{\n    deal().activities().where_(Activity::KIND.eq(\"call\")).or_where(Activity::MINUTES.gt(30)).latest().to_sql(dialect)\n})"
+---
+PostgreSQL: SELECT "activities"."id", "activities"."deal_id", "activities"."kind", "activities"."minutes", "activities"."created_at", "activities"."updated_at" FROM "activities" WHERE "activities"."deal_id" = $1 AND "activities"."deal_id" IS NOT NULL AND ("activities"."kind" = $2 OR "activities"."minutes" > $3) ORDER BY "activities"."created_at" DESC
+  values: [I64(7), String("call"), I64(30)]
+MySQL: SELECT `activities`.`id`, `activities`.`deal_id`, `activities`.`kind`, `activities`.`minutes`, `activities`.`created_at`, `activities`.`updated_at` FROM `activities` WHERE `activities`.`deal_id` = ? AND `activities`.`deal_id` IS NOT NULL AND (`activities`.`kind` = ? OR `activities`.`minutes` > ?) ORDER BY `activities`.`created_at` DESC
+  values: [I64(7), String("call"), I64(30)]
+SQLite: SELECT "activities"."id", "activities"."deal_id", "activities"."kind", "activities"."minutes", "activities"."created_at", "activities"."updated_at" FROM "activities" WHERE "activities"."deal_id" = ? AND "activities"."deal_id" IS NOT NULL AND ("activities"."kind" = ? OR "activities"."minutes" > ?) ORDER BY "activities"."created_at" DESC
+  values: [I64(7), String("call"), I64(30)]

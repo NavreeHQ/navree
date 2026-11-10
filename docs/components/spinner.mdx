@@ -1,0 +1,70 @@
+---
+title: "Spinner"
+description: "A sign that work is under way, with the `status` role and a label, for when you cannot say how far along it is."
+---
+
+<UiPreview example="spinner/default" />
+
+`Spinner` turns an icon to show that work is under way. It has `role="status"` and the label you give it.
+
+```rust
+use navree::ui::*;
+
+Spinner::new("Loading deals")
+```
+
+## When to use it
+
+Use it when you know only that something is working. A pending button shows its own spinner: see [Button](/docs/components/button/#states).
+
+<UiChoose name="loading" current="Spinner" />
+
+## In a page
+
+A card that follows a sync shows a spinner beside what is happening. The region asks again every five seconds, and the answer replaces the spinner when the work is done:
+
+```rust
+Region::new("sync")
+    .src("/fragments/sync")
+    .poll(Duration::from_secs(5))
+    .children(Row::gap(2).children((
+        Spinner::new("Syncing contacts"),
+        Text::muted("Syncing contacts"),
+    )))
+```
+
+Use a [Progress](/docs/components/progress/) instead once you can say how far along the work is.
+
+## Anatomy
+
+<UiAnatomy component="spinner" />
+
+## Beside its text
+
+<UiPreview example="spinner/inline" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The label is what a screen reader announces; the icon is hidden.
+- The turning stops when the reader asks for reduced motion.
+
+</UiA11y>
+
+## API
+
+### Spinner
+
+<UiProps type="Spinner" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/progress/" title="Progress">
+    How far along something is.
+  </LinkCard>
+  <LinkCard href="/docs/components/skeleton/" title="Skeleton">
+    The shape of content that is on its way.
+  </LinkCard>
+</LinkCards>

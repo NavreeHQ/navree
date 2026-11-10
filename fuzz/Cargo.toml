@@ -1,0 +1,394 @@
+[package]
+name = "navree-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "libFuzzer targets for the parsers of untrusted input (a separate workspace: it needs a nightly toolchain)."
+
+[package.metadata]
+cargo-fuzz = true
+
+# Not part of the root workspace: libFuzzer needs nightly and sanitizer flags.
+[workspace]
+
+[lib]
+name = "navree_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+arbitrary = { version = "1.4.2", features = ["derive"] }
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10.4"
+http = "1.5.0"
+# The handler's body of `http_compression`, and the gzip it is checked with.
+http-body = "1.0.1"
+flate2 = "1.1.10"
+# The HTTP/2 `:protocol` of a handshake.
+hyper = { version = "1.12.0", features = ["http2", "server"] }
+libfuzzer-sys = "0.4.13"
+bytes = "1.12.1"
+futures = { version = "0.3.34", default-features = false, features = ["executor"] }
+# How `http_multipart` reads a `Content-Type`, and the header lines its
+# reference reads.
+httparse = "1.10.1"
+mime = "0.3.17"
+navree-auth = { path = "../crates/navree-auth" }
+navree-cli = { path = "../crates/navree-cli" }
+navree-config = { path = "../crates/navree-config" }
+navree-contracts = { path = "../crates/navree-contracts" }
+navree-crypto = { path = "../crates/navree-crypto" }
+navree-directory = { path = "../crates/navree-directory" }
+navree-glob = { path = "../crates/navree-glob" }
+navree-documents = { path = "../crates/navree-documents", default-features = false, features = ["docx"] }
+navree-domains = { path = "../crates/navree-domains" }
+navree-http = { path = "../crates/navree-http" }
+navree-kernel = { path = "../crates/navree-kernel" }
+navree-logbook = { path = "../crates/navree-logbook" }
+navree-mail = { path = "../crates/navree-mail", features = ["inbound"] }
+navree-api = { path = "../crates/navree-api" }
+navree-mcp = { path = "../crates/navree-mcp", features = ["fuzzing"] }
+navree-micro = { path = "../crates/navree-micro" }
+navree-oauth = { path = "../crates/navree-oauth" }
+navree-openapi = { path = "../crates/navree-openapi" }
+navree-pdf = { path = "../crates/navree-pdf" }
+navree-phone = { path = "../crates/navree-phone" }
+navree-schedule = { path = "../crates/navree-schedule" }
+navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
+navree-sheets = { path = "../crates/navree-sheets", features = ["fuzzing"] }
+navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
+navree-template = { path = "../crates/navree-template" }
+navree-testing = { path = "../crates/navree-testing" }
+navree-time = { path = "../crates/navree-time" }
+navree-ui = { path = "../crates/navree-ui" }
+navree-validation = { path = "../crates/navree-validation", features = ["phone", "html", "fuzzing"] }
+navree-webhooks = { path = "../crates/navree-webhooks" }
+rqrr = { version = "0.11.0", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt", "io-util", "time", "macros"] }
+tower = { version = "0.5.3", features = ["util"] }
+# The independent URL parser `validation_parsers` checks the `url` rule against,
+# and `validation_html` the schemes of sanitized URLs.
+url = "2.5.8"
+uuid = { version = "1.29.0", features = ["serde", "v7"] }
+# The packages the `docx_read` target builds.
+zip = { version = "9.1.2", default-features = false }
+base64 = "0.23.1"
+
+[profile.release]
+debug = 1
+# libFuzzer's panic hook aborts on every panic, including one that the code
+# under test would catch with `catch_unwind`: a caught panic is still a bug.
+overflow-checks = true
+debug-assertions = true
+
+# One target per parser of untrusted input (see CONTRIBUTING.md, "Fuzzing").
+
+[[bin]]
+name = "auth_jwt"
+path = "fuzz_targets/auth_jwt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "config_sources"
+path = "fuzz_targets/config_sources.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docx_read"
+path = "fuzz_targets/docx_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ui_return_to"
+path = "fuzz_targets/ui_return_to.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glob_match"
+path = "fuzz_targets/glob_match.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "host_names"
+path = "fuzz_targets/host_names.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_client_ip"
+path = "fuzz_targets/http_client_ip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_compression"
+path = "fuzz_targets/http_compression.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_cors"
+path = "fuzz_targets/http_cors.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_extract"
+path = "fuzz_targets/http_extract.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_multipart"
+path = "fuzz_targets/http_multipart.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_routing"
+path = "fuzz_targets/http_routing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jose_keys"
+path = "fuzz_targets/jose_keys.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jose_token"
+path = "fuzz_targets/jose_token.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mail_inbound"
+path = "fuzz_targets/mail_inbound.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_protocol"
+path = "fuzz_targets/mcp_protocol.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "openapi_schema"
+path = "fuzz_targets/openapi_schema.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "api_markdown"
+path = "fuzz_targets/api_markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_server"
+path = "fuzz_targets/mcp_server.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "micro_envelope"
+path = "fuzz_targets/micro_envelope.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "openapi_client"
+path = "fuzz_targets/openapi_client.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "qr_roundtrip"
+path = "fuzz_targets/qr_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "template_render"
+path = "fuzz_targets/template_render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "schedule_cron"
+path = "fuzz_targets/schedule_cron.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scim_filter"
+path = "fuzz_targets/scim_filter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "search_query"
+path = "fuzz_targets/search_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sheets_workbook"
+path = "fuzz_targets/sheets_workbook.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sheets_xls"
+path = "fuzz_targets/sheets_xls.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "small_parsers"
+path = "fuzz_targets/small_parsers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sso_saml_metadata"
+path = "fuzz_targets/sso_saml_metadata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sso_saml_response"
+path = "fuzz_targets/sso_saml_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sso_xml"
+path = "fuzz_targets/sso_xml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "time_parse"
+path = "fuzz_targets/time_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "totp_uri"
+path = "fuzz_targets/totp_uri.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validation_html"
+path = "fuzz_targets/validation_html.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "phone_parse"
+path = "fuzz_targets/phone_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validation_international"
+path = "fuzz_targets/validation_international.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validation_parsers"
+path = "fuzz_targets/validation_parsers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webhooks_signatures"
+path = "fuzz_targets/webhooks_signatures.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ws_handshake"
+path = "fuzz_targets/ws_handshake.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_read"
+path = "fuzz_targets/pdf_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_content"
+path = "fuzz_targets/pdf_content.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ui_theme"
+path = "fuzz_targets/ui_theme.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ui_surface_validate"
+path = "fuzz_targets/ui_surface_validate.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,345 @@
+---
+title: "Event-driven"
+description: "Domain events, listeners, queued work and the transactional outbox: decouple modules inside one app, push changes to browsers and publish to other services."
+---
+
+## Introduction
+
+In an event-driven design, the code that changes something announces it, and the code that cares reacts on its own. When a deal is won, the deals module emits `DealWon`. One listener notifies the owner, another updates a leaderboard, a third tells the billing service. The deals module knows none of them, and you add a fourth without touching it.
+
+Navree gives you every piece of that in the box, wired to the same unit of work as your data:
+
+- **Events and listeners** inside one app, with typed payloads.
+- **Queued listeners and jobs** that run on workers, retry with backoff and survive restarts.
+- **A transactional outbox**: work that follows a change is stored in the same transaction as the change and leaves only after the commit.
+- **Broadcasting** to browsers over the WebSocket server.
+- **Messages to other services** over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP.
+
+<Diagram name="event-driven" />
+
+The reference CRM uses all of them: deal events, a queued listener that sends notifications, broadcasts after every change and a daily schedule. The examples on this page come from `crm/api`.
+
+## The building blocks
+
+| Piece | What it does | Runs | Page |
+|---|---|---|---|
+| `Event` | A named, serializable fact: `DealWon` | | [Events](/docs/digging-deeper/events/) |
+| Sync listener | Reacts during `emit`, in the same task and transaction | In the request | [Events](/docs/digging-deeper/events/#defining-listeners) |
+| Queued listener | Reacts on a worker, after the commit, with retries | `queue:work` | [Queued listeners](/docs/digging-deeper/events/#queued-listeners) |
+| `Job` | Any background work, dispatched by name | `queue:work` | [Queues](/docs/digging-deeper/queues/) |
+| `uow.after_commit` | Runs code once the transaction has committed | In the request, after commit | [Unit of work](/docs/database/unit-of-work/#after-commit-hooks) |
+| `dyn Broadcaster` | Pushes an event to browsers on a channel | Any process | [Broadcasting](/docs/digging-deeper/broadcasting/) |
+| `ServiceClient::emit` | Publishes an event to other services over a broker | Any process | [Microservices events](/docs/microservices/events/) |
+
+## Domain events
+
+An event is a struct with a stable name. Keep it small: ids and the few values listeners need, never secrets. These are the CRM's two deal events:
+
+```rust title="crates/crm-deals/src/events.rs"
+use navree::events::Event;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// A deal was given to an owner by someone else: created for them or
+/// reassigned to them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealAssigned {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub assigned_by: Uuid,
+}
+
+impl Event for DealAssigned {
+    const NAME: &'static str = "deal.assigned";
+}
+
+/// A deal moved to `won` (or was created as won).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub won_by: Uuid,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+```
+
+Name events in the past tense, after what happened in the domain (`deal.won`), not after what a listener should do (`send_won_email`). The name is part of the contract: it is stored with every queued listener's job and it is the subject other services subscribe to.
+
+The service emits after it has written the change, inside the request's unit of work:
+
+```rust title="crates/crm-deals/src/service.rs"
+let won =
+    after.stage == Stage::Won && before.is_none_or(|before| before.stage != Stage::Won);
+if won {
+    self.events
+        .emit(DealWon {
+            deal_id: after.id,
+            title: after.title.clone(),
+            owner_id: after.owner_id,
+            amount_cents: after.amount_cents,
+            currency: after.currency.clone(),
+            won_by: me,
+        })
+        .await?;
+}
+```
+
+## Reacting inside the app
+
+A module subscribes listeners in its `register` hook. The deals module sends owner notifications from one queued listener subscribed to both events:
+
+```rust title="crates/crm-deals/src/lib.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>()
+            .templates(notification::TEMPLATES);
+        m.mcp_server::<DealsMcp>();
+    }
+}
+```
+
+Any other module can subscribe to the same event without importing `DealsModule`. That is what keeps modules decoupled: the event type is the only thing the emitter and the listener share. [Modular monolith](/docs/patterns/modular-monolith/#how-modules-talk-to-each-other) has a leaderboard module built this way.
+
+### Sync or queued
+
+A listener is sync unless its `queued` method returns `true`. Choose per listener:
+
+| | Sync listener | Queued listener |
+|---|---|---|
+| Runs | During `emit`, before the response | On a `queue:work` worker, after the commit |
+| Sees the request's transaction | Yes: its database writes commit or roll back with the request | No: it reads committed data |
+| A failure | Fails `emit`, and with `?` the whole request (500, rollback) | Retried with backoff, then kept in the failed jobs |
+| Slows the request | Yes | No: the request only stores a job |
+| Use it for | Keeping data consistent in the same transaction: counters, denormalized columns, audit details | Side effects: mail, notifications, webhooks, calls to other systems, slow work |
+
+The rule of thumb: if it must be true when the response says "saved", make it sync. If it talks to the outside world, queue it.
+
+## The outbox: events and the unit of work
+
+The hard part of event-driven systems is the gap between the database and the message. Write the row and crash before publishing, and the event is lost. Publish first and roll back, and the world hears about something that never happened.
+
+Navree closes the gap with the [unit of work](/docs/database/unit-of-work/). Every request gets one transaction that commits when the response status is below 400 and rolls back otherwise. Work that must follow a change joins that transaction instead of happening on the spot:
+
+- **Queued jobs are written in the same transaction.** With the database queue driver, the `jobs` table is your outbox: a job dispatched during the request, including every queued listener's job, is a row inserted with the request's own writes. It exists only if the request commits, and workers see it only after the commit.
+- **After-commit hooks run once the commit has succeeded**, and are dropped on a rollback.
+
+This is what happens when a rep moves a deal to `won`:
+
+<Steps>
+<Step title="The request writes the change">
+
+`DealService::move_to` saves the deal's record, which records the change for the audit observer. The unit of work opened its transaction the first time the service used the database.
+
+</Step>
+<Step title="The service emits DealWon">
+
+`NotifyDealOwner` is queued, so `emit` dispatches its job. The job row is inserted in the request's transaction.
+
+</Step>
+<Step title="The service registers a broadcast">
+
+`uow.after_commit` holds the `deal.updated` broadcast until the transaction commits.
+
+</Step>
+<Step title="The response is 200, so the unit of work commits">
+
+The deal, its audit rows and the job row commit together, atomically. Then the after-commit hook broadcasts the deal to every open board.
+
+</Step>
+<Step title="A worker runs the listener">
+
+`queue:work` picks up the job, deserializes `DealWon` and runs `NotifyDealOwner`, which stores, broadcasts and mails the notification. If it fails, the worker retries it with backoff.
+
+</Step>
+</Steps>
+
+If the move is refused (a rep moving a closed deal gets a 403) or invalid (`lost` without a reason is a 400), the unit of work rolls back: no deal change, no audit row, no job, no broadcast.
+
+The service code that does this is short. `changed` emits the events and registers the broadcast; the unit of work does the rest:
+
+```rust title="crates/crm-deals/src/service.rs"
+/// Broadcasts `deal` as `deal.updated` on `private-crm.deals` once the
+/// unit of work commits (never for a change that rolls back). A failed
+/// broadcast is logged: the change itself stands.
+fn broadcast(&self, uow: &Uow, deal: &DealResource) {
+    let broadcaster = self.broadcaster.clone();
+    let data = json!({ "deal": deal });
+    uow.after_commit(move || {
+        Box::pin(async move {
+            let channels = vec![DEALS_CHANNEL.to_owned()];
+            if let Err(error) = broadcaster
+                .broadcast(channels, DEAL_UPDATED.to_owned(), data)
+                .await
+            {
+                tracing::warn!(
+                    target: "crm::deals",
+                    %error,
+                    "the deal.updated broadcast failed"
+                );
+            }
+        })
+    });
+}
+```
+
+### Durable or best-effort
+
+The two kinds of follow-up work give different guarantees. Pick the one the work needs:
+
+| | Queued job (database driver) | After-commit hook |
+|---|---|---|
+| Stored | In the database, with the change | In memory, until the commit |
+| The process dies right after the commit | The job is still there; a worker runs it | The hook never runs |
+| The work fails | Retried with backoff, then kept in `failed_jobs` | Logged by your hook; not retried |
+| Use it for | Anything that must happen: mail, notifications, webhooks, calls to other systems | Best-effort signals: refreshing open screens, cache invalidation |
+
+The CRM broadcasts board updates from a hook, because a missed refresh is harmless and the next change carries the full deal. It sends notifications from a queued listener, because an owner must not miss a won deal.
+
+The memory queue driver queues jobs after the commit rather than in it, and loses them when the process exits. Use the database driver wherever the outbox must hold.
+
+## Broadcasting to browsers
+
+Browsers subscribe to channels on Navree's WebSocket server, which speaks the Pusher protocol, so pusher-js and any Pusher client connects. Two kinds of events reach the CRM's browsers:
+
+- **`deal.updated` on `private-crm.deals`**, from the after-commit hook above. Every user who can read deals may subscribe, and the board updates the card.
+- **`notification.created` on `private-users.{id}`**, sent by the notifier when a notification has the broadcast channel. Only that user may subscribe.
+
+Workers don't hold the sockets: `serve` does. Set `realtime.relay_url` and every `dyn Broadcaster` in a worker or the scheduler hands its broadcasts to `serve` over a signed relay:
+
+```toml title="crm/api/config/app.toml"
+[realtime]
+# ws://127.0.0.1:8080/app/navree-crm-key
+key = "navree-crm-key"
+allowed_origins = ["http://localhost:3000"]
+# queue:work and schedule:work hand their broadcasts (deal notifications,
+# task reminders) to `serve`, which holds the sockets: `auto` posts them to
+# http.addr. Signed with a key derived from APP_KEY (or realtime.secret), so
+# every process needs the same one.
+relay_url = "auto"
+```
+
+Private channels are authorized by the app's access rules: `private-crm.deals` lets in anyone who can read deals. [Broadcasting](/docs/digging-deeper/broadcasting/) covers channels, presence and client setup, and [Backend for frontend](/docs/patterns/backend-for-frontend/#real-time-through-the-bff) shows channel authorization through a BFF.
+
+## Publishing to other services
+
+<Badge feature="micro" /> When another service needs to hear about `deal.won`, publish it over a broker with [navree-micro](/docs/microservices/introduction/). One line in the module forwards the in-process event to the broker, so `DealService` keeps calling `events.emit(..)` and doesn't change:
+
+```rust title="crates/crm-deals/src/lib.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>()
+            .templates(notification::TEMPLATES);
+        m.forward_event::<DealWon>(); // also publish deal.won to other services
+    }
+}
+```
+
+The outbox extends to the broker. With `DatabaseModule` in the app, an event emitted inside a unit of work is written to the `micro_outbox` table in the same transaction and published after the commit, so other services hear about every deal that was saved and never about one that rolled back. A broker that is down delays the event; it doesn't lose it.
+
+The billing service handles the event with `#[event_pattern("deal.won")]`, using the same `DealWon` type from a shared contracts crate:
+
+```rust title="services/billing/src/deals.rs"
+#[injectable]
+pub struct DealEvents {
+    invoices: Arc<InvoiceService>,
+}
+
+#[message_handlers]
+impl DealEvents {
+    #[event_pattern("deal.won")]
+    async fn deal_won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> {
+        self.invoices.draft_for_deal(&uow, event.deal_id, event.amount_cents).await
+    }
+}
+```
+
+The handler runs in a unit of work of its own, and a failure is retried with backoff before the event goes to the dead letters (`micro:failed`, `micro:retry`). [Microservices](/docs/patterns/microservices/) covers the whole picture: transports, request-response, shared contracts and tracing across services.
+
+### Bridges inside the process
+
+For code that doesn't know the event types, such as a webhook relay or an audit stream, the bus also delivers events by name, as JSON. `events.subscribe_json("deal.won")` returns a receiver of every `deal.won` payload, and `dyn EventSink` (from `navree::contracts`) publishes an event by name into the bus. See [JSON subscribers](/docs/digging-deeper/events/#json-subscribers-and-eventsink).
+
+## Idempotency and retries
+
+Everything that goes through the queue runs **at least once**. A job is retried after a failure, and a job whose worker died mid-run is taken over by another worker. Events published to a broker are delivered at least once too. On the receiving side, navree-micro's inbox (`micro.inbox`) records each handled message id in the same transaction as the handler's writes and skips a message it has already handled, so database work happens once; mail, calls to other APIs and other side effects outside the database still have to be safe to repeat. Design every queued listener and every event handler so that running it twice does no harm:
+
+- **Set state, don't toggle it.** "Mark the invoice as drafted" is safe to repeat; "add 1 to the count" is not.
+- **Check before you act.** Look for the notification, the invoice or the export you are about to create, keyed by the event's ids, and skip the work if it exists.
+- **Let the database decide.** A unique index on the business key (`deal_id` for a deal's invoice) turns a duplicate into a constraint error you can ignore.
+- **Deduplicate dispatches.** A unique job is queued once while an identical one is pending:
+
+```rust
+use navree::contracts::JobEnvelope;
+
+let mut envelope = JobEnvelope::of(&SyncCalendar { user_id })?;
+envelope.unique_key = Some(format!("calendar:{user_id}"));
+queue.push(envelope).await?;
+```
+
+Retries use the job's backoff: exponential from 1 second up to 5 minutes, three attempts by default. A queued listener runs with the default job options; when a listener needs other ones, have it dispatch a job of its own with them. See [Retries and backoff](/docs/digging-deeper/queues/#retries-and-backoff).
+
+## Ordering
+
+Inside one `emit`, listeners run in a fixed order: the listeners of imported modules first, then in the order they were subscribed, each finishing before the next starts. Across the queue there is no global order. Several workers run jobs concurrently, and a retried job runs after jobs dispatched later.
+
+So don't rely on order between events. Make each event carry what its listeners need (the CRM's events carry the title and the owner, not only an id), and when order matters for one record, have the listener read the record's current state rather than trusting the event's snapshot.
+
+## Evolving events
+
+Events outlive deploys: a job queued before a deploy runs on the new code.
+
+- **Keep names stable.** `Event::NAME` is part of every queued listener's job name.
+- **Add fields, don't change them.** Give a new field `#[serde(default)]` so older payloads still deserialize.
+- **Don't rename or move a queued listener's type while its jobs may be waiting.** Its job name includes the type path; let the queue drain first, or retry the failed jobs after the deploy.
+- **For a breaking change, add a new event** (`deal.won.v2`), emit both for a while, then retire the old one.
+
+## Testing
+
+Sync listeners run during `emit`, so assert on their effect. For queued work, a test either checks what was dispatched or runs the queue.
+
+With `QueueFake`, the test asserts the listener's job was queued, without running it:
+
+```rust
+let job = listener_job_name::<DealWon, NotifyDealOwner>();
+assert!(fake.envelopes().iter().any(|e| e.job_type == job));
+```
+
+The CRM's tests keep the real database queue and run it, so they cover the whole path from the request to the mail. Before `run_queue` nothing is delivered:
+
+```rust title="crates/crm-deals/tests/deals/notifications.rs"
+// Queued: nothing is delivered until a worker runs.
+assert!(notifications(&rep2).await.is_empty());
+assert!(mails(&crm).await.is_empty());
+let stats = crm.run_queue().await;
+assert_eq!((stats.released, stats.failed), (0, 0), "{stats:?}");
+
+let received = notifications(&rep2).await;
+assert_eq!(received.len(), 1, "{received:?}");
+assert_eq!(received[0]["type"], "deal.assigned");
+```
+
+The broadcast tests open a real WebSocket, subscribe to `private-crm.deals`, change a deal and wait for `deal.updated`; a refused change must broadcast nothing. See `crates/crm-deals/tests/deals/broadcasts.rs` and [Testing broadcasts](/docs/digging-deeper/broadcasting/#testing).
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    Events, sync and queued listeners, ordering and errors.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Jobs, workers, retries, unique jobs and failed jobs.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    One transaction per request, and after-commit hooks.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/events/" title="Events between services">
+    `#[event_pattern]` handlers and `ServiceClient::emit`.
+  </LinkCard>
+</LinkCards>

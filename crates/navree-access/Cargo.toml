@@ -1,0 +1,55 @@
+[package]
+name = "navree-access"
+description = "Navree AccessModule: roles, permissions and abilities with record checks and SQL list filters, shared with front ends as CASL JSON."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "authorization", "rbac", "permissions"]
+categories = ["authentication", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## navree-db's PostgreSQL driver (the module tests on PostgreSQL and
+## TimescaleDB: `NAVREE_TEST_DATABASE=postgres` with `NAVREE_TEST_POSTGRES_URL`).
+test-postgres = ["navree-db/postgres"]
+## navree-db's MySQL driver (`NAVREE_TEST_DATABASE=mysql` with
+## `NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+
+# The ability engine (`src/engine`) is pure: rules, record checks, CASL JSON
+# and SQL list filters (navree-db values and statements). The AccessModule
+# half adds the database tables (navree-db records, a navree-schema
+# migration), services, the route authorizer, extractors, endpoints and
+# commands.
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree-bounded = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+insta = { workspace = true }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }

@@ -1,0 +1,15 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: sql
+---
+-- mysql 8.0.12
+-- error: MySQL does not support a default on text column `bio` before 8.0.13: upgrade MySQL, or default the value in the application
+
+-- mysql 8.4
+CREATE TABLE `versions` (`id` BINARY(16) NOT NULL, `bio` TEXT NOT NULL DEFAULT ('none')) DEFAULT CHARACTER SET utf8mb4;
+
+-- mariadb 10.6
+CREATE TABLE `versions` (`id` BINARY(16) NOT NULL, `bio` TEXT NOT NULL DEFAULT ('none')) DEFAULT CHARACTER SET utf8mb4;
+
+-- mariadb 11.4
+CREATE TABLE `versions` (`id` BINARY(16) NOT NULL, `bio` TEXT NOT NULL DEFAULT ('none')) DEFAULT CHARACTER SET utf8mb4;

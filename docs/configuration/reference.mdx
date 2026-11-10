@@ -1,0 +1,1443 @@
+---
+title: "Configuration reference"
+description: "Every configuration section of the framework with its keys, types, defaults, environment variables and what each key does."
+---
+
+Every module of the framework reads one section of the configuration. This page lists them all: each key with its type, its default, the environment variable that sets it and what it does. It is written from the sections' own types and doc comments, so it cannot drift from the code.
+
+A key is written under its section in `config/app.toml`, or in a file of its own, `config/<section>.toml`, without the section header. The environment variable of a key is `APP_`, the section, `__` and the key, in capitals; a dot becomes `__`, so `mail.smtp.port` is `APP_MAIL__SMTP__PORT`. A credential shows `secret` instead of a default: set it in `.env` or in the environment, not in a file that is committed. [How the sources combine](/docs/getting-started/configuration/) and [environment files](/docs/configuration/environments-and-files/) explain the rest.
+
+`navree config:show --defaults` prints what an app uses, `navree config:publish <section>` writes a section's keys into a file of its own, and `navree config:schema` writes a JSON Schema for your editor.
+
+## `ai`
+
+Options of `AiModule` (configuration section `ai`).
+
+More: [/docs/ai/ai-sdk/](/docs/ai/ai-sdk/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `default` | string | `""` | `APP_AI__DEFAULT` | The model a request uses when it names none (default: the first model by name). |
+| `timeout_secs` | integer | `60` | `APP_AI__TIMEOUT_SECS` | The limit of one attempt, in seconds; for streams, the longest gap between two events (default 60). |
+| `max_retries` | integer | `2` | `APP_AI__MAX_RETRIES` | Retries of one model on a 429, a 5xx, a timeout or a connection failure, before its fallbacks (default 2). |
+| `retry_base_ms` | integer | `500` | `APP_AI__RETRY_BASE_MS` | The first retry delay in milliseconds; each later one doubles (default 500). |
+| `structured_retries` | integer | `2` | `APP_AI__STRUCTURED_RETRIES` | How often structured output that doesn't match its type is sent back for repair (default 2). |
+| `budget` | table |  | `APP_AI__BUDGET` | Per-user token budgets. |
+| `budget.daily_tokens_per_user` | integer | `0` | `APP_AI__BUDGET__DAILY_TOKENS_PER_USER` | Input plus output tokens one user may spend per UTC day; `0` turns budgets off (default). |
+| `log_content` | boolean | `false` | `APP_AI__LOG_CONTENT` | Log prompts and outputs at `debug` (default false). |
+| `fake` | boolean | `false` | `APP_AI__FAKE` | Answer every request from an `AiFake` (tests). |
+| `providers` | table of ProviderConfig | `"{}"` | `APP_AI__PROVIDERS` | Provider accounts by name. |
+| `models` | table of ModelConfig | `"{}"` | `APP_AI__MODELS` | Models by the name code uses (`smart`, `fast`, `embed`). |
+| `embeddings` | table |  | `APP_AI__EMBEDDINGS` | `Embeddings`. |
+| `embeddings.model` | string |  | `APP_AI__EMBEDDINGS__MODEL` | The model name in `ai.models` that embeds. |
+| `embeddings.batch_size` | integer | `96` | `APP_AI__EMBEDDINGS__BATCH_SIZE` | Texts per provider call in `embed_many` (default 96). |
+| `embeddings.cache_ttl_days` | integer | `30` | `APP_AI__EMBEDDINGS__CACHE_TTL_DAYS` | How long a text's vector is cached, in days; `0` turns the cache off (default 30). |
+| `vectors` | table |  | `APP_AI__VECTORS` | `VectorStore`. |
+| `vectors.store` | memory \| pgvector \| qdrant | `"memory"` | `APP_AI__VECTORS__STORE` | `memory` (default), `pgvector` or `qdrant`. |
+| `vectors.dimensions` | integer | `1536` | `APP_AI__VECTORS__DIMENSIONS` | The vector size of every collection (default 1536). |
+| `vectors.metric` | cosine \| dot \| euclidean | `"cosine"` | `APP_AI__VECTORS__METRIC` | `cosine` (default), `dot` or `euclidean`. |
+| `vectors.url` | string |  | `APP_AI__VECTORS__URL` | The Qdrant server (`http://127.0.0.1:6333`). |
+| `vectors.key` | string | secret | `APP_AI__VECTORS__KEY` | The Qdrant API key. Never serialized. |
+| `memory` | table |  | `APP_AI__MEMORY` | Agent conversation memory. |
+| `memory.max_messages` | integer | `40` | `APP_AI__MEMORY__MAX_MESSAGES` | Messages the model sees before older ones are summarized (default 40). |
+| `memory.summary_model` | string |  | `APP_AI__MEMORY__SUMMARY_MODEL` | The model that writes summaries (default `ai.default`). |
+| `memory.retention_days` | integer | `90` | `APP_AI__MEMORY__RETENTION_DAYS` | Age in days at which `ai:prune` deletes an untouched conversation (default 90). |
+
+## `api`
+
+OpenAPI document and docs UI settings (configuration section `api`; every key optional).
+
+More: [/docs/digging-deeper/openapi/](/docs/digging-deeper/openapi/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `title` | string | `"Navree API"` | `APP_API__TITLE` | The document title, `info.title` (default `Navree API`). |
+| `version` | string | `"1.0.0"` | `APP_API__VERSION` | The API version, `info.version` (default `1.0.0`). |
+| `servers` | list of string | `[]` | `APP_API__SERVERS` | Server URLs listed in the document (default none: clients use the URL they loaded the document from). From the environment, a comma-separated list (`APP_API__SERVERS=https://a.example,https://b.example`). |
+| `docs_ui` | boolean |  | `APP_API__DOCS_UI` | Serve the API reference page at `{api_prefix}/docs`, when `openapi_json` is on too: the page shows what the document says. Public: nothing signs a reader in. Unset (`None`, the default), it follows the environment (see `serves_docs_ui_in`). |
+| `openapi_json` | boolean |  | `APP_API__OPENAPI_JSON` | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route there. Off, nothing of it is served: not this route, and not the page. `openapi:export` writes the document either way. Unset (`None`, the default), it follows the environment (see `serves_openapi_json_in`). |
+| `require_docs` | boolean | `false` | `APP_API__REQUIRE_DOCS` | Refuse to boot while a route has no `#[api]` documentation (default `false`; `navree check` reports undocumented routes either way). |
+| `undocumented` | list of string | `[]` | `APP_API__UNDOCUMENTED` | Routes allowed without documentation: `"METHOD /path"` or `"/path"` (every method), with a trailing `*` matching any rest of the path (`"GET /storage/*"`). The path is the mounted one, prefix and version included. From the environment, a comma-separated list. |
+
+## `app`
+
+The `app` section: what the app is called, where it lives, which environment it runs in, and its keys.
+
+More: [/docs/getting-started/configuration/](/docs/getting-started/configuration/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `name` | string |  | `APP_APP__NAME` | The app's name. |
+| `url` | string |  | `APP_APP__URL` | The address users reach the app at (`https://agra.example.com`): used to build links in mail and callbacks. An absolute http or https URL. |
+| `version` | string |  | `APP_APP__VERSION` | The app's version. |
+| `env` | Environment |  | `APP_APP__ENV` | The environment the app runs in; none when not set. |
+| `key` | string | secret | `APP_APP__KEY` | The key that encrypts data and signs tokens (`base64:...`). |
+| `previous_keys` | list of string | secret | `APP_APP__PREVIOUS_KEYS` | Earlier keys that still decrypt, most recent first: a list, or one comma-separated string. |
+| `strict_config` | boolean | `false` | `APP_APP__STRICT_CONFIG` | Refuse to start when the configuration has a key nothing reads, or, in an environment that behaves like production, a setting the production profile fails (no `app.key`, a SQLite database, mail that goes to the log). Off by default: the boot only logs them. |
+
+## `audit`
+
+The settings of `AuditModule`: the `audit` configuration section. Every key is optional.
+
+More: [/docs/security/audit-log/](/docs/security/audit-log/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `enabled` | boolean | `true` | `APP_AUDIT__ENABLED` | Record audit entries at all (default `true`). When off, nothing is written; existing entries can still be listed and pruned. |
+| `retention_days` | integer | `365` | `APP_AUDIT__RETENTION_DAYS` | How many days `audit:prune` keeps entries (default 365; 0 keeps them forever). |
+| `skip_entities` | list of string | `[]` | `APP_AUDIT__SKIP_ENTITIES` | Tables whose changes are never audited, by table name (`sessions`) or subject type (`Session`), case-insensitively. The `audit_logs` table itself is never audited. |
+| `skip_fields` | list of string | `["password","password_hash","token","token_hash","secret","two_factor_secret","two_factor_recovery_codes","remember_token"]` | `APP_AUDIT__SKIP_FIELDS` | Fields dropped from old and new values and metadata: a name (`ssn`, matched case-insensitively at any depth) or `table.field` (`users.phone`, top-level fields of one table or subject type). Defaults to [`DEFAULT_SKIP_FIELDS`], which apply in any case. |
+| `subject_types` | table of string | `{}` | `APP_AUDIT__SUBJECT_TYPES` | The subject type recorded for a table, overriding the default (the table name singularised in PascalCase: `deals` → `Deal`, `companies` → `Company`, `deal_notes` → `DealNote`). Actions are `<subject type in snake_case>.<created\|updated\|deleted>`. |
+| `routes` | boolean | `true` | `APP_AUDIT__ROUTES` | Mount `GET {api_prefix}/audit` (default `true`). It requires the `audit.read` permission, so the app needs a `dyn RouteAuthorizer` (navree-access); turn it off in apps without one. |
+
+## `auth`
+
+Options of the auth module (configuration section `auth`).
+
+More: [/docs/security/authentication/](/docs/security/authentication/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `jwt` | table |  | `APP_AUTH__JWT` | JWT access tokens and refresh tokens. |
+| `jwt.secret` | string | secret | `APP_AUTH__JWT__SECRET` | The HS256 signing secret (at least [`MIN_SECRET_LEN`] bytes). When unset, a key derived from the application key (`app.key` / `APP_KEY`) is used; without either, a random per-process key (tokens stop working on restart, with a warning). |
+| `jwt.issuer` | string | `"navree"` | `APP_AUTH__JWT__ISSUER` | The `iss` claim written and required. |
+| `jwt.audience` | string |  | `APP_AUTH__JWT__AUDIENCE` | The `aud` claim written and required, if any. |
+| `jwt.access_ttl_secs` | integer | `900` | `APP_AUTH__JWT__ACCESS_TTL_SECS` | Lifetime of access tokens, in seconds. |
+| `jwt.refresh_ttl_secs` | integer | `2592000` | `APP_AUTH__JWT__REFRESH_TTL_SECS` | Lifetime of refresh tokens, in seconds (each refresh issues a new one). |
+| `registration` | boolean | `true` | `APP_AUTH__REGISTRATION` | Whether `POST /auth/register` is mounted (public sign-up). |
+| `login_throttle_per_minute` | integer | `5` | `APP_AUTH__LOGIN_THROTTLE_PER_MINUTE` | Failed login attempts allowed per email and client IP per minute before `POST /auth/login` answers 429; `0` turns the limit off. An IPv6 client is counted as its network (`http.rate_limit_ipv6_prefix`, a /64 by default). |
+| `password_min_length` | integer | `8` | `APP_AUTH__PASSWORD_MIN_LENGTH` | The shortest accepted password, in characters. |
+| `routes_prefix` | string | `"/auth"` | `APP_AUTH__ROUTES_PREFIX` | The path of the auth routes under the API prefix (`/auth` mounts `/api/auth/login`). |
+| `password_reset` | table |  | `APP_AUTH__PASSWORD_RESET` | Password reset (`POST /auth/forgot-password`, `POST /auth/reset-password`). |
+| `password_reset.ttl_secs` | integer | `3600` | `APP_AUTH__PASSWORD_RESET__TTL_SECS` | How long a reset token is valid, in seconds. |
+| `password_reset.throttle_secs` | integer | `60` | `APP_AUTH__PASSWORD_RESET__THROTTLE_SECS` | The shortest time between two reset mails to the same address, in seconds (requests in between are accepted but send nothing); `0` sends a mail for every request. |
+| `password_reset.url` | string |  | `APP_AUTH__PASSWORD_RESET__URL` | The front-end page the mail links to, as `{url}?token=..&email=..`; the page posts the new password to `POST /auth/reset-password`. Without it the mail carries the token alone (API and mobile clients). |
+| `password_reset.mail_template` | string |  | `APP_AUTH__PASSWORD_RESET__MAIL_TEMPLATE` | A navree-view template pair (`{template}.html` / `.txt`) for the mail, rendered with `{name, email, token, url, expires_in_minutes}` (`url` is empty without `url`); built-in text when unset. |
+| `verification` | table |  | `APP_AUTH__VERIFICATION` | Email verification (`POST /auth/email/verification`, `GET /auth/email/verify/{id}/{hash}`). |
+| `verification.ttl_secs` | integer | `3600` | `APP_AUTH__VERIFICATION__TTL_SECS` | How long a verification link is valid, in seconds. |
+| `verification.base_url` | string |  | `APP_AUTH__VERIFICATION__BASE_URL` | The absolute URL the signed path (`/api/auth/email/verify/..`) is appended to in the mail: the API's public URL, or the front end when it proxies `/api` to the API. Default: the `app.url` setting; without either the mail carries a relative link. |
+| `verification.mail_template` | string |  | `APP_AUTH__VERIFICATION__MAIL_TEMPLATE` | A navree-view template pair for the mail, rendered with `{name, email, url, expires_in_minutes}`; built-in text when unset. |
+| `two_factor` | table |  | `APP_AUTH__TWO_FACTOR` | TOTP two-factor authentication (`/auth/2fa/*`). |
+| `two_factor.issuer` | string | `"Navree"` | `APP_AUTH__TWO_FACTOR__ISSUER` | The issuer shown in authenticator apps (`otpauth://totp/{issuer}:{email}`). |
+| `two_factor.challenge_ttl_secs` | integer | `300` | `APP_AUTH__TWO_FACTOR__CHALLENGE_TTL_SECS` | Lifetime of the challenge token a two-factor login returns, in seconds. |
+| `two_factor.recovery_codes` | integer | `8` | `APP_AUTH__TWO_FACTOR__RECOVERY_CODES` | How many single-use recovery codes are issued (1 to 32). |
+| `two_factor.max_attempts_per_minute` | integer | `5` | `APP_AUTH__TWO_FACTOR__MAX_ATTEMPTS_PER_MINUTE` | Wrong codes accepted per user per minute at `POST /auth/2fa/verify` before it answers 429; `0` turns the limit off. |
+| `two_factor.required_for` | list of string | `[]` | `APP_AUTH__TWO_FACTOR__REQUIRED_FOR` | Roles (navree-access) whose holders must use two-factor authentication: until they set it up, their sessions reach only the two-factor setup routes (403 `two_factor_required` elsewhere). Needs `AccessModule` when not empty. Workspaces and organizations add their own rules with a `TwoFactorPolicy`. |
+| `impersonation` | table |  | `APP_AUTH__IMPERSONATION` | Impersonation (`POST /auth/impersonate/{user}`). |
+| `impersonation.enabled` | boolean | `false` | `APP_AUTH__IMPERSONATION__ENABLED` | Whether `POST /auth/impersonate/{user}` and `DELETE /auth/impersonate` are mounted. They require the permission `permission`, so the app needs `AccessModule`. |
+| `impersonation.ttl_secs` | integer | `3600` | `APP_AUTH__IMPERSONATION__TTL_SECS` | How long an impersonation session lasts, in seconds (refreshing does not extend it). |
+| `impersonation.permission` | string | `"users.impersonate"` | `APP_AUTH__IMPERSONATION__PERMISSION` | The permission `POST /auth/impersonate/{user}` requires. |
+| `magic_link` | table |  | `APP_AUTH__MAGIC_LINK` | Magic links (`POST /auth/magic-link`). |
+| `magic_link.enabled` | boolean | `false` | `APP_AUTH__MAGIC_LINK__ENABLED` | Whether `POST /auth/magic-link` and `POST /auth/magic-link/verify` are mounted. |
+| `magic_link.ttl_secs` | integer | `900` | `APP_AUTH__MAGIC_LINK__TTL_SECS` | How long a link works, in seconds. |
+| `magic_link.throttle_secs` | integer | `60` | `APP_AUTH__MAGIC_LINK__THROTTLE_SECS` | The shortest time between two links to the same address, in seconds (requests in between are accepted but send nothing). |
+| `magic_link.url` | string |  | `APP_AUTH__MAGIC_LINK__URL` | The front-end page the mail links to, as `{url}?token=..`; the page posts the token to `POST /auth/magic-link/verify`. Without it the mail carries the token alone. |
+| `magic_link.mail_template` | string |  | `APP_AUTH__MAGIC_LINK__MAIL_TEMPLATE` | A navree-view template pair for the mail, rendered with `{name, email, token, url, expires_in_minutes}`; built-in text when unset. |
+| `otp` | table |  | `APP_AUTH__OTP` | Emailed sign-in codes (`POST /auth/otp`). |
+| `otp.enabled` | boolean | `false` | `APP_AUTH__OTP__ENABLED` | Whether `POST /auth/otp` and `POST /auth/otp/verify` are mounted. |
+| `otp.length` | integer | `6` | `APP_AUTH__OTP__LENGTH` | Digits per code (4 to 10). |
+| `otp.ttl_secs` | integer | `600` | `APP_AUTH__OTP__TTL_SECS` | How long a code works, in seconds. |
+| `otp.max_attempts` | integer | `5` | `APP_AUTH__OTP__MAX_ATTEMPTS` | Wrong guesses a code survives; then it is burned. |
+| `otp.throttle_secs` | integer | `60` | `APP_AUTH__OTP__THROTTLE_SECS` | The shortest time between two codes to the same address, in seconds. |
+| `otp.mail_template` | string |  | `APP_AUTH__OTP__MAIL_TEMPLATE` | A navree-view template pair for the mail, rendered with `{name, email, code, expires_in_minutes}`; built-in text when unset. |
+| `platform` | table |  | `APP_AUTH__PLATFORM` | The platform audience for platform administrators (`POST /auth/platform/login`). |
+| `platform.enabled` | boolean | `false` | `APP_AUTH__PLATFORM__ENABLED` | Whether `POST /auth/platform/login` and `POST /auth/platform/2fa/verify` are mounted. |
+| `platform.roles` | list of string | `["platform-admin"]` | `APP_AUTH__PLATFORM__ROLES` | The roles (navree-access) that make a user a platform administrator. |
+| `platform.login_throttle_per_minute` | integer | `3` | `APP_AUTH__PLATFORM__LOGIN_THROTTLE_PER_MINUTE` | Failed platform sign-ins allowed per email and IP per minute; `0` turns the limit off. |
+| `platform.access_ttl_secs` | integer | `900` | `APP_AUTH__PLATFORM__ACCESS_TTL_SECS` | Lifetime of platform access tokens, in seconds. |
+| `platform.session_ttl_secs` | integer | `28800` | `APP_AUTH__PLATFORM__SESSION_TTL_SECS` | How long a platform session lasts, in seconds (refreshing does not extend it). |
+| `platform.break_glass` | boolean | `true` | `APP_AUTH__PLATFORM__BREAK_GLASS` | Break-glass: whether a platform administrator (password, role and second factor checked) still signs in to the platform console when a `SignInPolicy` refuses them (single sign-on enforced for their domain, with the identity provider down, say). Every such sign-in is audited as `auth.break_glass` and logged under `navree::security`. `false` makes platform sign-ins obey the policies like any other. App sign-ins never break glass. |
+| `trusted_issuers` | table of TrustedIssuerOptions | `"{}"` | `APP_AUTH__TRUSTED_ISSUERS` | Sibling systems whose signed tokens `POST /auth/exchange` accepts, by name. |
+| `passkeys` | table |  | `APP_AUTH__PASSKEYS` | Passkeys (WebAuthn, `/auth/passkeys/*`). |
+| `passkeys.enabled` | boolean | `false` | `APP_AUTH__PASSKEYS__ENABLED` | Whether the `/auth/passkeys/*` routes are mounted. |
+| `passkeys.rp_id` | string |  | `APP_AUTH__PASSKEYS__RP_ID` | The relying party id: the app's registrable domain (`example.com`). Required when enabled. |
+| `passkeys.rp_name` | string | `"Navree"` | `APP_AUTH__PASSKEYS__RP_NAME` | The relying party name shown by the browser. |
+| `passkeys.origins` | list of string | `[]` | `APP_AUTH__PASSKEYS__ORIGINS` | The origins the front end runs on (`https://app.example.com`). Required when enabled. |
+| `passkeys.timeout_secs` | integer | `300` | `APP_AUTH__PASSKEYS__TIMEOUT_SECS` | How long a registration or sign-in ceremony may take, in seconds. |
+| `passkeys.user_verification` | required \| preferred \| discouraged | `"preferred"` | `APP_AUTH__PASSKEYS__USER_VERIFICATION` | `required`, `preferred` or `discouraged`: whether authenticators must verify the user (PIN, biometrics). |
+| `session` | table |  | `APP_AUTH__SESSION` | Browsers signed in on the session cookie (the `session` feature). |
+| `session.lifetime_hours` | integer | `24` | `APP_AUTH__SESSION__LIFETIME_HOURS` | The longest a sign-in lasts without "remember me", however busy the browser is, in hours (default 24). |
+| `session.remember_days` | integer | `30` | `APP_AUTH__SESSION__REMEMBER_DAYS` | How long "remember me" keeps a browser signed in, in days (default 30): the session lives that long without a request, and the sign-in ends that long after it started, whatever happens. |
+
+## `billing`
+
+Options of the billing module (configuration section `billing`).
+
+More: [/docs/packages/billing/](/docs/packages/billing/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `provider` | ProviderKind | `"stripe"` | `APP_BILLING__PROVIDER` | The payment provider: `stripe` (the default), `paddle`, `fake`, or the name of a provider registered with `BillingModule::provider`. |
+| `currency` | string | `"usd"` | `APP_BILLING__CURRENCY` | The currency of the fake provider's invoices (lower-case ISO code). Stripe and Paddle take the currency from the price. |
+| `return_url` | string |  | `APP_BILLING__RETURN_URL` | Where checkout and the portal return; `app.url` when unset. |
+| `queue` | string | `"default"` | `APP_BILLING__QUEUE` | The queue of the webhook jobs. |
+| `past_due_grace_days` | integer | `7` | `APP_BILLING__PAST_DUE_GRACE_DAYS` | Days a past-due subscription stays valid. |
+| `trial_plan` | string |  | `APP_BILLING__TRIAL_PLAN` | The plan a trial without a subscription grants (default: the first plan by key). |
+| `invoice_cache_secs` | integer | `300` | `APP_BILLING__INVOICE_CACHE_SECS` | How long invoice lists are cached, in seconds (0: not cached). |
+| `routes` | boolean | `true` | `APP_BILLING__ROUTES` | Mounts the `/api/billing` routes. |
+| `routes_billable` | string |  | `APP_BILLING__ROUTES_BILLABLE` | The billable type the routes and `Subscribed` act on (`workspace`, `user`, or an app-defined `Billable::BILLABLE_TYPE`); default: the only registered billable. |
+| `webhook_route` | boolean | `true` | `APP_BILLING__WEBHOOK_ROUTE` | Mounts `POST /api/billing/webhook`. |
+| `webhook_tolerance_secs` | integer | `300` | `APP_BILLING__WEBHOOK_TOLERANCE_SECS` | Accepted clock skew of webhook signatures, in seconds. |
+| `stripe` | table |  | `APP_BILLING__STRIPE` | Stripe settings. |
+| `stripe.secret_key` | string | secret | `APP_BILLING__STRIPE__SECRET_KEY` | The secret API key (`sk_live_...`, `sk_test_...`). |
+| `stripe.webhook_secret` | string | secret | `APP_BILLING__STRIPE__WEBHOOK_SECRET` | The signing secret of the webhook endpoint (`whsec_...`). |
+| `stripe.api_base` | string | `"https://api.stripe.com"` | `APP_BILLING__STRIPE__API_BASE` | The API base URL (default `https://api.stripe.com`); point it at a mock server or a proxy. |
+| `paddle` | table |  | `APP_BILLING__PADDLE` | Paddle settings. |
+| `paddle.api_key` | string | secret | `APP_BILLING__PADDLE__API_KEY` | The API key (`pdl_live_apikey_...`, `pdl_sdbx_apikey_...`). |
+| `paddle.webhook_secret` | string | secret | `APP_BILLING__PADDLE__WEBHOOK_SECRET` | The secret key of the notification destination (`pdl_ntfset_...`). |
+| `paddle.environment` | sandbox \| production | `"sandbox"` | `APP_BILLING__PADDLE__ENVIRONMENT` | `sandbox` (the default) or `production`. |
+| `paddle.api_base` | string |  | `APP_BILLING__PADDLE__API_BASE` | Overrides the environment's API base URL (a mock server or a proxy). |
+| `plans` | table of PlanOptions | `"{}"` | `APP_BILLING__PLANS` | The plans, by key. |
+
+## `cache`
+
+`CacheModule` settings: configuration section `cache`.
+
+More: [/docs/digging-deeper/cache/](/docs/digging-deeper/cache/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | memory \| redis | `"memory"` | `APP_CACHE__STORE` | The backend (default `memory`; `redis` needs navree-redis's `RedisModule`). |
+| `prefix` | string | `""` | `APP_CACHE__PREFIX` | Prepended to every cache key and lock name (default empty). |
+| `default_ttl_secs` | integer | `3600` | `APP_CACHE__DEFAULT_TTL_SECS` | The TTL of `Ttl::Default`, in seconds; must be greater than 0 (default 3600). |
+
+## `database`
+
+The settings of `DatabaseModule`: the `database` configuration section. Every key is optional.
+
+More: [/docs/database/getting-started/](/docs/database/getting-started/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `url` | string | `"sqlite://storage/app.db?mode=rwc"` | `APP_DATABASE__URL` | The connection URL (`postgres://...` for TimescaleDB or PostgreSQL, `mysql://...`, `mariadb://...` or `sqlite://path?mode=rwc`); default `sqlite://storage/app.db?mode=rwc`. Each URL needs its driver's feature (`postgres`, `mysql`, `sqlite`; none is on by default), so an app built without `sqlite` that leaves the URL out stops at boot with "enable the `sqlite` feature of navree-db". |
+| `read_urls` | list of string | `[]` | `APP_DATABASE__READ_URLS` | Read replicas of the database at `url`: reads outside a transaction go to them in turn, writes and transactions to `url`. From the environment, a comma-separated list. |
+| `sticky` | boolean | `true` | `APP_DATABASE__STICKY` | After a unit of work wrote, its task reads from the writer, so a request sees its own writes while replicas catch up (default `true`). |
+| `direct_url` | string |  | `APP_DATABASE__DIRECT_URL` | A direct connection to the same database that bypasses a transaction-mode pooler (PgBouncer, RDS Proxy) in front of `url`: migrations run on it, and `Db::direct` hands it out for session-level work (advisory locks, `LISTEN`, prepared statements that outlive a transaction). Opened on first use. |
+| `max_connections` | integer | `10` | `APP_DATABASE__MAX_CONNECTIONS` | The most pooled connections. |
+| `min_connections` | integer | `0` | `APP_DATABASE__MIN_CONNECTIONS` | The fewest pooled connections kept open. |
+| `connect_timeout_secs` | integer | `8` | `APP_DATABASE__CONNECT_TIMEOUT_SECS` | How long to wait for a new connection, in seconds. |
+| `test_before_acquire` | boolean | `false` | `APP_DATABASE__TEST_BEFORE_ACQUIRE` | Pings every connection taken from the pool before handing it out: one more round trip per checkout. Off by default: then only a connection that sat idle in the pool for `IDLE_PING_SECS` or more is pinged first, since a server, proxy or firewall may have dropped it. |
+| `idle_timeout_secs` | integer | `600` | `APP_DATABASE__IDLE_TIMEOUT_SECS` | Closes connections idle in the pool this long, in seconds (above `min_connections`; 0 keeps them). |
+| `max_lifetime_secs` | integer | `1800` | `APP_DATABASE__MAX_LIFETIME_SECS` | Replaces connections this old, in seconds (0: no limit). |
+| `log_queries` | boolean | `false` | `APP_DATABASE__LOG_QUERIES` | Logs every statement (SQL without bound values) at debug level. |
+| `slow_query_ms` | integer | `200` | `APP_DATABASE__SLOW_QUERY_MS` | Statements slower than this are logged at warn level (0 = never). |
+| `migrate_on_boot` | boolean | `false` | `APP_DATABASE__MIGRATE_ON_BOOT` | Runs pending migrations when the app boots (tests and development). |
+| `transaction_settings` | boolean | `true` | `APP_DATABASE__TRANSACTION_SETTINGS` | Makes the actor and request id of every unit of work readable in SQL: `navree.actor` and `navree.request_id` on PostgreSQL, the session variables `@navree_actor` and `@navree_request_id` on MySQL and MariaDB (see `Uow`). On by default; turn it off when no trigger or policy reads them, to save the statement that sets them (and, on MySQL, the one that clears them) in every transaction. |
+| `mysql` | table |  | `APP_DATABASE__MYSQL` | MySQL and MariaDB settings (`database.mysql`); other databases ignore them. |
+| `mysql.strict` | boolean | `true` | `APP_DATABASE__MYSQL__STRICT` | Strict SQL mode for every connection (default `true`): the session adds `ONLY_FULL_GROUP_BY`, `STRICT_TRANS_TABLES`, `NO_ZERO_IN_DATE`, `NO_ZERO_DATE` and `ERROR_FOR_DIVISION_BY_ZERO` to the server's SQL mode, so a value that does not fit its column (a string too long, a number out of range, a zero date) is an error instead of being silently cut or replaced, and a query selecting a column it neither groups by nor aggregates is refused, as on PostgreSQL. `false` removes `STRICT_TRANS_TABLES` and `STRICT_ALL_TABLES` from the session instead, whatever the server's default. Ignored when `modes` is set. |
+| `mysql.modes` | list of string |  | `APP_DATABASE__MYSQL__MODES` | The session's exact SQL mode, replacing the server's (and what `strict` and SQLx would add): `["STRICT_ALL_TABLES", "NO_ENGINE_SUBSTITUTION"]`, or from the environment a comma-separated string (`APP_DATABASE__MYSQL__MODES=A,B`). An empty list clears the SQL mode. `None` (the default) leaves the mode to `strict`. Each entry must be a mode name: letters, digits and underscores. |
+| `mysql.isolation_level` | read_uncommitted \| read_committed \| repeatable_read \| serializable |  | `APP_DATABASE__MYSQL__ISOLATION_LEVEL` | The transaction isolation level of every connection (`"read_committed"`, `"REPEATABLE READ"`, ...). `None` (the default) keeps the server's, which is `REPEATABLE READ` unless configured otherwise. |
+| `postgres` | table |  | `APP_DATABASE__POSTGRES` | PostgreSQL settings (`database.postgres`); other databases ignore them. |
+| `postgres.search_path` | list of string | `[]` | `APP_DATABASE__POSTGRES__SEARCH_PATH` | The schemas unqualified names resolve in, in order (`search_path`). From the environment, a comma-separated list. |
+| `postgres.timezone` | string |  | `APP_DATABASE__POSTGRES__TIMEZONE` | The session's time zone (`TimeZone`), e.g. `UTC` or `Europe/Berlin`. |
+| `postgres.application_name` | string |  | `APP_DATABASE__POSTGRES__APPLICATION_NAME` | The name the server shows for these connections (`application_name`, in `pg_stat_activity`). |
+| `postgres.synchronous_commit` | on \| off \| local \| remote_write \| remote_apply |  | `APP_DATABASE__POSTGRES__SYNCHRONOUS_COMMIT` | `synchronous_commit`: `on`, `off`, `local`, `remote_write` or `remote_apply`. |
+| `postgres.isolation_level` | read_uncommitted \| read_committed \| repeatable_read \| serializable |  | `APP_DATABASE__POSTGRES__ISOLATION_LEVEL` | The isolation level transactions start with (`default_transaction_isolation`). |
+| `postgres.ssl_mode` | disable \| allow \| prefer \| require \| verify-ca \| verify-full |  | `APP_DATABASE__POSTGRES__SSL_MODE` | TLS: `disable`, `allow`, `prefer` (the default), `require`, `verify-ca` or `verify-full`; overrides the URL's `sslmode`. |
+| `sqlite` | table |  | `APP_DATABASE__SQLITE` | SQLite settings (`database.sqlite`); other databases ignore them. |
+| `sqlite.journal_mode` | string | `"wal"` | `APP_DATABASE__SQLITE__JOURNAL_MODE` | The journal mode (default `wal`). |
+| `sqlite.busy_timeout_ms` | integer | `5000` | `APP_DATABASE__SQLITE__BUSY_TIMEOUT_MS` | How long a connection waits for a lock, in milliseconds (default 5000). |
+| `sqlite.foreign_keys` | boolean | `true` | `APP_DATABASE__SQLITE__FOREIGN_KEYS` | Whether foreign keys are enforced (default `true`). |
+| `sqlite.synchronous` | string |  | `APP_DATABASE__SQLITE__SYNCHRONOUS` | `PRAGMA synchronous`; SQLite's own default when unset. |
+| `sqlite.pragmas` | table of string | `{}` | `APP_DATABASE__SQLITE__PRAGMAS` | Further pragmas run on every connection, by name. |
+| `connections` | table of DbOptions | `"{}"` | `APP_DATABASE__CONNECTIONS` | Further databases by name (`[database.connections.analytics]`), each with options of its own, connected on first use through `DbConnections`. Named connections cannot have connections of their own. |
+
+## `database.mongodb`
+
+The settings of `MongoModule`: the `database.mongodb` configuration section. Every key is optional.
+
+More: [/docs/orm/mongodb/](/docs/orm/mongodb/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `url` | string | `"mongodb://127.0.0.1:27017/navree"` | `APP_DATABASE__MONGODB__URL` | The connection string (default `mongodb://127.0.0.1:27017/navree`): `mongodb://[user:password@]host[:port][,host...]/[database][?options]` or `mongodb+srv://...` (DNS seed lists). TLS goes through rustls. |
+| `database` | string |  | `APP_DATABASE__MONGODB__DATABASE` | The database; the URL's path when unset, else `navree`. |
+| `app_name` | string |  | `APP_DATABASE__MONGODB__APP_NAME` | The application name the server logs (default: the app's name). |
+| `min_pool_size` | integer |  | `APP_DATABASE__MONGODB__MIN_POOL_SIZE` | Connections each server's pool keeps open. |
+| `max_pool_size` | integer |  | `APP_DATABASE__MONGODB__MAX_POOL_SIZE` | The most connections per server (the driver's default is 10). |
+| `max_idle_time_ms` | integer |  | `APP_DATABASE__MONGODB__MAX_IDLE_TIME_MS` | How long an idle pooled connection lives, in milliseconds. |
+| `connect_timeout_ms` | integer | `10000` | `APP_DATABASE__MONGODB__CONNECT_TIMEOUT_MS` | How long opening a connection may take, in milliseconds (default 10000). |
+| `server_selection_timeout_ms` | integer | `30000` | `APP_DATABASE__MONGODB__SERVER_SELECTION_TIMEOUT_MS` | How long an operation waits for a suitable server, in milliseconds (default 30000). |
+| `read_preference` | string |  | `APP_DATABASE__MONGODB__READ_PREFERENCE` | Which members serve reads: `primary` (the default), `primaryPreferred`, `secondary`, `secondaryPreferred` or `nearest`. |
+| `read_concern` | string |  | `APP_DATABASE__MONGODB__READ_CONCERN` | The read concern: `local`, `available`, `majority`, `linearizable` or `snapshot`. |
+| `write_concern` | string |  | `APP_DATABASE__MONGODB__WRITE_CONCERN` | The write concern: `majority`, a number of members (`1`), or a custom tag set's name. |
+| `journal` | boolean |  | `APP_DATABASE__MONGODB__JOURNAL` | Whether writes wait for the journal. |
+| `retry_writes` | boolean |  | `APP_DATABASE__MONGODB__RETRY_WRITES` | Whether writes are retried once on a network error (the driver's default is yes). |
+| `retry_reads` | boolean |  | `APP_DATABASE__MONGODB__RETRY_READS` | Whether reads are retried once on a network error. |
+| `slow_query_ms` | integer | `0` | `APP_DATABASE__MONGODB__SLOW_QUERY_MS` | Commands slower than this many milliseconds are logged as warnings; 0 (the default) turns that off. |
+| `log_queries` | boolean | `false` | `APP_DATABASE__MONGODB__LOG_QUERIES` | Whether every command's shape (no values) is logged at debug level. |
+| `sequences` | string | `"navree_sequences"` | `APP_DATABASE__MONGODB__SEQUENCES` | The collection holding the counters of integer keys (models whose key the database assigns): `navree_sequences`. |
+| `migrations` | string | `"navree_migrations"` | `APP_DATABASE__MONGODB__MIGRATIONS` | The collection recording applied migrations: `navree_migrations`. |
+| `migrate_on_boot` | boolean | `false` | `APP_DATABASE__MONGODB__MIGRATE_ON_BOOT` | Whether pending MongoDB migrations run when the module boots. |
+| `connections` | table of MongoConnectionOptions | `"{}"` | `APP_DATABASE__MONGODB__CONNECTIONS` | More connections, by name. |
+
+## `directory`
+
+Options of the directory module (configuration section `directory`).
+
+More: [/docs/packages/directory-sync/](/docs/packages/directory-sync/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `routes` | boolean | `true` | `APP_DIRECTORY__ROUTES` | Mount the `{http.api_prefix}/directory` routes (default true; permission `directory.manage`). |
+| `level` | workspace \| organization \| app | `"workspace"` | `APP_DIRECTORY__LEVEL` | Whose connections the routes manage: the request's workspace (default), its organization, or the app's own. Without `WorkspaceModule` in the app, `workspace` means the app's own. |
+| `scim` | table |  | `APP_DIRECTORY__SCIM` | The SCIM server. |
+| `scim.enabled` | boolean | `true` | `APP_DIRECTORY__SCIM__ENABLED` | Serve SCIM (default true). |
+| `scim.path` | string | `"/scim/v2"` | `APP_DIRECTORY__SCIM__PATH` | Where the SCIM endpoints are mounted, outside the API prefix (default `/scim/v2`). |
+| `scim.base_url` | string |  | `APP_DIRECTORY__SCIM__BASE_URL` | The public URL of `path`, for `meta.location` (default `app.url` followed by `path`; a relative location without either). |
+| `scim.max_results` | integer | `200` | `APP_DIRECTORY__SCIM__MAX_RESULTS` | The most resources one list response holds (default 200). |
+| `sync` | table |  | `APP_DIRECTORY__SYNC` | Sync runs. |
+| `sync.default_interval_mins` | integer | `60` | `APP_DIRECTORY__SYNC__DEFAULT_INTERVAL_MINS` | Minutes between a new connection's scheduled syncs (default 60; each connection has its own `sync_interval_mins`, and 0 turns its scheduled syncs off). |
+| `sync.chunk_size` | integer | `100` | `APP_DIRECTORY__SYNC__CHUNK_SIZE` | Changes applied per transaction (default 100). |
+| `sync.max_deactivation_percent` | integer | `20` | `APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT` | A run that would deactivate more than this share of the active users is held (default 20 percent; 100 turns the limit off). |
+| `sync.min_deactivations` | integer | `10` | `APP_DIRECTORY__SYNC__MIN_DEACTIVATIONS` | ...and more than this many users (default 10). |
+| `sync.max_recorded_changes` | integer | `5000` | `APP_DIRECTORY__SYNC__MAX_RECORDED_CHANGES` | Changes recorded per run, for review (default 5000; the counts are always complete). |
+| `sync.keep_runs_days` | integer | `90` | `APP_DIRECTORY__SYNC__KEEP_RUNS_DAYS` | `directory:prune` deletes runs older than this many days (default 90). |
+| `sync.stale_after_mins` | integer | `120` | `APP_DIRECTORY__SYNC__STALE_AFTER_MINS` | A queued or running run older than this many minutes is taken for a crashed worker's: it is marked failed, and a new sync may start (default 120; the sync job's own time limit is one hour). |
+| `ldap` | table |  | `APP_DIRECTORY__LDAP` | Which hosts LDAP connections may reach. |
+| `ldap.block_private` | boolean | `true` | `APP_DIRECTORY__LDAP__BLOCK_PRIVATE` | Refuse hosts that resolve to loopback, private, link-local or shared addresses (default true). |
+| `ldap.allow_hosts` | list of string | `[]` | `APP_DIRECTORY__LDAP__ALLOW_HOSTS` | Hosts (names or addresses) allowed anyway: a directory on your own network (`["dc1.corp.internal"]`; a list, or a comma-separated string from the environment). |
+
+## `documents`
+
+The settings of `DocumentsModule`: the `documents` configuration section. Every key is optional.
+
+More: [/docs/packages/documents/](/docs/packages/documents/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `templates` | list of string | `["resources/documents"]` | `APP_DOCUMENTS__TEMPLATES` | Template directories, searched in order (default `["resources/documents"]`). From the environment, a comma-separated list. |
+| `engine` | native \| chrome | `"native"` | `APP_DOCUMENTS__ENGINE` | The engine renders use unless they name one (default `native`; `chrome` in a build without the `native` feature). |
+| `disk` | string |  | `APP_DOCUMENTS__DISK` | The storage disk queued renders are written to (default: the default disk). |
+| `native` | table |  | `APP_DOCUMENTS__NATIVE` | The native engine. |
+| `native.bundled_fonts` | boolean | `true` | `APP_DOCUMENTS__NATIVE__BUNDLED_FONTS` | Load the bundled Noto fonts (default true). |
+| `native.font_dirs` | list of string | `[]` | `APP_DOCUMENTS__NATIVE__FONT_DIRS` | More font directories, searched recursively (default none). |
+| `native.timeout_secs` | integer | `60` | `APP_DOCUMENTS__NATIVE__TIMEOUT_SECS` | Time limit for one render, in seconds (default 60). |
+| `native.max_image_pixels` | integer | `25000000` | `APP_DOCUMENTS__NATIVE__MAX_IMAGE_PIXELS` | The most pixels (width times height) one PNG, GIF or WebP image in a document may have (default 25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch). A larger image is [`DocumentsError::TooLarge`] before it is decoded. A JPEG is not counted: it goes into the PDF as it is, without being decoded. At least 1; 0 fails the boot. |
+| `native.print` | table |  | `APP_DOCUMENTS__NATIVE__PRINT` | The page settings renders use unless they bring their own (an `@page` rule in the template wins while `prefer_css_page_size` is on). |
+| `native.print.paper` | Paper | `"a4"` | `APP_DOCUMENTS__NATIVE__PRINT__PAPER` | The paper size (default A4). |
+| `native.print.landscape` | boolean | `false` | `APP_DOCUMENTS__NATIVE__PRINT__LANDSCAPE` | Landscape orientation (default false). |
+| `native.print.margin` | table |  | `APP_DOCUMENTS__NATIVE__PRINT__MARGIN` | The margins (default 10 mm on every side). |
+| `native.print.margin.top` | number | `10.0` | `APP_DOCUMENTS__NATIVE__PRINT__MARGIN__TOP` | Top margin. |
+| `native.print.margin.right` | number | `10.0` | `APP_DOCUMENTS__NATIVE__PRINT__MARGIN__RIGHT` | Right margin. |
+| `native.print.margin.bottom` | number | `10.0` | `APP_DOCUMENTS__NATIVE__PRINT__MARGIN__BOTTOM` | Bottom margin. |
+| `native.print.margin.left` | number | `10.0` | `APP_DOCUMENTS__NATIVE__PRINT__MARGIN__LEFT` | Left margin. |
+| `native.print.print_background` | boolean | `true` | `APP_DOCUMENTS__NATIVE__PRINT__PRINT_BACKGROUND` | Print background colors and images (default true). |
+| `native.print.prefer_css_page_size` | boolean | `true` | `APP_DOCUMENTS__NATIVE__PRINT__PREFER_CSS_PAGE_SIZE` | Let a CSS `@page { size }` rule set the paper (default true). |
+| `native.print.scale` | number | `1.0` | `APP_DOCUMENTS__NATIVE__PRINT__SCALE` | Scale of the page rendering, 0.1 to 2 (default 1). |
+| `native.print.header` | string |  | `APP_DOCUMENTS__NATIVE__PRINT__HEADER` | An HTML template for the header of every page. Chrome fills elements with the classes `date`, `title`, `url`, `pageNumber` and `totalPages`. Style it inline: page styles do not apply. |
+| `native.print.footer` | string |  | `APP_DOCUMENTS__NATIVE__PRINT__FOOTER` | An HTML template for the footer of every page (same classes). |
+| `chrome` | table |  | `APP_DOCUMENTS__CHROME` | The Chrome engine. |
+| `chrome.path` | string |  | `APP_DOCUMENTS__CHROME__PATH` | The Chrome or Chromium executable. Default: the `NAVREE_BROWSER_CHROME` environment variable, then the usual install locations. Falls back to `NAVREE_BROWSER_CHROME`. |
+| `chrome.endpoint` | string |  | `APP_DOCUMENTS__CHROME__ENDPOINT` | A running Chrome to use instead of launching one: its browser WebSocket URL (`ws://host:9222/devtools/browser/<id>`) or its DevTools HTTP address (`http://host:9222`). |
+| `chrome.pool_size` | integer | `2` | `APP_DOCUMENTS__CHROME__POOL_SIZE` | How many pages render at once (default 2). More renders wait. |
+| `chrome.timeout_secs` | integer | `30` | `APP_DOCUMENTS__CHROME__TIMEOUT_SECS` | Time limit for one render, and for Chrome to start, in seconds (default 30). |
+| `chrome.no_sandbox` | boolean | `false` | `APP_DOCUMENTS__CHROME__NO_SANDBOX` | Run Chrome with `--no-sandbox` (default false). Needed when Chrome runs as root, as in many containers. |
+| `chrome.allow_network` | boolean | `false` | `APP_DOCUMENTS__CHROME__ALLOW_NETWORK` | Let documents load images, stylesheets and fonts from other origins (default false: only the template tree is reachable, so a template cannot make the server fetch an address its data names). |
+| `chrome.args` | list of string | `[]` | `APP_DOCUMENTS__CHROME__ARGS` | More command-line flags for Chrome. |
+| `chrome.print` | table |  | `APP_DOCUMENTS__CHROME__PRINT` | The page settings renders use unless they bring their own. |
+| `chrome.print.paper` | Paper | `"a4"` | `APP_DOCUMENTS__CHROME__PRINT__PAPER` | The paper size (default A4). |
+| `chrome.print.landscape` | boolean | `false` | `APP_DOCUMENTS__CHROME__PRINT__LANDSCAPE` | Landscape orientation (default false). |
+| `chrome.print.margin` | table |  | `APP_DOCUMENTS__CHROME__PRINT__MARGIN` | The margins (default 10 mm on every side). |
+| `chrome.print.margin.top` | number | `10.0` | `APP_DOCUMENTS__CHROME__PRINT__MARGIN__TOP` | Top margin. |
+| `chrome.print.margin.right` | number | `10.0` | `APP_DOCUMENTS__CHROME__PRINT__MARGIN__RIGHT` | Right margin. |
+| `chrome.print.margin.bottom` | number | `10.0` | `APP_DOCUMENTS__CHROME__PRINT__MARGIN__BOTTOM` | Bottom margin. |
+| `chrome.print.margin.left` | number | `10.0` | `APP_DOCUMENTS__CHROME__PRINT__MARGIN__LEFT` | Left margin. |
+| `chrome.print.print_background` | boolean | `true` | `APP_DOCUMENTS__CHROME__PRINT__PRINT_BACKGROUND` | Print background colors and images (default true). |
+| `chrome.print.prefer_css_page_size` | boolean | `true` | `APP_DOCUMENTS__CHROME__PRINT__PREFER_CSS_PAGE_SIZE` | Let a CSS `@page { size }` rule set the paper (default true). |
+| `chrome.print.scale` | number | `1.0` | `APP_DOCUMENTS__CHROME__PRINT__SCALE` | Scale of the page rendering, 0.1 to 2 (default 1). |
+| `chrome.print.header` | string |  | `APP_DOCUMENTS__CHROME__PRINT__HEADER` | An HTML template for the header of every page. Chrome fills elements with the classes `date`, `title`, `url`, `pageNumber` and `totalPages`. Style it inline: page styles do not apply. |
+| `chrome.print.footer` | string |  | `APP_DOCUMENTS__CHROME__PRINT__FOOTER` | An HTML template for the footer of every page (same classes). |
+
+## `domains`
+
+Options of the domains module (configuration section `domains`).
+
+More: [/docs/packages/custom-domains/](/docs/packages/custom-domains/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `routes` | boolean | `true` | `APP_DOMAINS__ROUTES` | Mount the `{http.api_prefix}/domains` routes (default true; permission `domains.manage`). |
+| `tls` | on_demand \| acme \| off | `"on_demand"` | `APP_DOMAINS__TLS` | How domains get certificates (default `on_demand`). |
+| `ask_path` | string | `"/_domains/allow"` | `APP_DOMAINS__ASK_PATH` | The ask endpoint an on-demand TLS proxy calls with `?domain=` (default `/_domains/allow`; mounted when `tls = "on_demand"`). |
+| `target` | string |  | `APP_DOMAINS__TARGET` | The host name customers point their domain at with a CNAME record (`domains.example.com`). With `addresses`, what a domain must point at to pass the routing check. |
+| `addresses` | list of string | `[]` | `APP_DOMAINS__ADDRESSES` | The IP addresses an apex domain (which can't have a CNAME) points at with A and AAAA records (a list, or a comma-separated string). |
+| `reserved` | list of string | `[]` | `APP_DOMAINS__RESERVED` | Domains no workspace may add, with their subdomains (`["example.com"]`). The host of `app.url`, `workspace.base_domain` and `target` are reserved too. |
+| `max_per_workspace` | integer | `10` | `APP_DOMAINS__MAX_PER_WORKSPACE` | The most domains one workspace may have (default 10; 0 for no limit). |
+| `cache_secs` | integer | `60` | `APP_DOMAINS__CACHE_SECS` | How long a host lookup is kept in memory, in seconds (default 60; 0 asks the database every time). |
+| `verification` | table |  | `APP_DOMAINS__VERIFICATION` | DNS verification. |
+| `verification.prefix` | string | `"_domain-verification"` | `APP_DOMAINS__VERIFICATION__PREFIX` | The label in front of the domain that holds the TXT record (default `_domain-verification`: the record for `crm.acme-corp.com` is `_domain-verification.crm.acme-corp.com`). Name it after your product. |
+| `verification.interval_mins` | integer | `5` | `APP_DOMAINS__VERIFICATION__INTERVAL_MINS` | Minutes between checks of a pending domain (default 5). |
+| `verification.give_up_after_hours` | integer | `72` | `APP_DOMAINS__VERIFICATION__GIVE_UP_AFTER_HOURS` | A domain still pending this many hours after it was added fails (default 72); verifying it by hand still works. |
+| `verification.failed_retention_hours` | integer | `168` | `APP_DOMAINS__VERIFICATION__FAILED_RETENTION_HOURS` | A failed domain (one that gave up, or lost its host to the workspace that proved control) is deleted this many hours after it last changed (default 168, a week; 0 keeps it until its workspace removes it). A failed domain never blocks another workspace. |
+| `verification.recheck_hours` | integer | `24` | `APP_DOMAINS__VERIFICATION__RECHECK_HOURS` | Hours between checks that a verified domain still points at the app (default 24; 0 never checks again). |
+| `verification.require_routing` | boolean | `true` | `APP_DOMAINS__VERIFICATION__REQUIRE_ROUTING` | A domain must point at `target` or `addresses` to be verified (default true; nothing is checked while both are unset). |
+| `certificates` | table |  | `APP_DOMAINS__CERTIFICATES` | Certificate checks and expiry reports. |
+| `certificates.warn_days` | integer | `14` | `APP_DOMAINS__CERTIFICATES__WARN_DAYS` | Report certificates that expire within this many days (default 14): a warning in the log, a `DomainCertificateExpiring` event and, with navree-lighthouse, an issue. |
+| `certificates.check_hours` | integer | `24` | `APP_DOMAINS__CERTIFICATES__CHECK_HOURS` | Hours between certificate checks of one domain (default 24). |
+| `certificates.probe` | boolean | `true` | `APP_DOMAINS__CERTIFICATES__PROBE` | With `tls = "on_demand"`, read each verified domain's certificate over TLS on port 443 to learn when it expires (default true). |
+| `acme` | table |  | `APP_DOMAINS__ACME` | In-process certificates (`tls = "acme"`). |
+| `acme.directory_url` | string | `"https://acme-v02.api.letsencrypt.org/directory"` | `APP_DOMAINS__ACME__DIRECTORY_URL` | The CA's ACME directory (default Let's Encrypt's production directory, [`LETS_ENCRYPT`]). |
+| `acme.contact` | list of string | `[]` | `APP_DOMAINS__ACME__CONTACT` | Contact addresses for the ACME account (`ops@example.com`). |
+| `acme.terms_agreed` | boolean | `false` | `APP_DOMAINS__ACME__TERMS_AGREED` | You agree to the CA's terms of service (required with `tls = "acme"`). |
+| `acme.https_addr` | string |  | `APP_DOMAINS__ACME__HTTPS_ADDR` | Where `serve` also listens for HTTPS with the certificates (`0.0.0.0:443`); unset, the app serves no HTTPS itself and you hand `DomainCertificates` to your own rustls server. |
+| `acme.renew_days` | integer | `30` | `APP_DOMAINS__ACME__RENEW_DAYS` | Renew a certificate this many days before it expires (default 30). |
+| `acme.hosts` | list of string | `[]` | `APP_DOMAINS__ACME__HOSTS` | Your own hosts that get certificates too (`["app.example.com"]`). |
+| `acme.ca_file` | string |  | `APP_DOMAINS__ACME__CA_FILE` | A PEM file with an extra root certificate for the directory's HTTPS (a private CA, or a test CA such as Pebble's). |
+| `acme.reload_secs` | integer | `60` | `APP_DOMAINS__ACME__RELOAD_SECS` | Seconds between reloads of the certificates from the database by the HTTPS listener (default 60), so every server sees renewals. |
+| `dns` | table |  | `APP_DOMAINS__DNS` | A DNS provider that manages a zone of your own. |
+| `dns.provider` | string |  | `APP_DOMAINS__DNS__PROVIDER` | `cloudflare`, or unset for none. |
+| `dns.zone` | string |  | `APP_DOMAINS__DNS__ZONE` | The zone the provider manages (`links.example.com`). |
+| `dns.cloudflare` | table |  | `APP_DOMAINS__DNS__CLOUDFLARE` | The Cloudflare driver. |
+| `dns.cloudflare.api_token` | string | secret | `APP_DOMAINS__DNS__CLOUDFLARE__API_TOKEN` | An API token with `Zone.DNS:Edit` on the zone. |
+| `dns.cloudflare.zone_id` | string |  | `APP_DOMAINS__DNS__CLOUDFLARE__ZONE_ID` | The zone's id (Overview page of the zone). |
+| `dns.cloudflare.api_url` | string | `"https://api.cloudflare.com/client/v4"` | `APP_DOMAINS__DNS__CLOUDFLARE__API_URL` | The API's base URL (default `https://api.cloudflare.com/client/v4`). |
+| `dns.cloudflare.proxied` | boolean | `false` | `APP_DOMAINS__DNS__CLOUDFLARE__PROXIED` | Proxy the records through Cloudflare (default false: DNS only). |
+| `dns.cloudflare.ttl` | integer | `1` | `APP_DOMAINS__DNS__CLOUDFLARE__TTL` | The records' TTL in seconds (default 1, automatic). |
+
+## `flags`
+
+The settings of `FlagsModule`: the `flags` configuration section. Every key is optional.
+
+More: [/docs/packages/feature-flags/](/docs/packages/feature-flags/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | database \| memory | `"database"` | `APP_FLAGS__STORE` | Where flag state is stored (default `database`). |
+| `cache_ttl_secs` | integer | `60` | `APP_FLAGS__CACHE_TTL_SECS` | How long the global state, the overrides of a scope and a workspace's plan stay in the app's cache (`CacheModule`), in seconds (default 60); `0` turns the cache off. Also the `max-age` of `GET /api/flags`. |
+| `routes` | boolean | `true` | `APP_FLAGS__ROUTES` | Mount `GET {api_prefix}/flags` (default `true`; needs an authenticator). |
+| `admin_routes` | boolean | `true` | `APP_FLAGS__ADMIN_ROUTES` | Mount `{api_prefix}/admin/flags...` (default `true`). The routes require the `flags.manage` permission, so the app needs a `dyn RouteAuthorizer` (navree-access); turn them off in apps without one. |
+| `missing_scope` | default \| off | `"default"` | `APP_FLAGS__MISSING_SCOPE` | How checks without a user or a workspace resolve (default `default`). |
+
+## `fleet`
+
+`FleetModule` settings: configuration section `fleet`. Every key is optional except each supervisor's `queues`.
+
+More: [/docs/tools/fleet/](/docs/tools/fleet/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `dashboard` | boolean | `true` | `APP_FLEET__DASHBOARD` | Mount the dashboard and its API (default true). |
+| `path` | string | `"/_fleet"` | `APP_FLEET__PATH` | Where the dashboard is served (default `/_fleet`), outside the API prefix. |
+| `balance_cooldown_secs` | integer | `3` | `APP_FLEET__BALANCE_COOLDOWN_SECS` | How often `auto` supervisors rebalance, in seconds (default 3). |
+| `balance_max_shift` | integer | `1` | `APP_FLEET__BALANCE_MAX_SHIFT` | Processes added or removed per queue per step (default 1). |
+| `snapshot_secs` | integer | `60` | `APP_FLEET__SNAPSHOT_SECS` | How often a master stores metrics, in seconds (default 60). |
+| `trim` | table |  | `APP_FLEET__TRIM` | How long completed jobs and metric snapshots are kept. |
+| `trim.recent_minutes` | integer | `60` | `APP_FLEET__TRIM__RECENT_MINUTES` | How long completed jobs are listed, in minutes (default 60). |
+| `trim.metrics_days` | integer | `7` | `APP_FLEET__TRIM__METRICS_DAYS` | How long metric snapshots are kept, in days (default 7). |
+| `long_wait` | table of integer | `{}` | `APP_FLEET__LONG_WAIT` | Seconds a queue's oldest job may wait before a long-wait alert, per queue (none by default: such queues never raise one). |
+| `long_wait_cooldown_minutes` | integer | `15` | `APP_FLEET__LONG_WAIT_COOLDOWN_MINUTES` | Minimum time between two long-wait events for one queue, in minutes (default 15). |
+| `only` | list of string | `[]` | `APP_FLEET__ONLY` | The supervisors this server runs (default: all). From the environment, one comma-separated string. |
+| `supervisors` | table of SupervisorOptions | `"{}"` | `APP_FLEET__SUPERVISORS` | The supervisors, by name. Without any, one supervisor `default` works `queue.queues` (or `queue.default_queue`). |
+
+## `graphql`
+
+How the GraphQL endpoint is served (config section `graphql`, env `APP_GRAPHQL__<KEY>`). Every key has a default; build literals with `..GraphqlOptions::default()`.
+
+More: [/docs/microservices/graphql/](/docs/microservices/graphql/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `path` | string | `"/graphql"` | `APP_GRAPHQL__PATH` | The endpoint (default `/graphql`). Absolute: `http.api_prefix` does not apply. |
+| `graphiql` | boolean | `true` | `APP_GRAPHQL__GRAPHIQL` | Serve GraphiQL to browsers that open the endpoint (default: on in debug builds). |
+| `introspection` | boolean | `true` | `APP_GRAPHQL__INTROSPECTION` | Answer introspection queries (default: on in debug builds). |
+| `depth_limit` | integer | `16` | `APP_GRAPHQL__DEPTH_LIMIT` | The deepest selection a query may nest (default 16). |
+| `complexity_limit` | integer | `1000` | `APP_GRAPHQL__COMPLEXITY_LIMIT` | The highest complexity score a query may have (default 1000; each field counts 1 unless it says otherwise). |
+| `batching` | boolean | `false` | `APP_GRAPHQL__BATCHING` | Accept a JSON array of operations in one request (default off). |
+| `subscriptions` | boolean | `true` | `APP_GRAPHQL__SUBSCRIPTIONS` | Serve subscriptions over WebSockets at `<path>/ws` (default on). |
+| `connection_init_timeout_secs` | integer | `10` | `APP_GRAPHQL__CONNECTION_INIT_TIMEOUT_SECS` | How long a WebSocket may wait before sending `connection_init` (default 10 s). |
+| `keep_alive_secs` | integer | `15` | `APP_GRAPHQL__KEEP_ALIVE_SECS` | How often the server pings an idle WebSocket (default 15 s; 0 turns the pings off). |
+
+## `grpc`
+
+gRPC settings (configuration section `grpc`; every key optional).
+
+More: [/docs/microservices/grpc/](/docs/microservices/grpc/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `addr` | string |  | `APP_GRPC__ADDR` | A separate listener for gRPC (default none: gRPC shares the HTTP server's port, `http.addr`). An empty string means none. |
+| `web` | boolean | `true` | `APP_GRPC__WEB` | Accept gRPC-Web, binary and text, over HTTP/1.1 and HTTP/2 (default `true`). |
+| `connect` | boolean | `true` | `APP_GRPC__CONNECT` | Accept the Connect protocol, with protobuf or JSON (default `true`). |
+| `reflection` | boolean | `true` | `APP_GRPC__REFLECTION` | Serve server reflection, `grpc.reflection.v1` and `v1alpha` (default `true` in debug builds, `false` in release builds). It describes the descriptor sets registered with `m.grpc_descriptors(..)`. |
+| `health` | boolean | `true` | `APP_GRPC__HEALTH` | Serve `grpc.health.v1.Health`, answered from the app's readiness checks (default `true`). |
+| `timeout_secs` | integer |  | `APP_GRPC__TIMEOUT_SECS` | The deadline of a call whose client sets none, and the longest one a client's `grpc-timeout` can ask for, in seconds (default: `http.timeout_secs`). |
+| `max_message_bytes` | integer | `4194304` | `APP_GRPC__MAX_MESSAGE_BYTES` | The largest message received or sent, in bytes (default 4 MiB). |
+| `concurrency_per_connection` | integer | `256` | `APP_GRPC__CONCURRENCY_PER_CONNECTION` | Calls in flight on one HTTP/2 connection of the separate listener (`grpc.addr`; default 256). On the shared port the HTTP server's HTTP/2 settings apply. |
+| `clients` | table of ClientOptions | `"{}"` | `APP_GRPC__CLIENTS` | The gRPC services this app calls, by name (`grpc.clients.<name>`), for `GrpcChannels`. |
+
+## `hashing`
+
+Argon2id parameters and the hashing concurrency limit: section `hashing` for `CryptoModule::from_config()`.
+
+More: [/docs/security/encryption-and-hashing/](/docs/security/encryption-and-hashing/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `memory_kib` | integer | `19456` | `APP_HASHING__MEMORY_KIB` | Memory cost in KiB (`m`; default 19 456 = 19 MiB). |
+| `iterations` | integer | `2` | `APP_HASHING__ITERATIONS` | Number of passes over the memory (`t`; default 2). |
+| `parallelism` | integer | `1` | `APP_HASHING__PARALLELISM` | Number of lanes (`p`; default 1). |
+| `max_concurrent_hashes` | integer |  | `APP_HASHING__MAX_CONCURRENT_HASHES` | How many hashes may run at once; `None` (the default) uses the number of CPUs. Each running hash holds `memory_kib` of memory. |
+
+## `helm`
+
+The panel's settings (configuration section `helm`; every key is optional).
+
+More: [/docs/tools/helm/](/docs/tools/helm/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `path` | string | `"/admin"` | `APP_HELM__PATH` | Where the panel is served (`/admin`). |
+| `title` | string | `"Admin"` | `APP_HELM__TITLE` | The name in the header and the browser tab (`Admin`). |
+| `logo` | string |  | `APP_HELM__LOGO` | A logo URL for the sidebar's header: a path on your app or an `https://` URL. |
+| `theme` | string | `"navree"` | `APP_HELM__THEME` | The Navree UI theme the panel is drawn in: `navree`, `neutral`, `ocean`, `violet`, `sunset`, `rose` or `contrast` (`navree`). |
+| `per_page` | integer | `25` | `APP_HELM__PER_PAGE` | Rows per page on lists (25, at most 100). |
+| `metrics_cache_secs` | integer | `60` | `APP_HELM__METRICS_CACHE_SECS` | How long metric results are cached per user and range, in seconds (60; 0 turns caching off). |
+| `dashboard` | boolean | `true` | `APP_HELM__DASHBOARD` | Whether the home page shows the metric cards marked `on_dashboard` (true). |
+| `export_max_secs` | integer | `1800` | `APP_HELM__EXPORT_MAX_SECS` | How long a list's CSV file may take to send, in seconds (1800): however slowly a client reads, no more rows are read for it after this. |
+
+## `http`
+
+HTTP server settings (configuration section `http`; every key optional).
+
+More: [/docs/basics/routing/](/docs/basics/routing/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `addr` | string | `"127.0.0.1:8080"` | `APP_HTTP__ADDR` | The address `serve` binds (default `127.0.0.1:8080`). |
+| `api_prefix` | string | `"/api"` | `APP_HTTP__API_PREFIX` | The prefix of every controller route (default `/api`); routes whose path starts with `!` ignore it. |
+| `cors` | table |  | `APP_HTTP__CORS` | Cross-origin settings. |
+| `cors.allowed_origins` | list of string | `[]` | `APP_HTTP__CORS__ALLOWED_ORIGINS` | Exact origins allowed to call the API, e.g. `http://localhost:3000`. Empty (the default) disables CORS. `*` is rejected. From the environment, a comma-separated list (`APP_HTTP__CORS__ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com`). |
+| `cors.allow_credentials` | boolean | `true` | `APP_HTTP__CORS__ALLOW_CREDENTIALS` | Allow cookies on cross-origin requests (default `true`). |
+| `cors.max_age_secs` | integer | `600` | `APP_HTTP__CORS__MAX_AGE_SECS` | How long browsers may cache a preflight answer (default 600 s). |
+| `timeout_secs` | integer | `30` | `APP_HTTP__TIMEOUT_SECS` | The request timeout (default 30 s); routes may override it. |
+| `body_limit_bytes` | integer | `2097152` | `APP_HTTP__BODY_LIMIT_BYTES` | The default request body limit (default 2 MiB); routes may override it. |
+| `per_ip_rate_limit` | integer | `600` | `APP_HTTP__PER_IP_RATE_LIMIT` | Requests per minute per client IP (default `Some(600)`; `None` disables). Counted in each process, and also in the store `http.rate_limit_store` names when every process shares one (`"redis"` with RedisModule). |
+| `rate_limit_store` | string |  | `APP_HTTP__RATE_LIMIT_STORE` | Where the per-IP limit and route throttles also count: unset or `"memory"`, only in each process; else in the `dyn RateLimitStore` registered under this name (`"redis"` with RedisModule) too, so every process counts them together. A name nothing registered stops the boot. |
+| `rate_limit_ipv6_prefix` | integer | `64` | `APP_HTTP__RATE_LIMIT_IPV6_PREFIX` | How much of an IPv6 address names a client for every per-IP limit (this one, route throttles for guests, the sign-in throttles, the OAuth endpoint limits): the first `rate_limit_ipv6_prefix` bits, so all addresses of one network share one budget (default 64: one /64, the smallest allocation a provider normally gives a customer; 1 to 128). IPv4 clients are counted per address, and IPv4-mapped IPv6 addresses (`::ffff:192.0.2.1`) as IPv4. See `rate_limit_key`. |
+| `security_headers` | boolean | `true` | `APP_HTTP__SECURITY_HEADERS` | Send the default security headers (default `true`). |
+| `compression` | boolean | `true` | `APP_HTTP__COMPRESSION` | Compress responses with gzip (default `true`). Brotli is not built in. A route opts out with `no_compression` and a response with `Cache-Control: no-transform`: see the BREACH note on `CompressionLayer`. |
+| `maintenance_file` | string | `"storage/framework/down"` | `APP_HTTP__MAINTENANCE_FILE` | While this file exists the app answers 503 (default `storage/framework/down`). |
+| `maintenance_except` | list of string | `["/health/live","/health/ready","/metrics"]` | `APP_HTTP__MAINTENANCE_EXCEPT` | Request paths still served during maintenance, matched exactly (default `/health/live`, `/health/ready` and `/metrics`, so probes and scrapes keep working and an orchestrator does not restart instances that are only down for maintenance). From the environment, a comma-separated list (`APP_HTTP__MAINTENANCE_EXCEPT=/health/live,/up`). |
+| `trust_proxy` | boolean | `false` | `APP_HTTP__TRUST_PROXY` | Take the client IP from `X-Forwarded-For` / `X-Real-IP` sent by any peer (default `false`; enable only when every request comes through a reverse proxy that sets them). Prefer `trusted_proxies`. |
+| `trusted_proxies` | list of string | `[]` | `APP_HTTP__TRUSTED_PROXIES` | The reverse proxies (and backends-for-frontends) whose `X-Forwarded-For` / `X-Real-IP` name the client: IP addresses or CIDR blocks (`127.0.0.1`, `::1`, `10.0.0.0/8`). A request from any other peer is identified by its own address, so clients reaching the app directly cannot choose theirs. In `X-Forwarded-For`, the client is the first address from the right that is not a listed proxy. When set, it replaces `trust_proxy`. From the environment, a comma-separated list (`APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`). |
+| `signing_key` | string | secret | `APP_HTTP__SIGNING_KEY` | The key for signed URLs. When unset, a key derived from the app key (`app.key`, or `APP_KEY`) is used; with no app key either, a random per-process key, so signed URLs do not survive a restart. |
+| `shutdown_grace_secs` | integer | `30` | `APP_HTTP__SHUTDOWN_GRACE_SECS` | How long `serve` waits for in-flight requests after a shutdown signal (default 30 s). |
+| `errors` | table |  | `APP_HTTP__ERRORS` | How error bodies are rendered (`http.errors`). |
+| `errors.code` | boolean | `true` | `APP_HTTP__ERRORS__CODE` | Send the machine-readable `code` member in every error body (default `true`). `false` leaves it out (`APP_HTTP__ERRORS__CODE=false`). |
+| `server` | table |  | `APP_HTTP__SERVER` | The limits on connections (`http.server`). |
+| `server.header_read_timeout_ms` | integer | `10000` | `APP_HTTP__SERVER__HEADER_READ_TIMEOUT_MS` | How long a client has to send a request head, from the moment it connects (or from its first byte, between two requests of a connection) to the end of the head (default 10 s). A client that takes longer, however steadily it sends, is disconnected. On HTTP/2 a new connection has this long to open its first stream. A head sent in one read with a request that has no body is timed from the end of that response; after a request with a body it has `idle_timeout_ms`. |
+| `server.idle_timeout_ms` | integer | `75000` | `APP_HTTP__SERVER__IDLE_TIMEOUT_MS` | How long a connection may sit with no request in flight before the server closes it (default 75 s, above the 60 s of common load balancers, so they close first and never reuse a closing connection). Nothing a client sends extends it on HTTP/2; on HTTP/1 its next byte starts a request head, and with `header_read_timeout_ms` off this deadline stays. A response still on its way to the client is not idle: `write_stall_timeout_ms` is the limit then. |
+| `server.body_read_timeout_ms` | integer | `20000` | `APP_HTTP__SERVER__BODY_READ_TIMEOUT_MS` | The longest the server waits for a request body while a handler reads it (default 20 s): a stall this long ends the read with a 408, and the connection closes (on HTTP/2 the stream ends and the connection stays). Only time spent waiting on the client counts. |
+| `server.body_min_bytes_per_sec` | integer | `256` | `APP_HTTP__SERVER__BODY_MIN_BYTES_PER_SEC` | The slowest a request body may arrive, averaged over time (default 256 bytes per second): each byte earns back `1 / rate` seconds of `body_read_timeout_ms`, so a client dripping bytes runs out of it even though it never stalls for long. `None` makes any byte restore the whole timeout. Does nothing without `body_read_timeout_ms`. |
+| `server.http2_keep_alive_interval_ms` | integer | `30000` | `APP_HTTP__SERVER__HTTP2_KEEP_ALIVE_INTERVAL_MS` | How often an HTTP/2 connection that has gone quiet is pinged (default 30 s), so dead peers are found while a request is in flight. |
+| `server.http2_keep_alive_timeout_ms` | integer | `20000` | `APP_HTTP__SERVER__HTTP2_KEEP_ALIVE_TIMEOUT_MS` | How long a client has to answer an HTTP/2 ping before the connection closes (default 20 s). |
+| `server.http2_max_concurrent_streams` | integer | `200` | `APP_HTTP__SERVER__HTTP2_MAX_CONCURRENT_STREAMS` | The most requests one HTTP/2 connection may have open at once (default 200). |
+| `server.max_connections` | integer | `10000` | `APP_HTTP__SERVER__MAX_CONNECTIONS` | The most connections open at once, WebSockets and TLS handshakes in progress included (default 10 000). At the cap new connections wait until one closes, nearly all of them in the listen backlog, and nothing is read from or answered on them until then. For a client that has sent something, the connection idle the longest closes, as at its idle timeout, one for each such client, and a connection that has only started its next request head counts as idle. A client that has sent nothing closes nothing, and has `header_read_timeout_ms` to wait. |
+| `server.max_connections_per_ip` | integer | `256` | `APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP` | The most connections open at once from one client address (default 256), counted like `http.per_ip_rate_limit`: per IPv4 address, or per IPv6 network of `http.rate_limit_ipv6_prefix` bits. At the limit a new connection takes the place of the address's own connection idle the longest, closed as at its idle timeout. That one counts until its socket has closed, and at most 8 of an address's connections (no more than the limit) close for newer ones at a time, so one address holds at most the limit and those. When none of its connections is idle, or that many are closing, the new one is closed at once; it cannot wait, because the address is only known after the accept. |
+| `server.max_header_bytes` | integer | `32768` | `APP_HTTP__SERVER__MAX_HEADER_BYTES` | The largest request head, in bytes (default 32 KiB, at least 8 KiB): the request line and headers on HTTP/1, the header list on HTTP/2, where each header also counts 32 bytes. Above it the answer is a 431. |
+| `server.max_headers` | integer | `100` | `APP_HTTP__SERVER__MAX_HEADERS` | The most headers a request may have (default 100, 431 above it). On HTTP/2 a header can cost a client a single byte, so without this a small request could carry a thousand into the app; a browser's cookies can count one each there, as HTTP/2 allows sending them apart. |
+| `server.write_stall_timeout_ms` | integer | `60000` | `APP_HTTP__SERVER__WRITE_STALL_TIMEOUT_MS` | How long a response may go without moving (default 60 s). When the socket takes nothing for this long the connection closes; when an HTTP/2 client's flow control holds one response back for this long, that stream is reset and the connection stays. Each byte the socket takes starts it over, and on HTTP/2 each 16 KiB the client takes from a response, so only a client that has really stopped runs out. It also applies to what a handler writes to an upgraded HTTP/1 socket, but not to an HTTP/2 WebSocket held back by flow control: that is the work of `upgraded_idle_timeout_ms`, or of a timeout on the handler's own writes. A client pausing a large download for longer loses it and has to ask for the rest. |
+| `server.upgraded_idle_timeout_ms` | integer |  | `APP_HTTP__SERVER__UPGRADED_IDLE_TIMEOUT_MS` | How long an upgraded connection (a WebSocket) may go with no bytes from its client before it closes (default `None`: never). A quiet WebSocket is a healthy one to the server, so this is for apps that know how their sockets talk: set it above the heartbeat of the protocol, whose answers are what count. What the server writes does not, so a heartbeat of its own cannot keep a silent client's socket open. The connection closes with an error, so a handler sees its read fail, and a handler must be reading for this to work. On HTTP/2 it applies once nothing but upgraded streams is left on the connection, and only `DATA` counts: the frames that look after the connection, such as keep-alive pings, are silence. |
+| `multipart` | table |  | `APP_HTTP__MULTIPART` | The limits on `multipart/form-data` forms (`http.multipart`). |
+| `multipart.max_parts` | integer | `1000` | `APP_HTTP__MULTIPART__MAX_PARTS` | The most parts in a form (default 1,000), counting parts a handler skips. |
+| `multipart.max_field_bytes` | integer | `1048576` | `APP_HTTP__MULTIPART__MAX_FIELD_BYTES` | The largest value of a part without a file name, in bytes (default 1 MiB). [`Field::text`] keeps to it whatever the part calls itself. |
+| `multipart.max_file_bytes` | integer |  | `APP_HTTP__MULTIPART__MAX_FILE_BYTES` | The largest value of a part with a file name, in bytes (default `None`: the route's body limit). A client names the file, so this is no way to keep text small: that is `max_field_bytes`. |
+| `multipart.max_header_bytes` | integer | `16384` | `APP_HTTP__MULTIPART__MAX_HEADER_BYTES` | The largest head of a part, the bytes after its delimiter line up to and including the blank line (default 16 KiB). Also bounds what comes before the first delimiter, and the padding after a delimiter. |
+
+## `http_client`
+
+Options for `HttpClient` and `HttpClientModule::for_root`.
+
+More: [/docs/digging-deeper/http-client/](/docs/digging-deeper/http-client/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `timeout_secs` | integer | `30` | `APP_HTTP_CLIENT__TIMEOUT_SECS` | Time allowed for each attempt, from connecting to the last body byte (default 30, at least 1). |
+| `connect_timeout_secs` | integer | `5` | `APP_HTTP_CLIENT__CONNECT_TIMEOUT_SECS` | Time allowed to open a connection (default 5, at least 1). |
+| `retries` | integer | `2` | `APP_HTTP_CLIENT__RETRIES` | Retries after the first attempt, for idempotent requests and requests with an idempotency key only (default 2). |
+| `retry_base_ms` | integer | `200` | `APP_HTTP_CLIENT__RETRY_BASE_MS` | The first retry delay in milliseconds; each later delay doubles, plus random jitter, up to 30 s (default 200). |
+| `max_response_bytes` | integer | `10485760` | `APP_HTTP_CLIENT__MAX_RESPONSE_BYTES` | The largest response body read into memory; a bigger one fails with `HttpClientError::BodyTooLarge` (default 10 MiB, at least 1). |
+| `ssrf` | table |  | `APP_HTTP_CLIENT__SSRF` | Which destinations are refused (server-side request forgery guard). |
+| `ssrf.block_private` | boolean | `true` | `APP_HTTP_CLIENT__SSRF__BLOCK_PRIVATE` | Refuse private, loopback, link-local and other internal addresses (default `true`). |
+| `ssrf.allow_hosts` | list of string | `[]` | `APP_HTTP_CLIENT__SSRF__ALLOW_HOSTS` | Destinations that bypass the policy: host names (`api.internal`), host globs (`*.svc.cluster.local`), IP addresses (`127.0.0.1`) or CIDR networks (`10.20.0.0/16`). Host names match case-insensitively. |
+| `user_agent` | string | `"navree-http-client/1.0.0"` | `APP_HTTP_CLIENT__USER_AGENT` | The `User-Agent` header sent with every request (default `navree-http-client/<version>`). |
+
+## `i18n`
+
+Options of the localization module (configuration section `i18n`).
+
+More: [/docs/packages/localization/](/docs/packages/localization/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `default_locale` | string | `"en"` | `APP_I18N__DEFAULT_LOCALE` | The locale when negotiation finds nothing, and the last fallback of every lookup. Must be one of `locales`. |
+| `locales` | list of string | `["en"]` | `APP_I18N__LOCALES` | The supported locales, as BCP 47 tags (`en`, `fr`, `pt-BR`). |
+| `dir` | string | `"locales"` | `APP_I18N__DIR` | The directory of the Fluent files (`<dir>/<locale>/*.ftl`), relative to the working directory; not read when `files` are embedded. |
+| `negotiation` | list of Source | `"user, workspace, header"` | `APP_I18N__NEGOTIATION` | The sources of a request's locale, in order: `query`, `user`, `workspace`, `cookie` and `header` (default `user, workspace, header`). |
+| `query_param` | string | `"locale"` | `APP_I18N__QUERY_PARAM` | The `query` source's parameter. |
+| `cookie` | string | `"locale"` | `APP_I18N__COOKIE` | The `cookie` source's cookie. |
+| `missing` | warn \| error \| id | `"warn"` | `APP_I18N__MISSING` | What a missing message gives. |
+| `reload` | boolean | `false` | `APP_I18N__RELOAD` | Whether changed files are reloaded while the app runs (checked twice a second; for development). Not with embedded files. |
+| `bidi_isolation` | auto \| always \| never | `"auto"` | `APP_I18N__BIDI_ISOLATION` | Isolation marks around variables (`auto`, `always` or `never`; also `true` and `false`). |
+| `routes` | boolean | `true` | `APP_I18N__ROUTES` | Whether the module mounts `GET /api/i18n/locales` and, with `DatabaseModule` and an authenticator in the app, `PUT /api/me/locale`. |
+
+## `integrations`
+
+Options of the integrations module (configuration section `integrations`).
+
+More: [/docs/packages/integrations/](/docs/packages/integrations/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `redirect_base` | string |  | `APP_INTEGRATIONS__REDIRECT_BASE` | The front end's callback page: a provider sends the browser back to `{redirect_base}/{provider}`. Required when a provider connects through a consent screen (every type but `api_key`, and `google` without a `client_id`). |
+| `routes` | boolean | `true` | `APP_INTEGRATIONS__ROUTES` | Mount the `/api/integrations` routes (default true; permission `integrations.manage`). |
+| `level` | workspace \| organization \| app | `"workspace"` | `APP_INTEGRATIONS__LEVEL` | Whose connections the routes and the `Connection` extractor use: the request's workspace (default), its organization, or the app's own. Without `WorkspaceModule` in the app, `workspace` means the app's own. |
+| `state_ttl_secs` | integer | `600` | `APP_INTEGRATIONS__STATE_TTL_SECS` | Lifetime of a sealed connect state, in seconds (default 600). |
+| `check_interval_mins` | integer | `60` | `APP_INTEGRATIONS__CHECK_INTERVAL_MINS` | `integrations:check --due` (scheduled every five minutes) checks a connection when its last check is older than this many minutes (default 60; 0 turns scheduled checks off). |
+| `unhealthy_after` | integer | `3` | `APP_INTEGRATIONS__UNHEALTHY_AFTER` | Consecutive transient failures (a provider that could not be reached or answered 5xx) before a connection is marked unhealthy (default 3). A refused credential is unhealthy at once. |
+| `lock_timeout_secs` | integer | `15` | `APP_INTEGRATIONS__LOCK_TIMEOUT_SECS` | How long a token refresh waits for another refresh of the same connection to finish, in seconds (default 15). |
+| `providers` | table of ProviderConfig | `"{}"` | `APP_INTEGRATIONS__PROVIDERS` | The providers, by key (`microsoft`, `google`, `slack`, or your own key with a `type`). |
+| `mailboxes` | table |  | `APP_INTEGRATIONS__MAILBOXES` | Watched mailboxes (crate feature `mail`): where Microsoft Graph and Gmail send their notifications. |
+| `mailboxes.graph_notification_url` | string |  | `APP_INTEGRATIONS__MAILBOXES__GRAPH_NOTIFICATION_URL` | The public URL of `POST /api/mail/inbound/graph`, which Graph posts notifications to. Needed to watch Microsoft 365 mailboxes; the route is mounted when it is set. |
+| `mailboxes.gmail_topic` | string |  | `APP_INTEGRATIONS__MAILBOXES__GMAIL_TOPIC` | The Pub/Sub topic Gmail publishes changes to (`projects/{project}/topics/{topic}`). Needed to watch Gmail mailboxes. |
+| `mailboxes.gmail_token` | string | secret | `APP_INTEGRATIONS__MAILBOXES__GMAIL_TOKEN` | The secret in the push subscription's endpoint (`.../api/mail/inbound/gmail?token=...`); the route is mounted when it is set. |
+| `mailboxes.renew_before_hours` | integer | `24` | `APP_INTEGRATIONS__MAILBOXES__RENEW_BEFORE_HOURS` | `integrations:mailboxes --renew` (scheduled hourly) renews the watches that expire within this many hours (default 24). |
+
+## `lighthouse`
+
+Options of the Lighthouse module (configuration section `lighthouse`). Every key is optional.
+
+More: [/docs/tools/lighthouse/](/docs/tools/lighthouse/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `enabled` | boolean | `true` | `APP_LIGHTHOUSE__ENABLED` | Record anything at all. When off, the dashboard still shows what was recorded. |
+| `store` | database \| off | `"database"` | `APP_LIGHTHOUSE__STORE` | Where records are kept: `database` (the default) or `off`. |
+| `database_url` | string | secret | `APP_LIGHTHOUSE__DATABASE_URL` | A separate database for Lighthouse's tables (same forms as `database.url`); the app's database when unset. |
+| `dashboard` | boolean | `true` | `APP_LIGHTHOUSE__DASHBOARD` | Mount the dashboard and its JSON API. |
+| `mcp` | boolean | `true` | `APP_LIGHTHOUSE__MCP` | Offer Lighthouse's MCP tools, resource and prompt on the app's MCP server (with the `mcp` feature and `McpModule` in the app). |
+| `path` | string | `"/_lighthouse"` | `APP_LIGHTHOUSE__PATH` | Where the dashboard is served (`/_lighthouse`). |
+| `url` | string |  | `APP_LIGHTHOUSE__URL` | The dashboard's public URL, for links in alerts; `app.url` followed by `path` when unset. |
+| `environment` | string |  | `APP_LIGHTHOUSE__ENVIRONMENT` | The environment label; the app's environment (`app.env`, `APP_ENV`) when unset, and when the app names none, `production` in release builds and `development` in debug builds. |
+| `release` | string |  | `APP_LIGHTHOUSE__RELEASE` | The release label; `app.version`, else `unknown`, when unset (`APP_LIGHTHOUSE__RELEASE`, which deploys set). |
+| `server` | string |  | `APP_LIGHTHOUSE__SERVER` | The server label; the host name when unset (`HOSTNAME`, or `COMPUTERNAME` on Windows). Falls back to `HOSTNAME`. |
+| `thresholds` | table |  | `APP_LIGHTHOUSE__THRESHOLDS` | When things are slow. |
+| `thresholds.slow_request_ms` | integer | `1000` | `APP_LIGHTHOUSE__THRESHOLDS__SLOW_REQUEST_MS` | A request slower than this opens a slow-request issue (1000). |
+| `thresholds.slow_query_ms` | integer | `200` | `APP_LIGHTHOUSE__THRESHOLDS__SLOW_QUERY_MS` | A query slower than this opens a slow-query issue (200). |
+| `thresholds.slow_job_ms` | integer | `30000` | `APP_LIGHTHOUSE__THRESHOLDS__SLOW_JOB_MS` | A job attempt slower than this keeps its trace (30000). |
+| `thresholds.slow_outgoing_ms` | integer | `2000` | `APP_LIGHTHOUSE__THRESHOLDS__SLOW_OUTGOING_MS` | An outgoing call slower than this opens an issue for its host (2000). |
+| `sample` | table |  | `APP_LIGHTHOUSE__SAMPLE` | How many details are stored. |
+| `sample.requests` | number | `0.1` | `APP_LIGHTHOUSE__SAMPLE__REQUESTS` | Fraction of ordinary request traces stored (0.1). |
+| `sample.jobs` | number | `0.1` | `APP_LIGHTHOUSE__SAMPLE__JOBS` | Fraction of ordinary job traces stored (0.1). |
+| `sample.exceptions` | number | `1.0` | `APP_LIGHTHOUSE__SAMPLE__EXCEPTIONS` | Fraction of occurrences stored beyond the first 100 per issue per hour (1.0). |
+| `retention_days` | integer | `14` | `APP_LIGHTHOUSE__RETENTION_DAYS` | What `lighthouse:prune` keeps, in days (14). |
+| `prune_at` | string | `"03:10"` | `APP_LIGHTHOUSE__PRUNE_AT` | When the scheduler prunes, `"HH:MM"` UTC (`"03:10"`); empty to not schedule it. |
+| `buffer` | integer | `10000` | `APP_LIGHTHOUSE__BUFFER` | Details (traces and occurrences) waiting to be written before new ones are sampled out (10000). Counts are never dropped. |
+| `capture` | table |  | `APP_LIGHTHOUSE__CAPTURE` | What is kept of a request. |
+| `capture.request_body` | boolean | `false` | `APP_LIGHTHOUSE__CAPTURE__REQUEST_BODY` | Store JSON request bodies up to 16 KiB, masked (false). |
+| `capture.request_headers` | boolean | `true` | `APP_LIGHTHOUSE__CAPTURE__REQUEST_HEADERS` | Store request headers, masked (true). |
+| `capture.ip` | boolean | `true` | `APP_LIGHTHOUSE__CAPTURE__IP` | Store the client address (true). |
+| `redact` | list of string | `[]` | `APP_LIGHTHOUSE__REDACT` | Name fragments masked in addition to `log.redact`. |
+| `ignore` | table |  | `APP_LIGHTHOUSE__IGNORE` | What is never recorded. |
+| `ignore.routes` | list of string | `["/health/*","/metrics"]` | `APP_LIGHTHOUSE__IGNORE__ROUTES` | Paths never recorded; `*` at the end matches one or more segments (`["/health/*", "/metrics"]`). |
+| `ignore.jobs` | list of string | `[]` | `APP_LIGHTHOUSE__IGNORE__JOBS` | Job types never recorded. |
+| `alerts` | table |  | `APP_LIGHTHOUSE__ALERTS` | The alert channels. |
+| `alerts.cooldown_minutes` | integer | `30` | `APP_LIGHTHOUSE__ALERTS__COOLDOWN_MINUTES` | At most one alert per issue and kind in this window (30). |
+| `alerts.spike` | table |  | `APP_LIGHTHOUSE__ALERTS__SPIKE` | When occurrences make a spike. |
+| `alerts.spike.occurrences` | integer | `50` | `APP_LIGHTHOUSE__ALERTS__SPIKE__OCCURRENCES` | Occurrences within the window that make a spike (50). |
+| `alerts.spike.minutes` | integer | `5` | `APP_LIGHTHOUSE__ALERTS__SPIKE__MINUTES` | The window, in minutes (5). |
+| `alerts.email` | table |  | `APP_LIGHTHOUSE__ALERTS__EMAIL` | Email alerts. |
+| `alerts.email.to` | list of string | `[]` | `APP_LIGHTHOUSE__ALERTS__EMAIL__TO` | The recipients: one address, a list, or a comma-separated string. |
+| `alerts.email.on` | list of AlertKind |  | `APP_LIGHTHOUSE__ALERTS__EMAIL__ON` | The kinds sent (default `new_issue`, `regression`, `spike`). |
+| `alerts.slack` | table |  | `APP_LIGHTHOUSE__ALERTS__SLACK` | Slack alerts. |
+| `alerts.slack.webhook_url` | string | secret | `APP_LIGHTHOUSE__ALERTS__SLACK__WEBHOOK_URL` | The incoming webhook's URL; a secret (`APP_LIGHTHOUSE__ALERTS__SLACK__WEBHOOK_URL`). |
+| `alerts.slack.on` | list of AlertKind |  | `APP_LIGHTHOUSE__ALERTS__SLACK__ON` | The kinds sent (default `new_issue`, `regression`, `spike`). |
+| `alerts.webhook` | table |  | `APP_LIGHTHOUSE__ALERTS__WEBHOOK` | Webhook alerts. |
+| `alerts.webhook.url` | string |  | `APP_LIGHTHOUSE__ALERTS__WEBHOOK__URL` | Where alerts are posted. |
+| `alerts.webhook.secret` | string | secret | `APP_LIGHTHOUSE__ALERTS__WEBHOOK__SECRET` | The signing secret, at least 32 bytes; required with `url` (`APP_LIGHTHOUSE__ALERTS__WEBHOOK__SECRET`). A `whsec_` secret is base64-decoded, as Standard Webhooks secrets are. |
+| `alerts.webhook.on` | list of AlertKind |  | `APP_LIGHTHOUSE__ALERTS__WEBHOOK__ON` | The kinds sent (default `new_issue`, `regression`, `spike`). |
+
+## `log`
+
+The settings of `LoggerModule`: the `log` configuration section. Every key is optional.
+
+More: [/docs/basics/logging/](/docs/basics/logging/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `format` | pretty \| json | `"pretty"` | `APP_LOG__FORMAT` | How lines are written; [`LogFormat::default`] depends on the build. |
+| `level` | string | `"info"` | `APP_LOG__LEVEL` | The level of every target without its own entry in `levels`: `trace`, `debug`, `info` (default), `warn`, `error` or `off`. |
+| `levels` | table of string | `{}` | `APP_LOG__LEVELS` | Per-target levels; a target also covers its submodules (`navree_db` covers `navree_db::pool`). |
+| `file` | table |  | `APP_LOG__FILE` | A rotating log file written in addition to stdout (none by default). |
+| `file.path` | string |  | `APP_LOG__FILE__PATH` | The file path; the date is inserted before the extension. |
+| `file.rotation` | daily \| hourly \| never |  | `APP_LOG__FILE__ROTATION` | When a new file is started. |
+| `file.keep_days` | integer |  | `APP_LOG__FILE__KEEP_DAYS` | How many days of rotated files are kept (at least 1); older files are deleted when a new one starts. |
+| `redact` | list of string | `["password","passwd","pwd","passphrase","secret","token","authorization","cookie","credential","dsn","api_key","api-key","apikey","private_key","connection_string"]` | `APP_LOG__REDACT` | Field names containing any of these fragments (ASCII case-insensitively) are written as `[redacted]`. Replaces the defaults, the shared list of secret words ([`Redactor::DEFAULT_FRAGMENTS`]). |
+| `slow_query_ms` | integer | `200` | `APP_LOG__SLOW_QUERY_MS` | Queries slower than this are logged (read by the database module). |
+
+## `logbook`
+
+The `logbook` configuration section. Every key is optional.
+
+More: [/docs/tools/logbook/](/docs/tools/logbook/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `enabled` | boolean |  | `APP_LOGBOOK__ENABLED` | Record and serve anything at all. `None` (unset) means on in debug builds and off in release builds; see [`LogbookOptions::activation`]. |
+| `path` | string | `"/_logbook"` | `APP_LOGBOOK__PATH` | Where the UI is served (`/_logbook`). |
+| `store` | file \| memory | `"file"` | `APP_LOGBOOK__STORE` | Where entries are kept. |
+| `file` | string | `"storage/logbook.db"` | `APP_LOGBOOK__FILE` | The SQLite file of the `file` store. |
+| `max_entries` | integer | `10000` | `APP_LOGBOOK__MAX_ENTRIES` | Entries kept; older batches are pruned whole. |
+| `keep_hours` | integer | `24` | `APP_LOGBOOK__KEEP_HOURS` | Age in hours after which entries are pruned. |
+| `allow_remote` | boolean | `false` | `APP_LOGBOOK__ALLOW_REMOTE` | Serve the UI to non-loopback clients, behind the permission `logbook.view`. |
+| `log_level` | string | `"debug"` | `APP_LOGBOOK__LOG_LEVEL` | The lowest level of log lines recorded (`trace`, `debug`, `info`, `warn` or `error`). |
+| `slow_query_ms` | integer | `100` | `APP_LOGBOOK__SLOW_QUERY_MS` | Queries slower than this many milliseconds are marked slow. |
+| `duplicate_queries` | integer | `5` | `APP_LOGBOOK__DUPLICATE_QUERIES` | Repeats of one statement in a batch that mark it as duplicated. |
+| `capture` | table |  | `APP_LOGBOOK__CAPTURE` | What request and response bodies are stored. |
+| `capture.request_body` | boolean | `true` | `APP_LOGBOOK__CAPTURE__REQUEST_BODY` | Store request bodies. |
+| `capture.response_body` | boolean | `true` | `APP_LOGBOOK__CAPTURE__RESPONSE_BODY` | Store response bodies. |
+| `capture.max_body_kb` | integer | `64` | `APP_LOGBOOK__CAPTURE__MAX_BODY_KB` | Bodies are cut after this many KiB (the original size is kept). |
+| `replay` | boolean | `true` | `APP_LOGBOOK__REPLAY` | Allow replaying recorded requests. |
+| `ignore` | table |  | `APP_LOGBOOK__IGNORE` | Paths never recorded. |
+| `ignore.routes` | list of string | `["/health/*","/metrics"]` | `APP_LOGBOOK__IGNORE__ROUTES` | Request paths never recorded, with `*` wildcards (`/health/*`); a comma-separated string from the environment. |
+| `ignore.framework` | boolean | `true` | `APP_LOGBOOK__IGNORE__FRAMEWORK` | Leave out what the framework does by itself: requests for the toolkit's own files, and, outside any request, job or scheduled task, the poll of the transactional outbox and the transaction and actor statements around it. Off, they are recorded like anything else. |
+| `watchers` | table |  | `APP_LOGBOOK__WATCHERS` | The watchers: one per kind of entry. |
+| `watchers.requests` | boolean | `true` | `APP_LOGBOOK__WATCHERS__REQUESTS` | HTTP requests, with headers and bodies. |
+| `watchers.queries` | boolean | `true` | `APP_LOGBOOK__WATCHERS__QUERIES` | SQL statements. |
+| `watchers.jobs` | boolean | `true` | `APP_LOGBOOK__WATCHERS__JOBS` | Job attempts. |
+| `watchers.mail` | boolean | `true` | `APP_LOGBOOK__WATCHERS__MAIL` | Mail handed to the transport. |
+| `watchers.events` | boolean | `true` | `APP_LOGBOOK__WATCHERS__EVENTS` | App events on the event bus. |
+| `watchers.cache` | boolean | `true` | `APP_LOGBOOK__WATCHERS__CACHE` | Cache hits, misses, writes and forgets. |
+| `watchers.logs` | boolean | `true` | `APP_LOGBOOK__WATCHERS__LOGS` | Log lines at `logbook.log_level` or above. |
+| `watchers.exceptions` | boolean | `true` | `APP_LOGBOOK__WATCHERS__EXCEPTIONS` | 5xx errors, panics and errors reported with `Telemetry::report_exception` (a job's error is part of its entry). |
+| `watchers.http_client` | boolean | `true` | `APP_LOGBOOK__WATCHERS__HTTP_CLIENT` | Outgoing HTTP calls through `HttpClient`. |
+| `watchers.notifications` | boolean | `true` | `APP_LOGBOOK__WATCHERS__NOTIFICATIONS` | Notifications, one entry per channel. |
+| `watchers.models` | boolean | `true` | `APP_LOGBOOK__WATCHERS__MODELS` | Inserts, updates and deletes a model makes in a unit of work. |
+| `watchers.schedule` | boolean | `true` | `APP_LOGBOOK__WATCHERS__SCHEDULE` | Scheduled task runs. |
+| `watchers.ai` | boolean | `true` | `APP_LOGBOOK__WATCHERS__AI` | Calls to model providers, with tokens and latency (never the prompt or the answer). |
+| `watchers.broadcasts` | boolean | `true` | `APP_LOGBOOK__WATCHERS__BROADCASTS` | Events pushed to real-time channels (never their data). |
+| `watchers.storage` | boolean | `true` | `APP_LOGBOOK__WATCHERS__STORAGE` | File operations on storage disks (never the contents). |
+| `watchers.webhooks` | boolean | `true` | `APP_LOGBOOK__WATCHERS__WEBHOOKS` | Webhook delivery attempts (never the payload). |
+| `watchers.search` | boolean | `true` | `APP_LOGBOOK__WATCHERS__SEARCH` | Searches, with the length of the term and the hits (never the term). |
+| `watchers.sign_ins` | boolean | `true` | `APP_LOGBOOK__WATCHERS__SIGN_INS` | Sign-in attempts (never an email address or a secret). |
+| `watchers.ui` | boolean | `true` | `APP_LOGBOOK__WATCHERS__UI` | Navree UI operations: form posts, actions, table queries and region fetches (never their values). |
+
+## `mail`
+
+Mail settings. Configuration section `mail`:
+
+More: [/docs/digging-deeper/mail/](/docs/digging-deeper/mail/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `from` | string | `"hello@example.com"` | `APP_MAIL__FROM` | The default sender, `hello@example.com` or `Agra <hello@acme.test>` (default `hello@example.com`). Empty means no default: every message must then set its own sender. |
+| `transport` | TransportConfig | `"log"` | `APP_MAIL__TRANSPORT` | How messages are delivered (default [`TransportConfig::Log`]). |
+| `queue` | string |  | `APP_MAIL__QUEUE` | The queue `Mailer::queue` dispatches to (default: the job's own queue, `default`). |
+| `transports` | table of TransportConfig | `"{}"` | `APP_MAIL__TRANSPORTS` | Named transports that `Mailer::via` selects (lanes such as `simulation` and `notifications`). |
+| `render` | table |  | `APP_MAIL__RENDER` | CSS inlining and the generated text body. |
+| `render.inline_css` | boolean | `true` | `APP_MAIL__RENDER__INLINE_CSS` | Move the rules of `<style>` blocks into `style` attributes, which mail clients keep (default `true`). `@media` rules stay in a `<style>` block. HTML without a `<style>` block is left as it is. |
+| `render.text_from_html` | boolean | `true` | `APP_MAIL__RENDER__TEXT_FROM_HTML` | Generate the plain-text body from the HTML when a message has HTML only (default `true`), so it goes out as `multipart/alternative`. |
+| `delivery` | table |  | `APP_MAIL__DELIVERY` | The delivery log, suppressions, the outbox and tenant transports. |
+| `delivery.enabled` | boolean | `false` | `APP_MAIL__DELIVERY__ENABLED` | Turn the delivery pipeline on (default `false`): every message is logged in `mail_deliveries`, suppressed recipients are left out, held messages go to the outbox and tenant transports are resolved. |
+| `delivery.suppress` | boolean | `true` | `APP_MAIL__DELIVERY__SUPPRESS` | Leave out recipients in `mail_suppressions` (default `true`). |
+| `delivery.auto_suppress` | boolean | `true` | `APP_MAIL__DELIVERY__AUTO_SUPPRESS` | Suppress an address after a hard bounce or a complaint (default `true`), in the delivery's workspace (app-wide for mail sent without one). |
+| `delivery.tenants` | boolean | `true` | `APP_MAIL__DELIVERY__TENANTS` | Look up tenant transports in `mail_transports` (default `true`). |
+| `delivery.routes` | boolean | `true` | `APP_MAIL__DELIVERY__ROUTES` | Mount the admin routes under `{api_prefix}/mail` (default `true`; permission `mail.manage`). |
+| `tracking` | table |  | `APP_MAIL__TRACKING` | Open and click tracking. |
+| `tracking.opens` | boolean | `false` | `APP_MAIL__TRACKING__OPENS` | Add an open-tracking image to HTML mail (default `false`). |
+| `tracking.clicks` | boolean | `false` | `APP_MAIL__TRACKING__CLICKS` | Send links through a signed redirect that logs the click (default `false`). |
+| `tracking.base_url` | string |  | `APP_MAIL__TRACKING__BASE_URL` | Where the tracking routes are served, without a trailing slash (default: `app.url`). |
+| `tracking.ttl_days` | integer | `365` | `APP_MAIL__TRACKING__TTL_DAYS` | How long tracked links stay valid, in days (default 365). Links are signed with the app's `UrlSigner` (`http.signing_key`, or a key derived from `app.key`). |
+| `webhooks` | table |  | `APP_MAIL__WEBHOOKS` | The provider webhooks that report deliveries, bounces and complaints. |
+| `webhooks.ses` | table |  | `APP_MAIL__WEBHOOKS__SES` | Amazon SES events through an SNS topic. |
+| `webhooks.ses.token` | string | secret | `APP_MAIL__WEBHOOKS__SES__TOKEN` | The secret in the subscription URL's `token` query parameter, checked on top of the signature. The route is mounted when it is set. |
+| `webhooks.ses.topic_arns` | list of string | `[]` | `APP_MAIL__WEBHOOKS__SES__TOPIC_ARNS` | The SNS topics accepted. Required with `token`: SNS signs every topic's messages with the same keys. |
+| `webhooks.ses.tolerance_secs` | integer | `3600` | `APP_MAIL__WEBHOOKS__SES__TOLERANCE_SECS` | How far a message's `Timestamp` may be from now, in seconds (default 3600: SNS retries a delivery for at most an hour, with the first timestamp). |
+| `webhooks.ses.confirm_subscriptions` | boolean | `true` | `APP_MAIL__WEBHOOKS__SES__CONFIRM_SUBSCRIPTIONS` | Confirm SNS subscriptions by fetching their `SubscribeURL` (default `true`; only `https://sns.<region>.amazonaws.com` URLs). |
+| `webhooks.mailgun` | table |  | `APP_MAIL__WEBHOOKS__MAILGUN` | Mailgun event webhooks. |
+| `webhooks.mailgun.signing_key` | string | secret | `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY` | The webhook signing key (Mailgun's "HTTP webhook signing key"). |
+| `webhooks.postmark` | table |  | `APP_MAIL__WEBHOOKS__POSTMARK` | Postmark webhooks. |
+| `webhooks.postmark.token` | string | secret | `APP_MAIL__WEBHOOKS__POSTMARK__TOKEN` | The secret: the basic-auth password of the webhook URL, or its `token` query parameter. |
+| `webhooks.resend` | table |  | `APP_MAIL__WEBHOOKS__RESEND` | Resend webhooks. |
+| `webhooks.resend.secret` | string | secret | `APP_MAIL__WEBHOOKS__RESEND__SECRET` | The webhook's signing secret (`whsec_...`). |
+| `inbound` | table |  | `APP_MAIL__INBOUND` | Inbound mail: size limit, the disk for raw messages, reply tokens and the provider sources (crate feature `inbound`). |
+| `inbound.max_size` | integer | `26214400` | `APP_MAIL__INBOUND__MAX_SIZE` | The largest message accepted, in bytes (default 25 MiB). Payloads that carry the message encoded may be up to twice as large. |
+| `inbound.max_parts` | integer | `1000` | `APP_MAIL__INBOUND__MAX_PARTS` | The most parts a message may have, multiparts and the message itself included (default 1,000). More is `InboundError::Unparseable`. |
+| `inbound.max_depth` | integer | `32` | `APP_MAIL__INBOUND__MAX_DEPTH` | The most multiparts a message may nest in one another (default 32). Deeper is `InboundError::Unparseable`. |
+| `inbound.max_headers` | integer | `1000` | `APP_MAIL__INBOUND__MAX_HEADERS` | The most fields a message's header may have (default 1,000). More is `InboundError::Unparseable`. |
+| `inbound.max_addresses` | integer | `1000` | `APP_MAIL__INBOUND__MAX_ADDRESSES` | The most addresses one address field (`From`, `To`, `Cc`, `Reply-To`) and the most ids `References` may list (default 1,000). More is `InboundError::Unparseable`. |
+| `inbound.disk` | string |  | `APP_MAIL__INBOUND__DISK` | A navree-storage disk that keeps every raw message as an `.eml` file (default: none). Needs `StorageModule`. |
+| `inbound.path` | string | `"inbound"` | `APP_MAIL__INBOUND__PATH` | The folder on the disk (default `inbound`): files are `{path}/{yyyy}/{mm}/{dd}/{sha-256}.eml`, so a message delivered twice is stored once. |
+| `inbound.reply_token_ttl_days` | integer | `0` | `APP_MAIL__INBOUND__REPLY_TOKEN_TTL_DAYS` | Reply tokens older than this many days are refused (default 0: they never expire). |
+| `inbound.ses` | SesInboundOptions | `"SesInboundOptions { token: None, topic_arns: [], disk: None, tolerance_secs: 3600, confirm_subscriptions: true }"` | `APP_MAIL__INBOUND__SES` | Amazon SES receipt rules (SNS, or S3 and SNS). |
+| `inbound.mailgun` | MailgunInboundOptions | `"MailgunInboundOptions { signing_key: None }"` | `APP_MAIL__INBOUND__MAILGUN` | Mailgun routes. |
+| `inbound.postmark` | PostmarkInboundOptions | `"PostmarkInboundOptions { token: None }"` | `APP_MAIL__INBOUND__POSTMARK` | Postmark inbound streams. |
+| `inbound.raw` | RawInboundOptions | `"RawInboundOptions { token: None }"` | `APP_MAIL__INBOUND__RAW` | Raw MIME posted by your own mail server or script. |
+
+## `mcp`
+
+The settings of `McpModule`: the `mcp` configuration section. Every key is optional.
+
+More: [/docs/ai/mcp-servers/](/docs/ai/mcp-servers/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `path` | string | `"/mcp"` | `APP_MCP__PATH` | Where the HTTP transport is served (default `/mcp`). Absolute: no API prefix, no version. |
+| `name` | string |  | `APP_MCP__NAME` | The server name clients show. Unset, it is the `app.name` setting, else the executable's name (resolved at boot). |
+| `title` | string |  | `APP_MCP__TITLE` | A display title. Unset, it is the name (resolved at boot). |
+| `version` | string |  | `APP_MCP__VERSION` | The server version clients see. Unset, it is the `app.version` setting, else `0.0.0` (resolved at boot). |
+| `instructions` | string |  | `APP_MCP__INSTRUCTIONS` | Text the client gives the model about the server: what it is for and how its data is shaped. |
+| `auth` | bearer \| oauth | `"bearer"` | `APP_MCP__AUTH` | `bearer` (default) or `oauth`. |
+| `allowed_origins` | list of string | `[]` | `APP_MCP__ALLOWED_ORIGINS` | Browser origins allowed to call the endpoint (`https://crm.example.com`). A request with any other `Origin` header gets a 403; requests without one (MCP clients are not browsers) pass. A list, or a comma-separated string. |
+| `session_ttl_secs` | integer | `3600` | `APP_MCP__SESSION_TTL_SECS` | How long an idle session lives, in seconds (default 3600). |
+| `max_request_bytes` | integer | `1048576` | `APP_MCP__MAX_REQUEST_BYTES` | The largest JSON-RPC message accepted, in bytes (default 1 MiB). |
+| `oauth` | table |  | `APP_MCP__OAUTH` | The OAuth settings, used with `auth = "oauth"`. |
+| `oauth.resource` | string |  | `APP_MCP__OAUTH__RESOURCE` | The resource identifier clients request tokens for: the endpoint's absolute URL. Unset, it is the `app.url` setting followed by [`McpOptions::path`] (resolved at boot). |
+| `oauth.authorization_servers` | list of string | `[]` | `APP_MCP__OAUTH__AUTHORIZATION_SERVERS` | The issuers of the authorization servers that grant tokens for it. Unset, it is `[app.url]`, the app's own OAuth server (resolved at boot). |
+| `oauth.scopes` | list of string | `[]` | `APP_MCP__OAUTH__SCOPES` | The scopes clients may request, listed as `scopes_supported`. Unset, they are the names of the app's OAuth server scopes (the `oauth.scopes` section), else none (resolved at boot). |
+
+## `media`
+
+The media module's settings (configuration section `media`, see `MediaModule::from_config`).
+
+More: [/docs/packages/media/](/docs/packages/media/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | database \| memory | `"database"` | `APP_MEDIA__STORE` | Where media rows are kept: `database` (default) or `memory`. |
+| `disk` | string |  | `APP_MEDIA__DISK` | The storage disk originals are written to (default: the storage module's default disk). A collection can name its own. |
+| `conversions_disk` | string |  | `APP_MEDIA__CONVERSIONS_DISK` | The disk conversions are written to (default: the original's). |
+| `prefix` | string | `"media"` | `APP_MEDIA__PREFIX` | The directory on the disk: an item's files live under `{prefix}/{id}/` (default `media`). |
+| `max_file_size` | integer | `26214400` | `APP_MEDIA__MAX_FILE_SIZE` | The largest file accepted, in bytes (default 25 MiB). A collection can lower it. |
+| `queue_conversions` | boolean | `true` | `APP_MEDIA__QUEUE_CONVERSIONS` | Generate conversions on the queue (default `true`). Without a queue in the app they run while the file is added. |
+| `queue` | string | `"default"` | `APP_MEDIA__QUEUE` | The queue conversion jobs go to (default `default`). |
+| `strip_metadata` | boolean | `true` | `APP_MEDIA__STRIP_METADATA` | Remove EXIF, XMP, IPTC and text metadata from JPEG, PNG and WebP originals before they are stored (default `true`). |
+| `delete_with_model` | boolean | `true` | `APP_MEDIA__DELETE_WITH_MODEL` | Delete a model's media when the model is deleted through its record (`delete`, `Model::destroy`; for models with a `MEDIA_TABLE`; default `true`). |
+| `url_ttl_secs` | integer | `3600` | `APP_MEDIA__URL_TTL_SECS` | How long the temporary URLs of `Media::resource` last, in seconds, for disks without a public URL (default 3600). |
+| `download_timeout_secs` | integer | `30` | `APP_MEDIA__DOWNLOAD_TIMEOUT_SECS` | How long a remote download may take (default 30 s). |
+| `images` | table |  | `APP_MEDIA__IMAGES` | Image settings. |
+| `images.max_pixels` | integer | `50000000` | `APP_MEDIA__IMAGES__MAX_PIXELS` | Images (and SVG renderings) with more pixels than this are refused before they are decoded (default 50 000 000, a 50-megapixel photo). |
+| `images.responsive_widths` | list of integer | `[320,640,960,1280,1920,2560]` | `APP_MEDIA__IMAGES__RESPONSIVE_WIDTHS` | The widths `responsive()` conversions generate, each only when it is narrower than the conversion itself (default 320, 640, 960, 1280, 1920 and 2560). From the environment, a comma-separated list. |
+| `archives` | table |  | `APP_MEDIA__ARCHIVES` | Archive limits. |
+| `archives.max_entries` | integer | `10000` | `APP_MEDIA__ARCHIVES__MAX_ENTRIES` | The most entries, directories included (default 10 000). The count is read from the end of the archive before any entry is held. |
+| `archives.max_entry_bytes` | integer | `536870912` | `APP_MEDIA__ARCHIVES__MAX_ENTRY_BYTES` | The largest unpacked entry in bytes (default 512 MiB). |
+| `archives.max_total_bytes` | integer | `2147483648` | `APP_MEDIA__ARCHIVES__MAX_TOTAL_BYTES` | The most bytes all entries unpack to together (default 2 GiB). |
+| `archives.max_ratio` | integer | `200` | `APP_MEDIA__ARCHIVES__MAX_RATIO` | The highest compression ratio of an entry over 1 MiB (default 200). |
+| `ffmpeg` | table |  | `APP_MEDIA__FFMPEG` | The FFmpeg sidecar (the `ffmpeg` feature). |
+| `ffmpeg.ffmpeg` | string | `"ffmpeg"` | `APP_MEDIA__FFMPEG__FFMPEG` | The `ffmpeg` executable: a name on the PATH or a path (default `ffmpeg`). |
+| `ffmpeg.ffprobe` | string | `"ffprobe"` | `APP_MEDIA__FFMPEG__FFPROBE` | The `ffprobe` executable (default `ffprobe`). |
+| `ffmpeg.timeout_secs` | integer | `600` | `APP_MEDIA__FFMPEG__TIMEOUT_SECS` | The longest a single run may take before it is killed (default 600 s). |
+| `ffmpeg.threads` | integer | `0` | `APP_MEDIA__FFMPEG__THREADS` | Encoder threads per transcode; `0` lets FFmpeg choose (default 0). |
+
+## `micro`
+
+Options of `MicroModule`: the `micro` configuration section.
+
+More: [/docs/microservices/introduction/](/docs/microservices/introduction/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `service` | string | `""` | `APP_MICRO__SERVICE` | The service's name: its consumer group, its client id and the `navree-service` header of what it sends. Empty: `app.name`, else the binary's name. |
+| `transport` | tcp \| nats \| kafka \| rabbitmq \| redis \| mqtt \| memory | `""` | `APP_MICRO__TRANSPORT` | The transport (required): `tcp`, `nats`, `kafka`, `rabbitmq`, `redis`, `mqtt` or `memory`. |
+| `url` | string |  | `APP_MICRO__URL` | Where the broker is; the transport's local default when unset. |
+| `codec` | json \| msgpack | `"json"` | `APP_MICRO__CODEC` | How payloads are encoded. |
+| `request_timeout_ms` | integer | `5000` | `APP_MICRO__REQUEST_TIMEOUT_MS` | The deadline of a `send` that sets none. |
+| `connect_timeout_ms` | integer | `5000` | `APP_MICRO__CONNECT_TIMEOUT_MS` | How long one connection attempt to the broker may take. |
+| `concurrency` | integer | `64` | `APP_MICRO__CONCURRENCY` | Messages one process handles at once, over every pattern. |
+| `listen_with_serve` | boolean | `true` | `APP_MICRO__LISTEN_WITH_SERVE` | Whether `serve` starts the listener too. |
+| `max_message_bytes` | integer | `1048576` | `APP_MICRO__MAX_MESSAGE_BYTES` | The largest encoded payload, sent or received. |
+| `forward_auth` | boolean | `true` | `APP_MICRO__FORWARD_AUTH` | Forward the current request's `Authorization` header on `send`. |
+| `outbox` | boolean | `true` | `APP_MICRO__OUTBOX` | Publish events emitted inside a unit of work through the outbox (with `DatabaseModule`). |
+| `inbox` | boolean | `true` | `APP_MICRO__INBOX` | Skip messages already handled, by message id (with `DatabaseModule`). |
+| `inbox_retention_hours` | integer | `72` | `APP_MICRO__INBOX_RETENTION_HOURS` | How long handled message ids (and `dedupe` replies) are kept. |
+| `outbox_poll_ms` | integer | `1000` | `APP_MICRO__OUTBOX_POLL_MS` | How often the outbox relay looks for events a crashed process left behind. |
+| `auto_setup` | boolean | `true` | `APP_MICRO__AUTO_SETUP` | Declare the streams, topics and queues the app needs when the listener starts. Default: on in debug builds. |
+| `events` | table |  | `APP_MICRO__EVENTS` | Retries and dead letters of events. |
+| `events.max_attempts` | integer | `5` | `APP_MICRO__EVENTS__MAX_ATTEMPTS` | Attempts before an event is dead-lettered. |
+| `events.backoff` | Backoff | `"Exponential { base_secs: 1, max_secs: 300 }"` | `APP_MICRO__EVENTS__BACKOFF` | The delay before each retry, the same `Backoff` jobs use. |
+| `events.timeout_secs` | integer | `120` | `APP_MICRO__EVENTS__TIMEOUT_SECS` | The time limit of one attempt. |
+| `events.dead_letter` | database \| transport \| log |  | `APP_MICRO__EVENTS__DEAD_LETTER` | Where exhausted events go; default: `database` with `DatabaseModule`, else `transport`. |
+| `tcp` | table |  | `APP_MICRO__TCP` | TCP settings. |
+| `tcp.addr` | string | `"127.0.0.1:4000"` | `APP_MICRO__TCP__ADDR` | Where this service listens. |
+| `tcp.routes` | table of string | `{}` | `APP_MICRO__TCP__ROUTES` | Pattern prefix (`deals.*`, or a full pattern) to `host:port`; the longest matching prefix wins. |
+| `tcp.pool_size` | integer | `4` | `APP_MICRO__TCP__POOL_SIZE` | Connections kept open to each peer. |
+| `tcp.tls` | table |  | `APP_MICRO__TCP__TLS` | `cert` and `key` turn on TLS; `ca` turns on mutual TLS. |
+| `tcp.tls.ca` | string |  | `APP_MICRO__TCP__TLS__CA` | A CA certificate (PEM). |
+| `tcp.tls.cert` | string |  | `APP_MICRO__TCP__TLS__CERT` | This service's certificate chain (PEM). |
+| `tcp.tls.key` | string |  | `APP_MICRO__TCP__TLS__KEY` | This service's private key (PEM). |
+| `nats` | table |  | `APP_MICRO__NATS` | NATS settings. |
+| `nats.jetstream` | boolean | `true` | `APP_MICRO__NATS__JETSTREAM` | Events through JetStream (at least once); `false` uses core publish-subscribe (at most once). |
+| `nats.stream` | string | `"NAVREE"` | `APP_MICRO__NATS__STREAM` | The stream that stores events. |
+| `nats.replicas` | integer | `1` | `APP_MICRO__NATS__REPLICAS` | Stream replicas. |
+| `nats.max_age_hours` | integer | `168` | `APP_MICRO__NATS__MAX_AGE_HOURS` | How long the stream keeps events. |
+| `nats.ack_wait_secs` | integer | `30` | `APP_MICRO__NATS__ACK_WAIT_SECS` | How long an unacknowledged event waits before redelivery (raised to the handler's time limit). |
+| `nats.credentials` | string |  | `APP_MICRO__NATS__CREDENTIALS` | A `.creds` file (JWT and NKey). Not supported: NKey signing needs ed25519-dalek, which the crypto policy keeps out, so a value here fails at connect. Use `token`, a user and password in the URL, or TLS client certificates. |
+| `nats.token` | string | secret | `APP_MICRO__NATS__TOKEN` | A token, for servers with token authentication (`APP_MICRO__NATS__TOKEN`). Never shown in `Debug`. |
+| `nats.tls` | table |  | `APP_MICRO__NATS__TLS` | TLS files. |
+| `nats.tls.ca` | string |  | `APP_MICRO__NATS__TLS__CA` | A CA certificate (PEM). |
+| `nats.tls.cert` | string |  | `APP_MICRO__NATS__TLS__CERT` | This service's certificate chain (PEM). |
+| `nats.tls.key` | string |  | `APP_MICRO__NATS__TLS__KEY` | This service's private key (PEM). |
+| `kafka` | table |  | `APP_MICRO__KAFKA` | Kafka settings. |
+| `kafka.partitions` | integer | `6` | `APP_MICRO__KAFKA__PARTITIONS` | Partitions of the topics `micro:setup` creates. |
+| `kafka.replication_factor` | integer | `1` | `APP_MICRO__KAFKA__REPLICATION_FACTOR` | Replicas of those topics. |
+| `kafka.retention_hours` | integer | `168` | `APP_MICRO__KAFKA__RETENTION_HOURS` | How long those topics keep records. |
+| `kafka.tls` | boolean | `false` | `APP_MICRO__KAFKA__TLS` | Connect with TLS, trusting the public authorities. |
+| `kafka.tls_files` | table |  | `APP_MICRO__KAFKA__TLS_FILES` | TLS with files of your own: `ca`, an authority to trust instead of the public ones (a broker whose certificate a private authority signed), and `cert` and `key`, for a broker that asks for a client certificate. Setting `ca` or `cert` connects with TLS. |
+| `kafka.tls_files.ca` | string |  | `APP_MICRO__KAFKA__TLS_FILES__CA` | A CA certificate (PEM). |
+| `kafka.tls_files.cert` | string |  | `APP_MICRO__KAFKA__TLS_FILES__CERT` | This service's certificate chain (PEM). |
+| `kafka.tls_files.key` | string |  | `APP_MICRO__KAFKA__TLS_FILES__KEY` | This service's private key (PEM). |
+| `kafka.sasl` | table |  | `APP_MICRO__KAFKA__SASL` | SASL credentials. |
+| `kafka.sasl.mechanism` | PLAIN \| SCRAM-SHA-256 \| SCRAM-SHA-512 |  | `APP_MICRO__KAFKA__SASL__MECHANISM` | Required. `PLAIN`, `SCRAM-SHA-256` or `SCRAM-SHA-512`. |
+| `kafka.sasl.username` | string |  | `APP_MICRO__KAFKA__SASL__USERNAME` | The user name. |
+| `kafka.sasl.password` | string | secret | `APP_MICRO__KAFKA__SASL__PASSWORD` | The password (`APP_MICRO__KAFKA__SASL__PASSWORD`). Never shown in `Debug`. |
+| `kafka.start_from` | latest \| earliest | `"latest"` | `APP_MICRO__KAFKA__START_FROM` | Where a new consumer group starts: `latest` or `earliest`. |
+| `rabbitmq` | table |  | `APP_MICRO__RABBITMQ` | RabbitMQ settings. |
+| `rabbitmq.exchange` | string | `"navree"` | `APP_MICRO__RABBITMQ__EXCHANGE` | The topic exchange. |
+| `rabbitmq.queue_type` | quorum \| classic | `"quorum"` | `APP_MICRO__RABBITMQ__QUEUE_TYPE` | `quorum` (replicated) or `classic`. |
+| `rabbitmq.prefetch` | integer | `32` | `APP_MICRO__RABBITMQ__PREFETCH` | Unacknowledged messages one instance holds per queue. |
+| `rabbitmq.tls` | table |  | `APP_MICRO__RABBITMQ__TLS` | TLS files (`ca` for `amqps://` URLs signed by a private CA). |
+| `rabbitmq.tls.ca` | string |  | `APP_MICRO__RABBITMQ__TLS__CA` | A CA certificate (PEM). |
+| `rabbitmq.tls.cert` | string |  | `APP_MICRO__RABBITMQ__TLS__CERT` | This service's certificate chain (PEM). |
+| `rabbitmq.tls.key` | string |  | `APP_MICRO__RABBITMQ__TLS__KEY` | This service's private key (PEM). |
+| `redis` | table |  | `APP_MICRO__REDIS` | Redis Streams settings. |
+| `redis.prefix` | string | `"navree:"` | `APP_MICRO__REDIS__PREFIX` | The prefix of every stream key. |
+| `redis.max_len` | integer | `100000` | `APP_MICRO__REDIS__MAX_LEN` | About how many entries each stream keeps. |
+| `redis.claim_after_ms` | integer | `60000` | `APP_MICRO__REDIS__CLAIM_AFTER_MS` | When another instance takes over an unacknowledged entry (raised to the handler's time limit). |
+| `redis.block_ms` | integer | `5000` | `APP_MICRO__REDIS__BLOCK_MS` | How long one read waits for new entries. |
+| `mqtt` | table |  | `APP_MICRO__MQTT` | MQTT settings. |
+| `mqtt.prefix` | string | `"navree"` | `APP_MICRO__MQTT__PREFIX` | The topic prefix. |
+| `mqtt.client_id` | string |  | `APP_MICRO__MQTT__CLIENT_ID` | The client id; `<service>-<instance>` when unset. |
+| `mqtt.keep_alive_secs` | integer | `30` | `APP_MICRO__MQTT__KEEP_ALIVE_SECS` | The keep-alive interval. |
+| `mqtt.session_expiry_secs` | integer | `3600` | `APP_MICRO__MQTT__SESSION_EXPIRY_SECS` | How long the broker keeps the session of a disconnected instance. |
+| `mqtt.username` | string |  | `APP_MICRO__MQTT__USERNAME` | The user name. |
+| `mqtt.password` | string | secret | `APP_MICRO__MQTT__PASSWORD` | The password (`APP_MICRO__MQTT__PASSWORD`). Never shown in `Debug`. |
+| `mqtt.tls` | table |  | `APP_MICRO__MQTT__TLS` | TLS files. |
+| `mqtt.tls.ca` | string |  | `APP_MICRO__MQTT__TLS__CA` | A CA certificate (PEM). |
+| `mqtt.tls.cert` | string |  | `APP_MICRO__MQTT__TLS__CERT` | This service's certificate chain (PEM). |
+| `mqtt.tls.key` | string |  | `APP_MICRO__MQTT__TLS__KEY` | This service's private key (PEM). |
+| `clients` | table of ClientOptions | `"{}"` | `APP_MICRO__CLIENTS` | Named clients for other transports (`micro.clients.<name>`), which only send. |
+
+## `notify`
+
+How `NotifyModule` sends notifications (configuration section `notify`, e.g. `APP_NOTIFY__QUEUE=true`).
+
+More: [/docs/digging-deeper/notifications/](/docs/digging-deeper/notifications/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `queue` | boolean | `false` | `APP_NOTIFY__QUEUE` | Queue notifications: `Notifier::send` renders the notification, then dispatches one job `notify.send` per channel through the app's `dyn Dispatcher`, so a queue worker delivers (and retries) each channel on its own. Without a dispatcher in the app, notifications are delivered at once. Default: `false` (deliver at once). |
+| `routes` | boolean | `true` | `APP_NOTIFY__ROUTES` | Serve the signed-in user's notifications under `{api_prefix}/notifications` (authenticated routes, so the app needs a `dyn Authenticator`), and their push subscriptions. Default: `true`. |
+| `deliveries` | boolean | `true` | `APP_NOTIFY__DELIVERIES` | Record each delivery over the Slack, Teams, SMS, WhatsApp and web push channels in `notification_deliveries` (with `DatabaseModule`). Default: `true`. |
+| `slack` | table |  | `APP_NOTIFY__SLACK` | The Slack channel. |
+| `slack.bot_token` | string | secret | `APP_NOTIFY__SLACK__BOT_TOKEN` | The bot token (`xoxb-...`) for `SlackRoute::channel`. |
+| `slack.endpoint` | string |  | `APP_NOTIFY__SLACK__ENDPOINT` | The Web API's base URL (default `https://slack.com/api`). |
+| `teams` | table |  | `APP_NOTIFY__TEAMS` | The Microsoft Teams channel. |
+| `teams.app_id` | string |  | `APP_NOTIFY__TEAMS__APP_ID` | The bot's Microsoft app id. |
+| `teams.app_password` | string | secret | `APP_NOTIFY__TEAMS__APP_PASSWORD` | The bot's client secret. |
+| `teams.tenant` | string | `"botframework.com"` | `APP_NOTIFY__TEAMS__TENANT` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot (default), the tenant id for a single-tenant one. |
+| `teams.token_url` | string |  | `APP_NOTIFY__TEAMS__TOKEN_URL` | The token endpoint (default `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`). |
+| `sms` | table |  | `APP_NOTIFY__SMS` | The SMS channel. |
+| `sms.driver` | twilio \| vonage \| sns \| log |  | `APP_NOTIFY__SMS__DRIVER` | The driver; without one the SMS channel is unavailable. |
+| `sms.from` | string |  | `APP_NOTIFY__SMS__FROM` | The default sender: a number in E.164, an alphanumeric sender id, or a Twilio messaging service (`MG...`). |
+| `sms.default_region` | string |  | `APP_NOTIFY__SMS__DEFAULT_REGION` | The region numbers without a country code are read in (`US`, `GB`); without it such numbers are invalid. |
+| `sms.status_callback` | string |  | `APP_NOTIFY__SMS__STATUS_CALLBACK` | The URL the provider reports delivery statuses to (Twilio's `StatusCallback`, Vonage's `webhook_url`), e.g. `https://api.acme.test/api/webhooks/notify/twilio`. |
+| `whatsapp` | table |  | `APP_NOTIFY__WHATSAPP` | The WhatsApp channel. |
+| `whatsapp.driver` | twilio \| meta \| log |  | `APP_NOTIFY__WHATSAPP__DRIVER` | The driver; without one the WhatsApp channel is unavailable. |
+| `whatsapp.from` | string |  | `APP_NOTIFY__WHATSAPP__FROM` | The sender's number in E.164 (Twilio). |
+| `whatsapp.status_callback` | string |  | `APP_NOTIFY__WHATSAPP__STATUS_CALLBACK` | The URL Twilio reports delivery statuses to. |
+| `web_push` | table |  | `APP_NOTIFY__WEB_PUSH` | The web push channel. |
+| `web_push.public_key` | string |  | `APP_NOTIFY__WEB_PUSH__PUBLIC_KEY` | The application server key: the public key, base64url (65 bytes). |
+| `web_push.private_key` | string | secret | `APP_NOTIFY__WEB_PUSH__PRIVATE_KEY` | The private key, base64url (32 bytes). |
+| `web_push.subject` | string | `""` | `APP_NOTIFY__WEB_PUSH__SUBJECT` | The contact push services reach you at: `mailto:` or `https:`. |
+| `web_push.ttl_secs` | integer | `86400` | `APP_NOTIFY__WEB_PUSH__TTL_SECS` | How long push services keep a message for an offline device, in seconds (default 86400, one day). |
+| `twilio` | table |  | `APP_NOTIFY__TWILIO` | Twilio credentials, for `sms.driver` and `whatsapp.driver` `twilio`. |
+| `twilio.account_sid` | string | `""` | `APP_NOTIFY__TWILIO__ACCOUNT_SID` | The account SID (`AC...`). |
+| `twilio.auth_token` | string | secret | `APP_NOTIFY__TWILIO__AUTH_TOKEN` | The auth token, or the secret of `api_key`. |
+| `twilio.api_key` | string |  | `APP_NOTIFY__TWILIO__API_KEY` | An API key SID (`SK...`) to authenticate with instead of the account SID (its secret goes in `auth_token`). |
+| `twilio.endpoint` | string |  | `APP_NOTIFY__TWILIO__ENDPOINT` | The API's base URL (default `https://api.twilio.com`). |
+| `vonage` | table |  | `APP_NOTIFY__VONAGE` | Vonage credentials, for `sms.driver = "vonage"`. |
+| `vonage.api_key` | string | `""` | `APP_NOTIFY__VONAGE__API_KEY` | The API key, which names the account (the secret is `api_secret`). |
+| `vonage.api_secret` | string | secret | `APP_NOTIFY__VONAGE__API_SECRET` | The API secret. |
+| `vonage.endpoint` | string |  | `APP_NOTIFY__VONAGE__ENDPOINT` | The API's base URL (default `https://api.nexmo.com`). |
+| `sns` | table |  | `APP_NOTIFY__SNS` | Amazon SNS credentials, for `sms.driver = "sns"`. |
+| `sns.region` | string | `""` | `APP_NOTIFY__SNS__REGION` | The AWS region (`us-east-1`). |
+| `sns.access_key_id` | string | `""` | `APP_NOTIFY__SNS__ACCESS_KEY_ID` | The access key id. |
+| `sns.secret_access_key` | string | secret | `APP_NOTIFY__SNS__SECRET_ACCESS_KEY` | The secret access key. |
+| `sns.session_token` | string | secret | `APP_NOTIFY__SNS__SESSION_TOKEN` | A session token, for temporary credentials. |
+| `sns.sms_type` | string | `"Transactional"` | `APP_NOTIFY__SNS__SMS_TYPE` | `Transactional` (default) or `Promotional`. |
+| `sns.endpoint` | string |  | `APP_NOTIFY__SNS__ENDPOINT` | The API's base URL (default `https://sns.{region}.amazonaws.com`). |
+| `meta` | table |  | `APP_NOTIFY__META` | WhatsApp Cloud API credentials, for `whatsapp.driver = "meta"`. |
+| `meta.phone_number_id` | string | `""` | `APP_NOTIFY__META__PHONE_NUMBER_ID` | The sending phone number's id. |
+| `meta.access_token` | string | secret | `APP_NOTIFY__META__ACCESS_TOKEN` | A system user access token. |
+| `meta.api_version` | string | `"v21.0"` | `APP_NOTIFY__META__API_VERSION` | The Graph API version (default `v21.0`). |
+| `meta.endpoint` | string |  | `APP_NOTIFY__META__ENDPOINT` | The Graph API's base URL (default `https://graph.facebook.com`). |
+| `preferences` | table |  | `APP_NOTIFY__PREFERENCES` | What people and workspaces choose to receive. |
+| `preferences.enabled` | boolean | `true` | `APP_NOTIFY__PREFERENCES__ENABLED` | Apply the stored preferences when sending (with `DatabaseModule`). Default: `true`. |
+| `preferences.channels` | list of Channel | `"mail, database, slack, teams, sms, whatsapp, web_push"` | `APP_NOTIFY__PREFERENCES__CHANNELS` | The channels people may switch, in the order the preference routes list them: a list, or a comma-separated string from an environment variable. Default: every channel but `broadcast`, which follows the `database` choice (the real-time event of an in-app notification). |
+| `preferences.required` | list of string | `[]` | `APP_NOTIFY__PREFERENCES__REQUIRED` | Categories that cannot be turned off (`security`): their notifications go out over every channel they name, and a change that turns one of their channels off is refused. Default: none. |
+| `preferences.workspace_permission` | string | `"workspace.update"` | `APP_NOTIFY__PREFERENCES__WORKSPACE_PERMISSION` | The permission that changes a workspace's defaults (`PATCH /api/notifications/preferences/workspace`), checked in the request's workspace. Default: `workspace.update`. |
+| `digest` | table |  | `APP_NOTIFY__DIGEST` | The digest mail of batched notifications. |
+| `digest.at` | string | `"09:00"` | `APP_NOTIFY__DIGEST__AT` | The local time daily and weekly digests go out, `HH:MM` on the recipient's clock. Default: `09:00`. |
+| `digest.weekly_on` | string | `"monday"` | `APP_NOTIFY__DIGEST__WEEKLY_ON` | The day weekly digests go out (`monday` to `sunday`). Default: `monday`. |
+| `digest.subject` | string | `"Your notifications"` | `APP_NOTIFY__DIGEST__SUBJECT` | The digest mail's subject, a template with `count` and `digest` (`daily`). Default: `Your notifications`. |
+| `digest.template` | string | `"notify/digest"` | `APP_NOTIFY__DIGEST__TEMPLATE` | The digest mail's template (`{template}.html` and `.txt`), with `items`, `count`, `digest` and `style`. Default: `notify/digest`, built in; a file of that name replaces it. |
+| `deferred` | table |  | `APP_NOTIFY__DEFERRED` | Deliveries held for quiet hours, send windows and digests. |
+| `deferred.channels` | list of Channel | `"mail, slack, teams, sms, whatsapp, web_push"` | `APP_NOTIFY__DEFERRED__CHANNELS` | The channels quiet hours and send windows hold. Default: `mail`, `slack`, `teams`, `sms`, `whatsapp` and `web_push` (the database and broadcast channels show in the app at once). |
+| `deferred.batch` | integer | `500` | `APP_NOTIFY__DEFERRED__BATCH` | How many held deliveries one `notify:release` run releases at most. Default: 500. |
+| `deferred.max_attempts` | integer | `5` | `APP_NOTIFY__DEFERRED__MAX_ATTEMPTS` | Attempts before a held delivery that keeps failing is dropped (logged). Default: 5. |
+| `deferred.retry_secs` | integer | `300` | `APP_NOTIFY__DEFERRED__RETRY_SECS` | Seconds before a release that failed is tried again. Default: 300. |
+| `deferred.schedule` | boolean | `true` | `APP_NOTIFY__DEFERRED__SCHEDULE` | Run `notify:release` every minute on `ScheduleModule`'s scheduler. Default: `true`. |
+
+## `oauth`
+
+Options of the OAuth server (configuration section `oauth`).
+
+More: [/docs/packages/oauth-server/](/docs/packages/oauth-server/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `issuer` | string |  | `APP_OAUTH__ISSUER` | The `iss` of ID tokens and the base of the discovery URLs. Defaults to `app.url`. |
+| `path` | string | `"/oauth"` | `APP_OAUTH__PATH` | Where the protocol endpoints are mounted (outside `http.api_prefix`). |
+| `consent_url` | string |  | `APP_OAUTH__CONSENT_URL` | The front end's consent page; required for the authorization code flow. `GET {path}/authorize` redirects to `{consent_url}?request=<id>`. |
+| `device_url` | string |  | `APP_OAUTH__DEVICE_URL` | The front end's device page; required for the device grant. It is the `verification_uri` shown on the device. |
+| `scopes` | table of ScopeOptions | `"{}"` | `APP_OAUTH__SCOPES` | The scopes the app defines, by name. `openid`, `profile`, `email` and `offline_access` are built in. |
+| `access_token_ttl_secs` | integer | `3600` | `APP_OAUTH__ACCESS_TOKEN_TTL_SECS` | Access token lifetime, in seconds. |
+| `refresh_token_ttl_secs` | integer | `2592000` | `APP_OAUTH__REFRESH_TOKEN_TTL_SECS` | Refresh token lifetime, in seconds; every refresh starts it again. |
+| `request_ttl_secs` | integer | `600` | `APP_OAUTH__REQUEST_TTL_SECS` | Authorization request and device code lifetime, in seconds. |
+| `code_ttl_secs` | integer | `60` | `APP_OAUTH__CODE_TTL_SECS` | Authorization code lifetime, in seconds. |
+| `token_cache_secs` | integer | `10` | `APP_OAUTH__TOKEN_CACHE_SECS` | How long each instance caches a token lookup, in seconds (`0` turns the cache off). |
+| `signing_key` | string | secret | `APP_OAUTH__SIGNING_KEY` | The key that signs ID tokens: Ed25519 (`ed25519:<base64 PKCS#8 or seed>`, from `navree oauth:keys`) for EdDSA, or RSA (`rsa:<base64 DER>` or a PEM private key, 2048 to 4096 bits, made with OpenSSL) for RS256. An Ed25519 key is derived from `app.key` when unset. |
+| `id_token_signing_alg` | EdDSA \| RS256 |  | `APP_OAUTH__ID_TOKEN_SIGNING_ALG` | How ID tokens are signed: `EdDSA` or `RS256`. Unset, it follows `signing_key` (EdDSA without one). Set, it must match the key: `RS256` needs an RSA `signing_key`. |
+| `previous_signing_keys` | list of string | secret | `APP_OAUTH__PREVIOUS_SIGNING_KEYS` | Older signing keys, still published in the JWKS so ID tokens issued before a rotation verify. A list, or a comma-separated string. |
+| `personal_access_tokens` | table |  | `APP_OAUTH__PERSONAL_ACCESS_TOKENS` | Personal access tokens. |
+| `personal_access_tokens.enabled` | boolean | `true` | `APP_OAUTH__PERSONAL_ACCESS_TOKENS__ENABLED` | Whether the module mounts `/api/oauth/personal-access-tokens` (default true). The `PersonalAccessTokens` service works either way. |
+| `personal_access_tokens.max_days` | integer | `365` | `APP_OAUTH__PERSONAL_ACCESS_TOKENS__MAX_DAYS` | The longest lifetime, in days (default 365); `0` allows tokens that never expire. |
+| `dynamic_registration` | boolean | `false` | `APP_OAUTH__DYNAMIC_REGISTRATION` | Whether clients may register themselves (`POST {path}/register`, RFC 7591). Off by default. |
+| `rate_limits` | table |  | `APP_OAUTH__RATE_LIMITS` | Rate limits of the token, introspection, revocation and device authorization endpoints, per client and per client IP. |
+| `rate_limits.token` | table |  | `APP_OAUTH__RATE_LIMITS__TOKEN` | `POST {path}/token`: 300 per client, 120 per IP. |
+| `rate_limits.token.per_client` | integer | `300` | `APP_OAUTH__RATE_LIMITS__TOKEN__PER_CLIENT` | Requests per minute of one client, counted once it has authenticated (so requests naming a client with a wrong secret can't use up its budget). Public clients have no secret, so anyone can name one: they are limited per IP only. |
+| `rate_limits.token.per_ip` | integer | `120` | `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP` | Requests per minute from one client IP address, counted before anything is checked (failed client authentications included). |
+| `rate_limits.introspect` | table |  | `APP_OAUTH__RATE_LIMITS__INTROSPECT` | `POST {path}/introspect`: 1200 per client, 600 per IP (resource servers introspect on every request they don't cache). |
+| `rate_limits.introspect.per_client` | integer | `1200` | `APP_OAUTH__RATE_LIMITS__INTROSPECT__PER_CLIENT` | Requests per minute of one client, counted once it has authenticated (so requests naming a client with a wrong secret can't use up its budget). Public clients have no secret, so anyone can name one: they are limited per IP only. |
+| `rate_limits.introspect.per_ip` | integer | `600` | `APP_OAUTH__RATE_LIMITS__INTROSPECT__PER_IP` | Requests per minute from one client IP address, counted before anything is checked (failed client authentications included). |
+| `rate_limits.revoke` | table |  | `APP_OAUTH__RATE_LIMITS__REVOKE` | `POST {path}/revoke`: 300 per client, 60 per IP. |
+| `rate_limits.revoke.per_client` | integer | `300` | `APP_OAUTH__RATE_LIMITS__REVOKE__PER_CLIENT` | Requests per minute of one client, counted once it has authenticated (so requests naming a client with a wrong secret can't use up its budget). Public clients have no secret, so anyone can name one: they are limited per IP only. |
+| `rate_limits.revoke.per_ip` | integer | `60` | `APP_OAUTH__RATE_LIMITS__REVOKE__PER_IP` | Requests per minute from one client IP address, counted before anything is checked (failed client authentications included). |
+| `rate_limits.device_authorization` | table |  | `APP_OAUTH__RATE_LIMITS__DEVICE_AUTHORIZATION` | `POST {path}/device_authorization`: 60 per client, 30 per IP. |
+| `rate_limits.device_authorization.per_client` | integer | `60` | `APP_OAUTH__RATE_LIMITS__DEVICE_AUTHORIZATION__PER_CLIENT` | Requests per minute of one client, counted once it has authenticated (so requests naming a client with a wrong secret can't use up its budget). Public clients have no secret, so anyone can name one: they are limited per IP only. |
+| `rate_limits.device_authorization.per_ip` | integer | `30` | `APP_OAUTH__RATE_LIMITS__DEVICE_AUTHORIZATION__PER_IP` | Requests per minute from one client IP address, counted before anything is checked (failed client authentications included). |
+
+## `observe`
+
+Observability settings (configuration section `observe`; every key optional).
+
+More: [/docs/digging-deeper/health-and-metrics/](/docs/digging-deeper/health-and-metrics/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `metrics` | boolean | `true` | `APP_OBSERVE__METRICS` | Install the Prometheus recorder and serve `GET /metrics` (default `true`). |
+| `metrics_token` | string | secret | `APP_OBSERVE__METRICS_TOKEN` | When set, `GET /metrics` requires `Authorization: Bearer <token>`. |
+
+## `observe.tracing`
+
+Tracing settings: configuration section `observe.tracing` (every key optional).
+
+More: [/docs/microservices/tracing/](/docs/microservices/tracing/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `enabled` | boolean | `true` | `APP_OBSERVE__TRACING__ENABLED` | Record spans and propagate trace context (default `true`). |
+| `endpoint` | string |  | `APP_OBSERVE__TRACING__ENDPOINT` | The OTLP endpoint; without one, nothing is exported. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT`. |
+| `protocol` | grpc \| http | `"grpc"` | `APP_OBSERVE__TRACING__PROTOCOL` | `grpc` (default) or `http`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`. |
+| `headers` | table of string | secret | `APP_OBSERVE__TRACING__HEADERS` | Headers sent with every export, such as a vendor's API key. Falls back to `OTEL_EXPORTER_OTLP_HEADERS`. |
+| `service_name` | string |  | `APP_OBSERVE__TRACING__SERVICE_NAME` | The `service.name` of every span: this key, then `micro.service`, then `app.name`, then the binary's name. Falls back to `OTEL_SERVICE_NAME`. |
+| `resource` | table of string | `{}` | `APP_OBSERVE__TRACING__RESOURCE` | Extra resource attributes (`deployment.environment = "production"`). Falls back to `OTEL_RESOURCE_ATTRIBUTES`. |
+| `sample_ratio` | number | `1.0` | `APP_OBSERVE__TRACING__SAMPLE_RATIO` | The share of new traces recorded, 0 to 1 (default `1.0`). Falls back to `OTEL_TRACES_SAMPLER_ARG`. |
+| `trust_incoming` | boolean | `true` | `APP_OBSERVE__TRACING__TRUST_INCOMING` | Continue traces from incoming `traceparent` headers (default `true`). |
+| `stdout` | boolean | `false` | `APP_OBSERVE__TRACING__STDOUT` | Also print finished spans to stdout, one JSON object per line. |
+| `timeout_ms` | integer | `10000` | `APP_OBSERVE__TRACING__TIMEOUT_MS` | The time limit of one export, in milliseconds (default 10000). |
+| `max_queue_size` | integer | `2048` | `APP_OBSERVE__TRACING__MAX_QUEUE_SIZE` | Spans waiting for export (default 2048); when full, new spans are dropped and counted in `navree_tracing_spans_dropped_total`. |
+| `trace_url` | string |  | `APP_OBSERVE__TRACING__TRACE_URL` | Your backend's trace page, with `{trace_id}` (for links to traces). |
+
+## `orm`
+
+The ORM's options, the `[orm]` section of the configuration.
+
+More: [/docs/orm/getting-started/](/docs/orm/getting-started/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `strict` | boolean |  | `APP_ORM__STRICT` | Every strict mode at once; unset: on unless the environment is `production`. |
+| `prevent_missing_attributes` | boolean |  | `APP_ORM__PREVENT_MISSING_ATTRIBUTES` | A column a partial select left out is an error (`OrmError::MissingAttribute`) instead of the field's default. |
+| `prevent_discarding_attributes` | boolean |  | `APP_ORM__PREVENT_DISCARDING_ATTRIBUTES` | Filling a column that is not fillable is an error (`OrmError::MassAssignment`) instead of silently skipping it. |
+| `prevent_lazy_loading` | boolean |  | `APP_ORM__PREVENT_LAZY_LOADING` | Loading a relation lazily for a record that came with others is an error (`OrmError::LazyLoading`). |
+| `auto_eager_load` | boolean | `false` | `APP_ORM__AUTO_EAGER_LOAD` | A lazy load on one record loads the relation for every record of the result it came from. |
+| `prune_chunk` | integer | `1000` | `APP_ORM__PRUNE_CHUNK` | How many records `model:prune` handles per chunk (unless `--chunk` or the model says otherwise). |
+
+## `queue`
+
+`QueueModule` settings: configuration section `queue`.
+
+More: [/docs/digging-deeper/queues/](/docs/digging-deeper/queues/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `driver` | database \| memory \| redis | `"database"` | `APP_QUEUE__DRIVER` | Where jobs are stored (default [`QueueDriver::Database`]). |
+| `default_queue` | string | `"default"` | `APP_QUEUE__DEFAULT_QUEUE` | The queue of jobs dispatched with an empty queue name, and the queue workers process when `queues` is empty (default `default`, the queue `JobOptions` names by default). |
+| `workers` | integer | `4` | `APP_QUEUE__WORKERS` | How many jobs one `Queue::work` call runs at the same time (default 4). |
+| `poll_interval_ms` | integer | `1000` | `APP_QUEUE__POLL_INTERVAL_MS` | How long an idle worker waits before polling again, in milliseconds (default 1000). |
+| `queues` | list of string | `[]` | `APP_QUEUE__QUEUES` | The queues workers process, highest priority first (default: just `default_queue`). |
+| `operations` | table |  | `APP_QUEUE__OPERATIONS` | Operations: their routes, heartbeat and watchdog (section `queue.operations`). |
+| `operations.routes` | boolean | `true` | `APP_QUEUE__OPERATIONS__ROUTES` | Mounts the `/api/operations` routes (default true; they also need `DatabaseModule` and an authenticator). |
+| `operations.watchdog` | boolean | `true` | `APP_QUEUE__OPERATIONS__WATCHDOG` | Schedules the watchdog (`Operations::sweep`) every minute, as task `queue.watchdog`, in apps with `ScheduleModule` (default true). Without `ScheduleModule`, run `queue:watchdog` every minute from system cron instead. |
+| `operations.heartbeat_secs` | integer | `30` | `APP_QUEUE__OPERATIONS__HEARTBEAT_SECS` | How often the worker renews the heartbeat of a running job's operation, in seconds (default 30). |
+| `operations.stale_after_secs` | integer | `300` | `APP_QUEUE__OPERATIONS__STALE_AFTER_SECS` | A pending or running operation without a heartbeat for this many seconds is stale (default 300): see `queue:watchdog`. |
+| `operations.max_redispatches` | integer | `3` | `APP_QUEUE__OPERATIONS__MAX_REDISPATCHES` | How many times the watchdog dispatches the job of a stale idempotent operation again before failing it (default 3). |
+| `operations.progress_interval_ms` | integer | `500` | `APP_QUEUE__OPERATIONS__PROGRESS_INTERVAL_MS` | `ctx.progress` writes to the database at most this often per job, in milliseconds (default 500); a report with `done == total` is always written. |
+| `operations.stream_poll_ms` | integer | `1000` | `APP_QUEUE__OPERATIONS__STREAM_POLL_MS` | How often an SSE stream re-reads its operation, in milliseconds (default 1000). Changes made in the same process arrive at once. |
+| `operations.view_permission` | string | `"operations.view"` | `APP_QUEUE__OPERATIONS__VIEW_PERMISSION` | The permission that shows other users' operations (default `operations.view`), app-wide or in the operation's workspace. |
+| `operations.cancel_permission` | string | `"operations.cancel"` | `APP_QUEUE__OPERATIONS__CANCEL_PERMISSION` | The permission that cancels other users' operations (default `operations.cancel`). |
+
+## `realtime`
+
+Settings of the realtime server (configuration section `realtime`; every key optional).
+
+More: [/docs/digging-deeper/broadcasting/](/docs/digging-deeper/broadcasting/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `app_id` | string | `"navree"` | `APP_REALTIME__APP_ID` | The application id (default `navree`). |
+| `key` | string | `"navree"` | `APP_REALTIME__KEY` | The public application key clients connect with (default `navree`): letters, digits, `-`, `_` and `.`. |
+| `secret` | string | secret | `APP_REALTIME__SECRET` | The secret that signs private and presence channel subscriptions. Empty (the default) means a random secret per process, which is enough for this in-process server: it both signs and verifies. |
+| `allowed_origins` | list of string | `[]` | `APP_REALTIME__ALLOWED_ORIGINS` | Exact origins (`https://app.example.com`) whose pages may connect; `*` allows any. Empty (the default) means the `http.cors` allowed origins. A request without an `Origin` header (not a browser) or from the server's own origin is always accepted. From the environment, a comma-separated list. |
+| `activity_timeout_secs` | integer | `120` | `APP_REALTIME__ACTIVITY_TIMEOUT_SECS` | Seconds of silence after which the server pings a client (default 120, sent to clients as `activity_timeout`). A client that then stays silent for another `min(activity_timeout, 30 s)` is disconnected. |
+| `relay_url` | string | `""` | `APP_REALTIME__RELAY_URL` | Where a process that does not serve the WebSockets (`queue:work`, `schedule:work`, a command) sends its broadcasts: the base URL of the `serve` process, e.g. `http://127.0.0.1:8080`, whose `POST /apps/{app_id}/events` delivers them to its connections. `auto` means `http://` plus `http.addr` (a wildcard address as loopback). Empty (the default): broadcasts stay in the process, which only reaches sockets when it serves them itself. Relayed messages are signed with a key derived from `realtime.secret`, or from the app key when there is no secret, so every process of the app must share one of them. |
+| `backplane` | none \| redis | `"none"` | `APP_REALTIME__BACKPLANE` | What connects the app's processes (default [`BackplaneKind::None`]). With [`BackplaneKind::Redis`], every process shares broadcasts, presence members and user disconnections over Redis; it needs `RedisModule` and a `secret`, because a subscription signed by one process is checked by another. |
+| `streams` | table |  | `APP_REALTIME__STREAMS` | The live streams pages listen to (`realtime.streams`). |
+| `streams.names` | integer | `32` | `APP_REALTIME__STREAMS__NAMES` | The topics and channels one stream may name together (default 32). A stream that names more is refused with 400. |
+| `streams.per_user` | integer | `16` | `APP_REALTIME__STREAMS__PER_USER` | The streams one signed-in user may hold open at once (default 16): one per open tab. One more is refused with 429, which a page tries again later. Guests are held by the server's connection limits. |
+| `streams.lifetime_secs` | integer | `3600` | `APP_REALTIME__STREAMS__LIFETIME_SECS` | How long a stream stays open, give or take a tenth (default 3600 seconds). Then it ends, and the page comes back, resumes from its last id and is authorized again. |
+| `streams.replay` | integer | `1024` | `APP_REALTIME__STREAMS__REPLAY` | How many of the last broadcasts a process keeps once it has served a stream, so a stream that comes back is told only what it missed (default 1024). `0` keeps none: a page that comes back fetches everything it shows once. |
+
+## `redis`
+
+The settings of `RedisModule`: the `redis` configuration section. Every key is optional.
+
+More: [/docs/digging-deeper/redis/](/docs/digging-deeper/redis/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `url` | string | `"redis://127.0.0.1:6379"` | `APP_REDIS__URL` | The default connection's URL (default `redis://127.0.0.1:6379`): `redis://[user][:password@]host[:port][/db]`, `rediss://…` for TLS (rustls, the system's root certificates) or `unix:///path/to/redis.sock`. When nothing sets it, the `REDIS_URL` environment variable does. Falls back to `REDIS_URL`. |
+| `prefix` | string | `"navree:"` | `APP_REDIS__PREFIX` | Starts every key the Redis drivers write (default `navree:`). Give each app sharing a Redis server its own prefix. |
+| `connect_timeout_ms` | integer | `5000` | `APP_REDIS__CONNECT_TIMEOUT_MS` | How long opening a connection may take, in milliseconds (default 5000). |
+| `response_timeout_ms` | integer | `5000` | `APP_REDIS__RESPONSE_TIMEOUT_MS` | How long a command may wait for its answer, in milliseconds (default 5000). Dedicated connections (`RedisConnection::dedicated`) have no response timeout, for blocking commands. |
+| `connections` | table of RedisConnectionOptions | `"{}"` | `APP_REDIS__CONNECTIONS` | More connections, by name. A driver uses the connection named after it when there is one (`cache`, which also holds the locks, `queue`, `session`, `realtime` and `rate_limiter`), the default one otherwise. |
+
+## `schema`
+
+Defaults of the schema builder: configuration section `schema`.
+
+More: [/docs/database/schema-builder/](/docs/database/schema-builder/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `default_string_length` | integer | `255` | `APP_SCHEMA__DEFAULT_STRING_LENGTH` | The length of `string` columns without an explicit `.length(n)`. |
+| `default_time_precision` | integer | `6` | `APP_SCHEMA__DEFAULT_TIME_PRECISION` | The fractional-second precision of `timestamp`, `date_time` and `time` columns without `.precision(p)`; `None` leaves each database's default (MySQL's is whole seconds). |
+| `morph_key` | int \| uuid \| ulid | `"int"` | `APP_SCHEMA__MORPH_KEY` | The key type of `morphs` and `nullable_morphs`. |
+| `timescaledb` | auto \| require \| off | `"auto"` | `APP_SCHEMA__TIMESCALEDB` | When to use TimescaleDB. |
+| `create_extensions` | boolean | `true` | `APP_SCHEMA__CREATE_EXTENSIONS` | Whether the builder may run `CREATE EXTENSION IF NOT EXISTS timescaledb` when the extension is available but not installed. |
+| `hypertable_keys` | extend \| reject | `"extend"` | `APP_SCHEMA__HYPERTABLE_KEYS` | What to do with a hypertable's primary key that lacks the time column. |
+| `mysql_charset` | string | `"utf8mb4"` | `APP_SCHEMA__MYSQL_CHARSET` | The default character set of MySQL tables (`utf8mb4`: every Unicode character, emoji included); `None` leaves the server's default. |
+| `mysql_collation` | string |  | `APP_SCHEMA__MYSQL_COLLATION` | The default collation of MySQL tables; `None` leaves the server's default for the character set. |
+| `mysql_engine` | string |  | `APP_SCHEMA__MYSQL_ENGINE` | The default storage engine of MySQL tables; `None` leaves the server's default (InnoDB). |
+| `dump_path` | string | `"database/schema"` | `APP_SCHEMA__DUMP_PATH` | The directory (relative to the working directory) where `navree schema:dump` writes `{driver}-schema.sql`, and where `navree migrate` looks for it when the database is empty. |
+
+## `search`
+
+Options of the search module (configuration section `search`).
+
+More: [/docs/packages/search/](/docs/packages/search/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `engine` | postgres \| meilisearch \| typesense \| tantivy \| memory | `"postgres"` | `APP_SEARCH__ENGINE` | The engine: `postgres` (default; `database` is the same), `meilisearch`, `typesense`, `tantivy` or `memory`. |
+| `url` | string |  | `APP_SEARCH__URL` | The server URL (`meilisearch` and `typesense`). |
+| `key` | string | secret | `APP_SEARCH__KEY` | The API key of the server (`meilisearch`; required by `typesense`). |
+| `nodes` | list of string | `[]` | `APP_SEARCH__NODES` | The other nodes of a Typesense cluster (a list, or a comma-separated string). |
+| `prefix` | string | `""` | `APP_SEARCH__PREFIX` | Put in front of every index name (default empty). |
+| `queue` | string | `"default"` | `APP_SEARCH__QUEUE` | The queue of `search.sync` jobs (default `default`). |
+| `sync` | queued \| inline \| off | `"queued"` | `APP_SEARCH__SYNC` | When indexes follow changes (default `queued`). |
+| `unique_for_secs` | integer | `5` | `APP_SEARCH__UNIQUE_FOR_SECS` | The window in which sync jobs for the same records collapse, in seconds (default 5). |
+| `chunk_size` | integer | `500` | `APP_SEARCH__CHUNK_SIZE` | Rows per batch for imports (default 500). |
+| `timeout_secs` | integer | `5` | `APP_SEARCH__TIMEOUT_SECS` | Time allowed for one engine request, in seconds (default 5). |
+| `postgres` | table |  | `APP_SEARCH__POSTGRES` | The `postgres` engine. |
+| `postgres.language` | string | `"english"` | `APP_SEARCH__POSTGRES__LANGUAGE` | The text search configuration (default `english`). |
+| `postgres.trigram` | boolean | `false` | `APP_SEARCH__POSTGRES__TRIGRAM` | Typo tolerance with `pg_trgm` (default false). |
+| `postgres.typo_threshold` | number | `0.4` | `APP_SEARCH__POSTGRES__TYPO_THRESHOLD` | The `pg_trgm.word_similarity_threshold` of a query with `trigram`: how close a query word must be to a word of the text to match, above 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses a one-letter typo in a longer word ("lakotia" scores 0.55 against "Lakhotia"), so the engine sets this value per query. |
+| `tantivy` | table |  | `APP_SEARCH__TANTIVY` | The `tantivy` engine. |
+| `tantivy.path` | string | `"storage/search"` | `APP_SEARCH__TANTIVY__PATH` | The directory holding one directory per index (default `storage/search`). |
+| `tantivy.memory_budget_mb` | integer | `64` | `APP_SEARCH__TANTIVY__MEMORY_BUDGET_MB` | The index writer's buffer in MB (default 64, at least 15). |
+| `vectors` | table |  | `APP_SEARCH__VECTORS` | Vector search; off without `vectors.store`. |
+| `vectors.store` | pgvector \| qdrant \| memory \| ai |  | `APP_SEARCH__VECTORS__STORE` | Where vectors live (unset: no vector search). `ai` keeps them in navree-ai's store, with its `ai.vectors` size and metric. |
+| `vectors.url` | string |  | `APP_SEARCH__VECTORS__URL` | The Qdrant server. |
+| `vectors.key` | string | secret | `APP_SEARCH__VECTORS__KEY` | The Qdrant API key. |
+| `vectors.dimensions` | integer | `1536` | `APP_SEARCH__VECTORS__DIMENSIONS` | The vector size; must match the embedding model (default 1536). |
+| `vectors.metric` | cosine \| dot \| euclidean | `"cosine"` | `APP_SEARCH__VECTORS__METRIC` | How vectors are compared (default `cosine`). |
+| `indexes` | table of IndexOverrides | `"{}"` | `APP_SEARCH__INDEXES` | Synonyms and stop words per index (keyed by the index name before the prefix). |
+
+## `session`
+
+Session settings (configuration section `session`; every key optional).
+
+More: [/docs/basics/sessions-and-csrf/](/docs/basics/sessions-and-csrf/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | memory \| database \| redis | `"memory"` | `APP_SESSION__STORE` | Where records are kept (default memory). |
+| `cookie` | string | `"navree_session"` | `APP_SESSION__COOKIE` | The session cookie name (default `navree_session`). |
+| `lifetime_minutes` | integer | `120` | `APP_SESSION__LIFETIME_MINUTES` | How long an idle session lives, in minutes (default 120). Requests extend it (at most one store write per minute when nothing else changed); the cookies carry the same `Max-Age`. |
+| `secure` | boolean | `true` | `APP_SESSION__SECURE` | The `Secure` cookie attribute (default `true`; set it to `false` to develop over plain HTTP on a host other than `localhost`). |
+| `same_site` | strict \| lax \| none | `"lax"` | `APP_SESSION__SAME_SITE` | The `SameSite` cookie attribute (default lax). |
+| `domain` | string |  | `APP_SESSION__DOMAIN` | The `Domain` cookie attribute (default none: the API host only). Set the shared parent domain when the SPA and the API are sibling hosts, so the SPA can read `XSRF-TOKEN`. |
+| `host_prefix` | boolean | `true` | `APP_SESSION__HOST_PREFIX` | Whether the session cookie's name starts with `__Host-` when it can (default `true`): with `secure` on and no `domain`, browsers then accept the cookie only from this host, over HTTPS, for the whole site, so a sibling subdomain can't plant a session cookie of its own. See `cookie_name`. |
+| `csrf_except` | list of string | `[]` | `APP_SESSION__CSRF_EXCEPT` | Request paths exempt from the CSRF check, as globs (`*` matches any characters, `?` one), e.g. `/webhooks/*`. A pattern without a leading `/` gets one. |
+
+## `settings`
+
+The options of `SettingsModule`: the `settings` configuration section. Every key is optional.
+
+More: [/docs/packages/settings/](/docs/packages/settings/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | database \| memory | `"database"` | `APP_SETTINGS__STORE` | Where stored values live (default `database`). |
+| `cache_ttl_secs` | integer | `300` | `APP_SETTINGS__CACHE_TTL_SECS` | How long resolved values stay in the app's cache (`CacheModule`), in seconds (default 300); `0` turns the cache off. Every write clears the entries it affects, so the lifetime only bounds what other processes see after a change made without a cache they share. |
+| `routes` | boolean | `true` | `APP_SETTINGS__ROUTES` | Mount `{api_prefix}/settings...` (default `true`; needs an authenticator). |
+
+## `sheets`
+
+Options of the sheets module (configuration section `sheets`).
+
+More: [/docs/packages/imports-and-exports/](/docs/packages/imports-and-exports/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `csv` | table |  | `APP_SHEETS__CSV` | How CSV files are written. |
+| `csv.bom` | boolean | `true` | `APP_SHEETS__CSV__BOM` | Start the file with a UTF-8 byte-order mark, so Excel reads it as UTF-8 (default `true`). |
+| `csv.delimiter` | string | `","` | `APP_SHEETS__CSV__DELIMITER` | The field delimiter, one ASCII character (default `,`; `;` for spreadsheets set to a European locale, `\t` for TSV). |
+| `csv.escape_formulas` | boolean | `true` | `APP_SHEETS__CSV__ESCAPE_FORMULAS` | Escape text that a spreadsheet would run as a formula (default `true`): a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return (or their full-width forms) gets a leading `'`. Numbers are never escaped. |
+| `csv.crlf` | boolean | `true` | `APP_SHEETS__CSV__CRLF` | End lines with CRLF, as RFC 4180 says (default `true`); `false` uses LF. |
+| `exports` | table |  | `APP_SHEETS__EXPORTS` | Exports. |
+| `exports.disk` | string | `""` | `APP_SHEETS__EXPORTS__DISK` | The disk queued exports are written to (default `""`: the storage module's default disk). |
+| `exports.directory` | string | `"exports"` | `APP_SHEETS__EXPORTS__DIRECTORY` | The directory on the disk (default `exports`). |
+| `exports.link_ttl_secs` | integer | `86400` | `APP_SHEETS__EXPORTS__LINK_TTL_SECS` | How long the signed download link of a queued export works, in seconds (default 86,400: a day). |
+| `exports.page_size` | integer | `1000` | `APP_SHEETS__EXPORTS__PAGE_SIZE` | How many rows an `Export` is asked for at a time (default 1,000). |
+| `exports.max_rows` | integer | `1000000` | `APP_SHEETS__EXPORTS__MAX_ROWS` | The most rows one export writes (default 1,000,000; an XLSX sheet holds at most 1,048,575). |
+| `exports.routes` | boolean | `true` | `APP_SHEETS__EXPORTS__ROUTES` | Mount the `/api/exports` routes (default true). |
+| `imports` | table |  | `APP_SHEETS__IMPORTS` | Imports. |
+| `imports.disk` | string | `""` | `APP_SHEETS__IMPORTS__DISK` | The disk uploads and error files are kept on (default `""`: the storage module's default disk). |
+| `imports.directory` | string | `"imports"` | `APP_SHEETS__IMPORTS__DIRECTORY` | The directory on the disk (default `imports`). |
+| `imports.max_upload_bytes` | integer | `20971520` | `APP_SHEETS__IMPORTS__MAX_UPLOAD_BYTES` | The largest file accepted, in bytes (default 20 MiB). |
+| `imports.max_rows` | integer | `100000` | `APP_SHEETS__IMPORTS__MAX_ROWS` | The most data rows a file may have (default 100,000). |
+| `imports.max_columns` | integer | `16384` | `APP_SHEETS__IMPORTS__MAX_COLUMNS` | The most columns a file may have (default 16,384, the width of an Excel sheet). |
+| `imports.max_cells` | integer | `10000000` | `APP_SHEETS__IMPORTS__MAX_CELLS` | The most cells a file may hold, counting every row at the width of the header (default 10,000,000: 100,000 rows of 100 columns). |
+| `imports.max_inflated_bytes` | integer | `1073741824` | `APP_SHEETS__IMPORTS__MAX_INFLATED_BYTES` | The most a part of a workbook (a sheet, the shared strings) may unpack to, as the zip file declares it, in bytes (default 1 GiB: twice the sheet XML of a workbook that holds `max_cells` cells). It also bounds opening: all that a workbook keeps while it opens counts against this, and it unpacks at most four times this to open. |
+| `imports.max_text_bytes` | integer | `268435456` | `APP_SHEETS__IMPORTS__MAX_TEXT_BYTES` | The most text the cells of a file may hold, in bytes, counting the text of every cell the table keeps, the same text again for each cell it is in (default 256 MiB: 10,000,000 cells of 26 bytes). |
+| `imports.chunk_size` | integer | `500` | `APP_SHEETS__IMPORTS__CHUNK_SIZE` | Rows checked per staging step and saved per apply job (default 500). |
+| `imports.keep_days` | integer | `7` | `APP_SHEETS__IMPORTS__KEEP_DAYS` | `sheets:prune` deletes imports (their rows, upload and error file) last changed more than this many days ago (default 7). |
+| `imports.routes` | boolean | `true` | `APP_SHEETS__IMPORTS__ROUTES` | Mount the `/api/imports` routes (default true). |
+
+## `social`
+
+Options of the social module (configuration section `social`).
+
+More: [/docs/packages/social-sign-in/](/docs/packages/social-sign-in/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `redirect_base` | string | `""` | `APP_SOCIAL__REDIRECT_BASE` | The front end's callback page: each provider's redirect URI is `{redirect_base}/{provider}`. Required; an absolute http(s) URL. |
+| `routes` | boolean | `true` | `APP_SOCIAL__ROUTES` | Whether the module mounts the `/api/auth/social` routes. |
+| `registration` | boolean |  | `APP_SOCIAL__REGISTRATION` | Whether a first sign-in creates a user; `None` follows `auth.registration`. |
+| `link_by_email` | verified \| never | `"verified"` | `APP_SOCIAL__LINK_BY_EMAIL` | Whether a verified provider email links to the user with that email. |
+| `allowed_email_domains` | list of string | `[]` | `APP_SOCIAL__ALLOWED_EMAIL_DOMAINS` | When not empty, only these email domains may sign in or sign up (with a verified address). A list, or a comma-separated string. |
+| `two_factor` | require \| skip | `"require"` | `APP_SOCIAL__TWO_FACTOR` | Two-factor authentication on social sign-ins. |
+| `state_ttl_secs` | integer | `600` | `APP_SOCIAL__STATE_TTL_SECS` | The lifetime of a sealed state, in seconds. |
+| `store_tokens` | boolean | `false` | `APP_SOCIAL__STORE_TOKENS` | Whether provider tokens are stored (encrypted) for `Social::token`. |
+| `providers` | table of ProviderConfig | `"{}"` | `APP_SOCIAL__PROVIDERS` | The providers, by key (`github`, `okta`). |
+
+## `sso`
+
+The `sso` configuration section. Environment variables: `APP_SSO__<KEY>`, nested with `__` (`APP_SSO__SAML__ALLOW_IDP_INITIATED`).
+
+More: [/docs/security/single-sign-on/](/docs/security/single-sign-on/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `base_url` | string |  | `APP_SSO__BASE_URL` | The API's public base URL (`https://api.acme.test`): the assertion consumer service, SAML metadata and OpenID Connect callback URLs start with it. `app.url` when unset. |
+| `complete_url` | string |  | `APP_SSO__COMPLETE_URL` | The front end's page that finishes a sign-in. The assertion consumer service and the callback redirect there with `?code=` (a one-time code for `POST /sso/exchange`), or with `?error=` and `&message=`. When unset they answer with the login JSON instead. |
+| `enforce_for_verified_domains` | boolean | `false` | `APP_SSO__ENFORCE_FOR_VERIFIED_DOMAINS` | Refuse password sign-in and registration for emails in a verified domain of an enabled connection (a connection's own `enforce` overrides it). Default `false`. |
+| `routes` | boolean | `true` | `APP_SSO__ROUTES` | Whether the routes are mounted (default `true`). |
+| `management_routes` | boolean | `true` | `APP_SSO__MANAGEMENT_ROUTES` | Whether the management routes (`connections`, `domains`; permission `sso.manage`) are mounted with the others (default `true`). They need a `RouteAuthorizer` (`AccessModule`): turn them off in an app without one. |
+| `routes_prefix` | string | `"/sso"` | `APP_SSO__ROUTES_PREFIX` | The routes' prefix under `http.api_prefix` (default `/sso`). |
+| `state_ttl_secs` | integer | `600` | `APP_SSO__STATE_TTL_SECS` | How long a sign-in may take from the login route to the identity provider's answer, in seconds (default 600). |
+| `code_ttl_secs` | integer | `60` | `APP_SSO__CODE_TTL_SECS` | How long the one-time code of a finished sign-in works, in seconds (default 60). |
+| `domains` | table |  | `APP_SSO__DOMAINS` | Verified email domains. |
+| `domains.txt_prefix` | string | `"navree-sso-verification"` | `APP_SSO__DOMAINS__TXT_PREFIX` | The TXT record's value is `{txt_prefix}={token}` (default `navree-sso-verification`). |
+| `domains.doh_url` | string | `"https://cloudflare-dns.com/dns-query"` | `APP_SSO__DOMAINS__DOH_URL` | The DNS-over-HTTPS endpoint (JSON API) TXT records are read from (default `https://cloudflare-dns.com/dns-query`). |
+| `saml` | table |  | `APP_SSO__SAML` | SAML connections. |
+| `saml.allow_idp_initiated` | boolean | `false` | `APP_SSO__SAML__ALLOW_IDP_INITIATED` | Accept responses the identity provider sends without a request (IdP-initiated sign-in, from a dashboard tile). Default `false`: such responses cannot be tied to a browser session. |
+| `saml.clock_skew_secs` | integer | `120` | `APP_SSO__SAML__CLOCK_SKEW_SECS` | How far the identity provider's clock may be off, in seconds (default 120). |
+| `saml.metadata_ttl_secs` | integer | `3600` | `APP_SSO__SAML__METADATA_TTL_SECS` | How long fetched metadata (`metadata_url`) is used, in seconds (default 3600). |
+| `saml.max_response_bytes` | integer | `1048576` | `APP_SSO__SAML__MAX_RESPONSE_BYTES` | The largest `SAMLResponse` accepted, in bytes (default 1 MiB). |
+| `oidc` | table |  | `APP_SSO__OIDC` | OpenID Connect connections. |
+| `oidc.scopes` | list of string | `["openid","email","profile"]` | `APP_SSO__OIDC__SCOPES` | The scopes asked for when a connection names none (default `openid email profile`; a comma-separated string from the environment). |
+| `oidc.clock_skew_secs` | integer | `60` | `APP_SSO__OIDC__CLOCK_SKEW_SECS` | How far the provider's clock may be off, in seconds (default 60). |
+
+## `storage`
+
+`StorageModule` settings: configuration section `storage`.
+
+More: [/docs/digging-deeper/storage/](/docs/digging-deeper/storage/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `default` | string | `"local"` | `APP_STORAGE__DEFAULT` | The name of the default disk (default `local`). |
+| `disks` | table of DiskConfig | `"{\"local\": Local { root: \"storage/app\", public_url: None }}"` | `APP_STORAGE__DISKS` | The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`, `memory`, `s3`, `gcs` or `azure`. |
+| `base_url` | string |  | `APP_STORAGE__BASE_URL` | An absolute base URL (`https://api.example.com`) prepended to the links the app serves itself (temporary URLs and presigned uploads of local and memory disks); without one they are path-only (`/storage/<disk>/<path>?expires=...&signature=...`). |
+
+## `time`
+
+The settings of `TimeModule`: the `time` configuration section. Every key is optional.
+
+More: [/docs/digging-deeper/time-zones/](/docs/digging-deeper/time-zones/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `default_zone` | string | `"UTC"` | `APP_TIME__DEFAULT_ZONE` | The app's zone: the zone of requests and owners no source gives one (default `UTC`). Legacy names are accepted and normalized (`Asia/Calcutta` is `Asia/Kolkata`). |
+| `routes` | boolean | `true` | `APP_TIME__ROUTES` | Mount `GET {api_prefix}/time/zones` (default `true`). |
+| `holidays` | table |  | `APP_TIME__HOLIDAYS` | The app's holidays. |
+| `holidays.country` | string |  | `APP_TIME__HOLIDAYS__COUNTRY` | The country whose public holidays the app observes, an ISO 3166-1 alpha-2 code (any case); none when unset. |
+| `holidays.days` | list of LocalDay | `"[]"` | `APP_TIME__HOLIDAYS__DAYS` | Extra closing days (`yyyy-MM-dd`): a list, or a comma-separated string from an environment variable. |
+
+## `ui`
+
+The `ui` section of the configuration: it overrides what the code gives [`PagesOptions`]. Every key is optional; one that is not set leaves the code's value alone.
+
+More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `sign_in` | string |  | `APP_UI__SIGN_IN` | Where "Sign in" leads: a path on this site, or the address of a sign-in provider (default `/sign-in`). The page the user came from is added as `next`. |
+| `home` | string |  | `APP_UI__HOME` | Where "Go to home" leads (default `/`). |
+| `sign_in_redirect` | boolean |  | `APP_UI__SIGN_IN_REDIRECT` | Send a guest who asks for a page straight to sign in, instead of showing the sign-in state (default off). |
+| `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a debug build, off in a release build). Always off in `production` and `staging`. |
+
+## `validation`
+
+Message and attribute-name overrides, the default phone region and the HTML policy (section `validation`).
+
+More: [/docs/basics/validation/](/docs/basics/validation/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `messages` | table of string | `{}` | `APP_VALIDATION__MESSAGES` | Templates by rule (`"required"`, `"min.string"`) or by field and rule (`"email.unique"`); see `DEFAULT_MESSAGES`. |
+| `attributes` | table of string | `{}` | `APP_VALIDATION__ATTRIBUTES` | Display names by field path (`"address.city"`), used for `:attribute`. |
+| `phone` | table |  | `APP_VALIDATION__PHONE` | Phone numbers (`validation.phone`). |
+| `phone.default_region` | Country |  | `APP_VALIDATION__PHONE__DEFAULT_REGION` | The region of numbers written without a country code (`"GB"`, from `APP_VALIDATION__PHONE__DEFAULT_REGION`), unless the app's [`RegionSource`] gives one for the request. Unset, such numbers are invalid. |
+| `html` | HtmlPolicy | `"HtmlPolicy { tags: {\"a\", \"b\", \"blockquote\", \"br\", \"code\", \"del\", \"em\", \"h1\", \"h2\", \"h3\", \"h4\", \"h5\", \"h6\", \"hr\", \"i\", \"li\", \"ol\", \"p\", \"pre\", \"s\", \"span\", \"strong\", \"sub\", \"sup\", \"table\", \"tbody\", \"td\", \"th\", \"thead\", \"tr\", \"u\", \"ul\"}, generic_attributes: {\"dir\", \"lang\"}, tag_attributes: {\"a\": {\"href\", \"title\"}, \"ol\": {\"start\"}, \"td\": {\"colspan\", \"rowspan\"}, \"th\": {\"colspan\", \"rowspan\", \"scope\"}}, url_schemes: {\"http\", \"https\", \"mailto\", \"tel\"}, link_rel: \"noopener noreferrer nofollow\", max_input_bytes: 524288, max_nodes: 131072, max_depth: 128 }"` | `APP_VALIDATION__HTML` | What `SafeHtml` keeps (`validation.html`). |
+
+## `view`
+
+Where `Views` finds template files, and whether it reloads them. Configuration section `view`:
+
+More: [/docs/digging-deeper/views/](/docs/digging-deeper/views/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `dirs` | list of string | `["resources/views"]` | `APP_VIEW__DIRS` | Template directories, searched in order: the first one holding a template name wins, and any file wins over an embedded template. A directory that does not exist is skipped. Default: `["resources/views"]`. From the environment, a comma-separated list. |
+| `reload` | boolean | `true` | `APP_VIEW__RELOAD` | Re-read template files when they change, appear or disappear (checked on every lookup, which costs a `stat` per lookup). Off: every template is read once, when `Views` is built. Default: on in debug builds, off in release builds. |
+
+## `webhooks`
+
+Options of the webhooks module (configuration section `webhooks`).
+
+More: [/docs/packages/webhooks/](/docs/packages/webhooks/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `queue` | string | `"default"` | `APP_WEBHOOKS__QUEUE` | The queue of the fan-out and delivery jobs (default `default`). |
+| `timeout_secs` | integer | `15` | `APP_WEBHOOKS__TIMEOUT_SECS` | Time allowed per delivery attempt, in seconds (default 15, at least 1). |
+| `require_https` | boolean | `true` | `APP_WEBHOOKS__REQUIRE_HTTPS` | Refuse `http://` endpoint URLs (default true). |
+| `disable_after_days` | integer | `5` | `APP_WEBHOOKS__DISABLE_AFTER_DAYS` | Disable an endpoint whose deliveries have failed, with no success in between, for this many days (default 5; `0` never disables). |
+| `max_payload_bytes` | integer | `262144` | `APP_WEBHOOKS__MAX_PAYLOAD_BYTES` | The largest outgoing payload in bytes (default 256 KB); a bigger one fails the dispatch. |
+| `retain_days` | integer | `30` | `APP_WEBHOOKS__RETAIN_DAYS` | `webhooks:prune` deletes deliveries older than this many days (default 30). |
+| `routes` | boolean | `true` | `APP_WEBHOOKS__ROUTES` | Mount the `/api/webhooks` routes (default true; permission `webhooks.manage`). |
+| `incoming` | table |  | `APP_WEBHOOKS__INCOMING` | Incoming webhooks. |
+| `incoming.tolerance_secs` | integer | `300` | `APP_WEBHOOKS__INCOMING__TOLERANCE_SECS` | The accepted age of a signed timestamp, in seconds, in either direction (default 300). |
+| `incoming.max_body_bytes` | integer | `1048576` | `APP_WEBHOOKS__INCOMING__MAX_BODY_BYTES` | The largest incoming body in bytes (default 1 MiB); a bigger one is answered with 413. |
+| `incoming.receipt_days` | integer | `30` | `APP_WEBHOOKS__INCOMING__RECEIPT_DAYS` | How long `mark_processed` receipts are kept, in days (default 30). |
+
+## `workflows`
+
+The settings of `WorkflowsModule`: the `workflows` configuration section. Every key is optional.
+
+More: [/docs/packages/workflows/](/docs/packages/workflows/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `store` | database \| memory | `"database"` | `APP_WORKFLOWS__STORE` | Where runs are stored (default `database`). |
+| `lease_secs` | integer | `300` | `APP_WORKFLOWS__LEASE_SECS` | How long one execution may hold a run, in seconds (default 300). Every recorded step renews it. A run whose worker died is taken over by `workflows:tick` once its lease has run out, so keep single steps shorter than this. |
+| `queue` | string | `"default"` | `APP_WORKFLOWS__QUEUE` | The queue the `workflows.run` jobs go to (default `default`). |
+| `routes` | boolean | `true` | `APP_WORKFLOWS__ROUTES` | Mount `{api_prefix}/workflows/runs...` (default `true`). The routes require `workflows.view` (reads) and `workflows.manage` (cancel, retry), so the app needs a `dyn RouteAuthorizer` (navree-access); turn them off in apps without one. |
+| `automations` | boolean | `true` | `APP_WORKFLOWS__AUTOMATIONS` | The automations half (default `true`): triggers enroll on events and the `automations` tables are used (needs `DatabaseModule`). |
+| `automation_routes` | boolean | `true` | `APP_WORKFLOWS__AUTOMATION_ROUTES` | Mount `{api_prefix}/automations...` (default `true`; needs `automations`). The routes require `automations.view` and `automations.manage`. |
+| `prune_after_days` | integer | `30` | `APP_WORKFLOWS__PRUNE_AFTER_DAYS` | `workflows:prune` deletes runs that finished more than this many days ago (default 30; `0` keeps them). |
+
+## `workspace`
+
+Options of the workspace module (configuration section `workspace`).
+
+More: [/docs/workspaces/introduction/](/docs/workspaces/introduction/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `resolvers` | list of ResolverKind | `"[Header, Path, Subdomain, Claim]"` | `APP_WORKSPACE__RESOLVERS` | The resolvers to try, in order. |
+| `header` | string | `"X-Workspace"` | `APP_WORKSPACE__HEADER` | The header the `header` resolver reads. |
+| `base_domain` | string |  | `APP_WORKSPACE__BASE_DOMAIN` | The domain whose subdomains name workspaces (`app.example.com`); the `subdomain` resolver finds nothing while it is unset. |
+| `path_prefix` | string | `"/w"` | `APP_WORKSPACE__PATH_PREFIX` | The path segment(s) before the workspace in a URL (`/w`). |
+| `claim` | string | `"workspace"` | `APP_WORKSPACE__CLAIM` | The bearer JWT claim the `claim` resolver reads. |
+| `isolation` | row \| schema \| database | `"row"` | `APP_WORKSPACE__ISOLATION` | How workspaces' data is kept apart. |
+| `routes` | boolean | `true` | `APP_WORKSPACE__ROUTES` | Whether the module mounts its routes (`/api/workspaces/...` and `/api/invitations/accept`). |
+| `switch_path` | string | `"/workspace/switch"` | `APP_WORKSPACE__SWITCH_PATH` | Where a browser switches workspace: the absolute path (no API prefix) of the `POST` route that stores the choice the `session` resolver reads, mounted with `routes` when the crate's `session` feature is on (default `/workspace/switch`). |
+| `session_default` | boolean | `false` | `APP_WORKSPACE__SESSION_DEFAULT` | Whether a browser signed in on its session that has not switched workspace yet (and that no other resolver places) is put in the first workspace its user belongs to, the oldest, which it then keeps until it switches. Off by default: such a request names no workspace (400 `workspace_required`). Navree UI apps with the `session` resolver turn it on, so a page opens in a workspace right after signing in. |
+| `users_table` | string | `"users"` | `APP_WORKSPACE__USERS_TABLE` | The table of user accounts (`id`, `name`, `email`; navree-auth's `users`) that member lists and invitation checks read; empty when the app has none. |
+| `invitations` | table |  | `APP_WORKSPACE__INVITATIONS` | Invitations. |
+| `invitations.ttl_secs` | integer | `604800` | `APP_WORKSPACE__INVITATIONS__TTL_SECS` | How long an invitation can be accepted, in seconds (default seven days). |
+| `invitations.url` | string |  | `APP_WORKSPACE__INVITATIONS__URL` | The front-end page the invitation mail links to, as `{url}?token=..`; the page posts the token to `POST /api/invitations/accept`. Without it the mail carries the token alone. |
+| `invitations.mail_template` | string |  | `APP_WORKSPACE__INVITATIONS__MAIL_TEMPLATE` | A navree-view template pair (`{template}.html` / `.txt`) for the mail, rendered with `{workspace, email, role, inviter, token, url, expires_in_days}`; built-in text when unset. |
+| `invitations.require_matching_email` | boolean | `true` | `APP_WORKSPACE__INVITATIONS__REQUIRE_MATCHING_EMAIL` | Whether only the account whose email address the invitation was sent to may accept it (default true). |
+| `roles` | table of RoleOptions | `"{}"` | `APP_WORKSPACE__ROLES` | Extra permissions per role, and app-defined roles. |
+| `schema_prefix` | string | `"workspace_"` | `APP_WORKSPACE__SCHEMA_PREFIX` | Schema isolation: the prefix of each workspace's schema name (`workspace_` gives `workspace_0199...`). |
+| `database_url` | string |  | `APP_WORKSPACE__DATABASE_URL` | Database isolation: the URL of each workspace's database, with `{id}` standing for the workspace id (simple form, 32 hex digits). |
+| `organizations` | table |  | `APP_WORKSPACE__ORGANIZATIONS` | Organizations above workspaces (off by default). |
+| `organizations.enabled` | boolean | `false` | `APP_WORKSPACE__ORGANIZATIONS__ENABLED` | Whether organizations are on: the services work, the routes are mounted (with `workspace.routes`) and workspace resolution accepts organization grants. Off by default. |
+| `organizations.resolvers` | list of ResolverKind | `"[Header, Path, Subdomain, Claim]"` | `APP_WORKSPACE__ORGANIZATIONS__RESOLVERS` | The resolvers `CurrentOrganization` tries, in order. |
+| `organizations.header` | string | `"X-Organization"` | `APP_WORKSPACE__ORGANIZATIONS__HEADER` | The header the `header` resolver reads. |
+| `organizations.base_domain` | string |  | `APP_WORKSPACE__ORGANIZATIONS__BASE_DOMAIN` | The domain whose subdomains name organizations; the `subdomain` resolver finds nothing while it is unset. |
+| `organizations.path_prefix` | string | `"/o"` | `APP_WORKSPACE__ORGANIZATIONS__PATH_PREFIX` | The path segment(s) before the organization in a URL (`/o`). |
+| `organizations.claim` | string | `"organization"` | `APP_WORKSPACE__ORGANIZATIONS__CLAIM` | The bearer JWT claim the `claim` resolver reads. |
+| `organizations.roles` | table of OrgRoleOptions | `"{}"` | `APP_WORKSPACE__ORGANIZATIONS__ROLES` | Extra permissions per organization role, and app-defined roles. |
+| `partitions` | table |  | `APP_WORKSPACE__PARTITIONS` | Partitions inside workspaces (off by default). |
+| `partitions.enabled` | boolean | `false` | `APP_WORKSPACE__PARTITIONS__ENABLED` | Whether partitions are on. Off by default. |
+| `partitions.resolvers` | list of ResolverKind | `"[Header, Claim]"` | `APP_WORKSPACE__PARTITIONS__RESOLVERS` | The resolvers that find the request's partition, in order (`header`, `path` or `claim`). |
+| `partitions.header` | string | `"X-Partition"` | `APP_WORKSPACE__PARTITIONS__HEADER` | The header the `header` resolver reads. |
+| `partitions.path_prefix` | string | `"/p"` | `APP_WORKSPACE__PARTITIONS__PATH_PREFIX` | The path segment(s) before the partition in a URL (`/p`). |
+| `partitions.claim` | string | `"partition"` | `APP_WORKSPACE__PARTITIONS__CLAIM` | The bearer JWT claim the `claim` resolver reads. |
+| `demo` | table |  | `APP_WORKSPACE__DEMO` | Demo workspaces. |
+| `demo.mode` | read_only \| reset | `"read_only"` | `APP_WORKSPACE__DEMO__MODE` | `read_only` (the default) or `reset`. |
+| `demo.reset_at` | string | `"03:00"` | `APP_WORKSPACE__DEMO__RESET_AT` | When the nightly reset runs in `reset` mode, as 24-hour `HH:MM` UTC (default `03:00`). Needs `ScheduleModule` in the app. |
+| `demo.guest_role` | string |  | `APP_WORKSPACE__DEMO__GUEST_ROLE` | The role signed-in users who are not members get in a demo workspace (`viewer`, say): they enter it, and `GET /workspaces` lists it for them. Unset (the default): demos are for their members. |
+| `demo.editor_roles` | list of string | `[]` | `APP_WORKSPACE__DEMO__EDITOR_ROLES` | Roles whose members still write to a read-only demo (the people who curate it). A list, or a comma-separated string. |
+| `demo.allow` | list of string | `[]` | `APP_WORKSPACE__DEMO__ALLOW` | Routes that write but stay open in a read-only demo: a route name (`reports.preview`) or a method and the mounted path (`POST /api/v1/reports/preview`). A list, or a comma-separated string. |
+| `demo.fixtures` | string | `"fixtures/demo"` | `APP_WORKSPACE__DEMO__FIXTURES` | The directory `DemoSeed::fixture` reads `<name>.json` files from (default `fixtures/demo`). |

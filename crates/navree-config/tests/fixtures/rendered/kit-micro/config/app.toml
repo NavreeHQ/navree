@@ -1,0 +1,45 @@
+# Agra cloud: settings for every environment.
+#
+# `.env` ranks above this file and holds the settings of one machine (the
+# database and broker settings Dock writes, secrets), and APP_* environment
+# variables override any key: APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
+# Secrets never go here.
+
+[app]
+name = "agra-cloud"
+
+[http]
+# Health checks and metrics for the orchestrator: /health/live,
+# /health/ready and /metrics.
+addr = "127.0.0.1:8080"
+
+[database]
+# The URL comes from .env (APP_DATABASE__URL, written by `navree dock up`).
+# Pending migrations run at boot in development; deploys run `navree migrate`.
+migrate_on_boot = true
+
+[log]
+level = "info"
+
+[auth]
+# Accounts are created by the service that owns them. This one verifies the
+# bearer tokens other services forward, signed with the same
+# auth.jwt.secret (APP_AUTH__JWT__SECRET in .env, identical everywhere).
+registration = false
+
+[micro]
+# The consumer group, the client id and the `navree-service` header.
+service = "agra-cloud"
+# tcp, nats, kafka, rabbitmq, redis or mqtt; each needs its navree feature
+# (`micro-nats`, ... in crates/agra-cloud/Cargo.toml). The broker's URL
+# comes from .env (APP_MICRO__URL, written by `navree dock up`).
+transport = "nats"
+# The default deadline of `ServiceClient::send`.
+request_timeout_ms = 5000
+# Messages one process handles at once.
+concurrency = 64
+
+[micro.events]
+# A failing event handler is retried with backoff, then dead-lettered
+# (`navree micro:failed`, `micro:retry`).
+max_attempts = 5

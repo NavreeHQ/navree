@@ -1,0 +1,19 @@
+error: `second` and `first` are both the MCP tool `list`
+  --> tests/ui/duplicates_and_placement.rs:18:14
+   |
+18 |     async fn second(&self) -> Result<u32, AppError> {
+   |              ^^^^^^
+
+error: #[mcp_tool] goes on a method of the impl block, not on the impl block
+  --> tests/ui/duplicates_and_placement.rs:27:1
+   |
+27 | #[mcp_tool]
+   | ^^^^^^^^^^^
+
+error: #[mcp_tool] only works on a method of an impl block marked #[mcp_server]
+  --> tests/ui/duplicates_and_placement.rs:33:5
+   |
+33 |     #[mcp_tool]
+   |     ^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `mcp_tool` (in Nightly builds, run with -Z macro-backtrace for more info)

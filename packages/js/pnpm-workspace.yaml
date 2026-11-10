@@ -1,0 +1,38 @@
+# Navree's front-end packages. Each folder here is one npm package:
+#   client  @navree/client  the typed client, the error shape, list queries, pagination, real time, operations
+#   bff     @navree/bff     the framework-neutral backend-for-frontend (httpOnly token cookies, refresh, CSRF)
+#   next    @navree/next    Next.js: route handlers, auth(), middleware, abilities, channels, operations, DataTable
+#   nuxt    @navree/nuxt    Nuxt: a module with Nitro BFF routes and composables, DataTable
+#   theme   @navree/theme   navree.com's dark theme: CSS variables, the Tailwind 4 preset, fonts
+#   deepmerge  @navree/deepmerge  private: the `deepmerge` that Nitro's bundler loads, through an override below
+packages:
+  - "*"
+
+# Dependencies' install scripts stay off unless listed here.
+allowBuilds:
+  esbuild: false
+  "@parcel/watcher": false
+  unrs-resolver: false
+  vue-demi: false
+
+# node-forge 1.4.2 is the fix for GHSA-86w9-cpqp-85rv (see overrides).
+minimumReleaseAgeExclude:
+  - 'node-forge@1.4.2'
+
+overrides:
+  # listhen (nuxt dev's HTTPS certificates) asks for node-forge ^1.4.0;
+  # 1.4.0 accepts forged RSA PKCS#1 v1.5 signatures (GHSA-86w9-cpqp-85rv).
+  node-forge: 1.4.2
+  # Nitro's bundler tooling (archiver-utils, @vercel/nft, js-beautify) asks for
+  # glob 10 to 13, and glob and minimatch before 14 and 11 are open to a
+  # denial of service from a crafted pattern (GHSA-3g3m-2fjr-6pw4,
+  # GHSA-g3hv-75wg-m249). Their newest releases still ask for those lines.
+  # glob 14 and minimatch 11 keep the named exports they call (glob, globSync,
+  # sync, hasMagic, Minimatch, escape).
+  glob@<14: ^14.0.2
+  minimatch@>=9 <11: ^11.0.1
+  readdir-glob>minimatch: ^11.0.1
+  # Nitro's bundler (@rollup/plugin-node-resolve, under nuxt) asks for deepmerge ^4.2.2.
+  # Navree's own copy (deepmerge/) keeps its API and never copies a key that
+  # reaches a prototype.
+  deepmerge: link:./deepmerge

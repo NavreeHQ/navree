@@ -1,0 +1,48 @@
+//! Fake `{{ model_pascal }}` records for tests and seeders.
+
+use navree::orm::factory::{FactoryContext, ModelFactory};
+
+use super::super::models::{{ model_name }}::{{ model_pascal }};
+
+/// Builds `{{ model_pascal }}` records with fake data:
+/// `{{ model_pascal }}::factory().count(3).create(&db).await?`. Named states
+/// are functions of the model: `.state({{ pascal }}Factory::renamed)`.
+{% if linked %}
+#[derive(Default)]
+{% else %}
+///
+/// Link it to the model with `#[model(factory = ...)]` on `{{ model_pascal }}`
+/// so `{{ model_pascal }}::factory()` exists; until then, build with
+/// `navree::orm::factory::Factory::<{{ pascal }}Factory>::new()`.
+#[derive(Default)]
+{% endif %}
+pub struct {{ pascal }}Factory;
+
+impl ModelFactory for {{ pascal }}Factory {
+    type Model = {{ model_pascal }};
+
+    fn definition(&self, ctx: &mut FactoryContext<'_, {{ model_pascal }}>) -> {{ model_pascal }} {
+{% if with_name_column %}
+        {{ model_pascal }} {
+            name: ctx.fake().title(),
+            ..{{ model_pascal }}::default()
+        }
+{% else %}
+        // Fill the model's columns with fake data, for example
+        // `title: ctx.fake().sentence()` or `email: ctx.fake().safe_email()`.
+        let _ = ctx;
+        {{ model_pascal }}::default()
+{% endif %}
+    }
+}
+
+impl {{ pascal }}Factory {
+    /// A state: `{{ model_pascal }}::factory().state({{ pascal }}Factory::renamed)`.
+    pub fn renamed(record: &mut {{ model_pascal }}) {
+{% if with_name_column %}
+        record.name = "Renamed".to_owned();
+{% else %}
+        let _ = record;
+{% endif %}
+    }
+}

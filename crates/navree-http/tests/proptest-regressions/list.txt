@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 297dfb1048be46b2b6c363b461f03fc36dda8b9c2cd9d668629778f94368bfe9 # shrinks to parts = ["filter[__]=a", "filter[_]=%", "filter[__][ne]=0"]

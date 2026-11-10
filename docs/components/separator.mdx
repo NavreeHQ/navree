@@ -1,0 +1,63 @@
+---
+title: "Separator"
+description: "A line that sets two things apart, across a stack or down a row, when space alone is not enough."
+---
+
+<UiPreview example="separator/default" />
+
+`Separator::horizontal()` is an `<hr>`. `Separator::vertical()` is a line in a [Row](/docs/ui/layout/), with `role="separator"` and a vertical orientation.
+
+```rust
+use navree::ui::*;
+
+Row::gap(3).children(("Proposal", Separator::vertical(), "₹48,000"))
+```
+
+## When to use it
+
+Use a line when space alone doesn't set two things apart. Most of the time, the gap of a [Stack](/docs/ui/layout/) is enough.
+
+<UiChoose name="divider" current="Separator" />
+
+## In a page
+
+A card for a deal sets its summary apart from its facts with a horizontal line, and sets the facts apart from each other with vertical ones:
+
+```rust
+Card::titled("Sutlej Supply renewal").body(Stack::gap(3).children((
+    Text::muted("Proposal · closes 30 November"),
+    Separator::horizontal(),
+    Row::gap(3).children(("Gurpreet Singh", Separator::vertical(), "₹48,000")),
+)))
+```
+
+Leave the line out where the gap of the `Stack` is enough.
+
+## Anatomy
+
+<UiAnatomy component="separator" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A separator isn't focusable. Assistive technology may announce it as a separator between groups.
+
+</UiA11y>
+
+## API
+
+### Separator
+
+<UiProps type="Separator" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/ui/layout/" title="Stack, Row, Grid and Container">
+    The spacing that usually does the job of a line.
+  </LinkCard>
+  <LinkCard href="/docs/components/card/" title="Card">
+    A titled box for related facts.
+  </LinkCard>
+</LinkCards>

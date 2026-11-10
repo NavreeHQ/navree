@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "query(Deal::query().where_(Deal::AMOUNT_CENTS.gt(0)).where_group(|g|\n{\n    g.where_(Deal::STAGE.eq(Stage::Won)).or_where_group(|inner|\n    { inner.where_(Deal::STAGE.eq(Stage::Lost)).where_null(Deal::CLOSED_AT) })\n}).where_not(Deal::TITLE.eq(\"x\").or(Deal::TITLE.eq(\"y\"))).or_where_not(Deal::AMOUNT_CENTS.lt(5)))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE (("deals"."amount_cents" > $1 AND ("deals"."stage" = $2 OR ("deals"."stage" = $3 AND "deals"."closed_at" IS NULL)) AND NOT ("deals"."title" = $4 OR "deals"."title" = $5)) OR NOT ("deals"."amount_cents" < $6)) AND "deals"."deleted_at" IS NULL
+  values: [I64(0), String("won"), String("lost"), String("x"), String("y"), I64(5)]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE ((`deals`.`amount_cents` > ? AND (`deals`.`stage` = ? OR (`deals`.`stage` = ? AND `deals`.`closed_at` IS NULL)) AND NOT (`deals`.`title` = ? OR `deals`.`title` = ?)) OR NOT (`deals`.`amount_cents` < ?)) AND `deals`.`deleted_at` IS NULL
+  values: [I64(0), String("won"), String("lost"), String("x"), String("y"), I64(5)]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE (("deals"."amount_cents" > ? AND ("deals"."stage" = ? OR ("deals"."stage" = ? AND "deals"."closed_at" IS NULL)) AND NOT ("deals"."title" = ? OR "deals"."title" = ?)) OR NOT ("deals"."amount_cents" < ?)) AND "deals"."deleted_at" IS NULL
+  values: [I64(0), String("won"), String("lost"), String("x"), String("y"), I64(5)]

@@ -1,0 +1,46 @@
+[package]
+name = "navree-browser"
+description = "Navree browser testing: drive Chrome or Chromium over the DevTools Protocol from Rust tests, with automatic waiting and failure screenshots."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "browser", "cdp", "e2e", "testing"]
+categories = ["development-tools::testing"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+# The front-end proxy forwards requests with hyper's HTTP/1 client.
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true }
+navree-glob = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+# The Chrome DevTools Protocol is JSON over a WebSocket.
+tokio-tungstenite = { workspace = true }
+uuid = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# Stops a front end's whole process group with kill(2) itself.
+rustix = { workspace = true }
+
+[dev-dependencies]
+navree-testing = { workspace = true }
+tempfile = { workspace = true }

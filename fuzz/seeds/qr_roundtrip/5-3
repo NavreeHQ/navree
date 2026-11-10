@@ -1,0 +1,1 @@
+(otpauth://totp/Navree:ada%40example.com?secret=AMFBCGA7EYWTIO2CJFIFOXTFNRZXVAMIR6LJ3JFLWK44BR6O2XOA&digits=8&algorithm=SHA256&issuer=Navree

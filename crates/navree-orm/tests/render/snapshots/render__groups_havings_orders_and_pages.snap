@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().column(col(\"stage\")).column_as(Expr::count_all(),\n\"deals\").column_as(Expr::func(\"SUM\", vec![col(\"amount_cents\")]),\n\"total\").group_by(col(\"stage\")).having(Expr::count_all().gt(val(2_i64))).having(Expr::raw(\"SUM(amount_cents) > ? OR MAX(amount_cents) > ?\",\n[1000_i64,\n50]))).order_by(col(\"total\").desc()).order_by(col(\"stage\").asc().nulls_last()).order_by(col(\"closed_at\").desc().nulls_first()).order_by(Expr::raw(\"field(stage, ?, ?)\",\n[\"won\", \"lost\"]).desc()).order_by(Expr::Random.asc()).limit(25).offset(50))"
+---
+PostgreSQL: SELECT "stage", COUNT(*) AS "deals", SUM("amount_cents") AS "total" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > $1 AND (SUM(amount_cents) > $2 OR MAX(amount_cents) > $3) ORDER BY "total" DESC, "stage" ASC NULLS LAST, "closed_at" DESC NULLS FIRST, field(stage, $4, $5) DESC, RANDOM() ASC LIMIT $6 OFFSET $7
+  values: [I64(2), I64(1000), I64(50), String("won"), String("lost"), U64(25), U64(50)]
+MySQL: SELECT `stage`, COUNT(*) AS `deals`, SUM(`amount_cents`) AS `total` FROM `deals` GROUP BY `stage` HAVING COUNT(*) > ? AND (SUM(amount_cents) > ? OR MAX(amount_cents) > ?) ORDER BY `total` DESC, `stage` IS NULL ASC, `stage` ASC, `closed_at` IS NULL DESC, `closed_at` DESC, field(stage, ?, ?) DESC, RAND() ASC LIMIT ? OFFSET ?
+  values: [I64(2), I64(1000), I64(50), String("won"), String("lost"), U64(25), U64(50)]
+SQLite: SELECT "stage", COUNT(*) AS "deals", SUM("amount_cents") AS "total" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > ? AND (SUM(amount_cents) > ? OR MAX(amount_cents) > ?) ORDER BY "total" DESC, "stage" ASC NULLS LAST, "closed_at" DESC NULLS FIRST, field(stage, ?, ?) DESC, RANDOM() ASC LIMIT ? OFFSET ?
+  values: [I64(2), I64(1000), I64(50), String("won"), String("lost"), U64(25), U64(50)]

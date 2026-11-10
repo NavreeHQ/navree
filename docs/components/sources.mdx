@@ -1,0 +1,61 @@
+---
+title: "Sources and Citation"
+description: "The links an answer drew on, with the host of each that leaves your site, and numbered references to them. A link that says one thing and goes to another can be seen."
+---
+
+<UiPreview example="sources/default" />
+
+`Sources` lists the places an answer came from. Each source is a link with the title the assistant gave it. A link that leaves your site shows the host it goes to in brackets after the title, so a title that says one thing and a link that goes somewhere else can be told apart.
+
+```rust
+use navree::ui::genui::*;
+
+Sources::new()
+    .source("Payments by method, October", "/reports/payments")
+    .source("Income Tax Department", "https://www.incometax.gov.in/")
+```
+
+A source is `.source(title, url)`. The list is numbered, named "Sources" for assistive technology (`.label(..)` replaces the name), and a link to another site carries `rel="noopener noreferrer nofollow"`. A URL that a link cannot take, such as `javascript:...`, keeps its title as text and has no link. A title is cut at 200 characters.
+
+Put a `Sources` below the words of a message with [ChatMessage::with](/docs/components/chat-message/#reasoning-and-sources).
+
+## Citations
+
+`Citation::new(number, url)` is a numbered reference in the words of an answer, `[2]`, that links to a source. It is a superscript link named "Source 2", so a screen reader does not read just "bracket two".
+
+```rust
+use navree::ui::genui::*;
+use navree::ui::*;
+
+el("p").children((
+    Text::new("UPI took 62% of the week's payments").inline(),
+    Citation::new(1, "/reports/payments"),
+    Text::new(" and cards 21%").inline(),
+    Citation::new(2, "https://www.incometax.gov.in/"),
+    Text::new(".").inline(),
+))
+```
+
+<UiPreview example="sources/citations" />
+
+A `Citation` is a part you draw yourself, from the sources you kept for the answer. The Markdown of a message draws its own links, and marks each one that leaves your site with its host.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The sources are a navigation landmark with a name, and an ordered list inside it.
+- A link to another site says which host it goes to in its text, not only in its address.
+- A citation is a link named "Source 1", "Source 2" and so on.
+
+</UiA11y>
+
+## API
+
+### Sources
+
+<UiProps type="Sources" />
+
+### Citation
+
+<UiProps type="Citation" />

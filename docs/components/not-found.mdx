@@ -1,0 +1,52 @@
+---
+title: "NotFound"
+description: "The state for a record, card or region that is not there."
+---
+
+<UiPreview example="not-found/default" />
+
+`NotFound` fills the place of something that is gone: a deal that was deleted, a link that points nowhere.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Owner").body(NotFound::new().what("deal"))
+```
+
+`.what("deal")` names the thing: "This deal doesn't exist, or it was removed."
+
+## When to use it
+
+Use it for a part of a page. For a whole page, `UiModule` shows an [ErrorPage](/docs/components/error-page/) on a 404.
+
+Choose between this and [Forbidden](/docs/components/forbidden/) by what the user may know. If seeing that the record exists would tell them something they should not know, answer 404 and show `NotFound`.
+
+<UiChoose name="state" current="NotFound" />
+
+## One line
+
+<UiPreview example="not-found/compact" />
+
+A row of a table that was removed has its own helper:
+
+```rust
+NotFound::new().row(3)
+```
+
+## Anatomy
+
+<UiAnatomy component="not-found" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The headline is a paragraph, not a heading. Ask for a heading with `.heading(3)`.
+- The icon is hidden from assistive technology.
+- It has no tab stop of its own. Add an action with `.action(...)`.
+
+</UiA11y>
+
+## API
+
+<UiProps type="NotFound" />

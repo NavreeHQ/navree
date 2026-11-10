@@ -1,0 +1,9 @@
+/* Flags: inline SVG, 4 by 3 by default. The width is the size; a faint outline keeps a white flag visible on a light page and a dark one on a dark page. */
+[data-slot=flag]{--flag-w:24px;display:inline-block;flex:none;width:var(--flag-w);height:calc(var(--flag-w)*3/4);border-radius:2px;outline:1px solid color-mix(in oklab,currentColor 18%,transparent);outline-offset:-1px;vertical-align:-.2em;
+  &[data-size=xs]{--flag-w:20px}
+  &[data-size=md]{--flag-w:32px}
+  &[data-size=lg]{--flag-w:40px}
+  &[data-size=xl]{--flag-w:48px}
+  &[data-shape=square],&[data-shape=round]{height:var(--flag-w)}
+  &[data-shape=round]{border-radius:50%}
+  &[data-state=unknown]{color:var(--fg-3)}}

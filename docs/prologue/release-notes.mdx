@@ -1,0 +1,67 @@
+---
+title: "Release notes"
+description: "What Navree 1.0.0, the first release, includes: the framework and ORM, Navree UI, the tools, packages, agent skills and CLI, and the limits that hold."
+---
+
+## Navree 1.0.0
+
+Navree is a framework for complete applications in Rust: the API, the background work, the screens and the tools that run them, in one binary. It is open source under MIT or Apache-2.0 and free to self-host. Every crate, the `navree` command-line tool, the starter kits and the `@navree/*` npm packages share one version number, and [the versioning page](/docs/prologue/versioning-and-support/) says what you can rely on across 1.x.
+
+### Install it
+
+```sh
+cargo install navree-cli
+navree new blog
+```
+
+You need Rust 1.95 or newer. Navree runs on Linux, macOS and Windows, with PostgreSQL (TimescaleDB by default), MySQL and MariaDB, SQLite or MongoDB. To add it to a project you already have, run `cargo add navree`. [Installation](/docs/getting-started/installation/) has the details for each system.
+
+### What is included
+
+| Area | What you get | Read more |
+|---|---|---|
+| Foundation | Modules and dependency injection, typed configuration with redacted secrets, logging | [Modules](/docs/architecture/modules/), [Configuration](/docs/getting-started/configuration/) |
+| HTTP | The server and its connection limits, the router, extractors, validation, OpenAPI documents, sessions with CSRF protection, one list-query format | [Routing](/docs/basics/routing/), [List queries](/docs/basics/list-queries/) |
+| Data | A database engine on PostgreSQL, MySQL and MariaDB, SQLite and MongoDB, the ORM, migrations, the cache | [ORM](/docs/orm/getting-started/), [Database](/docs/database/getting-started/) |
+| Security | JWT sign-in with rotating refresh tokens, two-factor authentication, roles and abilities, encryption, the audit log, social sign-in and single sign-on | [Security](/docs/security/authentication/) |
+| Workspaces | Members, roles, invitations and data isolated by row, schema or database | [Workspaces](/docs/workspaces/introduction/) |
+| Background work | Queues, batches, events, schedules, durable workflows and time zones | [Queues](/docs/digging-deeper/queues/) |
+| Communication | Mail, notifications over many channels, a real-time server, templates, inbound mail | [Mail](/docs/digging-deeper/mail/), [Broadcasting](/docs/digging-deeper/broadcasting/) |
+| Navree UI | Screens drawn on the server in Rust: components, forms, tables, charts, themes and live updates, with a strict content security policy | [Navree UI](/docs/ui/overview/) |
+| Tools | Lighthouse, Logbook, Fleet, Helm, Harbor, Dock and Navigator | [Tools](/docs/tools/lighthouse/) |
+| Packages | Search, AI, MCP servers, microservices, gRPC, GraphQL, OAuth, billing, webhooks, documents, media, imports and exports, feature flags, localisation | [Packages](/docs/packages/search/) |
+| AI-native | Agent skills, ways to bring a product or a design into Navree, docs written for agents | [AI](/docs/ai/agent-skills/) |
+| The CLI | `navree new`, the generators, `navree dev`, the OpenAPI client generator and three starter kits | [CLI](/docs/digging-deeper/cli/), [Starter kits](/docs/getting-started/starter-kits/) |
+| Front ends | `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt` and `@navree/theme` on npm | [Front end](/docs/frontend/introduction/) |
+| Testing | `TestApp`, `TestClient`, fakes and a browser driver | [Testing](/docs/testing/getting-started/) |
+
+Four apps show it in use: a [CRM](/docs/example-app/crm-tour/) with Next.js and Nuxt front ends, and a [store](/docs/example-app/store-tour/), a [board](/docs/example-app/board-tour/) and an [inbox](/docs/example-app/inbox-tour/) drawn with Navree UI. A Navree app is one binary that needs a few megabytes at idle and starts in milliseconds; [Performance](/performance/) has the measurements and how to reproduce them.
+
+### Design decisions
+
+- **Tokens for APIs, sessions for pages.** API clients get short-lived access tokens and rotating refresh tokens. A backend-for-frontend keeps them in httpOnly cookies for a separate web front end, and server-drawn pages use an encrypted session cookie with CSRF protection.
+- **One error shape.** Every error is JSON in one shape, `{ "statusCode", "message", "error", "code" }`, with `errors` for validation failures. The `code` is stable, so a front end can translate it.
+- **Real time is built in.** An in-process server speaks the Pusher protocol, and processes that don't serve sockets broadcast through it over a signed relay.
+- **Routes deny by default.** A route without an access declaration does not compile.
+
+### Security limits
+
+Everything that reads untrusted input has limits you can state:
+
+- **Connections.** The server bounds slow headers, slow bodies, idle connections, responses a client stops reading and connections per address ([Connection limits](/docs/getting-started/deployment/#connection-limits)).
+- **Requests.** Body, form, multipart and WebSocket frame sizes are capped, a path that cannot be routed unambiguously is a 400, and the per-address rate limit counts an IPv6 client by its network.
+- **Documents.** CSV, XLSX and the other spreadsheet formats, PDFs, images, Word files and inbound mail are read under limits on size, shape, nesting and work, and a file past a limit is refused with a clear message ([Imports and exports](/docs/packages/imports-and-exports/), [Documents](/docs/packages/documents/), [Inbound mail](/docs/digging-deeper/inbound-mail/)).
+- **Rich text.** Input is sanitised by a configurable policy that caps the size and depth of what it reads ([Validation](/docs/basics/validation/)).
+- **Outgoing requests.** The HTTP client refuses private addresses unless you allow them, and secrets in URLs stay out of logs and errors ([HTTP client](/docs/digging-deeper/http-client/)).
+- **Pages.** A strict content security policy on every page: scripts, styles and requests from the page's own origin only ([Navree UI](/docs/ui/overview/)).
+- **The supply chain.** Dependency advisories, licences and sources are checked on every change, every lockfile is scanned, and a fuzz target covers every parser of untrusted input.
+
+### Known limits
+
+- Access tokens are stateless, so signing out ends them when they expire, 15 minutes by default. Revocable access tokens are on the [roadmap](/docs/prologue/roadmap/).
+- Queues run on the database, memory and Redis drivers. Other backends are on the roadmap.
+- The `serve`, `queue:work` and `schedule:work` commands run under systemd and similar supervisors. Windows services are on the roadmap.
+- `navree dev` restarts the server when your code changes, so requests fail for the moment of the restart.
+- The SQLite driver bundles SQLite 3.53, which can return stale memory when it opens a database file together with a `-wal` file that someone else wrote ([RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459)). Don't open SQLite files from untrusted sources. Run `cargo update` once sqlx 0.9.1 is released to get SQLite 3.54 or later.
+
+What comes next is on the [roadmap](/docs/prologue/roadmap/).

@@ -1,0 +1,122 @@
+# Fuzzing of the parsers that handle untrusted input (the targets in fuzz/:
+# one per parser, see CONTRIBUTING.md, "Fuzzing").
+#
+# One job builds every target once and runs them one after another, so a run
+# costs one build however many targets there are:
+#
+# - Pushes to main that change fuzz/ run each target for 15 seconds, a smoke
+#   run that proves the targets still build and start.
+# - A weekly schedule runs each target for 5 minutes and trims each corpus.
+# - Run it by hand (workflow_dispatch) for longer runs.
+#
+# Corpora are cached between runs, so every run starts from what the earlier
+# ones found; the committed seeds (fuzz/seeds) are always read too. Every
+# target runs even when one crashes; the job fails at the end and uploads the
+# crashing inputs.
+#
+# The nightly toolchain and cargo-fuzz are pinned here and in fuzz/Dockerfile:
+# change them together.
+name: Fuzz
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fuzz/**"
+      - ".github/workflows/fuzz.yml"
+  schedule:
+    - cron: "23 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to run each target
+        default: "60"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIGHTLY: nightly-2026-10-20
+  CARGO_FUZZ: 0.13.2
+  # The prebuilt cargo-fuzz is a static musl binary, and cargo-fuzz defaults to
+  # the target it was built for; the sanitizers need the glibc target.
+  FUZZ_TRIPLE: x86_64-unknown-linux-gnu
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      EVENT: ${{ github.event_name }}
+      SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && '300' || github.event.inputs.seconds || '15' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ env.NIGHTLY }}
+
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-fuzz@${{ env.CARGO_FUZZ }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: fuzz
+          shared-key: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Restore the corpora
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpora-${{ github.run_id }}
+          restore-keys: fuzz-corpora-
+
+      - name: Build every target
+        run: cargo fuzz build --target "$FUZZ_TRIPLE"
+
+      # Seeds are read from fuzz/seeds/<target>; what a run finds is written
+      # to fuzz/corpus/<target>. `-timeout` is the hang limit of one input,
+      # `-rss_limit_mb` the memory limit.
+      - name: Fuzz every target for ${{ env.SECONDS_PER_TARGET }} seconds
+        run: |
+          crashed=()
+          for target in $(cargo fuzz list); do
+            mkdir -p "fuzz/corpus/$target" "fuzz/seeds/$target"
+            echo "::group::$target"
+            if ! cargo fuzz run --target "$FUZZ_TRIPLE" "$target" "fuzz/corpus/$target" "fuzz/seeds/$target" \
+              -- -max_total_time="$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048 -max_len=8192; then
+              crashed+=("$target")
+            fi
+            if [ "$EVENT" = schedule ]; then
+              cargo fuzz cmin --target "$FUZZ_TRIPLE" "$target" "fuzz/corpus/$target"
+            fi
+            echo "::endgroup::"
+          done
+          if [ "${#crashed[@]}" -gt 0 ]; then
+            echo "::error::Crashed: ${crashed[*]}"
+            exit 1
+          fi
+
+      - name: Save the corpora
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpora-${{ github.run_id }}
+
+      - name: Upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crashes
+          path: fuzz/artifacts
+          if-no-files-found: ignore

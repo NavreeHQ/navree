@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\nrender_insert(&base().returning(vec![Cow::Borrowed(\"id\")]).on_conflict(OnConflict::Ignore\n{ target: vec![Cow::Borrowed(\"name\")] }), d))"
+---
+PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT ("name") DO NOTHING RETURNING "id"
+  values: [String("vip"), String("gold")]
+MySQL: INSERT IGNORE INTO `tags` (`name`, `color`) VALUES (?, ?)
+  values: [String("vip"), String("gold")]
+SQLite: INSERT INTO "tags" ("name", "color") VALUES (?, ?) ON CONFLICT ("name") DO NOTHING RETURNING "id"
+  values: [String("vip"), String("gold")]

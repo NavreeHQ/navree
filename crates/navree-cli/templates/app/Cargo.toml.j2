@@ -1,0 +1,52 @@
+[package]
+name = "{{ package }}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+{% if ui_navree %}
+futures-util = "0.3"
+http = "1"
+{% endif %}
+navree = {{ navree_dependency }}
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+{% if ui_navree %}
+tokio = { version = "1", features = ["sync", "time"] }
+tracing = "0.1"
+{% endif %}
+uuid = { version = "1", features = ["serde", "v7"] }
+
+[dev-dependencies]
+# The tests boot the app on a fresh SQLite file each, so they turn the SQLite
+# driver on; the app itself compiles only the driver of its own database.
+navree = {{ navree_test_dependency }}
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+{% if ui_navree %}
+
+[features]
+# The pages speak the reader's language: Indian English and Hindi
+# (navree-i18n, `[i18n]` in config/app.toml).
+default = ["navree/i18n"]
+{% endif %}
+
+# Small debug info: faster links, so `navree dev` restarts sooner.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Password hashing (Argon2id) is unbearably slow unoptimised.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+# The app is its own workspace; remove this table to make it a member of an
+# enclosing one.
+[workspace]

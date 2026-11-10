@@ -1,0 +1,40 @@
+---
+source: crates/navree-schema/tests/schema/alter.rs
+expression: sql
+---
+-- postgres
+ALTER TABLE "deals" ADD COLUMN "stage" VARCHAR(255) NOT NULL DEFAULT 'lead';
+ALTER TABLE "deals" ADD COLUMN "source" VARCHAR(255) NULL;
+ALTER TABLE "deals" ADD COLUMN "currency" VARCHAR(3) NOT NULL DEFAULT 'USD';
+ALTER TABLE "deals" ADD COLUMN "taxed" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE "deals" ADD COLUMN "position" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "deals" ADD COLUMN "owner_id" UUID NULL;
+ALTER TABLE "deals" ADD CONSTRAINT "deals_owner_id_foreign" FOREIGN KEY ("owner_id") REFERENCES "users" ("id");
+ALTER TABLE "deals" ADD COLUMN "tags" JSON NULL;
+CREATE INDEX "deals_stage_index" ON "deals" ("stage");
+COMMENT ON COLUMN "deals"."tags" IS 'free-form labels';
+
+-- mysql
+ALTER TABLE `deals` ADD `stage` VARCHAR(255) NOT NULL DEFAULT 'lead';
+ALTER TABLE `deals` ADD `source` VARCHAR(255) NULL AFTER `title`;
+ALTER TABLE `deals` ADD `currency` VARCHAR(3) NOT NULL DEFAULT 'USD' AFTER `amount`;
+ALTER TABLE `deals` ADD `taxed` TINYINT(1) NOT NULL DEFAULT 0 AFTER `currency`;
+ALTER TABLE `deals` ADD `position` INT NOT NULL DEFAULT 0 FIRST;
+ALTER TABLE `deals` ADD `owner_id` BINARY(16) NULL;
+ALTER TABLE `deals` ADD CONSTRAINT `deals_owner_id_foreign` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`);
+ALTER TABLE `deals` ADD `tags` JSON NULL COMMENT 'free-form labels';
+ALTER TABLE `deals` ADD INDEX `deals_stage_index`(`stage`);
+
+-- mariadb
+ALTER TABLE `deals` ADD `stage` VARCHAR(255) NOT NULL DEFAULT 'lead';
+ALTER TABLE `deals` ADD `source` VARCHAR(255) NULL AFTER `title`;
+ALTER TABLE `deals` ADD `currency` VARCHAR(3) NOT NULL DEFAULT 'USD' AFTER `amount`;
+ALTER TABLE `deals` ADD `taxed` TINYINT(1) NOT NULL DEFAULT 0 AFTER `currency`;
+ALTER TABLE `deals` ADD `position` INT NOT NULL DEFAULT 0 FIRST;
+ALTER TABLE `deals` ADD `owner_id` BINARY(16) NULL;
+ALTER TABLE `deals` ADD CONSTRAINT `deals_owner_id_foreign` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`);
+ALTER TABLE `deals` ADD `tags` JSON NULL COMMENT 'free-form labels';
+ALTER TABLE `deals` ADD INDEX `deals_stage_index`(`stage`);
+
+-- sqlite
+-- error: adding a foreign key on SQLite (it rebuilds `deals` from its current columns, indexes and foreign keys) needs a database connection; this schema is offline (it only records statements)

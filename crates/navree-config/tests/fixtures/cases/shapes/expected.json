@@ -1,0 +1,30 @@
+{
+  "array_then_array": "7,8",
+  "array_then_scalar": "now a string",
+  "deep": {
+    "extra": {
+      "d": 4
+    },
+    "inner": {
+      "a": 1,
+      "b": 20,
+      "c": "300"
+    },
+    "keep": "from app.toml"
+  },
+  "scalar_then_array": [
+    "now",
+    "an",
+    "array"
+  ],
+  "scalar_then_table": {
+    "now": "a table"
+  },
+  "table_in_array": [
+    {
+      "name": "three"
+    }
+  ],
+  "table_then_scalar": "now a string",
+  "untouched": "now a string"
+}

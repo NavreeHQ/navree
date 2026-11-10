@@ -1,0 +1,370 @@
+# Every server the Rust suites test against, on 127.0.0.1 only.
+#
+# scripts/ci-services.sh drives this file: it generates the files the Mailpit
+# servers mount, starts the containers, waits until each answers, sets up the
+# data the suites expect (a bucket, a replica set) and prints the NAVREE_TEST_*
+# variables the suites read. You can also use the file by hand:
+#
+#   NAVREE_CI_STATE=$PWD/target/ci-services docker compose -f scripts/services/compose.yml up --detach redis nats
+#
+# The containers are called navree-ci-<service>. The throwaway credentials
+# below only guard servers that live for one job on the loopback interface.
+name: navree-ci
+
+services:
+  # PostgreSQL 17 with TimescaleDB. The suites install the extension
+  # themselves, so scripts/ci-services.sh drops it from the template database
+  # after the first start.
+  postgres:
+    image: ${POSTGRES_IMAGE:-timescale/timescaledb:2.31.0-pg17}
+    container_name: navree-ci-postgres
+    ports: ["127.0.0.1:5432:5432"]
+    environment:
+      POSTGRES_PASSWORD: navree
+      POSTGRES_DB: navree_test
+    # Throwaway data: crash safety traded for speed, as on a developer machine.
+    command:
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_worker_processes=16
+      - -c
+      - timescaledb.max_background_workers=8
+      - -c
+      - timescaledb.telemetry_level=off
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+
+  # PostgreSQL 17 with pgvector: the vector-store suite of navree-ai connects
+  # to a server of its own.
+  pgvector:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg17}
+    container_name: navree-ci-pgvector
+    ports: ["127.0.0.1:5433:5432"]
+    environment:
+      POSTGRES_PASSWORD: navree
+      POSTGRES_DB: navree_test
+    command: ["-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    container_name: navree-ci-mysql
+    ports: ["127.0.0.1:3306:3306"]
+    environment:
+      MYSQL_ROOT_PASSWORD: navree
+      MYSQL_DATABASE: navree_test
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --max_connections=300
+      - --local_infile=OFF
+      - --skip-log-bin
+      - --innodb_buffer_pool_size=256M
+      - --innodb_flush_log_at_trx_commit=2
+
+  # MariaDB 11.4, on the port after MySQL's. Change the version with
+  # MARIADB_IMAGE.
+  mariadb:
+    image: ${MARIADB_IMAGE:-mariadb:11.4}
+    container_name: navree-ci-mariadb
+    ports: ["127.0.0.1:3307:3306"]
+    environment:
+      MARIADB_ROOT_PASSWORD: navree
+      MARIADB_DATABASE: navree_test
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=300
+      - --skip-log-bin
+      - --innodb_buffer_pool_size=256M
+      - --innodb_flush_log_at_trx_commit=2
+
+  # MariaDB 10.6, the oldest release Navree supports (the first with SKIP
+  # LOCKED), on the port after MariaDB 11.4's. Change the version with
+  # MARIADB_10_6_IMAGE.
+  mariadb-10-6:
+    image: ${MARIADB_10_6_IMAGE:-mariadb:10.6}
+    container_name: navree-ci-mariadb-10-6
+    ports: ["127.0.0.1:3308:3306"]
+    environment:
+      MARIADB_ROOT_PASSWORD: navree
+      MARIADB_DATABASE: navree_test
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=300
+      - --skip-log-bin
+      - --innodb_buffer_pool_size=128M
+      - --innodb_flush_log_at_trx_commit=2
+
+  # MongoDB refuses to start on Linux kernels 6.19 through 7.0.13 (a TCMalloc
+  # incompatibility): a CI job runs on an image with an older kernel.
+  # scripts/ci-services.sh turns the server into the replica set rs0 once it
+  # answers (transactions need one).
+  mongodb:
+    image: ${MONGODB_IMAGE:-mongo:8.0}
+    container_name: navree-ci-mongodb
+    ports: ["127.0.0.1:27017:27017"]
+    command: ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:8-alpine}
+    container_name: navree-ci-redis
+    ports: ["127.0.0.1:6379:6379"]
+
+  # S3 (RustFS). scripts/ci-services.sh creates the bucket the suite names.
+  # The image runs as the user rustfs (10001) and writes its log to files in
+  # /logs, not to the container's output; the volume takes the ownership of
+  # /data in the image, so the server can write to it. The log level is
+  # raised from the image's warn so that the log shows how it started;
+  # scripts/ci-services.sh prints that log when the server does not answer.
+  s3:
+    image: ${S3_IMAGE:-rustfs/rustfs:1.0.4}
+    container_name: navree-ci-s3
+    ports: ["127.0.0.1:9000:9000"]
+    environment:
+      RUSTFS_ACCESS_KEY: navreetest
+      RUSTFS_SECRET_KEY: navreetest-secret
+      RUSTFS_OBS_LOGGER_LEVEL: info
+    volumes:
+      - s3-data:/data
+
+  # Google Cloud Storage. The emulator serves what the driver reads (the XML
+  # API's GET, HEAD, list and DELETE) and takes uploads through signed links;
+  # it does not take the XML API's authenticated PUT, so the suite seeds files
+  # through the JSON API (the driver's writes run on navree-storage's
+  # in-process XML server). scripts/ci-services.sh creates the bucket.
+  gcs:
+    image: ${GCS_IMAGE:-fsouza/fake-gcs-server:1.56.1}
+    container_name: navree-ci-gcs
+    ports: ["127.0.0.1:4443:4443"]
+    command:
+      - -scheme
+      - http
+      - -port
+      - "4443"
+      - -external-url
+      - http://127.0.0.1:4443
+      - -public-host
+      - 127.0.0.1:4443
+      - -backend
+      - memory
+
+  # Azure Blob Storage (Microsoft's own emulator, the Blob service only, with
+  # its published development account). scripts/ci-services.sh creates the
+  # container.
+  azurite:
+    image: ${AZURITE_IMAGE:-mcr.microsoft.com/azure-storage/azurite:3.37.0}
+    container_name: navree-ci-azurite
+    ports: ["127.0.0.1:10000:10000"]
+    command:
+      - azurite-blob
+      - --blobHost
+      - 0.0.0.0
+      - --blobPort
+      - "10000"
+      - --inMemoryPersistence
+      - --skipApiVersionCheck
+      - --loose
+
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.20.0}
+    container_name: navree-ci-qdrant
+    ports: ["127.0.0.1:6333:6333"]
+
+  typesense:
+    image: ${TYPESENSE_IMAGE:-typesense/typesense:30.1}
+    container_name: navree-ci-typesense
+    ports: ["127.0.0.1:8108:8108"]
+    tmpfs: ["/data"]
+    command: ["--data-dir", "/data", "--api-key=navree-test-key-0123456789", "--listen-address", "0.0.0.0"]
+
+  meilisearch:
+    image: ${MEILISEARCH_IMAGE:-getmeili/meilisearch:v1.55}
+    container_name: navree-ci-meilisearch
+    ports: ["127.0.0.1:7700:7700"]
+    environment:
+      MEILI_MASTER_KEY: navree-test-key-0123456789
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+
+  # stripe-mock answers from the OpenAPI spec it was built with, so its release
+  # must match the Stripe API version the driver pins (STRIPE_API_VERSION in
+  # crates/navree-billing/src/provider/stripe.rs). v0.206.0 is the release
+  # built from 2026-09-30.endive; move the two together.
+  stripe-mock:
+    image: ${STRIPE_MOCK_IMAGE:-stripe/stripe-mock:v0.206.0}
+    container_name: navree-ci-stripe-mock
+    ports: ["127.0.0.1:12111:12111"]
+
+  # Pebble does not fetch the challenge answers (PEBBLE_VA_ALWAYS_VALID): the
+  # suite's domains do not resolve to this machine, and the answers' route is
+  # covered by the crate's other tests.
+  pebble:
+    image: ${PEBBLE_IMAGE:-ghcr.io/letsencrypt/pebble:latest}
+    container_name: navree-ci-pebble
+    ports: ["127.0.0.1:14000:14000"]
+    environment:
+      PEBBLE_VA_ALWAYS_VALID: "1"
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+
+  nats:
+    image: ${NATS_IMAGE:-nats:2.14-alpine}
+    container_name: navree-ci-nats
+    ports: ["127.0.0.1:4222:4222"]
+    command: ["--jetstream"]
+
+  # NATS that asks for a token and speaks TLS only, with the certificate
+  # scripts/ci-services.sh writes into ${NAVREE_CI_STATE}/tls (for localhost;
+  # no public authority signed it).
+  nats-secure:
+    image: ${NATS_IMAGE:-nats:2.14-alpine}
+    container_name: navree-ci-nats-secure
+    ports: ["127.0.0.1:4223:4222"]
+    volumes:
+      - ${NAVREE_CI_STATE}/tls:/certs:ro
+    command:
+      - --jetstream
+      - --auth
+      - navree-nats-token
+      - --tls
+      - --tlscert
+      - /certs/cert.pem
+      - --tlskey
+      - /certs/key.pem
+
+  # Mosquitto 2 answers only the loopback interface of its own container
+  # unless a listener is configured. 1883 is open, 1884 asks for a login and
+  # 8883 asks for one over TLS (mosquitto.conf; the password file and the
+  # certificate are in ${NAVREE_CI_STATE}/mqtt).
+  mqtt:
+    image: ${MQTT_IMAGE:-eclipse-mosquitto:2}
+    container_name: navree-ci-mqtt
+    ports: ["127.0.0.1:1883:1883", "127.0.0.1:1884:1884", "127.0.0.1:8883:8883"]
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ${NAVREE_CI_STATE}/mqtt:/mosquitto/state:ro
+
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.0.0}
+    container_name: navree-ci-kafka
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+
+  # A second Kafka 4.0 broker that asks for a SASL PLAIN login (navree /
+  # navree-secret), on 9094 in plain text and on 9095 over TLS with the
+  # certificate in ${NAVREE_CI_STATE}/tls (a PEM key store: the key, then the
+  # certificate). The listeners have names of their own (SASL, SECURE), so
+  # the image's start script, which expects Java key stores for listeners
+  # named SSL, leaves them to these settings.
+  kafka-secure:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.0.0}
+    container_name: navree-ci-kafka-secure
+    ports: ["127.0.0.1:9094:9094", "127.0.0.1:9095:9095"]
+    volumes:
+      - ${NAVREE_CI_STATE}/tls:/certs:ro
+    environment:
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+      CLUSTER_ID: navree-ci-kafka-secure
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: CONTROLLER://localhost:9093,INTERNAL://localhost:9092,SASL://0.0.0.0:9094,SECURE://0.0.0.0:9095
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://localhost:9092,SASL://localhost:9094,SECURE://localhost:9095
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,SASL:SASL_PLAINTEXT,SECURE:SASL_SSL
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_LISTENER_NAME_SASL_PLAIN_SASL_JAAS_CONFIG: org.apache.kafka.common.security.plain.PlainLoginModule required user_navree="navree-secret";
+      KAFKA_LISTENER_NAME_SECURE_PLAIN_SASL_JAAS_CONFIG: org.apache.kafka.common.security.plain.PlainLoginModule required user_navree="navree-secret";
+      KAFKA_SSL_KEYSTORE_TYPE: PEM
+      KAFKA_SSL_KEYSTORE_LOCATION: /certs/keystore.pem
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+
+  # The default `guest` user may only connect from the container itself.
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:-rabbitmq:4-alpine}
+    container_name: navree-ci-rabbitmq
+    ports: ["127.0.0.1:5672:5672"]
+    environment:
+      RABBITMQ_DEFAULT_USER: navree
+      RABBITMQ_DEFAULT_PASS: navree
+
+  # Four Mailpit servers, because Mailpit takes one SMTP setting per server:
+  #
+  #   mailpit           SMTP 1025, mail API 8025: no login, no TLS
+  #   mailpit-auth      SMTP 1026, mail API 8026: login required (PLAIN, LOGIN)
+  #   mailpit-starttls  SMTP 1027: STARTTLS required, login required
+  #   mailpit-tls       SMTP 1465: TLS from the first byte, login required
+  #
+  # The last two answer with a certificate no public authority signed, so a
+  # client that checks certificates (the SMTP transport does) must refuse them.
+  # The login is navree / navree-secret. scripts/ci-services.sh writes the
+  # certificate and the password file into ${NAVREE_CI_STATE}/mailpit.
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-ci-mailpit
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+    command: ["--disable-version-check"]
+
+  mailpit-auth:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-ci-mailpit-auth
+    ports: ["127.0.0.1:1026:1025", "127.0.0.1:8026:8025"]
+    volumes:
+      - ${NAVREE_CI_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-auth-allow-insecure
+
+  mailpit-starttls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-ci-mailpit-starttls
+    ports: ["127.0.0.1:1027:1025"]
+    volumes:
+      - ${NAVREE_CI_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-starttls
+
+  mailpit-tls:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    container_name: navree-ci-mailpit-tls
+    ports: ["127.0.0.1:1465:1025"]
+    volumes:
+      - ${NAVREE_CI_STATE:-./state}/mailpit:/certs:ro
+    command:
+      - --disable-version-check
+      - --smtp-auth-file
+      - /certs/auth.txt
+      - --smtp-tls-cert
+      - /certs/cert.pem
+      - --smtp-tls-key
+      - /certs/key.pem
+      - --smtp-require-tls
+
+volumes:
+  s3-data:
+    name: navree-ci-s3

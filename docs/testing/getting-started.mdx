@@ -1,0 +1,245 @@
+---
+title: "Getting started"
+description: "Test a Navree app the way it runs: `TestApp` boots your modules in-process, with a fresh SQLite database per test, and `cargo test` runs it all."
+---
+
+Navree tests exercise your application the way it runs in production. A test boots your real modules in-process, sends requests through the full pipeline (request id, CORS, authentication, access checks, the unit of work, the error format) and reads the results from a real database. Only the edges you choose are faked: outgoing mail, the queue, the clock, outgoing HTTP.
+
+This keeps tests honest: a test that passes has gone through the same router, extractors and transactions as a real request. It also stays fast, because there is no server process and no network, and the database is a SQLite file in a temporary directory.
+
+## The testing kit
+
+The kit is the `navree-testing` crate, available as `navree::testing` with the `testing` feature (part of `full`, which is on by default). It isn't in the prelude, so import what you use:
+
+```rust
+use navree::testing::{TestApp, principal};
+```
+
+| Name | What it is |
+|---|---|
+| `TestApp` | A booted app for one test. |
+| `TestClient`, `TestRequest`, `TestResponse` | In-process requests and assertions; see [HTTP tests](/docs/testing/http-tests/). |
+| `principal(user_id)` | A test user to [act as](/docs/testing/http-tests/#acting-as-a-user). |
+| `TestAuthenticator` | The authenticator behind `acting_as`. |
+| `temp_sqlite_url()`, `TempDirGuard` | A fresh SQLite database file and the guard that deletes it. |
+| `FixedClock` | A clock that stands still until you move it; see [fakes](/docs/testing/fakes/#the-clock). |
+
+Tests are async, so your app needs `tokio` as a dev-dependency. The test databases are SQLite files, and SQLite is an opt-in feature, so the dev-dependencies also turn it on. An app made by `navree new` has both:
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree = { version = "1", features = ["sqlite"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Your first test
+
+This test boots the deals module (and the companies module its tables point at) with a database, and checks that a signed-in user can list deals while a guest can't. Its list route is `#[authenticated]`; a route with `#[can(..)]` also needs the access module and some abilities, as in [testing access](/docs/basics/access-control/#testing-access):
+
+```rust title="src/modules/deals/tests/mod.rs"
+use navree::db::DatabaseModule;
+use navree::testing::{TestApp, principal};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use super::DealsModule;
+use crate::modules::companies::CompaniesModule;
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(DatabaseModule)
+        .module(CompaniesModule)
+        .module(DealsModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_cannot_list_deals() {
+    let app = app().await;
+    app.client()
+        .get("/api/v1/deals")
+        .send()
+        .await
+        .assert_error(401, "Unauthorized");
+}
+
+#[tokio::test]
+async fn signed_in_users_list_deals() {
+    let app = app().await;
+    app.acting_as(principal(Uuid::now_v7()))
+        .get("/api/v1/deals")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(0));
+}
+```
+
+Each test builds its own app, so tests share nothing and `cargo test` runs them in parallel.
+
+Where to put tests:
+
+- **Module tests** live next to the module, in `src/modules/<module>/tests/`, declared with `#[cfg(test)] mod tests;`. `navree make:module deals --crud` writes a set of them, and `navree make:test deals moving_deals` adds a file with a test that boots the module.
+- **App tests** live in the top-level `tests/` directory and boot the whole app from its root ([below](#booting-your-whole-app)). A new app has `tests/app.rs`.
+
+## Building a test app
+
+`TestApp::builder()` assembles an app from:
+
+1. `ConfigModule`, configured with **no sources**: a test never reads `.env`, `config/app.toml` or `APP_*` environment variables, so a developer's settings can't change its result;
+2. `HttpModule`;
+3. the modules you add, in order.
+
+| Method | What it does |
+|---|---|
+| `.module(m)` | Adds a module. A configured `HttpModule::for_root(..)` replaces the default one. |
+| `.config(key, value)` | Sets a configuration key (a dotted path) to a JSON value, above every other source. Later calls win. |
+| `.sources(sources)` | Replaces the base configuration sources (none by default); `.config` values still apply on top. |
+| `.temp_database()` | Points `database.url` at a new SQLite file and sets `database.migrate_on_boot = true`. |
+| `.memory_database()` | Points `database.url` at an in-memory SQLite database, migrated at boot. Its pool keeps one connection, so a unit of work holds the database until it ends. |
+| `.hold(value)` | Keeps `value` alive as long as the app and drops it after the app and its temporary directories: a guard that drops a test's own database on a PostgreSQL or MySQL server, say. |
+| `.override_value::<T>(Arc<T>)` | Replaces the provider of `T` everywhere, for [fakes](/docs/testing/fakes/). |
+| `.fake_auth()` | Authenticates with the `TestAuthenticator` even when the app has its own; see [HTTP tests](/docs/testing/http-tests/#apps-with-navree-auth). |
+| `.build().await` | Boots the app, panicking with the boot error if it fails. |
+| `.try_build().await` | Boots the app and returns the boot error instead. |
+
+`temp_database()` sets the configuration only: add `DatabaseModule` yourself, or a module that imports it. Don't add a `ConfigModule` of your own, because the builder has configured one already and the boot would fail. Logbook is off in a test app (`logbook.enabled = false` under the default sources); turn it back on with `.config("logbook.enabled", true)`, usually with `.config("logbook.store", "memory")`.
+
+Once built, a `TestApp` gives you:
+
+| Method | What it does |
+|---|---|
+| `app.client()` | A [client](/docs/testing/http-tests/) for a guest, with an empty cookie jar. |
+| `app.acting_as(principal)` | A client whose requests are authenticated as `principal`. |
+| `app.get::<T>().await` | Resolves a provider: `app.get::<Db>()`, `app.get::<DealService>()`. Panics if there is none. |
+| `app.ctx()` | The `AppContext`. |
+| `app.run_command(name, args).await` | Runs a registered command, such as `db:seed`, against this app. |
+| `app.shutdown().await` | Shuts the app down gracefully and deletes its temporary database. |
+
+## Booting your whole app
+
+To test the app as `main` runs it, build its root with hermetic configuration and boot it with `TestApp::from_builder`. This is the `tests/app.rs` that `navree new` writes, without its `/health/live` test (`my_app` is your crate's name):
+
+```rust title="tests/app.rs"
+use navree::config::ConfigSources;
+use navree::crypto::generate_key;
+use navree::testing::{TempDirGuard, TestApp, TestAuthenticator, principal, temp_sqlite_url};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+/// Hermetic settings: no `.env`, a fresh database, fast password hashing,
+/// Logbook off.
+fn sources() -> (ConfigSources, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("http.per_ip_rate_limit", Value::Null)
+        .set("mail.transport", "array")
+        .set("observe.metrics", false)
+        .set("logbook.enabled", false)
+        .set("hashing.memory_kib", 1024)
+        .set("hashing.iterations", 1);
+    (sources, guard)
+}
+
+/// The booted app; requests made with `acting_as` are signed in.
+async fn app() -> (TestApp, TempDirGuard) {
+    let (sources, guard) = sources();
+    let app = TestApp::from_builder(TestAuthenticator::install(my_app::app(sources))).await;
+    (app, guard)
+}
+
+#[test]
+fn module_graph_is_valid() {
+    let (sources, _guard) = sources();
+    my_app::app(sources)
+        .validate()
+        .expect("every module's imports and providers line up");
+}
+
+#[tokio::test]
+async fn profile_needs_a_signed_in_user() {
+    let (app, _guard) = app().await;
+    app.client()
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(401);
+    app.acting_as(principal(Uuid::now_v7()))
+        .get("/api/v1/profile")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("timezone", json!("UTC"));
+}
+```
+
+`from_builder` adds nothing to your app except a `TestAuthenticator` when the app has no authenticator of its own. A new app has navree-auth's, so the test installs the `TestAuthenticator` in its place to make `acting_as` work ([apps with navree-auth](/docs/testing/http-tests/#apps-with-navree-auth)). Keep the `TempDirGuard` alive for the whole test: dropping it deletes the database. `validate()` checks the module graph (imports, providers, exports) without building anything, so a wiring mistake fails one fast test with a readable message.
+
+The settings above make the app hermetic and fast:
+
+| Key | Why |
+|---|---|
+| `app.key` | Encryption and signing need a key; `generate_key()` makes a fresh one. |
+| `database.url`, `database.migrate_on_boot` | A private, migrated database. |
+| `http.per_ip_rate_limit` = `null` | Every test request comes from 127.0.0.1, and the default limit is 600 requests a minute per IP. |
+| `mail.transport` = `"array"` | Mail is kept in memory, to [assert on](/docs/testing/fakes/#mail). |
+| `observe.metrics` = `false` | Skips the Prometheus recorder. |
+| `logbook.enabled` = `false` | Logbook records nothing (a builder-made test app has it off already). |
+| `hashing.memory_kib`, `hashing.iterations` | Argon2id with production settings is slow on purpose; cheap settings keep logins in tests fast. |
+
+## The test database
+
+`temp_database()` and `temp_sqlite_url()` create a new directory in the system's temporary directory (named `navree-test-<random>`) and point the app at a `database.sqlite` file inside it. SQLite creates the file on first connect, and `migrate_on_boot` runs every module's migrations, so each test starts from an empty, migrated schema. The directory is deleted when the `TestApp` (or the guard) is dropped. The SQLite driver must be compiled in: without the `sqlite` feature in the test build, the app stops at boot and asks for it.
+
+A file is used rather than an in-memory database because an in-memory SQLite database belongs to one connection: every connection in the pool would see a different, empty database.
+
+<Callout type="tip" title="Call shutdown on Windows">
+
+Deleting the directory is best effort. On Windows, files a database pool still holds open can't be deleted when the guard drops. The guard then hands the directory to a background thread that retries for about 30 seconds without holding up the test, and the first guard of each test process removes `navree-test-*` directories left by earlier runs once they are an hour old (`NAVREE_TEST_SWEEP_AGE_SECS` sets another age, in seconds, and makes the sweep run at once; otherwise the sweep runs at most every ten minutes). End tests with `app.shutdown().await` anyway: it closes the pool before deleting the directory, so nothing is left to retry.
+
+</Callout>
+
+`TestApp`'s own databases are SQLite. To test an app against PostgreSQL or MySQL, create a database of its own on a real server with the ORM's `#[navree::test(database = "postgres")]` ([ORM testing](/docs/orm/testing/#real-servers)), point `database.url` at its `url()`, and keep the `TestDb` alive with `.hold(..)` until the app is gone. [Database tests](/docs/testing/database-tests/) covers preparing data and asserting on it.
+
+## Running tests
+
+```sh
+cargo test                          # every test
+cargo test deals                    # tests whose name contains "deals"
+cargo test -p crm-deals             # one crate of a workspace
+cargo test -- --nocapture           # show println! output
+```
+
+`#[tokio::test]` runs each test on a single-threaded runtime, which is right for nearly every test. A test about concurrency (many requests at once) needs real threads:
+
+```rust
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn board_reads_and_a_move_under_load() {
+    // ...
+}
+```
+
+## Testing in a real browser
+
+These tests stop at the API. To check a whole user journey through your front end, [browser testing](/docs/packages/browser-testing/) drives a real Chromium from your Rust tests over the Chrome DevTools Protocol: visit a page, type into fields, press buttons and assert on what the user sees, with a screenshot when a step fails.
+
+<LinkCards>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    Requests, signed-in users and JSON assertions.
+  </LinkCard>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    Factories, seeders and asserting on the database.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    Mail, the queue, the clock, outgoing HTTP and more.
+  </LinkCard>
+  <LinkCard href="/docs/packages/browser-testing/" title="Browser testing">
+    Drive a real browser from your tests.
+  </LinkCard>
+</LinkCards>

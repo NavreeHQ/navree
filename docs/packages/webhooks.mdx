@@ -1,0 +1,785 @@
+---
+title: "Webhooks"
+description: "Send signed webhooks from your events with queue-backed retries and a delivery log, and verify incoming ones from Stripe, GitHub, Paddle and others."
+---
+
+## Quick start
+
+The smallest setup: add the module, say which event is a webhook and create an endpoint. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(WebhooksModule::from_config())
+// the module that owns DealWon: imports = [WebhooksModule::for_feature::<DealWon>()]
+impl WebhookEvent for DealWon {
+    const DESCRIPTION: &'static str = "A deal moved to won.";
+    fn workspace_id(&self) -> Option<Uuid> { Some(self.workspace_id) }
+}
+let created = webhooks
+    .create_endpoint(&uow, NewEndpoint::new("https://hooks.sutlejsupply.in/navree").events(["deal.won"]).workspace(workspace.id))
+    .await?;
+// created.secret is shown once
+```
+
+The feature is `webhooks`, part of the default `full` feature. Delivery needs the database, the queue, the events bus and the HTTP client. [Choosing the events](#choosing-the-events) shows the payload, and [verifying incoming webhooks](#verifying-incoming-webhooks) the other direction.
+
+## Introduction
+
+<Badge feature="webhooks" /> Webhooks are how your app tells other systems that something happened, and how other systems tell you. `navree-webhooks` handles both directions.
+
+**Outgoing.** Your customers register endpoint URLs and pick the events they want. When a deal is won, every subscribed endpoint receives a signed `POST` within seconds. Delivery runs on the [queue](/docs/digging-deeper/queues/), with retries for about a day, and every attempt lands in a delivery log your customers can read.
+
+**Incoming.** The `VerifiedWebhook` extractor checks that a request comes from who it claims before your handler sees it. It knows Stripe, GitHub, Paddle, AWS SNS (SES events among them), Google Pub/Sub push (Gmail notifications among them), Microsoft Graph change notifications, Twilio, Vonage, Meta (WhatsApp), Slack, Mailgun, Postmark and any sender that follows the [Standard Webhooks](https://www.standardwebhooks.com) specification, and it answers their handshakes (Graph's `validationToken`, Slack's challenge, SNS subscription confirmations) for you.
+
+Outgoing messages follow Standard Webhooks too, so your customers can verify them with any Standard Webhooks library, in any language.
+
+## Installation
+
+The `webhooks` feature of the `navree` facade is part of `full`, which is on by default. With `default-features = false`, turn it on:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", default-features = false, features = ["webhooks"] }
+```
+
+Add `WebhooksModule` to your app root. Outgoing delivery needs the database, the queue, the events bus and the HTTP client. Verifying incoming webhooks needs none of them; AWS SNS and Google Pub/Sub fetch their senders' public keys with the app's HTTP client, or a default one when the app has no `HttpClientModule`:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config()) // encrypts endpoint secrets with APP_KEY
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())
+    .module(QueueModule::from_config())
+    .module(HttpClientModule::from_config())
+    .module(WebhooksModule::from_config()) // section `webhooks`
+    // ...
+```
+
+The module contributes the migration set `webhooks`, which creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts` and `webhook_receipts`. The delivery log is time series: on [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), `webhook_deliveries` and `webhook_attempts` are hypertables on `created_at`, a day per chunk. A hypertable's key includes its time column, so attempts reference their endpoint rather than their delivery: deleting an endpoint deletes its deliveries and attempts, and `webhooks:prune` deletes a delivery's attempts with it.
+
+Endpoint secrets are encrypted at rest with your app key when the app includes `CryptoModule` and `APP_KEY` is set. Without a key they are stored as they are, and the module logs a warning the first time it stores one.
+
+## Configuration
+
+```toml title="config/app.toml"
+[webhooks]
+queue = "webhooks"          # the queue deliveries run on
+timeout_secs = 15           # per attempt
+require_https = true        # endpoint URLs must use https
+disable_after_days = 5      # disable an endpoint that has failed for this long
+
+[webhooks.incoming]
+tolerance_secs = 300        # accepted age of an incoming signature
+```
+
+Deliveries run on the `webhooks` queue here, so give it a worker: list it in `queue.queues`, or run `navree queue:work --queue webhooks`. A dedicated worker keeps slow endpoints from delaying your other jobs.
+
+Incoming secrets go in `.env`, one per source:
+
+```env title=".env"
+APP_WEBHOOKS__INCOMING__STRIPE__SECRET=whsec_Jx2...
+APP_WEBHOOKS__INCOMING__GITHUB__SECRET=6c0f9d2b8e...
+```
+
+Every key also comes from the environment with the `APP_` prefix: `APP_WEBHOOKS__REQUIRE_HTTPS=false` for local development. `WebhooksModule::for_root(WebhooksOptions { .. })` configures the module in code.
+
+## Sending webhooks
+
+<Diagram name="event-driven" />
+
+### Choosing the events
+
+Any [event](/docs/digging-deeper/events/) can be a webhook. Implement `WebhookEvent` for it to say what the payload looks like and whose endpoints receive it:
+
+```rust title="src/modules/deals/webhooks.rs"
+use navree::BoxFuture;
+use navree::prelude::*;
+use navree::webhooks::{WebhookContext, WebhookEvent};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use super::events::DealWon;
+use super::model::Deal;
+
+impl WebhookEvent for DealWon {
+    const DESCRIPTION: &'static str = "A deal moved to won.";
+
+    /// The workspace whose endpoints receive it.
+    fn workspace_id(&self) -> Option<Uuid> {
+        Some(self.workspace_id)
+    }
+
+    /// What goes in `data`: the deal as the API shows it.
+    fn payload<'a>(&'a self, ctx: &'a WebhookContext) -> BoxFuture<'a, Result<Value, BoxError>> {
+        Box::pin(async move {
+            let deal = Deal::find(ctx.db(), self.deal_id).await?;
+            Ok(json!({ "deal": deal, "won_by": self.won_by }))
+        })
+    }
+}
+```
+
+The event's `NAME` (`deal.won`) is the webhook's type. Without a `payload` method, `data` is the event itself as JSON. An event with a `workspace_id` goes to that workspace's endpoints only; without one (the default), it goes to app-wide endpoints only. Register each webhook event with `for_feature` in the module that owns it:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(
+    imports = [
+        WebhooksModule::for_feature::<DealCreated>(),
+        WebhooksModule::for_feature::<DealWon>(),
+        WebhooksModule::for_feature::<DealLost>(),
+    ],
+    providers = [DealService],
+    controllers = [DealsController],
+)]
+pub struct DealsModule;
+```
+
+From then on, emitting the event is all it takes. The deals service already emits `DealWon`; nothing in it changes:
+
+```rust
+self.events.emit(DealWon { deal_id, workspace_id, won_by, /* ... */ }).await?;
+```
+
+When the event is emitted inside a [unit of work](/docs/database/unit-of-work/), as in a request handler, the fan-out job joins it: a request that rolls back sends no webhook. The job builds the payload once, finds the enabled endpoints subscribed to `deal.won` in the event's workspace, stores one delivery per endpoint and queues each delivery.
+
+To send a webhook that isn't an event, dispatch it by name. Register the name first, with `m.webhook_type(name, description)` in a module's `register` function:
+
+```rust title="src/modules/exports/mod.rs"
+#[module(providers = [ExportService], register = Self::wire)]
+pub struct ExportsModule;
+
+impl ExportsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.webhook_type("export.ready", "A CSV export finished.");
+    }
+}
+```
+
+Then send it with the `Webhooks` service. `send` returns the message id; inside a unit of work the job joins it, like an event's:
+
+```rust
+use navree::webhooks::Webhooks;
+
+let message_id = webhooks
+    .dispatch_json("export.ready", json!({ "export_id": export.id, "url": url }))
+    .workspace(workspace_id)
+    .send()
+    .await?;
+```
+
+An unregistered name, or a payload larger than `webhooks.max_payload_bytes`, fails the dispatch.
+
+### What endpoints receive
+
+Every delivery is a `POST` with a JSON body and three signature headers:
+
+```http
+POST /hooks/navree HTTP/1.1
+Host: hooks.lakhotia.io
+Content-Type: application/json
+User-Agent: Navree-Webhooks/1
+webhook-id: msg_0199c1d2f7e07a31b5d42f0c8e9a1b23
+webhook-timestamp: 1793002627
+webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=
+
+{"type":"deal.won","timestamp":"2026-10-26T08:17:07Z","data":{"deal":{"id":"0199c1d2-...","title":"Lakhotia renewal","amount_cents":4200000,"currency":"INR","stage":"won"},"won_by":"01a17748-..."}}
+```
+
+- `webhook-id` is the message id: the same for every endpoint of one event and across retries, so receivers can drop duplicates.
+- `webhook-timestamp` is when the attempt was signed, in Unix seconds; the body's `timestamp` is when the event happened.
+- `webhook-signature` is `v1,` followed by the base64 HMAC-SHA256 of `{webhook-id}.{webhook-timestamp}.{body}`, keyed with the endpoint's secret (the bytes after `whsec_`, base64-decoded).
+- While a secret is being rotated, the header carries two signatures separated by a space, one per secret, for 24 hours.
+- Endpoints can add their own headers (an `Authorization` token, a team name). `Host`, `Content-Type`, `Content-Length`, `User-Agent`, `Connection`, `Transfer-Encoding`, `TE` and every `webhook-*` header are reserved.
+
+A receiver in any language verifies it with a Standard Webhooks library. In a Navree app on the other end, that's `VerifiedWebhook<S>` with the [`StandardWebhooks` verifier](#verifying-incoming-webhooks).
+
+### Retries and the delivery log
+
+An attempt succeeds when the endpoint answers 2xx within `webhooks.timeout_secs`. Anything else (a non-2xx status, a timeout, a refused connection) is a failed attempt, and the delivery is tried again on this schedule (`RETRY_SCHEDULE`):
+
+| Attempt | After the previous one |
+|---|---|
+| 1 | at once |
+| 2 | 5 seconds |
+| 3 | 5 minutes |
+| 4 | 30 minutes |
+| 5 | 2 hours |
+| 6 | 5 hours |
+| 7 | 10 hours |
+| 8 | 10 hours |
+
+After the eighth attempt, about 27 hours later, the delivery is marked `failed` and `WebhookDeliveryFailed` is emitted. An endpoint whose attempts have done nothing but fail for `webhooks.disable_after_days` (5) is disabled, and `WebhookEndpointDisabled` is emitted so you can tell its owner. An endpoint that answers `410 Gone` is disabled at once. A success clears the failure clock. Deliveries still pending for a disabled endpoint fail when their next attempt is due.
+
+Each attempt is recorded with its status code, the first 4 KB of the response, the error and the duration. Read them with `Webhooks`:
+
+```rust
+let page = webhooks.deliveries(endpoint_id, PageQuery::default()).await?;
+for delivery in &page.data {
+    println!("{} {} {:?} attempts={}", delivery.id, delivery.event_type, delivery.status, delivery.attempts);
+}
+let attempts = webhooks.attempts(delivery.id).await?;
+webhooks.retry(delivery.id).await?; // one more attempt for a failed delivery
+```
+
+A delivery's `status` is `Pending`, `Succeeded` or `Failed`. `retry` gives a failed delivery one more attempt, as soon as a worker is free, with the same id and `webhook-id`; retrying a delivery that has not failed is a `NotRetryable` error (409 over HTTP).
+
+Deliveries go through the [HTTP client](/docs/digging-deeper/http-client/) and its SSRF guard: an endpoint URL that points to, or resolves to, a private, loopback or cloud metadata address is refused when it is created or changed, and again on every attempt. To deliver to a service on your own network, list it in `http_client.ssrf.allow_hosts`.
+
+## Managing endpoints
+
+### The Webhooks service
+
+```rust
+use navree::webhooks::{NewEndpoint, Webhooks};
+
+let created = webhooks
+    .create_endpoint(
+        &uow,
+        NewEndpoint::new("https://hooks.lakhotia.io/navree")
+            .events(["deal.won", "deal.lost"])
+            .workspace(workspace.id)
+            .description("Revenue dashboard")
+            .header("X-Team", "revenue"),
+    )
+    .await?;
+// created.endpoint.id, and created.secret (shown once):
+// "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
+```
+
+| Method | What it does |
+|---|---|
+| `create_endpoint(&uow, new)` | Creates an endpoint and returns it with its secret |
+| `update_endpoint(&uow, id, changes)` | Changes the URL, events, description or headers (`EndpointChanges::new().url(..).events(..)`) |
+| `delete_endpoint(&uow, id)` | Deletes it with its deliveries; pending deliveries are dropped |
+| `rotate_secret(&uow, id)` | A new secret; the old one keeps signing for 24 hours |
+| `enable(&uow, id)`, `disable(&uow, id)` | Turns delivery on or off (enabling forgets past failures) |
+| `endpoint(id)`, `endpoints(workspace_id)` | One endpoint; a workspace's endpoints (`None` for app-wide ones) |
+| `send_test(id)` | Sends a `webhook.test` message at once and returns the attempt |
+| `deliveries(id, page)`, `delivery(id)`, `attempts(delivery_id)` | The log |
+| `retry(delivery_id)`, `retry_failed()` | Queues a failed delivery, or every one, again |
+| `prune(days)` | Deletes old deliveries and incoming receipts |
+| `event_types()` | Every registered event type, with its description |
+
+The URL must use `https` (unless `webhooks.require_https` is off) and carry no credentials; put tokens in a header instead. The events must be registered types; an endpoint subscribed to `*` receives every event type. A test message is recorded in the log but never counts towards disabling its endpoint. Deleting a [workspace](/docs/workspaces/introduction/) deletes its endpoints.
+
+### Built-in routes
+
+With `webhooks.routes = true` (the default) and `DatabaseModule` in the app, the module mounts JSON routes for a webhooks settings page. They require the `webhooks.manage` permission, so the app also needs `AccessModule` and an authenticator. In an app with [workspaces](/docs/workspaces/introduction/) they act on the request's workspace (from the `X-Workspace` header or the other resolvers), and the permission is checked in it; a workspace role gets it through `workspace.roles.<role>.permissions`, and the owner has it already.
+
+| Route | Does |
+|---|---|
+| `GET /api/webhooks/event-types` | Every registered type, with its description |
+| `GET /api/webhooks/endpoints`, `POST` | Lists or creates endpoints (the secret is in the create response only) |
+| `GET /api/webhooks/endpoints/{id}`, `PATCH`, `DELETE` | One endpoint; `PATCH` takes `{url?, events?, description?, headers?, enabled?}` |
+| `POST /api/webhooks/endpoints/{id}/rotate-secret` | `{secret}` |
+| `POST /api/webhooks/endpoints/{id}/test` | Sends `webhook.test` and returns the attempt |
+| `GET /api/webhooks/endpoints/{id}/deliveries` | The delivery log, newest first, paginated |
+| `POST /api/webhooks/deliveries/{id}/retry` | Queues a failed delivery again |
+
+The routes appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the `Webhooks` tag.
+
+## Verifying incoming webhooks
+
+A webhook endpoint is a public route that anyone can call, so check that the request comes from who it claims. Take `VerifiedWebhook<S>` instead of `Json<T>`, as the last argument: it reads the raw body, verifies the signature with the secret of source `S`, rejects a signed timestamp more than `tolerance_secs` away from now, and only then runs your handler.
+
+```rust title="src/modules/integrations/github.rs"
+use navree::prelude::*;
+use navree::webhooks::{GitHub, VerifiedWebhook};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct IssueEvent {
+    action: String,
+    issue: Issue,
+}
+
+#[injectable]
+pub struct GitHubHookController {
+    support: Arc<SupportService>,
+}
+
+#[controller("/integrations/github", version = "1")]
+impl GitHubHookController {
+    /// `POST /api/v1/integrations/github`: issues opened by customers become activities.
+    #[post("/")]
+    #[public]
+    async fn receive(&self, uow: Uow, hook: VerifiedWebhook<GitHub>) -> Result<NoContent> {
+        if !hook.mark_processed(&uow).await? {
+            return Ok(NoContent); // a redelivery we already handled
+        }
+        if hook.event_type() == Some("issues") {
+            let event: IssueEvent = hook.json()?;
+            if event.action == "opened" {
+                self.support.log_issue(&uow, &event.issue).await?;
+            }
+        }
+        Ok(NoContent)
+    }
+}
+```
+
+A request that fails verification never reaches the handler:
+
+```json
+{ "statusCode": 400, "message": "Invalid webhook signature", "error": "Bad Request", "code": "invalid_webhook_signature" }
+```
+
+| Request | Answer |
+|---|---|
+| Verified | Your handler runs |
+| A handshake (see [Handshakes](#handshakes)) | `200`, with the `text/plain` answer the sender expects; your handler doesn't run |
+| Not signed, signed by someone else, or too old | `400 Invalid webhook signature`; the reason is logged at debug level |
+| A body over `webhooks.incoming.max_body_bytes` | `413` |
+| A sender's key can't be fetched | `503`, so the sender retries; the reason is logged as a warning |
+| The source lacks its secret or a required setting | `500`; the error log names the key |
+
+| `VerifiedWebhook<S>` | |
+|---|---|
+| `json::<T>()` | The body as `T`; a body that doesn't match is a 400 |
+| `form::<T>()` | A form-encoded body (Twilio, Slack commands, Mailgun routes) as `T`; a body that doesn't match is a 400 |
+| `body()`, `headers()` | The raw bytes that were verified, and the request headers |
+| `id()` | The sender's delivery id (see the table of [built-in sources](#built-in-sources)), or the SHA-256 of the body when it sends none |
+| `event_type()` | The sender's event type, when it sends one |
+| `timestamp()` | The signed timestamp (`None` for senders that sign none) |
+| `mark_processed(&uow)` | Records the id in `webhook_receipts` in your unit of work; `false` if it was already there |
+
+Senders retry when they don't get a 2xx in time, so the same message can arrive twice. `mark_processed` writes the receipt in the same transaction as your changes: a message whose handling rolled back is handled again on the next delivery, and one that committed isn't. `webhooks:prune` deletes receipts older than `webhooks.incoming.receipt_days` (30).
+
+### Built-in sources
+
+Each built-in source is a type you name in `VerifiedWebhook<S>`, configured under `webhooks.incoming.<name>`:
+
+| Source | Name | Configure | Checks |
+|---|---|---|---|
+| `Stripe` | `stripe` | `secret` | `Stripe-Signature` (`t=`, `v1=`) |
+| `GitHub` | `github` | `secret` | `X-Hub-Signature-256` (`sha256=`) |
+| `Paddle` | `paddle` | `secret` | `Paddle-Signature` (`ts=`, `h1=`) |
+| `StandardWebhooks` | `standard` | `secret` | `webhook-id`, `webhook-timestamp`, `webhook-signature` |
+| `AwsSns` | `aws_sns` | `topics` | The message's RSA signature (SHA-1 for signature version 1, SHA-256 for version 2) with the certificate at `SigningCertURL`, which must be on an SNS host; `TopicArn` in `topics` |
+| `GooglePubSub` | `google_pubsub` | `service_account`, and `audience` or `url` | The `Authorization: Bearer` OIDC token: RS256 with Google's keys, issuer, audience, service account and expiry |
+| `MicrosoftGraph` | `microsoft_graph` | `secret`: the subscription's `clientState` | The `clientState` of every notification in the batch |
+| `Twilio` | `twilio` | `secret`: the auth token; `url` | `X-Twilio-Signature`: HMAC-SHA1 of the URL and the sorted form parameters, or of the URL alone with `bodySHA256` for a JSON body |
+| `Slack` | `slack` | `secret`: the signing secret | `X-Slack-Signature` (`v0=`) over `X-Slack-Request-Timestamp` and the body |
+| `Mailgun` | `mailgun` | `secret`: the webhook signing key | The body's `timestamp`, `token` and `signature`, as JSON (event webhooks) or form fields (routes) |
+| `Postmark` | `postmark` | `secret`: `username:password` | The `Authorization: Basic` credentials of the webhook URL |
+| `Vonage` | `vonage` | `secret`: the signature secret (signed webhooks on) | The `Authorization: Bearer` JWT: HS256 with the secret, its `payload_hash` equal to the body's SHA-256, its `iat` within the tolerance |
+| `Meta` | `meta` | `secret`: the app secret; `verify_token` for the handshake | `X-Hub-Signature-256` (`sha256=`) over the body |
+
+What each one says about a request:
+
+| Source | `id()` | `event_type()` | `timestamp()` |
+|---|---|---|---|
+| `Stripe` | The event's `id` | Its `type` | `t` |
+| `GitHub` | `X-GitHub-Delivery` | `X-GitHub-Event` | None |
+| `Paddle` | `event_id` | `event_type` | `ts` |
+| `StandardWebhooks` | `webhook-id` | The payload's `type` | `webhook-timestamp` |
+| `AwsSns` | `MessageId` | `Type` (`Notification`) | `Timestamp` |
+| `GooglePubSub` | `message.messageId` | None | The token's `iat` |
+| `MicrosoftGraph` | The body's SHA-256 | The first notification's `lifecycleEvent`, else its `changeType` | None |
+| `Twilio` | `I-Twilio-Idempotency-Token` | None | None |
+| `Slack` | `event_id` (Events API) | `event.type`, else `type` | `X-Slack-Request-Timestamp` |
+| `Mailgun` | `event-data.id`, else the token | `event-data.event` | `timestamp` |
+| `Postmark` | `MessageID` | `RecordType` (`Delivery`, `Bounce`...) | None |
+| `Vonage` | The token's `jti` | The body's `status`, else its `message_type` | The token's `iat` |
+| `Meta` | The body's SHA-256 | The body's `object` (`whatsapp_business_account`) | None |
+
+GitHub, Twilio, Postmark, Graph and Meta sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for up to an hour with the same timestamp and signature, so its `Timestamp` is checked against the source's own `tolerance_secs`, or an hour when you set none: an older SNS message is a replay and is refused before any certificate is fetched.
+
+The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them. [Billing](/docs/packages/billing/) checks its Stripe and Paddle webhooks with these same `Stripe` and `Paddle` verifiers on its own route, so it doesn't need `WebhooksModule`.
+
+A source table (`[webhooks.incoming.<source>]`) with an empty secret fails the boot, naming the key, unless it sets `topics` or `service_account`. A request for a source that lacks its secret or required setting, including one with no table at all, is answered with 500, and the error log names the missing key.
+
+### Senders that sign with their own keys
+
+AWS SNS and Google Pub/Sub share no secret with you. They sign with their own private keys, and the app checks the signature with the public half, which it fetches from the sender and caches: an SNS signing certificate for a day, Google's key set for as long as Google's `Cache-Control` says (an hour when it says nothing), fetched again at most once a minute when a token names a key the cached set lacks.
+
+A valid signature only says the request comes from SNS or Google, not that it is meant for you: anyone can publish to an SNS topic of their own pointed at your URL, and any Google service account can mint a token for any audience. So each source needs a setting that ties the request to your subscription, and refuses to run without it:
+
+```toml title="config/app.toml"
+[webhooks.incoming.aws_sns]
+topics = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]  # APP_WEBHOOKS__INCOMING__AWS_SNS__TOPICS, comma-separated
+auto_confirm = true             # confirm subscriptions without the handler
+
+[webhooks.incoming.google_pubsub]
+service_account = "gmail-push@agra-crm.iam.gserviceaccount.com"
+audience = "https://api.agra.example/api/v1/mail/gmail-push"  # default: the request's public URL
+```
+
+An SES event arrives as an SNS notification whose `Message` is the event's JSON. Read the body as `SnsMessage`:
+
+```rust title="src/modules/mail/ses_events.rs"
+use navree::prelude::*;
+use navree::webhooks::{AwsSns, SnsMessage, VerifiedWebhook};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesEvent {
+    event_type: String,
+    mail: SesMail,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesMail {
+    message_id: String,
+}
+
+#[injectable]
+pub struct SesEventsController {
+    deliveries: Arc<DeliveryLog>,
+}
+
+#[controller("/mail/ses-events", version = "1")]
+impl SesEventsController {
+    /// `POST /api/v1/mail/ses-events`: delivery events from SES, through SNS.
+    #[post("/")]
+    #[public]
+    async fn receive(&self, uow: Uow, hook: VerifiedWebhook<AwsSns>) -> Result<NoContent> {
+        if !hook.mark_processed(&uow).await? {
+            return Ok(NoContent);
+        }
+        let message: SnsMessage = hook.json()?;
+        let event: SesEvent = message
+            .message_json()
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        self.deliveries
+            .record(&uow, &event.mail.message_id, &event.event_type)
+            .await?;
+        Ok(NoContent)
+    }
+}
+```
+
+Leave raw message delivery off on the subscription: a raw message carries no signature. The certificate URL must be HTTPS on an SNS host (`sns.<region>.amazonaws.com`, or `.amazonaws.com.cn`), with a path ending in `.pem` and no query; any other is refused before anything is fetched.
+
+A Pub/Sub push body is a `PubSubPush`, whose message carries its payload in base64. `data_json::<T>()` decodes it, here a Gmail notification:
+
+```rust title="src/modules/mail/gmail_push.rs"
+use navree::webhooks::{GooglePubSub, PubSubPush, VerifiedWebhook};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailChange {
+    email_address: String,
+    history_id: String,
+}
+
+#[post("/")]
+#[public]
+async fn receive(&self, hook: VerifiedWebhook<GooglePubSub>) -> Result<NoContent> {
+    let push: PubSubPush = hook.json()?;
+    let change: GmailChange = push
+        .message
+        .data_json()
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    self.mailboxes.sync_later(&change.email_address, &change.history_id).await?;
+    Ok(NoContent)
+}
+```
+
+### Handshakes
+
+Some senders check that your URL answers before they send it anything. The extractor answers these requests itself, with a `200` and the `text/plain` body the sender expects, so your handler only sees deliveries:
+
+| Source | Handshake | Answer |
+|---|---|---|
+| `MicrosoftGraph` | A request with a `validationToken` query parameter, when a subscription is created | The token, decoded |
+| `Slack` | A signed Events API request with `"type": "url_verification"` | Its `challenge` |
+| `AwsSns` | A signed `SubscriptionConfirmation` | Confirms it by fetching its `SubscribeURL` (on an SNS host), then an empty `200` |
+| `AwsSns` | A signed `UnsubscribeConfirmation` | An empty `200` |
+| `Meta` | `GET ?hub.mode=subscribe&hub.verify_token=..&hub.challenge=..`, when the webhook is set up | The challenge, when the token equals the source's `verify_token`; otherwise a `400` |
+
+A Meta route answers the handshake only if it is mounted for `GET` as well as `POST`.
+
+With `auto_confirm = false`, SNS confirmations reach your handler instead (`event_type()` is `SubscriptionConfirmation` or `UnsubscribeConfirmation`), and you confirm with `SnsMessage::subscribe_url` yourself.
+
+Graph sends a batch of notifications, `{"value": [...]}`; read it as `GraphNotifications`. Lifecycle notifications (`reauthorizationRequired`, `subscriptionRemoved`, `missed`) come the same way and carry the same `clientState`. Graph expects a `202 Accepted` within three seconds, so queue the work and answer at once. Notifications with resource data also carry `validationTokens`, JWTs signed by Microsoft; they are in `GraphNotifications::validation_tokens`, and the extractor doesn't check them: the `clientState` is what it verifies.
+
+### Senders that sign the URL
+
+Twilio signs the full URL it called, query string included. Behind a proxy or load balancer the app sees another URL, so set the public one:
+
+```toml title="config/app.toml"
+[webhooks.incoming.twilio]
+secret = ""                     # APP_WEBHOOKS__INCOMING__TWILIO__SECRET: the account's auth token
+url = "https://api.agra.example/api/v1/sms/status"  # the request's query string is appended
+```
+
+Without `url`, the URL is rebuilt from `X-Forwarded-Proto`, `X-Forwarded-Host` and `Host`, which is right only when your proxy sets them as the caller saw them. The URL is also tried with its default port added or removed, because Twilio sometimes signs it with `:443`. Read Twilio's form parameters with `form::<T>()`:
+
+```rust
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct MessageStatus {
+    message_sid: String,
+    message_status: String,
+}
+
+let status: MessageStatus = hook.form()?;
+```
+
+`GooglePubSub` uses the same public URL as its default `audience`, which is what Pub/Sub puts in the token when the subscription names none.
+
+### Your own sources
+
+Many senders use Standard Webhooks, each with its own secret. Declare a source per sender and pick its verifier:
+
+```rust
+use navree::webhooks::{StandardWebhooks, WebhookSource};
+
+/// Delivery events from our mail provider.
+pub struct MailEvents;
+
+impl WebhookSource for MailEvents {
+    /// The secret is read from `webhooks.incoming.mail_events.secret`.
+    const NAME: &'static str = "mail_events";
+    type Verifier = StandardWebhooks;
+}
+```
+
+Then take `VerifiedWebhook<MailEvents>`. A source can also set its own `tolerance_secs`. For a sender with its own scheme, implement `WebhookVerifier`, or use the generic `Hmac` verifier, configured with the header, algorithm and encoding:
+
+```rust
+use navree::webhooks::{Hmac, WebhookSource};
+
+pub struct Calendly;
+
+impl WebhookSource for Calendly {
+    const NAME: &'static str = "calendly";
+    type Verifier = Hmac;
+}
+```
+
+```toml
+[webhooks.incoming.calendly]
+secret = ""                       # APP_WEBHOOKS__INCOMING__CALENDLY__SECRET
+header = "Calendly-Webhook-Signature"
+algorithm = "sha256"              # sha1 | sha256 | sha512
+encoding = "hex"                  # hex | base64
+format = "t={timestamp},v1={signature}"
+signed = "{timestamp}.{body}"
+tolerance_secs = 180              # optional, instead of webhooks.incoming.tolerance_secs
+```
+
+`format` is the shape of the header value: `{signature}` once and `{timestamp}` at most once, with text between them. `signed` is what is signed, from `{timestamp}`, `{id}` and `{body}`. When the timestamp or the delivery id come in headers of their own, name them with `timestamp_header` and `id_header`; `event_header` names the header that carries the event type.
+
+A `WebhookVerifier` that signs the headers and body implements `verify_request(source, headers, body, tolerance)`. One that needs the URL, keys fetched from the sender or a handshake implements `verify_incoming` instead, which takes the whole `IncomingRequest` (the source's options, headers, body, public URL, arrival time, tolerance and `SenderKeys`) and returns a `Verdict`. A partner that checks your URL with a `?challenge=` request before signing its deliveries the way GitHub does:
+
+```rust
+use navree::webhooks::{
+    GitHub, Handshake, IncomingRequest, Verdict, VerifyError, WebhookSource, WebhookVerifier,
+};
+
+pub struct Partner;
+
+impl WebhookVerifier for Partner {
+    async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
+        if let Some(challenge) = request.query("challenge") {
+            return Ok(Verdict::Handshake(Handshake::text(challenge)));
+        }
+        GitHub::verify(request.source().secret.expose(), request.headers(), request.body())
+            .map(Verdict::Verified)
+    }
+}
+
+impl WebhookSource for Partner {
+    const NAME: &'static str = "partner";
+    type Verifier = Partner;
+}
+```
+
+A verifier that needs a setting other than `secret` says so in `missing_setting`, so a request for a source without it is a 500 that names the key.
+
+### Notification callbacks
+
+With [notifications](/docs/digging-deeper/notification-channels/) in the app too (the `notify` feature; `webhooks` and `notify` are both in `full`), `WebhooksModule` receives the status callbacks and replies of the SMS and WhatsApp providers. It mounts a public route for each of these sources you configure:
+
+| Route | Source |
+|---|---|
+| `POST /api/webhooks/notify/twilio` | `Twilio`: message statuses, and incoming SMS and WhatsApp messages |
+| `POST /api/webhooks/notify/vonage` | `Vonage`: Messages API statuses and inbound messages |
+| `GET`, `POST /api/webhooks/notify/meta` | `Meta`: the WhatsApp Cloud API's handshake, statuses and messages |
+
+Each request is verified like any `VerifiedWebhook<S>` of its source, then applied to the notification delivery log: statuses move deliveries forward, and replies of STOP or START update the opt-outs. Nothing is mounted without `NotifyModule`. [Provider callbacks](/docs/digging-deeper/notification-channels/#provider-callbacks) says which URL to give each provider.
+
+## Testing
+
+### Outgoing
+
+Deliveries go through the app's `HttpClient`, so a fake client receives them. Run the queue, then assert on what was sent and check the signature with the verifier your customers would use:
+
+```rust title="tests/webhooks.rs"
+use http::Method;
+use navree::db::Db;
+use navree::events::EventBus;
+use navree::http_client::{FakeResponse, HttpClient};
+use navree::prelude::*;
+use navree::queue::Queue;
+use navree::testing::TestApp;
+use navree::webhooks::{NewEndpoint, StandardWebhooks, Webhooks};
+
+#[tokio::test]
+async fn winning_a_deal_notifies_subscribed_endpoints() {
+    let (client, server) = HttpClient::fake();
+    server.on(Method::POST, "https://hooks.lakhotia.io/*", FakeResponse::new(204));
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("queue.driver", "memory")
+        .config("webhooks.routes", false) // the routes need AccessModule
+        .module(DatabaseModule::from_config())
+        .module(EventsModule::for_root())
+        .module(QueueModule::from_config())
+        .module(HttpClientModule::from_config())
+        .module(WebhooksModule::from_config())
+        .module(DealsModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    let created = app
+        .get::<Webhooks>()
+        .await
+        .create_endpoint(
+            &uow,
+            NewEndpoint::new("https://hooks.lakhotia.io/navree").events(["deal.won"]),
+        )
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+
+    app.get::<EventBus>().await.emit(a_won_deal()).await.unwrap(); // a DealWon
+    app.get::<Queue>().await.run_pending().await.unwrap();
+
+    server.assert_sent_count(1);
+    let request = server.recorded().pop().unwrap();
+    StandardWebhooks::verify(&created.secret, request.headers(), request.body(), None).unwrap();
+    assert_eq!(request.json::<serde_json::Value>().unwrap()["type"], "deal.won");
+}
+```
+
+The last argument of `verify` is the tolerance: `None` checks the signature only, `Some(Tolerance::secs(300))` also checks the timestamp against the system clock, and `Tolerance::at(now, 300)` against a time you pick.
+
+Answer with `FakeResponse::new(500)` to test retries: the delivery stays `Pending` with one attempt. Override the app's clock with a `FixedClock` (`.override_value::<dyn Clock>(clock.clone())`), and moving it past the next wait (`clock.advance(RETRY_SCHEDULE[1])`) makes the next `run_pending` try again. To check that an event fans out without sending anything, install a [`QueueFake`](/docs/testing/fakes/#the-queue) and assert on `navree::webhooks::FanOut` (job `webhooks.fan_out`):
+
+```rust
+fake.assert_dispatched::<FanOut>(|job| job.event_type == "deal.won");
+```
+
+### Incoming
+
+Each built-in source can sign a test request. Build the body, sign it with the secret you configured for the test, and post it:
+
+```rust
+use navree::webhooks::GitHub;
+
+let body = serde_json::to_vec(&json!({
+    "action": "opened",
+    "issue": { "number": 7, "title": "Export fails" },
+}))
+.unwrap();
+app.client()
+    .post("/api/v1/integrations/github")
+    .header("X-GitHub-Event", "issues")
+    .header("X-GitHub-Delivery", "72d3162e-cc78-11e3-81ab-4c9367dc0958")
+    .header("X-Hub-Signature-256", GitHub::sign("test-secret", &body))
+    .header("Content-Type", "application/json")
+    .body(body)
+    .send()
+    .await
+    .assert_status(204);
+```
+
+`Stripe::sign(secret, timestamp, body)`, `Paddle::sign(secret, timestamp, body)` and `StandardWebhooks::sign(secret, id, timestamp, body)` return the header values for theirs (timestamps in Unix seconds), and `Hmac::sign(&source_options, Some(timestamp), None, body)` for a configured source. The others:
+
+| Source | Sign a test request with |
+|---|---|
+| `Twilio` | `Twilio::sign(auth_token, url, &[("MessageStatus", "delivered")])`: the `X-Twilio-Signature` for the public URL and the form parameters |
+| `Slack` | `Slack::sign(secret, timestamp, body)`: the `X-Slack-Signature`; send the timestamp in `X-Slack-Request-Timestamp` |
+| `Mailgun` | `Mailgun::sign(signing_key, timestamp, token)`: the `signature` field of the body |
+| `Postmark` | `Postmark::authorization("user:password")`: the `Authorization` header |
+| `MicrosoftGraph` | Nothing to sign: put the configured `clientState` in each notification |
+
+AWS SNS and Google Pub/Sub verify with keys the app fetches over its `HttpClient`, so a [fake client](/docs/digging-deeper/http-client/) serves yours. For Pub/Sub, serve an RSA test key as Google's key set and sign tokens with it:
+
+```rust
+use navree::crypto::jose::{JwkSet, SigningKey};
+use navree::webhooks::GooglePubSub;
+
+let key = SigningKey::from_pem(include_str!("fixtures/rsa-test-key.pem"))?.with_kid("test-1");
+let (client, server) = HttpClient::fake();
+let keys: JwkSet = key.public_jwk().into_iter().collect();
+server.on(Method::GET, GooglePubSub::KEYS_URL, FakeResponse::new(200).json(&keys));
+// ...override_value(Arc::new(client)) on the TestApp builder, then:
+let token = key.sign_jwt(&json!({
+    "iss": "https://accounts.google.com",
+    "aud": "https://api.agra.example/api/v1/mail/gmail-push",
+    "email": "gmail-push@agra-crm.iam.gserviceaccount.com",
+    "email_verified": true,
+    "iat": now,
+    "exp": now + 3600,
+}))?;
+app.client()
+    .post("/api/v1/mail/gmail-push")
+    .bearer(&token)
+    .json(&push)
+    .send()
+    .await
+    .assert_status(204);
+```
+
+For SNS, serve a test certificate at the message's `SigningCertURL` and sign `message.string_to_sign()` with its key: `key.sign(...)` of an RSA `SigningKey` gives a signature version 2 (SHA-256) signature, base64 it into `Signature`.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `webhooks.queue` | `default` | The queue of fan-out and delivery jobs |
+| `webhooks.timeout_secs` | `15` | Time allowed per attempt |
+| `webhooks.require_https` | `true` | Refuse `http://` endpoint URLs |
+| `webhooks.disable_after_days` | `5` | Disable an endpoint failing for this long; `0` never disables |
+| `webhooks.max_payload_bytes` | `262144` | Largest payload (256 KB); a bigger one fails the dispatch |
+| `webhooks.retain_days` | `30` | Deliveries older than this are pruned by `webhooks:prune` |
+| `webhooks.routes` | `true` | Mounts the `/api/webhooks` routes (permission `webhooks.manage`) |
+| `webhooks.incoming.tolerance_secs` | `300` | Accepted age of incoming signatures |
+| `webhooks.incoming.max_body_bytes` | `1048576` | Largest incoming body |
+| `webhooks.incoming.receipt_days` | `30` | How long `mark_processed` receipts are kept |
+| `webhooks.incoming.<source>.secret` | none | The secret of a source; from `.env` |
+| `webhooks.incoming.<source>.tolerance_secs` | none | The source's own tolerance |
+| `webhooks.incoming.<source>.header`, `algorithm`, `encoding`, `format`, `signed`, `timestamp_header`, `id_header`, `event_header` | see above | The scheme of an `Hmac` source |
+| `webhooks.incoming.<source>.url` | rebuilt from the request | The public URL of the route (Twilio, and the default audience of Google Pub/Sub); the request's query string is appended |
+| `webhooks.incoming.aws_sns.topics` | none | The topic ARNs accepted; required |
+| `webhooks.incoming.aws_sns.auto_confirm` | `true` | Confirm subscriptions without the handler |
+| `webhooks.incoming.aws_sns.tolerance_secs` | `3600` | Accepted age of an SNS message's `Timestamp` |
+| `webhooks.incoming.google_pubsub.service_account` | none | The service account email of the push subscription; required |
+| `webhooks.incoming.google_pubsub.audience` | the public URL | The token's expected `aud` |
+| `webhooks.incoming.meta.verify_token` | none | The token Meta sends in its `GET` handshake |
+
+| Command | What it does |
+|---|---|
+| `webhooks:endpoints [--workspace <slug>]` | Lists endpoints with their status and failure counts |
+| `webhooks:test <endpoint-id>` | Sends `webhook.test` and prints the response; fails when the endpoint does |
+| `webhooks:retry <delivery-id>\|failed` | Queues one failed delivery, or all of them, again |
+| `webhooks:prune [--days N]` | Deletes deliveries older than `retain_days` and receipts older than `receipt_days`, or both older than N days |
+
+| Event | `NAME` | When |
+|---|---|---|
+| `WebhookDeliveryFailed` | `webhook.delivery_failed` | A delivery used its last attempt (or its endpoint was disabled) |
+| `WebhookEndpointDisabled` | `webhook.endpoint_disabled` | An endpoint was disabled after failing (`reason` `failing` or `gone`) |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    The events that become webhooks.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    The workers that deliver them.
+  </LinkCard>
+  <LinkCard href="/docs/packages/billing/" title="Billing">
+    Verified Stripe and Paddle webhooks, processed for you.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/event-driven/" title="Event-driven architecture">
+    Events inside the app, between services and out to other systems.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,98 @@
+---
+title: "Donut chart"
+description: "One whole split into a few parts, with the total in the middle and a legend that names each part's value and share. A pie has no hole. Drawn as SVG."
+---
+
+<UiPreview example="donut-chart/default" />
+
+`Donut` splits one whole into parts. Each part is a slice, drawn clockwise from twelve o'clock in the order you give them. The total sits in the middle, and a legend beside the ring names each part with its value and its share, so a reader needs no hover to read it.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Donut::new("Payments")
+    .part("Succeeded", 9_412)
+    .part_tone("Failed", 188, Tone::Danger)
+    .part("Pending", 40)
+    .part("Refunded", 12)
+```
+
+`.parts([("Desktop", 5_200), ("Phone", 3_800)])` adds parts from name and value pairs. `.part_tone(name, value, tone)` colors a part by what it means, and the legend adds the tone's icon.
+
+## When to use it
+
+Use a donut for a few parts of one whole, read at a glance: how payments ended, which plans people are on. Reading a donut is reading angles, and people judge angles less well than lengths. When the parts are close in size, or there are more than a handful, use ranked [horizontal bars](/docs/components/bar-chart/#horizontal-bars). To show one share, use a [Stat](/docs/components/stat/) or a [Progress](/docs/components/progress/). For parts over time, use a stacked [area](/docs/components/area-chart/) or stacked [bars](/docs/components/bar-chart/).
+
+<UiChoose name="chart" current="Donut chart" />
+
+## Anatomy
+
+<UiAnatomy component="donut-chart" />
+
+## A pie
+
+`.pie()` draws the whole disc: no hole, and no total in the middle. The legend and the summary still give the total.
+
+<UiPreview example="donut-chart/pie" />
+
+## Your own words in the middle
+
+The middle says the total by default, in the chart's number format. `.center(value, label)` says something else: a share, a headline figure. It is for the eye only, and the summary still carries the total.
+
+<UiPreview example="donut-chart/center" />
+
+`.size(px)` sets the width and height of the ring (96 to 320, and 168 by default).
+
+## Parts that fold into Other
+
+A donut draws at most six parts. `.max_parts(n)` changes that (2 to 8). When more parts have a value, the largest `n - 1` keep their slices, in the order you gave them, and the rest are added up into one called Other, drawn in gray. The table lists the parts as folded.
+
+Parts at zero, with no value, or below zero draw nothing and stay in the table. Colors follow the order of the parts as given, before any fold, and a part with a tone takes no color of its own. A donut with no part above zero is empty.
+
+## Formats and languages
+
+`.format(NumberFormat)` writes the values, and the shares are always written as percentages in the chart's locale. `.locale("de")` writes them as `97,5 %`. See [Formats and languages](/docs/components/line-chart/#formats-and-languages) on the line chart page for the formats, the locales and the words a chart writes.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), and keep the height of the ring.
+
+<UiPreview example="donut-chart/states" />
+
+## The table
+
+The table lists each part with its value and its share. `.table(TableMode)` says where it sits: behind a "Show table" switch (the default), shown, or for screen readers only. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next part. |
+| `Home`, `End` | Moves to the first or the last part. |
+| `Page Up`, `Page Down` | Moves a tenth of the way back or on, and at least one part. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: how many parts, the total, and the largest part with its share.
+- A move by key marks the slice, dims the others, and is announced politely: the part's name, its value and its share. With a pointer the tooltip says the same.
+- The legend is a list that names every part, its value and its share. The total in the middle is hidden from assistive technology because the summary says it.
+- The table twin lists every part, including those that draw nothing.
+- A slice is told apart by the legend, never by color alone. A status tone adds an icon to its legend entry, and each slice has a thin gap around it.
+
+</UiA11y>
+
+## Data rules
+
+- A part's value is a finite number. NaN and infinity are read as no value: the slice is left out and the table shows a dash.
+- Only positive values draw. Their sum is the total, and a share is a part of it.
+- At most six parts, and then [Other](#parts-that-fold-into-other).
+- The summary and the legend are written from the folded parts, and the table too.
+
+## API
+
+### Donut
+
+<UiProps type="Donut" />

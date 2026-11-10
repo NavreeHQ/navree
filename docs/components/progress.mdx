@@ -1,0 +1,79 @@
+---
+title: "Progress"
+description: "How far along something is: the browser's `<progress>`, named for assistive technology."
+---
+
+<UiPreview example="progress/default" />
+
+`Progress` is the browser's `<progress>` element, styled. `Progress::new(value, max, label)` shows how far along something is; `Progress::indeterminate(label)` shows that it is going, with no known end.
+
+```rust
+use navree::ui::*;
+
+Progress::new(640, 1000, "Importing contacts")
+```
+
+## When to use it
+
+Use it when you know how much is done: an upload, an import, a step of a batch.
+
+<UiChoose name="loading" current="Progress" />
+
+## In a page
+
+An import shows how many rows are done. The region asks the server again every two seconds, so the bar moves as the import works:
+
+```rust
+Region::new("import")
+    .src("/fragments/import")
+    .poll(Duration::from_secs(2))
+    .children(Progress::new(640, 1000, "Importing contacts"))
+```
+
+The fragment the route answers draws the same `Progress` with the new value, and the region swaps it in.
+
+## Anatomy
+
+<UiAnatomy component="progress" />
+
+## States
+
+The value is held to the maximum, and the maximum is at least 1.
+
+<UiPreview example="progress/states" />
+
+## Tone and figure
+
+`.tone(Tone)` colours the bar by what it means (`Tone::Success`, `Tone::Warning`, `Tone::Danger`). The colour never carries the meaning alone: the label says it. `.show_value()` writes the percentage beside the bar; a screen reader gets it from the bar itself, so the text is hidden from it. An indeterminate bar has no percentage to write.
+
+```rust
+Progress::new(640, 1000, "Importing contacts")
+    .tone(Tone::Success)
+    .show_value()
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The label is the element's `aria-label`; assistive technology reads the value as a percentage.
+- To update it as work goes on, put it in a [region](/docs/ui/regions/) that polls.
+
+</UiA11y>
+
+## API
+
+### Progress
+
+<UiProps type="Progress" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/upload/" title="Upload">
+    A file dropped in, with its own progress.
+  </LinkCard>
+  <LinkCard href="/docs/ui/regions/" title="Regions and live updates">
+    Polling a part of the page.
+  </LinkCard>
+</LinkCards>

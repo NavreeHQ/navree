@@ -1,0 +1,366 @@
+---
+title: "Next.js"
+description: "`@navree/next`: the backend-for-frontend as route handlers, `auth()` and `client()` for server components, the page guard, abilities and real time."
+---
+
+`@navree/next` puts a Next.js app (App Router) on a Navree API. The server side, `@navree/next/server`, mounts the [backend-for-frontend](/docs/frontend/auth-and-bff/) as route handlers, gives server components the signed-in user and a typed client, and guards pages in the proxy. The browser side is hooks and components: list queries in the URL, a data table, operations, workspaces and form errors, with abilities in `@navree/next/abilities` and real time in `@navree/next/realtime`.
+
+<Callout type="note" title="Apps made by navree new">
+
+`navree new --ui next` and the SaaS starter kit create `web/` on `@navree/next`: `lib/navree.ts` is the `createNavree()` of the setup below, and the route handlers, the proxy and `auth()` come from it. The CRM's Next.js front end, `web/` of the [CRM repository](https://github.com/NavreeHQ/crm), runs on the package too.
+
+</Callout>
+
+## Setting up
+
+<Steps>
+<Step title="Install the packages">
+
+`@navree/next`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/react`; for real time, `pusher-js`.
+
+</Step>
+<Step title="Generate the client's schema">
+
+```sh
+navree openapi:client
+```
+
+</Step>
+<Step title="Create the app's Navree">
+
+```ts title="web/src/lib/navree.ts"
+import { createNavree } from "@navree/next/server";
+
+export const navree = createNavree();
+```
+
+Settings come from the `NAVREE_*` variables when the first request arrives (see [configuration](#configuration)); options passed to `createNavree` win over them.
+
+</Step>
+<Step title="Mount the route handlers">
+
+<CodeGroup>
+
+```ts title="web/src/app/api/[...path]/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;
+```
+
+```ts title="web/src/app/broadcasting/auth/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { POST } = navree.handlers;
+```
+
+```ts title="web/src/app/auth/[...path]/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { GET } = navree.handlers;
+```
+
+</CodeGroup>
+
+One catch-all serves sign-in, two-factor, sign-out and refresh, and forwards every other `/api/*` call with the bearer token. The `GET` route at `app/auth/[...path]/route.ts` is for social sign-in: `/auth/social/<provider>` starts it and `/auth/callback/<provider>` is where the provider sends the browser back (the API's `social.redirect_base` is that route without the provider). Both end like a password sign-in, with the tokens in httpOnly cookies. The link in the verification mail is answered by the `/api` catch-all. To reach a server-rendered tool the API serves under a prefix, add the same two lines at `app/admin/[...path]/route.ts`.
+
+</Step>
+<Step title="Guard the pages">
+
+```ts title="web/src/proxy.ts"
+import { navree } from "@/lib/navree";
+
+export const proxy = navree.proxy({ loginPath: "/login", publicPaths: ["/", "/pricing", "/docs/*"] });
+
+export const config = { matcher: ["/((?!_next/|favicon.ico).*)"] };
+```
+
+Before Next.js 16 the file is `middleware.ts` and the export `middleware`: `export const middleware = navree.proxy({ ... })`.
+
+</Step>
+</Steps>
+
+## Linking a checkout
+
+This is for working on the packages themselves; an app that installs them from npm needs none of it. You build the packages in the Navree checkout (`pnpm install` and `pnpm build` in `packages/js`) and link them with `link:` (see [working on Navree itself](/docs/frontend/introduction/#working-on-navree-itself)). A linked package sits outside your app and brings its own `node_modules`, so Next.js needs its root to hold both, and the packages compiled with your app:
+
+```ts title="web/next.config.ts"
+import path from "node:path";
+import type { NextConfig } from "next";
+
+// The directory that holds both your app and the Navree checkout.
+const root = path.resolve(process.cwd(), "../..");
+
+const nextConfig: NextConfig = {
+  turbopack: { root },
+  outputFileTracingRoot: root,
+  transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
+};
+
+export default nextConfig;
+```
+
+Next.js resolves `react` and `react-dom` for the whole bundle to its own copy, so the linked components run on one React in the browser and on the server. `navree new` writes this file for the checkout it was run from, with the root worked out from the two paths.
+
+Vitest does not do that. A test that renders a component from the package needs your app's React, and `@casl/react` (a dependency of `@navree/next/abilities`) processed by your app's Vite instead of loaded on its own:
+
+```ts title="web/vitest.config.mts"
+export default defineConfig({
+  resolve: { dedupe: ["react", "react-dom"] },
+  test: { server: { deps: { inline: ["@casl/react"] } } },
+});
+```
+
+
+## The proxy
+
+`navree.proxy(options)` runs before every page:
+
+- A page request without a session goes to `loginPath?next=<path and query>` (307).
+- An access token that has expired is refreshed first: the new cookies go to the browser, and the request continues with the new `Cookie` header, so `auth()` and server components rendering this request already see the new token.
+- An expired session (the refresh failed) clears the cookies and goes to sign-in.
+- When the API can't be reached to refresh an expired token, the cookies stay and the page is served (the session's status is `unavailable`). That is not a sign-out; what the page shows when its own calls fail is up to it.
+- API routes (`/api/`, `/broadcasting/`), `/_next/`, files with an extension and requests that aren't page navigations pass untouched. A page navigation is a `GET` or `HEAD` that accepts `text/html`, or a React Server Components request.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `loginPath` | `/login` | The sign-in page; always public. |
+| `publicPaths` | `[]` | Pages anyone may open: exact paths, or prefixes ending in `/*`. |
+| `passThrough` | `["/api/", "/broadcasting/", "/_next/", "/__nextjs"]` and the social sign-in routes (`/auth/social/`, `/auth/callback/`) | Path prefixes the proxy never touches. |
+| `signedInRedirect` | none | Where a signed-in browser that opens the sign-in page goes. |
+
+Whether a session is still valid is the API's call: the proxy reads the token's expiry, it doesn't verify it. A route the API refuses answers 401, and the client's `onUnauthorized` hook sends the browser to sign-in.
+
+## Server components
+
+`navree.auth()` returns the signed-in user, the access token and the workspace, or `null`. It is cached per request and never refreshes (a server component can't set cookies; the proxy already did):
+
+```tsx title="web/src/app/(app)/layout.tsx"
+import { redirect } from "next/navigation";
+import { navree } from "@/lib/navree";
+import type { User } from "@/lib/api/types";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const session = await navree.auth<User>();
+  if (!session) redirect("/login");
+  return <Shell user={session.user} workspace={session.workspace}>{children}</Shell>;
+}
+```
+
+`navree.client<paths>()` is the [typed client](/docs/frontend/typed-client/) in bearer mode, pointed at the API with the session's token and workspace:
+
+```tsx title="web/src/app/(app)/deals/[id]/page.tsx"
+import { unwrap } from "@navree/client";
+import { navree } from "@/lib/navree";
+import type { paths } from "@/lib/api/schema";
+
+export default async function DealPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const api = await navree.client<paths>();
+  const deal = await unwrap(api.GET("/api/v1/deals/{id}", { params: { path: { id } } }));
+  return <DealDetail deal={deal} />;
+}
+```
+
+`navree.bff()` is the underlying [BFF](/docs/frontend/auth-and-bff/), for anything else (`bff().api(path, {accessToken})`).
+
+## In the browser
+
+The browser's client is the typed client in cookie mode, with the workspace from its cookie and hooks for 401 and 403:
+
+```ts title="web/src/lib/api/client.ts"
+import { createNavreeClient } from "@navree/client";
+import { readWorkspaceCookie } from "@navree/next";
+import type { paths } from "./schema";
+
+export const api = createNavreeClient<paths>({
+  workspace: () => readWorkspaceCookie(),
+  onUnauthorized: () => window.location.assign(`/login?next=${encodeURIComponent(location.pathname + location.search)}`),
+});
+```
+
+Sign-in posts to the BFF and gets only the user back (the API's document describes the API's answer, with the tokens, so read the BFF's with `raw`):
+
+```ts
+import { NavreeError } from "@navree/client";
+
+const response = await api.raw("/api/auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email, password }),
+});
+const body = await response.json().catch(() => null);
+if (!response.ok) throw NavreeError.fromResponse(response, body);
+if (body.two_factor_required) showCodeStep(); // then POST /api/auth/2fa/verify with { code } or { recovery_code }
+else signedIn(body.user);
+```
+
+### Abilities
+
+```tsx title="web/src/app/providers.tsx"
+"use client";
+
+import type { CaslRule } from "@navree/client/abilities";
+import { AbilityProvider } from "@navree/next/abilities";
+
+export function Providers({ rules, children }: { rules: CaslRule[] | undefined; children: React.ReactNode }) {
+  return <AbilityProvider rules={rules}>{children}</AbilityProvider>;
+}
+```
+
+```tsx
+import { Can, useAbility } from "@navree/next/abilities";
+
+<Can I="update" this={deal}>
+  <EditButton />
+</Can>;
+
+const ability = useAbility();
+const canMove = ability.can("move", deal);
+```
+
+`AbilityProvider` builds one ability from the rules `GET /api/me/abilities` serves (load them with `fetchAbilities({ fetch: api.raw })` from `@navree/client/abilities`, or in a server component). Everything is denied until the rules arrive; new rules (after sign-in or a workspace switch) update the ability in place, and every `useAbility()` and `<Can>` re-renders. Records are checked by their `__type`. The UI hides what the rules deny; the API still checks every request.
+
+### Real time
+
+```tsx title="web/src/app/providers.tsx"
+"use client";
+
+import { RealtimeProvider } from "@navree/next/realtime";
+import { api } from "@/lib/api/client";
+
+const server = {
+  key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
+  wsHost: process.env.NEXT_PUBLIC_WS_HOST!,
+  wsPort: Number(process.env.NEXT_PUBLIC_WS_PORT),
+};
+
+export function Live({ children }: { children: React.ReactNode }) {
+  return (
+    <RealtimeProvider server={server} options={{ authorize: api.raw }}>
+      {children}
+    </RealtimeProvider>
+  );
+}
+```
+
+```tsx
+import { useChannel, useRealtimeState } from "@navree/next/realtime";
+
+useChannel("crm.deals", "deal.updated", () => queryClient.invalidateQueries({ queryKey: deals.all }));
+useChannel(user ? `users.${user.id}` : null, "notification.created", (n: AppNotification) => toast(n.data.title));
+const state = useRealtimeState(); // "connecting", "connected", "unavailable", "failed", "disconnected"
+```
+
+`RealtimeProvider` opens one pusher-js connection after the first render and closes it on unmount; `enabled={false}` keeps it closed (signed out). `useChannel` listens while the component is mounted, keeps its subscription when the handler changes, and moves it when the channel does; `null` listens to nothing. A bare channel name is private. Real time is optional: when the socket can't connect, the app keeps working and queries still refetch. List the web origin in the API's `realtime.allowed_origins`. In tests, pass `connect={() => createMemoryRealtime()}` and play the server with `emit`.
+
+### Operations
+
+```tsx
+import { useOperation } from "@navree/next";
+
+function ImportProgress({ id }: { id: string | null }) {
+  const { operation, finished, error, cancel } = useOperation<{ imported: number }>(id, {
+    onFinished: () => queryClient.invalidateQueries({ queryKey: contacts.all }),
+  });
+  if (error) return <p>{errorMessage(error)}</p>;
+  return (
+    <div>
+      <progress value={operation?.progress?.percent ?? 0} max={100} />
+      {!finished && <button onClick={() => cancel()}>Cancel</button>}
+    </div>
+  );
+}
+```
+
+`useOperation(id)` follows the operation's event stream through the BFF ([`followOperation`](/docs/frontend/typed-client/#operations)), re-renders on every change, and stops reading when the component unmounts or the id changes.
+
+### Workspaces
+
+```tsx
+import { useWorkspace, WorkspaceProvider } from "@navree/next";
+
+<WorkspaceProvider initial={session.workspace} onChange={() => { queryClient.clear(); router.refresh(); }}>
+  {children}
+</WorkspaceProvider>;
+
+const { workspace, setWorkspace } = useWorkspace();
+```
+
+The current workspace lives in the `navree_workspace` cookie (not httpOnly: it isn't a secret). The browser's client sends it as `X-Workspace`, the BFF falls back to it, and `auth()` reads it, so server components and the browser agree on the workspace. `readWorkspaceCookie()` and `writeWorkspaceCookie(slug)` read and write it directly.
+
+### Form errors
+
+```ts
+import { applyFieldErrors } from "@navree/next";
+import { errorMessage } from "@navree/client";
+
+onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) || toast.error(errorMessage(error));
+```
+
+`applyFieldErrors` puts a 400's field errors on react-hook-form's fields (any function with `setError`'s signature works) and the messages for fields the form doesn't know on `root.server`. When the API names a field differently from the form, pass an object in place of the list: `applyFieldErrors(error, form.setError, { company_id: "company", owner_id: "owner" })`.
+
+## Configuration
+
+| Variable | Read | Default | Meaning |
+|---|---|---|---|
+| `NAVREE_API_URL` | server, first request | `http://127.0.0.1:8080` | Where the BFF forwards. |
+| `NAVREE_COOKIE_SECURE` | server | on in production | `0` to serve a production build over plain http. |
+| `APP_ORIGINS` | server | none | Extra origins allowed to send non-GET requests. |
+| `NAVREE_TRUSTED_PROXY_HOPS` | server | `0` | Reverse proxies that append the client to `X-Forwarded-For`. |
+| `NAVREE_CLIENT_IP_HEADER` | server | none | A header the proxy sets to the bare client address (`x-real-ip`), read before `X-Forwarded-For`. |
+| `NAVREE_WORKSPACE_HEADER` | server | `X-Workspace` | The API's `workspace.header`. |
+| `NEXT_PUBLIC_PUSHER_KEY`, `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | build | none | The API's real-time server, if you pass them to `RealtimeProvider`. |
+
+Options passed to `createNavree` win over the variables. Besides the ones the table covers, `pages` (`{signIn, twoFactor, verifyEmail}`: where social sign-in, the verification link and `redirectNavigations` end), `socialPaths` (`{start, callback}`: where the two social routes are mounted) and `redirectNavigations` (send a page request the API refuses with 401 to the sign-in page, for a tool mounted at `/admin`) are the [BFF's options](/docs/frontend/auth-and-bff/#options). `@navree/next/server` also exports `readCookie`.
+
+## Moving an existing app onto the package
+
+An app that keeps these pieces in its own files can move onto the packages one for one. The reference CRM front end, `crm/web`, did that for its backend-for-frontend, its abilities and its real-time channels (the first four rows below). Its API client, forms, query keys, data table and theme are still its own, and can move the same way:
+
+| An app's own files | With the packages |
+|---|---|
+| `lib/bff/bff.ts`, `http-errors.ts`, `server.ts` | `createNavree()` in `lib/navree.ts` |
+| `app/api/[...path]/route.ts` and the four `app/api/auth/*/route.ts`, `app/broadcasting/auth/route.ts` | One catch-all exporting `navree.handlers`, and `export const { POST } = navree.handlers` for the channel authorization |
+| `lib/casl/ability.ts`, the `AbilityProvider` set up by hand | `createAbility` and `AbilityProvider` |
+| `lib/realtime/pusher.ts` and its mock bus, the component that subscribes | `RealtimeProvider`, `useChannel`, `createMemoryRealtime` |
+| `lib/api/client.ts` (`createApiClient`, `unwrap`, `rawFetch`) | `createNavreeClient<paths>()`, `unwrap`, `api.raw` |
+| `lib/api/errors.ts` (`ApiError`, `errorMessage`) | `NavreeError` (with `code`), `errorMessage` |
+| `lib/api/form-errors.ts` | `applyFieldErrors` from `@navree/next` |
+| `lib/api/keys.ts` | `queryKeys("deals")` per resource |
+| `components/data-table.tsx`, `pagination-bar.tsx`, `hooks/use-url-state.ts` | `DataTable`, `Pagination`, `useListQuery` (see [data tables](/docs/frontend/data-tables/)) |
+| The tokens in `app/globals.css`, `app/fonts.ts` | `@navree/theme/theme.css` and the fonts (see [theming](/docs/frontend/theming/)) |
+
+The cookie names, the routes and the error shape are the same, so the move can go file by file with the app working after each step. Three things change for the app's code: errors are `NavreeError` instead of `ApiError` (`status`, `errors` and `requestId` keep their meaning; `fieldErrors` becomes `errors`), channel listeners stop with the function `listen` returns instead of `leave`, and the BFF's own refusals use the codes in [the BFF's errors](/docs/frontend/auth-and-bff/#the-bffs-own-errors) (`two_factor_expired`, `unexpected_response`). The CRM-specific parts stay in the app: its types, its screens, its mock API, its channel names and its query hooks.
+
+## Testing
+
+The server side is plain functions: mock `next/headers` for `auth()`, build requests with `browserRequest` from `@navree/bff/testing` (wrap them in `NextRequest` for the proxy) and give `createNavree` a `fakeNavree` fetch:
+
+```ts
+import { browserRequest, fakeNavree, tokenPair } from "@navree/bff/testing";
+import { createNavree } from "@navree/next/server";
+import { NextRequest } from "next/server";
+
+const navree = createNavree({ apiUrl: "http://api.test", fetch: fakeNavree({ "POST /api/auth/refresh": () => Response.json(tokenPair(2)) }).fetch });
+const response = await navree.proxy()(new NextRequest(browserRequest("http://app.test", "/deals", { headers: { accept: "text/html" } })));
+expect(response.status).toBe(307);
+```
+
+The package's own suite (`pnpm test` in `packages/js`) runs the same way, and `pnpm smoke` builds a small app on the package with `next build` and checks the running server.
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    `useListQuery` and `DataTable`: lists sorted and paged on the server, with the state in the URL.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The dark theme for Tailwind CSS 4 and shadcn/ui, and the fonts.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Right-to-left layouts and API errors translated by code with next-intl.
+  </LinkCard>
+</LinkCards>

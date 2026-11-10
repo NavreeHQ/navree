@@ -1,0 +1,5 @@
+# Copies that `cargo xtask release stage` makes before the crate is packaged
+# (the skills, the docs pages and the UI catalog it embeds).
+/skills/
+/docs/
+/catalog.json

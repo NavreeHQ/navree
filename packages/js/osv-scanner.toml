@@ -1,0 +1,8 @@
+# Findings the scanner reports for versions that already carry the fix (a
+# patched release).
+# Reviewed 2026-10-28; each entry expires so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "GHSA-vjh5-4x84-xrqp"
+ignoreUntil = 2027-01-31
+reason = "nuxt and @nuxt/nitro-server 4.6.3 (@navree/nuxt's development and test install) are patched (the advisory: fixed in nuxt@4.6.2). Its OSV record also lists Nuxt 3, which gets no fix, as a range with only an 'introduced: 3.0.0' event (the '< 4.0.0' bound is only in database_specific), so the scanner matches every version from 3.0.0 on, the fixed ones included. Drop this entry once the record closes that range."

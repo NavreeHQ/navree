@@ -1,0 +1,339 @@
+---
+title: "Multi-tenant SaaS"
+description: "Workspace-level multi-tenancy: resolving the workspace, checking membership, scoping every query, and choosing row, schema or database isolation."
+---
+
+## Introduction
+
+A multi-tenant SaaS serves many customers from one deployment, and each customer must only ever see its own data. In Navree the tenant is a **workspace**: an organization, a team or a client account, with members, roles and invitations. Workspaces are part of the framework: `WorkspaceModule` is in the default `navree` features, so a new app can be multi-tenant from its first commit.
+
+<Diagram name="multi-tenancy" />
+
+This page shows how the pieces fit into a SaaS backend: how a request finds its workspace, how queries stay inside it, and how to choose an isolation strategy. The [Workspaces](/docs/workspaces/introduction/) section documents the module itself in full.
+
+## The request path
+
+Every request to a workspace route goes through the same steps before your handler runs:
+
+<Steps>
+<Step title="Authenticate">
+
+The user is identified from the bearer token or the session, as on any route.
+
+</Step>
+<Step title="Resolve the workspace">
+
+The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/agra/...`), a subdomain (`agra.app.example.com`) or a claim of the bearer token. These four are the default list. With [custom domains](/docs/packages/custom-domains/) and `domain` in the list, a workspace's own verified domain names it too. A request that names no workspace is a 400, and an unknown workspace a 404.
+
+</Step>
+<Step title="Check membership">
+
+The user must be a member of that workspace. Anyone else gets a 403, so knowing a slug never gives access to its data.
+
+</Step>
+<Step title="Scope the unit of work">
+
+The request's [unit of work](/docs/database/unit-of-work/) is tied to the workspace. On PostgreSQL its transaction sets `navree.workspace`, which row-level security policies check, and under schema isolation it sets the `search_path` to the workspace's schema.
+
+</Step>
+<Step title="Apply the member's role">
+
+The user's abilities are rebuilt for this workspace: your abilities function runs with the member's workspace role and its permissions, so `#[permissions]` and `#[can]` on the route decide with the role the user has **in this workspace**, not in another one.
+
+</Step>
+</Steps>
+
+The `InWorkspace` guard runs these steps before the route's access check, and the `CurrentWorkspace` extractor hands the result to the handler. Each failure has the error shape every Navree response uses:
+
+```json title="403 Forbidden"
+{
+  "statusCode": 403,
+  "message": "You are not a member of this workspace.",
+  "error": "Forbidden",
+  "code": "not_a_member"
+}
+```
+
+## Setting it up
+
+<Badge feature="workspace" /> `WorkspaceModule` comes with the `workspace` feature, which is on by default. Add it to the app root after the database and auth modules:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(DatabaseModule::from_config())
+    .module(AuthModule::from_config())
+    .module(AccessModule::for_root(access_options()))
+    .module(WorkspaceModule::from_config()) // section `workspace`
+```
+
+It is global, and contributes the tables `workspaces`, `workspace_members` and `workspace_invitations` (the `workspace` migration set, after `auth`), the services `Workspaces`, `Members` and `Invitations`, and routes for managing workspaces, members and invitations under `/api/workspaces` and `POST /api/invitations/accept`. Set `workspace.routes = false` to write your own.
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["header", "path"]   # tried in this order
+header = "X-Workspace"           # X-Workspace: agra
+path_prefix = "/w"               # /api/w/agra/projects
+isolation = "row"                # row | schema | database
+```
+
+See [Workspaces](/docs/workspaces/introduction/) for every key.
+
+## Resolving the workspace
+
+Pick the resolvers that match how clients address a workspace:
+
+| Resolver | Example | Good for |
+|---|---|---|
+| `header` | `X-Workspace: agra` | API clients and a BFF: the web app sends the workspace it shows |
+| `path` | `/api/w/agra/projects` | URLs that name the workspace, shareable links |
+| `subdomain` | `agra.app.example.com` | A branded URL per customer; set `workspace.base_domain` |
+| `claim` | a `workspace` claim in the bearer JWT | Tokens issued for one workspace |
+| `domain` | `crm.agra-corp.com` | A customer's own domain, verified by [custom domains](/docs/packages/custom-domains/) |
+
+A resolver finds a slug or an id, and the first one that finds something wins. The `path` resolver reads the segment after `path_prefix`, so it applies to routes whose path contains it, such as a controller mounted at `/w/{workspace}/projects`; for those, `InWorkspace::from_path("workspace")` reads the route parameter directly. Keep the list short: every resolver you add is another way to name a workspace that your clients and your tests have to agree on. [Resolution](/docs/workspaces/resolution/) covers each resolver and its settings.
+
+## Scoping every query
+
+With row isolation, every tenant table has a `workspace_id` column. The rule is simple: **no query on a tenant table runs without the current workspace.** Navree helps you keep it in four layers.
+
+**Mark the model.** A model that implements `WorkspaceScoped` belongs to a workspace, through its `workspace_id` column:
+
+```rust title="src/modules/projects/model.rs"
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "projects", subject = "Project", permission_prefix = "projects")]
+pub struct Project {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+}
+
+impl WorkspaceScoped for Project {}
+```
+
+**Query through `WorkspaceRepo`.** It is the model API with the workspace built in: reads filter by `workspace_id`, inserts set it, and updates and deletes only touch rows of that workspace. A record of another workspace is a 404, as if it didn't exist. (A model declared `#[model(workspace)]` already scopes its own queries to the current workspace; `WorkspaceRepo` is for naming a workspace explicitly, and both use the same column.)
+
+```rust title="src/modules/projects/service.rs"
+type Projects = WorkspaceRepo<Project>;
+
+#[injectable]
+pub struct ProjectService;
+
+impl ProjectService {
+    pub async fn list(&self, uow: &Uow, workspace: Uuid, page: PageQuery) -> Result<Page<Record<Project>>> {
+        Ok(Projects::query(workspace).latest().paginate(uow, page).await?)
+    }
+
+    pub async fn show(&self, uow: &Uow, workspace: Uuid, id: Uuid) -> Result<Record<Project>> {
+        Ok(Projects::find_or_fail(uow, workspace, id).await?)
+    }
+}
+```
+
+**Guard the controller.** `InWorkspace::guard()` resolves the workspace and checks membership before the route's access check, so the access rules see the member's role. Handlers take `CurrentWorkspace` for the workspace and `WorkspaceUow` for the unit of work that holds its data:
+
+```rust title="src/modules/projects/controller.rs"
+#[injectable]
+pub struct ProjectsController {
+    projects: Arc<ProjectService>,
+}
+
+#[controller("/projects", version = "1")]
+#[guard(InWorkspace::guard())]
+impl ProjectsController {
+    /// `GET /api/v1/projects`: the current workspace's projects.
+    #[get("/")]
+    #[permissions("projects.read")]
+    async fn index(&self, uow: WorkspaceUow, ws: CurrentWorkspace, page: PageQuery) -> Result<Page<Record<Project>>> {
+        self.projects.list(&uow, ws.id(), page).await
+    }
+
+    /// `GET /api/v1/projects/{id}`
+    #[get("/{id}")]
+    #[can(Read, Project, from = "id")]
+    async fn show(&self, uow: WorkspaceUow, ws: CurrentWorkspace, Path(id): Path<Uuid>) -> Result<Json<Record<Project>>> {
+        Ok(Json(self.projects.show(&uow, ws.id(), id).await?))
+    }
+}
+
+#[module(
+    imports = [AccessModule::for_feature::<Project>()],
+    providers = [ProjectService],
+    controllers = [ProjectsController],
+    register = Self::wire,
+)]
+pub struct ProjectsModule;
+
+impl ProjectsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.workspace_scoped::<Project>();
+    }
+}
+```
+
+`m.workspace_scoped::<Project>()` makes `#[can(.., from = "id")]` check that the record belongs to the current workspace before the access rule runs, so asking for another workspace's project is a 404 before the service is called. `WorkspaceUow` derefs to `Uow`: under row and schema isolation it is the request's own unit of work, already scoped, and under database isolation it is a unit of work on the workspace's database, committed with the request. Handlers written with it work under every strategy.
+
+**Let PostgreSQL enforce it.** A missed filter is a data leak, so on PostgreSQL add a row-level security policy to each tenant table in a migration (a [navree-schema migration](/docs/database/migrations/)). Rows are then visible and writable only while the transaction's `navree.workspace` setting holds their workspace id, which every workspace request sets:
+
+```rust title="src/modules/projects/migrations/m20261026_100000_projects_rls.rs"
+if schema.target().await?.dialect() == Dialect::Postgres {
+    schema.statement(&RlsPolicy::new("projects").create_sql()).await?;
+}
+```
+
+The policy is forced, so it binds the role the app connects as. A query that forgot its filter returns nothing instead of everyone's rows. Maintenance that spans workspaces runs as a database role with `BYPASSRLS`.
+
+### Outside a request
+
+Jobs and commands have no request to resolve a workspace from. Put the workspace id in the job's payload, and scope the job's unit of work with `Workspaces::enter` before you query:
+
+```rust title="src/modules/projects/jobs/archive.rs"
+let db = ctx.app.get::<Db>().await?;
+let workspaces = ctx.app.get::<Workspaces>().await?;
+let uow = db.uow(None, None).await;
+workspaces.enter(&uow, self.workspace_id).await?;
+let projects = Projects::query(self.workspace_id).get(&uow).await?;
+// ...
+uow.commit().await?;
+```
+
+On PostgreSQL, `enter` sets `navree.workspace` (and, under schema isolation, the `search_path`) for the transaction, exactly as a workspace request does. Under database isolation, open the workspace's own database with `WorkspaceDatabases::db(id)` instead.
+
+Events need the same care: put `workspace_id` in every event about tenant data, so queued listeners and other services know which workspace to enter. The module's own events (`WorkspaceCreated`, `MemberAdded`, `MemberRoleChanged` and the rest) carry it.
+
+## Isolation strategies
+
+`workspace.isolation` decides how one workspace's data is kept apart from another's. The handlers and services stay the same under all three; what changes is where the rows live.
+
+| | `row` (default) | `schema` | `database` |
+|---|---|---|---|
+| How | One set of tables with a `workspace_id` column, filtered by `WorkspaceRepo` and by PostgreSQL row-level security | One PostgreSQL schema per workspace; each request's transaction sets the `search_path` | One database per workspace, from `workspace.database_url` with `{id}` in it |
+| New workspace | A row | A schema, created and migrated in the same transaction | A database, connected and migrated on first use |
+| Migrations | Once | Once per workspace | Once per workspace |
+| Cross-workspace reports | One query | A query per schema | A query per database |
+| Backup or restore one workspace | Filter by `workspace_id` | Dump one schema | Dump one database |
+| Noisy neighbors | Share every table and index | Share the server | Separate databases, on separate servers if you like |
+| Scale | Millions of small workspaces | Hundreds to a few thousand | Tens to hundreds of large ones |
+
+How to choose:
+
+- **Start with `row`.** It is the cheapest to run and to migrate, and with row-level security the database enforces the boundary, not only your code. Most SaaS products never need more.
+- **Choose `schema`** when customers ask for stronger separation, per-customer exports are routine, or you want to restore one customer without touching others, and the number of workspaces stays in the thousands.
+- **Choose `database`** for a few large customers who need their own database: data residency in a region, dedicated capacity, or a contract that says so. Each workspace's database can live on another server.
+
+Tables that every workspace shares (users, workspaces, plans) stay in the app's database under every strategy. Under row isolation, tenant tables are ordinary migrations (`m.migrations(..)`). Under schema and database isolation, register them as workspace migrations instead, so they are created in each workspace's schema or database: when a workspace is created (schema), when its database is first opened (database), and by `workspace:migrate` after a deploy:
+
+```rust title="src/modules/projects/mod.rs"
+impl ProjectsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.workspace_migrations(migrations());
+        m.workspace_scoped::<Project>();
+    }
+}
+```
+
+[Isolation](/docs/workspaces/isolation/) covers each strategy's settings and how to move between them.
+
+## Roles and permissions per workspace
+
+A user can own one workspace and be a viewer in another. Each membership has a role, and the role's permissions apply only inside its workspace:
+
+| Role | Built-in permissions |
+|---|---|
+| `owner` | `all.*`: everything in the workspace, including deleting it and transferring it |
+| `admin` | `workspace.read`, `workspace.update`, `workspace.members.*`, `workspace.invitations.*` |
+| `member` | `workspace.read`, `workspace.members.read` |
+| `viewer` | `workspace.read`, `workspace.members.read` |
+
+`member` and `viewer` differ only in what your app grants them. Add your features' permissions to the built-in roles, and define roles of your own, in configuration:
+
+```toml title="config/app.toml"
+[workspace.roles.member]
+permissions = ["projects.*", "invoices.read"]
+
+[workspace.roles.viewer]
+permissions = ["projects.read"]
+
+[workspace.roles.billing]       # an app-defined role
+permissions = ["invoices.*", "billing.manage"]
+```
+
+The permissions feed [access control](/docs/security/authorization/): on a route guarded by `InWorkspace`, your abilities function runs with the member's workspace role and that role's permissions, so routes use the same attributes as anywhere else. `#[permissions("billing.manage")]` lets in owners and members with the `billing` role in the request's workspace, and nobody else. Inside a handler, `ws.role()`, `ws.has_permission("invoices.read")` and `ws.authorize("billing.manage")?` answer the same questions in code. [Members and roles](/docs/workspaces/members-and-roles/) and [Invitations](/docs/workspaces/invitations/) cover membership in full.
+
+## Billing per workspace
+
+In most SaaS products the customer is the workspace, not the user. [Billing](/docs/packages/billing/) bills workspaces when you register the workspace as the billable type:
+
+```rust title="src/modules/settings/mod.rs"
+#[module(
+    imports = [BillingModule::for_feature::<Workspace>()],
+    controllers = [BillingController],
+)]
+pub struct SettingsModule;
+```
+
+Checkout, the customer portal and subscription checks then take the current workspace, plans can charge per seat with the member count as the quantity, and the `Subscribed` extractor answers 402 on routes the workspace's plan doesn't include. Feature flags and settings can be scoped per workspace the same way, so one customer can try a feature before everyone else ([Feature flags](/docs/packages/feature-flags/)).
+
+## Workspaces across the stack
+
+The current workspace follows the work wherever it goes:
+
+- **Real time.** Broadcast tenant changes on a channel per workspace (`private-workspace.{id}`) and authorize it by membership, so a browser only hears about its own workspace. See [Broadcasting](/docs/digging-deeper/broadcasting/#authorizing-channels).
+- **Cache.** Put the workspace id in every cache key for tenant data.
+- **Files.** Store tenant uploads under a directory per workspace on your [storage](/docs/digging-deeper/storage/) disk.
+- **Services.** In a [microservice](/docs/patterns/microservices/#workspaces-across-services) setup, the workspace travels with every message, and the receiving service scopes its unit of work the same way.
+
+## Testing
+
+Every multi-tenant app needs one test above all others: a member of one workspace can't read or change another workspace's data. Create two workspaces, sign in as a member of the first, and try the second's records:
+
+```rust title="tests/isolation.rs"
+#[tokio::test]
+async fn a_member_never_sees_another_workspace() {
+    let app = test_app().await;
+    let (anu, agra) = workspace_with_owner(&app, "Agra").await;
+    let (_, gulati) = workspace_with_owner(&app, "Gulati").await;
+    let gulati_project = create_project(&app, gulati.id, "Launch").await;
+
+    // Anu's own workspace works.
+    app.acting_as(principal(anu))
+        .get("/api/v1/projects")
+        .header("X-Workspace", "agra")
+        .send()
+        .await
+        .assert_status(200);
+
+    // Naming the other workspace is refused.
+    app.acting_as(principal(anu))
+        .get("/api/v1/projects")
+        .header("X-Workspace", "gulati")
+        .send()
+        .await
+        .assert_error(403, "You are not a member of this workspace.");
+
+    // Its records don't exist from Anu's workspace.
+    app.acting_as(principal(anu))
+        .get(&format!("/api/v1/projects/{}", gulati_project.id))
+        .header("X-Workspace", "agra")
+        .send()
+        .await
+        .assert_status(404);
+}
+```
+
+Run it on PostgreSQL in CI as well as SQLite: row-level security only exists on PostgreSQL, and that is the layer that catches a missed filter.
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/introduction/" title="Workspaces">
+    `WorkspaceModule`, its tables, routes and services.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/isolation/" title="Isolation">
+    Row, schema and database isolation in depth.
+  </LinkCard>
+  <LinkCard href="/docs/packages/billing/" title="Billing">
+    Subscriptions and seats for workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/" title="Starter kits">
+    The SaaS kit: workspaces, members and billing, ready to use.
+  </LinkCard>
+</LinkCards>

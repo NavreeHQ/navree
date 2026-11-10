@@ -1,0 +1,64 @@
+//! {{ title }}.
+
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+{% if create_table %}
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("{{ table }}", |t| {
+                t.uuid_primary();
+{% if with_name_column %}
+                t.string("name");
+{% endif %}
+{% for key in pivot_keys %}
+                t.foreign_uuid("{{ key }}");
+{% endfor %}
+{% if pivot_keys %}
+                t.unique([{% for key in pivot_keys %}"{{ key }}"{% if not loop.last %}, {% endif %}{% endfor %}]);
+{% endif %}
+                t.timestamps_tz();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("{{ table }}").await
+    }
+{% elif alter_table %}
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("{{ table }}", |t| {
+                // Change the table, for example:
+                // t.string("slug").nullable().unique();
+                let _ = t;
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("{{ table }}", |t| {
+                // Undo `up`, for example:
+                // t.drop_column("slug");
+                let _ = t;
+            })
+            .await
+    }
+{% else %}
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        // Change the schema, for example:
+        // schema.table("posts", |t| t.drop_column("legacy")).await
+        let _ = schema;
+        Ok(())
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        // Undo `up`.
+        let _ = schema;
+        Ok(())
+    }
+{% endif %}
+}

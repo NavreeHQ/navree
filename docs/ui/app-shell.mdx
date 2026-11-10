@@ -1,0 +1,155 @@
+---
+title: "App shell"
+description: "The frame of every page: a collapsible sidebar, a top bar with the breadcrumb, and the page with its title and actions."
+---
+
+<UiPreview example="app-shell/default" />
+
+The app shell gives every page of an app the same frame: a sidebar of grouped links, a top bar with a sidebar button and the breadcrumb, then the page with its title, actions and body. You define the shell once; each handler takes the `AppShell` extractor and returns an `AppPage`. The preview is drawn 1,100 px wide and scaled to the column; open it on its own to see it at full size, and narrow the window to see the phone layout.
+
+```rust title="src/shell.rs"
+use navree::ui::*;
+
+pub fn shell() -> Shell {
+    Shell::new("Cloudworks CRM")
+        .context("Production")
+        .group(
+            NavGroup::new("Sales")
+                .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE).count("312"))
+                .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),
+        )
+        .user(
+            UserMenu::new("Gurpreet Singh", "gurpreet@example.com")
+                .link("Profile", "/profile")
+                .action("Sign out", "/sign-out"),
+        )
+}
+```
+
+## Registering it
+
+Register the shell as a provider, and every handler can take `AppShell`: the shell applied to the request, with the current link marked, the sidebar collapsed or not, and any toast the last page left.
+
+```rust title="src/app.rs"
+m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) }))
+    .exports::<Shell>();
+```
+
+```rust title="src/deals/pages.rs"
+async fn show(shell: AppShell) -> AppPage {
+    shell
+        .page("Sutlej Supply renewal")
+        .crumb("Deals", "/deals")
+        .actions(Button::primary("Edit").href("/deals/42/edit"))
+        .body(Card::titled("Notes").body(Text::new("Two-year term, same price.")))
+}
+```
+
+A module that serves pages of its own and has no business registering a shell for the whole app, such as a debugging tool, builds its own `Shell` and applies it with `Shell::for_request(path, &headers)`, which does what the extractor does.
+
+## A whole page
+
+The same shell with a full page in it: counts beside the sidebar links, page actions, four figures, a [DataTable](/docs/ui/data-table/) with its filters and pages, and one deal open in a [Sheet](/docs/components/sheet/) over the table, with a [Timeline](/docs/components/timeline/) of its history in IST. The preview is drawn 1,440 px wide.
+
+<UiPreview example="app-shell/full" defer />
+
+## On a phone
+
+Below 768 px the sidebar is off-canvas. The top bar keeps its button, and pressing it slides the sidebar over the page as a sheet and moves the focus to its first link. Tapping outside the sheet, following one of its links or pressing `Esc` closes it. The page itself gets the whole width. The shell below is drawn at 390 px, the width of a phone, with the sidebar closed behind its button:
+
+<UiPreview example="app-shell/phone" />
+
+The same page after the button is pressed: the sidebar sits over the page and the page behind it is dimmed. On a real page the focus moves to the sidebar's first link. It is the same code; the preview only draws the sidebar open.
+
+<UiPreview example="app-shell/phone-open" />
+
+## When to use it
+
+<UiChoose name="wayfinding" current="Shell" />
+
+## Anatomy
+
+<UiAnatomy component="app-shell" />
+
+## The sidebar
+
+- **Width:** 16 rem open, 3 rem collapsed to its icons. Give every top-level item an icon: the collapsed sidebar shows only that.
+- **Collapsing:** the top bar's button and `Ctrl+B` (`Cmd+B` on a Mac) toggle it. The choice is kept in a cookie, so the next page renders the same way with no flash.
+- **Phones:** below 768 px it becomes a sheet that slides over the page.
+- **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
+- **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
+- **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::header_slot(node)` puts something under the app's name (a workspace switcher; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
+- **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts.
+- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's.
+
+## Only what a reader may use
+
+A button that answers "no" should not have been drawn. With the `access` feature, `navree::ui::ability` asks the reader's [abilities](/docs/security/authorization/) before the page draws a navigation item, a bulk action, a row action or any other part. `Requires::requires(action, subject)` gates a part, and `ByAbility` (implemented for `Ability`, which the `Abilities` extractor derefs to) keeps what the reader may see:
+
+```rust
+use navree::ui::ability::{ByAbility, Requires};
+use navree::ui::{BulkAction, NavItem};
+
+let items = ability.only([
+    NavItem::new("Deals", "/deals").requires("read", "Deal"),
+    NavItem::new("Reports", "/reports").requires("read", "Report"),
+]);
+let actions = ability.only([
+    BulkAction::new("archive", "Archive").requires("update", "Deal"),
+    BulkAction::new("delete", "Delete").requires("delete", "Deal"),
+]);
+```
+
+`show` keeps one part or drops it, and `nav_group(group, items)` returns the group with the items the reader may use, or `None` when none are left, so an empty group is not drawn. The check is on the kind of subject, so a reader who may edit some deals sees the Edit button; the server still decides each record, and a route's guard refuses a request the page should not have offered.
+
+## Layouts and folding
+
+`Shell::layout` places the navigation: a docked sidebar (the default), `ShellLayout::Inset` with the page in a card beside the sidebar, `ShellLayout::Floating` with the sidebar as a card, or `ShellLayout::Header` with the links in the top bar and each labelled group as a menu. `Shell::collapse` sets what folding does: `Collapse::Icons` (the default), `Collapse::Offcanvas` to slide it away, or `Collapse::Never`. On a phone every layout puts the links in a sheet. See [Themes](/docs/ui/themes/#layouts) for each one drawn.
+
+`Shell::theme_menu()` adds the reader's theme and mode to the top bar; see [Themes](/docs/ui/themes/#the-theme-menu).
+
+## Fetched ahead of a click
+
+Nothing is fetched ahead of a click unless you ask, link by link. `NavItem::prefetch()` fetches a sidebar item when the pointer rests on it or it takes focus, so the page is often there before the click; `NavItem::prefetch_eager()` fetches it as soon as the page is quiet. `AppPage::prefetch_crumbs()` does the same for a page's breadcrumb, and `Shell::prefetch_home()` for the app's name. Each costs a request the user may never need, so ask only for the places users usually go next, and only for pages whose `GET` changes nothing.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Ctrl+B`, `Cmd+B` | Collapses or expands the sidebar. |
+| `Tab` | Moves through the sidebar, the top bar, then the page. |
+| `Esc` | Closes the sidebar sheet on a phone. |
+
+- The current page's link has `aria-current="page"`; the sidebar button has `aria-expanded`.
+- The page is a `<main>` with `id="main"`, and the title is its `<h1>`.
+- Every page has a labelled region for [toasts](/docs/components/toast/), and a toast left for the next page is already in it, so it shows with JavaScript off too.
+
+</UiA11y>
+
+## API
+
+### Shell
+
+<UiProps type="Shell" />
+
+### NavGroup
+
+<UiProps type="NavGroup" />
+
+### NavItem
+
+<UiProps type="NavItem" />
+
+### UserMenu
+
+<UiProps type="UserMenu" />
+
+### AppShell
+
+<UiProps type="AppShell" />
+
+### AppPage
+
+<UiProps type="AppPage" />

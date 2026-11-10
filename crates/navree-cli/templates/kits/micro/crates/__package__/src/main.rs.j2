@@ -1,0 +1,14 @@
+//! The {{ title }} service. With no arguments (or `serve`) it serves the
+//! health checks and metrics over HTTP and handles its messages and events;
+//! `micro:listen` handles messages without HTTP. Every other command runs
+//! against the same app: `migrate`, `micro:patterns`, `micro:send`,
+//! `micro:failed`, `routes`, `list`, ... (`navree <command>` forwards to it,
+//! and `navree list` shows them all).
+
+use navree::config::ConfigSources;
+
+fn main() -> Result<(), navree::kernel::BoxError> {
+    // The files under `config/`, then `.env`, then `APP_*` environment variables,
+    // read from the directory it runs in (the workspace root).
+    {{ crate_name }}::app(ConfigSources::defaults()).run()
+}

@@ -1,0 +1,351 @@
+---
+title: "Getting started"
+description: "Navree's ORM: models as plain structs, typed columns, a query builder, relationships and records that track changes, in the request's unit of work."
+---
+
+The ORM is how a Navree app works with its data. A model is a plain Rust struct with `#[derive(Model)]`; the derive maps it to a table and gives it one typed column constant per field, so conditions are checked by the compiler. Queries chain on a builder and run on the executor you pass them: the request's [unit of work](/docs/database/unit-of-work/) in a handler, the database pool elsewhere. What a query returns are records: your model plus what the ORM knows about it, such as whether it is stored and which fields you changed.
+
+```rust
+let deals = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))
+    .where_(Deal::AMOUNT_CENTS.gte(100_000))
+    .with("company")
+    .latest()
+    .get(&uow)
+    .await?;
+```
+
+Around models and queries the ORM has [relationships](/docs/orm/relationships/) with batched [eager loading](/docs/orm/eager-loading/), [casts and accessors](/docs/orm/casts-and-accessors/), [serialization](/docs/orm/serialization/) that hides what clients must not see, [events and observers](/docs/orm/events-and-observers/), [scopes and soft deletes](/docs/orm/scopes-and-soft-deletes/), [pagination and streams](/docs/orm/pagination-and-streaming/), [factories](/docs/orm/factories/) and [testing helpers](/docs/orm/testing/), [route model binding](/docs/orm/route-model-binding/), and [workspace and access-control scoping](/docs/orm/workspaces-and-access/).
+
+It runs on what `navree-db` already owns: the connection pool, the unit of work and its transaction, change events for the [audit log](/docs/security/audit-log/), after-commit hooks, and the actor and workspace settings that triggers and row-level security policies read. A record saved in a handler is part of the request's transaction: it commits when the response succeeds, rolls back when it fails, and shows up in the audit trail.
+
+The same models run on every database Navree supports: **TimescaleDB** and PostgreSQL, **MySQL** and **MariaDB** (11.4 and 10.6, through the same driver; both are [tested in CI](/docs/database/mysql/#what-has-been-run)), **SQLite**, and **MongoDB** through a [document driver](/docs/orm/mongodb/). SQL is generated per database, with every value bound.
+
+<Diagram name="orm-parts" />
+
+## Installation
+
+<Badge feature="orm" /> The ORM is the `orm` feature of the `navree` facade. `full`, the default, turns it on, and it turns on the features it builds on: `db`, `http`, `events`, `telemetry`, `crypto` and `api`. Everything lives in `navree::orm`; its prelude has every name a model or a query needs:
+
+```rust
+use navree::orm::prelude::*; // Model, Record, Collection, Builder, the relation types, col, raw, ...
+```
+
+`navree::prelude` brings the everyday ones too: `Model` (the trait and the derive), `Record`, `Collection`, `Builder`, `OrmModule`, `Attributes`, `attrs!` and `#[accessors]`.
+
+Models derive `Serialize`, and their fields use the types of `chrono` and `uuid`, so your app depends on `serde` (with `derive`), `chrono` and `uuid` (both with `serde`), as an app made by `navree new` does. The ORM needs no query or driver crate: it writes its SQL itself, for the database it runs on, and runs it through the connections `navree` opens.
+
+## Configuration
+
+Models work without any module, but an app adds `OrmModule` to configure them. `navree new` puts it in `src/app.rs`:
+
+```rust title="src/app.rs" {7}
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        // ...
+        .module(OrmModule::from_config())
+        .module(DealsModule)
+}
+```
+
+`OrmModule` reads the `orm` section of your configuration. Every key is optional:
+
+```toml title="config/app.toml"
+[orm]
+strict = true                         # every prevent_* mode at once
+prevent_missing_attributes = true     # a column a partial select left out is an error
+prevent_discarding_attributes = true  # filling a column that isn't fillable is an error
+prevent_lazy_loading = true           # loading a relation record by record is an error
+auto_eager_load = false               # a lazy load loads the relation for the whole result
+prune_chunk = 1000                    # records `model:prune` handles per chunk
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `strict` | on, except in production | Turns the three `prevent_*` modes on or off together. Unset, it is on unless the app's environment (`env`, `APP_ENV`, or `app.env`) is `production`: development and tests are strict, production is lenient. |
+| `prevent_missing_attributes` | `strict` | Reading a record whose query didn't select one of the model's columns fails with `OrmError::MissingAttribute`, instead of filling the field with its type's default. |
+| `prevent_discarding_attributes` | `strict` | [Mass assignment](/docs/orm/models/#mass-assignment) of a key the model doesn't allow fails with `OrmError::MassAssignment`, instead of leaving the key out. |
+| `prevent_lazy_loading` | `strict` | Loading a relation for one record of a result fails with `OrmError::LazyLoading`, so N+1 queries show up in development. See [preventing lazy loading](/docs/orm/eager-loading/#preventing-lazy-loading). |
+| `auto_eager_load` | `false` | A relation loaded for one record of a result is loaded for every record of that result, in one query. |
+| `prune_chunk` | `1000` | How many records [`model:prune`](/docs/orm/scopes-and-soft-deletes/#pruning-models) handles at a time. |
+
+A mode you set on its own wins over `strict`. Like every section, these keys can come from the environment: `APP_ORM__PREVENT_LAZY_LOADING=false`.
+
+To configure the module in code, pass `OrmOptions` to `OrmModule::for_root`, and to log a violation instead of failing, give it a handler:
+
+```rust
+use navree::orm::OrmOptions;
+
+Navree::app().module(
+    OrmModule::for_root(OrmOptions::strict()).on_lazy_loading(|violation| {
+        tracing::warn!(%violation, "lazy loading");
+        Ok(()) // load the relation anyway
+    }),
+)
+```
+
+`on_missing_attribute` and `on_discarded_attributes` do the same for the other two modes. The module also registers the commands `model:prune` and `model:show`, and the job that queues [model broadcasts](/docs/orm/events-and-observers/#broadcasting-changes).
+
+## Your first model
+
+Generate a model in a module, with the migration that creates its table:
+
+```sh
+navree make:model deals Deal --migration
+```
+
+This writes `src/modules/deals/models/deal.rs`, a `create_deals_table` migration, and registers the model in the module's `wire` (`m.model::<Deal>()`, and `global_entity::<Deal>()`: one set of rows shared by every [workspace](/docs/workspaces/introduction/), until you make it `#[model(workspace)]`). The generated model has an `id`, a `name` and the two timestamps, and the migration creates the same columns: change both to your fields. `--migration` is `-m`. `--factory` (`-f`), `--seeder` (`-s`), `--controller` (`-c`) and `--policy` add the companions, which refer to each other, and `--all` (`-a`) adds every one of them. `--pivot` (`-p`) makes the [pivot model](/docs/orm/relationships/#pivot-models) of a many-to-many, such as `deal_tag`.
+
+A model is a struct with named fields. This one has a title and an amount instead of a name:
+
+```rust title="src/modules/deals/models/deal.rs"
+use chrono::{DateTime, Utc};
+use navree::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+/// A sales deal: the `deals` table.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps)]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+The derive reads everything from the struct:
+
+- `id` is the primary key. Its type decides how it gets a value: a `Uuid` key is a UUID v7, generated when the record is created, so keys sort by creation time and the record knows its key before the `INSERT`.
+- `timestamps` makes the ORM set `created_at` when the record is inserted and `updated_at` whenever it changes, from the app's `dyn Clock`.
+- Each field is a column of the same name, read and written as its Rust type.
+- `table` names the table. Without it, the table is the struct's name in snake case and plural, so `Deal` maps to `deals` and `Company` to `companies`.
+
+The migration creates the table with the [schema builder](/docs/database/schema-builder/):
+
+```rust title="src/modules/deals/migrations/m20261027_090000_create_deals_table.rs"
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid_primary();
+                t.string("title");
+                t.big_integer("amount_cents");
+                t.timestamps_tz();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
+    }
+}
+```
+
+[Models](/docs/orm/models/) covers keys of other types, column names that differ from field names, soft deletes and every other option.
+
+## Running queries
+
+Every method that touches the database is `async` and takes an **executor** first: `&Db` (the connection pool) or `&Uow` (a unit of work).
+
+```rust
+// Insert a record: the key and both timestamps are filled in.
+let mut deal = Deal::create(&db, Deal {
+    title: "Agra renewal".into(),
+    amount_cents: 120_000,
+    ..Default::default()
+})
+.await?;
+
+// Change it: only the columns that changed are written.
+deal.amount_cents = 150_000;
+deal.save(&db).await?;
+
+// Query with typed columns and values.
+let big_deals = Deal::query()
+    .where_(Deal::AMOUNT_CENTS.gte(100_000))
+    .latest()
+    .get(&db)
+    .await?;
+for deal in &big_deals {
+    println!("{}: {}", deal.title, deal.amount_cents);
+}
+
+// Find by key, and delete.
+let found = Deal::find(&db, deal.id).await?;
+deal.delete(&db).await?;
+```
+
+`Deal::create` returns a `Record<Deal>`, and `get` a `Collection<Deal>` of records. A record dereferences to the model, so `deal.title` reads the field and `deal.amount_cents = ..` changes it. `Deal::AMOUNT_CENTS` is a `Column<Deal, i64>`: comparing it with a string would not compile.
+
+| Executor | Reads run on | Writes run on |
+|---|---|---|
+| `&Uow` | its transaction | its transaction, with change events recorded for the audit log |
+| `&Db` | the current unit of work's transaction when it is open, else the pool (a read replica when you configure them) | the current unit of work when there is one, else the pool |
+
+In a handler, pass the request's unit of work. `&Db` joins it as well (the current unit of work is the request's while a handler runs), so a service that only has an `Arc<Db>` still writes inside the request's transaction. In commands, jobs and seeders, `&Db` runs on the pool, or open a unit of work with `db.uow(..)`. [Connections and transactions](/docs/orm/connections-and-transactions/) has the details: named connections, read replicas and raw SQL.
+
+## Models in a controller
+
+Here is a JSON API for deals. `Bound<Deal>` loads the deal the path names, or answers 404; `paginate` reads a page and the total in two queries:
+
+```rust title="src/modules/deals/controller.rs"
+use navree::orm::binding::Bound;
+use navree::prelude::*;
+use serde::Deserialize;
+
+use super::models::deal::Deal;
+
+/// The body of a create or an update.
+#[derive(Debug, Deserialize, navree::validation::Validate)]
+pub struct DealInput {
+    #[validate(length(min = 1, max = 255))]
+    pub title: String,
+    #[validate(range(min = 0))]
+    pub amount_cents: i64,
+}
+
+#[injectable]
+pub struct DealsController;
+
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl DealsController {
+    /// GET /api/v1/deals?page=2: newest first, 15 per page.
+    #[get("/")]
+    async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        Ok(Deal::query().latest().paginate(&uow, page).await?)
+    }
+
+    /// GET /api/v1/deals/{deal}
+    #[get("/{deal}")]
+    async fn show(&self, deal: Bound<Deal>) -> Json<Record<Deal>> {
+        Json(deal.into_inner())
+    }
+
+    /// POST /api/v1/deals
+    #[post("/")]
+    async fn store(
+        &self,
+        uow: Uow,
+        Valid(Json(input)): Valid<Json<DealInput>>,
+    ) -> Result<Created<Record<Deal>>> {
+        let deal = Deal::create(&uow, Deal {
+            title: input.title,
+            amount_cents: input.amount_cents,
+            ..Default::default()
+        })
+        .await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    }
+
+    /// PATCH /api/v1/deals/{deal}
+    #[patch("/{deal}")]
+    async fn update(
+        &self,
+        uow: Uow,
+        deal: Bound<Deal>,
+        Valid(Json(input)): Valid<Json<DealInput>>,
+    ) -> Result<Json<Record<Deal>>> {
+        let mut deal = deal.into_inner();
+        deal.update(&uow, |d| {
+            d.title = input.title;
+            d.amount_cents = input.amount_cents;
+        })
+        .await?;
+        Ok(Json(deal))
+    }
+
+    /// DELETE /api/v1/deals/{deal}
+    #[delete("/{deal}")]
+    async fn destroy(&self, uow: Uow, deal: Bound<Deal>) -> Result<NoContent> {
+        deal.into_inner().delete(&uow).await?;
+        Ok(NoContent)
+    }
+}
+```
+
+Records serialize as their model's JSON, so a handler returns them as they are; [serialization](/docs/orm/serialization/) shows how to hide fields and add computed ones. `navree make:model deals Deal --controller` writes a controller like this one for you, and with `--policy` as well its routes check abilities.
+
+Services take the unit of work as a parameter, like handlers:
+
+```rust title="src/modules/deals/service.rs"
+#[injectable]
+pub struct DealService;
+
+impl DealService {
+    pub async fn rename(&self, uow: &Uow, id: Uuid, title: String) -> Result<Record<Deal>> {
+        let mut deal = Deal::find_or_fail(uow, id).await?;
+        deal.title = title;
+        deal.save(uow).await?;
+        Ok(deal)
+    }
+}
+```
+
+## Errors
+
+ORM methods return `navree::orm::Result<T>`, whose error is `OrmError`. A handler returns it with `?`, and it keeps its meaning over HTTP:
+
+| Error | Response |
+|---|---|
+| `ModelNotFound` (`find_or_fail`, `first_or_fail`, `sole`, a route binding) | 404, "Not Found" |
+| A unique or foreign-key violation | 409, as for every database error ([database errors](/docs/database/getting-started/#database-errors)) |
+| Anything else | 500, logged with its details |
+
+Messages name the model, the column and the operation, and say how to fix the problem: "cannot read column `amount_cents` of Deal as i64: ...", "no Deal found for key 0199a7a0-...". No SQL or value reaches the client. `is_not_found()`, `is_unique_violation()`, `is_foreign_key_violation()`, `is_timeout()` and `is_lost_connection()` classify an error when you handle it yourself. A database's own error is navree-db's `DbError` (`OrmError::Db`, and the source of `ModelNotFound` and `Timeout`; `db_error()` returns it): its `kind()` names the failure the same way on every database (`ErrorKind::UniqueViolation`, `Deadlock`, `LockUnavailable`, ...), `code()` and `constraint()` carry the server's own details.
+
+## Inspecting models
+
+`navree model:show` lists the models the app's modules register, and `navree model:show Deal` describes one (`--json` prints it as JSON):
+
+```text
+Deal (deals)
+  key           id (uuid_v7)
+  route key     id
+  timestamps    created_at, updated_at
+  soft deletes  -
+  workspace     -
+  connection    default
+  per page      15
+  factory       -
+  subject       -
+  policy        -
+
+columns
+  id            Uuid
+  title         String
+  amount_cents  i64
+  created_at    DateTime<Utc>
+  updated_at    DateTime<Utc>
+```
+
+Below the columns it lists the factory's relationships, the global scopes and the hooks, when the model has them. A module registers a model with `m.model::<Deal>()` (`ModuleBuilderOrmExt`, in the prelude); `make:model` adds the line.
+
+## The ORM and navree-db
+
+The ORM runs on navree-db's own engine: its values (`navree::orm::Value` is navree-db's `Value`), rows, pools, transactions and errors. A model and any raw statement you run through `Executor` share the pool and the unit of work, so they commit together. [Models and records](/docs/database/entities-and-repositories/) shows how a table maps to a model and which change events a write records.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/models/" title="Models">
+    Keys, columns, timestamps, saving, dirty tracking and mass assignment.
+  </LinkCard>
+  <LinkCard href="/docs/orm/query-builder/" title="Query builder">
+    Conditions, joins, aggregates, bulk writes and raw SQL.
+  </LinkCard>
+  <LinkCard href="/docs/orm/relationships/" title="Relationships">
+    Every kind of relation, pivots and polymorphism.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Creating the tables your models map to.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,538 @@
+---
+title: "Notification preferences"
+description: "What people and workspaces choose to receive: channels per category, digests, quiet hours and send windows on the recipient's clock, held deliveries and workspace mail templates."
+---
+
+## Introduction
+
+<Badge feature="notify" /> A [notification](/docs/digging-deeper/notifications/) names the channels it goes out on. The people who receive it decide the rest: someone turns off text messages for deal updates, wants a single morning mail instead of twenty, or doesn't want their phone to buzz at night. A workspace sets those choices for its members, and restyles the mail they get.
+
+The `Notifier` applies all of it before it delivers anything:
+
+| Choice | Set by | Effect |
+|---|---|---|
+| Channels per category | The person, else their workspace | A channel turned off for a category is skipped. |
+| Digest | The person, else their workspace, else the notification | Its mail waits and goes out as one digest mail, hourly, daily or weekly. |
+| Quiet hours | The person, else their workspace | Channels that interrupt wait until the quiet hours end. |
+| Send window | The notification | Channels that interrupt wait for the next slot, weekdays 09:00 to 17:00 say. |
+| Mail templates and style | The workspace (settings) | Its own subject, body, logo, color and footer. |
+
+Everything is counted on the recipient's clock: 09:00 is 09:00 in Kolkata for a member in Kolkata and 09:00 in New York for one in New York. Deliveries that wait are rows in `notification_deferrals`, and `notify:release` sends them when they are due.
+
+## Categories and digests
+
+Every notification has a category, the unit people switch channels for. By default it is the notification's type; give several types one category with `#[notification]`, and batch their mail into a digest:
+
+```rust title="src/modules/deals/notifications.rs"
+use navree::mail::TemplateMail;
+use navree::notify::{Channel, Notifiable, Notification, SmsMessage, notification};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+/// A deal the user follows was won.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub title: String,
+}
+
+#[notification(category = "deals", digest = "daily")]
+impl Notification for DealWon {
+    const TYPE: &'static str = "deal.won";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Mail, Channel::Sms]
+    }
+
+    fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
+        Some(json!({
+            "title": "Deal won",
+            "message": self.title,
+            "url": format!("/deals/{}", self.deal_id),
+        }))
+    }
+
+    fn to_mail(&self, _notifiable: &dyn Notifiable) -> Option<TemplateMail> {
+        Some(TemplateMail {
+            subject: format!("Deal won: {}", self.title),
+            template: "mail/deal-won".into(),
+            context: json!({ "title": self.title }),
+            ..TemplateMail::default()
+        })
+    }
+
+    fn to_sms(&self, _notifiable: &dyn Notifiable) -> Option<SmsMessage> {
+        Some(SmsMessage::new(format!("Deal won: {}", self.title)))
+    }
+}
+```
+
+The in-app notification and the text message go out at once. The mail waits for 09:00 on the recipient's clock and goes out with every other `deals` mail they got since, in one digest.
+
+`#[notification]` goes on the `impl Notification for ..` block and sets the trait's constants. You can set them by hand too:
+
+| Argument | Constant | Default | Meaning |
+|---|---|---|---|
+| `category = "deals"` | `CATEGORY` | `TYPE` | The category people switch channels for. Letters, digits, `_`, `-`, `.` and `:`, up to 100. |
+| `digest = "daily"` | `DIGEST` | `Digest::Off` | `off`, `hourly`, `daily` or `weekly`: how often its mail is batched, unless the recipient chooses otherwise. |
+| `urgent` | `URGENT` | `false` | Delivered at once, whatever the quiet hours and digest. |
+| `type = "deal.won"` | `TYPE` | required | The type, when the impl doesn't set it. |
+
+An unknown key, an unknown digest, an invalid category, a constant set both ways or `urgent` with a digest is a compile error.
+
+A sign-in code must not wait for the morning, so it is urgent. Its category can't be turned off either, once you list it in `notify.preferences.required`:
+
+```rust title="src/modules/auth/notifications.rs"
+/// A one-time sign-in code.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SignInCode {
+    pub code: String,
+}
+
+#[notification(category = "security", urgent)]
+impl Notification for SignInCode {
+    const TYPE: &'static str = "auth.sign_in_code";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Sms]
+    }
+
+    fn to_sms(&self, _notifiable: &dyn Notifiable) -> Option<SmsMessage> {
+        Some(SmsMessage::new(format!("Your sign-in code is {}", self.code)))
+    }
+}
+```
+
+### Registering categories
+
+Register each notification type in the module that owns it. The preference routes then list its category, and accept changes only for registered categories:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(imports = [
+    NotifyModule::for_feature::<DealWon>(),
+    NotifyModule::for_feature::<SignInCode>(),
+    NotifyModule::for_feature::<TrainingDue>(),
+])]
+pub struct DealsModule;
+```
+
+`m.notification::<DealWon>()` (`ModuleBuilderNotifyExt`) does the same in a hand-written module. The registered types are in `NotificationCatalog`: `kinds()`, `kind("deal.won")` and `categories(required)`. With no type registered, any category name is accepted.
+
+## Preferences
+
+A person's preferences are one JSON document. Every field is optional, and what a person leaves out comes from their workspace:
+
+```json title="Preferences"
+{
+  "channels": { "sms": false },
+  "categories": {
+    "deals": { "channels": { "mail": true }, "digest": "weekly" },
+    "training": { "channels": { "web_push": false } }
+  },
+  "digest": "daily",
+  "quiet_hours": { "start": "22:00", "end": "07:00" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push` (`notify.preferences.channels`). |
+| `categories.<name>.channels` | Switches for one category (up to 200 categories have choices of their own). |
+| `categories.<name>.digest` | The digest of one category's mail. |
+| `digest` | The digest of every category's mail. |
+| `quiet_hours` | `start` and `end`, local `HH:MM`. `22:00` to `07:00` spans midnight; a start equal to the end means no quiet hours. |
+
+For a delivery of category `deals` over SMS, the first answer wins:
+
+1. the person's `categories.deals.channels.sms`, then their `channels.sms`;
+2. the workspace's `categories.deals.channels.sms`, then its `channels.sms`;
+3. on.
+
+The digest follows the same order and ends with the notification's `DIGEST`; the quiet hours are the person's, else the workspace's. Two rules sit above the switches:
+
+- **Required categories always deliver.** `notify.preferences.required = ["security"]` sends `security` notifications over every channel they name, and a change that turns one of its channels off is refused.
+- **Broadcast follows database.** The real-time event of an in-app notification goes with the notification: turning off `database` for a category stops both.
+
+### The recipient's workspace and clock
+
+A notifiable names its workspace and its zone:
+
+```rust title="src/modules/people/member.rs"
+/// A member of a workspace, as the recipient of notifications.
+#[derive(Clone, Debug)]
+pub struct Member {
+    pub user_id: Uuid,
+    pub workspace_id: Uuid,
+    pub email: String,
+    pub mobile: Option<String>,
+    /// The zone the member picked in their profile, if any.
+    pub time_zone: Option<String>,
+}
+
+impl Notifiable for Member {
+    fn notifiable_type(&self) -> &'static str {
+        USER_NOTIFIABLE_TYPE
+    }
+
+    fn notifiable_id(&self) -> String {
+        self.user_id.to_string()
+    }
+
+    fn route_mail(&self) -> Option<String> {
+        Some(self.email.clone())
+    }
+
+    fn route_sms(&self) -> Option<String> {
+        self.mobile.clone()
+    }
+
+    fn workspace_id(&self) -> Option<Uuid> {
+        Some(self.workspace_id)
+    }
+
+    fn time_zone(&self) -> Option<String> {
+        self.time_zone.clone()
+    }
+}
+```
+
+| Method | Default | Used for |
+|---|---|---|
+| `workspace_id` | `None`, then the workspace of the current unit of work (a workspace request's) | The workspace's preferences under the person's, its zone, its mail transport and its mail templates. |
+| `time_zone` | `None` | The zone quiet hours, send windows and digests are counted in. |
+
+Without a zone of its own, the recipient's zone comes from [time zones](/docs/digging-deeper/time-zones/) when `TimeModule` is in the app: the user's zone (for notifiable type `user`), else the workspace's, else `time.default_zone`. Without `TimeModule`, it is UTC.
+
+### In code
+
+Inject `Arc<NotificationPreferences>`. It reads and writes the `notification_preferences` table, one row per owner, joining the current unit of work when there is one:
+
+```rust
+let owner = PreferenceOwner::user(user_id);
+preferences
+    .update(
+        &owner,
+        &json!({
+            "categories": { "deals": { "channels": { "sms": false }, "digest": "weekly" } },
+            "quiet_hours": { "start": "22:00", "end": "07:00" },
+        }),
+    )
+    .await?;
+
+let resolved = preferences.resolve(&member, Some(member.workspace_id)).await?;
+assert!(!resolved.allows("deals", Channel::Sms));
+assert_eq!(resolved.digest("deals", Digest::Daily), Digest::Weekly);
+```
+
+| Method | What it does |
+|---|---|
+| `of(&owner)` | The owner's `Preferences` (empty when none are stored). |
+| `update(&owner, &patch)` | Applies a JSON merge patch: objects merge, `null` removes a choice so it is inherited again. Returns the result. |
+| `set(&owner, preferences)` | Replaces the owner's preferences. |
+| `forget(&owner)` | Deletes them: everything is inherited again. |
+| `resolve(&notifiable, workspace)` | The `ResolvedPreferences` that decide a delivery: `allows(category, channel)`, `digest(category, default)` and `quiet_hours()`. |
+
+`PreferenceOwner::of(&notifiable)` names a notifiable's preferences, `PreferenceOwner::user(id)` a user's and `PreferenceOwner::workspace(id)` a workspace's. A change that is refused fails with `NotifyError::InvalidPreferences`, the messages by field.
+
+## The preference routes
+
+With `notify.routes` on (the default), the signed-in user reads and changes their own preferences:
+
+```http
+GET /api/notifications/preferences
+Authorization: Bearer eyJhbGciOiJFZERTQSJ9...
+```
+
+```json title="200 OK"
+{
+  "data": { "categories": { "deals": { "channels": { "sms": false } } } },
+  "workspace": { "channels": { "whatsapp": false } },
+  "categories": [
+    {
+      "category": "deals",
+      "types": ["deal.won"],
+      "required": false,
+      "digest": "daily",
+      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": false, "whatsapp": false, "web_push": true }
+    },
+    {
+      "category": "security",
+      "types": ["auth.sign_in_code"],
+      "required": true,
+      "digest": "off",
+      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": true, "whatsapp": true, "web_push": true }
+    }
+  ],
+  "channels": ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"],
+  "time_zone": "Asia/Kolkata"
+}
+```
+
+`data` is what the user chose, `workspace` what their workspace chose (`null` outside a workspace), and `categories` what each category gets: the registered categories, plus any the user or workspace chose for. A preference screen draws a row per category and a checkbox per channel from it, and shows quiet hours in `time_zone`.
+
+`PATCH` takes a JSON merge patch and answers with the same shape:
+
+```http
+PATCH /api/notifications/preferences
+Content-Type: application/json
+
+{ "categories": { "deals": { "digest": "weekly", "channels": { "sms": null } } }, "quiet_hours": { "start": "22:00", "end": "07:00" } }
+```
+
+A change that is refused is a `400` with the fields named:
+
+```json title="400 Bad Request" wrap
+{ "statusCode": 400, "message": "security notifications cannot be turned off", "error": "Bad Request", "code": "validation_failed", "errors": { "categories.security.channels.sms": ["security notifications cannot be turned off"] } }
+```
+
+### A workspace's defaults
+
+`GET /api/notifications/preferences/workspace` shows the defaults of the request's workspace to any member, and `PATCH` changes them for a user with `notify.preferences.workspace_permission` (`workspace.update`) in that workspace. Outside a workspace, both answer `404`.
+
+| Route | Access | Answers |
+|---|---|---|
+| `GET /api/notifications/preferences` | signed in | `200` |
+| `PATCH /api/notifications/preferences` | signed in | `200`, `400` |
+| `GET /api/notifications/preferences/workspace` | signed in, in a workspace | `200`, `404` |
+| `PATCH /api/notifications/preferences/workspace` | the permission, in the workspace | `200`, `400`, `403`, `404` |
+
+## Digests
+
+A mail in a digest waits for the recipient's next digest:
+
+| Digest | Goes out |
+|---|---|
+| `hourly` | At the top of the next hour, on the recipient's clock. |
+| `daily` | At `notify.digest.at` (`09:00`), the next time that comes on the recipient's clock. |
+| `weekly` | On `notify.digest.weekly_on` (`monday`) at `notify.digest.at`. |
+
+Only mail is batched: the database, broadcast, Slack, Teams, SMS, WhatsApp and web push channels deliver as usual. Each recipient gets one digest mail per frequency, listing every mail that waited for it, oldest first. A digest that falls in the recipient's quiet hours waits for their end.
+
+The digest renders `notify.digest.template` (`notify/digest`, built in). Put `notify/digest.html` and `notify/digest.txt` in your views to replace it; they get these variables:
+
+| Variable | Holds |
+|---|---|
+| `items` | Each mail: `type`, `category`, `subject`, `created_at`, `context` (its template variables), and `html` and `text` (its rendered bodies, or `null`). |
+| `count` | How many mails it batches. |
+| `digest` | `hourly`, `daily` or `weekly`. |
+| `style` | The workspace's style variables (see [workspace templates](#workspace-templates)). |
+
+```jinja title="views/notify/digest.txt"
+{{ count }} update{% if count != 1 %}s{% endif %} since your last digest
+{% for item in items %}
+- {{ item.subject }}{% if item.text %}
+  {{ item.text }}{% endif %}
+{% endfor %}
+```
+
+The subject is `notify.digest.subject`, itself a template with `count` and `digest` (`Your notifications`).
+
+## Quiet hours and send windows
+
+Mail, Slack, Teams, SMS, WhatsApp and web push interrupt people (`notify.deferred.channels`). Inside the recipient's quiet hours, deliveries over those channels wait until the quiet hours end; the in-app notification shows at once.
+
+A notification can also say when it may reach people at all. Return a [send window](/docs/digging-deeper/time-zones/#send-windows) from `send_window`:
+
+```rust title="src/modules/training/notifications.rs"
+/// A training module is due.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TrainingDue {
+    pub module: String,
+}
+
+impl Notification for TrainingDue {
+    const TYPE: &'static str = "training.due";
+    const CATEGORY: &'static str = "training";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Mail]
+    }
+
+    fn send_window(&self, _notifiable: &dyn Notifiable) -> Option<SendWindow> {
+        Some(SendWindow::weekdays().between("09:00", "17:00"))
+    }
+
+    fn to_mail(&self, _notifiable: &dyn Notifiable) -> Option<TemplateMail> {
+        Some(TemplateMail {
+            subject: format!("{} is due", self.module),
+            template: "mail/training-due".into(),
+            context: json!({ "module": self.module }),
+            ..TemplateMail::default()
+        })
+    }
+}
+```
+
+Sent on Friday evening, the training mail reaches a member in Kolkata on Monday at 09:00 in Kolkata, and one in Los Angeles at once (it is still Friday morning there). A window and quiet hours combine: the delivery goes out at the first instant inside the window and outside the quiet hours. `SendWindow::working_days_in("SA")` follows a country's weekend, and `.except(holidays)` skips its public holidays.
+
+`URGENT` notifications skip the quiet hours and the digest. Their send window, and the recipient's channel switches, still apply.
+
+## Held deliveries
+
+A delivery that waits is a row of `notification_deferrals` (`NotificationDeferral`): the rendered channel, why it waits (`digest`, `quiet_hours` or `send_window`), and `release_at`. Inside a unit of work the rows join its transaction, so a rollback drops them with the rest of the request.
+
+`notify:release` sends the rows that are due:
+
+```sh
+cargo run -- notify:release
+```
+
+```text
+released 3 held notifications, 1 digest (4 mails batched); 0 dropped, 0 to retry
+```
+
+`NotifyModule` schedules it every minute, so the [scheduler](/docs/digging-deeper/scheduling/) (`schedule:work`) runs it; set `notify.deferred.schedule = false` to run it yourself. In code, `Notifier::release_due()` does the same and returns a `Released` count.
+
+- The digest rows of one recipient and frequency go out as one digest mail; the others as they were rendered.
+- With `notify.queue` on, each release is a `notify.send` job, so a worker delivers and retries it.
+- A channel the recipient turned off since the notification was sent is dropped.
+- Each row is claimed by one release, so several schedulers can run at once.
+- A release that fails is tried again `notify.deferred.retry_secs` (300) seconds later; after `notify.deferred.max_attempts` (5) attempts it is dropped and logged.
+
+Without `DatabaseModule` nothing can wait: preferences don't apply, and digests, quiet hours and send windows deliver at once, with a warning logged the first time.
+
+## Workspace templates
+
+<Badge feature="settings" /> A workspace restyles the notification mail its members get. With the `settings` feature on too, the `notification-templates` [settings](/docs/packages/settings/) hold the style and the overrides, stored for the whole app, an organization or a workspace, and inherited field by field:
+
+```http
+PATCH /api/settings/notification-templates?scope=workspace
+Content-Type: application/json
+
+{
+  "logo_url": "https://cdn.acme.test/logo.png",
+  "brand_color": "#0F766E",
+  "footer": "Agra Corp, 12 Harbour Road, Pune",
+  "templates": {
+    "training.due": { "subject": "Agra Academy: {{ module }}" }
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `logo_url` | An `https` URL, as `{{ style.logo_url }}`. |
+| `brand_color` | `#RRGGBB`, as `{{ style.brand_color }}`. |
+| `footer` | Up to 1,000 characters, as `{{ style.footer }}`. |
+| `style` | More variables: `{"accent": "#F59E0B"}` is `{{ style.accent }}`. |
+| `templates` | By notification type (`notify.digest` for the digest): `subject` (up to 500 characters), `html` and `text`. |
+
+Every notification mail gets `style` among its template variables, so your templates can use it:
+
+```jinja title="views/mail/deal-won.html"
+{% if style.logo_url %}<img src="{{ style.logo_url }}" alt="" height="32">{% endif %}
+<h1{% if style.brand_color %} style="color: {{ style.brand_color }}"{% endif %}>{{ title }} was won</h1>
+{% if style.footer %}<p>{{ style.footer }}</p>{% endif %}
+```
+
+An override replaces the subject or a body of one type and renders with the mail's own variables. An `html` override can extend your layouts (`{% extends "layouts/mail.html" %}`). The parts it leaves out keep the type's own template, and an override that fails to render is skipped with a warning. The settings are checked when they are saved; a change at the organization level reaches every workspace that doesn't set the field itself.
+
+The mail of a notification sent in a workspace goes through the workspace's [mail transport](/docs/digging-deeper/mail-delivery/) too. To keep overrides somewhere else, register your own `Arc<dyn TemplateOverrides>`: it returns the `NotificationOverrides` (`style` and `templates`) of a workspace, or of the whole app for `None`.
+
+## Configuration
+
+```toml title="config/app.toml"
+[notify.preferences]
+enabled = true                        # apply stored preferences when sending
+channels = ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"]
+required = ["security"]               # categories that can't be turned off
+workspace_permission = "workspace.update"
+
+[notify.digest]
+at = "09:00"                          # daily and weekly digests, recipient's clock
+weekly_on = "monday"
+subject = "Your notifications"
+template = "notify/digest"
+
+[notify.deferred]
+channels = ["mail", "slack", "teams", "sms", "whatsapp", "web_push"]
+batch = 500
+max_attempts = 5
+retry_secs = 300
+schedule = true
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `notify.preferences.enabled` | `true` | Apply stored preferences when sending (with `DatabaseModule`). |
+| `notify.preferences.channels` | every channel but `broadcast` | The channels people may switch, in the order the routes list them. |
+| `notify.preferences.required` | none | Categories that always deliver. |
+| `notify.preferences.workspace_permission` | `workspace.update` | The permission that changes a workspace's defaults. |
+| `notify.digest.at` | `09:00` | The local time daily and weekly digests go out. |
+| `notify.digest.weekly_on` | `monday` | The day weekly digests go out. |
+| `notify.digest.subject` | `Your notifications` | The digest's subject, a template with `count` and `digest`. |
+| `notify.digest.template` | `notify/digest` | The digest's templates. |
+| `notify.deferred.channels` | every channel but `database` and `broadcast` | The channels quiet hours and send windows hold. |
+| `notify.deferred.batch` | `500` | Held deliveries one release sends at most. |
+| `notify.deferred.max_attempts` | `5` | Attempts before a release that keeps failing is dropped. |
+| `notify.deferred.retry_secs` | `300` | Seconds before a failed release is tried again. |
+| `notify.deferred.schedule` | `true` | Run `notify:release` every minute on the scheduler. |
+
+From the environment, lists are comma-separated: `APP_NOTIFY__PREFERENCES__REQUIRED=security,billing`, `APP_NOTIFY__DIGEST__AT=08:30`.
+
+## Testing
+
+Put a `FixedClock` in the app and move it to the moment a digest or the end of the quiet hours comes, then release:
+
+```rust title="tests/deals/notifications.rs"
+#[tokio::test]
+async fn deal_mail_waits_for_the_morning_digest() {
+    // Wednesday 20:00 UTC is 01:30 on Thursday in Kolkata.
+    let clock = Arc::new(FixedClock::new("2026-10-28T20:00:00Z".parse().unwrap()));
+    let sms = SmsFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .config("mail.transport", "array")
+        .config("notify.routes", false)
+        .module(DatabaseModule::from_config())
+        .module(ViewModule::from_config())
+        .module(Templates)
+        .module(MailModule::from_config())
+        .module(NotifyModule::from_config())
+        .override_value::<dyn Clock>(clock.clone())
+        .override_value::<dyn SmsDriver>(sms.driver())
+        .build()
+        .await;
+    let notifier = app.get::<Notifier>().await;
+    let priya = member("Asia/Kolkata");
+
+    for title in ["Agra renewal", "Gulati expansion"] {
+        let won = DealWon {
+            deal_id: Uuid::now_v7(),
+            title: title.into(),
+        };
+        notifier.send(&priya, won).await.unwrap();
+    }
+    // The texts go out at once; the mail waits for the digest.
+    assert_eq!(sms.sent().len(), 2);
+    let mailer = app.get::<Mailer>().await;
+    let mail = mailer.array_transport().unwrap();
+    assert!(mail.sent().is_empty());
+
+    // 09:00 in Kolkata: one mail lists both deals.
+    clock.set("2026-10-29T03:30:00Z".parse().unwrap());
+    let released = notifier.release_due().await.unwrap();
+    assert_eq!((released.digests, released.batched), (1, 2));
+    let digest = &mail.sent()[0];
+    assert_eq!(digest.to, [priya.email.as_str()]);
+    assert!(digest.text.as_deref().unwrap().contains("Deal won: Agra renewal"));
+}
+```
+
+The held rows are an ORM model, so a test can also read them: `NotificationDeferral::query().get(&db)` lists each with its `reason` and `release_at`. Store preferences for a test with `NotificationPreferences::update`, as a user would through the routes. `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Notifiables, the database, mail and broadcast channels, queueing.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notification-channels/" title="Notification channels">
+    Slack, Teams, SMS, WhatsApp and web push, with the delivery log and opt-outs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/time-zones/" title="Time zones">
+    Zones of users and workspaces, local days and send windows.
+  </LinkCard>
+  <LinkCard href="/docs/packages/settings/" title="Settings">
+    Typed settings per scope, behind the workspace templates.
+  </LinkCard>
+</LinkCards>

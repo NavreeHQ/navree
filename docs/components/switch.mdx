@@ -1,0 +1,58 @@
+---
+title: "Switch"
+description: "An on and off switch: a checkbox with the `switch` role, so it posts and works with no script."
+---
+
+<UiPreview example="switch/default" />
+
+`Switch` is a checkbox drawn as a switch, with `role="switch"`. Assistive technology announces it as on or off, and it posts `name=true` with its form when it is on.
+
+```rust
+use navree::ui::*;
+
+Switch::new("notify").label("Email me when a deal closes").checked(true)
+```
+
+## When to use it
+
+Use a switch for a setting read as on or off. For agreeing to something, or picking items from a list, use a [Checkbox](/docs/components/checkbox/).
+
+<UiChoose name="on-off" current="Switch" />
+
+## Anatomy
+
+<UiAnatomy component="switch" />
+
+## States
+
+<UiPreview example="switch/states" />
+
+## A line under the label
+
+`.description(text)` adds a line under the label that says more and ties it to the switch, so a screen reader reads it after the label.
+
+```rust
+Switch::new("notify")
+    .label("Email me when a deal closes")
+    .description("One email a day at most.")
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the switch. |
+| `Space` | Turns it on or off. |
+
+- `role="switch"` makes a screen reader say "on" and "off" rather than "checked".
+- A switch posts with its form: it saves when the form is submitted.
+
+</UiA11y>
+
+## API
+
+### Switch
+
+<UiProps type="Switch" />

@@ -1,0 +1,535 @@
+---
+title: "Automations"
+description: "End-user automations: `#[trigger]`, `#[condition]` and `#[action]` blocks, versioned definitions per workspace, enrollments and simulation."
+---
+
+## Quick start
+
+The smallest setup: add `WorkflowsModule`, write a trigger and an action, and register them. A person then connects them in a definition. The rest of the page explains each part.
+
+```rust
+#[trigger(type = "deal.won", label = "Deal won", event = DealWon, subject = "owner_id")]
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct DealWonTrigger {}
+
+#[action(type = "task.create", label = "Create a task")]
+async fn create_task(config: CreateTask, ctx: AutomationCtx) -> Result<TaskCreated, BoxError> { /* ... */ }
+
+// src/app.rs: .module(WorkflowsModule::from_config())
+// the owning module's `register`: m.trigger::<DealWonTrigger>().action::<CreateTask>();
+```
+
+```json title="A definition"
+{"trigger": {"type": "deal.won", "config": {}},
+ "nodes": [{"id": "thank", "kind": "action", "type": "task.create", "config": {"title": "Thank the customer"}}]}
+```
+
+Automations need `DatabaseModule` and `EventsModule`. [Triggers](#triggers) and [actions](#actions) show the blocks, and [definitions](#definitions) the JSON a person saves.
+
+## Introduction
+
+<Badge feature="workflows" /> Your customers want to automate their own work: "when a deal is won, create a thank-you task, wait a day, then a call for big deals or a survey for the rest". Each customer wants a different sequence, so you can't write it as code. You can write the pieces.
+
+Automations split the job in two:
+
+- **You write blocks.** A trigger (an event that starts an automation), a condition (a branch) or an action (something done) is a Rust type plus a function, with `#[trigger]`, `#[condition]` or `#[action]`. The type is the block's settings and derives `ToSchema`, so an editor gets a JSON Schema for its form.
+- **People combine them.** An automation is a definition: a trigger and a graph of nodes (actions, conditions, delays and waits). People edit a draft in your editor, check it, simulate it with a sample event, and publish it as a version.
+- **Every matching event enrolls.** An enrollment is a durable [workflow](/docs/packages/workflows/) run that walks the published version's nodes: actions run once each with retries, delays sleep for days without holding a worker, waits end on the subject's next event or a timeout. Enrollments keep their version when the automation changes.
+
+You get the `Automations` service, the catalog of blocks, validation with JSON pointers, enrollment policies, simulation, templates, the `/api/automations` routes for an editor and the `automations:*` commands. Automations belong to a workspace, or to the whole app.
+
+## Installation
+
+Automations come with `WorkflowsModule` (the `workflows` feature, in `full`); see the [workflows installation](/docs/packages/workflows/#installation). Block settings derive `ToSchema` (`navree::openapi::ToSchema`, also in the prelude):
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = "1"
+```
+
+They need `DatabaseModule` (for the `automations`, `automation_versions` and `automation_enrollments` tables) and `EventsModule` (triggers are events). `workflows.automations = false` turns them off: no event enrolls, and the routes are not mounted.
+
+## Triggers
+
+A trigger is an [event](/docs/digging-deeper/events/) and the settings a person picks for it. Write the settings type, then a function that decides which events fire an automation with those settings:
+
+```rust title="src/modules/deals/automation.rs"
+use navree::prelude::*;
+use navree::workflows::{AutomationCtx, action, condition, trigger};
+use serde::{Deserialize, Serialize};
+use navree::openapi::ToSchema;
+
+/// A deal was won.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub owner_id: Uuid,
+    pub amount_cents: i64,
+    pub workspace_id: Option<Uuid>,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+
+/// The settings of the "Deal won" trigger.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct DealWonTrigger {
+    /// Only deals worth at least this much, in cents.
+    #[serde(default)]
+    pub min_amount_cents: Option<i64>,
+}
+
+/// A deal moved to won.
+#[trigger(type = "deal.won", label = "Deal won", subject = "owner_id")]
+fn deal_won(config: &DealWonTrigger, event: &DealWon) -> bool {
+    config
+        .min_amount_cents
+        .is_none_or(|min| event.amount_cents >= min)
+}
+```
+
+A trigger that fires on every event of its type needs no function: put the attribute on the settings struct and name the event:
+
+```rust
+/// A task was completed.
+#[trigger(type = "task.completed", label = "Task completed", event = TaskCompleted, subject = "owner_id")]
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct TaskCompletedTrigger {}
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `type = ".."` | required | The stable type name stored in definitions (`deal.won`) |
+| `label = ".."` | the type name | The name the editor shows |
+| `subject = ".."` | none | The event field naming who or what is enrolled (`owner_id`): [enrollment policies](#enrollment) and [waits](#waits) use it |
+| `workspace = ".."` or `false` | `"workspace_id"` | The event field holding the workspace id, or `false` when the event has none |
+| `event = Type` | the function's second argument | The event, for the attribute on a struct |
+
+Fields are dotted paths into the event's JSON (`deal.owner_id`). The doc comment becomes the block's description. The function is a plain `fn` (it runs for every event of the type), and its settings may be empty: a node without `config` reads as `{}`.
+
+## Conditions
+
+A condition branches: it decides between a node's `then` and `else` paths from what the enrollment knows.
+
+```rust
+/// The deal is worth at least the amount.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct DealAmountAtLeast {
+    /// The amount, in cents.
+    pub amount_cents: i64,
+}
+
+/// The won deal is worth at least the amount.
+#[condition(type = "deal.amount_at_least", label = "Deal amount")]
+async fn deal_amount_at_least(
+    config: &DealAmountAtLeast,
+    ctx: &AutomationCtx,
+) -> Result<bool, BoxError> {
+    let deal: DealWon = ctx.event_as()?;
+    Ok(deal.amount_cents >= config.amount_cents)
+}
+```
+
+The function takes the settings and the `AutomationCtx` by reference, may be `async` or not, and returns `bool` or `Result<bool, E>`. An enrollment evaluates it once and stores the answer. Simulations evaluate it too, so keep it free of side effects.
+
+The built-in condition `field` compares a value of the enrollment's data with a constant, with no code:
+
+```json
+{"id": "big-deal", "kind": "condition", "type": "field",
+ "config": {"path": "event.amount_cents", "op": "gte", "value": 1000000},
+ "then": "call", "else": "survey"}
+```
+
+`op` is one of `eq`, `ne`, `gt`, `gte`, `lt`, `lte` (numbers, or strings in byte order), `contains` (a text holds the value, or a list holds it), `in` (the value, a list, holds the field), `exists` and `missing`. A missing field never compares.
+
+## Actions
+
+An action does something: create a record, send a message, call a service.
+
+```rust
+/// The settings of the "Create a task" action.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct CreateTask {
+    /// The task's title.
+    pub title: String,
+}
+
+/// What the action returns: later nodes read it as `nodes.<id>.task_id`.
+#[derive(Serialize)]
+pub struct TaskCreated {
+    pub task_id: Uuid,
+}
+
+/// Creates a task for the deal's owner.
+#[action(type = "task.create", label = "Create a task", preview = create_task_preview)]
+async fn create_task(config: CreateTask, ctx: AutomationCtx) -> Result<TaskCreated, BoxError> {
+    let tasks = ctx.app().get::<Tasks>().await?;
+    let deal: DealWon = ctx.event_as()?;
+    let task_id = tasks
+        .create(deal.owner_id, &config.title, &ctx.idempotency_key())
+        .await?;
+    Ok(TaskCreated { task_id })
+}
+
+/// What a simulation shows instead of creating the task.
+fn create_task_preview(config: &CreateTask, ctx: &AutomationCtx) -> serde_json::Value {
+    json!({ "title": config.title, "owner_id": ctx.subject() })
+}
+```
+
+The function takes the settings and the `AutomationCtx` by value and returns `Result<T, E>`; `T` is stored with the enrollment. An action runs as a durable [step](/docs/packages/workflows/#steps): once per enrollment, with 3 attempts on errors, and never during a simulation, which shows `preview` instead (by default, the settings). `ctx.idempotency_key()` is unique to the node of the enrollment (`<run id>:<node id>`): pass it to services that deduplicate, since an action whose process dies runs again.
+
+Each of the three attributes implements a trait (`Trigger`, `Condition`, `Action`) on the settings type; you can write the impl yourself instead. A missing `type`, a function of the wrong shape or an unknown key is a compile error.
+
+### What blocks know
+
+`AutomationCtx` carries the enrollment's data:
+
+| Method | |
+|---|---|
+| `event()`, `event_as::<E>()` | The trigger's event, as JSON or as a type |
+| `subject()` | Who or what is enrolled (the trigger's `subject` field), as text |
+| `field("event.amount_cents")` | A value of the data by dotted path |
+| `output_of("thank")` | What node `thank` returned (an action's output, a condition's answer, a wait's event) |
+| `data()` | Everything: `{ "event", "subject", "workspace_id", "automation": { "id", "version" }, "nodes": { .. } }` |
+| `automation_id()`, `version()`, `enrollment_id()`, `run_id()`, `node()`, `workspace_id()` | Where the block runs |
+| `is_simulation()`, `idempotency_key()`, `app()` | The simulation flag, a key for the node, the app |
+
+### Registering blocks
+
+Register blocks and templates in the module that owns them:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(register = Self::automations)]
+pub struct CrmAutomationsModule;
+
+impl CrmAutomationsModule {
+    fn automations(&self, m: &mut ModuleBuilder) {
+        m.trigger::<DealWonTrigger>()
+            .trigger::<TaskCompletedTrigger>()
+            .condition::<DealAmountAtLeast>()
+            .action::<CreateTask>()
+            .automation_template(
+                AutomationTemplate::new(
+                    "big-deal-follow-up",
+                    "Big deal follow-up",
+                    big_deal_follow_up(),
+                )
+                .description("Thanks the owner, then a call or a survey a day later.")
+                .category("Sales")
+                .enrollment(EnrollmentPolicy::EveryTime),
+            );
+    }
+}
+```
+
+`m.trigger::<T>()` also subscribes the engine to the trigger's event. Two types with one type name fail the boot, naming both.
+
+## The catalog
+
+`GET /api/automations/catalog` is your editor's palette: every block with its JSON Schema, and the node kinds.
+
+```json title="GET /api/automations/catalog"
+{
+  "triggers": [
+    {
+      "kind": "trigger",
+      "type": "deal.won",
+      "label": "Deal won",
+      "description": "A deal moved to won.",
+      "event": "deal.won",
+      "subject": "owner_id",
+      "schema": {
+        "type": "object",
+        "description": "The settings of the \"Deal won\" trigger.",
+        "properties": {
+          "min_amount_cents": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Only deals worth at least this much, in cents."
+          }
+        }
+      }
+    }
+  ],
+  "conditions": [ { "kind": "condition", "type": "deal.amount_at_least", "…": "…" }, { "kind": "condition", "type": "field", "…": "…" } ],
+  "actions": [ { "kind": "action", "type": "task.create", "…": "…" } ],
+  "nodes": ["action", "condition", "delay", "wait"]
+}
+```
+
+Render each block's `schema` as its settings form; field doc comments are the descriptions. In code, `automations.catalog()` lists the same (`triggers()`, `conditions()`, `actions()`, `block(kind, type)`).
+
+## Definitions
+
+A definition is a trigger and a list of nodes. The first node runs first:
+
+```json title="A definition"
+{
+  "trigger": {"type": "deal.won", "config": {}},
+  "nodes": [
+    {"id": "thank", "kind": "action", "type": "task.create",
+     "config": {"title": "Thank the customer"}, "next": "a-day-later"},
+    {"id": "a-day-later", "kind": "delay", "seconds": 86400, "next": "big-deal"},
+    {"id": "big-deal", "kind": "condition", "type": "deal.amount_at_least",
+     "config": {"amount_cents": 1000000}, "then": "call", "else": "survey"},
+    {"id": "call", "kind": "action", "type": "task.create",
+     "config": {"title": "Call the customer"}},
+    {"id": "survey", "kind": "action", "type": "task.create",
+     "config": {"title": "Send the survey"}}
+  ],
+  "ui": {"zoom": 1.5}
+}
+```
+
+| Kind | Fields | Does |
+|---|---|---|
+| `action` | `type`, `config`, `next` | Runs the action |
+| `condition` | `type`, `config`, `then`, `else` | Evaluates the condition and branches |
+| `delay` | `seconds` (at least 1), `next` | Sleeps, durably |
+| `wait` | `trigger` (`type`, `config`), `same_subject` (default `true`), `timeout_seconds`, `next`, `on_timeout` | Waits for a trigger's event (see [waits](#waits)) |
+
+A node without a target ends the enrollment. Node ids are unique, 1 to 100 characters, without `#` and not starting with `$`; later nodes read a node's output as `nodes.<id>`. Nodes may not loop: each runs at most once per enrollment. `ui` fields, on the definition or on a node, are kept as they are, for your editor's own data (positions, notes). A definition has at most 200 nodes.
+
+**Validation.** `automations.validate(&definition)` and `POST /api/automations/validate` check a definition against the catalog and list every problem at a JSON pointer:
+
+```json title="POST /api/automations/validate"
+{
+  "valid": false,
+  "issues": [
+    { "path": "/nodes/0/type", "message": "unknown action `task.make`" },
+    { "path": "/nodes/1/seconds", "message": "a delay lasts at least 1 second" },
+    { "path": "/nodes/2/config", "message": "missing field `amount_cents`" },
+    { "path": "/nodes/4/next", "message": "going to `thank` makes a loop: each node runs at most once" }
+  ]
+}
+```
+
+It finds unknown blocks, settings their type does not accept, duplicate or invalid ids, targets that do not exist, loops, a zero delay or timeout, and a `same_subject` wait on a trigger without a subject.
+
+## Drafts, publishing and versions
+
+An automation has a draft definition and, once published, versions:
+
+```rust title="src/modules/deals/service.rs"
+let draft = automations
+    .create(
+        &uow,
+        NewAutomation::new("Big deal follow-up", definition)
+            .workspace(workspace.id)
+            .description("Thanks, then a call or a survey.")
+            .enrollment(EnrollmentPolicy::EveryTime),
+    )
+    .await?;
+let published = automations.publish(&uow, draft.id, Some(user.id)).await?;
+```
+
+- **`create`** stores a draft (`status: draft`). The definition must have the right shape (a 400 otherwise); what it names is checked when it is published, so people can save work in progress. `automations.details(id)` returns the automation with its draft's `issues`.
+- **`update(&uow, id, AutomationChanges { .. })`** changes the name, description, draft definition or enrollment policy. The published version keeps enrolling until the next publish.
+- **`publish`** checks the draft against the catalog (a 400 `validation_failed` listing the issues), stores it as the next version and makes the automation `active`. From then on, matching events enroll in that version.
+- **`pause` and `resume`** stop and restart enrolling (409 `automation_not_active` or `automation_not_paused` otherwise). Enrollments under way go on.
+- **`delete`** removes the automation with its versions and enrollments, and cancels the enrollments under way.
+
+The writes run in your unit of work, and reads inside it see them: an update and a publish in one request publish the update. `versions(id)` lists the published versions, newest first, with who published them.
+
+## Enrollment
+
+When an event of a published trigger is emitted, every active automation listening to it is checked:
+
+1. **The workspace.** An automation of a workspace only enrolls events whose workspace field holds that workspace. App-wide automations enroll every event.
+2. **The trigger's settings.** The trigger function decides (`min_amount_cents` above).
+3. **The enrollment policy**, by the event's subject:
+
+| Policy | Enrolls |
+|---|---|
+| `one_at_a_time` (default) | Unless the subject's earlier enrollment is still under way |
+| `once` | Only the first time, ever, per subject |
+| `every_time` | On every event |
+
+Events without a subject (a trigger with no `subject`) always enroll. An event emitted inside a unit of work (a handler's) enrolls once that work commits, and not at all if it rolls back. Each enrollment is stored with its run in one transaction, then runs: inline in the emit without a queue, as `workflows.run` jobs with one. Its actions, delays and waits behave as [workflow steps](/docs/packages/workflows/#steps): an action that fails three times fails the enrollment with the action's error. An enrollment's run belongs to the automation's workspace, and its output is every node's output by id.
+
+`automations.enrollments(id, page)` lists an automation's enrollments with the status of their runs; `enrollment(id)` reads one and `cancel_enrollment(id)` cancels it (409 `enrollment_finished` when it finished). `enroll(id, event_json)` enrolls by hand, in the published version, whatever the status, trigger settings and policy (a "run it for this record now" button); the JSON must be the trigger's event (400 `invalid_automation_event`), and an automation never published is a 409 `automation_not_published`.
+
+## Waits
+
+A `wait` node waits for a trigger's event, by default the enrolled subject's next one:
+
+```json
+{"id": "next-task", "kind": "wait", "trigger": {"type": "task.completed"},
+ "timeout_seconds": 259200, "next": "thanks", "on_timeout": "chase"}
+```
+
+When the deal's owner completes a task within three days, the enrollment goes on at `thanks`, and the event is the node's output (`nodes.next-task`). Otherwise it goes on at `chase` after three days. The trigger's settings and function filter the events too. `same_subject: false` takes any event the trigger accepts; without `timeout_seconds` the wait has no end.
+
+## Simulation
+
+A simulation shows what an event would do without storing or running anything:
+
+```http
+POST /api/automations/0199a1c2-…/simulate
+Content-Type: application/json
+
+{"event": {"deal_id": "…", "owner_id": "0199…", "amount_cents": 2500000, "workspace_id": null}}
+```
+
+```json title="200 OK"
+{
+  "enrolls": false,
+  "reason": "the automation is draft",
+  "subject": "0199…",
+  "version": null,
+  "steps": [
+    { "node": "thank", "kind": "action", "type": "task.create", "at_seconds": 0, "outcome": "would_run",
+      "detail": { "title": "Thank the customer", "owner_id": "0199…" } },
+    { "node": "a-day-later", "kind": "delay", "at_seconds": 0, "outcome": "waits", "detail": { "seconds": 86400 } },
+    { "node": "big-deal", "kind": "condition", "type": "deal.amount_at_least", "at_seconds": 86400, "outcome": "true", "detail": null },
+    { "node": "call", "kind": "action", "type": "task.create", "at_seconds": 86400, "outcome": "would_run",
+      "detail": { "title": "Call the customer", "owner_id": "0199…" } }
+  ]
+}
+```
+
+- `enrolls` and `reason` say whether the event would enroll now (a draft or paused automation, another workspace, the trigger's settings, the policy).
+- Each step is a node reached: actions show their preview (`would_run`), conditions their answer, delays and timeouts add up in `at_seconds`.
+- The body takes `version` (simulate a published version instead of the draft) and `waits`: `received` (the default, waits get their event) or `timed_out` (waits take their `on_timeout` path).
+- The event must be the trigger's event (400 `invalid_automation_event`); an unknown version is a 400 `unknown_automation_version`.
+
+`automations.simulate(id, SimulateInput { event, version, waits })` does the same in code.
+
+## Templates
+
+Templates are ready-made definitions people start from. Register them with `m.automation_template(..)` (above); they are checked against the catalog at boot, so a template naming a block that does not exist fails the boot. `GET /api/automations/templates` lists them, and `POST /api/automations/templates/{key}` (or `automations.create_from_template(&uow, key, workspace, name)`) creates a draft from one, named after the template unless the body names it:
+
+```http
+POST /api/automations/templates/big-deal-follow-up
+Content-Type: application/json
+
+{"name": "Our follow-up"}
+```
+
+## Over HTTP
+
+With `workflows.automation_routes` on (the default), the module mounts the routes of an editor under `{http.api_prefix}/automations`. Reads need `automations.view`, changes `automations.manage`:
+
+| Route | Permission | Answer |
+|---|---|---|
+| `GET /api/automations/catalog` | view | The blocks with their schemas, and the node kinds |
+| `GET /api/automations/templates` | view | `{ "data": [templates] }` |
+| `POST /api/automations/templates/{key}` | manage | 201: a draft from the template |
+| `POST /api/automations/validate` | view | `{ "valid", "issues" }` for `{ "definition" }` |
+| `GET /api/automations?page=&per_page=` | view | A page of automations, newest first |
+| `POST /api/automations` | manage | 201: a draft from `{ "name", "description", "definition", "enrollment" }` |
+| `GET /api/automations/{id}` | view | The automation with its draft's `issues` |
+| `PATCH /api/automations/{id}` | manage | The automation, changed |
+| `DELETE /api/automations/{id}` | manage | 204 |
+| `POST /api/automations/{id}/publish` | manage | The automation, active on its new version |
+| `POST /api/automations/{id}/pause`, `/resume` | manage | The automation |
+| `GET /api/automations/{id}/versions` | view | `{ "data": [versions] }`, newest first |
+| `POST /api/automations/{id}/simulate` | view | The [simulation](#simulation) |
+| `POST /api/automations/{id}/enroll` | manage | 201: the enrollment of `{ "event" }` |
+| `GET /api/automations/{id}/enrollments` | view | A page of enrollments with their status |
+| `GET /api/automations/{id}/enrollments/{enrollment}` | view | One enrollment |
+| `POST /api/automations/{id}/enrollments/{enrollment}/cancel` | manage | The enrollment, cancelled |
+
+In an app with `WorkspaceModule`, the routes need a workspace (`X-Workspace`): they list, create and change that workspace's automations only (another workspace's is a 404), and publishing records the signed-in user as `published_by`. Without it, they act on app-wide automations.
+
+```json title="GET /api/automations/0199a1c2-…/enrollments"
+{
+  "data": [
+    {
+      "id": "0199a1d0-…",
+      "automation_id": "0199a1c2-…",
+      "version": 1,
+      "workspace_id": null,
+      "subject": "0199…",
+      "run_id": "0199a1d0-…",
+      "status": "sleeping",
+      "error": null,
+      "created_at": "2026-10-26T08:00:00Z",
+      "finished_at": null
+    }
+  ],
+  "meta": { "current_page": 1, "per_page": 15, "total": 1, "last_page": 1 }
+}
+```
+
+An enrollment's `run_id` is a [workflow run](/docs/packages/workflows/#over-http): `GET /api/workflows/runs/{run_id}` shows every node it went through.
+
+## From the command line
+
+| Command | |
+|---|---|
+| `automations:list` | Automations with their status and published version |
+| `automations:catalog` | The registered triggers, conditions and actions |
+
+The enrollments' runs are workflow runs: `workflows:list --workflow automation` lists them.
+
+## Testing
+
+Automations run on the same engine as workflows, so the [workflow test setup](/docs/packages/workflows/#testing) runs them: a fixed clock, no queue (enrollments run inline in the emit), and `tick()` after moving the clock.
+
+```rust title="tests/deals.rs"
+#[tokio::test]
+async fn won_deals_get_a_thank_you_task() {
+    let app = app_with_fixed_clock().await; // DatabaseModule, EventsModule, WorkflowsModule, CrmAutomationsModule
+    let automations = app.get::<Automations>().await;
+    let db = app.get::<Db>().await;
+
+    let uow = db.uow(None, None).await;
+    let draft = automations
+        .create_from_template(&uow, "big-deal-follow-up", None, None)
+        .await
+        .unwrap();
+    automations.publish(&uow, draft.id, None).await.unwrap();
+    uow.commit().await.unwrap();
+
+    let owner = Uuid::now_v7();
+    let deal = DealWon { deal_id: Uuid::now_v7(), owner_id: owner, amount_cents: 2_500_000, workspace_id: None };
+    let simulation = automations
+        .simulate(draft.id, SimulateInput { event: serde_json::to_value(&deal).unwrap(), ..SimulateInput::default() })
+        .await
+        .unwrap();
+    let path: Vec<&str> = simulation.steps.iter().map(|s| s.node.as_str()).collect();
+    assert_eq!(path, ["thank", "a-day-later", "big-deal", "call"]);
+
+    app.get::<EventBus>().await.emit(deal).await.unwrap();
+    // ... move the clock a day, then `workflows.tick()`: the call task exists.
+}
+```
+
+The routes take the usual [HTTP tests](/docs/testing/http-tests/): grant `automations.view` and `automations.manage` to the user you act as.
+
+## Reference
+
+| `Automations` method | |
+|---|---|
+| `catalog()`, `templates()`, `template(key)` | The registered blocks and templates |
+| `validate(&definition)` | `Validation { valid, issues }` |
+| `create(&uow, new)`, `create_from_template(&uow, key, workspace, name)` | A draft |
+| `get(id)`, `details(id)`, `list(&query)`, `page(scope, page)`, `versions(id)` | Reads |
+| `update(&uow, id, changes)`, `publish(&uow, id, by)`, `pause`, `resume`, `delete` | Changes |
+| `simulate(id, input)` | A dry run |
+| `enroll(id, event)`, `enrollments(id, page)`, `enrollment(id)`, `cancel_enrollment(id)` | Enrollments |
+
+| `WorkflowsError` | Response |
+|---|---|
+| `UnknownAutomation`, `UnknownEnrollment`, `UnknownTemplate` | 404 `automation_not_found`, `enrollment_not_found`, `automation_template_not_found` |
+| `InvalidDefinition` | 400 `validation_failed`, with `errors` by JSON pointer |
+| `Invalid` | 400 `invalid_automation_event`, `unknown_automation_version` |
+| `Conflict` | 409 `automation_not_active`, `automation_not_paused`, `automation_not_published`, `enrollment_finished` |
+
+<LinkCards>
+  <LinkCard href="/docs/packages/workflows/" title="Workflows">
+    The durable engine enrollments run on, for sequences you write in code.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    What triggers and waits listen to.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/introduction/" title="Workspaces">
+    Automations per workspace.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The JSON error shape and every code.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,6 @@
+---
+source: crates/navree-schema/tests/schema/create.rs
+expression: "schema.statements().join(\";\\n\")"
+---
+CREATE TABLE `users` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, `email` VARCHAR(191) NOT NULL, `created_at` TIMESTAMP NULL, `updated_at` TIMESTAMP NULL) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci' ENGINE = InnoDB;
+ALTER TABLE `users` ADD UNIQUE `users_email_unique`(`email`)

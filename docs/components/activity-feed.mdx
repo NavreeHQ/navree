@@ -1,0 +1,114 @@
+---
+title: "ActivityFeed"
+description: "What people did lately, newest first: a round tone icon, who did what, a tag and a meta line, with a live dot and a notice for rows left out."
+---
+
+<UiPreview example="activity-feed/default" />
+
+`ActivityFeed` is a card of recent activity. Each row has a round icon in a tone, an actor, a verb in the tone's colour, what it was done to, a small tag, a line of facts and the time. The header holds a title, an optional live dot, a summary line and any control you want, such as a period select.
+
+```rust
+use navree::ui::*;
+
+ActivityFeed::new("activity", "Recent activity")
+    .live()
+    .summary("09:30 to 10:30 · 4 events")
+    .item(
+        ActivityItem::new("Manpreet Gill", "replied to")
+            .object("Ticket 2041")
+            .tone(Tone::Success)
+            .icon(icons::MESSAGE_SQUARE_REPLY)
+            .at(1_793_592_667)
+            .tag("Billing")
+            .meta(Meta::icon(icons::TIMER, "First reply in 12 min"))
+            .href("/tickets/2041"),
+    )
+```
+
+The feed is plain markup. On its own it ships no script. Put it in a [Region](/docs/ui/regions/) and it takes new rows as a server-sent event stream announces them.
+
+## When to use it
+
+<UiChoose name="happened" current="ActivityFeed" />
+
+## Anatomy
+
+<UiAnatomy component="activity-feed" />
+
+## Rows
+
+`ActivityItem::new(actor, verb)` reads as a sentence: "Manpreet Gill" "replied to" "Ticket 2041". The actor and the object are user text, so each sits in a `<bdi>` and keeps its own direction. `.tone(...)` colours the icon and the verb; `.icon(...)` picks the glyph. The icon is a circle; the feed has no initials and no avatars.
+
+`.at(unix_seconds)` prints the clock time in the feed's zone (`.time_zone(name, offset)`, which also writes "Times in …" under the title). `.time_text("2 min ago")` prints your own words instead. With the `time` feature, `.zone(&zone)` takes a navree-time `CurrentZone` in place of `.time_zone(name, offset)`.
+
+`.href(url)` makes the actor a link and the whole row a click target. Point it at a page, or at a page that opens a [Sheet](/docs/components/sheet/) with the details. It is a real link: it opens in a new tab with a middle click, and it works with JavaScript off.
+
+`.muted()` quiets a row, for work a machine did. `.id("event-42")` gives it an id, which a live feed uses to tell a row it already has from a new one.
+
+## The header
+
+`.summary(...)` writes one line under the title. `.period_select(action, region_id, select)` puts a period select at the end: choosing an option fetches the page with the choice in the query and morphs the region in place, and with JavaScript off an Apply button does the same as a plain form. For any other control, `.period(node)` takes any node.
+
+## Rows left out
+
+Mark a row `.filtered()` and it stays in the page, out of sight. The feed shows a notice: "2 items were hidden. Show them". Ticking the box shows the rows in place with no script and no request; a close button dismisses the notice when the runtime is present. A live feed keeps the notice in the page even when nothing is left out (hidden), so a filtered row that arrives later is counted in it: the count follows the rows, and a notice the reader dismissed stays dismissed.
+
+<UiPreview example="activity-feed/hidden" />
+
+## Loading, failed and empty
+
+<UiPreview example="activity-feed/states" />
+
+`.loading()` shows placeholder rows. `.failed("…")` shows an alert in place of the rows and keeps the header, so the reader can still change the period; add `.retry(url)` for a "Try again" link. With no rows the feed shows `Empty`, in your words if you give them: `.empty(Empty::new("Quiet for the last hour"))`. Say which of the two cases it is: an empty hour is not an empty history.
+
+## Height
+
+`.height(FeedHeight::Md)` stops the list growing taller than about 27 rem and scrolls it inside the card. The heights are a closed set (`Sm`, `Md`, `Lg`), because the content security policy allows no `style` attribute.
+
+## Live
+
+`.live()` shows a dot and a word beside the title. It follows the stream of the region it is in:
+
+| State | Dot | Word |
+|---|---|---|
+| Connecting | grey | Connecting |
+| Connected | green, pulsing | Live |
+| Connection lost, trying again | amber | Reconnecting |
+| Page hidden | grey | Paused |
+| The stream said stop (`204`, `401`, `403`) | grey | Not live |
+
+Without the runtime nothing is connected, so the dot is not shown at all.
+
+`.in_region(region_id, src, stream, cursor)` wraps the feed in a [Region](/docs/ui/regions/#live-from-a-stream) that listens to `stream`. When the stream speaks, the region asks `src?after=<cursor>` for the rows that are new, adds them at the top and keeps the newest cursor.
+
+<UiPreview example="regions/live" />
+
+## Words
+
+The words the feed prints are in `DisplayLabels`: pass your own with `.labels(...)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The feed is a group named by its title, not a landmark region, so a page can hold several. The rows are an ordered list.
+- A linked row is a link on the actor's name, so Tab reaches it and Enter opens it. The whole row is its click target, and its focus ring surrounds the row.
+- The icon is hidden from assistive technology. The verb says what happened, so the tone's colour is never the only signal.
+- The live word is a status, so a change from "Live" to "Reconnecting" is announced once. New rows are announced too, once they stop coming and with the total: a feed made with `in_region` says "3 new items" politely, not once a row.
+- The hidden-items checkbox is a real checkbox, reached by Tab and toggled with Space.
+
+</UiA11y>
+
+## API
+
+### ActivityFeed
+
+<UiProps type="ActivityFeed" />
+
+### ActivityItem
+
+<UiProps type="ActivityItem" />
+
+### FeedHeight
+
+<UiProps type="FeedHeight" />

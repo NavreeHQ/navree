@@ -1,0 +1,86 @@
+[package]
+name = "navree-sso"
+description = "Navree SsoModule: SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified email domains and just-in-time provisioning."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "sso", "saml", "oidc"]
+categories = ["authentication"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## Entry points for the fuzz targets in `fuzz/` (`navree_sso::fuzzing`). Not
+## part of the API.
+fuzzing = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+base64 = { workspace = true }
+chrono = { workspace = true }
+# SAML's HTTP-Redirect binding deflates the request (miniz_oxide, pure Rust).
+flate2 = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+navree-auth = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# `jose`: XML signatures (RSA-SHA256/384/512, ECDSA) and ID tokens are
+# verified on `ring`; X.509 certificates are read for their public keys.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+# The SSO tables are models (`sso_connection::Model`, ...); users and
+# workspaces are read as navree-auth's and navree-workspace's models.
+navree-orm = { workspace = true }
+navree-workspace = { workspace = true }
+quick-xml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-access = { workspace = true }
+navree-api = { workspace = true }
+# The enforcement tests read magic links and sign-in codes from the array
+# mail transport (MailModule needs ViewModule).
+navree-mail = { workspace = true }
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+# The Keycloak tests sign in on Keycloak's login page with a client that keeps
+# cookies and does not follow redirects by itself.
+reqwest = { workspace = true }
+rustls = { workspace = true }
+# The tests check real SHA-1 signatures (refused by the verifier) to prove
+# the canonical form matches other signers'.
+ring = { workspace = true }
+# Checks the canonical form against real signed samples that still use SHA-1
+# digests (which the verifier itself refuses).
+sha1 = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = { workspace = true }

@@ -1,0 +1,18 @@
+# harbor: status on {{ server.name }}
+if [ -d {{ base }}/releases ]; then
+	cd {{ base }}
+	echo "live=$(cat .harbor-live 2> /dev/null || true)"
+	if [ -L current ]; then
+		echo "current=$(basename "$(readlink current)")"
+	fi
+	echo "releases=$(ls -1 releases | grep -c -v -e '\.partial$' -e '\.tar\.gz$' || true)"
+fi
+{% for unit in units %}
+echo "unit={{ unit }} $(systemctl is-active {{ unit }} 2> /dev/null || true)"
+{% endfor %}
+echo "disk=$(df -P / | awk 'NR == 2 {print $5, $2}')"
+echo "memory=$(awk '/^MemTotal:/ {t = $2} /^MemAvailable:/ {a = $2} END {print t, a}' /proc/meminfo)"
+echo "load=$(cut -d' ' -f1 /proc/loadavg)"
+if [ -f /var/run/reboot-required ]; then
+	echo "reboot=yes"
+fi

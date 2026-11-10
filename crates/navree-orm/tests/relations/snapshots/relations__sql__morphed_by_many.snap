@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "per_dialect(|dialect|\n{ Tag { id: 4, ..Tag::default() }.labeled_deals().to_sql(dialect) })"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", "taggables"."tag_id" AS "pivot_tag_id", "taggables"."taggable_id" AS "pivot_taggable_id", "taggables"."taggable_type" AS "pivot_taggable_type" FROM "deals" INNER JOIN "taggables" ON "deals"."id" = "taggables"."taggable_id" WHERE "taggables"."tag_id" = $1 AND "taggables"."taggable_type" = $2 AND "deals"."deleted_at" IS NULL
+  values: [I64(4), String("deal")]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`owner_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at`, `taggables`.`tag_id` AS `pivot_tag_id`, `taggables`.`taggable_id` AS `pivot_taggable_id`, `taggables`.`taggable_type` AS `pivot_taggable_type` FROM `deals` INNER JOIN `taggables` ON `deals`.`id` = `taggables`.`taggable_id` WHERE `taggables`.`tag_id` = ? AND `taggables`.`taggable_type` = ? AND `deals`.`deleted_at` IS NULL
+  values: [I64(4), String("deal")]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", "taggables"."tag_id" AS "pivot_tag_id", "taggables"."taggable_id" AS "pivot_taggable_id", "taggables"."taggable_type" AS "pivot_taggable_type" FROM "deals" INNER JOIN "taggables" ON "deals"."id" = "taggables"."taggable_id" WHERE "taggables"."tag_id" = ? AND "taggables"."taggable_type" = ? AND "deals"."deleted_at" IS NULL
+  values: [I64(4), String("deal")]

@@ -1,0 +1,18 @@
+{% extends "mail/demo/layout.html" %}
+{% block title %}Your week in System{% endblock %}
+{% block content %}
+<h1>Your week in System</h1>
+<p>{{ week }}. Hello {{ name }}, here is what moved.</p>
+<table>
+<tr><th>Tasks finished</th><th>Tasks created</th><th>Active projects</th></tr>
+<tr><td><strong>{{ done }}</strong></td><td><strong>{{ created }}</strong></td><td><strong>{{ active_projects }}</strong></td></tr>
+</table>
+<h2>Worth a look</h2>
+<table>
+{% for highlight in highlights %}
+<tr><td>{{ highlight }}</td></tr>
+{% endfor %}
+</table>
+<p><a class="button" href="https://system.test/board">Open the board</a></p>
+<p class="muted">You get this digest every Monday. You can change that in your notification settings.</p>
+{% endblock %}

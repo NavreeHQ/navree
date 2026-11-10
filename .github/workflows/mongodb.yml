@@ -1,0 +1,108 @@
+# navree-mongo's suite against a real server: MongoDB 8.0 as a single-node
+# replica set (transactions need one), on pushes to main and pull requests
+# that touch the MongoDB crate or what it builds on (navree-testing included,
+# for the dev-dependency). The workspace sets no compiler wrapper, so nothing
+# here needs sccache.
+name: MongoDB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-mongo/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-orm-macros/**"
+      - "crates/navree-schema/**"
+      - "crates/navree-db/**"
+      - "crates/navree-config/**"
+      - "crates/navree-contracts/**"
+      - "crates/navree-kernel/**"
+      - "crates/navree-telemetry/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/mongodb.yml"
+  pull_request:
+    paths:
+      - "crates/navree-mongo/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-orm-macros/**"
+      - "crates/navree-schema/**"
+      - "crates/navree-db/**"
+      - "crates/navree-config/**"
+      - "crates/navree-contracts/**"
+      - "crates/navree-kernel/**"
+      - "crates/navree-telemetry/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/mongodb.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navree-mongo:
+    # MongoDB refuses to start on Linux kernels 6.19 through 7.0.13 (a TCMalloc
+    # incompatibility; see the warning in the MongoDB 8.0 release notes), and
+    # the ubuntu-24.04 image from 2026-10-25 ships such a kernel. ubuntu-22.04
+    # still runs an older one. Move back to ubuntu-latest once its kernel is
+    # 7.0.14 or newer.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+      NAVREE_TEST_MONGODB_URL: mongodb://127.0.0.1:27017/navree_test?replicaSet=rs0
+      # Fail instead of skipping when the server is missing.
+      NAVREE_TEST_REQUIRE_SERVICES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start MongoDB 8.0 as a single-node replica set
+        run: |
+          # mongod sometimes exits right after starting on a fresh runner: show
+          # why, and start it again (up to three times) instead of failing.
+          echo "Linux kernel $(uname -r)"
+          ready=""
+          for start in 1 2 3; do
+            docker rm --force mongodb >/dev/null 2>&1 || true
+            docker run --detach --name mongodb --publish 27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+            for attempt in $(seq 1 30); do
+              if [ "$(docker inspect --format '{{.State.Running}}' mongodb)" != "true" ]; then
+                echo "mongod exited on start $start (exit code $(docker inspect --format '{{.State.ExitCode}}' mongodb)):" >&2
+                docker logs mongodb 2>&1 | tail -n 40 >&2
+                break
+              fi
+              if docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+                ready=yes
+                break
+              fi
+              sleep 2
+            done
+            [ -n "$ready" ] && break
+          done
+          if [ -z "$ready" ]; then
+            echo "MongoDB did not start" >&2
+            exit 1
+          fi
+          # The member's address is the one the tests reach it by.
+          docker exec mongodb mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          for attempt in $(seq 1 30); do
+            if [ "$(docker exec mongodb mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MongoDB did not become the replica set's primary" >&2
+          docker logs mongodb >&2
+          exit 1
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Test navree-mongo
+        run: cargo test -p navree-mongo

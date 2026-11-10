@@ -1,0 +1,140 @@
+---
+title: "DatePicker"
+description: "A date field you can type in or choose from a calendar. It posts an ISO date, works with JavaScript off, and fits a form that the server checks."
+---
+
+<UiPreview example="date-picker/default" />
+
+`DatePicker` is a text box with a button that opens a [Calendar](/docs/components/calendar/) in a popover. A person types the date the way their language writes it, or chooses it. The server gets one field: an ISO date such as `2026-11-12`.
+
+```rust
+use navree::ui::dates::*;
+use navree::ui::*;
+
+Field::new("due", "Due date")
+    .help("Type it as 11/30/2026, or pick it.")
+    .control(DatePicker::new("due").today(today))
+```
+
+Press the calendar button in the preview to open it.
+
+## When to use it
+
+Use a DatePicker for one day in a form: a due date, a birthday, a start. For a window with presets, use a [DateRangePicker](/docs/components/date-range-picker/). To show days or choose them in place, use a [Calendar](/docs/components/calendar/). For a day and a time together, use a [DateTimePicker](/docs/components/date-time-picker/).
+
+<UiChoose name="date-time" current="DatePicker" />
+
+## Anatomy
+
+<UiAnatomy component="date-picker" />
+
+## What posts, and what happens with JavaScript off
+
+A native `<input type="date">` comes first in the markup. It is the field that posts, and it is the whole control when JavaScript is off: the browser draws its own date field, with its own picker. With JavaScript on, the browser module hides that field and keeps its value, and a text box and a button take its place. A browser style rule, `@media (scripting: none)`, picks the one that shows, so a page needs no script to choose.
+
+The text box has no name. It never posts. The browser turns what is typed into an ISO date, or marks the box wrong and holds the form back. The server doesn't rely on that: it parses the posted ISO date, checks that it is a day, and holds it to the same rules the calendar showed.
+
+A `Field` ties its label to the native field. The browser module points the label at the box a person sees, so a click on the label focuses the box, and the box takes the field's `aria-invalid` and `aria-describedby`.
+
+## Typing a date
+
+The box reads dates by the rules of its locale.
+
+| Typed | Read as, in `en` |
+|---|---|
+| `11/3/2026`, `11-3-2026`, `11.3.2026`, `11 3 2026` | 3 November 2026. Any of `/ . - ,` or a space separates. |
+| `2026-11-03`, `2026/11/3` | The same: a first number of four digits is a year, in every locale. |
+| `Nov 3 2026`, `3 November 2026`, `Tue, Nov 3, 2026` | Month names work, in full, short, or the first letters, with or without accents. |
+| `11/3/26` | A two-digit year lands within 50 years of today. |
+| `20261103`, `110326` | Eight and six digits are read by the locale's order. |
+| `٣/١١/٢٠٢٦`, `１１／３／２０２６` | Digits of any script count. |
+| `3/11` | Refused: no year. Nothing is guessed. |
+| `31/04/2026`, `29/02/2025` | Refused: there is no such day. |
+
+The browser and the server read text by one set of rules, and one list of cases holds them together. `DateLocale::parse_date` is the server's reader, for an API or an import that takes typed dates.
+
+When the text can't be read, or the day can't be chosen, the box is marked `aria-invalid`, the message says what to do with an example in the locale's own order, and the form won't send until it is fixed.
+
+## A value, Today and Clear
+
+`.value(date)` sets the date. `.clearable()` adds a button that empties the picker. `.with_today()` adds a Today button under the calendar. Clearing, or emptying the box, empties the field.
+
+<UiPreview example="date-picker/options" />
+
+## States
+
+`.invalid(true)` marks the box. Sent back a value that isn't a date, `.value_text(text)` shows it as it was typed. `.disabled(true)` turns the picker off and posts nothing. `.read_only()` shows the date and still posts it.
+
+<UiPreview example="date-picker/states" />
+
+## One button
+
+`.style(PickerStyle::Button)` draws one button that shows the date, for a toolbar or a row of filters. It has no box to type in.
+
+<UiPreview example="date-picker/button" />
+
+## A date of birth
+
+`.caption(CaptionLayout::Dropdowns)` puts lists of months and years in the calendar.
+
+<UiPreview example="date-picker/birth" />
+
+## Languages
+
+<UiPreview example="date-picker/locales" />
+
+## In a form
+
+`#[form(widget = date_picker)]` draws a field as a DatePicker, and `NaiveDate` reads it back. `FormView::dates(locale, today)` sets the language and today for every picker in the form.
+
+```rust
+#[derive(Deserialize, Validate, Form)]
+struct Booking {
+    /// Start date
+    #[validate(skip)]
+    #[form(widget = date_picker, date_rules = open_days, help = "A weekday in the next three months.")]
+    start: NaiveDate,
+    /// End date
+    #[validate(skip)]
+    #[form(widget = date_picker)]
+    end: Option<NaiveDate>,
+}
+
+fn open_days() -> DateRules {
+    DateRules::new().min(today).disable_weekdays([Weekday::Sat, Weekday::Sun])
+}
+```
+
+`date_rules = open_days` names the rules once. The picker is drawn with them, so the calendar shows the weekends off, and the server holds the posted value to them: a Saturday posted by hand is refused under the field with "That date isn't available." The words are English, or the field's own `error = "..."`. `time_rules = ...` does the same for a time picker. A `#[validate(custom(...))]` rule is for what the rules can't say, such as a rule that depends on another field, or a message in another language.
+
+With rules or without, the server always refuses a date outside the years 1 to 9999, and a time with a leap second (`16:59:60`) or a fraction of a second.
+
+The server's message sits under the field, and the cursor goes to the box. A form sent back keeps what was typed, whether the browser sent the page again or the runtime added the errors.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves from the box to the button, then on. |
+| `↓` in the box | Opens the calendar on the chosen day, or today. |
+| `Enter` in the box | Reads what is typed. The form then sends as usual. |
+| `Esc` | Closes the calendar and keeps the value. Focus goes back to where it was. |
+| Calendar keys | See [Calendar](/docs/components/calendar/#keyboard-and-accessibility). |
+
+- The popover is `role="dialog"`, named "Choose date" in the locale's words.
+- A wrong box has `aria-invalid="true"` and its message is announced.
+- The hidden native field is out of the tab order and hidden from assistive technology while the box is in use.
+
+</UiA11y>
+
+## API
+
+### DatePicker
+
+<UiProps type="DatePicker" />
+
+### PickerStyle
+
+<UiProps type="PickerStyle" />

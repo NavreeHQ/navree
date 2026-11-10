@@ -1,0 +1,94 @@
+---
+title: "NavigationMenu"
+description: "The links of a site, some of them opening panels of more links. Each panel is a popover, so it opens with no script, and the arrow keys, hover and closing when focus leaves come with the script."
+---
+
+<UiPreview example="navigation-menu/default" />
+
+`NavigationMenu` draws the main links of a site. A top-level item is a link, or a button that opens a panel of links, each with an optional line about where it goes, and an optional block of content before them. Each panel is the browser's `popover`, so a button opens it with no script, `Esc` closes it, and a press outside closes it. The `menubar` module adds opening on hover, closing when focus leaves, and the arrow keys between the top-level items. The `overlay` module places a panel under its button.
+
+It follows the *disclosure navigation* pattern, not the menu pattern. A panel is not a menu: it holds ordinary links, and `Tab` walks through them.
+
+```rust
+use navree::ui::*;
+
+NavigationMenu::new("site-nav", "Main")
+    .item(
+        NavMenuItem::panel("Products")
+            .entry(
+                NavMenuLink::new("Invoices", "/invoices")
+                    .description("Send GST invoices from Ludhiana to Kochi in one click."),
+            )
+            .entry(NavMenuLink::new("Payments", "/payments")),
+    )
+    .item(NavMenuItem::link("Pricing", "/pricing"))
+```
+
+`NavigationMenu::new(id, label)` names the `nav` for assistive technology. The id also starts the ids of its panels (`site-nav-p1`, `site-nav-p2`), so keep it unique on the page.
+
+## Items
+
+`NavMenuItem::link(label, href)` is a link in the bar. `NavMenuItem::panel(label)` is a button that opens a panel, and `.entry(NavMenuLink::new(label, href))` adds a link to it. `.description(text)` on a link adds a line under its name. `.featured(content)` on a panel adds a block before the links, such as a promotion.
+
+<UiPreview example="navigation-menu/default" />
+
+The preview shows a panel open in place. On a real page it opens when the reader presses its button or rests the pointer on it.
+
+## Links only
+
+<UiPreview example="navigation-menu/links" />
+
+## The current page
+
+`.current(true)` on a link marks it with `aria-current="page"` and a line under it. A button whose panel holds the current page is marked too, so the reader sees which part of the site they are in.
+
+<UiPreview example="navigation-menu/current" />
+
+## With the pointer
+
+Resting the pointer on a button opens its panel after a short pause, so a pointer passing over does not. With a panel open, moving to the next button switches at once. Moving the pointer away closes the panel after a moment, and moving into the panel keeps it. A press on a button the pointer has just opened keeps the panel open instead of closing it.
+
+## On a phone
+
+Below 40rem the items stack, one to a line, and each button takes the full width. A panel opens under its button and stays inside the window.
+
+## When to use it
+
+Use it for the main links of a marketing site or a docs site, where a few sections hold many pages. For the navigation of an application, use the [app shell](/docs/ui/app-shell/). For actions, not pages, use a [DropdownMenu](/docs/components/dropdown-menu/) or a [Menubar](/docs/components/menubar/).
+
+## Anatomy
+
+<UiAnatomy component="navigation-menu" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space` on a button | Open or close its panel. Focus stays on the button. |
+| `Tab` | From an open button, moves into the panel's links, and on through them. Leaving the item closes its panel. |
+| `Esc` | Closes the panel and returns focus to its button. |
+| `Right`, `Left` (swapped in a right-to-left page) | Move between the top-level items, and round at the ends. An open panel closes. |
+| `Home`, `End` | Move to the first or last top-level item. |
+
+- The root is a `nav` with the name you gave it, holding lists of links.
+- A button has `aria-controls` naming its panel. The `menubar` module writes `aria-expanded` and keeps it right. With no script, the browser's own state for a button that opens a popover is the true one, so no stale value is written.
+- The current page has `aria-current="page"`.
+- Nothing has a menu role, because nothing is a menu.
+
+</UiA11y>
+
+## API
+
+### NavigationMenu
+
+<UiProps type="NavigationMenu" />
+
+### NavMenuItem
+
+<UiProps type="NavMenuItem" />
+
+### NavMenuLink
+
+<UiProps type="NavMenuLink" />

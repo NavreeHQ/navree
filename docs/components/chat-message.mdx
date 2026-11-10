@@ -1,0 +1,76 @@
+---
+title: "ChatMessage"
+description: "One message of a conversation: what the reader wrote as plain text, what the assistant wrote as Markdown from a source you do not control, with Stop while it is written."
+---
+
+<UiPreview example="chat-message/default" />
+
+`ChatMessage` is one message of a [Conversation](/docs/components/conversation/). `ChatMessage::user` is what the reader wrote and `ChatMessage::assistant` is what the assistant wrote. Both take a key that names the message in the list, a cursor that places it, and the text.
+
+```rust
+use navree::ui::genui::*;
+
+let labels = ChatLabels::default();
+Conversation::new("kitchen-help", "/assistant/7/items").items([
+    ChatMessage::user("m1", "0001", "Which city ordered the most this month?")
+        .into_item(&labels),
+    ChatMessage::assistant(
+        "m2",
+        "0002",
+        "**Ludhiana** ordered the most: 1,240 orders worth ₹18,40,000.",
+    )
+    .into_item(&labels),
+])
+```
+
+## What the words may be
+
+What the reader wrote is plain text: its lines are kept and nothing in it is read as markup. What the assistant wrote is drawn with [Markdown](/docs/components/markdown/) from a source you do not control: no raw HTML, no pictures, links checked and marked with their host, headings starting at level 3, and at most 64 KB. A reply from a model can have lists, tables and code, and it cannot add an element, a script or an image that sends what the page knows to another site.
+
+## States
+
+An assistant's message has a state, set with `.state(..)`:
+
+- `ChatState::Done` is the default.
+- `ChatState::Writing` marks a message still being written. It shows a spinner and "Writing…", sets `aria-busy`, and is listed under its writing key (the key with `.w`, from `writing_key`), so it is never announced. `.stop(url, csrf)` adds a Stop button that posts to `url`.
+- `ChatState::Stopped` shows a "Stopped" badge: the reader stopped the answer, and what was written stays.
+- `ChatState::Failed` shows an alert, "The assistant couldn't answer. Try again."
+
+<UiPreview example="chat-message/states" />
+
+When the message is done it comes back under its own key, and the conversation announces it once.
+
+## Who and when
+
+A reader's messages lean to the end of the line and the assistant's to the start. The header says "You" or "Assistant", or the name you give with `.author(..)`. `.time(..)` adds a `<time>` you drew below the message.
+
+## Reasoning and sources
+
+`.with(..)` adds parts below the words: [Reasoning](/docs/components/tool-call-card/#reasoning), the sources of the answer ([Sources](/docs/components/sources/)), or both.
+
+<UiPreview example="chat-message/parts" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A message is a plain element in the conversation's list. Who wrote it is in its header, in words.
+- A finished assistant message is announced once, with "The assistant answered" and the start of its words. What the reader wrote is never announced back.
+- The Stop button is a real form button, so it works with no script, and it is the only control a message draws.
+- The side a message leans to is only visual. Inside `Direction::rtl`, start and end swap.
+
+</UiA11y>
+
+## API
+
+### ChatMessage
+
+<UiProps type="ChatMessage" />
+
+### ChatState
+
+<UiProps type="ChatState" />
+
+### ChatRole
+
+<UiProps type="ChatRole" />

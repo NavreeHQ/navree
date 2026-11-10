@@ -1,0 +1,223 @@
+---
+title: "DataTable"
+description: "One Rust definition drives the URL, the query, the drawing, the export and bulk actions: sort, filter, page, select and act, with everything but the selection in the URL."
+---
+
+<UiPreview example="data-table/default" />
+
+`DataTable` draws rows from a query, and `#[derive(TableRow)]` on one struct says what can be done with each column. The same definition parses the URL into a `TableQuery`, builds the query through navree-orm with an allow-list, draws the table, exports CSV and checks bulk actions. Sort, filters, the page, the page size, hidden columns, widths and density live in the URL, so back, forward, reload and a shared link restore them, and it all works with JavaScript off. The [store example app](/showcase/store/) pages lakhs of orders with one.
+
+```rust title="src/deals/table.rs"
+#[derive(Clone, TableRow)]
+#[table(sort = "-amount", per = 5, per_pages(5, 25, 100))]
+pub struct Deal {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, sticky, filter = text, link = "/deals/{id}", label = "Deal")]
+    pub title: String,
+    #[col(sortable, hide_on_mobile)]
+    pub company: &'static str,
+    #[col(badge = tone)]
+    pub stage: &'static str,
+    #[col(sortable, numeric, filter = range, label = "Amount (₹)")]
+    pub amount: Money,
+    #[col(sortable, filter = date, label = "Closes")]
+    pub closes_on: chrono::NaiveDate,
+}
+```
+
+In a handler, `TableQuery<Deal>` is an extractor. With the `ui` and `orm` features of `navree` (both on by default), `query.load` runs it on a model that derives `TableRow` itself. `query.load_as` maps each model record to a separate row type when the rows join or rename fields:
+
+```rust title="src/deals/pages.rs"
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell.page("Deals").body(DataTable::new("deals", &query, &page).caption("Deals")))
+}
+```
+
+The previews on this page draw five rows from memory with `TablePage::new(rows, total)`, which is what `load` returns.
+
+## Pages, not thousands of rows
+
+Keep a table paged. 25 rows to a page is the default, and `per_pages` lets a reader choose another size. Each sort, filter or page is then one small request, and the browser redraws 25 rows. Measured on a slow phone (4x CPU, Slow 4G), a sort of a 25-row page took about 310 ms, the request included. A page holding 1,000 rows took 1.2 s to sort by a column of numbers, though it sorted them in the browser with no request: that time is the browser laying out a thousand rows, and nothing makes it shorter but fewer rows. The numbers, and how they were taken, are under [Speed](#speed).
+
+## When to use it
+
+<UiChoose name="data" current="DataTable" />
+
+## Anatomy
+
+<UiAnatomy component="data-table" />
+
+## Columns
+
+| Column option | Means |
+|---|---|
+| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` (or `text`, `money`, `float`, `decimal`, `date`, `datetime`, `bool`, `uuid`) when filter values bind as another type than the field's; `source = "companies.name"` when the column has another name |
+| `sticky`, `sticky_end`, `hidden`, `locked`, `hide_on_mobile`, `width = 240`, `group = "Address"` | where it sits |
+| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads; `badge = tone` names a function that takes `&value` and returns the badge's `BadgeVariant`, and `options = LIST` shows the label of the matching `(value, label)` pair |
+
+| On the table | Means |
+|---|---|
+| `#[table(cursor)]` | keyset pages, for huge tables |
+| `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't count, with Previous and Next only |
+| `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
+
+## The URL
+
+A table reads and writes the same list-query names as the API, so a link to a table and a request to the API are written alike. What each operator means, and how a Rust endpoint reads the query, is on the [list queries](/docs/basics/list-queries/) page. The [typed client](/docs/frontend/typed-client/#list-queries) page covers the JavaScript side.
+
+```text
+/deals?filter[stage][in]=won,lost&filter[amount][gte]=500000&search=sutlej&sort=-amount&page=2&per_page=25
+```
+
+| Column filter | In the URL |
+|---|---|
+| `text` | `filter[title][contains]=sutlej` |
+| `select` | `filter[stage]=won` |
+| `multi`, `relation` | `filter[stage][in]=won,lost` |
+| `boolean` | `filter[active]=true` |
+| `range`, `date` | `filter[amount][gte]=1&filter[amount][lte]=9` |
+| empty | `filter[owner][null]=true` |
+
+- **Search and order.** `search=text` is the box above the table. `sort=-amount,title` sorts by up to four columns, and `-` means descending. `sort=` with nothing after it asks for no order.
+- **Pages.** A numbered table reads `page` and `per_page`; a `#[table(cursor)]` table reads `cursor`, `before` and `limit`. Each table ignores the other's names. The page size is always one the table offers. A cursor table's `cursor` and `before` are its own page state in the page's URL, written by its paging links: they are not the `next_cursor` and `prev_cursor` of a JSON `CursorPage`, and the two need not match.
+- **Its own state.** `cols`, `w`, `fb`, `density`, `open` and `count` belong to the table and are not part of the list query.
+- **Forgiving.** A table shows a page whatever the URL says. A value of the wrong kind, a column the definition doesn't list, or an operator a filter doesn't take is left out. The API answers the same mistakes with a 400 that names the parameter.
+
+## Selection and bulk actions
+
+`.bulk(url, actions)` adds a checkbox to each row and a bar of actions for the selection. The selection is kept per tab: ticked rows survive paging, sorting and filtering, and "all that match" survives paging and sorting and takes exclusions. An action posts the selection and the count the user saw; `BulkRequest::resolve` runs the same definition on your scoped query and refuses when the count or a row's version differs.
+
+<UiPreview example="data-table/bulk" />
+
+```rust title="src/deals/pages.rs"
+async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
+    let target = match request.resolve(Deal::query(), &uow).await? {
+        Ok(target) => target,
+        Err(refusal) => return Ok(request.refused(StatusCode::CONFLICT, refusal.message())),
+    };
+    let count = target.delete(&uow).await?;
+    Ok(request.done(format!("Deleted {count}.")))
+}
+```
+
+## Filters under the headers
+
+`.filter_row()` puts each column's filter under its header instead of in a popover. `.filter_bar()` puts them in a bar over the table, where the reader chooses which show.
+
+<UiPreview example="data-table/filter-row" />
+
+## Counts and amounts in lakhs and crores
+
+The count under the table (`Showing 1 to 25 of 12,34,567 results`) and the cells of a `Money` column group their digits as `TableLabels::grouping` says: by thousands (`1,234,567`) by default, in lakhs and crores (`12,34,567`) with `Grouping::Indian`. A table that takes its words from navree-i18n (`TableLabels::from_locale(&locale)`) gets the grouping of the locale: `en-IN` and `hi` group in lakhs, `en` and `de` by thousands. To set it yourself:
+
+```rust
+let labels = TableLabels { grouping: Grouping::Indian, ..TableLabels::default() };
+DataTable::new("deals", &query, &page).labels(&labels)
+```
+
+`Money::display_grouped(Grouping::Indian)` writes one amount the same way (`12,34,567.50`), and `Money::parse` reads either grouping back.
+
+## Compact rows
+
+`density=compact` in the URL, set from the table's view options, makes rows shorter.
+
+<UiPreview example="data-table/compact" />
+
+## Empty, loading and failed
+
+`.empty(empty)` shows an [Empty](/docs/components/empty/) when no row matches, `.loading()` skeleton rows, and `.failed(message)` an error with a way to try again.
+
+<UiPreview example="data-table/states" />
+
+## Sorting in the browser
+
+When a page holds every row of its result (the first page, with nothing after it), a click on the heading of a column of numbers or dates sorts the rows in the browser at once, and the heading's arrow moves with them. The runtime still follows the link, and the server's answer has the last word: it confirms the order and redraws the rest of the table. While it is on its way the table isn't marked busy, since it already shows the answer.
+
+The browser sorts only what it can order exactly as the database does: numbers and dates whose cells show the value the column holds, empty cells first, ties by key in the column's direction. Every cell of such a column carries its value, so a cell drawn with `.cell(name, fn)` sorts by the value, not by what it shows. Text asks the server, since a database orders it by its own collation (case, accents), and so does a column that shows something other than what it sorts by, such as a company's name for a company id. An order by several columns, filters and search always ask the server. If the server can't answer, the rows, the headings and the table's form go back to the last order it confirmed.
+
+## Several sticky columns at the end
+
+`sticky` keeps a column at the start while the table scrolls sideways, and `sticky_end` keeps one at the end. A table can hold several of each (the stylesheet places up to four of each from its own edge), and the row's menu, when the table has one, is the last of the end columns. A column is `sticky` or `sticky_end`, not both.
+
+## Searching words in a big table
+
+The search box matches the text anywhere in a column marked `search` (`SearchMode::Contains`, the default). It works on every database with no index, and no index can serve it, so the whole table is read: fine to some tens of thousands of rows, and about a quarter of a second at a million on MySQL 8.4 for a word a tenth of the rows hold (0.6 s for a word only one row holds, since every row is still read; the medians `apps/ui-table-proof/tests/search_million_sql.rs` measures). `SearchMode::Words` matches the words of the text in any order through the database's full-text index: in the same test it finds a word one row of a million holds in about 4 ms, counts the 100,000 rows that hold a common word in about a quarter of a second, and holds a counted words search under two seconds. It finds words, not fragments (`renew` does not find `renewal`), and SQLite has no full-text condition, so there it is an error at load.
+
+```rust
+let query = TableQuery::<Customer>::parse("/customers", raw_query)
+    .search_mode(SearchMode::Words);
+```
+
+Create the index in a migration. On PostgreSQL it is a text-search index. On MySQL and MariaDB it is a `FULLTEXT` index over exactly the `#[col(search)]` columns, in the same order: `FULLTEXT (title, notes)` for `title` and `notes`.
+
+## Typing and choosing
+
+A tick in a filter's list, a radio and a select apply at once. The search box and text filters wait for a pause in the typing: 100 ms, or what `.debounce(wait)` says, up to 5 s, for a search the database is slow to answer.
+
+## More on a table
+
+| Method | Means |
+|---|---|
+| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
+| `.cell(name, fn)` | draws a column from the whole row, into any component |
+| `.keyboard_grid()` | one tab stop, arrow keys, `Home`, `End`, `Page Up` and `Page Down` |
+| `.live(every)`, `.live_from(url)`, `.refreshable()` | refetches while the page is visible, or when a server-sent event stream speaks, keeping typing, focus and the selection |
+| `.views(&views, url)`, `.export(url)`, `.foot(col, cell)` | stored views, CSV export of the current filter, a footer row |
+| `.debounce(wait)` | how long typing in the search or a text filter waits for a pause: 100 ms unless this says otherwise |
+| `.prefetch()` | fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one, so the next state is often there before the click; off unless asked |
+
+## Limits
+
+- **One table per URL.** Its state lives in plain query parameters, so two tables on one page would share it: give the second its own route or [region](/docs/ui/regions/).
+- **NULL is the smallest value on every store:** ascending puts NULLs first, descending last. On PostgreSQL, index such a column as `(col NULLS FIRST, id)`.
+- **Huge tables** want an index per sort column, ending in the key. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages, a row added or deleted between pages moves what follows by one; `#[table(cursor)]` pages don't.
+- **Stored views** are kept where the rows are: the table `navree_ui_table_views` on an SQL database, which you create in a migration, and the collection of that name on MongoDB, which MongoDB creates with the first view (index `(owner, table_id)` for a long list).
+- **A row's actions** are links, or a small form each, inside the row. If you draw your own controls in a cell, keep it that way: a submit button in every row tied to one form by `form=` makes Chromium recount the form's controls across the page for each one that moves, which on a phone costs most of a second per sort at 1,000 rows.
+
+## Speed
+
+Measured on the proof app's table, with a box, a menu of two actions and details on every row, over SQLite. Chromium, driven by Playwright with DevTools throttling; medians of five runs. The slow phone is 4x CPU and Slow 4G (150 ms latency, 1.6 Mbit/s). On the Windows laptop these ran on, a 4x setting slows page work more than four times, so read the order of the numbers rather than the decimals.
+
+| Rows on the page | Sort | Tick a filter | Last key of a search | Next page | Open a row's details |
+|---|---:|---:|---:|---:|---:|
+| 25, paged (the default) | 314 ms | 309 ms | 398 ms | 327 ms | 279 ms |
+| 100, paged | 533 ms | 582 ms | 409 ms | 493 ms | 340 ms |
+| 1,000, all of them, sorted by a number in the browser | 1.2 s | 1.3 s | 409 ms | | 526 ms |
+| 11, all of them, sorted by a number in the browser | 37 ms | | | | |
+
+On a desktop with no throttling, a 25-row page sorts in 43 ms, a tick filters it in 44 ms, the last key of a search shows its result in 153 ms (100 of them the pause the table waits for), and a page of 1,000 rows sorts by a number in 228 ms.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves through the toolbar, the headers' sort links, the checkboxes and the row links. |
+| `Enter` | Sorts by a header, follows a row's link. |
+| Arrow keys, `Home`, `End`, `Page Up`, `Page Down` | With `.keyboard_grid()`, move between cells with one tab stop. |
+| `Esc` | Closes an open column menu, or a row's menu and returns to its button. |
+| `Enter`, `Space`, `Down`, `Up` on a row's menu button | Open the row's menu on its first or last item. |
+| `Down`, `Up`, `Home`, `End`, letters | Move through the items of an open row menu. |
+
+- The sorted header has `aria-sort`; the table has its caption; a refetch marks the table `aria-busy`.
+- A row's actions (`.row_actions(fn)`) are a menu: the button is named "Actions for" and the row's first column, and the items are links and small forms that post, with the keys of a [DropdownMenu](/docs/components/dropdown-menu/). `RowAction::destructive()` marks one, and `RowAction::disabled(true)` shows one that can't be taken. A row whose function returns no actions has no button.
+- Nothing a hover can fire changes anything: every action is a `POST`.
+
+</UiA11y>
+
+## API
+
+### DataTable
+
+<UiProps type="DataTable" />
+
+### BulkAction
+
+<UiProps type="BulkAction" />
+
+### RowAction
+
+<UiProps type="RowAction" />

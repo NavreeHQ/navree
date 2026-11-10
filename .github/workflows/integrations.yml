@@ -1,0 +1,388 @@
+# Connectors against real servers and emulators.
+#
+# rust-suites.yml covers the connectors whose server is one container away
+# (databases, brokers, S3, search, Mailpit over plain text). The connectors here
+# need more: a certificate no public authority signed, an IMAP server, an AWS
+# emulator, an identity provider, an LDAP server, a collector, a DNS server, a
+# Pub/Sub emulator, a host with systemd and sshd. scripts/integration-services.sh
+# starts them from scripts/services/integrations.yml and prints the NAVREE_TEST_*
+# variables the suites read; the suites are marked #[ignore] and run here with
+# `-- --ignored`.
+# NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server into a failure instead
+# of a skip.
+#
+# One job per group of servers, so a run starts only what its tests use. A
+# server that does not answer is started once more and then named in the
+# output of the step that starts them (with its log); the tests of the others
+# still run, and the job fails in the step after them:
+#
+# - mail:     SMTP over TLS to Mailpit with a trusted certificate, SES to an
+#             emulator, mail fetched from IMAP and POP3, Gmail's Pub/Sub push.
+# - identity: SAML and OpenID Connect sign-in against Keycloak, the LDAP source
+#             against OpenLDAP, the SCIM server driven by an independent SCIM
+#             client (scim2-cli).
+# - infra:    spans exported to an OpenTelemetry Collector, DNS lookups against
+#             CoreDNS and a DNS-over-HTTPS server, Dock starting every service
+#             of its catalog.
+# - harbor:   Harbor provisioning, deploying to and rolling back a real Ubuntu host
+#             (systemd and sshd in a container).
+# - sandbox:  the paid providers' own test and sandbox modes (mail, payments,
+#             text messages, model vendors), one request each, only for the
+#             providers whose keys are in the repository's secrets.
+#
+# The schedule is weekly, after rust-suites.yml. Run it by hand
+# (workflow_dispatch) after changing one of the connectors, and before a
+# release.
+name: Integrations
+
+on:
+  schedule:
+    # Sundays 05:17 UTC.
+    - cron: "17 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      mail:
+        description: Mail (SMTP over TLS, SES, IMAP and POP3, Pub/Sub)
+        type: boolean
+        default: true
+      identity:
+        description: Identity (Keycloak, OpenLDAP)
+        type: boolean
+        default: true
+      infra:
+        description: Infrastructure (OpenTelemetry Collector, DNS, Dock)
+        type: boolean
+        default: true
+      harbor:
+        description: Harbor on a real Ubuntu host
+        type: boolean
+        default: true
+      sandbox:
+        description: Providers' test and sandbox modes (needs their keys in secrets)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integrations-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Debug info makes test binaries several times larger and nothing here reads
+  # it; no incremental state is kept between runs.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  RUST_BACKTRACE: "1"
+  # A missing server fails a test instead of skipping it.
+  NAVREE_TEST_REQUIRE_SERVICES: "1"
+
+jobs:
+  mail:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mail)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binaries
+        run: |
+          # The images download while the compiler works.
+          scripts/integration-services.sh pull mail &
+          pulling=$!
+          cargo test --locked -p navree-mail --test mail --no-run
+          cargo test --locked -p navree-integrations --test integrations --no-run
+          wait "$pulling"
+
+      - name: Start the servers
+        id: servers
+        # A server that does not start is named in the output and fails the
+        # job in the step after the tests, but the tests of the others run.
+        continue-on-error: true
+        run: scripts/integration-services.sh start mail
+
+      - name: SMTP over TLS to Mailpit
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-mail --test mail real_servers -- --ignored --nocapture
+
+      - name: SES against Moto
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-mail --test mail ses_emulator -- --ignored --nocapture
+
+      - name: Inbound mail from IMAP and POP3 (GreenMail)
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-mail --test mail greenmail -- --ignored --nocapture
+
+      - name: Gmail push through the Pub/Sub emulator
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-integrations --test integrations pubsub -- --ignored --nocapture
+
+      - name: Fail the job when a server did not start
+        if: ${{ !cancelled() && steps.servers.outcome == 'failure' }}
+        run: |
+          echo "A server did not start: see the output of the step that starts them."
+          exit 1
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  identity:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.identity)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binaries
+        run: |
+          scripts/integration-services.sh pull identity &
+          pulling=$!
+          cargo test --locked -p navree-sso --test sso --no-run
+          cargo test --locked -p navree-dock --test docker --no-run
+          cargo test --locked -p navree-directory --test directory --no-run
+          wait "$pulling"
+
+      - name: Start the servers
+        id: servers
+        # A server that does not start is named in the output and fails the
+        # job in the step after the tests, but the tests of the others run.
+        continue-on-error: true
+        run: scripts/integration-services.sh start identity
+
+      - name: SAML and OpenID Connect sign-in against Keycloak
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-sso --test sso keycloak -- --ignored --nocapture --test-threads 1
+
+      - name: The LDAP source against OpenLDAP
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-directory --test directory openldap -- --ignored --nocapture
+
+      - name: The SCIM server driven by scim2-cli
+        if: ${{ !cancelled() }}
+        run: |
+          # The versions the test reads the output of (scim_client.rs).
+          python3 -m pip install --user scim2-cli==0.3.0 scim2-tester==0.4.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          scim2 --help > /dev/null
+          NAVREE_TEST_SCIM2_CLI=scim2 cargo test --locked -p navree-directory --test directory scim_client -- --ignored --nocapture
+
+      - name: Fail the job when a server did not start
+        if: ${{ !cancelled() && steps.servers.outcome == 'failure' }}
+        run: |
+          echo "A server did not start: see the output of the step that starts them."
+          exit 1
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  infra:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.infra)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binaries
+        run: |
+          scripts/integration-services.sh pull infra &
+          pulling=$!
+          cargo test --locked -p navree-observe --features otel --test observe --no-run
+          cargo test --locked -p navree-domains --test domains --no-run
+          cargo test --locked -p navree-mail --test mail --no-run
+          cargo test --locked -p navree-sso --test sso --no-run
+          wait "$pulling"
+
+      - name: Start the servers
+        id: servers
+        # A server that does not start is named in the output and fails the
+        # job in the step after the tests, but the tests of the others run.
+        continue-on-error: true
+        run: scripts/integration-services.sh start infra
+
+      - name: Spans exported to an OpenTelemetry Collector
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-observe --features otel --test observe collector -- --ignored --nocapture
+
+      - name: DNS lookups against CoreDNS and a DNS-over-HTTPS server
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test --locked -p navree-domains --test domains coredns -- --ignored --nocapture
+          cargo test --locked -p navree-mail --test mail coredns -- --ignored --nocapture
+          cargo test --locked -p navree-sso --test sso doh -- --ignored --nocapture
+
+      - name: Dock starts every service of its catalog
+        env:
+          NAVREE_TEST_DOCKER: "1"
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p navree-dock --test docker -- --include-ignored --nocapture
+
+      - name: Fail the job when a server did not start
+        if: ${{ !cancelled() && steps.servers.outcome == 'failure' }}
+        run: |
+          echo "A server did not start: see the output of the step that starts them."
+          exit 1
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  harbor:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.harbor)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Build the test binary and the host image
+        run: |
+          scripts/integration-services.sh pull harbor &
+          pulling=$!
+          cargo test --locked -p navree-harbor --test real_host --no-run
+          wait "$pulling"
+
+      - name: Start the host
+        run: scripts/integration-services.sh start harbor
+
+      - name: Provision twice, deploy, break a release and roll back
+        run: cargo test --locked -p navree-harbor --test real_host -- --ignored --nocapture
+
+      - name: Show the host's logs after a failure
+        if: ${{ failure() }}
+        run: |
+          docker exec navree-int-harbor-host journalctl --no-pager --lines 200 2>&1 || true
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-int-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  sandbox:
+    # Opt in by keys: a test whose provider has no secret here prints SKIPPED
+    # and passes. Tests are named sandbox_* and marked #[ignore]; each sends
+    # one request to the provider's test or sandbox mode (a test token, a
+    # sandbox domain, the mailbox simulator), so nothing is spent beyond a free
+    # tier. A crate that adds one lists its package in the command below.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.sandbox)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      # A provider without a key is skipped, not failed.
+      NAVREE_TEST_REQUIRE_SERVICES: ""
+      NAVREE_SANDBOX_RESEND_KEY: ${{ secrets.NAVREE_SANDBOX_RESEND_KEY }}
+      NAVREE_SANDBOX_MAILGUN_KEY: ${{ secrets.NAVREE_SANDBOX_MAILGUN_KEY }}
+      NAVREE_SANDBOX_MAILGUN_DOMAIN: ${{ secrets.NAVREE_SANDBOX_MAILGUN_DOMAIN }}
+      NAVREE_SANDBOX_MAILGUN_TO: ${{ secrets.NAVREE_SANDBOX_MAILGUN_TO }}
+      NAVREE_SANDBOX_MAILGUN_REGION: ${{ secrets.NAVREE_SANDBOX_MAILGUN_REGION }}
+      NAVREE_SANDBOX_SES_KEY_ID: ${{ secrets.NAVREE_SANDBOX_SES_KEY_ID }}
+      NAVREE_SANDBOX_SES_SECRET: ${{ secrets.NAVREE_SANDBOX_SES_SECRET }}
+      NAVREE_SANDBOX_SES_REGION: ${{ secrets.NAVREE_SANDBOX_SES_REGION }}
+      NAVREE_SANDBOX_SES_FROM: ${{ secrets.NAVREE_SANDBOX_SES_FROM }}
+      # The payment providers' test modes (navree-billing's opt-in suite, which
+      # rust-suites.yml also runs).
+      STRIPE_TEST_SECRET: ${{ secrets.STRIPE_TEST_SECRET }}
+      PADDLE_SANDBOX_KEY: ${{ secrets.PADDLE_SANDBOX_KEY }}
+      # The text-message providers (navree-notify's sandbox_ tests): Twilio's
+      # test credentials, a WhatsApp Cloud API test number, a Vonage trial
+      # account.
+      NAVREE_SANDBOX_TWILIO_SID: ${{ secrets.NAVREE_SANDBOX_TWILIO_SID }}
+      NAVREE_SANDBOX_TWILIO_TOKEN: ${{ secrets.NAVREE_SANDBOX_TWILIO_TOKEN }}
+      NAVREE_SANDBOX_META_TOKEN: ${{ secrets.NAVREE_SANDBOX_META_TOKEN }}
+      NAVREE_SANDBOX_META_PHONE_NUMBER_ID: ${{ secrets.NAVREE_SANDBOX_META_PHONE_NUMBER_ID }}
+      NAVREE_SANDBOX_META_TO: ${{ secrets.NAVREE_SANDBOX_META_TO }}
+      NAVREE_SANDBOX_VONAGE_KEY: ${{ secrets.NAVREE_SANDBOX_VONAGE_KEY }}
+      NAVREE_SANDBOX_VONAGE_SECRET: ${{ secrets.NAVREE_SANDBOX_VONAGE_SECRET }}
+      NAVREE_SANDBOX_VONAGE_FROM: ${{ secrets.NAVREE_SANDBOX_VONAGE_FROM }}
+      NAVREE_SANDBOX_VONAGE_TO: ${{ secrets.NAVREE_SANDBOX_VONAGE_TO }}
+      # The model vendors (navree-ai's sandbox_ tests): a key each, and the
+      # model to ask, a repository variable because a model name is no secret.
+      NAVREE_SANDBOX_ANTHROPIC_KEY: ${{ secrets.NAVREE_SANDBOX_ANTHROPIC_KEY }}
+      NAVREE_SANDBOX_ANTHROPIC_MODEL: ${{ vars.NAVREE_SANDBOX_ANTHROPIC_MODEL }}
+      NAVREE_SANDBOX_OPENAI_KEY: ${{ secrets.NAVREE_SANDBOX_OPENAI_KEY }}
+      NAVREE_SANDBOX_OPENAI_MODEL: ${{ vars.NAVREE_SANDBOX_OPENAI_MODEL }}
+      NAVREE_SANDBOX_GEMINI_KEY: ${{ secrets.NAVREE_SANDBOX_GEMINI_KEY }}
+      NAVREE_SANDBOX_GEMINI_MODEL: ${{ vars.NAVREE_SANDBOX_GEMINI_MODEL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Run the sandbox tests
+        shell: bash
+        run: |
+          mkdir -p target/logs
+          cargo test --locked -p navree-mail -p navree-notify -p navree-integrations -p navree-ai \
+            -- --ignored sandbox_ --nocapture 2>&1 | tee target/logs/sandbox.log
+          # Billing's suite is not ignored: without a key each test says SKIPPED and passes.
+          cargo test --locked --all-features -p navree-billing --test sandboxes -- --nocapture 2>&1 \
+            | tee -a target/logs/sandbox.log
+          echo "Providers skipped for want of a key:"
+          grep -h '^SKIPPED' target/logs/sandbox.log || echo "  none"

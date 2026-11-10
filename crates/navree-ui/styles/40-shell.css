@@ -1,0 +1,88 @@
+/*
+ * navree-ui's stylesheet: The application shell: sidebar, top bar, page frame and the layout primitives. Provenance: structure, slot names and
+ * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
+ * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
+ * Navree's own. See THIRD_PARTY.md.
+ */
+/* The app shell: sidebar 16rem wide, 3rem collapsed to icons, top bar 48px. */
+[data-slot=sidebar-wrapper]{display:flex;min-height:100dvh}
+[data-slot=sidebar]{position:sticky;top:0;display:flex;flex:none;flex-direction:column;width:var(--sidebar-w);height:100dvh;border-inline-end:1px solid var(--line);background:var(--ink-1);overflow:hidden;transition:width .1s}
+[data-slot=sidebar-header]{padding:.5rem}
+[data-slot=sidebar-brand]{display:flex;align-items:center;gap:.5rem;padding:.25rem;border-radius:var(--radius);color:inherit;text-decoration:none;&:hover{background:var(--ink-2)}}
+[data-slot=sidebar-logo]{display:flex;align-items:center;justify-content:center;flex:none;width:2rem;height:2rem;border-radius:var(--radius);background:var(--ink-3);color:var(--fg);& svg,& img{width:1.25rem;height:1.25rem}& img{object-fit:contain}}
+[data-slot=sidebar-header-slot]{padding:.5rem .25rem 0}
+[data-slot=sidebar-brand-text],[data-slot=sidebar-user-text]{display:flex;flex:1;flex-direction:column;min-width:0;line-height:1.25;text-align:start}
+[data-slot=sidebar-brand-name],[data-slot=sidebar-user-name]{overflow:hidden;color:var(--fg);font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=sidebar-brand-context],[data-slot=sidebar-user-email]{overflow:hidden;color:var(--fg-3);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=sidebar-content]{flex:1;min-height:0;overflow:hidden auto;scrollbar-width:thin}
+[data-slot=sidebar-group]{padding:.25rem .5rem}
+[data-slot=sidebar-group-label]{display:flex;align-items:center;height:2rem;padding:0 .5rem;color:var(--fg-3);font-size:12px;white-space:nowrap}
+[data-slot=sidebar-menu]{display:flex;flex-direction:column;gap:.125rem}
+[data-slot=sidebar-item],[data-slot=sidebar-sub-item]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-2);text-decoration:none;white-space:nowrap;
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  &[aria-current=page]{background:var(--ink-3);color:var(--fg);font-weight:500}
+}
+[data-slot=sidebar-label]{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+[data-slot=sidebar-count]{color:var(--fg-3);font:400 12px var(--font-mono)}
+[data-slot=sidebar-sub]{display:flex;flex-direction:column;gap:.125rem;margin:.125rem 0 0 1rem;padding-inline-start:.5rem;border-inline-start:1px solid var(--line)}
+[data-slot=sidebar-footer]{padding:.5rem}
+[data-slot=sidebar-user]{display:flex;align-items:center;gap:.5rem;width:100%;padding:.25rem;border:0;border-radius:var(--radius);background:transparent;cursor:pointer;&:hover{background:var(--ink-2)}& > [data-slot=icon]{color:var(--fg-3)}}
+[data-slot=sidebar-inset]{display:flex;flex:1;flex-direction:column;min-width:0}
+[data-slot=sidebar-overlay]{display:none}
+[data-slot=topbar]{position:sticky;top:0;z-index:10;display:flex;flex:none;align-items:center;gap:.5rem;height:var(--topbar-h);padding:0 .75rem;border-bottom:1px solid var(--line);background:var(--ink-0)}
+[data-slot=topbar-spacer]{flex:1}
+[data-slot=page]{flex:1;min-width:0;padding:var(--page-pad);display:flex;flex-direction:column;gap:1rem}
+[data-slot=page-header]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem}
+[data-slot=page-title]{color:var(--fg);font-size:1.25rem;font-weight:600;line-height:1.25;letter-spacing:-.01em}
+[data-slot=page-actions]{display:flex;flex-wrap:wrap;gap:.5rem}
+
+/* Collapsed to icons. */
+@media (min-width:768px){
+  [data-collapsed] > [data-slot=sidebar]{width:var(--sidebar-w-icon);
+    & [data-slot=sidebar-brand-text],& [data-slot=sidebar-header-slot],& [data-slot=sidebar-user-text],& [data-slot=sidebar-label],& [data-slot=sidebar-count],& [data-slot=sidebar-sub],& [data-slot=sidebar-group-label],& [data-slot=sidebar-user] > [data-slot=icon]{display:none}
+    & [data-slot=sidebar-item]{justify-content:center;padding:0}
+    & [data-slot=sidebar-brand],& [data-slot=sidebar-user]{justify-content:center;padding:0}
+    & [data-slot=sidebar-group],& [data-slot=sidebar-header],& [data-slot=sidebar-footer]{padding-inline:.5rem}
+  }
+}
+/* An off-canvas sheet on phones. */
+@media (max-width:767px){
+  [data-slot=sidebar]{position:fixed;inset:0 auto 0 0;z-index:30;translate:-100%;width:18rem;visibility:hidden;transition:translate .1s,visibility .1s}
+  [data-mobile-open] > [data-slot=sidebar]{translate:0;visibility:visible}
+  [data-mobile-open] > [data-slot=sidebar-overlay]{display:block;position:fixed;inset:0;z-index:20;background:var(--scrim)}
+}
+
+/* Layouts, on wide screens: inset, floating, the links in the top bar; and what folding does. */
+[data-slot=topnav],[data-slot=topbar-brand]{display:none}
+[data-slot=topnav-menu]{display:flex;align-items:center;gap:.125rem}
+[data-slot=topnav-item]{display:inline-flex;align-items:center;gap:.375rem;height:2rem;padding:0 .625rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-2);font:inherit;font-weight:500;text-decoration:none;white-space:nowrap;cursor:pointer;
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  &[aria-current=page],&[data-active]{background:var(--ink-3);color:var(--fg)}
+  & > [data-slot=icon]:last-child:not(:first-child){width:14px;height:14px;color:var(--fg-3)}
+}
+[data-slot=topnav-sub]{display:flex;flex-direction:column;gap:.125rem;min-width:12rem;& [aria-current=page]{background:var(--ink-3);color:var(--fg)}& [data-nested] [data-slot=menu-link]{padding-inline-start:2.125rem}}
+[data-slot=popover-content]:has([data-slot=topnav-sub]){padding:.25rem}
+[data-slot=topbar-user] [data-slot=sidebar-user]{width:auto;padding:.125rem;& [data-slot=sidebar-user-text],& > [data-slot=icon]{display:none}}
+@media (min-width:768px){
+  [data-layout=header]{
+    & > [data-slot=sidebar],& [data-ui-sidebar-trigger]{display:none}
+    & [data-slot=topnav]{display:flex;min-width:0;overflow-x:auto;scrollbar-width:none}
+    & [data-slot=topbar-brand]{display:flex;flex:none;& [data-slot=sidebar-brand-context]{display:none}}
+    & [data-slot=topbar]{gap:.75rem}
+  }
+  [data-layout=inset]{background:var(--ink-1);
+    & > [data-slot=sidebar]{border-inline-end:0;background:transparent}
+    & > [data-slot=sidebar-inset]{min-height:calc(100dvh - 1rem);margin:.5rem;margin-inline-start:0;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-0);overflow:clip}
+  }
+  [data-layout=floating]{
+    & > [data-slot=sidebar]{top:.5rem;height:calc(100dvh - 1rem);margin:.5rem;margin-inline-end:0;border:1px solid var(--line-2);border-radius:var(--radius-lg)}
+    & [data-slot=topbar]{border-bottom-color:transparent}
+  }
+  [data-collapse=never] [data-ui-sidebar-trigger]{display:none}
+  [data-collapse=offcanvas][data-collapsed] > [data-slot=sidebar]{width:0;border-width:0;margin:0;visibility:hidden}
+}
+
+/* What a page keeps for wide screens only: a table column, one pane of two. */
+@media (max-width:767px){[data-hide-mobile]{display:none}}
+/* A pane of a page with two: on wide screens it stays in view and scrolls on its own. */
+@media (min-width:768px){[data-pane]{position:sticky;top:calc(var(--topbar-h) + var(--page-pad));align-self:start;max-height:calc(100dvh - var(--topbar-h) - 2 * var(--page-pad));overflow:auto;scrollbar-width:thin}}

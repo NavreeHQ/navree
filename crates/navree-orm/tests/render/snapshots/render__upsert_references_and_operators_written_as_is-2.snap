@@ -1,0 +1,8 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(col(\"meta\").binary(BinaryOp::Custom(\"?|\".into()), val(\"k\")))"
+---
+PostgreSQL: "meta" ?| $1
+  values: [String("k")]
+MySQL: error: invalid query: the operator `?|` holds a `?`, a placeholder on MySQL
+SQLite: error: invalid query: the operator `?|` holds a `?`, a placeholder on SQLite

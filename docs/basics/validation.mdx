@@ -1,0 +1,671 @@
+---
+title: "Validation"
+description: "Validate bodies and query strings with `#[derive(Validate)]` and `Valid<Json<T>>`: rules, field-level messages, custom rules and database rules."
+---
+
+Navree validates input with extractors. You describe the rules on a DTO with `#[derive(Validate)]`, take `Valid<Json<T>>` or `Valid<Query<T>>` in your handler, and the handler only runs when the input passes. When it doesn't, the client gets a 400 [error](/docs/basics/errors/) with one message per broken rule, such as `email must be a valid email address`.
+
+Validation lives in the `navree-validation` crate (the `validation` feature of the `navree` facade, on by default). `Validate`, `Valid` and `ValidAsync` are in the prelude. The [international types](#international-input) `Phone` and `SafeHtml` come with the `validation-phone` and `validation-html` features, also on by default.
+
+## A first example
+
+### Defining the rules
+
+A DTO is a struct that derives `serde::Deserialize` and `Validate`. Every field gets a `#[validate(...)]` attribute with its rules, or `#[validate(skip)]` when it has none:
+
+```rust title="src/contacts/dto.rs"
+use navree::validation::{Validate, rules};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateContact {
+    #[validate(length(min = 1, max = 100))]
+    pub first_name: String,
+    #[validate(length(min = 1, max = 100))]
+    pub last_name: String,
+    #[validate(email)]
+    pub email: String,
+    #[validate(range(min = 16, max = 120))]
+    pub age: Option<u8>,
+    #[validate(length(max = 10), each(length(min = 1, max = 30)))]
+    pub tags: Vec<String>,
+    #[validate(custom(rules::one_of(&["lead", "customer", "churned"])))]
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ContactFilters {
+    #[validate(length(min = 2))]
+    pub search: Option<String>,
+    #[validate(range(min = 1, max = 100))]
+    pub per_page: Option<u32>,
+}
+```
+
+The derive comes with `navree`: your app needs no other dependency for it, and every rule is always available.
+
+### Using the extractor
+
+Wrap the extractor you would take without validation in `Valid`. The pattern `Valid(Json(input))` hands you the validated value:
+
+```rust title="src/contacts/controller.rs"
+use navree::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Debug, Serialize)]
+pub struct ContactView {
+    pub name: String,
+}
+
+#[injectable]
+pub struct ContactsController;
+
+#[controller("/contacts", version = "1")]
+#[authenticated]
+impl ContactsController {
+    #[get("/")]
+    async fn index(&self, Valid(Query(filters)): Valid<Query<ContactFilters>>) -> Json<Vec<String>> {
+        Json(filters.search.into_iter().collect())
+    }
+
+    #[post("/")]
+    async fn store(&self, Valid(Json(input)): Valid<Json<CreateContact>>) -> Created<ContactView> {
+        let id = Uuid::now_v7();
+        let name = format!("{} {}", input.first_name, input.last_name);
+        Created(format!("/api/v1/contacts/{id}"), ContactView { name })
+    }
+}
+```
+
+### What the client receives
+
+Send a body that breaks several rules:
+
+```json title="POST /api/v1/contacts"
+{
+  "first_name": "",
+  "last_name": "Lakhotia",
+  "email": "anu@",
+  "age": 12,
+  "tags": ["vip", ""],
+  "status": "prospect"
+}
+```
+
+The handler doesn't run. The client gets this response (formatted here):
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "age must not be less than 16",
+    "email must be a valid email address",
+    "first_name must be longer than or equal to 1 characters",
+    "status must be one of the following values: lead, customer, churned",
+    "tags.1 must be longer than or equal to 1 characters"
+  ],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "age": ["age must not be less than 16"],
+    "email": ["email must be a valid email address"],
+    "first_name": ["first_name must be longer than or equal to 1 characters"],
+    "status": ["status must be one of the following values: lead, customer, churned"],
+    "tags.1": ["tags.1 must be longer than or equal to 1 characters"]
+  }
+}
+```
+
+The [error response format](#error-responses) section below explains each member.
+
+## The extractors
+
+| Extractor | Reads | Root name for whole-input errors |
+|---|---|---|
+| `Valid<Json<T>>` | a JSON body (`application/json` or any `application/*+json`) | `body` |
+| `Valid<Query<T>>` | the query string | `query` |
+| `Valid<Form<T>>` | an `application/x-www-form-urlencoded` body, or the query string for `GET` and `HEAD` | `body` (`query` for a `GET` or `HEAD` form that doesn't parse; rule failures on the whole form stay on `body`) |
+| `ValidAsync<Json<T>>`, `ValidAsync<Query<T>>`, `ValidAsync<Form<T>>` | the same, then the [database rules](#database-rules) | as above |
+
+`T` must implement `serde::de::DeserializeOwned` and `Validate`. Each extractor works in two steps:
+
+1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error, and every one of them is reported, together with the rules of the fields that did deserialize (input under 16 KiB; longer input reports its first).
+2. **Validate.** Every rule of `T` runs, and every failure is reported at once.
+
+Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than the route's body limit (`http.body_limit_bytes` unless the route sets its own) is a 413. See [errors](/docs/basics/errors/) for those.
+
+`Form` is `navree::http::Form`, and `Json` and `Query` are in the prelude. Import it with `use navree::http::Form;`.
+
+## Available rules
+
+### The rules
+
+These are the rules `#[validate(...)]` takes, with the message Navree renders for a field called `name`:
+
+| Rule | Checks | Message |
+|---|---|---|
+| `length(min = 2, max = 50)` | string length in characters | `name must be longer than or equal to 2 characters`, `name must be shorter than or equal to 50 characters` |
+| `length(bytes, max = 255)` | string length in UTF-8 bytes | as above (the message still says `characters`; override `min.string` and `max.string` to word it differently) |
+| `length(min = 1, max = 10)` on a list, set or map | number of items | `name must contain at least 1 elements`, `name must contain no more than 10 elements` |
+| `range(min = 1, max = 100)` | numbers, both bounds included | `name must not be less than 1`, `name must not be greater than 100` |
+| `required` | an `Option` is `Some` | `name should not be empty` |
+| `email` | an email address | `name must be a valid email address` |
+| `url` | an absolute URL | `name must be a URL address` |
+| `pattern(r"^[A-Z]{3}$")` | a regular expression | `name must match ^[A-Z]{3}$ regular expression` |
+| `ascii`, `alphanumeric` | character classes (`alphanumeric`: letters and digits of any script) | `name must contain only ASCII characters`, `name must contain only letters and numbers` |
+| `contains("x")`, `starts_with("x")`, `ends_with("x")` | substrings | `name must contain a x string`, `name must start with x`, `name must end with x` |
+| `ip`, `ipv4`, `ipv6` | IP addresses | `name must be an ip address`, `name must be an IPv4 address`, `name must be an IPv6 address` |
+| `credit_card` | 12 to 19 digits (spaces and hyphens allowed) with a valid check digit | `name must be a credit card` |
+| `phone` | a valid [phone number](/docs/basics/phone-numbers/), with or without its country code (feature `validation-phone`) | `name must be a valid phone number` |
+| `same_as(other_field)` | equals another field of the struct | `name must match other_field` |
+| `nested`, `each(...)` | nested structs, list items | see [nested data](#validating-nested-data) |
+| `custom(f)` | your own function | see [custom rules](#custom-rules) |
+| `skip` | nothing | |
+
+<Callout type="tip" title="Characters or bytes">
+
+`length` counts the characters of a string (Unicode scalar values), so `"Zoë"` has length 3. Write `length(bytes, max = 255)` when a limit is about storage in bytes.
+
+</Callout>
+
+Every field states its rules or `skip`: a field without `#[validate]` is a compile error, so a nested struct is never left unchecked by accident. Put `#[validate(skip_unmarked)]` on the struct to let fields without rules go unchecked. A field can carry several rules, which run in the order written, each once (only `custom` can repeat). A rule name that doesn't exist, a rule twice, a `length` or `range` without a bound or with a literal `min` above its `max`, a `pattern` that isn't a valid regular expression, a `same_as` that names no field of the struct or a rule on a field of the wrong type (`range` on a `String`) fails to compile, with an error at the rule.
+
+Rules on an `Option<T>` only run when the value is `Some`; `required` is the rule that demands one.
+
+The derive works on structs (with named fields, as a tuple or as a newtype) and enums, with generics. For an enum, each variant's fields follow the same rules. Tuple fields are named `0`, `1`, and a newtype's field reports at the path of the value itself. The expansion finds the validation crate through `navree` or `navree-validation` in your `Cargo.toml`; `#[validate(crate = "path::to::validation")]` on the type names it when neither is a direct dependency.
+
+`email` accepts an ASCII address of at most 254 bytes with one `@`: a local part of up to 64 letters, digits and the usual symbols (no quoted local parts, no leading, trailing or doubled dot) and a host name or an address literal such as `[192.0.2.1]`. Internationalized domains pass in their punycode form. `url` accepts an absolute URL in ASCII: a scheme, then the rest in RFC 3986's syntax; for `http`, `https`, `ws`, `wss` and `ftp` a host is required (a `file` URL may leave it out). A space or a non-ASCII character in a URL fails: clients percent-encode them.
+
+Field paths use the names serde reads, so a field's `#[serde(rename = "...")]` and the struct's `rename_all` apply to rule errors too. `#[validate(rename = "...")]` sets a field's name in paths.
+
+### Navree's extra rules
+
+`navree::validation::rules` adds rules for common cases. Use them with `custom(...)`; they accept `String`, `&str`, `Cow<str>` and `Option`s of them, and `None` passes:
+
+```rust
+use navree::validation::confirmed;
+use navree::validation::rules;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Register {
+    #[validate(length(min = 8), custom(confirmed(&self.password_confirmation)))]
+    pub password: String,
+    #[validate(skip)]
+    pub password_confirmation: String,
+    #[validate(custom(rules::uuid))]
+    pub team_id: String,
+    #[validate(custom(rules::date_ymd))]
+    pub starts_on: Option<String>,
+}
+```
+
+| Rule | Checks | Message |
+|---|---|---|
+| `confirmed(&self.x_confirmation)` | the field equals its confirmation; the error goes on the field itself | `password confirmation does not match` |
+| `rules::uuid` | a hyphenated UUID | `team_id must be a UUID` |
+| `rules::date_ymd` | a real date written exactly `YYYY-MM-DD` | `starts_on must be a valid date in the format YYYY-MM-DD` |
+| `rules::one_of(&["a", "b"])` | one of the listed strings | `status must be one of the following values: a, b` |
+| `rules::unicode_name` | a name in any script | `name must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `rules::phone` | a valid phone number (feature `validation-phone`) | `phone must be a valid phone number` |
+| `rules::country` | an ISO 3166-1 alpha-2 country code | `country must be a valid ISO 3166-1 alpha-2 country code` |
+| `rules::locale` | a BCP 47 language tag | `locale must be a valid locale` |
+
+The last four are explained under [international input](/docs/basics/international-input/).
+
+### Rules serde checks for you
+
+Typed fields are checked while deserializing, before any `#[validate]` rule runs. A `Uuid` field rejects `"nope"`, an enum rejects unknown variants, and so on:
+
+| Input problem | Message |
+|---|---|
+| a required field is missing, or `null` | `title should not be empty` |
+| a string where a number is expected | `count must be an integer number`, `ratio must be a number` |
+| a number where a string is expected | `title must be a string` |
+| not `true` or `false` | `active must be a boolean value` |
+| not a list, not an object | `labels must be an array`, `address must be an object` |
+| not a UUID | `owner_id must be a UUID` |
+| an unknown enum variant | `stage must be one of the following values: lead, won` |
+| an unknown field, with `#[serde(deny_unknown_fields)]` | `property extra should not exist` |
+
+So an enum is often all the validation a field needs:
+
+```rust
+#[derive(Debug, Deserialize, Validate)]
+pub struct NewSubscription {
+    #[validate(skip)]
+    pub plan: Plan, // "starter", "team" or "enterprise"
+    #[validate(range(min = 1))]
+    pub seats: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Plan {
+    Starter,
+    Team,
+    Enterprise,
+}
+```
+
+### Required fields
+
+Deserialization errors are reported together, and with the validation rules of the other fields: a `CreateContact` body with only `first_name` and `email` gets one error for each missing field. Input of 16 KiB or more reports its first deserialization error only.
+
+When you want a custom message for a missing field, make the field an `Option` and use the `required` rule. The CRM's deal DTO does this (`not_blank` is one of its own [custom rules](#custom-rules), which rejects a whitespace-only title):
+
+```rust title="crm-deals/src/dto.rs"
+#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+pub struct CreateDeal {
+    #[validate(required, custom(not_blank), length(max = 255))]
+    pub title: Option<String>,
+    #[validate(required)]
+    pub company_id: Option<Uuid>,
+    #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    pub amount_cents: Option<i64>,
+    // ...
+}
+```
+
+An empty body `{}` now reports all three fields:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "amount_cents should not be empty",
+    "company_id should not be empty",
+    "title should not be empty"
+  ],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "amount_cents": ["amount_cents should not be empty"],
+    "company_id": ["company_id should not be empty"],
+    "title": ["title should not be empty"]
+  }
+}
+```
+
+## International input
+
+People write names in many scripts, type codes with the digits their keyboard has and paste phone numbers in every format. `Phone`, `Country`, `Locale`, `SafeHtml`, `Folded<T>` and `rules::unicode_name` check that input and turn it into one canonical form. They have [a page of their own](/docs/basics/international-input/).
+
+## Error responses
+
+Every validation failure is a `400 Bad Request` with `Content-Type: application/json`:
+
+- `statusCode` is `400` and `error` is `"Bad Request"`.
+- `message` is a list of **every** message, ordered by field path (alphabetically), then in the order the rules failed.
+- `errors` maps each field path to its messages. Nested fields use dots and list indexes: `customer.address.city`, `items.1.quantity`.
+- The request id is in the `X-Request-Id` header, not the body.
+
+Problems with the input as a whole use the root name. A malformed JSON body gives:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": ["body must be a valid JSON string"],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": { "body": ["body must be a valid JSON string"] }
+}
+```
+
+Query strings work the same way. `GET /api/v1/contacts?search=a&per_page=500` gives:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "per_page must not be greater than 100",
+    "search must be longer than or equal to 2 characters"
+  ],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "per_page": ["per_page must not be greater than 100"],
+    "search": ["search must be longer than or equal to 2 characters"]
+  }
+}
+```
+
+A list endpoint that filters, sorts, searches and pages takes [`List<R>`](/docs/basics/list-queries/) instead of a validated query struct. It answers a bad parameter in the same format, keyed by the parameter as written: `GET /api/v1/deals?per_page=500` gives `"per_page": ["per_page must not exceed 100 (got 500)"]`.
+
+The same format is used for every 400 with field errors, including the ones you [build yourself](#validating-by-hand) and the ones navree-auth returns. The [errors page](/docs/basics/errors/) describes the error format as a whole.
+
+## Custom messages
+
+The built-in messages read as one short sentence: the field's path, then the rule, with no capital letter and no full stop. You can replace any of them, for every field or for one field, and you can give fields display names.
+
+### Overriding messages
+
+Message templates are keyed by rule (`required`, `min.string`) or by field and rule (`email.unique`). A field-specific template wins over a rule template, which wins over the built-in one:
+
+```rust title="src/app.rs"
+use std::collections::BTreeMap;
+
+use navree::validation::ValidationOptions;
+
+let options = ValidationOptions {
+    messages: BTreeMap::from([
+        ("required".to_owned(), "Please fill in :attribute.".to_owned()),
+        ("email.unique".to_owned(), "This e-mail is already registered.".to_owned()),
+    ]),
+    attributes: BTreeMap::from([("first_name".to_owned(), "first name".to_owned())]),
+    ..ValidationOptions::default()
+};
+let app = Navree::app().module(ValidationModule::with_options(options));
+```
+
+With these options a missing `first_name` reads `Please fill in first name.`. `ValidationOptions` also holds the [default phone region](/docs/basics/international-input/#the-default-region) (`phone`) and the [HTML policy](/docs/basics/international-input/#the-html-policy) (`html`), so start from `..ValidationOptions::default()`.
+
+### From configuration
+
+`ValidationModule::from_config()`, or a plain `.module(ValidationModule)`, reads the `validation` section, so you can keep messages out of your code:
+
+```toml title="config/app.toml"
+[validation.messages]
+required = ":Attribute is required."
+"email.unique" = "This e-mail is already registered."
+
+# Nested tables flatten to dotted keys: this sets `min.string`.
+[validation.messages.min]
+string = ":Attribute needs at least :min characters."
+
+[validation.attributes]
+first_name = "first name"
+"address.city" = "city"
+```
+
+The same section holds `[validation.phone]` and `[validation.html]`, described under [international input](/docs/basics/international-input/).
+
+`ValidationModule::for_root()` uses the built-in messages and ignores the section. Without `ValidationModule` in the app, the extractors use the built-in messages, no default phone region and the default HTML policy.
+
+### Placeholders
+
+| Placeholder | Value |
+|---|---|
+| `:attribute` | the field's display name: its path (`first_name`, `items.0.sku`) unless `attributes` names it |
+| `:Attribute` | the same, first letter in upper case |
+| `:min`, `:max` | the rule's bounds |
+| `:other` | the other field of `same_as` (shown by its display name) |
+| `:values` | the allowed values (`in`), or the prefix or suffix |
+| `:format`, `:pattern`, `:value` | the date format, the regular expression, the `contains` text |
+
+Placeholders the rule doesn't fill are left as they are.
+
+### Message keys
+
+These are the keys you can override, with their built-in templates:
+
+| Key | Template |
+|---|---|
+| `required` | `:attribute should not be empty` |
+| `min.string`, `max.string` | `:attribute must be longer than or equal to :min characters`, `:attribute must be shorter than or equal to :max characters` |
+| `min.array`, `max.array` | `:attribute must contain at least :min elements`, `:attribute must contain no more than :max elements` |
+| `min.numeric`, `max.numeric` | `:attribute must not be less than :min`, `:attribute must not be greater than :max` |
+| `email`, `url`, `ip`, `ipv4`, `ipv6`, `phone`, `credit_card` | `:attribute must be a valid email address`, `:attribute must be a URL address`, ... |
+| `regex` | `:attribute must match :pattern regular expression` |
+| `alpha_num`, `ascii` | `:attribute must contain only letters and numbers`, `:attribute must contain only ASCII characters` |
+| `contains`, `starts_with`, `ends_with` | `:attribute must contain a :value string`, `:attribute must start with :values`, `:attribute must end with :values` |
+| `same`, `confirmed` | `:attribute must match :other`, `:attribute confirmation does not match` |
+| `in` | `:attribute must be one of the following values: :values` |
+| `uuid`, `date_format`, `date` | `:attribute must be a UUID`, `:attribute must be a valid date in the format :format`, `:attribute must be a valid ISO 8601 date string` |
+| `unicode_name` | `:attribute must contain only letters, numbers, spaces, hyphens, apostrophes and periods` |
+| `country`, `locale` | `:attribute must be a valid ISO 3166-1 alpha-2 country code`, `:attribute must be a valid locale` |
+| `string`, `integer`, `numeric`, `boolean`, `array`, `object`, `json` | `:attribute must be a string`, `:attribute must be an integer number`, ... |
+| `prohibited` | `property :attribute should not exist` |
+| `unique`, `exists` | `:attribute has already been taken`, `:attribute does not exist` |
+| `html.input`, `html.nodes`, `html.depth`, `html.attributes` | the [limits on rich text](/docs/basics/international-input/#limits-on-rich-text): `:attribute must be shorter than or equal to :max bytes of HTML`, `:attribute has too much markup`, `:attribute nests deeper than :max levels`, `:attribute has a tag with more than :max attributes` |
+| `invalid` | `:attribute is invalid` (used for any rule without a template) |
+
+The full table is `navree::validation::DEFAULT_MESSAGES`.
+
+<Callout type="note">
+
+The built-in messages are English, with one table per app. [Localization](/docs/packages/localization/) translates them per request, in the locale of the user, the workspace or `Accept-Language`, the international keys (`phone`, `country`, `locale`, `unicode_name`) included.
+
+</Callout>
+
+The hook behind that is the `MessageTranslator` trait. When the app provides an `Arc<dyn MessageTranslator>` (`I18nModule` registers one), the extractors render every message through it instead of the table: `message(messages, field, rule, params)` for a rule key and its parameters, `attribute(messages, field)` for the field name inside a text of your own. The `messages` it receives are the app's table, for the translator to fall back on with `Messages::lookup` and `Messages::fill`.
+
+## Custom rules
+
+A `custom` rule is a function of the value that returns `Result<(), E>`, where `E` is a `Violation`, a `String` or a `&str`. Return `rule_error` (or `Violation::rule`) with a rule key to get a message from the table, so it can be overridden like a built-in one. Or return your own text, which may use `:attribute`:
+
+```rust title="src/teams/rules.rs"
+use navree::validation::{rule_error, Violation};
+
+pub fn even(value: &u32) -> Result<(), Violation> {
+    if value.is_multiple_of(2) {
+        Ok(())
+    } else {
+        Err(rule_error("even", &[("value", value)]))
+    }
+}
+
+pub fn not_blank(value: &str) -> Result<(), &'static str> {
+    if value.trim().is_empty() {
+        Err(":attribute must not be blank")
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Teams {
+    #[validate(custom(even))]
+    pub size: u32,
+    #[validate(custom(not_blank))]
+    pub name: String,
+}
+```
+
+`even` has no built-in template, so it renders the `invalid` one (`size is invalid`) until you add a message for the key `even`, for example `even = ":value is not an even number."` under `[validation.messages]`. `Violation::rule("even").with("value", value)` builds the same violation as `rule_error`, and `Violation::text(":attribute must not be blank")` is the text a `&str` or a `String` stands for.
+
+A rule that should take what Navree's rules take (`String`, `&str`, `Cow<str>`, `Folded` text and `Option`s of them, with `None` passing) is generic over `rules::RuleInput` and reads the text with `rule_str()`:
+
+```rust
+use navree::validation::rules::RuleInput;
+
+pub fn filled<T: RuleInput + ?Sized>(value: &T) -> Result<(), &'static str> {
+    match value.rule_str() {
+        Some(text) if text.trim().is_empty() => Err(":attribute must be filled in"),
+        _ => Ok(()),
+    }
+}
+```
+
+`custom` takes any expression that gives such a function, and the expression can read the whole struct through `self`: `custom(confirmed(&self.password_confirmation))`, or `custom(shorter_than(self.max_bio))` with a function of your own that returns a closure.
+
+<Callout type="note" title="No context parameter">
+
+Rules have no context type parameter: what a rule needs from outside the value comes from elsewhere. Request data, such as the default phone region and the HTML policy, comes from the [`InputContext`](/docs/basics/international-input/#outside-the-extractors) the extractors set up. Rules that need the database are [async rules](#database-rules), which run after the synchronous rules pass.
+
+</Callout>
+
+## Database rules
+
+Some rules need the database: an email must not be taken yet, a `company_id` must point at a real company. Implement `AsyncRules` on the DTO and take `ValidAsync<...>` instead of `Valid<...>`:
+
+```rust title="src/users/dto.rs"
+use navree::validation::{AsyncRule, AsyncRules};
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateUser {
+    #[validate(email)]
+    pub email: String,
+    #[validate(skip)]
+    pub team_id: Option<Uuid>,
+}
+
+impl AsyncRules for UpdateUser {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        vec![
+            AsyncRule::unique("email", "users", "email", self.email.clone(), None)
+                .ignore_path_param("id"),
+            AsyncRule::exists("team_id", "teams", "id", self.team_id),
+        ]
+    }
+}
+```
+
+```rust title="src/users/controller.rs"
+#[controller("/users", version = "1")]
+#[authenticated]
+impl UsersController {
+    #[patch("/{id}")]
+    async fn update(
+        &self,
+        uow: Uow,
+        Path(id): Path<Uuid>,
+        ValidAsync(Json(input)): ValidAsync<Json<UpdateUser>>,
+    ) -> Result<Json<UserResource>> {
+        // `input` passed its rules, then both database rules.
+        // ...
+    }
+}
+```
+
+A failed rule is a field error like any other: `email has already been taken`, `team_id does not exist`.
+
+- `AsyncRule::unique(field, table, column, value, ignore_id)` passes when no row of `table` has `value` in `column`. When `ignore_id` is `Some(id)`, the row whose `id` column equals it doesn't count, which is what an update needs.
+- `.ignore_path_param("id")` does the same with the route's `{id}` parameter, when it is a UUID. An explicit `ignore_id` wins.
+- `AsyncRule::exists(field, table, column, value)` passes when some row has `value` in `column`.
+- A `None` value passes without a query, so optional fields stay optional. Combine with `required` to demand a value.
+- Bind values with the column's type: a `Uuid` for UUID columns, a `String` for text.
+- `.without_deleted("deleted_at")` leaves soft-deleted rows out: `exists` doesn't find them and `unique` doesn't count them.
+
+How they run:
+
+- Only after every `#[validate]` rule passes, so no query runs for input that is already invalid.
+- Inside the request's [unit of work](/docs/database/unit-of-work/), as `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1` with bound values. The app needs `DatabaseModule`; without it, a rule that has a value to check answers 500.
+- Table and column names must match `[a-z_][a-z0-9_]*`. Anything else fails with a 500 before any SQL runs, so a name can never inject SQL. Never build them from input.
+
+Outside a request, check a rule yourself with `rule.passes(&executor).await` (a `Db`, a `Transaction` or a `Uow`: anything that is a navree-db `Executor`), which returns `Result<bool, RuleError>`. A failed query is `RuleError::Database`, carrying the engine's `DbError` (boxed).
+
+For a check that needs more than one column and one value, `AsyncRule::check(field, rule, check)` wraps a `UowCheck`, which runs its own queries in the request's unit of work and answers `Ok(true)` when the rule passes; `rule.skipped_when(true)` lets it pass without running (an empty value), and `rule.passes_in(&uow)` runs any rule outside a request. The rules on ORM models are built this way: `navree::orm::validation::unique` and `exists` query through the model, so its scopes hold (see [validation rules](/docs/orm/workspaces-and-access/#validation-rules)).
+
+<Callout type="warning" title="No extra conditions">
+
+`AsyncRule::unique` and `AsyncRule::exists` compare one column with one value, and with `.without_deleted(column)` leave out soft-deleted rows. For other conditions, build the rule on the model, whose rules take `where_(..)` conditions, or wrap a `UowCheck`.
+
+</Callout>
+
+The same rules run for a Navree UI form: see [database rules in forms](/docs/ui/forms/#database-rules). A form's messages come from the same tables and translator as the extractors'.
+
+## Validating nested data
+
+Mark a field holding another struct, or a list, map or `Option` of structs, with `nested`. Use `each(...)` to apply rules to each item of a list, set or map of plain values (`each(length(min = 1, max = 30))` on a `Vec<String>`); `each(nested)` and `each(each(...))` work too:
+
+```rust title="src/orders/dto.rs"
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateOrder {
+    #[validate(nested)]
+    pub customer: Customer,
+    #[validate(length(min = 1), nested)]
+    pub items: Vec<OrderItem>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Customer {
+    #[validate(email)]
+    pub email: String,
+    #[validate(nested)]
+    pub address: Address,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct Address {
+    #[validate(length(min = 1))]
+    pub city: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct OrderItem {
+    #[validate(length(min = 1))]
+    pub sku: String,
+    #[validate(range(min = 1, max = 99))]
+    pub quantity: u32,
+}
+```
+
+Errors name the full path, with list indexes:
+
+```json title="400 Bad Request (errors)"
+{
+  "customer.address.city": ["customer.address.city must be longer than or equal to 1 characters"],
+  "items.1.quantity": ["items.1.quantity must not be less than 1"],
+  "items.1.sku": ["items.1.sku must be longer than or equal to 1 characters"]
+}
+```
+
+serde reports nested type errors at their path too: `"quantity": "two"` in the first item gives `items.0.quantity must be an integer number`. Map values are at their key (`prices.EUR.amount`), and a `#[serde(flatten)]` field marked `nested` reports at the parent's path, where its keys are in the input.
+
+To override a nested field's message or name, use its full dotted path: `"customer.address.city" = "city"` under `[validation.attributes]`. List items have their index in the path, so an override for one specific index rarely makes sense; override the rule instead.
+
+<Badge feature="time" /> With `validation` on too, navree-time's types implement `Validate`: `Zone` and `LocalDay` have nothing to check (they validate themselves while deserializing), so a field of either type takes `#[validate(nested)]` or `#[validate(skip)]`, and a `DayRange` checks that `to` is not before `from` (`to must not be before from`, on `to`), so `Valid<Query<DayRange>>` takes a report window from a request. See [time zones](/docs/digging-deeper/time-zones/).
+
+## Validating by hand
+
+Some checks only make sense in a service: a date range, a rule that depends on the stored record. Collect them in `ValidationErrors` and return them as the same 400:
+
+```rust
+use navree::validation::ValidationErrors;
+
+pub fn check_dates(starts_on: &str, ends_on: &str) -> Result<()> {
+    let mut errors = ValidationErrors::new();
+    if ends_on < starts_on {
+        errors.add("ends_on", "ends_on must be after starts_on");
+    }
+    if !errors.is_empty() {
+        return Err(errors.into_app_error());
+    }
+    Ok(())
+}
+```
+
+- `add(field, message)` drops duplicates; `merge(other)` adds another set.
+- `ValidationErrors` converts into `AppError` (`.into_app_error()` or `?`) and implements `IntoResponse`.
+- To reuse the app's templates, inject `Arc<Messages>` (exported by `ValidationModule`) and call `messages.render("company_id", "exists", &[])`. The CRM does this to report a soft-deleted company as `company_id does not exist`.
+- `AppError::validation(map)` builds the same response from a `BTreeMap<String, Vec<String>>`.
+
+Calling `input.validate()` yourself works anywhere. It returns `Result<(), Violations>`: `get(path)` and `iter()` give the `Violation`s by dotted field path, each with its rule `key()` (`None` for a text of your own, which `as_text()` returns), its `params()` and a `message()` with the built-in template (for a field called `value`; `render(field, &messages)` uses a table you hold), and `Violations` displays one message per line, naming each field by its path. `violations.to_errors(&messages)` turns them into `ValidationErrors`. For the app's messages on a value that didn't come through an extractor (a gRPC message, an event payload), call `validate_in(&value, Some(&ctx)).await` with the app's `AppContext` (its messages and its [input context](/docs/basics/international-input/#outside-the-extractors); `None` uses the built-in ones), or `validate(&value, None, &messages, "input")` with a `Messages` you hold. Both return `Result<(), ValidationErrors>`, with the errors keyed by dotted field path.
+
+## Testing
+
+`TestResponse` has assertions for this format. `assert_validation_error(field)` checks for a 400 with at least one message for the field, and `assert_error(400, message)` checks that the `message` list contains that exact message:
+
+```rust title="tests/contacts.rs"
+client
+    .post("/api/v1/contacts")
+    .json(&json!({
+        "first_name": "Anu",
+        "last_name": "Lakhotia",
+        "email": "nope",
+        "tags": [],
+        "status": "lead"
+    }))
+    .send()
+    .await
+    .assert_validation_error("email")
+    .assert_error(400, "email must be a valid email address");
+```
+
+See [HTTP tests](/docs/testing/http-tests/) for the test client.
+
+<LinkCards>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The JSON error shape, `AppError` and mapping your own errors.
+  </LinkCard>
+  <LinkCard href="/docs/basics/requests/" title="Requests and extractors">
+    Path parameters, query strings, bodies and the current user.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    The per-request transaction async rules run in.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/openapi/" title="OpenAPI">
+    Describe your DTOs in the generated API document.
+  </LinkCard>
+</LinkCards>

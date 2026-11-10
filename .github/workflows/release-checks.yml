@@ -1,0 +1,287 @@
+# What must hold for every commit that may be released:
+#
+# - release: `cargo xtask release check` (one version everywhere, exact
+#   requirements between Navree's crates, a publish order, the changelog) and
+#   the tests of the release tool.
+# - msrv: the workspace builds with the oldest Rust it declares
+#   (`rust-version`, 1.95).
+# - docs: every published crate's documentation builds the way docs.rs builds
+#   it (nightly, `--cfg docsrs`), with warnings as errors.
+# - package: every crate packages (its file list, Navigator's staged skills
+#   and docs, at most 10 MB each), `cargo publish --dry-run` builds the whole
+#   set as it will be published, and the npm packages pack.
+# - semver: no breaking change to the public API since the last release tag
+#   (cargo-semver-checks). Skipped until a release exists.
+# - stack: the reference app (NavreeHQ/crm), the skeleton (NavreeHQ/skeleton)
+#   and a fresh app of each starter kit, built against this commit. It runs
+#   nightly and on release pull requests (branches prepare/v*), and is
+#   skipped while those repositories do not exist.
+name: Release checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly, 02:23 UTC.
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  # The nightly the docs job builds with (docs.rs builds on a recent nightly).
+  NIGHTLY: nightly-2026-10-20
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: The release tool's tests
+        run: cargo test --locked --package xtask
+      - name: Release checks
+        run: cargo xtask release check
+
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: cargo +1.95 check
+        run: cargo +1.95 check --workspace --all-features --locked
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ env.NIGHTLY }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Documentation as docs.rs builds it
+        env:
+          RUSTDOCFLAGS: "-D warnings --cfg docsrs"
+        run: |
+          cargo xtask release stage
+          packages=()
+          while read -r name _; do packages+=(--package "$name"); done < <(cargo xtask release crates)
+          cargo "+$NIGHTLY" doc --locked --no-deps --all-features "${packages[@]}"
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Package every crate
+        run: |
+          cargo xtask release stage
+          packages=()
+          while read -r name _; do packages+=(--package "$name"); done < <(cargo xtask release crates)
+          # Cargo counts the staged copies (ignored by git) as changes, so it
+          # is told to allow them; any other change fails here first.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::the checkout has changes"
+            git status --porcelain
+            exit 1
+          fi
+          cargo package --locked --no-verify --allow-dirty "${packages[@]}"
+          # crates.io takes at most 10 MB a crate.
+          large="$(find target/package -maxdepth 1 -name '*.crate' -size +10M)"
+          if [ -n "$large" ]; then
+            echo "::error::over 10 MB: $large"
+            exit 1
+          fi
+          ls -lS target/package/*.crate | head -n 5
+
+      - name: Navigator carries the skills, the docs and the UI catalog
+        # The staged copies count as changes here too (see the step above).
+        run: |
+          files="$(cargo package --list --locked --allow-dirty --package navree-navigator)"
+          for want in '^skills/navree/SKILL\.md$' '^docs/.*\.mdx$' '^catalog\.json$'; do
+            if ! grep -q "$want" <<< "$files"; then
+              echo "::error::navree-navigator's package has no file matching $want"
+              exit 1
+            fi
+          done
+          echo "skills: $(grep -c '^skills/' <<< "$files") files, docs: $(grep -c '^docs/.*\.mdx$' <<< "$files") pages"
+
+      - name: Build every crate as it will be published
+        # The same as the dry run release.yml makes before publishing.
+        run: cargo xtask release publish --dry-run
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: packages/js/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/js/pnpm-lock.yaml
+      - name: Crate READMEs and licence files match their generator
+        run: node scripts/crate-readmes.mjs --check
+      - name: Pack the npm packages
+        working-directory: packages/js
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          node scripts/check-packaging.mjs --pack
+          mkdir -p ../../target/npm
+          pnpm -r pack --pack-destination ../../target/npm
+          for tarball in ../../target/npm/*.tgz; do
+            echo "$tarball"
+            tar -tzf "$tarball" | sed 's/^/  /'
+          done
+
+  semver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The last release
+        id: baseline
+        run: |
+          tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null || true)"
+          if [ -z "$tag" ]; then
+            echo "::notice::no release tag yet: nothing to compare with"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        if: ${{ steps.baseline.outputs.tag != '' }}
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        if: ${{ steps.baseline.outputs.tag != '' }}
+        with:
+          tool: cargo-semver-checks
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ steps.baseline.outputs.tag != '' }}
+      - name: cargo semver-checks against the last release
+        if: ${{ steps.baseline.outputs.tag != '' }}
+        env:
+          TAG: ${{ steps.baseline.outputs.tag }}
+        run: cargo semver-checks --workspace --baseline-rev "$TAG"
+
+  stack:
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && startsWith(github.head_ref, 'prepare/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: navree
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: navree
+          cache-on-failure: true
+
+      - name: Find the reference app and the skeleton
+        id: repos
+        run: |
+          for repo in crm skeleton; do
+            if git ls-remote "https://github.com/NavreeHQ/$repo.git" HEAD > /dev/null 2>&1; then
+              echo "$repo=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::NavreeHQ/$repo is not public yet: skipped"
+            fi
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ steps.repos.outputs.crm == 'true' }}
+        with:
+          repository: NavreeHQ/crm
+          path: crm
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ steps.repos.outputs.skeleton == 'true' }}
+        with:
+          repository: NavreeHQ/skeleton
+          path: skeleton
+          persist-credentials: false
+
+      - name: Point the apps at this commit
+        # Every published crate is patched to this checkout, so `navree = "1"`
+        # and the exact requirements between the crates resolve here.
+        run: |
+          patch="$RUNNER_TEMP/navree-patch.toml"
+          echo "[patch.crates-io]" > "$patch"
+          (cd navree && cargo xtask release crates) | while read -r name dir; do
+            echo "$name = { path = \"$GITHUB_WORKSPACE/navree/$dir\" }" >> "$patch"
+          done
+          for app in crm skeleton; do
+            if [ -d "$app" ]; then
+              mkdir -p "$app/.cargo"
+              cat "$patch" >> "$app/.cargo/config.toml"
+            fi
+          done
+
+      - name: The reference app
+        if: ${{ steps.repos.outputs.crm == 'true' }}
+        working-directory: crm
+        run: cargo test --workspace --no-run
+
+      - name: The skeleton
+        if: ${{ steps.repos.outputs.skeleton == 'true' }}
+        working-directory: skeleton
+        run: |
+          cargo build
+          cargo test --no-run
+
+      - name: A fresh app of each kit
+        working-directory: navree
+        run: |
+          cargo test --locked --package navree-cli --test generated_kits -- --ignored --test-threads 1
+          cargo test --locked --package navree-cli --test generated_app -- --ignored --test-threads 1

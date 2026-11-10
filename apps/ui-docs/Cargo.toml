@@ -1,0 +1,34 @@
+[package]
+name = "ui-docs"
+description = "Writes the website's UI docs data: every documented example rendered by navree-ui with its code and parts, and the props tables, read from the toolkit's source."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "ui-docs"
+path = "src/main.rs"
+
+# A build tool: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+# The example apps, whose views the website shows under "Build anything".
+store-demo = { path = "../store-demo" }
+# The example support inbox, whose views the website shows under "Build anything" and on its showcase page.
+inbox-demo = { path = "../inbox-demo" }
+# The example board, whose views its showcase page shows.
+board-demo = { path = "../board-demo" }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+# A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
+# cannot turn off default features that the workspace entry leaves on.
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "validation-phone"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+syn = { workspace = true }

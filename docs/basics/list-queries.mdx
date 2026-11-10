@@ -1,0 +1,408 @@
+---
+title: "List queries"
+description: "One query-string format for filters, sort, search and paging: declare a `ListSpec`, take `List<R>` in a handler and apply it with `Builder::list`."
+---
+
+Every list endpoint takes the same things: filters, a sort order, a search box and a page. Navree reads them in one format, from one place. A resource declares what a client may ask for. A handler takes `List<DealList>`. `Builder::list` turns the request into a database query.
+
+A request outside what the resource declared is a 400 that names the parameter. A misspelled filter never returns an unfiltered list, and a client never reaches a column you did not expose.
+
+[Navree UI tables](/docs/ui/data-table/), [Helm](/docs/tools/helm/), the [typed client](/docs/frontend/typed-client/#list-queries) and the Next.js and Nuxt [data tables](/docs/frontend/data-tables/) read and write the same names. This page is the server side.
+
+The types are in `navree::orm::list`, which re-exports everything in `navree::http::list` and adds `ListQueryExt`.
+
+## The grammar
+
+```text
+filter[status]=active                  equal (the same as filter[status][eq]=active)
+filter[created_at][gte]=2026-10-01     an operator
+filter[stage][in]=lead,won             one of several values; the key may repeat
+filter[owner_id][null]=true            is NULL (false: is not NULL)
+sort=-created_at,name                  a leading "-" sorts descending
+search=agra
+page=2&per_page=25                     numbered pages, or
+cursor=eyJpZCI6NDJ9&limit=50           cursor pages
+```
+
+| Operator | Means | Value |
+|---|---|---|
+| `eq` (or none) | equals | one value |
+| `ne` | does not equal | one value |
+| `gt`, `gte`, `lt`, `lte` | greater than, at least, less than, at most | one value |
+| `in`, `not_in` | is one of, is none of | a comma list; the key may repeat |
+| `contains` | contains this text, ignoring case | text |
+| `starts_with` | starts with this text, ignoring case | text without `%`, `_` or `\` |
+| `null` | is NULL (`true` or `1`), is not NULL (`false` or `0`) | `true`, `false`, `1` or `0` |
+
+- A field name starts with a letter or `_`, then letters, digits, `_` and `.`, up to 64 characters. Operator names are exact and lower case.
+- A filter whose value is empty or only spaces is left out. Search text is trimmed.
+- `sort` takes up to four fields, and a repeated `sort` adds fields. A field sorted twice is a problem.
+- A repeated `in` or `not_in` adds its values. Any other operator keeps its first value and reports the repeat.
+- Mixing numbered paging (`page`, `per_page`) with cursor paging (`cursor`, `before`, `limit`) is a problem.
+- Other parameters (`owner_id=3`, `range=30d`, `utm_source`) are not the list query's. A handler reads them with its own extractors.
+
+When you write a list query as a link, write it the way `ListQuery::to_query_string` does: the filters grouped by field in the order each field first appears, then `sort`, `search`, `page`, `per_page`, `cursor`, `before` and `limit`, in `URLSearchParams` encoding (a space is `+`, `[` is `%5B`, `,` is `%2C`). The JavaScript side writes the same string, so a query works as a cache key and as a link.
+
+## Declare what a list allows
+
+A resource that can be listed implements `ListResource` on a marker type. Its constant `ListSpec` is the allow-list: the fields a client may filter by, the operators each field takes, and what it may sort and search by.
+
+```rust title="src/deals/dto.rs"
+use navree::orm::list::{Field, ListResource, ListSpec};
+
+/// The strings of `Stage`, in board order (`filter[stage]` takes these).
+const STAGES: &[&str] = &[
+    "lead",
+    "qualified",
+    "proposal",
+    "negotiation",
+    "won",
+    "lost",
+];
+
+/// The list query of `GET /api/v1/deals`.
+pub struct DealList;
+
+impl ListResource for DealList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::one_of("stage", STAGES),
+        Field::uuid("owner_id"),
+        Field::uuid("company_id"),
+    ])
+    .sortable(&["created_at", "title", "amount_cents", "expected_close_date"])
+    .default_sort(&["-created_at"])
+    .searchable(&["title"]);
+}
+```
+
+The spec is a `const`: it is fixed when the app is built. Anything it does not list is refused.
+
+### Field kinds
+
+A field has a kind. The kind decides which values it accepts and which operators it takes unless you narrow them.
+
+| Field | Accepts | Takes |
+|---|---|---|
+| `Field::text(name)` | any text | `eq`, `ne`, `contains`, `starts_with`, `in`, `not_in`, `null` |
+| `Field::int(name)` | a whole number (`i64`) | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `null` |
+| `Field::decimal(name)` | digits with one optional point (`12.50`), at most 38 digits | the same as `int` |
+| `Field::boolean(name)` | `true` or `false` | `eq`, `ne`, `null` |
+| `Field::date(name)` | `YYYY-MM-DD` | the same as `int` |
+| `Field::datetime(name)` | a date, or a date and time with an offset (`2026-11-05T10:30:00+05:30`) | the same as `int` |
+| `Field::uuid(name)` | a UUID in its hyphenated form | `eq`, `ne`, `in`, `not_in`, `null` |
+| `Field::one_of(name, words)` | one of the words | `eq`, `ne`, `in`, `not_in`, `null` |
+
+A `one_of` field takes one word with `eq` (`filter[stage]=won`) and several with `in` (`filter[stage][in]=lead,won`). `filter[stage]=won,lost` is refused, because `won,lost` is not a stage.
+
+A field takes three more settings:
+
+| Method | What it does |
+|---|---|
+| `.ops(&[Op::Eq])` | Replaces the operators the field takes. |
+| `.column("companies.name")` | Reads that column instead of one named like the field. Use it for a joined table. |
+| `.by_app()` | The query is checked as for any field, but `Builder::list` leaves the condition to the handler. See [computed filters](#computed-filters). |
+
+### The list
+
+`ListSpec::new(fields)` starts a list with no sorting, no search and pages of 15 up to 100. Each method below returns the spec, so they chain in a `const`.
+
+| Method | What it does |
+|---|---|
+| `.sortable(&["created_at", "title"])` | The columns a client may sort by. Without it, `sort` is refused. |
+| `.default_sort(&["-created_at"])` | The order when the query gives none. A leading `-` sorts descending. It may name columns a client cannot sort by. |
+| `.searchable(&["title"])` | `search` matches text in any of these columns, ignoring case. Without a search setting, `search` is refused. |
+| `.searchable_by_app()` | `search` is accepted and the handler applies it, for a search that matches words or spans tables. |
+| `.page_size(default, max)` | The page size when the query gives none, and the largest it may ask for. |
+| `.two_way_cursors()` | Accepts `before`, for a list that pages both ways by cursor. Without it, `before` is refused. |
+
+A sort name is a column of the model.
+
+## Take `List<R>` in a handler
+
+`List<R>` is an extractor. It reads the query string against `R`'s spec and hands the handler a query it can trust, or the request ends in a 400. It dereferences to `ListQuery`, so `list.search`, `list.filter` and `list.eq("stage")` work on it directly.
+
+```rust title="src/deals/controller.rs"
+use navree::orm::list::List;
+use navree::prelude::*;
+
+#[get("/")]
+#[can(Read, Deal)]
+async fn index(
+    &self,
+    uow: Uow,
+    scope: Accessible<Deal, Read>,
+    list: List<DealList>,
+) -> Result<Page<DealResource>> {
+    self.deals.list(&uow, scope, &list).await
+}
+```
+
+The service applies the query to a model query with `Builder::list`:
+
+```rust title="src/deals/service.rs"
+use navree::orm::list::{ListQuery, ListQueryExt, ListResource};
+
+pub async fn list(
+    &self,
+    uow: &Uow,
+    scope: Accessible<Deal, Read>,
+    list: &ListQuery,
+) -> Result<Page<DealResource>> {
+    let page = scope
+        .apply(Deal::query())
+        .list(list, &DealList::SPEC)?
+        .with_all(DealResource::EMBEDS)
+        .paginate(uow, list.page_request(&DealList::SPEC))
+        .await?;
+    Ok(page.map(|deal| deal.to_resource::<DealResource>()))
+}
+```
+
+A request such as this one:
+
+```text
+GET /api/v1/deals?filter[stage][in]=negotiation,won&filter[owner_id]=0190a5c4-7d2e-7c3a-9d1e-0f4b6a7c8d9e&search=sutlej&sort=-amount_cents&page=2&per_page=25
+```
+
+returns the second page of 25 deals that are in negotiation or won, are owned by that user and have `sutlej` in the title, largest amount first, in the usual `{data, meta}` [page](/docs/database/pagination/#the-response).
+
+`Builder::list(&query, &spec)` does this to the query:
+
+- Every filter becomes a condition, and all of them must hold. A field marked `.by_app()` is skipped.
+- `search` becomes a condition that holds when any of the searchable columns contains the text, ignoring case.
+- The sort is the query's, or the spec's default. It replaces any order the query had. The primary key is added last, so rows with equal values keep one order from page to page. A list with no sort at all leaves the query's order alone.
+
+| Operator | Condition |
+|---|---|
+| `eq`, `ne`, `gt`, `gte`, `lt`, `lte` | the comparison, with the value read as the field's type |
+| `in`, `not_in` | `IN (...)`, `NOT IN (...)` |
+| `contains` | contains the text, ignoring case |
+| `starts_with` | starts with the text, ignoring case |
+| `null` | `IS NULL` (`true`) or `IS NOT NULL` (`false`) |
+
+Two details follow from SQL and from the field kinds:
+
+- `ne` and `not_in` are SQL's: a row whose value is NULL matches neither. Add `filter[field][null]=false` to say what you mean about missing values.
+- A date-and-time field takes a plain date as the whole day in UTC. `filter[created_at][lte]=2026-11-05` includes everything on the 5th, and `filter[created_at]=2026-11-05` matches the whole day.
+
+Pass `Builder::list` a query that `ListSpec::parse` or the `List` extractor read against the same spec. A field the spec does not declare, or a value of the wrong type, is an `OrmError::InvalidQuery` and never reaches SQL.
+
+## Page the result
+
+`ListQueryExt` turns the paging of a list query into the request the ORM takes. Both methods fill the page size from the spec's default.
+
+| Method | For | Reads |
+|---|---|---|
+| `list.page_request(&SPEC)` | `.paginate(&uow, ..)` and `.simple_paginate(&uow, ..)` | `page` and `per_page` |
+| `list.cursor_request(&SPEC)` | `.cursor_paginate(&uow, ..)` | `cursor` and `limit` |
+
+A list that pages by cursor looks like this:
+
+```rust title="src/deals/controller.rs"
+use navree::orm::list::{List, ListQueryExt};
+use navree::orm::{CursorPage, Record};
+use navree::prelude::*;
+
+/// The feed: the list's deals by cursor.
+#[get("/feed")]
+#[authenticated]
+async fn feed(&self, uow: Uow, list: List<DealList>) -> Result<CursorPage<Record<Deal>>> {
+    Ok(Deal::query()
+        .list(&list, &DealList::SPEC)?
+        .cursor_paginate(&uow, list.cursor_request(&DealList::SPEC))
+        .await?)
+}
+```
+
+A cursor page has no total, and its cursors are opaque strings: pass the `next_cursor` of one page as the `cursor` of the next ([cursor pagination](/docs/database/pagination/#cursor-pagination)). If the client pages the other way than the endpoint does, the request still works: `page_request` on a cursor query is page 1 sized by `limit`, and `cursor_request` on a numbered query is the first page sized by `per_page`.
+
+`cursor_request` carries `cursor` and `limit`. A list that reads `before` itself calls `.two_way_cursors()` and takes the value from `list.before`. To page a list by hand, `ListSpec::paging(&list)` returns `Paging::Pages { page, per_page }` or `Paging::Cursor { cursor, before, limit }` with the defaults filled in.
+
+## Strict errors
+
+`ListSpec::parse` and the `List` extractor read a query strictly. They check the syntax first, then the allow-list, and report every problem at once:
+
+- A filter or sort the list does not declare.
+- An operator the field does not take.
+- A value of the wrong type for the field.
+- `search` on a list that cannot be searched, or `before` on one that pages forward only.
+- A `per_page` or `limit` past the list's maximum.
+- A bad `page`, a mix of numbered and cursor paging, an unknown operator or any other problem with the syntax.
+
+The error becomes a 400 whose `errors` map each parameter to its messages. A filter is named `filter[field]` for equality and `filter[field][operator]` for the rest. This request has four problems:
+
+```text
+GET /api/v1/deals?filter[stage]=archived&filter[password][contains]=x&sort=password&per_page=500
+```
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "`password` is not a filter of this list; use one of: stage, owner_id, company_id",
+    "`archived` is not one of: lead, qualified, proposal, negotiation, won, lost",
+    "per_page must not exceed 100 (got 500)",
+    "`password` is not a sort of this list; use one of: created_at, title, amount_cents, expected_close_date"
+  ],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "filter[password][contains]": ["`password` is not a filter of this list; use one of: stage, owner_id, company_id"],
+    "filter[stage]": ["`archived` is not one of: lead, qualified, proposal, negotiation, won, lost"],
+    "per_page": ["per_page must not exceed 100 (got 500)"],
+    "sort": ["`password` is not a sort of this list; use one of: created_at, title, amount_cents, expected_close_date"]
+  }
+}
+```
+
+It is the same [error body](/docs/basics/errors/) as a failed validation, so a front end shows it the way it shows any field error. The keys are the parameters, so `filter[stage]` is the control to mark.
+
+To read a query yourself, call `parse` and let `?` convert the error:
+
+```rust
+use navree::orm::list::{ListQuery, ListResource};
+use navree::prelude::*;
+
+fn read(query: &str) -> Result<ListQuery> {
+    Ok(DealList::SPEC.parse(query)?)
+}
+```
+
+A test asserts on the parameter:
+
+```rust
+rep.get("/api/v1/deals")
+    .query(&[("filter[stage]", "closed")])
+    .send()
+    .await
+    .assert_validation_error("filter[stage]");
+```
+
+## Computed filters
+
+Some filters are not a column. `filter[due]=overdue` depends on today's date, and `filter[completed]=true` means a timestamp is set. Declare them with `.by_app()`. The query is checked like any other (the word must be one of the list, the operator must be allowed), and `Builder::list` leaves the condition to you:
+
+```rust title="src/activities/dto.rs"
+use navree::orm::list::{Field, ListResource, ListSpec, Op};
+
+impl ListResource for ActivityList {
+    const SPEC: ListSpec = ListSpec::new(&[
+        Field::one_of("subject_type", SUBJECT_TYPES),
+        Field::uuid("subject_id"),
+        Field::one_of("kind", KINDS),
+        Field::uuid("assignee_id"),
+        // A window of days and a state, worked out by the service.
+        Field::one_of("due", Due::WORDS).ops(&[Op::Eq]).by_app(),
+        Field::boolean("completed").ops(&[Op::Eq]).by_app(),
+    ]);
+}
+```
+
+```rust title="src/activities/service.rs"
+let due = list.eq("due").and_then(Due::from_word);
+let completed = list.eq("completed").map(|word| word == "true");
+let query = scope
+    .apply(Activity::query())
+    .list(list, &ActivityList::SPEC)?
+    .when_some(due, |query, due| due.apply(query, today))
+    .when_some(completed, |query, completed| {
+        if completed {
+            query.where_not_null(Activity::COMPLETED_AT)
+        } else {
+            query.where_null(Activity::COMPLETED_AT)
+        }
+    });
+```
+
+`list.eq("due")` is the value of `filter[due]=...`, and `list.condition("amount", Op::Gte)` is the condition on a field with that operator. `.searchable_by_app()` does the same for `search`: the spec accepts it and the handler applies it.
+
+## Read a list query on a screen
+
+A screen should still show a page when a link is old or edited. For that, `ListQuery::parse_lenient` reads the syntax only. It keeps everything that is right and reports the rest:
+
+```rust
+use navree::http::list::{ListQuery, Op};
+
+let (query, problems) = ListQuery::parse_lenient("?filter[stage][in]=lead,won&page=0&owner_id=3");
+assert_eq!(query.filter.len(), 1);
+assert_eq!(query.filter[0].op, Op::In);
+assert_eq!(query.filter[0].values, ["lead", "won"]);
+assert_eq!(query.page, None);
+assert_eq!(problems[0].param, "page");
+```
+
+It does no allow-list check: the screen keeps only what its own columns allow. The Navree UI table and Helm read the URL this way.
+
+A `ListQuery` is data:
+
+| Member | Holds |
+|---|---|
+| `filter` | the conditions: `Condition { field, op, values }` |
+| `sort` | `SortKey { field, descending }`, in order |
+| `search` | the search text |
+| `page`, `per_page` | numbered paging |
+| `cursor`, `before`, `limit` | cursor paging |
+
+`query.eq("stage")` is the value of `filter[stage]=...`, `query.condition(field, op)` finds a condition, and `query.is_cursor()` tells which way it pages. `to_query_string()` writes the query back in the canonical form, and `on_page(n)` moves to another page, which is how a screen builds its page links:
+
+```rust
+let (query, _) = ListQuery::parse_lenient("sort=-name&filter[stage][in]=a,b&page=2");
+let next = query.on_page(3);
+assert_eq!(next.to_query_string(), "filter%5Bstage%5D%5Bin%5D=a%2Cb&sort=-name&page=3");
+```
+
+## Endpoints that only page
+
+A handler that needs no filters can take `PageQuery` or `CursorQuery` from `navree::db`. They read the paging names of the grammar and nothing else: `page` and `per_page`, or `cursor` and `limit`. The mail delivery log takes them; the audit log (`AuditList`) and the notification inbox (`NotificationList`) read the whole grammar.
+
+The two readers differ in what they do with a size past the maximum:
+
+| | `PageQuery`, `CursorQuery` | `ListSpec::parse`, `List<R>` |
+|---|---|---|
+| Names | `page`, `per_page`; `cursor`, `limit` | the same, plus `filter[..]`, `sort`, `search`, `before` |
+| `per_page` or `limit` above 100 | lowered to 100 | a 400, or whatever maximum the spec sets |
+| Not a positive whole number | a 400 | a 400 |
+| Other parameters | ignored | the list query's own are checked, the rest ignored |
+
+A link that works on a `PageQuery` endpoint (`?page=2&per_page=50`) works unchanged on a list that uses a `ListSpec`. See [pagination](/docs/database/pagination/) for both types.
+
+## Limits
+
+A list query is user input, so every part of it is bounded. A part past its limit is reported as a problem, and a strict reader answers with a 400.
+
+| Limit | Value |
+|---|---|
+| Query string read | 16 KiB (`MAX_QUERY_BYTES`) |
+| Parameters read | 1,000 (`MAX_PARAMS`) |
+| Filter conditions | 64 (`MAX_CONDITIONS`) |
+| Values in one `in` or `not_in` | 200 (`MAX_VALUES`) |
+| A filter value or the search text | 256 bytes (`MAX_TEXT`) |
+| A cursor | 1,024 bytes (`MAX_CURSOR`) |
+| Sort fields | 4 (`MAX_SORTS`) |
+| A field name | 64 characters (`MAX_FIELD`) |
+| Page number | 10,000,000 (`MAX_PAGE`) |
+| Page size | 10,000 in the syntax (`MAX_PAGE_SIZE`); a list's own maximum, 100 unless `.page_size(default, max)` says otherwise |
+
+The default page size of a list is 15.
+
+## The same names everywhere
+
+- **Navree UI.** A [DataTable](/docs/ui/data-table/) writes its filters, sort, search and page into the URL in this format, so a link to a table and a request to the API are written alike. Its own state (`cols`, `w`, `fb`, `density`, `open`, `count`) is not part of the list query.
+- **Helm.** The list pages of the [admin panel](/docs/tools/helm/) read `filter[..]`, `search`, `sort`, `page` and `per_page`. `via[column]` and `range` are Helm's own parameters.
+- **`@navree/client`.** `listQuery()` builds a query, `serializeListQuery` writes it and `checkListQuery` reads it, with the same limits and the same problem names as the server. See [list queries in the typed client](/docs/frontend/typed-client/#list-queries).
+- **Next.js and Nuxt.** `useListQuery` keeps the query in the URL, and `DataTable` (`@navree/next`) and `<NavreeDataTable>` (`@navree/nuxt`) turn clicks into the next query. See [data tables](/docs/frontend/data-tables/).
+
+<LinkCards>
+  <LinkCard href="/docs/database/pagination/" title="Pagination">
+    Page and cursor responses, `PageQuery` and `CursorQuery`.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The error body a refused list query comes back in.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/typed-client/#list-queries" title="List queries in the typed client">
+    Build, write and read a list query in JavaScript.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    Tables on the same query, for Next.js and Nuxt.
+  </LinkCard>
+</LinkCards>

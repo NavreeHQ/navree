@@ -1,0 +1,5 @@
+error: #[derive(Model)] does not take generic parameters: a model is one table
+ --> tests/ui/model_with_generics.rs:4:12
+  |
+4 | struct Deal<T: Clone + serde::Serialize> {
+  |            ^

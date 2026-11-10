@@ -1,0 +1,532 @@
+---
+title: "Notifications"
+description: "One notification over the mail, database, broadcast, Slack, Teams, SMS, WhatsApp and web push channels: notifiable users, read state, the `/api/notifications` routes, queueing and testing."
+---
+
+## Introduction
+
+<Badge feature="notify" /> A notification tells a user that something happened: a deal was assigned to them, their tasks are due today. Unlike a plain mail, one notification can go out over several **channels** at once:
+
+| Channel | Delivers |
+|---|---|
+| `Channel::Database` | A row in the `notifications` table, with read state. Users list theirs at `/api/notifications`. |
+| `Channel::Mail` | An email, sent with the app's [`Mailer`](/docs/digging-deeper/mail/). |
+| `Channel::Broadcast` | A `notification.created` event on the user's private [real-time channel](/docs/digging-deeper/broadcasting/), so an open web app can show it at once. |
+| `Channel::Slack`, `Channel::MicrosoftTeams` | A message in a Slack channel or a Teams chat. See [notification channels](/docs/digging-deeper/notification-channels/). |
+| `Channel::Sms`, `Channel::WhatsApp` | A text or WhatsApp message through Twilio, Vonage, Amazon SNS or the WhatsApp Cloud API, with STOP opt-outs. |
+| `Channel::WebPush` | A push notification on each browser or phone the user subscribed. |
+
+`NotifyModule` provides the `Notifier`, which asks each notification for its channels, renders it for each one and delivers it. In the CRM, a deal's owner is told over the database, broadcast and mail channels when someone else assigns them the deal or when it is won, and every user with open tasks gets a daily reminder. This page covers those three; [notification channels](/docs/digging-deeper/notification-channels/) covers the other five, their drivers and the delivery log they write, and [notification preferences](/docs/digging-deeper/notification-preferences/) what recipients choose: channels per category, digests, quiet hours and send windows.
+
+## Configuration
+
+Add `NotifyModule` once, in your app root. Each channel needs the module behind it:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(DatabaseModule::from_config())  // the database channel
+    .module(ViewModule::from_config())      // mail templates
+    .module(MailModule::from_config())      // the mail channel
+    .module(QueueModule::from_config())     // queued notifications
+    .module(NotifyModule::from_config())
+    .module(RealtimeModule::from_config())  // the broadcast channel
+    // ...
+```
+
+The notifier looks these services up when it sends, so an app without one of them still boots: only the channels that need the missing service fail, with `NotifyError::Unavailable`, and the others still deliver.
+
+The module is global, migrates the `notifications` table, the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`) and of preferences (`notification_preferences`, `notification_deferrals`; migration set `notify`) on PostgreSQL (with TimescaleDB), MySQL and SQLite (the `sqlite` feature), and reads the `notify` section:
+
+```toml title="config/app.toml"
+[notify]
+queue = false      # deliver at once; true queues one job per channel
+routes = true      # serve /api/notifications
+deliveries = true  # record Slack, Teams, SMS, WhatsApp and web push deliveries
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `notify.queue` | `false` | Queue each channel as a job instead of delivering it during `send`; see [queueing](#queueing-notifications). |
+| `notify.routes` | `true` | Serve the signed-in user's notifications, push subscriptions and preferences under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
+| `notify.deliveries` | `true` | Record every delivery over the Slack, Teams, SMS, WhatsApp and web push channels; see [the delivery log](/docs/digging-deeper/notification-channels/#the-delivery-log). |
+
+Those channels' drivers and credentials have tables of their own (`notify.sms`, `notify.twilio`, `notify.web_push`...), described in [notification channels](/docs/digging-deeper/notification-channels/#configuration); preferences, digests and held deliveries have `notify.preferences`, `notify.digest` and `notify.deferred`, described in [notification preferences](/docs/digging-deeper/notification-preferences/#configuration).
+
+As environment variables: `APP_NOTIFY__QUEUE=true`, `APP_NOTIFY__ROUTES=false`. In code, use `for_root`, and build the options with `..NotifyOptions::default()` so new fields keep compiling:
+
+```rust
+use navree::notify::NotifyOptions;
+
+Navree::app().module(NotifyModule::for_root(NotifyOptions {
+    queue: true,
+    ..NotifyOptions::default()
+}))
+```
+
+## Notifiable recipients
+
+A notification goes to a `Notifiable`, usually a user. It names the owner of stored notifications and tells the mail and broadcast channels where to deliver. This is the CRM's, from `crm-core/src/notify.rs`:
+
+```rust title="crm-core/src/notify.rs"
+use navree::auth::User;
+use navree::notify::{Notifiable, USER_NOTIFIABLE_TYPE};
+use uuid::Uuid;
+
+/// A user as the recipient of a notification.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotifiableUser {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+}
+
+impl From<&User> for NotifiableUser {
+    fn from(user: &User) -> Self {
+        NotifiableUser {
+            id: user.id,
+            name: user.name.clone(),
+            email: user.email.clone(),
+        }
+    }
+}
+
+impl Notifiable for NotifiableUser {
+    fn notifiable_type(&self) -> &'static str {
+        USER_NOTIFIABLE_TYPE
+    }
+
+    fn notifiable_id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn route_mail(&self) -> Option<String> {
+        Some(self.email.clone())
+    }
+}
+```
+
+| Method | Used for |
+|---|---|
+| `notifiable_type` | The owner type stored with each row. |
+| `notifiable_id` | The owner id stored with each row. |
+| `route_mail` | The address of the mail channel when the notification's mail names no recipient; `None` skips the mail. |
+| `broadcast_channel` | The real-time channel of the broadcast; `None` skips it. Defaults to `private-users.{id}`. |
+| `route_slack`, `route_teams`, `route_sms`, `route_whatsapp` | Where the [other channels](/docs/digging-deeper/notification-channels/#routing-a-notifiable) reach the recipient. Default `None`: skipped. |
+| `workspace_id`, `time_zone` | The recipient's workspace and zone, for [preferences](/docs/digging-deeper/notification-preferences/#the-recipients-workspace-and-clock), digests and quiet hours. Default `None`. |
+
+The `/api/notifications` routes find the signed-in user's notifications under the type `USER_NOTIFIABLE_TYPE` (`"user"`) and the user's UUID as a string, so a user must be notifiable exactly like this. Other notifiable types work for the database channel, but only in code: the routes serve users.
+
+## Creating notifications
+
+A notification implements `Notification`. It has a stable `TYPE`, lists its channels per recipient with `via`, and renders itself for each channel:
+
+```rust title="src/modules/contacts/notifications/contact_moved.rs"
+use navree::notify::{Channel, Notifiable, Notification};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+/// A contact the user follows changed company.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContactMoved {
+    pub contact_id: Uuid,
+    pub name: String,
+    pub company: String,
+}
+
+impl Notification for ContactMoved {
+    const TYPE: &'static str = "contact.moved";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Broadcast]
+    }
+
+    fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
+        Some(json!({
+            "title": "Contact moved",
+            "message": format!("{} now works at {}", self.name, self.company),
+            "url": format!("/contacts/{}", self.contact_id),
+        }))
+    }
+}
+```
+
+| Method | Returns | Default |
+|---|---|---|
+| `via` | The channels, in delivery order (duplicates are ignored). | required |
+| `to_database` | The `data` stored with the row. | the notification serialized as JSON |
+| `to_broadcast` | The `data` of the broadcast. | `to_database` |
+| `to_mail` | A [`TemplateMail`](/docs/digging-deeper/mail/#template-mail). | `None`: no mail |
+| `to_slack`, `to_teams`, `to_sms`, `to_whatsapp`, `to_web_push` | The messages of the [other channels](/docs/digging-deeper/notification-channels/#rendering-for-each-channel). | `None` |
+| `send_window` | When the notification may reach people; see [send windows](/docs/digging-deeper/notification-preferences/#quiet-hours-and-send-windows). | `None`: any time |
+
+`CATEGORY`, `DIGEST` and `URGENT` (or `#[notification(category = "deals", digest = "daily")]`) decide how the recipient's [preferences](/docs/digging-deeper/notification-preferences/#categories-and-digests) apply: the category they switch channels for, whether its mail is batched, and whether it skips quiet hours.
+
+Any `to_*` method may return `None` to skip its channel for this recipient. `TYPE` is stored with every row and sent with every broadcast, so clients can tell notifications apart; keep it stable.
+
+To send something else in the broadcast than what is stored, override `to_broadcast`:
+
+```rust
+fn to_broadcast(&self, notifiable: &dyn Notifiable) -> Option<Value> {
+    let mut data = self.to_database(notifiable)?;
+    data["toast"] = json!(true);
+    Some(data)
+}
+```
+
+The CLI generates a notification with the database and broadcast channels:
+
+```sh
+navree make:notification contacts contact_moved
+```
+
+### Mail notifications
+
+`to_mail` returns a `TemplateMail`. Leave its `to` empty and the notification goes to the recipient's `route_mail`; leave the sender unset and it comes from `mail.from`. This is the CRM's `DealNotification`, one type for both deal notices (`K` is `Assigned` or `Won`, which supply the `TYPE`):
+
+```rust title="crm-deals/src/notification.rs"
+/// A notification to a deal's owner, stored (`/api/notifications`),
+/// broadcast on `private-users.{id}` (`notification.created`) and mailed.
+/// Its `data` is [`NotificationData`] about the deal.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct DealNotification<K> {
+    /// `{title, message, url, deal_id}`.
+    pub data: NotificationData,
+    /// The recipient's name, for the mail's greeting.
+    pub recipient: String,
+    /// The deal's title, for the mail's subject.
+    pub deal_title: String,
+    /// The absolute link the mail points at (`app.url` + `data.url`).
+    pub link: String,
+    #[serde(skip)]
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: DealNotice> Notification for DealNotification<K> {
+    const TYPE: &'static str = K::TYPE;
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Broadcast, Channel::Mail]
+    }
+
+    fn to_mail(&self, _notifiable: &dyn Notifiable) -> Option<TemplateMail> {
+        Some(TemplateMail {
+            to: Vec::new(),
+            subject: format!("{}: {}", self.data.title, self.deal_title),
+            template: MAIL_TEMPLATE.to_owned(),
+            context: json!({
+                "name": self.recipient,
+                "title": self.data.title,
+                "message": self.data.message,
+                "url": self.link,
+            }),
+        })
+    }
+
+    fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
+        serde_json::to_value(&self.data).ok()
+    }
+}
+```
+
+The mail renders `mail/deal-notification.html` and `.txt`, which `DealsModule` embeds (see [mail templates](/docs/digging-deeper/mail/#mail-templates)). The mail is rendered when it is delivered, so a template error shows up as a failure of the mail channel, not before.
+
+Give every notification of your app the same `data` shape, so one client component can list them all. The CRM's is `NotificationData`: `{title, message, url, deal_id?}`.
+
+## Sending notifications
+
+Inject `Arc<Notifier>` and call `send` with the recipient and the notification. It returns the notification's id, a UUID v7 shared by all its channels: the row's id, and the `id` in the broadcast. The CRM's queued listener `NotifyDealOwner` does this:
+
+```rust title="crm-deals/src/notification.rs"
+async fn notify<K: DealNotice>(
+    &self,
+    owner_id: Uuid,
+    deal_id: Uuid,
+    deal_title: &str,
+    title: &str,
+    message: String,
+) -> Result<(), BoxError> {
+    let Some(owner) = self.auth.find_user(owner_id).await? else {
+        return Ok(());
+    };
+    let data = NotificationData::new(title, message, format!("/deals/{deal_id}")).deal(deal_id);
+    let link = self.link(&data.url);
+    let notification = DealNotification::<K>::new(data, owner.name.clone(), deal_title, link);
+    self.notifier
+        .send(&NotifiableUser::from(&owner), notification)
+        .await?;
+    Ok(())
+}
+```
+
+`send` attempts every channel, even when one fails. When one channel fails you get its error; when several do, `NotifyError::Several` with each of them.
+
+### Notifications and transactions
+
+Inside a [unit of work](/docs/database/unit-of-work/), a request handler's or `Db::transaction`'s, `send` ties the notification to it:
+
+- the database row is written in the transaction, so it exists only if the request commits;
+- the other channels (mail, broadcast and the rest) go out only after the commit, and not at all on a rollback. Their errors are then logged at target `navree::notify`, not returned.
+
+`send_in(&uow, &user, notification)` does the same with a unit of work you pass explicitly. Elsewhere, in a job, a command or a scheduled task, every channel is delivered during `send`.
+
+### Queueing notifications
+
+Sending mail during a request makes the user wait for the SMTP server. With `notify.queue` on, `send` renders the notification at once, then dispatches one job `notify.send` per channel through the [queue](/docs/digging-deeper/queues/), so a worker delivers each channel and retries it on its own. (Inside a unit of work, the database row is still written in the transaction, and the other channels are queued after the commit.)
+
+- The jobs carry the rendered output, not the notification, so notification types need no registration with the queue. `NotifyModule` registers `notify.send`.
+- A retried database job doesn't store the row twice.
+- `send_now` never queues, even with queueing on: it delivers during the call (inside a unit of work, once it commits).
+- In an app without a queue, queued notifications are delivered at once, with a warning logged the first time.
+
+The CRM leaves `notify.queue` off. Its deal notifications are sent from a [queued listener](/docs/digging-deeper/events/#queued-listeners), so the whole listener, notification included, already runs on a worker; its reminders run from the scheduler.
+
+## The channels in detail
+
+### Database
+
+Each delivery stores a row in `notifications`: `id`, `notifiable_type`, `notifiable_id`, `type`, `data` (JSON), `read_at` (null while unread) and `created_at`. Times come from the app's `dyn Clock`, to the microsecond.
+
+Rows are never deleted for you. To prune old ones, schedule a task that deletes through the `navree::notify::notifications::Model` (see [in code](#in-code)), as in [scheduling functions](/docs/digging-deeper/scheduling/#scheduling-functions).
+
+### Broadcast
+
+The broadcast channel sends the event `notification.created` on the recipient's `broadcast_channel`, through the app's `dyn Broadcaster` (`RealtimeModule`). Its payload is the notification as the list shows it:
+
+```json
+{
+  "id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23",
+  "type": "deal.won",
+  "data": {
+    "title": "Deal won",
+    "message": "“Agra renewal” was marked won",
+    "url": "/deals/0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e",
+    "deal_id": "0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e"
+  },
+  "read_at": null,
+  "created_at": "2026-10-26T09:30:00Z"
+}
+```
+
+`private-users.{id}` is a private channel, so the app must authorize it. The CRM lets only that user subscribe:
+
+```rust title="crm-core/src/platform.rs"
+m.global()
+    .value_arc::<dyn Clock>(Arc::new(SystemClock))
+    .exports::<dyn Clock>()
+    .channel("crm.deals", deals_channel)
+    .channel("users.{id}", user_channel);
+```
+
+```rust
+/// `private-users.{id}` (notifications): only that user.
+fn user_channel(
+    principal: &Principal,
+    params: &HashMap<String, String>,
+    _ctx: &AppContext,
+) -> BoxFuture<'static, Result<ChannelDecision, BoxError>> {
+    let own = params.get("id") == Some(&principal.user_id.to_string());
+    Box::pin(async move {
+        Ok(if own {
+            ChannelDecision::Allow
+        } else {
+            ChannelDecision::Deny
+        })
+    })
+}
+```
+
+A queue worker or the scheduler doesn't hold the WebSocket connections. To reach browsers from there, set `realtime.relay_url` (the CRM uses `"auto"`) so they hand broadcasts to the `serve` process; see [broadcasting](/docs/digging-deeper/broadcasting/).
+
+## Reading notifications
+
+### The HTTP routes
+
+With `notify.routes` on, the module serves the signed-in user's notifications under the API prefix (`/api` in the CRM). Every route needs authentication and only ever sees the caller's own notifications.
+
+| Route | Result |
+|---|---|
+| `GET /api/notifications` | A page of notifications, newest first, in the [list-query grammar](/docs/basics/list-queries/) (`navree::notify::NotificationList`): `filter[unread]=true` keeps unread ones only; `filter[type]` (also `[ne]`, `[in]`, `[not_in]`), `filter[created_at][gte]` and the like, `page`, `per_page`. |
+| `GET /api/notifications/unread-count` | `{"count": 3}` |
+| `POST /api/notifications/{id}/read` | 204. Marks one read and keeps the first read time; 404 when it isn't yours. |
+| `POST /api/notifications/read-all` | 204. Marks every unread one read. |
+
+A page looks like this ([pagination](/docs/database/pagination/) explains `page`, `per_page` and `meta`):
+
+```json
+{
+  "data": [
+    {
+      "id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23",
+      "type": "deal.assigned",
+      "data": {
+        "title": "Deal assigned to you",
+        "message": "Manpreet Gill assigned you “Agra renewal”",
+        "url": "/deals/0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e",
+        "deal_id": "0199c1c8-2a4b-7c10-9e3f-5d6a7b8c9d0e"
+      },
+      "read_at": null,
+      "created_at": "2026-10-26T09:30:00Z"
+    }
+  ],
+  "meta": { "current_page": 1, "per_page": 15, "total": 1, "last_page": 1 }
+}
+```
+
+A `filter[unread]` other than `true` or `false`, an unknown filter or operator, or a `per_page` over 100 is a 400 that names the parameter. The routes appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the tag `Notifications`.
+
+### In a Navree UI page
+
+With the `ui` and `notify` features on together, `navree::notify::ui::NotificationBell` shows the signed-in user's stored (database) notifications in the [app shell](/docs/ui/app-shell/): the number of unread ones and the latest eight, each a link to what it is about, with Mark read and Mark all read.
+
+```rust
+let shell = Shell::new("Agra").search(NotificationBell::new().live());
+```
+
+The bell fetches its list after the page paints, so the shell stays fast. `.live()` hears a new notification on the app's live hub and needs `RealtimeModule`; without it the bell polls once a minute (`.poll(duration)` changes that). `NotifyModule` mounts the routes it uses when `notify.routes` is on and the app has a database and an authenticator: `GET /notifications/bell`, `POST /notifications/{id}/mark-read` and `POST /notifications/read-all`. A notification's `data` is read as `{title, message, url}`, and `url` becomes the link only when it is an address on your own site. The words are in `BellLabels` (`.labels(..)`).
+
+### In code
+
+The same read state is available on the `Notifier`, for any notifiable. Each method takes the executor to use (any `navree::orm::Executor`: a `Db`, a `Uow`): in a handler, `uow.db()` to read and `&uow` to write.
+
+```rust
+use navree::db::{Page, PageQuery};
+use navree::notify::DatabaseNotification;
+
+let page: Page<DatabaseNotification> = notifier
+    .notifications(uow.db(), &me, true, PageQuery::default()) // unread only
+    .await?;
+let unread = notifier.unread_count(uow.db(), &me).await?;
+
+let found = notifier.mark_as_read(&uow, &me, id).await?;  // false: not one of mine
+let marked = notifier.mark_all_as_read(&uow, &me).await?; // how many were unread
+```
+
+For any other query, a stored notification is a model of Navree's ORM (`navree::orm`), `navree::notify::notifications::Model`; its `type` column is the field `notification_type`:
+
+```rust
+use navree::notify::notifications::Model as Stored;
+use navree::orm::Model as _;
+
+let unread = Stored::query()
+    .where_(Stored::NOTIFIABLE_ID.eq(me.id.to_string()))
+    .where_null(Stored::READ_AT)
+    .latest_by(Stored::CREATED_AT)
+    .get(&db)
+    .await?;
+```
+
+## Errors
+
+`send`, `send_now` and `send_in` return `NotifyError`; the read-state methods (`notifications`, `unread_count`, `mark_as_read`, `mark_all_as_read`) return the ORM's `OrmError`. `NotifyError`'s messages never contain notification data or mail bodies.
+
+| Variant | When |
+|---|---|
+| `Database` | A statement failed (a `DbError`). |
+| `Orm` | Storing or reading a row of a channel table failed (an `OrmError`). |
+| `Mail` | The mail channel failed (a `MailError`, such as a missing template). |
+| `Broadcast` | The broadcaster failed. |
+| `Queue` | Dispatching a `notify.send` job failed. |
+| `Channel` | A Slack, Teams, SMS, WhatsApp or web push driver didn't send; see [errors](/docs/digging-deeper/notification-channels/#errors). |
+| `InvalidRecipient` | A number isn't valid E.164, or a push subscription is invalid. |
+| `Unavailable` | A channel's service isn't in the app (or the app has shut down). |
+| `Several` | More than one channel failed; each error in channel order. |
+| `InvalidPreferences` | A change to [notification preferences](/docs/digging-deeper/notification-preferences/#in-code) was refused; the messages by field. |
+
+## Testing
+
+Build a test app with the channels you want to check and send the notification, or trigger the code that sends it:
+
+- **Database:** count with `unread_count`, or list with `GET /api/notifications` as the user (see [HTTP tests](/docs/testing/http-tests/)).
+- **Mail:** use the `array` transport and read `mailer.array_transport()`, as in [testing mail](/docs/digging-deeper/mail/#testing).
+- **Broadcast:** there is no broadcaster fake yet. Override `dyn Broadcaster` with a small recording one, as below.
+- **Queueing:** with `notify.queue` on and the [queue fake](/docs/digging-deeper/queues/#faking-the-queue), each channel is a recorded `SendNotificationJob`; its `delivery` says which channel and what was rendered.
+- **Slack, Teams, SMS, WhatsApp, web push:** each has a fake (`SmsFake` and the others) that records messages and plays the provider; see [testing the channels](/docs/digging-deeper/notification-channels/#testing).
+
+```rust title="tests/contact_moved.rs"
+use std::sync::Mutex;
+
+use navree::BoxFuture;
+use navree::contracts::Broadcaster;
+use navree::db::Db;
+use navree::notify::{Notifier, NotifyOptions};
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+#[derive(Default)]
+struct RecordingBroadcaster(Mutex<Vec<(Vec<String>, String, Value)>>);
+
+impl Broadcaster for RecordingBroadcaster {
+    fn broadcast(
+        &self,
+        channels: Vec<String>,
+        event: String,
+        data: Value,
+    ) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.0.lock().unwrap().push((channels, event, data));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[tokio::test]
+async fn followers_hear_about_moved_contacts() {
+    let broadcaster = Arc::new(RecordingBroadcaster::default());
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(NotifyModule::for_root(NotifyOptions {
+            routes: false,
+            ..NotifyOptions::default()
+        }))
+        .override_value::<dyn Broadcaster>(broadcaster.clone())
+        .build()
+        .await;
+
+    let notifier = app.get::<Notifier>().await;
+    let me = NotifiableUser {
+        id: Uuid::now_v7(),
+        name: "Priya Verma".into(),
+        email: "rep1@navree.test".into(),
+    };
+    let moved = ContactMoved {
+        contact_id: Uuid::now_v7(),
+        name: "Anu".into(),
+        company: "Agra".into(),
+    };
+    let id = notifier.send(&me, moved).await.unwrap();
+
+    let db = app.get::<Db>().await;
+    assert_eq!(notifier.unread_count(&*db, &me).await.unwrap(), 1);
+    let sent = broadcaster.0.lock().unwrap().clone();
+    assert_eq!(sent[0].0, [format!("private-users.{}", me.id)]);
+    assert_eq!(sent[0].1, "notification.created");
+    assert_eq!(sent[0].2["id"], json!(id));
+    app.shutdown().await.unwrap();
+}
+```
+
+`temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
+
+The CRM tests notifications end to end in `crm-deals/tests/deals/notifications.rs`: a manager reassigns a deal over HTTP, the test checks that nothing was delivered yet, runs the queue with `crm.run_queue()`, then reads the new owner's `/api/notifications` and the mail the array transport kept.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/notification-channels/" title="Notification channels">
+    Slack, Teams, SMS, WhatsApp and web push, with the delivery log and opt-outs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notification-preferences/" title="Notification preferences">
+    Channels per category, digests, quiet hours, send windows and workspace templates.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Templates and transports behind the mail channel.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Real-time broadcasting">
+    Private channels and the relay from workers.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    Sending notifications from queued listeners.
+  </LinkCard>
+</LinkCards>

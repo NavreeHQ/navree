@@ -1,0 +1,22 @@
+[package]
+name = "navree-glob"
+description = "Navree's glob matcher: `*` and `?` over whole strings, in time proportional to the pattern times the input."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "glob", "wildcard", "pattern"]
+categories = ["text-processing"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

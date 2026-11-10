@@ -1,0 +1,135 @@
+---
+title: "InputOtp"
+description: "A field for a one-time code, such as the six digits in a text message. It is one text field drawn as boxes, so a phone can fill it in, a paste lands whole, and it works with JavaScript off."
+---
+
+<UiPreview example="input-otp/default" />
+
+`InputOtp` asks for a short code that was sent to the person: a text message, an email, an authenticator app. It draws the code in boxes, one character to a box, and posts it as one value.
+
+```rust
+use navree::ui::*;
+
+Field::new("code", "Verification code")
+    .help("Six digits, sent to +91 98765 43210.")
+    .control(InputOtp::new("code", 6))
+```
+
+`InputOtp::new(name, length)` posts the code as `name`. The length is from 3 to 12 characters. A number outside that is held to it, both in the field and in the server's check.
+
+## It is one text field
+
+The boxes are not separate inputs. `InputOtp` is one real text input, and the stylesheet draws the boxes round it. That is a choice, and it has four reasons.
+
+- **A phone can fill it in.** The field says `autocomplete="one-time-code"`, so a phone offers the code from the text message that just arrived and puts all of it in one go. Six separate inputs cannot take that.
+- **A paste lands whole.** One field takes a pasted code as one piece of text.
+- **A screen reader reads one field.** It hears "Verification code, edit text", not six fields to move through.
+- **It works with JavaScript off.** It is a text input with a length and a pattern. The browser holds back a code that is too short, and the form posts it.
+
+There is no keyboard pattern for a one-time code in the WAI-ARIA Authoring Practices, so the field follows the text field. Type to add characters, `Backspace` removes the last one, the arrow keys and `Home` and `End` move the caret so the code can be read back, and `Tab` leaves.
+
+The boxes line up because the field uses a monospace font, in which every character is exactly one `ch` wide. The letter spacing gives each character the width of one box, and the stylesheet draws the lines between the boxes at that width. A code is always drawn left to right, even on a right-to-left page. There is no masked mode: the dots a browser draws for a password are not the width of a character, so the boxes would no longer line up with them.
+
+<UiAnatomy component="input-otp" />
+
+## When to use it
+
+Use it for a code the person receives and types back: signing in, confirming a payment, checking a phone number. For a secret the person chooses, use an [Input](/docs/components/input/) of type password. A code is not a secret in that way, and it is shown as it is typed.
+
+## In groups
+
+`.group(3)` draws a heavier line after every third box, as in 482-915. A group is 2 to 4 boxes and must be shorter than the code. The code is still posted as one value with no dash in it.
+
+<UiPreview example="input-otp/groups" />
+
+## Letters and digits
+
+A code is digits by default. `.kind(OtpKind::Alphanumeric)` takes the letters A to Z as well. A small letter is changed to its capital as it is typed, and the phone shows its text keyboard with capitals on.
+
+<UiPreview example="input-otp/letters" />
+
+## Typing and pasting
+
+The `otp` module keeps what is typed or pasted to the characters a code may hold. A space, a dash, a letter in a digits code, or a character from another script is dropped as it arrives. A pasted `482 915` lands as `482915`: the field's own length limit would cut the paste at six characters, so the module takes the spaces out first and then puts the code in.
+
+When the code is whole, the field sends a `change` event, once each time it becomes whole.
+
+## Sending when the code is whole
+
+`.submit_when_complete()` sends the form as soon as the last character is in and the form is valid. The form keeps its button and still posts with no script.
+
+<UiPreview example="input-otp/send" />
+
+## With an error
+
+Put the field in a [Field](/docs/components/field/) and give it an error. The field takes the `id`, the `aria-invalid` mark and the `aria-describedby` tie to the message, as an Input does.
+
+<UiPreview example="input-otp/error" />
+
+## States
+
+`.disabled(true)` can't be focused and posts nothing. `.readonly()` shows the code and keeps it still. `.invalid(true)` colours the boxes for a bad code. `.value(code)` starts the field with a code; only the characters the code can have are kept, and only as many as it has room for.
+
+<UiPreview example="input-otp/states" />
+
+## Right to left
+
+A code reads left to right in every language, so the boxes keep their order on a right-to-left page. The label and the help text follow the page.
+
+<UiPreview example="input-otp/rtl" />
+
+## The server reads the code
+
+A browser sends what it is told to, and anything else can send anything. `OtpRules` holds the length and the kind of a field, and reads a posted code under the same rules the field draws.
+
+```rust
+use navree::ui::*;
+
+let rules = InputOtp::new("code", 6).rules();
+match rules.check(&posted_code) {
+    Ok(code) => { /* "482915": six ASCII digits */ }
+    Err(error) => { /* OtpError::Empty, WrongLength or BadCharacter */ }
+}
+```
+
+`check` trims the white space round the code and drops the spaces and dashes inside it. What is left must be exactly the right length of ASCII digits (for `OtpKind::Alphanumeric`, ASCII letters and digits, as capitals). Nothing else counts as a digit or a letter: not Arabic-Indic or fullwidth digits, not zero-width characters, not other kinds of space. A post longer than 64 bytes is not a code and is not read. `error.message()` says what is wrong in words.
+
+<UiPreview example="input-otp/check" />
+
+`check` does not compare the code with the one you sent. Do that yourself, in constant time, and limit how many tries a person gets.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| A digit (or a letter, for a code with letters) | Adds it, until the code is whole. |
+| `Backspace` | Removes the character before the caret. |
+| `Left`, `Right`, `Home`, `End` | Move the caret, so the code can be read back. |
+| `Tab` | Leaves the field. |
+
+- It is one field with one name. Give it a label with a [Field](/docs/components/field/), or with `.label(text)` when no visible label does.
+- A click puts the caret after the last character, so a code is typed in order. A range that is selected stays selected.
+- The boxes are drawn by the stylesheet and are not read out. What a screen reader reads is the text in the field.
+- The field has `autocomplete="one-time-code"`, a numeric keyboard for digits, a pattern, and a minimum and maximum length equal to the code's.
+
+</UiA11y>
+
+## API
+
+### InputOtp
+
+<UiProps type="InputOtp" />
+
+### OtpKind
+
+<UiProps type="OtpKind" />
+
+### OtpRules
+
+<UiProps type="OtpRules" />
+
+### OtpError
+
+<UiProps type="OtpError" />

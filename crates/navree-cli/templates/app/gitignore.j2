@@ -1,0 +1,12 @@
+/target/
+
+# Local secrets and settings (commit .env.example instead). Runtime data
+# (databases, logs, uploads) stays in storage/, which has its own .gitignore.
+.env
+{% if ui_next %}
+
+# Next.js front end
+/web/node_modules/
+/web/.next/
+/web/.env.local
+{% endif %}

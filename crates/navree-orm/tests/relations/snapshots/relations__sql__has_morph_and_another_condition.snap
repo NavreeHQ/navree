@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "query(Note::query().where_(Note::BODY.eq(\"x\")).has_morph(\"notable\",\n[\"deal\", \"company\"]))"
+---
+PostgreSQL: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."body" = $1 AND (("notes"."notable_type" = $2 AND EXISTS (SELECT 1 FROM "deals" WHERE "notes"."notable_id" = "deals"."id" AND "deals"."deleted_at" IS NULL)) OR ("notes"."notable_type" = $3 AND EXISTS (SELECT 1 FROM "companies" WHERE "notes"."notable_id" = "companies"."id")))
+  values: [String("x"), String("deal"), String("company")]
+MySQL: SELECT `notes`.`id`, `notes`.`notable_type`, `notes`.`notable_id`, `notes`.`body` FROM `notes` WHERE `notes`.`body` = ? AND ((`notes`.`notable_type` = ? AND EXISTS (SELECT 1 FROM `deals` WHERE `notes`.`notable_id` = `deals`.`id` AND `deals`.`deleted_at` IS NULL)) OR (`notes`.`notable_type` = ? AND EXISTS (SELECT 1 FROM `companies` WHERE `notes`.`notable_id` = `companies`.`id`)))
+  values: [String("x"), String("deal"), String("company")]
+SQLite: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."body" = ? AND (("notes"."notable_type" = ? AND EXISTS (SELECT 1 FROM "deals" WHERE "notes"."notable_id" = "deals"."id" AND "deals"."deleted_at" IS NULL)) OR ("notes"."notable_type" = ? AND EXISTS (SELECT 1 FROM "companies" WHERE "notes"."notable_id" = "companies"."id")))
+  values: [String("x"), String("deal"), String("company")]

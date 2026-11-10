@@ -1,0 +1,280 @@
+---
+title: "Database tests"
+description: "A fresh SQLite database per test, preparing data with factories, seeders and the API, and asserting on rows, change events and audit entries."
+---
+
+Most of what an API does ends up in the database, so most tests check it there: arrange some rows, call the API, then look at what it stored. Navree gives every test its own database, so tests never see each other's rows and need no cleanup.
+
+## A database for every test
+
+`TestApp::builder().temp_database()` points the app at a new SQLite file in a temporary directory and turns on `database.migrate_on_boot`. For an app you boot with `from_builder`, `temp_sqlite_url()` gives you the URL, and you set `database.migrate_on_boot` yourself ([booting your whole app](/docs/testing/getting-started/#booting-your-whole-app)). Every test starts from an empty database with every module's migrations applied, and the file is deleted with the app. The test databases are SQLite, so the app's tests need the `sqlite` Cargo feature: in `[dev-dependencies]` for an app that runs on PostgreSQL or MySQL, so its release build still compiles no SQLite (`navree new` writes it):
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree = { version = "1", features = ["sqlite"] }
+```
+
+Without it a test fails at boot with "enable the `sqlite` feature of navree-db". Here is a test:
+
+```rust
+use navree::db::DatabaseModule;
+use navree::testing::TestApp;
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(CompaniesModule)
+        .module(DealsModule)
+        .build()
+        .await
+}
+```
+
+There is nothing to reset between tests, and tests aren't wrapped in a transaction that rolls back at the end. Each request commits or rolls back as it would in production, so a test can check what was committed, after-commit hooks included.
+
+`temp_database()` always creates a SQLite file. For tests on PostgreSQL or MySQL, the ORM's `#[navree::test(database = "postgres")]` gives each test a database of its own on a real server, copied from a template ([ORM testing](/docs/orm/testing/#real-servers)).
+
+To reach the database in a test, resolve `Db` from the app. It is an executor, so models, queries and statements take it as it is:
+
+```rust
+use navree::db::Db;
+
+let db = app.get::<Db>().await;
+```
+
+## Preparing data
+
+### With factories
+
+[Model factories](/docs/orm/factories/) create records with fake data, saved through the models like any other record, and you override what the test cares about:
+
+```rust
+let agra = Company::factory().set(Company::NAME, "Agra").create_one(&db).await.unwrap();
+Deal::factory().count(3).for_record(&agra, Deal::COMPANY_ID).create(&db).await.unwrap();
+Deal::factory()
+    .count(2)
+    .for_record(&agra, Deal::COMPANY_ID)
+    .state(DealFactory::won)
+    .create(&db)
+    .await
+    .unwrap();
+```
+
+Records saved through `&Db`, outside a unit of work, record no change events. Factories write directly, without your services' rules. That makes them quick for the data a test merely needs, but not for the behaviour under test.
+
+### With seeders
+
+Run your seeders as the `db:seed` command would:
+
+```rust
+app.run_command("db:seed", &["demo-companies"]).await.unwrap();
+```
+
+or call the functions your seeders use. The CRM's test kit seeds its roles and demo accounts with `ensure_demo_accounts(app.ctx())`, the same function its `crm-demo` seeder calls.
+
+### Through the API
+
+Creating data through your own endpoints exercises the most code, and stays correct when your rules change. The CRM's tests keep small helpers for it:
+
+```rust title="tests/api/support.rs"
+/// `POST /api/v1/companies` as `client`, expecting a 201.
+pub async fn create_company(client: &CrmClient, body: Value) -> Value {
+    client
+        .post("/api/v1/companies")
+        .json(&body)
+        .send()
+        .await
+        .assert_status(201)
+        .json_value()
+}
+```
+
+For records another module owns, whose API isn't part of the test app, the CRM saves the record directly through its model, as `insert_deal` in the same file does.
+
+## Asserting on the database
+
+The ORM's assertions check rows directly, and report the closest rows when they fail ([database assertions](/docs/orm/testing/#database-assertions)):
+
+```rust
+use navree::orm::testing::*;
+
+assert_database_has(&db, "deals", [("title", "Agra renewal")]).await;
+assert_database_count(&db, "deals", 1).await;
+assert_soft_deleted(&db, &company).await;
+```
+
+Or query the table through its model and check what's there:
+
+```rust
+#[tokio::test]
+async fn creating_a_deal_stores_it() {
+    let app = app().await;
+    let db = app.get::<Db>().await;
+    let me = Uuid::now_v7();
+    let agra = Company::factory()
+        .set(Company::OWNER_ID, me)
+        .create_one(&db)
+        .await
+        .unwrap();
+
+    let body = app
+        .acting_as(principal(me))
+        .post("/api/v1/deals")
+        .json(&json!({ "title": "Agra renewal", "amount_cents": 120000, "company_id": agra.id }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+
+    let id: Uuid = serde_json::from_value(body["id"].clone()).unwrap();
+    let stored = Deal::query()
+        .find(&db, id)
+        .await
+        .unwrap()
+        .expect("the deal is stored");
+    assert_eq!(stored.title, "Agra renewal");
+    assert_eq!(stored.owner_id, me);
+    assert_eq!(stored.stage, Stage::Lead);
+}
+```
+
+Counting is often enough, and it is the way to check that a rejected request left nothing behind:
+
+```rust
+app.acting_as(principal(Uuid::now_v7()))
+    .post("/api/v1/deals")
+    .json(&json!({ "title": "", "amount_cents": 100, "company_id": Uuid::now_v7() }))
+    .send()
+    .await
+    .assert_validation_error("title");
+
+assert_eq!(Deal::query().count(&db).await.unwrap(), 0);
+```
+
+Checking the row also proves what the API can't show. A [soft-deleted](/docs/orm/scopes-and-soft-deletes/#soft-deletes) company answers 404, but its row must still be there:
+
+```rust
+#[tokio::test]
+async fn deleting_a_company_keeps_its_row() {
+    let app = app().await;
+    let db = app.get::<Db>().await;
+    let me = Uuid::now_v7();
+    let company = Company::factory()
+        .set(Company::OWNER_ID, me)
+        .create_one(&db)
+        .await
+        .unwrap();
+    let path = format!("/api/v1/companies/{}", company.id);
+    let client = app.acting_as(principal(me));
+
+    client.delete(&path).send().await.assert_status(204);
+    client.get(&path).send().await.assert_error(404, None);
+
+    let row = Company::query()
+        .with_trashed()
+        .find(&db, company.id)
+        .await
+        .unwrap()
+        .expect("the row is kept");
+    assert!(row.deleted_at.is_some());
+    app.shutdown().await.unwrap();
+}
+```
+
+### Change events
+
+To test what a service records for the audit trail, run it in a unit of work of your own and read `uow.changes()` before rolling back:
+
+```rust
+use navree::db::ChangeOp;
+
+let uow = db.uow(Some(owner), None).await;
+let mut deal = deal.clone();
+deal.update(&uow, |deal| deal.stage = Stage::Won).await.unwrap();
+
+let changes = uow.changes();
+assert_eq!(changes.len(), 1);
+assert_eq!(changes[0].op, ChangeOp::Updated);
+// Only the changed columns, so `stage` and the touched `updated_at`.
+assert_eq!(changes[0].old.as_ref().unwrap()["stage"], json!("lead"));
+assert_eq!(changes[0].new.as_ref().unwrap()["stage"], json!("won"));
+uow.rollback().await.unwrap();
+```
+
+### Audit entries
+
+With `AuditModule` in the app, the change observer writes data entries inside each request's transaction. Security entries (sign-ins, denials) go through a background writer, so call `flush()` before you read them. The CRM reads them through `AuditLog::list`:
+
+```rust
+use navree::audit::{AuditFilter, AuditLog};
+use navree::db::PageQuery;
+
+let log = crm.get::<AuditLog>().await;
+log.flush().await;
+let denied = log
+    .list(
+        &AuditFilter {
+            action: Some("access.denied".to_owned()),
+            ..AuditFilter::default()
+        },
+        PageQuery::new(1, 100),
+    )
+    .await
+    .expect("the audit log lists")
+    .data;
+assert_eq!(denied[0].actor_id, Some(rep.id()));
+```
+
+See [the audit log](/docs/security/audit-log/) for the filters and the entry fields.
+
+## Time
+
+Rows store timestamps, and a test that compares them with `Utc::now()` is fragile. Inject the app's `dyn Clock` in your services and give the test app a `FixedClock`; then `created_at` is exactly the time you set, and `clock.advance(..)` moves it. See [the clock](/docs/testing/fakes/#the-clock).
+
+## Commands and migrations
+
+`app.run_command` runs any registered command against the test's database. Rolling all migrations back and running them again checks your `down` methods:
+
+```rust
+use navree::db::Migrator;
+
+app.run_command("migrate:rollback", &[]).await?;
+let status = Migrator::status(app.ctx()).await?;
+assert!(status.iter().all(|migration| !migration.applied));
+app.run_command("migrate", &[]).await?;
+```
+
+## Catching pool starvation
+
+On SQLite, a request that holds its unit of work's connection and then waits for a second one can starve the pool under load ([SQLite and concurrency](/docs/database/unit-of-work/#sqlite-and-concurrency)). The CRM catches such code with a pool of one connection and a short timeout, where any request needing a second connection fails at once:
+
+```rust
+async fn crm() -> TestCrm {
+    TestCrm::builder()
+        .app(crm_api::app)
+        .config("database.max_connections", 1)
+        .config("database.min_connections", 1)
+        .config("database.connect_timeout_secs", 1)
+        .build()
+        .await
+}
+```
+
+Its test then calls every route that combines a record check, `CurrentUser` and embedded users, and asserts they all succeed quickly. Tests that send many requests at once need real threads: `#[tokio::test(flavor = "multi_thread", worker_threads = 4)]`.
+
+## Cleaning up
+
+Dropping a `TestApp` deletes its database directory. On Windows, a pool that is still open keeps the files, so end tests with `app.shutdown().await` (or the CRM's `crm.shutdown().await`), which closes the pool first. A directory that could not be deleted is retried in the background for about 30 seconds, and the next test process removes `navree-test-*` directories that are more than an hour old.
+
+<LinkCards>
+  <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding and factories">
+    Writing the factories and seeders tests use.
+  </LinkCard>
+  <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
+    Requests, signed-in users and response assertions.
+  </LinkCard>
+  <LinkCard href="/docs/testing/fakes/" title="Fakes">
+    The clock, the queue, mail and outgoing HTTP.
+  </LinkCard>
+</LinkCards>

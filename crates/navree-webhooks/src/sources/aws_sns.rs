@@ -1,0 +1,609 @@
+//! [`AwsSns`]: SNS messages signed with the signing certificate of the
+//! topic's region (signature version 1 and 2), and subscription
+//! confirmation. The message's envelope and signature are checked by
+//! `navree_crypto::sns`, which navree-mail's SES routes share.
+
+use navree_crypto::jose::VerifyingKey;
+use navree_crypto::sns::{self, SnsEnvelopeError, SnsSignatureError};
+
+use crate::options::SourceOptions;
+use crate::request::{Handshake, IncomingRequest, Verdict};
+use crate::verify::{Verified, VerifyError, WebhookSource, WebhookVerifier};
+
+/// Amazon SNS HTTP(S) subscriptions (SES events and inbound mail among
+/// them). SNS signs each message with RSA, SHA-1 for signature version 1
+/// and SHA-256 for version 2, using the certificate at `SigningCertURL`. The
+/// URL must be HTTPS on an SNS host (`sns.<region>.amazonaws.com`, or
+/// `.amazonaws.com.cn`) with a path ending in `.pem` and no query; the
+/// certificate is fetched once
+/// and cached ([`SenderKeys`](crate::SenderKeys)). The message's
+/// `TopicArn` must be one of the source's `topics`: SNS signs every topic's
+/// messages with the same keys.
+///
+/// A `SubscriptionConfirmation` is confirmed (its `SubscribeURL`, on an SNS
+/// host, is fetched) and an `UnsubscribeConfirmation` acknowledged, both
+/// without running the handler, unless the source sets `auto_confirm =
+/// false`. The id is the `MessageId`, the event type the message `Type`,
+/// the timestamp its `Timestamp`, which must be within the source's own
+/// `tolerance_secs` of now, else within an hour
+/// ([`DEFAULT_TOLERANCE_SECS`](navree_crypto::sns::DEFAULT_TOLERANCE_SECS)):
+/// SNS retries a delivery for up to an hour with the same timestamp and
+/// signature, so an older message is a replay. The type, topic,
+/// certificate URL, signature version and timestamp are all checked before
+/// a certificate is fetched. Turn raw message delivery off: a raw message
+/// carries no signature. Source name `aws_sns`; no secret.
+///
+/// Read the body as [`SnsMessage`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AwsSns;
+
+impl AwsSns {
+    /// The header naming the message type.
+    pub const TYPE_HEADER: &'static str = "x-amz-sns-message-type";
+
+    /// Whether `url` is an HTTPS URL on an SNS host
+    /// (`sns.<region>.amazonaws.com` or `sns.<region>.amazonaws.com.cn`),
+    /// with no credentials and the default port.
+    pub fn is_sns_url(url: &str) -> bool {
+        sns::is_sns_url(url)
+    }
+
+    /// Verifies `message`'s signature with `key`, the public key of its
+    /// signing certificate.
+    pub fn verify_signature(message: &SnsMessage, key: &VerifyingKey) -> Result<(), VerifyError> {
+        message.verify_signature(key).map_err(|error| match error {
+            SnsSignatureError::MalformedSignature => {
+                VerifyError::MalformedBody("`Signature`".to_owned())
+            }
+            SnsSignatureError::UnsupportedVersion => {
+                VerifyError::MalformedBody("`SignatureVersion`".to_owned())
+            }
+            SnsSignatureError::Mismatch => VerifyError::SignatureMismatch,
+            _ => VerifyError::SignatureMismatch,
+        })
+    }
+}
+
+impl WebhookVerifier for AwsSns {
+    async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
+        let source = request.source();
+        let message: SnsMessage = serde_json::from_slice(request.body())
+            .map_err(|_| VerifyError::MalformedBody("SNS message".to_owned()))?;
+        let tolerance_secs = source.tolerance_secs.unwrap_or(sns::DEFAULT_TOLERANCE_SECS);
+        let timestamp = message
+            .check_envelope(&source.topics, tolerance_secs, request.now())
+            .map_err(|error| refusal(error, tolerance_secs))?;
+        if let Some(sent) = request.header(Self::TYPE_HEADER)
+            && sent != message.message_type
+        {
+            return Err(VerifyError::MalformedHeader(Self::TYPE_HEADER.to_owned()));
+        }
+        let keys = request.keys().await?;
+        let key = keys
+            .certificate(message.signing_cert_url.trim(), request.now())
+            .await?;
+        Self::verify_signature(&message, &key)?;
+        if source.auto_confirm {
+            match message.message_type.as_str() {
+                "SubscriptionConfirmation" => {
+                    let url = message.subscribe_url.as_deref().unwrap_or_default().trim();
+                    if !Self::is_sns_url(url) {
+                        return Err(VerifyError::Rejected(
+                            "`SubscribeURL` is not an SNS URL".to_owned(),
+                        ));
+                    }
+                    let confirmed = keys
+                        .client()
+                        .get(url)
+                        .send()
+                        .await
+                        .is_ok_and(|response| response.is_success());
+                    if !confirmed {
+                        return Err(VerifyError::Unavailable(
+                            "the subscription confirmation".to_owned(),
+                        ));
+                    }
+                    tracing::info!(
+                        target: "navree::webhooks",
+                        topic = %message.topic_arn,
+                        "confirmed an SNS subscription"
+                    );
+                    return Ok(Verdict::Handshake(Handshake::ok()));
+                }
+                "UnsubscribeConfirmation" => return Ok(Verdict::Handshake(Handshake::ok())),
+                _ => {}
+            }
+        }
+        Ok(Verdict::Verified(Verified {
+            id: Some(message.message_id),
+            timestamp: Some(timestamp),
+            event_type: Some(message.message_type),
+        }))
+    }
+
+    fn missing_setting(source: &SourceOptions) -> Option<&'static str> {
+        source.topics.is_empty().then_some("topics")
+    }
+}
+
+impl WebhookSource for AwsSns {
+    const NAME: &'static str = "aws_sns";
+    type Verifier = AwsSns;
+}
+
+/// The refusal of a message whose envelope cannot be trusted.
+fn refusal(error: SnsEnvelopeError, tolerance_secs: u64) -> VerifyError {
+    match error {
+        SnsEnvelopeError::UnknownType => VerifyError::MalformedBody("`Type`".to_owned()),
+        SnsEnvelopeError::ForeignTopic => {
+            VerifyError::Rejected("the topic is not one of the source's `topics`".to_owned())
+        }
+        SnsEnvelopeError::ForeignCertificate => {
+            VerifyError::Rejected("`SigningCertURL` is not an SNS certificate URL".to_owned())
+        }
+        SnsEnvelopeError::UnsupportedVersion => {
+            VerifyError::MalformedBody("`SignatureVersion`".to_owned())
+        }
+        SnsEnvelopeError::MalformedTimestamp => {
+            VerifyError::MalformedBody("`Timestamp`".to_owned())
+        }
+        SnsEnvelopeError::OutOfTolerance => VerifyError::TimestampOutOfTolerance { tolerance_secs },
+        other => VerifyError::Rejected(other.to_string()),
+    }
+}
+
+/// An SNS message: the JSON body SNS posts. Defined in `navree_crypto::sns`
+/// with the signature check, and shared with navree-mail's SES routes.
+pub use navree_crypto::sns::SnsMessage;
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use chrono::{DateTime, TimeDelta, Utc};
+    use http::{HeaderMap, Method};
+    use navree_http_client::{FakeResponse, FakeServer, HttpClient};
+    use serde_json::{Value, json};
+
+    use super::*;
+    use crate::keys::SenderKeys;
+
+    const TOPIC: &str = "arn:aws:sns:us-east-1:123456789012:ses-events";
+    const CERT_URL: &str = "https://sns.us-east-1.amazonaws.com/SimpleNotificationService-9c6465fa7f48f5cacd23014631ec1136.pem";
+    const CERTIFICATE: &str = include_str!("../../tests/fixtures/sources/signer-cert.pem");
+    const MESSAGES: &str = include_str!("../../tests/fixtures/sources/sns-messages.json");
+
+    fn fixture(name: &str) -> Value {
+        let messages: Value = serde_json::from_str(MESSAGES).unwrap();
+        messages[name].clone()
+    }
+
+    fn body(message: &Value) -> Vec<u8> {
+        serde_json::to_vec(message).unwrap()
+    }
+
+    fn source() -> SourceOptions {
+        SourceOptions {
+            topics: vec![TOPIC.to_owned()],
+            ..SourceOptions::default()
+        }
+    }
+
+    /// Sender keys on a fake client that serves the certificate.
+    fn fake_keys() -> (Arc<SenderKeys>, FakeServer) {
+        let (client, server) = HttpClient::fake();
+        server.on(
+            Method::GET,
+            CERT_URL,
+            FakeResponse::new(200).text(CERTIFICATE),
+        );
+        server.on(
+            Method::GET,
+            "https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription*",
+            FakeResponse::new(200).text("<ConfirmSubscriptionResponse/>"),
+        );
+        (Arc::new(SenderKeys::new(client)), server)
+    }
+
+    fn now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-10-26T08:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    async fn verify(
+        source: &SourceOptions,
+        body: &[u8],
+        keys: &Arc<SenderKeys>,
+    ) -> Result<Verdict, VerifyError> {
+        let headers = HeaderMap::new();
+        let request = IncomingRequest::new(source, &headers, body)
+            .at(now())
+            .with_keys(keys.clone());
+        AwsSns::verify_incoming(&request).await
+    }
+
+    #[tokio::test]
+    async fn notifications_signed_with_sha1_and_sha256_verify() {
+        let (keys, server) = fake_keys();
+        for name in [
+            "notification_v1",
+            "notification_v2",
+            "notification_without_subject_v1",
+        ] {
+            let message = fixture(name);
+            let verdict = verify(&source(), &body(&message), &keys).await;
+            let Ok(Verdict::Verified(verified)) = verdict else {
+                panic!("{name}: {verdict:?}");
+            };
+            assert_eq!(verified.id.as_deref(), message["MessageId"].as_str());
+            assert_eq!(verified.event_type.as_deref(), Some("Notification"));
+            assert_eq!(
+                verified.timestamp.unwrap().to_rfc3339(),
+                DateTime::parse_from_rfc3339(message["Timestamp"].as_str().unwrap())
+                    .unwrap()
+                    .to_rfc3339()
+            );
+        }
+        // The certificate was fetched once.
+        server.assert_sent_count(1);
+        let parsed: SnsMessage = serde_json::from_value(fixture("notification_v1")).unwrap();
+        let event: Value = parsed.message_json().unwrap();
+        assert_eq!(event["eventType"], "Bounce");
+    }
+
+    #[tokio::test]
+    async fn tampered_messages_fail() {
+        let (keys, _server) = fake_keys();
+        for (field, value) in [
+            ("Message", json!("{}")),
+            ("Subject", json!("Another subject")),
+            ("Timestamp", json!("2026-10-26T07:59:31.000Z")),
+            ("Type", json!("SubscriptionConfirmation")),
+            ("SignatureVersion", json!("2")),
+        ] {
+            let mut message = fixture("notification_v1");
+            message[field] = value;
+            assert_eq!(
+                verify(&source(), &body(&message), &keys).await,
+                Err(VerifyError::SignatureMismatch),
+                "{field}"
+            );
+        }
+        let mut message = fixture("notification_v1");
+        message["SignatureVersion"] = json!("3");
+        assert_eq!(
+            verify(&source(), &body(&message), &keys).await,
+            Err(VerifyError::MalformedBody("`SignatureVersion`".to_owned()))
+        );
+        assert!(matches!(
+            verify(&source(), b"not json", &keys).await,
+            Err(VerifyError::MalformedBody(_))
+        ));
+    }
+
+    async fn verify_at(
+        source: &SourceOptions,
+        body: &[u8],
+        keys: &Arc<SenderKeys>,
+        at: DateTime<Utc>,
+    ) -> Result<Verdict, VerifyError> {
+        let headers = HeaderMap::new();
+        let request = IncomingRequest::new(source, &headers, body)
+            .at(at)
+            .with_keys(keys.clone());
+        AwsSns::verify_incoming(&request).await
+    }
+
+    #[tokio::test]
+    async fn without_a_tolerance_of_its_own_a_message_is_trusted_for_an_hour() {
+        let (keys, server) = fake_keys();
+        let message = body(&fixture("notification_v2"));
+        // Published at 07:59:30: an hour either side passes.
+        let published = now() - TimeDelta::seconds(30);
+        for offset in [-3_600, 0, 3_600] {
+            let at = published + TimeDelta::seconds(offset);
+            let verdict = verify_at(&source(), &message, &keys, at).await;
+            assert!(
+                matches!(verdict, Ok(Verdict::Verified(_))),
+                "{offset}: {verdict:?}"
+            );
+        }
+        server.assert_sent_count(1);
+
+        // A replay later than that, or a message from the future, is refused
+        // before any certificate is fetched.
+        let (keys, server) = fake_keys();
+        for offset in [-3_601, 3_601, 86_400] {
+            let at = published + TimeDelta::seconds(offset);
+            assert_eq!(
+                verify_at(&source(), &message, &keys, at).await,
+                Err(VerifyError::TimestampOutOfTolerance {
+                    tolerance_secs: sns::DEFAULT_TOLERANCE_SECS
+                }),
+                "{offset}"
+            );
+        }
+        server.assert_nothing_sent();
+    }
+
+    #[tokio::test]
+    async fn a_source_tolerance_replaces_the_hour() {
+        let (keys, _server) = fake_keys();
+        let message = body(&fixture("notification_v1"));
+        let strict = SourceOptions {
+            tolerance_secs: Some(10),
+            ..source()
+        };
+        // Thirty seconds old.
+        assert_eq!(
+            verify(&strict, &message, &keys).await,
+            Err(VerifyError::TimestampOutOfTolerance { tolerance_secs: 10 })
+        );
+        let lenient = SourceOptions {
+            tolerance_secs: Some(7_200),
+            ..source()
+        };
+        let two_hours_on = now() + TimeDelta::hours(1) + TimeDelta::minutes(30);
+        assert!(matches!(
+            verify_at(&lenient, &message, &keys, two_hours_on).await,
+            Ok(Verdict::Verified(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn unknown_versions_and_undated_messages_are_refused_before_any_fetch() {
+        let (keys, server) = fake_keys();
+        for version in ["3", "", "SHA256"] {
+            let mut message = fixture("notification_v2");
+            message["SignatureVersion"] = json!(version);
+            assert_eq!(
+                verify(&source(), &body(&message), &keys).await,
+                Err(VerifyError::MalformedBody("`SignatureVersion`".to_owned())),
+                "{version}"
+            );
+        }
+        let mut message = fixture("notification_v2");
+        message["Timestamp"] = json!("yesterday");
+        assert_eq!(
+            verify(&source(), &body(&message), &keys).await,
+            Err(VerifyError::MalformedBody("`Timestamp`".to_owned()))
+        );
+        let mut message = fixture("notification_v2");
+        message["Type"] = json!("Publish");
+        assert_eq!(
+            verify(&source(), &body(&message), &keys).await,
+            Err(VerifyError::MalformedBody("`Type`".to_owned()))
+        );
+        // A message type header that disagrees with the body.
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AwsSns::TYPE_HEADER,
+            "SubscriptionConfirmation".parse().unwrap(),
+        );
+        let source = source();
+        let message = body(&fixture("notification_v2"));
+        let request = IncomingRequest::new(&source, &headers, &message)
+            .at(now())
+            .with_keys(keys.clone());
+        assert_eq!(
+            AwsSns::verify_incoming(&request).await,
+            Err(VerifyError::MalformedHeader(AwsSns::TYPE_HEADER.to_owned()))
+        );
+        server.assert_nothing_sent();
+    }
+
+    #[tokio::test]
+    async fn other_topics_and_certificate_hosts_are_refused_before_any_fetch() {
+        let (keys, server) = fake_keys();
+        let other_topic = SourceOptions {
+            topics: vec!["arn:aws:sns:us-east-1:123456789012:other".to_owned()],
+            ..SourceOptions::default()
+        };
+        assert!(matches!(
+            verify(&other_topic, &body(&fixture("notification_v1")), &keys).await,
+            Err(VerifyError::Rejected(_))
+        ));
+        for url in [
+            "https://sns.us-east-1.amazonaws.com.evil.example/cert.pem",
+            "http://sns.us-east-1.amazonaws.com/cert.pem",
+            "https://sns.us-east-1.amazonaws.com/cert.txt",
+            "https://sns.us-east-1.amazonaws.com/?Action=Publish&x=.pem",
+            "https://attacker.example/sns.us-east-1.amazonaws.com.pem",
+        ] {
+            let mut message = fixture("notification_v1");
+            message["SigningCertURL"] = json!(url);
+            assert!(
+                matches!(
+                    verify(&source(), &body(&message), &keys).await,
+                    Err(VerifyError::Rejected(_))
+                ),
+                "{url}"
+            );
+        }
+        server.assert_nothing_sent();
+    }
+
+    #[test]
+    fn sns_hosts_are_recognized() {
+        for url in [
+            "https://sns.us-east-1.amazonaws.com/x.pem",
+            "https://sns.eu-central-2.amazonaws.com/?Action=ConfirmSubscription",
+            "https://sns.cn-north-1.amazonaws.com.cn/x.pem",
+        ] {
+            assert!(AwsSns::is_sns_url(url), "{url}");
+        }
+        for url in [
+            "http://sns.us-east-1.amazonaws.com/x.pem",
+            "https://sns.us-east-1.amazonaws.com:8443/x.pem",
+            "https://user@sns.us-east-1.amazonaws.com/x.pem",
+            "https://sns.amazonaws.com/x.pem",
+            "https://sns.us.amazonaws.com/x.pem",
+            "https://sns.us_east.amazonaws.com/x.pem",
+            "https://s3.us-east-1.amazonaws.com/x.pem",
+            "https://sns.us-east-1.amazonaws.com.example/x.pem",
+            "not a url",
+        ] {
+            assert!(!AwsSns::is_sns_url(url), "{url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn subscriptions_are_confirmed_without_the_handler() {
+        for name in [
+            "subscription_confirmation_v1",
+            "subscription_confirmation_v2",
+        ] {
+            let (keys, server) = fake_keys();
+            assert_eq!(
+                verify(&source(), &body(&fixture(name)), &keys).await,
+                Ok(Verdict::Handshake(Handshake::ok())),
+                "{name}"
+            );
+            server.assert_sent(|request| {
+                request.method() == Method::GET
+                    && request
+                        .url()
+                        .as_str()
+                        .contains("Action=ConfirmSubscription")
+            });
+        }
+
+        // Unsubscribing is acknowledged, not confirmed.
+        let (keys, server) = fake_keys();
+        assert_eq!(
+            verify(
+                &source(),
+                &body(&fixture("unsubscribe_confirmation_v2")),
+                &keys
+            )
+            .await,
+            Ok(Verdict::Handshake(Handshake::ok()))
+        );
+        server.assert_not_sent(|request| request.url().as_str().contains("Action="));
+
+        // With auto_confirm off, the handler gets the confirmation.
+        let (keys, server) = fake_keys();
+        let manual = SourceOptions {
+            auto_confirm: false,
+            ..source()
+        };
+        let verdict = verify(
+            &manual,
+            &body(&fixture("subscription_confirmation_v1")),
+            &keys,
+        )
+        .await;
+        let Ok(Verdict::Verified(verified)) = verdict else {
+            panic!("{verdict:?}");
+        };
+        assert_eq!(
+            verified.event_type.as_deref(),
+            Some("SubscriptionConfirmation")
+        );
+        server.assert_not_sent(|request| request.url().as_str().contains("Action="));
+    }
+
+    #[tokio::test]
+    async fn unreachable_certificates_and_confirmations_are_unavailable() {
+        let (client, server) = HttpClient::fake();
+        server.on(Method::GET, CERT_URL, FakeResponse::new(503));
+        let keys = Arc::new(SenderKeys::new(client));
+        assert_eq!(
+            verify(&source(), &body(&fixture("notification_v1")), &keys).await,
+            Err(VerifyError::Unavailable(
+                "the signing certificate".to_owned()
+            ))
+        );
+
+        let (client, server) = HttpClient::fake();
+        server.on(
+            Method::GET,
+            CERT_URL,
+            FakeResponse::new(200).text(CERTIFICATE),
+        );
+        server.on(
+            Method::GET,
+            "https://sns.us-east-1.amazonaws.com/?Action=*",
+            FakeResponse::new(500),
+        );
+        let keys = Arc::new(SenderKeys::new(client));
+        assert_eq!(
+            verify(
+                &source(),
+                &body(&fixture("subscription_confirmation_v2")),
+                &keys
+            )
+            .await,
+            Err(VerifyError::Unavailable(
+                "the subscription confirmation".to_owned()
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn the_timestamp_is_checked_against_the_sources_own_tolerance() {
+        let (keys, _server) = fake_keys();
+        let message = body(&fixture("notification_v2"));
+        // Published 30 s before now.
+        let strict = SourceOptions {
+            tolerance_secs: Some(10),
+            ..source()
+        };
+        assert_eq!(
+            verify(&strict, &message, &keys).await,
+            Err(VerifyError::TimestampOutOfTolerance { tolerance_secs: 10 })
+        );
+        let lenient = SourceOptions {
+            tolerance_secs: Some(60),
+            ..source()
+        };
+        assert!(verify(&lenient, &message, &keys).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn the_type_header_must_match_the_message() {
+        let (keys, _server) = fake_keys();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AwsSns::TYPE_HEADER,
+            "SubscriptionConfirmation".parse().unwrap(),
+        );
+        let source = source();
+        let message = body(&fixture("notification_v1"));
+        let request = IncomingRequest::new(&source, &headers, &message)
+            .at(now())
+            .with_keys(keys);
+        assert_eq!(
+            AwsSns::verify_incoming(&request).await,
+            Err(VerifyError::MalformedHeader(AwsSns::TYPE_HEADER.to_owned()))
+        );
+    }
+
+    #[test]
+    fn the_source_needs_topics_not_a_secret() {
+        assert_eq!(
+            AwsSns::missing_setting(&SourceOptions::default()),
+            Some("topics")
+        );
+        assert_eq!(AwsSns::missing_setting(&source()), None);
+    }
+
+    #[test]
+    fn the_string_to_sign_follows_the_message_type() {
+        let notification: SnsMessage =
+            serde_json::from_value(fixture("notification_without_subject_v1")).unwrap();
+        assert!(
+            notification
+                .string_to_sign()
+                .starts_with("Message\n{\"eventType\"")
+        );
+        assert!(!notification.string_to_sign().contains("Subject\n"));
+        let confirmation: SnsMessage =
+            serde_json::from_value(fixture("subscription_confirmation_v1")).unwrap();
+        let text = confirmation.string_to_sign();
+        assert!(text.contains("\nSubscribeURL\nhttps://sns.us-east-1.amazonaws.com/"));
+        assert!(text.contains("\nToken\n2336412f"));
+        assert!(text.ends_with("Type\nSubscriptionConfirmation\n"));
+    }
+}

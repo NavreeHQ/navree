@@ -1,0 +1,50 @@
+# Settings for every environment. `.env` ranks above this file and holds the
+# settings of one machine (secrets such as APP_KEY), and APP_* environment
+# variables override any key: APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
+
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+
+[database]
+# TimescaleDB (PostgreSQL with time-series hypertables): `navree dock up`
+# runs it on this machine. Production sets APP_DATABASE__URL instead.
+url = "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
+# Run pending migrations at boot (handy in development; use `navree migrate`
+# in deployments).
+migrate_on_boot = true
+
+[schema]
+# Hypertables (`schema.create_hypertable(...)` in migrations) use TimescaleDB
+# when the database has it, and are regular tables elsewhere (tests run on
+# SQLite). Production sets APP_SCHEMA__TIMESCALEDB=require, so a database
+# without TimescaleDB stops the migration instead.
+timescaledb = "auto"
+
+[log]
+level = "info"
+
+[mail]
+# "log" writes messages to the log. To send them, set the transport to an
+# address such as smtps://user:pass@host:465: keep the password out of this
+# file and set APP_MAIL__TRANSPORT as a real environment variable instead.
+# The sender (mail.from) is in .env.
+transport = "log"
+
+[queue]
+driver = "database"
+
+[auth]
+# Public sign-up at POST /api/auth/register.
+registration = true
+
+[workspace]
+# Where a request's workspace comes from: the X-Workspace header. Create the
+# first workspace with POST /api/workspaces (the signed-in user owns it).
+resolvers = ["header"]
+
+[api]
+title = "Agra cloud API"
+# The Lighthouse and Logbook dashboards are pages, not API routes:
+# `navree check` doesn't ask them for #[api] docs.
+undocumented = ["/_lighthouse*", "/_logbook*"]

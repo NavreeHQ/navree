@@ -1,0 +1,66 @@
+[package]
+name = "navree-cli"
+description = "The navree command-line tool: new, make:*, dev, dock, Harbor's deploy commands, and forwarding of runtime commands."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "cli", "generator", "scaffold"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+include = ["src/**", "build.rs", "templates/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+# The generators, the dev loop and the forwarding live in a library so the
+# integration tests can drive them without spawning the binary.
+[lib]
+name = "navree_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "navree"
+path = "src/main.rs"
+# The facade crate is also called `navree`; skip rustdoc for the binary.
+doc = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+heck = { workspace = true }
+navree-template = { workspace = true }
+# `navree dock`, Harbor's commands, and `navree mcp` / `navree skills:install`:
+# tool crates, no runtime crates (Navigator reads configuration with
+# navree-config).
+navree-dock = { workspace = true }
+navree-harbor = { workspace = true }
+navree-navigator = { workspace = true }
+notify = { workspace = true }
+notify-debouncer-mini = { workspace = true }
+# `navree browser:install`: downloads Chrome for Testing (rustls with ring)
+# and unpacks the zip.
+reqwest = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Reads models for `make:resource`.
+syn = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+# `tests/navigator.rs`: the fixture app's SQLite database (the test speaks
+# JSON-RPC lines to `navree mcp`'s stdio itself).
+sqlx = { workspace = true, features = ["sqlite-bundled"] }
+tempfile = { workspace = true }
+# A local server for the browser:install download tests.
+wiremock = { workspace = true }

@@ -1,0 +1,14 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,mail)",
+  "@odata.nextLink": "{{base}}/v1.0/users?$select=id,mail&$skiptoken=RFNwdAIAAQAAAD8",
+  "value": [
+    {
+      "id": "87d349ed-44d7-43e1-9a83-5f2406dee5bd",
+      "mail": "AdeleV@contoso.com"
+    },
+    {
+      "id": "626cbf8c-5dde-46b0-8385-9e40d64736fe",
+      "mail": "AlexW@contoso.com"
+    }
+  ]
+}

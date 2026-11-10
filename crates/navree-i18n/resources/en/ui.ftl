@@ -1,0 +1,407 @@
+# The words Navree UI writes on its own, in English. Each id is `ui-<group>-<field>`; a
+# `{ $name }` is a blank the toolkit fills in when it draws the page. Define the same id in
+# your own `locales/<tag>/*.ftl` to change a word.
+
+## TableLabels
+ui-table-search = Search
+ui-table-filters = Filters
+ui-table-live = Live
+ui-table-refresh = Refresh now
+ui-table-columns = Columns
+ui-table-view = View
+ui-table-views = Views
+ui-table-export = Export
+ui-table-apply = Apply
+ui-table-clear-filters = Clear filters
+ui-table-remove-filter = Remove filter { $label }
+ui-table-remove-sort = Remove { $label }
+ui-table-sorted-by = Sorted by
+ui-table-rows-per-page = Rows per page
+ui-table-showing = Showing { $from } to { $to } of { $total } results
+ui-table-showing-open = Showing { $from } to { $to }
+ui-table-one-result = 1 result
+ui-table-count-all = Count all
+ui-table-first = First
+ui-table-previous = Previous
+ui-table-next = Next
+ui-table-empty = Nothing here yet.
+ui-table-empty-filtered = No results match these filters.
+ui-table-empty-filtered-hint = Change or clear the search and filters.
+ui-table-failed = That didn't load. The rows below may be out of date.
+ui-table-retry = Try again
+ui-table-lost-access = You no longer have access to this.
+ui-table-loading = Loading
+ui-table-select-row = Select { $label }
+ui-table-select-page = Select all on this page
+ui-table-selected = { $n } selected
+ui-table-page-selected = All { $n } on this page are selected.
+ui-table-select-all = Select all { $n } results
+ui-table-all-selected = All { $n } results are selected.
+ui-table-some-selected = { $n } of { $total } results are selected.
+ui-table-off-page = { $n } not on this page
+ui-table-clear-selection = Clear selection
+ui-table-selection-ended = The filter changed, so the selection of all results ended.
+ui-table-confirm-title = Are you sure?
+ui-table-confirm = Yes, go ahead
+ui-table-cancel = Cancel
+ui-table-sort-asc = Sort ascending
+ui-table-sort-desc = Sort descending
+ui-table-sort-add = Add to sort
+ui-table-sort-clear = Stop sorting
+ui-table-hide-column = Hide column
+ui-table-column-options = { $label } options
+ui-table-move-up = Move { $label } up
+ui-table-move-down = Move { $label } down
+ui-table-resize = Resize { $label }
+ui-table-reset-columns = Reset columns
+ui-table-empty-value = Empty
+ui-table-any = Any
+ui-table-yes = Yes
+ui-table-no = No
+ui-table-min = Min
+ui-table-max = Max
+ui-table-from = From
+ui-table-to = To
+ui-table-find-option = Find
+ui-table-show-details = Show details
+ui-table-hide-details = Hide details
+ui-table-actions = Actions
+ui-table-row-actions = Actions for { $label }
+ui-table-density = Density
+ui-table-compact = Compact
+ui-table-default-density = Default
+ui-table-spacious = Spacious
+ui-table-save-view = Save this view
+ui-table-view-name = Name
+ui-table-delete-view = Delete view { $label }
+ui-table-make-default = Open with this view
+ui-table-default-view = Default
+
+## ChartLabels
+ui-chart-show-table = Show table
+ui-chart-chart = { $title }, chart
+ui-chart-keys = Use the arrow keys to move between values.
+ui-chart-loading = Loading { $title }
+ui-chart-failed = This chart could not be loaded
+ui-chart-retry = Try again
+ui-chart-empty = No data
+ui-chart-empty-text = Nothing to show for this period.
+ui-chart-other = Other
+ui-chart-total = Total
+ui-chart-share = Share
+ui-chart-category = Category
+ui-chart-time = Time
+ui-chart-value = Value
+ui-chart-no-value = No value
+ui-chart-of-first = Of first
+ui-chart-of-previous = Of previous
+ui-chart-reduced = The drawing shows { $shown } of { $total } points; the table lists the points drawn.
+ui-chart-summary-series = { $series }: { $first } at { $first_x }, { $last } at { $last_x }. Highest { $max } at { $max_x }, lowest { $min } at { $min_x }.
+ui-chart-summary-one = { $series }: { $value } at { $x }.
+ui-chart-summary-bars = { $series }: highest { $max } for { $max_x }, lowest { $min } for { $min_x }, total { $total }.
+ui-chart-summary-parts = { $count } parts, total { $total }. Largest: { $name }, { $share }.
+ui-chart-summary-funnel = From { $first_name }, { $first }, to { $last_name }, { $last }: { $rate } of the first stage.
+ui-chart-summary-none = { $series }: no values.
+ui-chart-summary-marks = Marked: { $marks }.
+ui-chart-one-point = A line needs two values; one is shown.
+ui-chart-week-of = Week of { $date }
+ui-chart-again = { $time }, second time
+ui-chart-stages-cut = The first { $shown } of { $total } stages are drawn.
+
+## CarouselLabels
+ui-carousel-previous = Previous slide
+ui-carousel-next = Next slide
+ui-carousel-pause = Pause automatic rotation
+ui-carousel-play = Start automatic rotation
+ui-carousel-slides = Slides
+ui-carousel-slide-of = { $n } of { $total }
+ui-carousel-picker = Slide { $n }
+ui-carousel-pickers = Choose a slide
+
+## LazyLabels
+ui-lazy-start = Load newer
+ui-lazy-end = Load more
+ui-lazy-loaded = { $n } more loaded
+ui-lazy-loading = Loading…
+ui-lazy-failed = That didn't load. Try again
+
+## DisplayLabels
+ui-display-hidden-one = 1 item was hidden.
+ui-display-hidden-many = { $n } items were hidden.
+ui-display-show-hidden = Show them
+ui-display-hide-hidden = Hide them
+ui-display-dismiss = Dismiss
+ui-display-connecting = Connecting
+ui-display-live = Live
+ui-display-reconnecting = Reconnecting
+ui-display-paused = Paused
+ui-display-closed = Not live
+ui-display-times-in = Times in { $zone }
+ui-display-timeline-empty = No events yet
+ui-display-feed-empty = Nothing yet
+ui-display-failed = This couldn't load.
+ui-display-retry = Try again
+ui-display-apply = Apply
+ui-display-loading = Loading
+ui-display-upcoming = Upcoming
+ui-display-gap-under-a-second = under 1 s
+ui-display-gap-after = { $gap } after the previous step
+ui-display-second = s
+ui-display-minute = min
+ui-display-hour = h
+ui-display-day = d
+ui-display-outcome-yes = yes
+ui-display-outcome-no = no
+ui-display-new-one = 1 new item
+ui-display-new-many = { $n } new items
+
+## SliderLabels
+ui-slider-minimum = minimum
+ui-slider-maximum = maximum
+ui-slider-range-to = to
+ui-slider-missing = Choose a value.
+ui-slider-duplicate = Choose one value.
+ui-slider-not-a-number = Enter a number.
+ui-slider-too-low = Choose { $min } or more.
+ui-slider-too-high = Choose { $max } or less.
+ui-slider-off-step = Choose a value in steps of { $step }.
+ui-slider-low-above-high = The lower value can't be above the upper one.
+ui-slider-too-close = The two values must be at least { $gap } apart.
+ui-slider-decimal-point = .
+
+## StepperLabels
+ui-stepper-done = completed
+ui-stepper-current = current step
+ui-stepper-error = needs attention
+ui-stepper-disabled = not available yet
+ui-stepper-optional = Optional
+ui-stepper-step-of = Step { $n } of { $total }
+
+## ToolbarLabels
+ui-toolbar-more = More
+
+## TreeLabels
+ui-tree-expand = Expand { $label }
+ui-tree-collapse = Collapse { $label }
+ui-tree-more = Show more
+ui-tree-loading = Loading
+ui-tree-failed = Couldn't load this.
+ui-tree-retry = Try again
+ui-tree-loaded = { $n } items loaded
+
+## WizardLabels
+ui-wizard-next = Next
+ui-wizard-back = Back
+ui-wizard-finish = Finish
+ui-wizard-save = Save and leave
+ui-wizard-edit = Edit
+ui-wizard-review = Review
+ui-wizard-review-hint = Check your answers. Nothing is created until you finish.
+ui-wizard-needs-attention = This step needs attention.
+ui-wizard-nothing = —
+ui-wizard-yes = Yes
+ui-wizard-no = No
+ui-wizard-stale = This draft was changed in another window. This is the latest.
+ui-wizard-stepper = Steps
+
+## MarkdownLabels
+ui-markdown-new-tab = (opens in a new tab)
+ui-markdown-image-removed = Image not shown
+ui-markdown-table = Table
+ui-markdown-task-done = Done
+ui-markdown-task-open = Not done
+ui-markdown-copy-code = Copy code
+ui-markdown-cut = The rest of this text is not shown.
+
+## PhoneLabels
+ui-phone-country = Country
+ui-phone-choose = Country
+ui-phone-preferred = Suggested
+ui-phone-search = Search countries
+ui-phone-empty = No country found.
+ui-phone-country-set = Country set to { $country }
+ui-phone-count = { $n } countries
+
+## SelectLabels
+ui-select-empty = No results
+ui-select-none = No options
+ui-select-searching = Searching…
+ui-select-failed = Couldn't load the options. Press Enter to try again.
+ui-select-retry = Try again
+ui-select-lost = You no longer have access to these options.
+ui-select-clear = Clear
+ui-select-remove = Remove { $label }
+ui-select-focused = { $label } focused. Press Backspace to remove.
+ui-select-added = { $label } added
+ui-select-removed = { $label } removed
+ui-select-cleared = Selection cleared
+ui-select-count = { $n } selected
+ui-select-result = 1 result available
+ui-select-results = { $n } results available
+ui-select-create = Create “{ $q }”
+ui-select-creating = Creating…
+ui-select-create-failed = Couldn't create it.
+ui-select-limit = You can choose at most { $n }.
+ui-select-more = Show more
+ui-select-shown = Showing { $n } of { $total }. Keep typing to narrow the list.
+ui-select-min = Type at least { $n } characters to search.
+ui-select-select-all = Select all
+ui-select-deselect-all = Deselect all
+ui-select-toggle = Show options
+ui-select-recent = Recent
+ui-select-list = Results
+ui-select-required = Choose an option.
+ui-select-palette = Command palette
+
+## SortLabels
+ui-sort-help = Press Space to pick it up, the arrow keys to move it, Space again to drop it, Escape to cancel.
+ui-sort-handle = Move { $item }
+ui-sort-picked = Picked up { $item }. Position { $position } of { $total } in { $list }.
+ui-sort-moved = Position { $position } of { $total } in { $list }.
+ui-sort-dropped = Dropped { $item } at position { $position } of { $total } in { $list }.
+ui-sort-cancelled = Move cancelled. { $item } is back at position { $position } of { $total } in { $list }.
+ui-sort-returned = { $item } wasn't moved. It is back at position { $position } of { $total } in { $list }.
+ui-sort-settled = { $item } is at position { $position } of { $total } in { $list }.
+ui-sort-gone = { $item } is no longer shown here.
+ui-sort-failed = That move wasn't saved. Try again.
+ui-sort-offline = No connection. That move may not have been saved.
+ui-sort-full = { $list } holds at most { $limit }.
+ui-sort-locked = { $item } can't be moved.
+ui-sort-count = { $count }
+ui-sort-count-limit = { $count }/{ $limit }
+ui-sort-count-limit-text = { $count } of at most { $limit }
+ui-sort-empty = Nothing here yet
+ui-sort-move-summary = Move
+ui-sort-move-to = To
+ui-sort-move-position = Position
+ui-sort-move-submit = Move
+ui-sort-full-option = { $list } (full)
+ui-sort-more = Load more
+
+## UploadLabels
+ui-upload-choose = Choose files
+ui-upload-choose-one = Choose a file
+ui-upload-drop = or drop them here
+ui-upload-drop-one = or drop it here
+ui-upload-send = Send
+ui-upload-remove = Remove
+ui-upload-cancel = Cancel
+ui-upload-retry = Try again
+ui-upload-files = Files
+ui-upload-sending = Sending { $name }
+ui-upload-done = Sent
+ui-upload-failed = { $name } could not be sent.
+ui-upload-offline = { $name } could not be sent. Check your connection and try again.
+ui-upload-too-big = { $name } is larger than { $max }.
+ui-upload-wrong-type = { $name } is not an accepted kind of file. Accepted: { $types }.
+ui-upload-empty = { $name } is empty.
+ui-upload-too-many = You can send up to { $count } files.
+ui-upload-removed = { $name } was removed
+ui-upload-expired = This upload has expired. Choose the file again.
+ui-upload-sent-one = 1 file sent.
+ui-upload-sent-many = { $count } files sent.
+ui-upload-nothing = Choose a file to send.
+ui-upload-up-to = up to { $size }
+ui-upload-up-to-files = up to { $count } files
+ui-upload-or = or
+ui-upload-images = images
+ui-upload-videos = videos
+ui-upload-audio = audio
+ui-upload-text = text
+
+## StateLabels
+ui-state-kind-sign-in-short = Sign in required
+ui-state-kind-sign-in-title = Sign in to continue
+ui-state-kind-sign-in-description = You need to be signed in to see this. After you sign in, you come back here.
+ui-state-kind-sign-in-toast = Your session ended. Sign in to continue.
+ui-state-kind-forbidden-short = No access
+ui-state-kind-forbidden-title = You don't have access to this
+ui-state-kind-forbidden-description = Your account can't open this page. If you think it should, ask an admin to give you access.
+ui-state-kind-forbidden-toast = You don't have permission to do that.
+ui-state-kind-not-found-short = Page not found
+ui-state-kind-not-found-title = We can't find that page
+ui-state-kind-not-found-description = The address may be wrong, or the page may have moved or been deleted.
+ui-state-kind-not-found-toast = That no longer exists.
+ui-state-kind-method-not-allowed-short = Not allowed
+ui-state-kind-method-not-allowed-title = That isn't allowed here
+ui-state-kind-method-not-allowed-description = This address doesn't take that kind of request. Go to the home page and start again.
+ui-state-kind-method-not-allowed-toast = That action isn't available here.
+ui-state-kind-conflict-short = Conflict
+ui-state-kind-conflict-title = That clashes with another change
+ui-state-kind-conflict-description = Someone changed this while you were working on it. Reload to see the latest version, then try again.
+ui-state-kind-conflict-toast = That clashes with a change made elsewhere. Reload and try again.
+ui-state-kind-gone-short = Gone
+ui-state-kind-gone-title = This is gone for good
+ui-state-kind-gone-description = The page you asked for was removed and won't be back.
+ui-state-kind-gone-toast = That was removed and won't be back.
+ui-state-kind-expired-short = Page expired
+ui-state-kind-expired-title = This page expired
+ui-state-kind-expired-description = It was open for a long time, or your session changed. Reload the page and try again.
+ui-state-kind-expired-toast = This page expired. Reload it and try again.
+ui-state-kind-invalid-short = Couldn't use that
+ui-state-kind-invalid-title = We couldn't use what you sent
+ui-state-kind-invalid-description = Some of it isn't valid. Check it and try again.
+ui-state-kind-invalid-toast = That wasn't valid. Check it and try again.
+ui-state-kind-rate-limited-short = Too many requests
+ui-state-kind-rate-limited-title = You're going too fast
+ui-state-kind-rate-limited-description = Wait a moment, then try again.
+ui-state-kind-rate-limited-toast = Too many requests. Wait a moment and try again.
+ui-state-kind-failed-short = Something went wrong
+ui-state-kind-failed-title = Something went wrong on our side
+ui-state-kind-failed-description = That wasn't your doing. Try again in a moment. If it keeps happening, tell support the reference below.
+ui-state-kind-failed-toast = Something went wrong on our side. Try again in a moment.
+ui-state-kind-unavailable-short = Unavailable
+ui-state-kind-unavailable-title = We'll be right back
+ui-state-kind-unavailable-description = The service is busy or down for maintenance. Try again in a few minutes.
+ui-state-kind-unavailable-toast = The service is unavailable. Try again in a few minutes.
+ui-state-kind-offline-short = No connection
+ui-state-kind-offline-title = You're offline
+ui-state-kind-offline-description = Check your connection and try again.
+ui-state-kind-offline-toast = No connection. Try again.
+ui-state-kind-client-short = Request problem
+ui-state-kind-client-title = That request didn't work
+ui-state-kind-client-description = Check what you asked for and try again.
+ui-state-kind-client-toast = That didn't work. Try again.
+ui-state-home = Go to home
+ui-state-sign-in = Sign in
+ui-state-try-again = Try again
+ui-state-reload = Reload
+ui-state-request-access = Request access
+ui-state-reference = Reference
+ui-state-copy = Copy reference
+ui-state-wait = Try again in { $n } seconds.
+ui-state-wait-one = Try again in 1 second.
+ui-state-debug = Development only
+ui-state-forbidden-what = You don't have access to this { $what }.
+ui-state-not-found-what = This { $what } doesn't exist, or it was removed.
+ui-state-signed-out = You've been signed out
+ui-state-signed-out-help = Sign in again to carry on where you were.
+ui-state-sign-in-what = Sign in to see { $what }.
+ui-state-row-locked = You no longer have access to this row.
+ui-state-row-missing = This row was removed.
+ui-state-nothing-yet = Nothing here yet
+ui-state-nothing-yet-what = No { $what } yet
+ui-state-no-results = No results
+ui-state-no-results-help = Nothing matches your search or filters. Change them, or clear them to see everything.
+ui-state-clear-filters = Clear filters
+ui-state-caught-up = You're all caught up
+ui-state-caught-up-help = There is nothing left to do here.
+
+## FormView and Rejected
+ui-form-check = Check this form
+ui-form-save = Save
+
+## The form's own checks (the rule keys of FORM_MESSAGES)
+validation-form-amount = { $attribute }: enter an amount, like 12,500.50.
+validation-form-choice = { $attribute }: choose one of the options.
+validation-form-date = { $attribute }: enter a date.
+validation-form-decimal_places = { $attribute }: use at most 28 decimal places.
+validation-form-file = { $attribute }: choose the file again.
+validation-form-invalid = { $attribute } is not valid.
+validation-form-max_choices = Choose at most { $max }.
+validation-form-moment = { $attribute }: enter a date and time.
+validation-form-number = { $attribute }: enter a number.
+validation-form-phone = { $attribute }: enter a phone number, with its country.
+validation-form-phone_extension = { $attribute }: enter the number without an extension.
+validation-form-time = { $attribute }: enter a time.
+validation-form-unreadable = This form could not be read.

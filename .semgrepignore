@@ -1,0 +1,32 @@
+# Paths Semgrep never scans (this file replaces Semgrep's built-in default
+# ignore list, so the usual build and dependency directories are repeated).
+
+# Build output and dependencies
+target/
+node_modules/
+.next/
+.nuxt/
+.output/
+dist/
+build/
+coverage/
+.pnpm-store/
+
+# Local tool folders (installed skills, settings) and copies of this repository
+.claude/
+
+# (The rules' own test fixtures in .semgrep/ contain the patterns the rules
+# look for, on purpose; scripts/sast.sh leaves them out of the scan with
+# --exclude, so that `semgrep --test` can still see them.)
+
+# Hostile input for the template engine's escaping tests: it holds a
+# right-to-left override on purpose, and JSON has no comment to mark it.
+crates/navree-template/tests/fixtures/xss-vectors.json
+
+# Vendored third-party browser bundles, served byte for byte
+crates/navree-api/assets/
+crates/navree-graphql/assets/
+
+# Scanner output
+sast-reports/
+.sast-base.json

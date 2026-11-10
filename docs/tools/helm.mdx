@@ -1,0 +1,672 @@
+---
+title: "Helm"
+description: "An admin panel generated from your navree-orm models, with fields, filters, search, actions and metrics checked against the access rules your API already enforces."
+---
+
+## Introduction
+
+<Badge feature="helm" /> Helm gives your team an admin panel without building one. You describe each model once, as a **resource**: which fields to show and edit, how to filter and search it, which actions run on it and which numbers matter. Helm turns that into list, detail, create and edit screens, bulk actions and metric cards, served by your app at `/admin`.
+
+Helm works with what your app already has:
+
+- **Your models.** A resource wraps a [navree-orm model](/docs/orm/models/) that is an access subject. Every screen reads the model's query, with its global scopes: soft-deleted rows stay hidden. There is no second schema to keep in sync.
+- **Your access rules.** Every screen, row, field and action is checked against your [abilities](/docs/security/authorization/), the same rules your API enforces. A sales rep who may only edit their own deals sees exactly that in Helm.
+- **Your unit of work.** Every change runs in a transaction with the signed-in user as the actor, so the [audit log](/docs/security/audit-log/) records who changed what, and your change observers see it.
+
+The screens are drawn on the server with [Navree UI](/docs/ui/overview/), the toolkit the rest of your app's pages use: its app shell, its [DataTable](/docs/ui/data-table/) and its [forms](/docs/ui/forms/), described at run time from each resource ([tables and forms described at run time](/docs/ui/described/)). There is nothing to build and no front-end toolchain. Every screen works with JavaScript off; the toolkit's runtime only makes it quicker: tables that morph in place, searchable pickers, the command menu and the collapsible sidebar.
+
+<ToolMock name="helm" />
+
+## Quick start
+
+<Steps>
+<Step title="Add the module">
+
+Put `HelmModule::from_config()` after `AuthModule`, `AccessModule` and your feature modules in `src/app.rs`. The panel signs people in on your app's browser session, so the app also has `SessionModule`, `UiModule` and `AuthPages`. See [Installation](#installation).
+
+</Step>
+<Step title="Let a role in">
+
+```sh
+navree access:role manager
+navree access:grant manager helm.view
+```
+
+</Step>
+<Step title="Make a resource for a model that is an access subject">
+
+```sh
+navree make:resource deals Deal
+```
+
+Open `http://127.0.0.1:8080/admin` and sign in with your app's account. See [Your first resource](#your-first-resource).
+
+</Step>
+</Steps>
+
+## Installation
+
+The `helm` feature of the `navree` facade brings the crate `navree-helm`. It is part of `full`, the default. Add the module to your app root:
+
+```rust title="src/app.rs" {13}
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(SessionModule::from_config())
+        .module(AuthModule::from_config())
+        .module(UiModule)
+        .module(AuthPages::new().app_name("Agra CRM"))
+        .module(AccessModule::for_root(access()))
+        // ... your feature modules
+        .module(HelmModule::from_config())
+}
+```
+
+`HelmModule` is global and needs `DatabaseModule`, `AccessModule` (every check) and `CryptoModule`. People sign in to the panel the way they sign in to the rest of your app, so it also needs the app's browser sign-in: `SessionModule` (the session cookie), `AuthModule` (the users) and `AuthPages` on `UiModule` (the sign-in, two-factor and sign-out pages). A guest who opens the panel is sent to the sign-in page (`ui.sign_in`, `/sign-in` by default) and comes back to the page they asked for. It has no tables of its own. `HelmModule::for_root(HelmOptions { .. })` takes the [options](#configuration) in code instead.
+
+Helm registers the subject `Helm` with the permission prefix `helm`. The `view` ability on it lets a user into the panel; what they can do inside depends on their abilities on each resource. Grant it to the roles that should have a panel:
+
+```sh
+navree access:grant manager helm.view
+navree access:grant rep helm.view
+```
+
+Open `http://127.0.0.1:8080/admin` and sign in with your app's account. Until you add a resource, the panel shows an empty dashboard and a hint to run `make:resource`.
+
+## Your first resource
+
+A resource wraps a [model](/docs/orm/models/) that is an access subject. `navree make:model deals Deal --policy` makes one (the policy makes it a subject); a model of your own becomes one with `subject` in its `#[model(..)]` attribute:
+
+```rust title="src/modules/deals/models/deal.rs"
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    // ...
+}
+```
+
+Generate a resource for the model with the CLI. The first argument is the module, the second the model:
+
+```sh
+navree make:resource deals Deal
+```
+
+```text
+  created  src/modules/deals/resources/deal.rs
+  created  src/modules/deals/resources/mod.rs
+  updated  src/modules/deals/mod.rs
+  updated  src/modules/deals/mod.rs
+```
+
+The generator reads the model's columns (from the module's `models/deal.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. A column the model hides (`#[model(hidden)]`, its `hidden(..)` list, or left out of its `visible(..)` list) or one named like a secret (`password_hash`, `api_token`, `client_secret`) gets no field, isn't the title and isn't searched; a comment says what was left out. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
+
+```rust title="src/modules/deals/mod.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        navree::helm::ModuleBuilderHelmExt::resource::<resources::deal::DealResource>(m);
+        // navree:wire
+    }
+}
+```
+
+`m.resource::<R>()` registers `R` as a provider of the module and adds it to the panel. The prelude brings it into scope, so in code you write by hand it is `m.resource::<DealResource>()`. When the model isn't a subject yet, the generator prints how to make it one. Reload `/admin`: **Deals** is in the menu, with a list, filters and search, a detail page, and create and edit forms.
+
+## Resources
+
+A resource is a provider that implements `Resource` for one model. This is a complete one, for deals:
+
+```rust title="src/modules/deals/resources/deal.rs"
+use navree::helm::{Action, ActionResult, Field, Filter, Metric, Resource};
+use navree::prelude::*;
+
+use crate::modules::companies::resources::{CompanyResource, ContactResource};
+use crate::modules::deals::models::{Deal, Stage};
+use crate::modules::deals::{DealService, Move, MoveDeal};
+use crate::modules::users::resources::UserResource;
+
+#[injectable]
+pub struct DealResource;
+
+impl Resource for DealResource {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Deals";
+    const SINGULAR: &'static str = "Deal";
+    const GROUP: &'static str = "Sales";
+    const ICON: &'static str = "handshake";
+    const TITLE: &'static str = "title";
+    const SEARCH: &'static [&'static str] = &["title"];
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::text("title").required().max_length(200).sortable(),
+            Field::money("amount_cents", "currency").label("Amount").min(0).sortable(),
+            Field::select("stage")
+                .options(Stage::ALL.iter().map(|s| (s.as_str(), s.label())))
+                .badge()
+                .sortable(),
+            Field::belongs_to::<CompanyResource>("company_id").label("Company").required(),
+            Field::belongs_to::<ContactResource>("contact_id").label("Contact"),
+            Field::belongs_to::<UserResource>("owner_id").label("Owner"),
+            Field::date("expected_close_date").sortable(),
+            Field::computed("probability", |deal: &Deal| format!("{}%", deal.stage.probability())),
+            Field::textarea("lost_reason").hide_on_index(),
+            Field::datetime("closed_at").readonly(),
+            Field::datetime("created_at").readonly().sortable(),
+        ]
+    }
+
+    fn filters(&self) -> Vec<Filter<Deal>> {
+        vec![
+            Filter::select("stage").options(Stage::ALL.iter().map(|s| (s.as_str(), s.label()))),
+            Filter::belongs_to::<UserResource>("owner_id").label("Owner"),
+            Filter::date_range("expected_close_date"),
+            Filter::boolean("open", "Open deals only", |query, on| {
+                if on { query.where_(Deal::CLOSED_AT.is_null()) } else { query }
+            }),
+        ]
+    }
+
+    fn actions(&self) -> Vec<Action<Deal>> {
+        vec![
+            Action::new("mark-won", "Mark as won")
+                .ability(Move)
+                .confirm("Mark the selected deals as won?")
+                .handle(|ctx, deals| async move {
+                    let service = ctx.get::<DealService>().await?;
+                    let count = deals.len();
+                    for deal in deals {
+                        let input = MoveDeal { stage: Some(Stage::Won), ..MoveDeal::default() };
+                        service.move_to(ctx.uow(), ctx.user_id(), deal, input).await?;
+                    }
+                    Ok(ActionResult::message(format!("{count} deals marked as won.")))
+                }),
+        ]
+    }
+
+    fn metrics(&self) -> Vec<Metric<Deal>> {
+        vec![
+            Metric::value("Open pipeline")
+                .sum(Deal::AMOUNT_CENTS)
+                .filter(Deal::CLOSED_AT.is_null())
+                .money("USD")
+                .on_dashboard(),
+            Metric::trend("New deals").count().by_day(Deal::CREATED_AT, 30),
+            Metric::partition("Deals by stage").count().group_by(Deal::STAGE),
+        ]
+    }
+}
+```
+
+The model behind it stores the stage as its name (`#[model(cast = "string_enum")]` on `stage: Stage`), so the select, the filter and the partition use `lead`, `won` and `lost`.
+
+| Item | What it does |
+|---|---|
+| `type Model` | The navree-orm model. It must be an access subject (`#[model(subject = "Deal")]`), which it already is if your routes check it with `#[can]`. `m.resource::<R>()` registers it with navree-access (like `AccessModule::for_feature`), so permissions such as `deals.read` map to it. |
+| `LABEL`, `SINGULAR` | The plural and singular names on screen. `SINGULAR` defaults to `LABEL`. |
+| `GROUP` | The menu group. Resources without one go under **Resources**. |
+| `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu, such as `handshake`, `users`, `building-2`, `receipt` or `package`. Helm embeds about 140 common Lucide icons (no external requests); any other name shows a folder icon and logs a warning at boot. The `helm-all-icons` feature lets any Lucide name through; it adds the whole icon set to the binary, about 640 KB in a release build. Custom front ends get the name from the [metadata API](#the-json-api). |
+| `TITLE` | The column that names a record: in headings, breadcrumbs and relationship fields. Defaults to `id`. A record with no title (the key is the title, or the column is empty) is named by the resource and the end of its key, `Report #3f9a1c2e`, never by a whole UUID. |
+| `SEARCH` | The columns the search box matches, case-insensitively. |
+| `SLUG` | The resource's path segment, `/admin/resources/deals`. Defaults to the table name, with `-` for `_`. |
+| `PER_PAGE` | Rows per page on the list (at most 100). `0`, the default, uses `helm.per_page` (25). |
+| `DEFAULT_SORT` | The list's order, such as `"-amount_cents"`. Defaults to newest first. See [sorting](#search-sorting-and-filters). |
+| `ORDER` | The position in the menu within the group (lower first). |
+| `READ_ONLY` | `true` for records the app writes itself, such as an audit trail: the panel shows no New, Edit or Delete for them and refuses a create, an update or a delete, in its screens and in its API, as well as an action with the `create`, `update` or `delete` ability, which is every action that doesn't say otherwise. An action with another ability is offered and runs. Defaults to `false`. |
+| `EXPORT` | Whether the list offers **Export**, its rows as a CSV file. Defaults to `true`. See [exporting](#exporting). |
+| `SIDEBAR_COUNT` | Whether the menu shows how many records the resource has. Defaults to `true`; turn it off for a table whose count is not cheap. See [the sidebar](#the-panels-look-and-pages). |
+| `COUNT_CAP` | How many rows the list pages count before they say `10,000+` and no longer how many pages there are (10,000). The JSON API always counts them all. |
+| `WORKSPACES` | Where a resource of a model that belongs to workspaces (`#[model(workspace)]`) works: `Workspaces::Current` (the default), in the workspace the request works in, or `Workspaces::Every`, across all of them. See [workspaces](#workspaces). |
+| `fields`, `filters`, `actions`, `metrics` | What the screens show. Only `fields` is required. |
+| `query` | The base query every screen starts from. See [scoping the query](#scoping-the-query). |
+| `create`, `update`, `delete` | How records are saved. See [saving through your services](#saving-through-your-services). |
+
+Helm checks every resource when the app boots, so a mistake fails the boot with a message that names the resource: a field, a metric's column or `TITLE` that isn't a column of the model, an invalid `pattern`, a relationship to a resource that isn't registered, an action without `.handle(..)`, a trend without a period, or two resources with the same slug.
+
+### The screens
+
+- **List.** A Navree UI DataTable of the fields shown on the index: a search box, a bar with a button for each filter, sortable column headers, columns to show, hide and resize, a row density, the pages and their size. A row opens its record; its menu offers **Open**, **Edit** and **Delete** as far as the user may. Tick rows and press an action's button over the table. **Export** downloads what the list shows as a CSV file. The resource's metrics sit above the table as cards. A list counts its rows up to `COUNT_CAP` (10,000), so a table of millions does not pay for its page number; **Count all** counts them.
+- **Detail.** Every field shown on the detail page, the record's title as the heading, buttons for edit, delete and the actions, and below them a table for each `has_many` relationship, with its own actions and a link to all of its rows.
+- **Create and edit.** A Navree UI form with every editable field: a text input, a decimal input with the currency beside it, a select, a picker for a related record that searches on the server, a date or date-time field, an upload. Validation errors appear under their fields and name a field by its label (`Company should not be empty`), not by its column. A field the user may not change is shown beside the form, with why.
+- **Dashboard.** The panel's home page, `/admin`, shows the metrics marked `.on_dashboard()` from every resource the user may read.
+
+Deleting and an action that asks a question show a page with the question first, with or without JavaScript; an action with fields shows its form.
+
+## Fields
+
+Each field names a column of the model, except `computed`, `has_many` and `view`.
+
+| Field | Shows | In forms |
+|---|---|---|
+| `Field::id()` | The primary key | Never editable |
+| `Field::text(column)` | The text | A text input |
+| `Field::textarea(column)` | The first line on the list, everything on the detail page | A text area |
+| `Field::markdown(column)` | Rendered Markdown on the detail page, without raw HTML | A text area |
+| `Field::number(column)` | The number | A number input |
+| `Field::money(column, currency_column)` | An amount in minor units with its currency, as `$12,500.00` or `₹12,34,567.00` (`USD` when the record has none) | A decimal input; stored in minor units |
+| `Field::boolean(column)` | A check mark | A switch |
+| `Field::select(column)` | The option's label, or a badge with `.badge()` | A select of `.options(..)` |
+| `Field::date(column)`, `Field::datetime(column)` | The date; a date-time on the app's clock, with its zone (`26 Oct 2026 17:30 IST`): the reader's [`CurrentZone`](/docs/digging-deeper/time-zones/) when the app has `TimeModule`, else UTC | A date or date-time field, typed on the same clock (the field names the zone) and stored in UTC |
+| `Field::email(column)`, `Field::url(column)` | A link | A text input, validated |
+| `Field::file(column, disk)` | A download link | An [upload](/docs/components/upload/) to that [storage disk](/docs/digging-deeper/storage/) (needs `StorageModule`), showing the file stored; the column holds the file's path, and a refused file (its type or size) shows its error under the field |
+| `Field::belongs_to::<R>(column)` | The related record's title, linked to its page | A picker of the records of `R` the user may read, searched on the server (`GET /admin/resources/{r}/choices?q=..`) |
+| `Field::has_many::<R>(foreign_key)` | A panel on the detail page listing the related records, with their own actions | Not in forms |
+| `Field::computed(name, f)` | The value `f(&model)` returns | Not in forms |
+| `Field::view(name, template)` | A [template](/docs/digging-deeper/views/) rendered with `record` (the record's columns) and `field` (needs `ViewModule`) | Not in forms |
+
+Modifiers chain after the constructor:
+
+| Modifier | What it does |
+|---|---|
+| `.label("Amount")` | The label. Defaults to the column name in sentence case. |
+| `.help("Shown under the input")` | Help text in forms. |
+| `.sortable()` | Lets the list sort by this column. |
+| `.readonly()` | Shown but never editable (and left out of create forms). |
+| `.hide_on_index()`, `.hide_on_detail()`, `.hide_on_forms()`, `.only_on_forms()`, `.hide_on_export()` | Where the field appears. |
+| `.required()`, `.min(n)`, `.max(n)`, `.min_length(n)`, `.max_length(n)`, `.pattern(regex)` | Validation in forms, with the same messages as [validation](/docs/basics/validation/) (`title should not be empty`). For money, `min` and `max` are in minor units. |
+| `.default(value)` | The value a create form starts with, and the value saved when a create leaves the field out. |
+| `.options(pairs)`, `.badge()` | The `(value, label)` pairs of a select, and showing the label as a badge. |
+| `.accept(["image/*"])`, `.max_size(bytes)` | The types a file field accepts (sniffed from the content) and its size limit (10 MiB by default). |
+
+On the company resource, a `has_many` field lists each company's deals on its page. The related resource needs a `Field::belongs_to` on that foreign key, which `DealResource` has:
+
+```rust title="src/modules/companies/resources/company.rs"
+fn fields(&self) -> Vec<Field> {
+    vec![
+        Field::text("name").required().sortable(),
+        Field::url("website"),
+        Field::text("city").sortable(),
+        Field::belongs_to::<UserResource>("owner_id").label("Owner"),
+        Field::has_many::<DealResource>("company_id").label("Deals"),
+        Field::has_many::<ContactResource>("company_id").label("Contacts"),
+    ]
+}
+```
+
+A resource may have several `has_many` fields on the same foreign key name, as long as they list different resources (`Deals` and `Contacts` above), and a tree's children (`has_many` on `parent_id`) sit beside its parent (`belongs_to` on `parent_id`).
+
+## Search, sorting and filters
+
+The search box matches the `SEARCH` columns, ignoring case (non-ASCII letters included). The list sorts by any `.sortable()` field, newest first by default (`-created_at` when the model has that column, else its primary key descending); set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
+
+Each filter is a button in the bar over the list's table: its name, or once it holds something, what it holds (`Stage: Won, Lost`). It opens its choices; the filters in force also show as chips under the bar, each with a way off, and **Clear filters** takes them all off. Which filters the bar shows, and in what order, is each user's choice. Filters narrow the list:
+
+| Filter | Lets the user pick |
+|---|---|
+| `Filter::select(column).options(..)` | One or more values, as checkboxes |
+| `Filter::belongs_to::<R>(column)` | One or more related records, as checkboxes |
+| `Filter::boolean(name, label, f)` | Any, yes or no; `f(query, on)` changes the model query (a `Builder`) |
+| `Filter::date_range(column)` | A range of dates, from and to, either end optional. A link can also name a preset: `today`, `week`, `month` or `quarter` |
+| `Filter::custom(name, label, f)` | A value typed in; `f(query, value)` changes the model query |
+| `.reads([columns])`, on a boolean or custom filter | The columns its closure reads, so it runs for who may read them. Without it the filter runs only for a user with no column hidden from them. |
+
+The search, filters, sort and page are in the URL, so a filtered list is a link you can share:
+
+```text
+/admin/resources/deals?search=gulati&filter[stage][in]=lead,won&sort=-amount_cents&page=2
+```
+
+The names are the same as on every Navree list (see [list queries](/docs/basics/list-queries/)):
+
+| Parameter | Means |
+|---|---|
+| `filter[stage]=won` | The filter holds this one value |
+| `filter[stage][in]=lead,won` | The filter holds any of these values. Separate them with commas, or repeat the parameter. |
+| `filter[open]=true` | A boolean filter is on (`false`: off) |
+| `filter[expected_close_date][gte]=2026-10-01`, `[lte]=2026-10-31` | A range of dates, from and to; either may be left out. `filter[expected_close_date]=2026-10-01..2026-10-31` and a preset (`=month`) read the same. |
+| `filter[min_amount][contains]=5000` | What a custom filter was given |
+| `search=gulati` | The text to search for |
+| `sort=-amount_cents` | The column to sort by; a leading `-` sorts descending |
+| `page=2`, `per_page=50` | The page and its size (at most 100) |
+
+The table writes a range of dates and a custom filter's value as above; the JSON API reads a filter as equal to a value or one of a list, the only two forms it takes. Helm sorts by one column: when a sort names several (`sort=-amount_cents,title`), the first counts. `via[column]=id` (the rows of a relationship panel) and `range` (the period of the metric cards) are Helm's own parameters, and the table's links keep them. So do the table's own: the columns shown, their widths, the density, the filters the bar shows.
+
+A page is forgiving: a parameter Helm does not read, such as `filter[stage][gte]=won`, is left out and the list still opens. A `page` or `per_page` that is not a number in range is a 400 that names it.
+
+### Exporting
+
+**Export** on a list downloads its rows as a CSV file (`GET /admin/resources/deals/export.csv`, with the list's search, filters and sort in the query). It has the list's rows for the user: the same rows, narrowed by the same access filter, and in a workspace only that workspace's. Its columns are the fields of a record's page, less any marked `.hide_on_export()`: use that for a field someone reads one record at a time but shouldn't take by the table. A header line names them by their labels; a value the user's rules hide is empty, and a `#[model(hidden)]` column isn't there at all. Dates are ISO 8601 and Markdown is the text typed.
+
+- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk reads the user's access again and checks again that they may work in the workspace, so a role or a permission taken away, or a member removed, ends the file. Signing out does not end a file already being sent; its time limit does.
+- **A time limit.** `helm.export_max_secs` (1800) ends a file however slowly the client reads, and no more rows are read for it. A client that has stopped reading altogether holds only its socket until the server's own connection limits close it: nothing is read for it.
+- **In a workspace your app entered.** The file enters the workspace itself past its first chunk, so the panel asks up front who may work there, as it does for a queued action: `WorkspaceModule`, or `helm_staff_workspaces`. An app with neither can't export from a workspace it entered, the list doesn't offer it, and the route answers with a 403 that says why.
+- **Spreadsheets.** A text that starts with `=`, `+`, `-` or `@` and is not a number gets a quote in front, so a spreadsheet opens it as text and runs nothing; a number stays a number, currency symbol and thousands separators included (`-$1,234.60`). The file starts with a UTF-8 byte order mark so that Excel reads it as UTF-8: a program that reads it should skip one.
+- **A read.** Export is a `GET` that changes nothing, so a role that only reads may use it. Each export writes a `helm.export` entry to the [audit log](/docs/security/audit-log/) with the resource, the query and the workspace, and a `helm.export.finished` entry when it ends, with the rows sent and how it ended: `finished`, `stopped`, `time_limit` or `abandoned` by a client that went away. A `HEAD` is a 405 and writes nothing.
+- **From the panel only.** A browser that says the request comes from another site of the domain (`Sec-Fetch-Site: same-site` or `cross-site`) gets a 403, here and on the menu's counts. A client that isn't a browser doesn't send the header.
+- **Off.** Set `const EXPORT: bool = false;` on a resource whose rows should not leave the panel.
+
+### Scoping the query
+
+`query` is the starting point of every screen, metric and relationship picker. It gets the model's query (`Company::query()`), whose global scopes apply when it runs: a model with `#[model(soft_deletes)]` already hides its trashed rows. Use it to narrow what the panel works on:
+
+```rust
+use navree::orm::Builder;
+
+fn query(&self, query: Builder<Company>) -> Builder<Company> {
+    query.where_(Company::DELETED_AT.is_null())
+}
+```
+
+Helm applies the user's access filter after `query`, so `query` never widens what a user may see.
+
+## Actions
+
+An action runs on the records ticked on the list, or on one record from its page. It names an ability, and runs only on the records the user has that ability on:
+
+```rust
+Action::new("mark-lost", "Mark as lost")
+    .ability(Move)
+    .fields(vec![Field::textarea("lost_reason").label("Reason").required()])
+    .handle(|ctx, deals| async move {
+        let reason: String = ctx.input("lost_reason")?;
+        let service = ctx.get::<DealService>().await?;
+        for deal in deals {
+            let input = MoveDeal {
+                stage: Some(Stage::Lost),
+                lost_reason: Some(reason.clone()),
+                ..MoveDeal::default()
+            };
+            service.move_to(ctx.uow(), ctx.user_id(), deal, input).await?;
+        }
+        Ok(ActionResult::message("Deals marked as lost."))
+    })
+```
+
+Tick rows on the list, choose the action in the menu beside **Run** and press it; an action that asks a question asks before it runs. The menu offers only the actions the user may run on some record and that the workspace they work in takes from them (a read-only role is offered none), and **Run** waits for a row and an action. The server checks every run again.
+
+| Builder | What it does |
+|---|---|
+| `Action::new(name, label)` | The action's name (in URLs and the audit log) and its button label. |
+| `.ability(Move)` | The action marker each selected record is checked against. Defaults to `Update`. |
+| `.confirm(text)` | Asks before running. Actions with `.destructive()` always ask, in red. |
+| `.fields(vec![..])` | A small form shown before the action runs; read the values with `ctx.input(name)`. |
+| `.only_on_detail()`, `.only_on_index()` | Where the button appears. |
+| `.queued()` | Runs the action as a `helm.action` job on your [queue](/docs/digging-deeper/queues/) and answers at once. Use it for slow work, such as exports. Without a queue in the app it runs in the request. |
+| `.handle(f)` | The work. `f(ctx, records)` gets an `ActionContext` and the records the user may act on. |
+
+The handler runs inside the request's unit of work: return an error and every change rolls back, and the error's message appears on screen. `ActionContext` has `uow()`, `user_id()`, `get::<T>()` to resolve services (with the visibility of the resource's module), `input(name)` and `inputs()`. Records the user isn't allowed to act on are left out, and the result says how many were skipped; when none is left, the action is refused with a 403. A queued action checks the user's abilities again when the job runs.
+
+When the handler calls a method on a record itself (rather than passing it to a service), Rust can't infer the records' type: write `|ctx, deals: Vec<Record<Deal>>|`.
+
+`ActionResult::message(text)` shows a message, `ActionResult::redirect(url)` goes somewhere, and `ActionResult::download(url)` starts a download, for example of an export a queued action stored on a [disk](/docs/digging-deeper/storage/) with a temporary URL. A redirect or download to another site opens from a link on a confirmation page.
+
+## Metrics
+
+Metrics are cards above a resource's list, and on the dashboard when marked `.on_dashboard()`. Each is one query, computed over the rows the user may read:
+
+| Metric | Shows | Built with |
+|---|---|---|
+| `Metric::value(label)` | One number | `.count()`, `.sum(col)`, `.average(col)`, `.min(col)`, `.max(col)`, `.filter(cond)`, `.money(currency)`, `.over(col)` |
+| `Metric::trend(label)` | A line over time | an aggregate, then `.by_day(col, days)`, `.by_week(col, weeks)` or `.by_month(col, months)` |
+| `Metric::partition(label)` | A breakdown by a column | an aggregate, then `.group_by(col)` |
+
+A `col` is one of the model's typed columns (`Deal::AMOUNT_CENTS`) or a column name (`"amount_cents"`), and `.filter(cond)` takes a condition on the model (`Deal::CLOSED_AT.is_null()`).
+
+A value metric with a date column (`.over(Deal::CREATED_AT)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and, when the period before it has rows to compare with, a **delta**: `+12.4%` on the previous 30 days. With nothing before it, or for a value with no range, there is no delta. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
+
+## Authorization
+
+Helm doesn't have its own permission system. It asks your abilities, with the [access rules](/docs/security/authorization/) and the same SQL filters your API uses:
+
+| In Helm | Requires |
+|---|---|
+| Entering the panel | `view` on `Helm` (permission `helm.view`) |
+| A resource in the menu, its list and its metrics | `read` on its subject, as a type-level check; rows are filtered like `Accessible<M, Read>` |
+| A record's page | `read` on that record; a record the filter hides is a 404 |
+| The create form | `create` on the subject; the saved record must then pass your `create` rules too |
+| Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only, and changing them is a 403. A field the user may change but not read is blank in the form, and left blank it stays as it is |
+| Deleting a record | `delete` on that record |
+| An action | its ability on each selected record |
+| A relationship picker | `read` on the related resource; it lists only readable records |
+| A field's value | `read` on that field (a `cannot read .. fields [..]` rule hides it, by any route: see [hidden columns](#hidden-columns)) |
+
+So with rules where reps read every deal but update only their own, and only some of its fields, a rep's Helm lists every deal, shows an **Edit** button only on their own, and grays out the fields they may not change. The API under `/admin/api` enforces the same checks: hiding a button is never the only protection.
+
+### Hidden columns
+
+A column is out of a user's reach in two ways: the model hides it from everyone (`#[model(hidden)]`, its `hidden(..)` list, or left out of its `visible(..)` list), and your field rules hide it from them (`cannot(READ, "Deal").fields(["title"])`). One place in the panel decides, and every route asks it:
+
+- **The value reaches no route.** Not a cell, a page's title or heading, a list, the API's `title` and `values`, a relationship picker, a related record's name, an export, a form or a view field's template. Where the title's column is hidden, the record is named by its label and short key (`Deal #3f9a1c2e`).
+- **No query runs on the column.** A sort, a search, a filter, `via`, a metric and a relationship panel would each tell something about it. The API answers a 400 or, for a metric, a 403, and the pages and `GET /admin/api/resources` don't offer them. A search with other columns goes on with those. A default sort on such a column gives way to the newest key. A rule with conditions (`.when(..)`) hides a value only where they hold, and takes the whole column out of queries.
+- **A `#[model(hidden)]` column can still have a field.** It is write-only: it isn't on the list or the page, the form shows it blank, leaving it blank keeps the value, and the API's answer to a write doesn't echo it. To show such a value, make it a `Field::computed`, which is your code saying so.
+
+What the panel can't see through is your own code:
+
+- A filter's closure. Say what it reads with `.reads([Deal::AMOUNT_CENTS])`, and it runs for a user who may read those columns. One that doesn't say runs only for a user with no column hidden from them, since it could be reading any.
+- A computed field's closure. A rule can name the field itself (`.fields(["probability"])`), and a rule that hides a column it reads should.
+- A metric's `.filter(..)` condition, which is fixed for everyone and can't be asked about a value the user picks. A metric is withheld when a column it adds up, groups by or dates by is hidden.
+
+Every create, update and delete runs in the request's [unit of work](/docs/database/unit-of-work/), so [audit](/docs/security/audit-log/) entries name the user who made the change (`deal.updated`), and each action run adds an entry `helm.action` with the action's name, the resource and the record ids. The change events of Helm's own writes carry the record's [serialized form](/docs/orm/serialization/): a field the model hides (`#[model(hidden)]`, or skipped by serde) is stored, but never reaches an observer or the audit log.
+
+### Workspaces
+
+A model declared `#[model(workspace)]` belongs to workspaces, and the panel works in **one workspace at a time**. Which one is decided before a screen runs:
+
+1. the workspace the request's unit of work has entered, which is the case when the app enters it for the request (an `InWorkspace` guard, or `Workspaces::enter` in your own layer);
+2. else the one the request names: the workspace header holding the workspace id (`workspace.header`, `X-Workspace` by default, for API clients; none if `workspace.resolvers` leaves out `header`), or the `navree_helm_workspace` cookie that the form in the sidebar sets. The form shows when the panel has a resource of a workspace model; type the workspace id and press **Work in this workspace**, and an empty field leaves the workspace. Anything that isn't a UUID names no workspace. The browser keeps the cookie for up to 30 days. In a signed-in browser its value is sealed to the sign-in, so a cookie set at another path, by a sibling subdomain or kept from another sign-in, names nothing; after signing out or in again it is dead.
+
+A workspace the request names is entered only for a user who may work in it:
+
+- **A member.** The check goes through `WorkspaceModule`: a membership, a grant through the workspace's organization, or a demo workspace's guest role. Someone who is removed is out on their next request, and a queued action they started fails when it runs (its job checks again, so nothing runs on the word of who they were). A write to a read-only demo workspace is refused as it is on any workspace route. A member limited to some of a workspace's [partitions](/docs/workspaces/partitions/) gets a 403 (code `helm_workspace_partitions`), because the panel doesn't keep to partitions and would show them all.
+- **Staff, if the app says so.** Nobody works in a workspace they aren't in unless the app names who may, with `helm_staff_workspaces`:
+
+```rust
+m.helm_staff_workspaces(|entry| async move {
+    // entry.user_id, entry.workspace, entry.access (their app-wide access), entry.app
+    Ok(entry.access.ability.can("enter", "support", None))
+});
+```
+
+  Every request made that way writes a `helm.workspace.staff` entry to the [audit log](/docs/security/audit-log/), when the app has one, on the log's own connection: the entry stays when the request, or a queued action, fails. A workspace that doesn't exist is a 404 for staff. Staff are held to read-only demos like anyone else.
+
+A header that names a workspace the user may not enter is a 403, the same one whether the workspace exists or not. A cookie that does counts for nothing, so a removed user still reaches the sidebar, and the form says why it refuses. An app without `WorkspaceModule` or `helm_staff_workspaces` has no way to check, so naming a workspace is refused with a 403 (code `helm_workspace_unchecked`) and the panel never takes the request's word for it. 
+
+**What a member's role does.** Abilities in the panel are app-wide, and a role narrows them: it never grants one. A workspace owner with only `helm.view` still can't list notes. A role that can't write gets read-only, the way a read-only demo does: reads work, and a create, an update, a delete or an action is a 403 (code `workspace_read_only`), through a resource across workspaces and in a queued action too, whatever the user holds app-wide.
+
+| Role | Writes in the panel |
+|---|---|
+| `owner`, `admin`, `member` | yes |
+| `viewer` | no |
+| A role of your own | no |
+
+[`workspace.roles`](/docs/workspaces/members-and-roles/) decides for the models it names, either way, and takes precedence over the table:
+
+```toml
+[workspace.roles.viewer]
+permissions = ["notes.update"]  # viewers update notes, and write nothing else
+
+[workspace.roles.member]
+permissions = ["deals.read"]    # members only read deals, and write the rest
+
+[workspace.roles.clerk]
+permissions = ["invoices.*"]    # clerks write invoices, and nothing else
+```
+
+The panel shows only what the role takes: a role that only reads is offered no **New**, **Edit** or **Delete** and no bulk action, and the API's `can` says so, while a write made by hand is still a 403 as above. A count, a list and an export are reads, so a read-only role has them. The same goes for a [read-only demo](/docs/workspaces/demo-workspaces/) and for a resource with `READ_ONLY`.
+
+The user still needs the app-wide ability for each write. A user who is both a read-only member and staff is read-only there: the membership is asked first. A demo's `guest_role` is a role like any other, so in `reset` mode a `viewer` guest doesn't write either, and a role in `workspace.demo.editor_roles` writes to a read-only demo. The form in the sidebar stays open to a read-only member, who can still choose the workspace, and the sidebar's choice of one that takes no write doesn't stop a form for another workspace.
+
+A credential limited to one workspace ([`PinnedWorkspace`](/docs/workspaces/resolution/), such as a token of an OAuth client made for a workspace) reaches only that one, staff or not. A request that names no workspace works in it, a header that names another is a 403 (code `token_workspace_mismatch`) before staff is asked, a cookie that names another counts for nothing, the form in the sidebar refuses, and a resource across workspaces is scoped to it.
+
+The panel then enters the workspace the way a workspace request does: the unit of work remembers it, so the ORM scopes every query of workspace models to it and fills the `workspace_id` of the records Helm creates, and on PostgreSQL the transaction's `navree.workspace` setting holds it, which is what [row-level security](/docs/workspaces/isolation/) policies read, and under schema isolation so does its `search_path`. Under database isolation each workspace's records are in a database the panel doesn't work on, so naming a workspace is a 400 that says so. Lists, record pages, relationship pickers, metrics (counted and cached per workspace), actions (queued ones run again in the workspace they were started in; in a workspace the app entered itself, where the job has only `WorkspaceModule` and `helm_staff_workspaces` to ask, one they wouldn't admit is refused when it is asked for, with the same 403) and the default `create`, `update` and `delete` all work inside it, with or without a role that bypasses row-level security. A record of another workspace is a 404, and a form that names another workspace in `workspace_id` is a 400, on a create or an update: a record stays in its workspace.
+
+Without a workspace, a resource of a workspace model answers with a 400, `Choose a workspace first`, and a picker lists nothing. Nothing falls back to the records of every workspace.
+
+A resource that has to span workspaces asks for it with `const WORKSPACES: Workspaces = Workspaces::Every`. Its queries leave out the workspace scope, so what it sees is what the database lets the connection's role see: a role that bypasses row-level security (a maintenance role) sees every workspace, and one that doesn't sees nothing. A create is on the same terms. Its form names the record's `workspace_id`, which must exist (the sidebar's workspace is the default, and gives way to the form; a header doesn't). A user who may work in that workspace makes the record inside it. Anyone else makes it only if the database would show it to them, so a role row-level security binds gets a 403, the same for a workspace that doesn't exist. Under schema isolation a record has nowhere to go but the schema of its workspace, so that's a 403 too, and what `Every` lists with no workspace named is what the shared tables hold: a workspace's records are reached by naming it. On SQLite and MySQL, which have no such thing, and with a bypassing role, `Every` is the resource's own word that everyone with the model's abilities works across workspaces. The default `update` and `delete` run inside the workspace of the record, a read-only demo refuses them and an action on its records whoever asks, and a role's limits apply in the record's workspace. Relationship fields are checked in the workspace of the record, whichever the sidebar holds. An action's handler and your own `create`, `update` and `delete` run as the request does, in no workspace unless one was named, so they scope their own writes with `navree::orm::workspace::scope`. A resource that wants no workspace at all overrides `query`.
+
+In your own `create`, `update`, actions and pages, `ctx.workspace()` is the workspace the request works in, and `navree::orm::workspace::scope(id, ..)` runs ORM calls in another one.
+
+### Saving through your services
+
+By default Helm writes the form's values straight to the model's columns, through each field's conversion (its cast and mutator):
+
+- a create starts from a model whose fields are at their types' defaults, sets the form's values, generates the key (a UUID v7 for a `Uuid` key) and sets `created_at` and `updated_at` to now when the model has them;
+- an update writes the columns that changed and sets `updated_at`;
+- a delete removes the row, or trashes it when the model soft-deletes.
+
+These writes are statements: the model's hooks and observers don't run (its change observers, such as the audit log, do). A model with a field whose type has no `Default` can't start from defaults, so its resource overrides `create`. When your service does more than that, such as moving the other deals of a stage, emitting events or checking a business rule, save through it instead by overriding `create`, `update` or `delete`:
+
+```rust
+use navree::BoxFuture;
+use navree::helm::{FormData, RecordOf, SaveContext};
+
+impl Resource for DealResource {
+    // ...
+
+    fn update<'a>(
+        &'a self,
+        ctx: &'a SaveContext,
+        deal: RecordOf<Self>,
+        form: FormData,
+    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
+        Box::pin(async move {
+            let deals = ctx.get::<DealService>().await?;
+            let input: UpdateDeal = form.parse().await?; // validation, errors under each field
+            deals.update_model(ctx.uow(), ctx.user_id(), deal, input).await
+        })
+    }
+}
+```
+
+`RecordOf<Self>` is a [record](/docs/orm/models/) of the resource's model (`Record<Deal>`); a service that saves it with `deal.update(uow, |d| ..)` runs the model's hooks. `form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
+
+## The panel's look and pages
+
+The `helm` section sets the panel's name and look:
+
+```toml title="config/app.toml"
+[helm]
+title = "Agra CRM"
+logo = "/brand/logo.svg"   # a URL; served by your app or a CDN
+theme = "navree"           # a Navree UI theme
+per_page = 25
+```
+
+The look is Navree UI's, dark, in the [theme](/docs/ui/themes/) `helm.theme` names: `navree` (the default), `neutral`, `ocean`, `violet`, `sunset`, `rose` or `contrast`. The layout is Navree UI's [app shell](/docs/ui/app-shell/), a sidebar and a top bar:
+
+- **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, each with its `ICON`, a [Lucide](https://lucide.dev) icon by name (one of about 140 common ones, or any with `helm-all-icons`). Its header shows `helm.title` with `helm.logo` and, when a resource lives in workspaces, the form that picks one; its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons, and the next page opens the same way.
+- **Counts.** Each resource in the menu shows how many records it has, read for the signed-in user and the workspace they work in (it is what their list shows), cached for `helm.metrics_cache_secs` under the user, their access and the workspace, and capped: past 1,000 it says `1,000+`. A page never counts them: a group of the menu with counts fetches itself once the page is up (`GET /admin/counts`), so a list pays for none it does not show. The same address answers JSON for any other client: `{"counts": {"deals": {"value": 30, "capped": false, "text": "30"}}}`. Turn a resource's count off with `const SIDEBAR_COUNT: bool = false;`.
+- **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource or page of the menu by name.
+- **On phones** the sidebar opens as a sheet over the page, and a table scrolls in its own box.
+
+### Custom pages
+
+For a screen that isn't a resource, add a page rendered from a [template](/docs/digging-deeper/views/) inside the panel's layout:
+
+```rust
+use navree::helm::HelmPage;
+
+m.helm_page(
+    HelmPage::new("pipeline", "Pipeline board")
+        .group("Sales")
+        .icon("kanban")
+        .template("admin/pipeline")
+        .can("read", "Deal"),
+);
+```
+
+The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline.
+
+### Settings
+
+<Badge feature="settings" /> When the app has `SettingsModule`, the panel edits every [settings type](/docs/packages/settings/) your modules register. **System → Settings** lists the types the signed-in user manages: those whose `permission` they hold app-wide, else those `settings.manage` covers. Each type opens at `/admin/settings/{key}` for a level: global, or an organization, workspace or user named by its id or slug. The permission says which types; the level says whose. A workspace's settings are for those who may work in it, and an organization's for its members, a role that can't write only reads them, and a user's are for that user, as in the settings API. Anyone else gets a 403, the same for a workspace or organization that doesn't exist. The only way across is `helm_staff_workspaces`, and for organizations `helm_staff_organizations`, which takes `entry.organization`. Each request made that way, reads included, writes a `helm.workspace.staff` or `helm.organization.staff` entry to the audit log. An app with neither `WorkspaceModule` nor staff has no way to check, and gets `helm_workspace_unchecked`. A credential limited to a workspace reaches that workspace's settings and its own user's, and not the global or an organization's level. A member with the permission writes their workspace's settings on these screens, where the settings API asks for `workspace.update` in the workspace. Every field shows where its value comes from; saving stores only the fields you changed, so the others keep inheriting, and a field set at the level has an **Inherit** button. Writes go through the `Settings` service in the request's unit of work, so they are validated, audited and announced like any other. The screens come with the `helm` and `settings` features together (both are in `full`; on the crate, `navree-helm`'s `settings` feature).
+
+## Security
+
+- **Sign-in.** The panel has no sign-in screen of its own. People sign in on your app's pages (`AuthPages`), on the app's [session](/docs/basics/sessions-and-csrf/): password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). One sign-in opens every page and tool of the app. The session is kept on the server: signing out, ending the session from another device, changing or resetting the password and offboarding end it at once, for a copied cookie too. The cookie is the session's own (`__Host-navree_session` where browsers allow the prefix, `Secure` and `HttpOnly`); its settings and lifetime (`session.*`, `auth.session.lifetime_hours`, `auth.session.remember_days`) are the app's. The workspace the panel works in is a cookie of its own, `navree_helm_workspace`, scoped to the panel's path, set only by the sidebar's form (a `POST` that carries the session's CSRF token) and sealed to the sign-in it was chosen in. **Sign out** in the sidebar posts to the app's `/sign-out`.
+- **CSRF.** Every change a browser makes sends the session's CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403 by the session layer. Do not put the panel in `session.csrf_except`: nothing else checks it.
+- **Deny by default.** Nobody enters without `view` on `Helm`, and every screen and API call checks the user's ability on the subject and the record, as [above](#authorization). The super-admin role passes every check.
+- **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles; Navree UI's page policy, with pictures from `https:` for files on a disk of their own), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped by the toolkit's one escaping path; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.
+- **Rate limits.** The panel and its API are subject to your app's per-IP [rate limit](/docs/basics/rate-limiting/).
+
+The panel and its JSON API also accept an access token in `Authorization: Bearer`, which needs no CSRF token. That is how you test it, and how a [backend-for-frontend](/docs/patterns/backend-for-frontend/) serves it: when the BFF forwards `/admin` with the signed-in user's token, as the [SaaS starter kit](/docs/getting-started/starter-kits/) does, Helm opens on the web app's origin with the same session and nobody is sent to a sign-in page.
+
+## Testing
+
+The panel's API is ordinary JSON under `/admin/api`, so you test resources with [HTTP tests](/docs/testing/http-tests/), acting as users with different roles:
+
+```rust title="tests/helm_deals.rs"
+use navree::prelude::*;
+use navree::testing::principal;
+use serde_json::json;
+
+#[tokio::test]
+async fn reps_read_every_deal_but_edit_only_their_own() {
+    // `boot_app`, `create_user` and `create_deal` are your tests' own helpers.
+    let app = boot_app().await;
+    let priya = create_user(&app, "priya@example.com", "rep").await;
+    let tom = create_user(&app, "tom@example.com", "rep").await;
+    let toms_deal = create_deal(&app, tom.id, "Gulati renewal").await;
+
+    let rep = app.acting_as(principal(priya.id));
+    rep.get("/admin/api/resources/deals")
+        .query(&[("search", "Gulati")])
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", 1.into());
+
+    rep.patch(&format!("/admin/api/resources/deals/{}", toms_deal.id))
+        .json(&json!({ "title": "Mine now" }))
+        .send()
+        .await
+        .assert_error(403, None);
+}
+```
+
+`boot_app` builds the app with `TestApp::builder().fake_auth()` so `acting_as` works next to `AuthModule`, and with `.temp_database()`, which points the app at a SQLite file: the test crate needs the `sqlite` feature of `navree` in its `[dev-dependencies]`, which `navree new` writes.
+
+### The JSON API
+
+| Route | What it does |
+|---|---|
+| `GET /admin/api/resources` | The resources the user may read, with their fields, filters, actions, metrics and `can.create`, and the pages they may open |
+| `GET /admin/api/resources/{resource}` | The list: `search`, `filter[name]`, `filter[name][in]`, `sort`, `page`, `per_page`; answers `{"data": [..], "meta": {..}}`. A parameter of the list query that Helm does not read (`filter[stage][gte]`, `cursor`) is a 400 that names it. |
+| `GET /admin/api/resources/{resource}/{id}` | One record with its fields |
+| `GET /admin/api/resources/{resource}/options` | Records for a relationship picker: `search`; answers `{"data": [{"id", "title"}]}`, at most 20 |
+| `POST /admin/api/resources/{resource}` | Creates a record from `{"field": value, ..}` (201) |
+| `PATCH /admin/api/resources/{resource}/{id}` | Updates a record with the fields sent |
+| `DELETE /admin/api/resources/{resource}/{id}` | Deletes a record (204) |
+| `POST /admin/api/resources/{resource}/actions/{action}` | Runs an action: `{"ids": [..], "input": {..}}`; answers the result (`{"type": "message", "message"}`, or `"redirect"` / `"download"` with `url`) with `ran`, `skipped` and `queued` |
+| `GET /admin/api/resources/{resource}/metrics/{metric}` | One metric (its name is its label in kebab-case, `open-pipeline`): `range`; answers `value`, `previous`, `change` and `display`, trend `points` or partition `groups` |
+
+A record is `{"id", "title", "values", "display", "can": {"update", "delete"}}`: `values` holds the raw column values (money in minor units), `display` the text the screens show, and a single record also lists the fields the user may not change under `readonly`. A field sent that isn't an editable field of the resource is a 400 (`property created_at should not exist`). The API doesn't take uploads: a file field accepts only the path of a file the panel's forms stored for that resource (`deals/<random name>.pdf`), and anything else is a 400 (`attachment is invalid`).
+
+Errors use Navree's JSON error shape (`{ "statusCode", "message", "error", "code" }`), and a validation error lists its field messages under `errors`, as in your API.
+
+## Configuration
+
+Every key of the `helm` section is optional. From the environment: `APP_HELM__TITLE="Agra CRM"`, `APP_HELM__PER_PAGE=50`.
+
+| Key | Default | What it does |
+|---|---|---|
+| `helm.path` | `/admin` | Where the panel is served. |
+| `helm.title` | `Admin` | The name in the header and the browser tab. |
+| `helm.logo` | none | A logo URL for the sidebar's header: a path on your app or an `http(s)` URL. |
+| `helm.theme` | `navree` | The Navree UI theme the panel is drawn in: `navree`, `neutral`, `ocean`, `violet`, `sunset`, `rose` or `contrast`. |
+| `helm.per_page` | `25` | Rows per page on lists (at most 100). |
+| `helm.metrics_cache_secs` | `60` | How long metric results and the sidebar's counts are cached per user and range (counts: per user and workspace); `0` turns the cache off. |
+| `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
+| `helm.export_max_secs` | `1800` | How long a list's CSV file may take to send, however slowly the client reads. |
+
+| Command | What it does |
+|---|---|
+| `navree make:resource <module> <Model> [--path src/modules]` | Generates a resource with a field for every column of the module's model (`models/<model>.rs`), and registers it. The model may be written `Deal` or `deal`. |
+
+<LinkCards>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    The abilities every Helm screen checks.
+  </LinkCard>
+  <LinkCard href="/docs/orm/models/" title="Models">
+    The navree-orm models resources are built on.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    Who changed what, from the API or from Helm.
+  </LinkCard>
+</LinkCards>

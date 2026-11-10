@@ -1,0 +1,91 @@
+[package]
+name = "navree-micro"
+description = "Navree MicroModule: request-response messages and events between services, with the same modules, guards, validation and unit of work as HTTP routes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "microservices", "nats", "kafka"]
+categories = ["network-programming", "asynchronous"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["kafka", "mqtt", "nats", "rabbitmq", "redis", "testing"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## NATS (core request-reply, JetStream for durable events).
+nats = ["dep:async-nats"]
+## Kafka.
+kafka = ["dep:kafka-protocol", "dep:hmac", "dep:sha2", "dep:base64"]
+## RabbitMQ (AMQP 0-9-1).
+rabbitmq = ["dep:lapin"]
+## Redis Streams.
+redis = ["dep:redis"]
+## MQTT 5.
+mqtt = ["dep:rumqttc"]
+## `MicroFake`: stubs other services and records what a service sends, in process
+## (it answers with navree-testing's `TestResponse`). The facade turns it on with its
+## own `testing` feature.
+testing = ["dep:navree-testing"]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+test-postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+async-nats = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+hmac = { workspace = true, optional = true }
+http = { workspace = true }
+kafka-protocol = { workspace = true, optional = true }
+lapin = { workspace = true, optional = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+percent-encoding = { workspace = true }
+redis = { workspace = true, optional = true, features = ["tls-rustls-webpki-roots"] }
+rmp-serde = { workspace = true }
+rumqttc = { workspace = true, optional = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+webpki-roots = { workspace = true }
+
+[dev-dependencies]
+# The crate's own tests use `MicroFake`.
+navree-micro = { path = ".", features = ["testing"] }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-access = { workspace = true }
+navree-macros = { workspace = true }
+# The `deals` fixture is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
+rcgen = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+trybuild = { workspace = true }

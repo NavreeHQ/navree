@@ -1,0 +1,79 @@
+[package]
+name = "navree-i18n"
+description = "Navree I18nModule: Fluent translations with plurals and variables, negotiated per request, for validation messages, views and notifications."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "i18n", "fluent", "l10n"]
+categories = ["internationalization", "localization"]
+readme = "README.md"
+include = ["src/**", "resources/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["phone", "ui"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+## Navree UI in the reader's language: `FromLocale` for the toolkit's label structs, money
+## and dates by locale, the shipped words of the toolkit (`resources/<tag>/ui.ftl`) and the
+## `Localizer` that lets a form say its date, time and slider messages in the request's
+## language. The facade turns it on when both `ui` and `i18n` are on.
+ui = ["dep:navree-ui"]
+## `PhoneLabels` from a locale, when Navree UI has its phone input.
+phone = ["navree-ui?/phone"]
+
+[dependencies]
+chrono = { workspace = true }
+fixed_decimal = { workspace = true }
+fluent-bundle = { workspace = true }
+fluent-syntax = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+icu_calendar = { workspace = true }
+icu_datetime = { workspace = true }
+icu_decimal = { workspace = true }
+icu_locale_core = { workspace = true }
+icu_provider = { workspace = true }
+intl-memoizer = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-i18n-macros = { workspace = true }
+navree-kernel = { workspace = true }
+navree-notify = { workspace = true }
+navree-openapi = { workspace = true }
+navree-template = { workspace = true }
+navree-ui = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+navree-view = { workspace = true }
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+unic-langid = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The crate's own tests draw Navree UI in other languages.
+navree-i18n = { path = ".", features = ["ui"] }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-access = { workspace = true }
+navree-macros = { workspace = true }
+navree-mail = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }

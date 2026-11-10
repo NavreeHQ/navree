@@ -1,0 +1,198 @@
+---
+title: "Upload"
+description: "A file field with a drop area, a list of the files and their progress. It is a real multipart form, so it works with JavaScript off, and the server holds every file to its size, count and kind."
+---
+
+<UiPreview example="upload/default" />
+
+`Upload` is a file field. Underneath it is the browser's own `<input type="file">` inside a form that posts `multipart/form-data`, so it works with JavaScript off: choose a file, press Send, and the server answers with a redirect. The `upload` module adds what a bare file input lacks: a drop area, a list of the files with a progress bar for each one, a way to stop a file on its way and to send it again, and large files sent in chunks.
+
+```rust
+use navree::ui::*;
+
+Upload::new("photo", "Profile photo")
+    .action("/profile/photo")
+    .limits(UploadLimits::new(2 * 1024 * 1024).accept(["image/png", "image/jpeg"]))
+```
+
+`Upload::new(name, label)` posts its files as `name`. `.action(url)` makes it a form of its own. Without an action it is a field for a form of yours, and that form must have `enctype="multipart/form-data"`.
+
+## When to use it
+
+Use an upload for files a person has on their device: a photo, an Aadhaar card scan, a price list, a video of the shop. For a file the server already has, list it with `UploadedFile`. For text, use an [Input](/docs/components/input/) or a [Textarea](/docs/components/textarea/).
+
+## Anatomy
+
+<UiAnatomy component="upload" />
+
+## Several files
+
+`UploadLimits::max_files(n)` lets a person send up to `n` files at once, from 2 to 100. The drop area then says "Choose files" and the input takes several.
+
+<UiPreview example="upload/multiple" />
+
+## Limits
+
+`UploadLimits` says how large a file may be, how many files there may be, and which kinds are accepted. The page writes them in words under the drop area, so people know before they choose.
+
+<UiPreview example="upload/limits" />
+
+A kind is a MIME type such as `image/png`, or a group such as `image/*`. Anything else is dropped, so a made-up entry can't reach the page. With no kinds, any kind is accepted.
+
+**The limits on the page are hints.** They save a person from sending a file that cannot be kept, and the browser's file chooser uses the kinds to show the right files. They are not a defence: anything that can send a request can ignore them. The server holds every file to the same limits, as the next section shows.
+
+## Receiving the files
+
+`Uploads` receives the files into a directory of a storage disk. It needs the `storage` feature. It counts a file's size while the bytes arrive, so a file that is too large is stopped part of the way and nothing is kept. It reads the kind from the first bytes of the file, never from its name or from what the browser says, so a program renamed to `photo.png` is refused. The name is text to show: the file is stored under a random name of its own, and a name such as `../../etc/passwd` is cut to `passwd` and stays a label.
+
+```rust
+use navree::http::extract::Multipart;
+use navree::ui::*;
+
+async fn photo(
+    uploads: Arc<Uploads>,
+    headers: HeaderMap,
+    mut form: Multipart,
+) -> Result<Response, AppError> {
+    let received = uploads.receive(&mut form).await?;
+    // The files that were kept, under names of the server's own.
+    for file in &received.stored {
+        save_photo_of(user, &file.path).await?;
+    }
+    // JSON for the browser module; for a post with no script, a redirect and a toast.
+    Ok(received.respond(&headers, "/profile"))
+}
+
+let uploads = Uploads::new(
+    disk,
+    "photos",
+    UploadLimits::new(2 * 1024 * 1024).accept(["image/png", "image/jpeg"]),
+);
+// The route reads a body as large as its largest file.
+RouteDef::on(Method::POST, "/profile/photo", /* the handler */).body_limit(uploads.body_limit());
+```
+
+A file that breaks a limit is refused by name, in words, and the other files go on. `received.refused` holds each one with a reason you can match on: `Empty`, `TooLarge`, `WrongType` or `TooMany`. A form that cannot be read at all, or that is larger than the route allows, is an error, and the files that request had already stored are taken back.
+
+`receive` keeps at most as many files as `UploadLimits::max_files`. If you count the files a person already has and allow more only while there is room, use `receive_into(&mut form, room)`.
+
+The words come from `UploadLabels`, so a refusal can be in Hindi or Punjabi as easily as English:
+
+```rust
+let uploads = Uploads::new(disk, "photos", limits).labels(UploadLabels {
+    too_big: "{name} बहुत बड़ी है। सीमा {max} है।".into(),
+    ..UploadLabels::default()
+});
+```
+
+## Files the server already has
+
+`UploadedFile` is a row of the list for a file that is already stored, with its size, a link and, if you give an address, a Remove button. The button posts through the page's post form, so it works with JavaScript off.
+
+<UiPreview example="upload/files" />
+
+`UploadedFile::thumbnail(src)` shows a small picture of the file before its name: an address on your site that serves a picture (the page's content security policy allows no other). Anything that is not an address on your site is ignored.
+
+```rust
+UploadedFile::new("shop-front.jpg")
+    .size(240 * 1024)
+    .href("/files/17")
+    .thumbnail("/files/17/thumb")
+```
+
+`Upload::previews()` shows a small picture of each chosen file that is a picture (PNG, JPEG, GIF, WebP or AVIF, up to 2 MB) before it is sent. The browser reads the file into a `data:` address, which the page's content security policy allows where it allows no `blob:`; a larger file, or one of another kind, is listed with its name only.
+
+## Large files
+
+Give the upload a chunk address and a file larger than the chunk threshold (8 MB unless you say otherwise) goes in parts. A part that fails is tried again, so a slow connection loses one part and not the file.
+
+<UiPreview example="upload/chunks" />
+
+```rust
+Upload::new("video", "Shop video")
+    .action("/shops/doaba-traders/video")
+    .chunks("/uploads/chunks")
+    .limits(UploadLimits::new(500 * 1024 * 1024).accept(["video/*"]))
+```
+
+Four routes serve the chunk address. `owner` is whoever your app says is sending, such as the user's id; only that owner can send the parts of an upload and finish it.
+
+| Request | Does | Answers |
+|---|---|---|
+| `POST /uploads/chunks` with `{"name": "...", "size": 123}` | `uploads.begin(owner, start)` | `{"id": "...", "chunk_bytes": 4194304, "chunks": 3}` |
+| `PUT /uploads/chunks/{id}/{n}` with the part as the body | `uploads.put_chunk(owner, id, n, body)` | `200` |
+| `POST /uploads/chunks/{id}/finish` | `uploads.finish(owner, id)` | the stored file, as `Received::into_json_response` writes it |
+| `DELETE /uploads/chunks/{id}` | `uploads.abort(owner, id)` | `204` |
+
+Set the part route's body limit with `uploads.chunk_body_limit()`. The size of a file is held to the limit before the first part is sent. Every part but the last is exactly the size `begin` names, parts may come in any order, and a part may come twice. A file is put together only when every part is here, and the kind is read from its first bytes with the same sniffer a plain post uses, so the two ways in accept and refuse the same files. A file of a kind that is not accepted is thrown away with its parts. An upload that is not finished in a day is removed, and `uploads.sweep()` removes old ones at any time. One owner has at most 16 unfinished chunked uploads at once (`uploads.chunk_sessions(n)` sets it); `begin` refuses another with `too_many` until one is finished, aborted or expired. The owner is one person: for a guest, pass something of that guest's own, such as its session's id, never one name for every guest. Two `finish` calls for one upload at the same moment put it together once: the second finds it finished.
+
+## A field in your own form
+
+<UiPreview example="upload/field" />
+
+Without an action the upload is a field. The files the person chooses are listed, each with a Remove button, and they go with the form when it is sent. Give the form `enctype="multipart/form-data"`.
+
+## A file field in a derived form
+
+`#[form(widget = file)]` on a `String` (or an `Option<String>`) draws the field as an upload, and the form becomes a multipart form. The handler's `Submit<T>` gets the stored file's path on its disk, not the file:
+
+```rust
+#[derive(Deserialize, Validate, Form)]
+struct Claim {
+    /// Title
+    #[validate(length(min = 1))]
+    title: String,
+    /// Receipt
+    #[validate(skip)]
+    #[form(widget = file)]
+    receipt: String,
+}
+
+async fn save(Submit(claim): Submit<Claim>) -> Reply {
+    // claim.receipt is a path such as "receipts/k3v9q….pdf" on the upload's disk.
+    Reply::redirect("/claims")
+}
+```
+
+With no script, the file goes with the form and `Submit` stores it through the app's `Uploads`: the one registered under the field's name (`m.factory(Factory::<Uploads>::new(..).named("receipt"))`), else the app's one (`m.value(Uploads::new(disk, "receipts", limits))`). The route's body limit must take the file: `.body_limit(uploads.body_limit())`. A file the upload refuses is an error under its field, in the upload's words.
+
+With the `upload` module, the file can go first, as soon as it is chosen. Give the field an upload that sends it, and a route that stores it and answers with its key:
+
+```rust
+let form = FormView::<Claim>::new()
+    .post("/claims")
+    .upload("receipt", Upload::new("receipt", "Receipt").limits(limits).send_to("/claims/receipt"));
+
+// POST /claims/receipt
+async fn receipt(uploads: Inject<Uploads>, signer: Inject<UrlSigner>, mut form: Multipart) -> Response {
+    match uploads.receive(&mut form).await {
+        Ok(received) => received.into_keyed_response(&signer),
+        Err(error) => error.into_response(),
+    }
+}
+```
+
+The module puts the key in a hidden field, and the form posts it in place of the file; `Submit` reads it back as the path. A key is the path signed with the app's key (`navree_ui::upload::file_key`) and good for a day, so a path a browser makes up, or a key it changes, is refused ("choose the file again"). A form that is refused for another reason comes back with the key of the file it already stored, so the person does not choose it twice. The form waits to be sent while a file is still on its way, and says so at the field; until the key is in, the field asks the browser for nothing. A sent file's row has a Remove button: it takes the key out of the form, and a required field asks for a file again.
+
+## States
+
+<UiPreview example="upload/states" />
+
+`.disabled(true)` turns the field off. `.error(text)` draws the text under the drop area and marks the field invalid. `.manual()` waits for the Send button instead of sending a file as soon as it is chosen. `.compact()` makes the drop area smaller. `.refresh(region_id)` fetches the [Region](/docs/ui/regions/) with that id again when the last file is over, so a list you draw there shows what was sent.
+
+## JavaScript off
+
+Without the module the native control shows, styled: choose files, press Send, and the page answers with a redirect and a toast that says how many files were kept and why the others were not. Dragging a file onto the native control chooses it. Nothing else changes: the server's checks are the same.
+
+## Right to left
+
+<UiPreview example="upload/rtl" />
+
+The drop area, the list and the buttons follow the page's direction.
+
+## Accessibility and keys
+
+- The file input is the control. It is named by the label, and described by the limits and the status line, which a screen reader hears when a file starts, ends or fails.
+- Enter or Space on the control opens the file chooser. Tab reaches the buttons of the list, and Delete or Backspace on one removes or cancels that file and says so.
+- A file dropped outside the area never takes the page away.
+- Progress is a native `progress` element with a name that says which file it is.

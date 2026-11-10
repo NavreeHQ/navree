@@ -1,0 +1,430 @@
+---
+title: "OpenAPI"
+description: "An OpenAPI 3.1 document generated from your routes at boot, a docs UI, exports for typed clients, and API resources."
+---
+
+<Badge feature="api" /> Every Navree route already knows its method, path, access rules and, if you tell it, its request and response types. `navree-api` turns that into an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document when the app boots, serves it with an interactive docs page, and writes it to a file so front ends can generate typed clients from it. There is no separate spec file to keep in sync: the document comes from the code.
+
+## Setup
+
+Add `ApiModule` to your app:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(ApiModule::from_config()) // section `api`
+}
+```
+
+You now have two public routes under the API prefix (`http.api_prefix`, `/api` by default):
+
+| Route | What it serves |
+|---|---|
+| `GET /api/openapi.json` | The document, pretty-printed JSON. |
+| `GET /api/docs` | The API reference page, rendered from that document. |
+
+Neither appears in the document itself. Both are served in development and not in production, unless you set `api.openapi_json` and `api.docs_ui` (below). `openapi:export` writes the document in every environment.
+
+The `api` section is optional:
+
+```toml title="config/app.toml"
+[api]
+title = "Navree CRM API"
+version = "1.0.0"
+servers = ["https://crm.example.com"]
+# Serve the document and the reference page in production too.
+openapi_json = true
+docs_ui = true
+# Refuse to boot while a route has no #[api] documentation.
+require_docs = false
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `api.title` | `Navree API` | `info.title`, and the docs page's title. |
+| `api.version` | `1.0.0` | `info.version`, your API's version (not Navree's). |
+| `api.servers` | `[]` | Server URLs listed in the document. Without any, clients use the URL they loaded the document from. From the environment, comma-separated: `APP_API__SERVERS=https://a.example,https://b.example`. |
+| `api.docs_ui` | unset: off in `production`, on elsewhere | Serve the API reference page at `{api_prefix}/docs`, when the document is served too. Public: no sign-in. |
+| `api.openapi_json` | unset: off in `production`, on elsewhere | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route. Off, nothing of it is served: not this route and not the reference page. `openapi:export` writes the document either way. |
+| `api.require_docs` | `false` | Refuse to boot while a route has no `#[api]` documentation. `navree check` reports undocumented routes either way; see [conformity checks](/docs/testing/conformity-checks/). |
+| `api.undocumented` | `[]` | Routes allowed without documentation, as `"METHOD /path"` or `"/path"` for every method; a trailing `*` matches the rest of the path. From the environment, comma-separated. |
+
+Unset, both follow the environment: off when `env` (`APP_ENV`, else `app.env`) is `production` (in any letter case), on in any other named environment, and with no environment on in a debug build and off in a release build. To publish the reference page in production, set both: `APP_API__OPENAPI_JSON=true` and `APP_API__DOCS_UI=true`. `docs_ui` alone isn't enough, because the page needs the document.
+
+Or configure it in code:
+
+```rust
+use navree::api::ApiOptions;
+
+.module(ApiModule::for_root(ApiOptions {
+    title: "CRM API".to_owned(),
+    version: "2026.10".to_owned(),
+    servers: vec!["https://crm.example.com".to_owned()],
+    ..ApiOptions::default()
+}))
+```
+
+`ApiModule` imports `HttpModule`, so the document covers every route of the app, framework routes included (authentication, notifications, health checks and so on).
+
+### The API reference page
+
+`/api/docs` lists every operation and every schema on one page, grouped by tag, and works on any screen down to a phone:
+
+- **Search** with the box at the top (press `/`). Every word must match a method, path, summary, operation id, tag or schema name. `Esc` clears it, the up and down arrows walk the contents, and `Enter` jumps to the first match.
+- **Try it** under an operation sends a real request from the browser: fill in the path parameters, edit the JSON body (it starts from the required properties), and read the status, headers and body that come back. A bearer token you type stays in the page's memory and is never stored; with no token the request uses the browser's session, with the `XSRF-TOKEN` cookie's value in `X-XSRF-TOKEN` on unsafe methods. Without JavaScript, the page is still complete to read.
+- **Descriptions** are Markdown, read by the same reader as the [Markdown component](/docs/components/markdown/): paragraphs, headings (which start at `h4`), lists, quotes, tables, code, emphasis, links and images from your own site. HTML is shown as text, and a link keeps only `http`, `https`, `mailto`, `tel` and addresses on your site.
+
+<Callout type="note" title="The page loads nothing from a third party">
+
+The page is rendered by your app from the document, and its stylesheet and script are embedded in your binary and served at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows styles and scripts from your own origin only, with nothing inline. Images come from your own origin or `data:` URIs only, so a remote image in a route's description (a logo, a badge) shows its alt text. Serve such images from the app, or inline them as `data:` URIs. "Try it" may call your own origin and the absolute URLs in `api.servers`; a server on another origin must allow the page with CORS. To remove the page and its assets in every environment, set `api.docs_ui = false`; the JSON document stays as `api.openapi_json` says.
+
+</Callout>
+
+## Describing routes
+
+Without any annotation, a route is documented with its path, path parameters, security and access-related error responses. To add the rest, put `#[api(...)]` on the route. This is the CRM's deals controller:
+
+```rust title="crates/crm-deals/src/controller.rs"
+#[controller("/deals", version = "1")]
+impl DealsController {
+    #[get("/")]
+    #[can(Read, Deal)]
+    #[api(
+        summary = "List deals",
+        tag = "Deals",
+        response = DealPage,
+        responses(400, 401, 403)
+    )]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Deal, Read>,
+        list: List<DealList>,
+    ) -> Result<Page<DealResource>> {
+        self.deals.list(&uow, scope, &list).await
+    }
+
+    #[post("/")]
+    #[can(Create, Deal)]
+    #[api(
+        summary = "Create a deal",
+        tag = "Deals",
+        request = CreateDeal,
+        response = DealResource,
+        status = 201,
+        responses(400, 401, 403)
+    )]
+    async fn store(
+        &self,
+        uow: Uow,
+        CurrentUser(user): CurrentUser,
+        Abilities(ability): Abilities,
+        Valid(Json(input)): Valid<Json<CreateDeal>>,
+    ) -> Result<Created<DealResource>> {
+        let deal = self.deals.create(&uow, &ability, user.id, input).await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    }
+}
+```
+
+| Key | What it documents |
+|---|---|
+| `summary = "..."` | The one-line summary. |
+| `description = "..."` | A longer description (Markdown). |
+| `tag = "..."`, `tags("A", "B")` | The groups the reference page shows the route under (the first tag). |
+| `request = T` | The JSON request body (required), from `T`'s schema. |
+| `response = T` | The success response's JSON body. |
+| `status = 201` | The success status (default `200`). |
+| `responses(400, 404)` | Error statuses the route can answer, documented with the error schema. |
+| `query = R` | A list route's query parameters, from `R`, its `ListResource` (see [Query parameters](#query-parameters)). |
+
+Give a route a name with `#[name("deals.index")]` to set its `operationId`; routes without a name have none. Routes written by hand describe themselves with `RouteDef::api(ApiMeta { .. })`, where `request` and `response` are `Some(schema_fn::<T>)` (both from `navree::http`).
+
+### What is generated for you
+
+- **Paths** are the mounted paths, prefix and version included, in OpenAPI form (`{*rest}` becomes `{rest}`). Every `{param}` is a required path parameter of type `string`, whatever its Rust type.
+- **Security**: every route that isn't public lists the `bearer` (JWT access token) and `cookie` (session) security schemes and documents `401`. Routes checked by the route authoriser (`#[roles]`, `#[permissions]`, `#[can]`) also document `403`.
+- **Errors**: every documented error status uses the `HttpError` schema, Navree's [JSON error shape](/docs/basics/errors/) (`statusCode`, `message`, `error`, the optional `code`, and `errors` for validation failures).
+- **Tags** are listed in the order routes first use them.
+
+The `cookie` scheme names the session cookie as the browser sees it: `session.cookie` (default `navree_session`) with the `__Host-` prefix whenever the cookie is `Secure` and has no `Domain` (the default), so `__Host-navree_session`. It is listed even in apps that only use bearer tokens, such as the CRM.
+
+## Schemas
+
+Request and response types describe themselves with the `ToSchema` derive (`navree::openapi::ToSchema`, also in the prelude). Derive it next to serde: the schema follows the type's serde attributes, doc comments become descriptions, and `#[schema(as = Name)]` sets the component name the document uses:
+
+```rust title="src/modules/notes/resource.rs"
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use navree::openapi::ToSchema;
+use uuid::Uuid;
+
+/// A note on a deal.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+#[schema(as = Note)]
+pub struct NoteResource {
+    /// Always `"Note"` (the CASL subject type).
+    #[serde(rename = "__type")]
+    #[schema(example = "Note")]
+    pub resource_type: &'static str,
+    pub id: Uuid,
+    /// The text.
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// What `POST /api/v1/notes` takes.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateNote {
+    /// The text, 1 to 2000 characters.
+    pub body: String,
+}
+```
+
+The routes then name these types in `#[api(..)]`:
+
+```rust title="src/modules/notes/controller.rs"
+#[injectable]
+pub struct NotesController;
+
+#[controller("/notes", version = "1")]
+impl NotesController {
+    #[post("/")]
+    #[authenticated]
+    #[name("notes.store")]
+    #[api(
+        summary = "Create a note",
+        description = "The note belongs to the signed-in user.",
+        tag = "Notes",
+        request = CreateNote,
+        response = NoteResource,
+        status = 201,
+        responses(400)
+    )]
+    async fn store(&self, Json(input): Json<CreateNote>) -> Result<Created<NoteResource>> {
+        let note = NoteResource {
+            resource_type: "Note",
+            id: Uuid::now_v7(),
+            body: input.body,
+            created_at: Utc::now(),
+        };
+        Ok(Created(format!("/api/v1/notes/{}", note.id), note))
+    }
+}
+
+#[module(controllers = [NotesController])]
+pub struct NotesModule;
+```
+
+The request and response schemas of every route, and every schema they refer to, become `components.schemas`. Two kinds of mistakes **stop the boot**, so a broken document never ships:
+
+- **Two different types with the same name** (`ApiError::SchemaConflict`): `a::Item` and `b::Item`, in one schema or in two routes, however deep, even below two types that look the same and whose fields refer to different types. Two types of one name that mean the same share a component. The error names both types and both routes; rename one with `#[schema(as = OtherName)]`. Two types of a name with the same schema are one component.
+- **A reference to a schema nothing registered** (`ApiError::MissingSchemas`): the derive doesn't collect the schemas of generic type arguments, so a response such as your own generic `Page<Note>` refers to a `Note` component that nothing provides. Register it in its module with `m.api_schema::<T>()`.
+
+A generic type is named after its arguments, so each use is a component of its own: `Page<Note>` is `Page_Note`, and `Vec<Note>` as a response body is `Vec_Note`. `#[schema(inline)]` on a field that contains its own type doesn't compile, and types that inline each other stop the boot with a message naming them.
+
+What the derive reads:
+
+| Attribute | On | What it does |
+|---|---|---|
+| `#[serde(rename_all = "..")]`, `#[serde(rename = "..")]`, `rename_all_fields` | type, field, variant | The names in the schema. A field named differently by direction (`rename(serialize = "a", deserialize = "b")`) is two properties, `readOnly` and `writeOnly`; a variant can't be, and doesn't compile. |
+| `#[serde(skip)]` | field, variant | Leaves it out of the schema. |
+| `skip_serializing`, `skip_deserializing` | field | `writeOnly` (only in requests) and `readOnly` (only in responses). Use `skip` for a field that is never in the JSON. |
+| `#[serde(default)]`, `skip_serializing_if` | type, field | The field isn't required. A type-level `default` (or `default = "function"`) also gives each field's `default` value, when the type has a default and the field can be written. |
+| `#[serde(transparent)]` | type | The schema is its one field's. |
+| `#[serde(with = "..")]`, `serialize_with`, `getter` | field | The derive can't see what these write: a compile error unless the field says `#[schema(value_type = T)]` or `#[schema(schema_with = ..)]`. `deserialize_with` reads the same shape as far as the derive knows. |
+| `#[serde(from = "..")]`, `try_from`, `into`, `remote` | type | The derive can't see what these make: a compile error. Write `impl ToSchema` by hand. |
+| `#[serde(flatten)]` | field | `allOf` with the field's schema, or a map's `additionalProperties`. |
+| `#[serde(tag = "..")]`, `content`, `untagged` | enum | The enum's JSON shape. |
+| `#[serde(deny_unknown_fields)]` | type | `additionalProperties: false`. |
+| `#[schema(as = Name)]`, `#[schema(description = "..")]` | type | The component name; the description, in place of the doc comment. |
+| `#[schema(value_type = T)]` | field | Describes the field as `T`, for a field whose type has no `ToSchema`. `Object` is `{"type": "object"}`. |
+| `#[schema(inline)]` | field | The type's schema in place of a `$ref`. |
+| `#[schema(required = true)]`, `#[schema(nullable = false)]` | field | Overrides whether the field is required; an `Option` that's never `null` when present. |
+| `#[schema(rename = "..")]` | field, variant | The name, unless serde renames it. |
+| `#[schema(format = Uuid)]`, `#[schema(example = "..")]`, `#[schema(title = "..")]` | field | `format` (`Uuid`, `Date`, `DateTime`, `Password` and so on, or a string), `example` (a literal or `json!(..)`), `title`. |
+| `#[schema(minimum = 0, maximum = 100)]` | field | The numeric limits. |
+| `#[schema(schema_with = function)]` | field | The schema a `fn() -> Schema` returns. |
+
+Any other `#[schema(..)]` option is a compile error. `Option<T>` is `T` or `null`, and never required; `Vec<T>`, the sets, the maps, `Box<T>`, `Arc<T>`, `Cow<T>`, `String`, the number types, `bool`, `Uuid`, chrono's dates and times and `serde_json::Value` have schemas of their own. A type can write its schema by hand with `impl ToSchema for Zone { fn schema() -> Schema { .. } }`.
+
+`m.api_schema::<T>()` (from the `ModuleBuilderApiExt` trait, in the prelude) adds any type to the components, with the schemas it refers to. Use it for a type that a route's document refers to only through a generic argument, such as the `Note` in a `Page<Note>` response:
+
+```rust title="src/modules/notes/mod.rs"
+impl NotesModule {
+    /// Schemas the routes' documents refer to only through a generic argument.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.api_schema::<Note>();
+    }
+}
+```
+
+### Paginated responses
+
+navree-db's `Page<T>` doesn't derive `ToSchema`, so `#[api(response = ..)]` can't name it. Describe each list with its own named type, as the CRM does, while the handler keeps returning `Page<T>` ([pagination](/docs/database/pagination/)):
+
+```rust title="crates/crm-deals/src/resource.rs"
+/// A page of deals (the OpenAPI shape of `GET /api/v1/deals`).
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct DealPage {
+    /// The deals.
+    pub data: Vec<DealResource>,
+    /// Where the page is.
+    #[schema(inline)]
+    pub meta: PageMetaSchema,
+}
+```
+
+The route then says `#[api(response = DealPage)]`, as in the controller above.
+
+## Query parameters
+
+`#[api(query = DealList)]`, where `DealList` is the route's [`ListResource`](/docs/basics/list-queries/), documents a list route's `filter` (a `deepObject`), `sort`, `search` and paging parameters, built from the same allow-list the route enforces. A `RouteDoc` (`ModuleBuilderApiExt::api_route`) still adds any other parameter. A list route that doesn't say `query` has no query parameters in the document, so a generated client needs them added by hand (see [below](#typed-clients-from-the-document)).
+
+## Fields a user resource extension adds
+
+`GET /api/auth/me` and the login response's `user` are documented as `UserResource`. An extension says the fields it adds with `fn schema_properties() -> Vec<(String, Schema, bool)>`, and the document's `UserResource` lists them (the CRM's `roles`). See [The user resource](/docs/security/authentication/#the-user-resource).
+
+## Limitations
+
+The document is honest about what it knows, and there are things it can't express yet:
+
+- **Bodies are JSON only.** A non-JSON response, such as the CRM's CSV export at `GET /api/v1/contacts/export`, has no response schema, and multipart request bodies (uploads) can't be described.
+- **Path parameters are always strings**, even when the handler parses a UUID or a number.
+- **No shared page metadata component.** Every page schema inlines its `meta`.
+
+These are tracked in the framework's open issues.
+
+## Exporting the document
+
+The `openapi:export` command writes the document to a file, `openapi.json` by default, creating missing directories:
+
+```sh
+navree openapi:export web/openapi.json
+```
+
+```text
+OpenAPI document written to web/openapi.json
+```
+
+It writes exactly what `GET /api/openapi.json` serves. Commit the file if your front end builds from it, and re-export after changing routes or types.
+
+## Typed clients from the document
+
+`navree openapi:client` exports the document and generates the TypeScript schema in one step, for the [typed client](/docs/frontend/typed-client/) in `@navree/client`:
+
+```sh
+navree openapi:client                         # web/src/lib/api/openapi.json and schema.d.ts
+navree openapi:client --out web/app/lib/api   # another folder
+```
+
+The CRM's front end, `crm/web`, generates its TypeScript types from the exported document with `navree openapi:client --input` and calls the API with the [typed fetch core](/docs/frontend/typed-client/#the-fetch-core) that `@navree/client` is built on:
+
+```sh
+cd crm/api
+cargo run -p crm-api -- openapi:export ../web/openapi.json
+
+cd ../web
+pnpm gen:api   # navree openapi:client --input ./openapi.json --out src/lib/api
+```
+
+The app never imports `schema.d.ts` directly. `src/lib/api/types.ts` gives the schemas friendly names, so a renamed schema only needs that file to change, and adds the query parameters of the list endpoints whose routes don't say `query = ..` yet:
+
+```ts title="crm/web/src/lib/api/types.ts"
+import type { components, paths as GeneratedPaths } from "./schema";
+
+type Schemas = components["schemas"];
+
+/** Navree error body: `{statusCode, message, error, code?, errors?}`. */
+export type ApiErrorBody = Schemas["HttpError"];
+export type User = Schemas["User"];
+export type TokenPair = Schemas["TokenPair"];
+```
+
+## API resources
+
+Front ends that check permissions with [CASL](https://casl.js.org) need to know what type each JSON object is. Navree's convention is a `__type` field holding the subject type (`"Deal"`), which CASL reads with `detectSubjectType: (o) => o.__type`. The CRM puts it in its resources as a renamed field, so the schema documents it (see `NoteResource` above).
+
+For resources that don't carry the field, `navree::api` has helpers:
+
+```rust
+use navree::api::{ApiResource, mask_fields, resource_json};
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct DealSummary {
+    pub id: u64,
+    pub title: String,
+    pub amount_cents: i64,
+}
+
+impl ApiResource for DealSummary {
+    const TYPE: &'static str = "Deal";
+}
+
+/// `{"id", "title", "amount_cents", "__type": "Deal"}`, keeping only the
+/// fields the user may read (plus `id` and `__type`).
+pub fn summary_json(deal: &DealSummary, readable: Option<&[String]>) -> serde_json::Value {
+    mask_fields(resource_json(deal), readable)
+}
+```
+
+- `resource_json(&value)` serializes a resource and adds `"__type": T::TYPE`.
+- `mask_fields(value, Some(&fields))` keeps only the listed top-level fields, plus `id` and `__type`, in an object or in each object of an array; `None` keeps everything. Pass the fields an ability permits for field-level access control; see [Authorization](/docs/security/authorization/).
+
+See [Responses and API resources](/docs/basics/responses/) for how handlers return them.
+
+## Testing
+
+The document is built at boot, so a schema conflict or a missing schema already fails any test that boots the app. To check what a route documents, fetch the document like a client would:
+
+```rust title="src/modules/notes/tests/mod.rs"
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn notes_are_documented() {
+    let app = TestApp::builder()
+        .module(ApiModule::from_config())
+        .module(NotesModule)
+        .build()
+        .await;
+
+    let document = app
+        .client()
+        .get("/api/openapi.json")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+
+    let store = &document["paths"]["/api/v1/notes"]["post"];
+    assert_eq!(store["operationId"], "notes.store");
+    assert_eq!(
+        store["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        json!("#/components/schemas/Note")
+    );
+    app.shutdown().await.unwrap();
+}
+```
+
+Each CRM feature crate has a test like this (for example `crates/crm-deals/tests/deals/openapi.rs`), checking that its routes refer to the schema names `crm/web` imports.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/basics/routing/" title="Routing and controllers">
+    The `#[controller]` attributes `#[api]` sits next to.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses and API resources">
+    What handlers return.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    The API and the typed web client side by side.
+  </LinkCard>
+</LinkCards>

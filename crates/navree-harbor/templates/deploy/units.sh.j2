@@ -1,0 +1,4 @@
+# harbor: {{ step }} on {{ server.name }}
+{% for unit in units %}
+sudo -n systemctl {{ verb }} {{ unit }}
+{% endfor %}

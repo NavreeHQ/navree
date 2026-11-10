@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "per_dialect(|d| render_exists(&plain.clone().into_ir(), d))"
+---
+PostgreSQL: SELECT EXISTS (SELECT 1 FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."deleted_at" IS NULL) AS "exists"
+  values: [String("won")]
+MySQL: SELECT EXISTS (SELECT 1 FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`deleted_at` IS NULL) AS `exists`
+  values: [String("won")]
+SQLite: SELECT EXISTS (SELECT 1 FROM "deals" WHERE "deals"."stage" = ? AND "deals"."deleted_at" IS NULL) AS "exists"
+  values: [String("won")]

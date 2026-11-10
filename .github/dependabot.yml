@@ -1,0 +1,66 @@
+# Dependabot version updates for the parts of the repository that ship.
+# Security updates (on in the repository settings) cover every lockfile
+# whenever an advisory is published.
+#
+# @types/node follows the Node.js major the code runs on (24 on the build
+# machines, 22 on the server), so its major updates are ignored in every npm
+# directory; raise it by hand together with the runtime.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    ignore:
+      # reqwest 0.13 is built on tower-http 0.6 and the workspace keeps one
+      # version of each crate; move both together when reqwest does.
+      - dependency-name: tower-http
+        versions: [">= 0.7"]
+    groups:
+      rust-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The fuzzing workspace has its own lockfile. It builds Navree's crates by
+  # path, so a major update here edits the root Cargo.toml without the root
+  # Cargo.lock; majors are taken in the root workspace and this lockfile
+  # follows.
+  - package-ecosystem: cargo
+    directory: /fuzz
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      fuzz-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/js
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      packages-js-minor-and-patch:
+        update-types: [minor, patch]
+      # @navree/next and @navree/nuxt share one TanStack Table major, so its
+      # React and Vue adapters move in one pull request. Minor and patch
+      # updates already land in the group above; this one takes the majors.
+      tanstack-table:
+        patterns: ["@tanstack/*-table"]
+
+  # The official MCP SDK client that drives navree-mcp's conformance test
+  # (e2e/mcp-sdk); following its releases keeps the test current.
+  - package-ecosystem: npm
+    directory: /e2e/mcp-sdk
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      github-actions:
+        patterns: ["*"]

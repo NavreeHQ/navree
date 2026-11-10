@@ -1,0 +1,24 @@
+multipart/form-data; boundary=----formdata-undici-065368120643
+------formdata-undici-065368120643
+Content-Disposition: form-data; name="a"
+
+1
+------formdata-undici-065368120643
+Content-Disposition: form-data; name="b"
+
+two
+lines
+------formdata-undici-065368120643
+Content-Disposition: form-data; name="e"
+
+
+------formdata-undici-065368120643
+Content-Disposition: form-data; name="f"; filename="résumé 日本語.txt"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+------formdata-undici-065368120643--

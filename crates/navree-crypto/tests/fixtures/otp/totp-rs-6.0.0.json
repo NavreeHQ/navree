@@ -1,0 +1,325 @@
+{
+  "about": "TOTP secrets, otpauth URLs and codes produced by totp-rs 6.0.0 before navree_crypto::totp replaced it.",
+  "cases": [
+    {
+      "account": "ada@example.com",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "053204",
+          "time": 0
+        },
+        {
+          "code": "611722",
+          "time": 59
+        },
+        {
+          "code": "407691",
+          "time": 1111111109
+        },
+        {
+          "code": "856116",
+          "time": 1792929600
+        },
+        {
+          "code": "856116",
+          "time": 1792929629
+        },
+        {
+          "code": "336900",
+          "time": 1792929630
+        },
+        {
+          "code": "823149",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "Navree",
+      "name": "default-0",
+      "period": 30,
+      "secret": "RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER",
+      "url": "otpauth://totp/Navree:ada%40example.com?secret=RJLR4GJ3YLMHQFDBJ66WK6OIKGY562ER&issuer=Navree"
+    },
+    {
+      "account": "grace+tag@example.org",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "430340",
+          "time": 0
+        },
+        {
+          "code": "377995",
+          "time": 59
+        },
+        {
+          "code": "080333",
+          "time": 1111111109
+        },
+        {
+          "code": "718617",
+          "time": 1792929600
+        },
+        {
+          "code": "718617",
+          "time": 1792929629
+        },
+        {
+          "code": "064323",
+          "time": 1792929630
+        },
+        {
+          "code": "193834",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "My App",
+      "name": "default-1",
+      "period": 30,
+      "secret": "ORK4CYUJA6H5BC74LBAUKR6Z5ZSN4UDJ",
+      "url": "otpauth://totp/My%20App:grace%2Btag%40example.org?secret=ORK4CYUJA6H5BC74LBAUKR6Z5ZSN4UDJ&issuer=My%20App"
+    },
+    {
+      "account": "o'brien@example.com",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "413474",
+          "time": 0
+        },
+        {
+          "code": "199195",
+          "time": 59
+        },
+        {
+          "code": "319308",
+          "time": 1111111109
+        },
+        {
+          "code": "505000",
+          "time": 1792929600
+        },
+        {
+          "code": "505000",
+          "time": 1792929629
+        },
+        {
+          "code": "001802",
+          "time": 1792929630
+        },
+        {
+          "code": "116441",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "Acme & Sons",
+      "name": "default-2",
+      "period": 30,
+      "secret": "I7IVYSICEF7R5PTCBTJL4CRSYUWBYPTY",
+      "url": "otpauth://totp/Acme%20%26%20Sons:o%27brien%40example.com?secret=I7IVYSICEF7R5PTCBTJL4CRSYUWBYPTY&issuer=Acme%20%26%20Sons"
+    },
+    {
+      "account": "zoë@exämple.com",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "008736",
+          "time": 0
+        },
+        {
+          "code": "812693",
+          "time": 59
+        },
+        {
+          "code": "661385",
+          "time": 1111111109
+        },
+        {
+          "code": "405484",
+          "time": 1792929600
+        },
+        {
+          "code": "405484",
+          "time": 1792929629
+        },
+        {
+          "code": "890045",
+          "time": 1792929630
+        },
+        {
+          "code": "410647",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "Navree",
+      "name": "default-3",
+      "period": 30,
+      "secret": "QM6IMFH3PQWEDBVHUCAWLQMHKOXELWCU",
+      "url": "otpauth://totp/Navree:zo%C3%AB%40ex%C3%A4mple.com?secret=QM6IMFH3PQWEDBVHUCAWLQMHKOXELWCU&issuer=Navree"
+    },
+    {
+      "account": "a b@example.com",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "492830",
+          "time": 0
+        },
+        {
+          "code": "601696",
+          "time": 59
+        },
+        {
+          "code": "714984",
+          "time": 1111111109
+        },
+        {
+          "code": "793861",
+          "time": 1792929600
+        },
+        {
+          "code": "793861",
+          "time": 1792929629
+        },
+        {
+          "code": "567685",
+          "time": 1792929630
+        },
+        {
+          "code": "709997",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "Café 42",
+      "name": "default-4",
+      "period": 30,
+      "secret": "XPCQZCAICSNXF75STMJGEYWXZK3AHNKV",
+      "url": "otpauth://totp/Caf%C3%A9%2042:a%20b%40example.com?secret=XPCQZCAICSNXF75STMJGEYWXZK3AHNKV&issuer=Caf%C3%A9%2042"
+    },
+    {
+      "account": "ada@example.com",
+      "algorithm": "SHA256",
+      "codes": [
+        {
+          "code": "58031074",
+          "time": 0
+        },
+        {
+          "code": "54919453",
+          "time": 59
+        },
+        {
+          "code": "42469769",
+          "time": 1111111109
+        },
+        {
+          "code": "49315325",
+          "time": 1792929600
+        },
+        {
+          "code": "49315325",
+          "time": 1792929629
+        },
+        {
+          "code": "77192409",
+          "time": 1792929630
+        },
+        {
+          "code": "79064057",
+          "time": 2000000000
+        }
+      ],
+      "digits": 8,
+      "issuer": "Navree",
+      "name": "sha256-8",
+      "period": 30,
+      "secret": "AMFBCGA7EYWTIO2CJFIFOXTFNRZXVAMIR6LJ3JFLWK44BR6O2XOA",
+      "url": "otpauth://totp/Navree:ada%40example.com?secret=AMFBCGA7EYWTIO2CJFIFOXTFNRZXVAMIR6LJ3JFLWK44BR6O2XOA&digits=8&algorithm=SHA256&issuer=Navree"
+    },
+    {
+      "account": "ada@example.com",
+      "algorithm": "SHA512",
+      "codes": [
+        {
+          "code": "7248855",
+          "time": 0
+        },
+        {
+          "code": "7248855",
+          "time": 59
+        },
+        {
+          "code": "0963853",
+          "time": 1111111109
+        },
+        {
+          "code": "2770211",
+          "time": 1792929600
+        },
+        {
+          "code": "2770211",
+          "time": 1792929629
+        },
+        {
+          "code": "2770211",
+          "time": 1792929630
+        },
+        {
+          "code": "5353233",
+          "time": 2000000000
+        }
+      ],
+      "digits": 7,
+      "issuer": "Navree",
+      "name": "sha512-7-60",
+      "period": 60,
+      "secret": "AMFBCGA7EYWTIO2CJFIFOXTFNRZXVAMIR6LJ3JFLWK44BR6O2XOOH2XR7D7QMDIUDMRCSMBXHZCUYU22MFUG65T5QSFZFGNAU6XLLPA",
+      "url": "otpauth://totp/Navree:ada%40example.com?secret=AMFBCGA7EYWTIO2CJFIFOXTFNRZXVAMIR6LJ3JFLWK44BR6O2XOOH2XR7D7QMDIUDMRCSMBXHZCUYU22MFUG65T5QSFZFGNAU6XLLPA&digits=7&algorithm=SHA512&issuer=Navree&period=60"
+    },
+    {
+      "account": "ada@example.com",
+      "algorithm": "SHA1",
+      "codes": [
+        {
+          "code": "071368",
+          "time": 0
+        },
+        {
+          "code": "999033",
+          "time": 59
+        },
+        {
+          "code": "654282",
+          "time": 1111111109
+        },
+        {
+          "code": "811703",
+          "time": 1792929600
+        },
+        {
+          "code": "430139",
+          "time": 1792929629
+        },
+        {
+          "code": "154184",
+          "time": 1792929630
+        },
+        {
+          "code": "380466",
+          "time": 2000000000
+        }
+      ],
+      "digits": 6,
+      "issuer": "Navree",
+      "name": "sha1-6-15",
+      "period": 15,
+      "secret": "AMFBCGA7EYWTIO2CJFIFOXTFNQ",
+      "url": "otpauth://totp/Navree:ada%40example.com?secret=AMFBCGA7EYWTIO2CJFIFOXTFNQ&issuer=Navree&period=15"
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+---
+title: "Route model binding"
+description: "`Bound<M>` loads the record a route's path names, or answers 404: route keys, custom bindings, soft-deleted records and nested routes."
+---
+
+Most routes that take an id start by loading that record and answering 404 when it doesn't exist. Route model binding does it for you: a handler argument of type `Bound<M>` loads the record the path names, in the request's unit of work, before your handler runs.
+
+```rust title="src/modules/companies/controller.rs"
+use navree::orm::binding::Bound;
+
+#[controller("/companies", version = "1")]
+#[authenticated]
+impl CompaniesController {
+    /// GET /api/v1/companies/{company}
+    #[get("/{company}")]
+    async fn show(&self, company: Bound<Company>) -> Json<Record<Company>> {
+        Json(company.into_inner())
+    }
+}
+```
+
+`GET /api/v1/companies/0199a7a0-...` answers the company, and an id that names no company answers 404 in Navree's [error shape](/docs/basics/errors/), from the binding itself. `Bound<M>` dereferences to the `Record<M>`; `into_inner()` takes it out, or destructure it: `Bound(company, _)`.
+
+## Which parameter, which column
+
+A binding reads the path parameter named after the model in snake case (`{company}` for `Company`, `{user_account}` for `UserAccount`), else `{id}`, else the route's only parameter.
+
+It looks the record up by the model's **route key**: its primary key, unless the model names another column:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, route_key = "slug")]
+pub struct Deal {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+The text of the parameter is read as the column's type first, so a malformed UUID, ULID or number names no record: that is a 404 without a query.
+
+The model's query runs with its [global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes), in the request's unit of work. So a record another workspace owns is a 404 for a [workspace-scoped](/docs/orm/workspaces-and-access/#workspace-scoping) model, and the same rules as everywhere else apply.
+
+## Soft-deleted records
+
+A trashed record of a soft-deleting model is a 404 like any missing record. A route that works on trashed records, such as one that restores them, binds `WithTrashed`:
+
+```rust
+use navree::orm::binding::WithTrashed;
+
+/// POST /api/v1/companies/{company}/restore
+#[post("/{company}/restore")]
+async fn restore(
+    &self,
+    uow: Uow,
+    Bound(mut company, _): Bound<Company, WithTrashed>,
+) -> Result<Json<Record<Company>>> {
+    company.restore(&uow).await?;
+    Ok(Json(company))
+}
+```
+
+## Custom bindings
+
+A `RouteBinding` decides the parameter and the query for a route: implement it on a marker type and name it as `Bound`'s second parameter.
+
+```rust
+use navree::orm::binding::RouteBinding;
+
+/// Deals by their title, from `{title}`.
+pub struct ByTitle;
+
+impl RouteBinding<Deal> for ByTitle {
+    const PARAM: Option<&'static str> = Some("title");
+
+    fn query(query: Builder<Deal>, value: &str) -> Option<Builder<Deal>> {
+        Some(query.where_(Deal::TITLE.eq(value.to_owned())))
+    }
+}
+
+#[get("/by-title/{title}")]
+async fn by_title(&self, deal: Bound<Deal, ByTitle>) -> Json<Record<Deal>> {
+    Json(deal.into_inner())
+}
+```
+
+`query` returns `None` when the text can't name a record, which answers 404 without a query. `const WITH_TRASHED: bool = true` binds trashed records too, and `WithTrashed<ByTitle>` wraps a binding of yours the same way.
+
+## Nested routes
+
+In `/companies/{company}/deals/{deal}`, the deal must belong to the company: a deal id of another company should be a 404, not someone else's deal. `BoundChild<P, C>` binds the parent, then looks the child up among the parent's children only:
+
+```rust
+use navree::orm::binding::{BoundChild, ChildOf};
+
+impl ChildOf<Company> for Deal {
+    fn children_of(company: &Record<Company>, query: Builder<Deal>) -> Builder<Deal> {
+        query.where_(Deal::COMPANY_ID.eq(company.id))
+    }
+}
+
+/// GET /api/v1/companies/{company}/deals/{deal}
+#[get("/{company}/deals/{deal}")]
+async fn deal(&self, deal: BoundChild<Company, Deal>) -> Json<Record<Deal>> {
+    let (_company, deal) = deal.into_parts();
+    Json(deal)
+}
+```
+
+The parent comes from the parameter named after `P` (else the first one), the child from the one named after `C` (else the last). `parent()` and `child()` borrow them.
+
+## Bindings and access checks
+
+A route that checks abilities on a record uses `#[can(Update, Ticket, from = "ticket")]` and an `Authorized<Ticket, Update>` argument instead: that loads the record the same way (by route key, with global scopes, in the unit of work), then checks the ability. See [workspaces and access](/docs/orm/workspaces-and-access/#access-control).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/routing/" title="Routing">
+    Controllers, paths and extractors.
+  </LinkCard>
+  <LinkCard href="/docs/orm/workspaces-and-access/" title="Workspaces and access">
+    Workspace scoping and ability checks on models.
+  </LinkCard>
+</LinkCards>

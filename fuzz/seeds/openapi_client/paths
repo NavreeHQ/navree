@@ -1,0 +1,157 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "t", "version": "1"},
+  "paths": {
+    "/pets": {
+      "summary": "ignored",
+      "parameters": [
+        {"name": "trace", "in": "header", "schema": {"type": "string"}, "description": "A trace id."},
+        {"$ref": "#/components/parameters/Limit"}
+      ],
+      "get": {
+        "operationId": "pets.list",
+        "summary": "List pets",
+        "description": "Lists\nthe pets.",
+        "tags": ["pets"],
+        "parameters": [
+          {"name": "q", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "ids", "in": "query", "required": true, "schema": {"type": "array", "items": {"type": "integer"}}},
+          {"name": "sess", "in": "cookie", "schema": {"type": "string"}},
+          {"name": "trace", "in": "header", "required": true, "schema": {"type": "string"}},
+          {"$ref": "#/components/parameters/Offset"},
+          {"name": "nos", "in": "query"},
+          {"name": "deprecated one", "in": "query", "deprecated": true, "schema": {"type": "string", "deprecated": true}, "example": "x", "examples": {"a": {"value": 1}}},
+          {"name": "weird-name", "in": "query", "schema": {"type": "boolean", "default": true}},
+          {"name": "200", "in": "query", "schema": {"type": "string"}},
+          {"name": "obj", "in": "query", "content": {"application/json": {"schema": {"type": "object"}}}}
+        ],
+        "responses": {
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Total": {"schema": {"type": "integer"}, "required": true, "description": "Total."},
+              "X-Optional": {"schema": {"type": "string"}},
+              "X-Ref": {"$ref": "#/components/headers/RateLimit"},
+              "X-Content": {"content": {"text/plain": {"schema": {"type": "string"}}}},
+              "X-Empty": {},
+              "X-EmptyContent": {"content": {}},
+              "x-lower": {"schema": {"type": "string"}}
+            },
+            "content": {
+              "application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Pet"}}, "example": [{"id": 1}]},
+              "text/csv": {"schema": {"type": "string"}},
+              "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+              "text/plain": {},
+              "application/x-ndjson": {"schema": {"$ref": "#/components/schemas/Pet"}, "examples": {"a": {"value": 1}}}
+            }
+          },
+          "2XX": {"description": "Other success"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "4XX": {"description": "Client error", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      },
+      "post": {
+        "operationId": "pets.create",
+        "summary": "Create a pet",
+        "requestBody": {
+          "required": true,
+          "description": "The pet to create.",
+          "content": {
+            "application/json": {"schema": {"$ref": "#/components/schemas/Pet"}},
+            "application/x-www-form-urlencoded": {"schema": {"type": "object", "properties": {"name": {"type": "string"}}}},
+            "multipart/form-data": {"schema": {"type": "object", "properties": {"file": {"type": "string", "format": "binary"}}, "required": ["file"]}}
+          }
+        },
+        "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}}}
+      },
+      "put": {
+        "summary": "No operation id",
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"a": {"type": "string"}}}}}},
+        "responses": {"200": {"description": "OK"}}
+      },
+      "delete": {
+        "operationId": "pets.delete",
+        "deprecated": true,
+        "requestBody": {"$ref": "#/components/requestBodies/PetBody"},
+        "responses": {}
+      },
+      "options": {"operationId": "pets.options", "requestBody": {"description": "no content"}, "responses": {"200": {"description": "OK"}}},
+      "head": {"responses": {"200": {"description": "OK"}}},
+      "patch": {"$ref": "#/components/pathItems/Dummy/get"},
+      "trace": {"operationId": "weird#id/with.stuff 100", "responses": {"200": {"description": "OK"}}}
+    },
+    "/pets/{id}": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}, "description": "The pet id."}],
+      "get": {
+        "operationId": "pets.show",
+        "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}}}
+      },
+      "delete": {
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}, {"name": "force", "in": "query", "schema": {"type": "boolean"}}],
+        "responses": {"204": {"description": "No Content"}}
+      }
+    },
+    "/pets/{id}/photos/{photo}": {
+      "get": {
+        "parameters": [
+          {"$ref": "#/components/parameters/PhotoId"},
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/ref": {"$ref": "#/components/pathItems/Dummy", "description": "path ref", "summary": "S"},
+    "/200": {"get": {"responses": {"200": {"description": "OK"}}}},
+    "/ünï/çödé": {"get": {"responses": {"200": {"description": "OK"}}}},
+    "/with\"quote": {"get": {"responses": {"200": {"description": "OK"}}}},
+    "1": {"get": {"responses": {"200": {"description": "OK"}}}},
+    "/empty": {},
+    "/not-an-object": null,
+    "/x-extension": {"x-foo": 1, "get": {"operationId": "ext.get", "x-bar": 2, "responses": {"200": {"description": "OK"}}}}
+  },
+  "webhooks": {
+    "newPet": {
+      "post": {
+        "operationId": "hooks.newPet",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}},
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "withParam": {"parameters": [{"name": "p", "in": "query", "schema": {"type": "string"}}], "get": {"responses": {"200": {"description": "OK"}}}}
+  },
+  "components": {
+    "schemas": {
+      "Pet": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}}},
+      "Error": {"type": "object", "properties": {"message": {"type": "string"}}}
+    },
+    "parameters": {
+      "Limit": {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}, "description": "How many."},
+      "Offset": {"name": "offset", "in": "query", "required": true, "schema": {"type": "integer"}},
+      "PhotoId": {"name": "photo", "in": "path", "required": true, "schema": {"type": "string"}},
+      "NoSchema": {"name": "ns", "in": "query"}
+    },
+    "responses": {
+      "NotFound": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "Empty": {"description": "Empty"},
+      "WithHeaders": {"description": "H", "headers": {"X-A": {"schema": {"type": "string"}, "required": true}}}
+    },
+    "requestBodies": {
+      "PetBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}},
+      "Opt": {"content": {"application/json": {"schema": {"type": "string"}}}},
+      "None": {}
+    },
+    "headers": {
+      "RateLimit": {"schema": {"type": "integer"}, "description": "Calls left."},
+      "NoSchema": {}
+    },
+    "pathItems": {
+      "Dummy": {
+        "get": {"operationId": "dummy.get", "responses": {"200": {"description": "OK"}}},
+        "post": {"responses": {"200": {"description": "OK"}}}
+      }
+    },
+    "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
+    "examples": {"a": {"value": 1}}
+  }
+}

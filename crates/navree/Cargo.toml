@@ -1,0 +1,1098 @@
+[package]
+name = "navree"
+description = "Navree, the complete application framework for Rust: the backend, the screens and the tools to run them, modular and AI-native."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "web", "framework", "orm", "async"]
+categories = ["web-programming", "web-programming::http-server", "database", "asynchronous"]
+readme = "../../README.md"
+include = ["src/**", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = [
+    "full",
+    "social",
+    "oauth",
+    "flags",
+    "graphql",
+    "grpc",
+    "ai",
+    "pdf",
+    "phone",
+    "documents",
+    "search",
+    "billing",
+    "mcp",
+    "micro",
+    "i18n",
+    "media",
+    "mongo",
+    "redis",
+    "dock",
+    "harbor",
+    "navigator",
+    "browser",
+    "otel",
+    "sqlite",
+    "postgres",
+    "mysql",
+]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = ["full"]
+## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
+## `graphql`, `grpc`, `documents`, `media`, `billing`, `search`, `mcp`, `ai`,
+## `mongo`, `redis`, `micro`, `i18n`, `dock`, `harbor`, `navigator`, `browser`,
+## `otel`).
+full = [
+    "access",
+    "api",
+    "audit",
+    "auth",
+    "cache",
+    "crypto",
+    "db",
+    "directory",
+    "domains",
+    "events",
+    "fleet",
+    "helm",
+    "http",
+    "http-client",
+    "integrations",
+    "lighthouse",
+    "log",
+    "logbook",
+    "mail",
+    "mail-inbound",
+    "notify",
+    "observe",
+    "orm",
+    "queue",
+    "realtime",
+    "schedule",
+    "schema",
+    "session",
+    "settings",
+    "sheets",
+    "sso",
+    "storage",
+    "storage-s3",
+    "telemetry",
+    "testing",
+    "time",
+    "ui",
+    "validation",
+    "validation-html",
+    "validation-phone",
+    "view",
+    "webhooks",
+    "workflows",
+    "workspace",
+]
+# Each module feature turns on the features of the navree crates it builds
+# on, so `navree::<dependency>` is always there to name their types.
+## L1
+## Telemetry events, sinks and W3C trace context (every emitting module turns it on).
+telemetry = ["dep:navree-telemetry"]
+## L2
+http = ["dep:navree-http", "telemetry"]
+log = ["dep:navree-log", "telemetry"]
+crypto = ["dep:navree-crypto"]
+events = ["dep:navree-events", "telemetry"]
+## The template engine (navree-template), under `view`, `i18n` and `harbor`.
+template = ["dep:navree-template"]
+view = ["dep:navree-view", "template"]
+cache = ["dep:navree-cache", "telemetry"]
+http-client = ["dep:navree-http-client", "telemetry"]
+## The schema builder: tables, columns, indexes and foreign keys in Rust for
+## PostgreSQL (with TimescaleDB), MySQL and SQLite; hypertables; schema dumps.
+schema = ["dep:navree-schema"]
+## L3
+db = ["dep:navree-db", "http", "schema"]
+## With `workspace` on too, also `navree::workspace::testing` (isolation suites).
+## With `orm` on too, also `navree::orm::testing::TestAppExt` (`app.seed::<S>()`).
+## With `oauth`, `grpc`, `mcp` or `micro` on too, also their test kits
+## (`navree::oauth::testing`, `navree::grpc::testing`, `navree::mcp::testing`,
+## `MicroFake`). Those modules link no test code without this feature; it is in
+## `full`, so an app that wants none turns off the default features.
+testing = [
+    "dep:navree-testing",
+    "http",
+    "navree-workspace?/testing",
+    "navree-orm?/testing",
+    "navree-oauth?/testing",
+    "navree-grpc?/testing",
+    "navree-mcp?/testing",
+    "navree-micro?/testing",
+]
+observe = ["dep:navree-observe", "http"]
+api = ["dep:navree-api", "http", "markdown"]
+## Mail: mailables, SMTP and the SES, Mailgun, Postmark and Resend APIs,
+## tenant transports, a delivery log with provider events, suppressions,
+## hold for approval, tracking, DKIM signing and sending-domain checks.
+mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "http-client", "db"]
+## Inbound mail: received messages parsed by Navree's own MIME reader,
+## Amazon SES (SNS and S3), Mailgun, Postmark and raw MIME sources,
+## mailboxes routed by address, signed reply tokens and raw `.eml` files on
+## a `storage` disk (in `full`). With `integrations` on too, Gmail and
+## Microsoft 365 mailboxes watched through their connections.
+mail-inbound = ["mail", "storage", "navree-mail/inbound", "navree-integrations?/mail"]
+realtime = ["dep:navree-realtime", "http", "crypto", "db", "telemetry"]
+storage = ["dep:navree-storage", "http", "crypto", "telemetry", "navree-ui?/storage"]
+## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
+## Spaces), on rustls with ring (in `full`).
+storage-s3 = ["storage", "navree-storage/s3"]
+## Google Cloud Storage disks (opt-in, not in `full`).
+storage-gcs = ["storage", "navree-storage/gcs"]
+## Azure Blob Storage disks (opt-in, not in `full`).
+storage-azure = ["storage", "navree-storage/azure"]
+## Time zones: zones, the request's zone, local days, send windows,
+## holidays and local-time SQL (the IANA database compiled in; in `full`).
+## With `validation` on too, `Valid<Query<DayRange>>` checks report windows.
+time = ["dep:navree-time", "http", "db", "navree-validation?/time", "navree-ui?/time"]
+## L4
+## With `auth` on too, browsers sign in through `AuthModule` on the session
+## (`navree::auth::SessionStrategy`: two-factor, throttles, sign-in policies
+## and the audit trail kept); with `workspace`, the `session` workspace
+## resolver and its switch route.
+session = [
+    "dep:navree-session",
+    "http",
+    "crypto",
+    "db",
+    "navree-auth?/session",
+    "navree-workspace?/session",
+]
+## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
+## rules on models).
+validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
+## The audit trail; its entries are ORM models (`orm`).
+audit = ["dep:navree-audit", "http", "db", "orm"]
+## Job queues; failed jobs are ORM models (`orm`). With `documents` on too,
+## queued renders can run behind an operation (navree-documents'
+## `operations` feature).
+queue = [
+    "dep:navree-queue",
+    "http",
+    "db",
+    "realtime",
+    "schedule",
+    "orm",
+    "navree-documents?/operations",
+]
+schedule = ["dep:navree-schedule", "db", "time"]
+## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
+## `accessible` queries, `Authorized<Model, A>`).
+access = ["dep:navree-access", "http", "db", "navree-orm?/access", "navree-ui?/access"]
+## Notifications over mail, the database, broadcasts, Slack, Microsoft
+## Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push (VAPID
+## through `crypto`, numbers in E.164 through `validation`); stored ones,
+## the delivery log, opt-outs and push subscriptions are ORM models (`orm`).
+## Preferences per category and channel, digests, quiet hours and send
+## windows on the recipient's clock (`time`), held deliveries released by
+## `notify:release` on the scheduler (`schedule`).
+## With `webhooks` on too, the providers' status callbacks and STOP replies
+## (`/api/webhooks/notify/*`); with `integrations`, bot routes send with a
+## connection's token; with `settings`, the `notification-templates`
+## settings restyle each workspace's notification mail.
+notify = [
+    "dep:navree-notify",
+    "http",
+    "db",
+    "mail",
+    "view",
+    "orm",
+    "crypto",
+    "http-client",
+    "validation",
+    "time",
+    "schedule",
+    "realtime",
+    "navree-webhooks?/notify",
+    "navree-integrations?/notify",
+    "navree-settings?/notify",
+]
+## The UI toolkit: typed components rendered to HTML on the server, the app
+## shell, forms and tables from one struct, embedded CSS, JS and fonts.
+## With `auth` on too, the sign-in, two-factor, password reset and sign-out
+## pages (`navree::auth::AuthPages`, on the session); with `workspace`, the
+## workspace switcher (`navree::workspace::WorkspaceSwitcher`); with `i18n`,
+## the toolkit's labels, money and dates in the request's language
+## (`navree::i18n::ui`); with `queue`, a region that follows an operation
+## (`navree::queue::ui::OperationProgress`); with `notify`, the notification
+## bell (`navree::notify::ui::NotificationBell`).
+ui = [
+    "dep:navree-ui",
+    "http",
+    "markdown",
+    "telemetry",
+    "validation",
+    "navree-auth?/ui",
+    "navree-i18n?/ui",
+    "navree-notify?/ui",
+    "navree-oauth?/ui",
+    "navree-queue?/ui",
+    "navree-workspace?/ui",
+    "navree-ai?/ui",
+]
+## The ORM: `#[derive(Model)]` models, the query builder, records,
+## collections and pagination on navree-db's pool and unit of work; model
+## events and observers, soft deletes, strict modes and pruning (`OrmModule`);
+## encrypted and hashed attributes (crypto) and records as API resources
+## (api).
+orm = [
+    "dep:navree-orm",
+    "navree-ui?/orm",
+    "db",
+    "events",
+    "http",
+    "telemetry",
+    "crypto",
+    "api",
+]
+## L5
+auth = [
+    "dep:navree-auth",
+    "http",
+    "telemetry",
+    "db",
+    "crypto",
+    "validation",
+    "cache",
+    "mail",
+    "access",
+    "http-client",
+    "orm",
+]
+## Workspaces: multi-tenancy with members, roles, invitations, isolation and
+## demo workspaces (reset nightly through `schedule`).
+workspace = [
+    "dep:navree-workspace",
+    "http",
+    "db",
+    "crypto",
+    "events",
+    "mail",
+    "access",
+    "time",
+    "schedule",
+    "orm",
+]
+## L5 (opt-in, not in `full`)
+## MongoDB: `MongoModule` (connections, pools, readiness), the ORM's
+## document driver (filters, pipelines, aggregates, ObjectId keys, sessions
+## and units of work), the schema builder and migrations on collections,
+## time-series collections (the official driver on rustls; opt-in because
+## only apps with a MongoDB server need it).
+mongo = ["dep:navree-mongo", "telemetry", "schema", "db", "orm"]
+## `mongo` by the database's name.
+mongodb = ["mongo"]
+## L5 (opt-in, not in `full`)
+## Redis: shared connections and the Redis drivers of the cache and locks,
+## the queue, sessions and the real-time backplane, plus shared rate limits
+## (pure Rust, rustls with ring for rediss://; opt-in because it adds the
+## redis client and its Lua scripts are only needed with a Redis server).
+redis = ["dep:navree-redis", "cache", "queue", "session", "realtime"]
+## L6
+## Settings: typed settings stored per scope (global, organization,
+## workspace, user), inherited down the chain, with the source of every
+## value (light: no new dependencies; in `full`).
+settings = [
+    "dep:navree-settings",
+    "http",
+    "cache",
+    "db",
+    "events",
+    "validation",
+    "audit",
+    "access",
+    "workspace",
+    # With `helm` on too, the panel's Settings screens.
+    "navree-helm?/settings",
+]
+## Webhooks: signed outgoing deliveries with retries and a delivery log,
+## verified incoming webhooks (pure Rust; in `full`).
+webhooks = [
+    "dep:navree-webhooks",
+    "http",
+    "telemetry",
+    "crypto",
+    "events",
+    "http-client",
+    "db",
+    "workspace",
+    "orm",
+]
+## Single sign-on: SAML 2.0 and OpenID Connect connections per organization
+## or workspace, verified email domains, just-in-time provisioning (pure
+## Rust, XML signatures on ring; in `full`).
+sso = [
+    "dep:navree-sso",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "auth",
+    "workspace",
+]
+## L6
+## Sheets: CSV and Excel exports (streamed downloads, queued files with
+## signed links) and imports (encoding detection, header mapping, row
+## validation, a staging preview, batched apply, error files); pure Rust
+## (rust_xlsxwriter; its own XLSX, XLSB, ODS and XLS readers); in
+## `full`.
+sheets = [
+    "dep:navree-sheets",
+    "http",
+    "db",
+    "storage",
+    "validation",
+    "queue",
+    "workspace",
+]
+## Integrations: workspace and organization connections to Microsoft 365,
+## Google Workspace, Slack, OAuth 2.0 APIs and API keys, with encrypted
+## credentials, token refresh, scope sets and health checks (pure Rust; in
+## `full`).
+integrations = [
+    "dep:navree-integrations",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "schedule",
+    "workspace",
+    "orm",
+]
+## L6 (opt-in, not in `full`)
+## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
+## Discord, X and OpenID Connect providers, linked to navree-auth users.
+social = [
+    "dep:navree-social",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "auth",
+    "orm",
+]
+## L6 (opt-in, not in `full`)
+## OAuth 2.1 authorization server and OpenID Connect provider.
+oauth = [
+    "dep:navree-oauth",
+    "access",
+    "auth",
+    "crypto",
+    "db",
+    "http",
+    "workspace",
+    "orm",
+]
+## L6 (ecosystem libraries, opt-in: not part of `full`)
+## Feature flags: `#[flag]`, `Flags`, `CurrentFlags`, `#[requires_flag]`.
+flags = [
+    "dep:navree-flags",
+    "http",
+    "cache",
+    "db",
+    "events",
+    "audit",
+    "workspace",
+    "auth",
+    "orm",
+]
+## L6 (opt-in, not in `full`)
+## GraphQL: `GraphqlModule`, `#[resolver]`, dataloaders, subscriptions.
+graphql = [
+    "dep:navree-graphql",
+    "http",
+    "events",
+    "db",
+    "validation",
+    "access",
+    "auth",
+    "workspace",
+]
+## L6 (opt-in: not in `full`)
+## gRPC, gRPC-Web and Connect services in modules, on tonic.
+grpc = ["dep:navree-grpc", "http", "db", "validation"]
+## L6 (ecosystem libraries; opt-in, not in `full`)
+## AI SDK: text, structured output and streaming from Anthropic, OpenAI,
+## Gemini, Mistral, Ollama and Bedrock; agents with tools; embeddings,
+## vector stores and AiFake.
+ai = [
+    "dep:navree-ai",
+    "http",
+    "telemetry",
+    "http-client",
+    "cache",
+    "db",
+    "storage",
+    "validation",
+    "access",
+    "auth",
+    "navree-search?/ai",
+]
+## Markdown: CommonMark read into events that hold no raw HTML, no script link
+## and no unbounded document (navree-markdown), under `ui` and `api`.
+markdown = ["dep:navree-markdown"]
+## PDF: reading, editing and the text of PDF files within a budget of memory
+## and work (navree-pdf), under `documents` and `media`.
+pdf = ["dep:navree-pdf"]
+## Phone numbers: parsing, number types and formats on libphonenumber's
+## numbering plans (navree-phone), under `validation-phone`.
+phone = ["dep:navree-phone", "navree-phone/serde"]
+## L6 (opt-in: not in `full`; the native PDF engine and the bundled fonts
+## add to the build)
+## Documents: PDF from HTML templates or `PdfDocument` (the native engine in
+## process, or headless Chrome), DOCX, merge and stamps, queued renders.
+documents = [
+    "dep:navree-documents",
+    "http",
+    "view",
+    "storage",
+    "pdf",
+    "navree-documents/native",
+    "navree-documents/chrome",
+    "navree-documents/docx",
+]
+## One part of `documents` without the others (opt-in, not in `full`): the
+## native PDF engine, headless Chrome for PDF, or DOCX files. Turn on one or
+## more of these instead of `documents` to compile only what the app uses.
+documents-native = ["navree-documents/native", "http", "view", "storage", "pdf"]
+documents-chrome = ["navree-documents/chrome", "http", "view", "storage", "pdf"]
+documents-docx = ["navree-documents/docx", "http", "view", "storage", "pdf"]
+## L7 (opt-in, not in `full`)
+## Search: full-text and vector search over navree-orm models (postgres,
+## meilisearch, typesense and memory engines).
+search = [
+    "dep:navree-search",
+    "http",
+    "telemetry",
+    "http-client",
+    "db",
+    "orm",
+    "queue",
+    "access",
+    "workspace",
+]
+## The embedded Tantivy engine for search (compiles Tantivy in).
+search-tantivy = ["search", "navree-search/tantivy"]
+## Billing: subscriptions, trials, seats, usage, invoices and the portal
+## with Stripe, Paddle or a fake; verified webhooks on the queue.
+billing = [
+    "dep:navree-billing",
+    "http",
+    "events",
+    "http-client",
+    "db",
+    "schedule",
+    "auth",
+    "workspace",
+    "orm",
+    "webhooks",
+]
+## L6 (ecosystem, opt-in: not in `full`)
+## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
+## With `lighthouse` on too, Lighthouse's tools, resource and prompt.
+mcp = [
+    "dep:navree-mcp",
+    "http",
+    "cache",
+    "db",
+    "validation",
+    "access",
+    "auth",
+    "navree-lighthouse?/mcp",
+]
+## L6 (opt-in, not in `full`)
+## Microservices: message and event handlers, `ServiceClient`, the TCP and
+## in-memory transports. Each broker is a feature of its own (below).
+micro = [
+    "dep:navree-micro",
+    "http",
+    "events",
+    "db",
+    "validation",
+]
+## NATS for `micro` (async-nats; core request-reply, JetStream for events).
+micro-nats = ["micro", "navree-micro/nats"]
+## Kafka for `micro` (a pure-Rust client).
+micro-kafka = ["micro", "navree-micro/kafka"]
+## RabbitMQ (AMQP 0-9-1) for `micro` (lapin).
+micro-rabbitmq = ["micro", "navree-micro/rabbitmq"]
+## Redis Streams for `micro`.
+micro-redis = ["micro", "navree-micro/redis"]
+## MQTT 5 for `micro` (rumqttc).
+micro-mqtt = ["micro", "navree-micro/mqtt"]
+## L6 (opt-in, not in `full`: it compiles in ICU4X's locale data)
+## Localization: `I18nModule`, Fluent files, `t!`, the `Locale` extractor,
+## translated validation messages, templates and notifications.
+i18n = [
+    "dep:navree-i18n",
+    "template",
+    "http",
+    "view",
+    "db",
+    "validation",
+    "notify",
+    "workspace",
+    # Export headers and import messages in the request's locale.
+    "navree-sheets?/i18n",
+]
+## L7 (in `full`)
+## Lighthouse: application monitoring inside the app. Issues grouped by
+## fingerprint, traces, aggregates, alerts and the `/_lighthouse` dashboard.
+lighthouse = [
+    "dep:navree-lighthouse",
+    "telemetry",
+    "http",
+    "http-client",
+    "db",
+    "mail",
+    "schedule",
+    "access",
+    "auth",
+    "orm",
+    "session",
+    "ui",
+    # With `domains` on too, certificates close to expiry become issues.
+    "navree-domains?/lighthouse",
+]
+## L7 (in `full`)
+## Logbook: the local debugging timeline at `/_logbook` (requests, queries,
+## jobs, mail, events, cache, logs) with filters and request replay. Off in
+## release builds unless `logbook.enabled = true`.
+logbook = [
+    "dep:navree-logbook",
+    "telemetry",
+    "http",
+    "ui",
+    "db",
+    "auth",
+]
+## L7 (in `full`)
+## Fleet: supervised queue workers with auto-balancing, recycling and
+## graceful restarts, metrics, failed jobs, pause and continue, long-wait
+## alerts and a Navree UI dashboard at `/_fleet` on the app's browser session
+## (`session`, `auth` and `ui`; pure Rust; no system dependency).
+fleet = [
+    "dep:navree-fleet",
+    "access",
+    "auth",
+    "db",
+    "events",
+    "http",
+    "observe",
+    "queue",
+    "session",
+    "telemetry",
+    "ui",
+]
+## L7 (in `full`)
+## Helm: the admin panel generated from your navree-orm models.
+helm = [
+    "dep:navree-helm",
+    "http",
+    "view",
+    "db",
+    "crypto",
+    "storage",
+    "validation",
+    "audit",
+    "access",
+    "auth",
+    "orm",
+    "session",
+    "time",
+    "ui",
+]
+## Helm with any Lucide icon by name for a resource's or a page's `ICON` (opt-in,
+## not in `full`: the whole icon set adds about 640 KB to a release build).
+helm-all-icons = ["helm", "navree-helm/all-icons"]
+## L7 (opt-in, not in `full`: the image codecs, resvg and the document
+## readers add to the build)
+## Media: files attached to models in collections, image conversions and
+## responsive variants, safe remote downloads, zip archives, text from PDF,
+## DOCX and HTML (navree-media).
+media = [
+    "dep:navree-media",
+    "http",
+    "http-client",
+    "db",
+    "orm",
+    "storage",
+    "queue",
+    "pdf",
+]
+## Video and audio for `media` through an FFmpeg sidecar: probe, poster
+## frames and transcodes. Needs `ffmpeg` and `ffprobe` on the server.
+media-ffmpeg = ["media", "navree-media/ffmpeg"]
+## L7 (in `full`)
+## Workflows: durable workflows in code (steps replayed on resume, timers,
+## event waits, versions) and end-user automations (triggers, conditions and
+## actions in versioned graphs, enrollments, simulation, templates), with
+## `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`.
+workflows = [
+    "dep:navree-workflows",
+    "http",
+    "db",
+    "events",
+    "schedule",
+    "workspace",
+]
+## Directory sync: a SCIM 2.0 server and pull connectors (Microsoft Graph
+## with delta queries, Google Workspace, Okta, LDAP and Active Directory
+## through ldap3 with rustls) that sync users and groups into the app in
+## runs with dry runs, a deactivation limit and progress (pure Rust; in
+## `full`).
+directory = [
+    "dep:navree-directory",
+    "http",
+    "crypto",
+    "events",
+    "db",
+    "orm",
+    "queue",
+    "schedule",
+    "workspace",
+    "integrations",
+]
+## Custom domains: workspaces on their own domains, verified through DNS
+## (hickory-resolver), with automatic TLS through an on-demand proxy's ask
+## endpoint or in-process ACME certificates (instant-acme on ring, served
+## by a rustls resolver), the `domain` workspace resolver and a Cloudflare
+## DNS driver (pure Rust; in `full`).
+domains = [
+    "dep:navree-domains",
+    "http",
+    "crypto",
+    "events",
+    "db",
+    "orm",
+    "schedule",
+    "workspace",
+]
+## SQLite driver for navree-db (`sqlite:` URLs; the bundled SQLite library),
+## and Logbook's SQLite file store. Not in `full`: a PostgreSQL or MySQL build
+## compiles no SQLite.
+sqlite = ["db", "navree-db/sqlite", "navree-logbook?/sqlite"]
+## PostgreSQL driver for navree-db.
+postgres = ["db", "navree-db/postgres"]
+## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
+mysql = ["db", "navree-db/mysql"]
+## navree-validation's `Phone`: E.164 phone numbers (navree-phone).
+## Pure Rust; in `full`.
+validation-phone = ["validation", "phone", "navree-validation/phone", "navree-ui?/phone", "navree-orm?/phone", "navree-i18n?/phone"]
+## navree-validation's `SafeHtml`: rich text sanitized by the app's
+## `HtmlPolicy` (Navree's own sanitizer on html5ever). Pure Rust; in `full`.
+validation-html = ["validation", "navree-validation/html"]
+## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
+## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
+dock = ["dep:navree-dock"]
+## Opt-in, not in `full`: Navigator's library (the MCP server for coding
+## agents behind `navree mcp`, its tools, and the embedded agent skills of
+## `navree skills:install`), for tools and tests. The CLI does not need it.
+navigator = ["dep:navree-navigator", "dock"]
+## Opt-in, not in `full`: browser testing (navree-browser) for tests, usually
+## turned on in `[dev-dependencies]`; it drives Chrome or Chromium over the
+## DevTools Protocol, so it needs a browser on the machine at test time.
+browser = ["dep:navree-browser", "http"]
+## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
+## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
+otel = ["observe", "navree-observe/otel"]
+## Harbor (opt-in, not in `full`): harbor.toml, provisioning and deploys as a
+## library. The `navree` CLI has it built in; apps rarely need it.
+harbor = ["dep:navree-harbor", "template"]
+
+[dependencies]
+navree-bounded = { workspace = true }
+navree-glob = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-openapi = { workspace = true }
+
+navree-access = { workspace = true, optional = true }
+navree-ai = { workspace = true, optional = true }
+navree-api = { workspace = true, optional = true }
+navree-audit = { workspace = true, optional = true }
+navree-auth = { workspace = true, optional = true }
+navree-billing = { workspace = true, optional = true }
+navree-browser = { workspace = true, optional = true }
+navree-workspace = { workspace = true, optional = true }
+navree-oauth = { workspace = true, optional = true }
+navree-flags = { workspace = true, optional = true }
+navree-fleet = { workspace = true, optional = true }
+navree-grpc = { workspace = true, optional = true }
+navree-search = { workspace = true, optional = true }
+navree-cache = { workspace = true, optional = true }
+navree-crypto = { workspace = true, optional = true }
+navree-db = { workspace = true, optional = true }
+navree-directory = { workspace = true, optional = true }
+navree-dock = { workspace = true, optional = true }
+navree-domains = { workspace = true, optional = true }
+navree-documents = { workspace = true, optional = true }
+navree-markdown = { workspace = true, optional = true }
+navree-pdf = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
+navree-template = { workspace = true, optional = true }
+navree-navigator = { workspace = true, optional = true }
+navree-events = { workspace = true, optional = true }
+navree-graphql = { workspace = true, optional = true }
+navree-helm = { workspace = true, optional = true }
+navree-harbor = { workspace = true, optional = true }
+navree-http = { workspace = true, optional = true }
+navree-http-client = { workspace = true, optional = true }
+navree-i18n = { workspace = true, optional = true }
+navree-integrations = { workspace = true, optional = true }
+navree-lighthouse = { workspace = true, optional = true }
+navree-log = { workspace = true, optional = true }
+navree-logbook = { workspace = true, optional = true }
+navree-mail = { workspace = true, optional = true }
+navree-mcp = { workspace = true, optional = true }
+navree-media = { workspace = true, optional = true }
+navree-micro = { workspace = true, optional = true }
+navree-mongo = { workspace = true, optional = true }
+navree-notify = { workspace = true, optional = true }
+navree-observe = { workspace = true, optional = true }
+navree-orm = { workspace = true, optional = true }
+navree-queue = { workspace = true, optional = true }
+navree-redis = { workspace = true, optional = true }
+navree-realtime = { workspace = true, optional = true }
+navree-schedule = { workspace = true, optional = true }
+navree-schema = { workspace = true, optional = true }
+navree-session = { workspace = true, optional = true }
+navree-settings = { workspace = true, optional = true }
+navree-sheets = { workspace = true, optional = true }
+navree-social = { workspace = true, optional = true }
+navree-sso = { workspace = true, optional = true }
+navree-storage = { workspace = true, optional = true }
+navree-telemetry = { workspace = true, optional = true }
+navree-testing = { workspace = true, optional = true }
+navree-time = { workspace = true, optional = true }
+navree-ui = { workspace = true, optional = true }
+navree-validation = { workspace = true, optional = true }
+navree-view = { workspace = true, optional = true }
+navree-webhooks = { workspace = true, optional = true }
+navree-workflows = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The `graphql` test's object derives name async-graphql directly, as an
+# app's do.
+async-graphql = { workspace = true }
+# `tests/jose_docs.rs` builds fixture keys by hand.
+base64 = { workspace = true }
+chrono = { workspace = true }
+# The request-pipeline benchmarks (`benches/pipeline.rs`).
+criterion = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+metrics = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+# `tests/workspace_library_docs.rs`: an error type of the app's own, as the
+# ORM's events page writes it.
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+# `tests/integrations_docs.rs`: the page's listener logs with tracing, as
+# an app does.
+tracing = { workspace = true }
+uuid = { workspace = true }
+# The gRPC docs example: tonic's generated code names these crates.
+prost = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tonic-prost = { workspace = true }
+
+# Every test target names the features it needs, so a feature set that lacks one
+# leaves the test out of the build and says so: `cargo test -p navree --test x`
+# stops with the features to turn on, instead of compiling an empty file and
+# reporting no tests. `tests/feature_gates.rs` fails when a test file is gated
+# with `#![cfg(feature = ..)]` inside, or when a name here is not a feature.
+# `scripts/facade-features.sh skipped` lists, for a feature set, the targets it leaves out.
+
+[[test]]
+name = "ai"
+required-features = ["access", "ai", "http", "validation"]
+
+[[test]]
+name = "auth_security_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "sqlite", "testing"]
+
+[[test]]
+name = "batches_docs"
+required-features = ["db", "http", "queue", "sqlite", "testing"]
+
+[[test]]
+name = "billing"
+required-features = ["access", "auth", "billing", "crypto", "db", "events", "http", "http-client", "queue", "schedule", "settings", "sqlite", "testing", "validation", "workspace"]
+
+[[test]]
+name = "directory_docs"
+required-features = ["crypto", "db", "directory", "events", "http", "orm", "schema", "sqlite", "testing"]
+
+# The documents docs examples through the facade
+# (`cargo test -p navree --features documents --test documents`).
+[[test]]
+name = "documents"
+required-features = ["db", "documents", "http", "queue", "sqlite", "storage", "testing"]
+
+[[test]]
+name = "domains_docs"
+required-features = ["access", "auth", "crypto", "db", "domains", "events", "http", "schedule", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "errors_docs"
+required-features = ["access", "http", "testing"]
+
+[[test]]
+name = "facade"
+required-features = ["full"]
+
+[[test]]
+name = "flags"
+required-features = ["access", "auth", "cache", "crypto", "db", "events", "flags", "http", "queue", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "fleet_docs"
+required-features = ["access", "auth", "db", "events", "fleet", "http", "queue", "session", "sqlite", "testing", "ui"]
+
+[[test]]
+name = "framework_models"
+required-features = ["access", "audit", "auth", "crypto", "db", "notify", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "fullstack_blog"
+required-features = ["api", "audit", "auth", "db", "mail", "queue", "sqlite", "testing"]
+
+# GraphQL through the facade (`cargo test -p navree --features graphql --test graphql`).
+[[test]]
+name = "graphql"
+required-features = ["graphql", "http", "testing", "validation"]
+
+# The gRPC docs example through the facade (`cargo test -p navree --features grpc,sqlite --test grpc`).
+[[test]]
+name = "grpc"
+required-features = ["access", "db", "grpc", "http", "orm", "schema", "sqlite", "testing", "validation"]
+
+[[test]]
+name = "helm"
+required-features = ["access", "auth", "crypto", "db", "helm", "http", "orm", "schema", "sqlite", "testing", "validation", "view"]
+
+[[test]]
+name = "integrations_docs"
+required-features = ["access", "crypto", "db", "directory", "events", "http", "http-client", "integrations", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "jose_docs"
+required-features = ["cache", "crypto", "http", "http-client", "sso", "testing"]
+
+[[test]]
+name = "lighthouse_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "lighthouse", "log", "queue", "sqlite", "testing"]
+
+[[test]]
+name = "lighthouse_mcp"
+required-features = ["access", "db", "lighthouse", "mcp", "sqlite", "testing"]
+
+[[test]]
+name = "logbook_docs"
+required-features = ["db", "http", "logbook", "orm", "sqlite", "telemetry", "testing"]
+
+[[test]]
+name = "macros_end_to_end"
+required-features = ["access", "api", "db", "http", "sqlite", "testing"]
+
+[[test]]
+name = "mail_delivery_docs"
+required-features = ["crypto", "db", "events", "http", "mail", "orm", "settings", "sqlite", "testing", "view", "workspace"]
+
+[[test]]
+name = "mail_inbound_docs"
+required-features = ["crypto", "db", "events", "http", "integrations", "mail", "mail-inbound", "storage", "testing", "view", "webhooks"]
+
+[[test]]
+name = "mcp"
+required-features = ["access", "http", "mcp", "testing", "validation"]
+
+[[test]]
+name = "mcp_oauth"
+required-features = ["access", "auth", "crypto", "db", "http", "mcp", "oauth", "sqlite", "testing"]
+
+# The media docs examples through the facade
+# (`cargo test -p navree --features media --test media`).
+[[test]]
+name = "media"
+required-features = ["db", "http", "media", "orm", "schema", "sqlite", "storage", "testing"]
+
+[[test]]
+name = "middleware_docs"
+required-features = ["http", "testing"]
+
+[[test]]
+name = "notification_channels_docs"
+required-features = ["db", "http", "notify", "orm", "sqlite", "testing"]
+
+[[test]]
+name = "notification_preferences_docs"
+required-features = ["db", "mail", "notify", "orm", "settings", "sqlite", "testing", "time", "view"]
+
+[[test]]
+name = "orm"
+required-features = ["access", "db", "http", "orm", "sqlite"]
+
+[[test]]
+name = "orm_attributes"
+required-features = ["orm"]
+
+[[test]]
+name = "production_migrations"
+required-features = ["access", "audit", "auth", "crypto", "db", "directory", "domains", "fleet", "integrations", "lighthouse", "mail", "notify", "queue", "schedule", "session", "settings", "sheets", "sqlite", "sso", "storage", "view", "webhooks", "workflows", "workspace"]
+
+# Redis through the facade (`cargo test -p navree --features redis --test redis`).
+[[test]]
+name = "redis"
+required-features = ["auth", "cache", "db", "http", "queue", "realtime", "redis", "session", "sqlite", "testing"]
+
+[[test]]
+name = "search"
+required-features = ["db", "orm", "schema", "search", "sqlite", "testing"]
+
+[[test]]
+name = "settings_docs"
+required-features = ["access", "audit", "auth", "cache", "db", "events", "http", "settings", "sqlite", "testing", "validation", "workspace"]
+
+[[test]]
+name = "sheets_docs"
+required-features = ["access", "db", "http", "orm", "queue", "schema", "sheets", "sqlite", "storage", "testing", "validation"]
+
+[[test]]
+name = "social_docs"
+required-features = ["access", "auth", "crypto", "db", "http", "http-client", "social", "sqlite", "sso", "testing"]
+
+[[test]]
+name = "sortable_locks"
+required-features = ["access", "db", "http", "orm", "sqlite", "ui"]
+
+[[test]]
+name = "sso_docs"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "settings", "sqlite", "sso", "testing", "workspace"]
+
+[[test]]
+name = "storage_docs"
+required-features = ["crypto", "http", "storage", "testing"]
+
+[[test]]
+name = "telemetry"
+required-features = ["access", "http", "http-client", "observe", "telemetry", "testing"]
+
+[[test]]
+name = "time_docs"
+required-features = ["db", "http", "orm", "schedule", "schema", "sqlite", "testing", "time", "validation"]
+
+[[test]]
+name = "time_series"
+required-features = ["access", "audit", "db", "events", "fleet", "http-client", "lighthouse", "orm", "queue", "schedule", "sqlite", "testing", "webhooks"]
+
+[[test]]
+name = "timescaledb_docs"
+required-features = ["db", "orm", "schema", "sqlite"]
+
+[[test]]
+name = "ui_access"
+required-features = ["access", "ui"]
+
+[[test]]
+name = "ui_auth_browser"
+required-features = ["access", "auth", "browser", "crypto", "db", "http", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_auth_session"
+required-features = ["access", "auth", "crypto", "db", "http", "session", "sqlite", "testing", "ui"]
+
+[[test]]
+name = "ui_forms_validation"
+required-features = ["access", "db", "http", "i18n", "orm", "sqlite", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_i18n"
+required-features = ["http", "i18n", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_live"
+required-features = ["access", "db", "events", "http", "queue", "realtime", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_live_session"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "realtime", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_pickers_docs"
+required-features = ["access", "db", "http", "orm", "sqlite", "testing", "ui", "validation"]
+
+[[test]]
+name = "ui_platform"
+required-features = ["access", "auth", "crypto", "db", "events", "http", "i18n", "queue", "realtime", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_report_sheets"
+required-features = ["sheets", "ui"]
+
+[[test]]
+name = "ui_report_pdf"
+required-features = ["documents-native", "ui"]
+
+[[test]]
+name = "ui_workspace"
+required-features = ["access", "crypto", "db", "http", "orm", "session", "sqlite", "testing", "ui", "workspace"]
+
+[[test]]
+name = "ui_zone"
+required-features = ["http", "testing", "time", "ui"]
+
+[[test]]
+name = "validation_docs"
+required-features = ["http", "testing", "validation", "validation-html", "validation-phone"]
+
+[[test]]
+name = "webhooks_docs"
+required-features = ["db", "events", "http", "http-client", "integrations", "queue", "sqlite", "testing", "webhooks"]
+
+[[test]]
+name = "workflows_docs"
+required-features = ["access", "db", "events", "http", "sqlite", "testing", "workflows"]
+
+[[test]]
+name = "workspace_demo_docs"
+required-features = ["access", "db", "http", "orm", "schedule", "sqlite", "testing", "workspace"]
+
+[[test]]
+name = "workspace_library_docs"
+required-features = ["access", "auth", "crypto", "db", "events", "helm", "http", "orm", "schema", "sqlite", "testing", "validation", "view", "workspace"]
+
+# The request-pipeline micro-benchmarks: `/json` through the whole router,
+# a pool read, a validated insert and a unit of work on SQLite
+# (`cargo bench -p navree --features sqlite --bench pipeline`).
+[[bench]]
+name = "pipeline"
+harness = false
+required-features = ["db", "validation", "sqlite"]

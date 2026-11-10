@@ -1,0 +1,47 @@
+---
+title: "Drawer"
+description: "A dialog that rises from the bottom of the screen, for quick tasks on phones."
+---
+
+<UiPreview example="drawer/default" />
+
+`Drawer` is a [Dialog](/docs/components/dialog/) that rises from the bottom edge, full width, with rounded top corners and at most 85% of the screen's height.
+
+The preview shows the drawer in place. Press **Quick add** to open it for real.
+
+```rust
+use navree::ui::*;
+
+Drawer::new("quick-add", "Quick add")
+    .body(Field::new("task-title", "Task").control(Input::text("title")))
+    .footer(Button::primary("Add"))
+```
+
+## When to use it
+
+Use a drawer for a short task that people mostly do on a phone, where the bottom of the screen is in reach.
+
+<UiChoose name="overlay" current="Drawer" />
+
+## Anatomy
+
+<UiAnatomy component="drawer" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab`, `Shift+Tab` | Moves between the drawer's controls; focus stays inside. |
+| `Esc` | Closes it. |
+
+- It is a modal `<dialog>`: the page behind is inert while it is open.
+
+</UiA11y>
+
+## API
+
+### Drawer
+
+<UiProps type="Drawer" />

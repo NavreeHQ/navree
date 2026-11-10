@@ -1,0 +1,51 @@
+---
+title: "Tooltip"
+description: "A short description on hover and on focus, with the `tooltip` role and a hover delay."
+---
+
+<UiPreview example="tooltip/default" />
+
+`Tooltip` adds a few words to a focusable element, usually an icon button. It shows after 300 ms of hover or focus, and hides when the pointer or focus leaves, or on `Esc`. The trigger gets `aria-describedby`, so the words are read with it.
+
+The preview shows each tooltip in place. Hover or focus a button to see the real one.
+
+```rust
+use navree::ui::*;
+
+Tooltip::new(
+    "tip-copy",
+    Button::icon_only(icons::COPY, "Copy link"),
+    "Copy link",
+)
+```
+
+## When to use it
+
+Use a tooltip for a short hint on a control. It never holds anything to click: that's a [Popover](/docs/components/popover/).
+
+<UiChoose name="hint" current="Tooltip" />
+
+## Anatomy
+
+<UiAnatomy component="tooltip" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Focusing the trigger shows the tooltip. |
+| `Esc` | Hides it. |
+
+- The tooltip describes its trigger; it doesn't name it. An icon button still needs its own label.
+- It ignores the pointer, so it never covers what you want to click.
+- Touch screens have no hover: don't put anything only in a tooltip.
+
+</UiA11y>
+
+## API
+
+### Tooltip
+
+<UiProps type="Tooltip" />

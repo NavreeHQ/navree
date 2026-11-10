@@ -1,0 +1,179 @@
+# Gitleaks configuration. `scripts/sast.sh secrets` (and the SAST workflow)
+# scans every commit on every branch and the working tree with the default
+# ruleset plus the allowlists below.
+#
+# An allowlist entry says "this finding is a known fake", and each one carries
+# its reason. Keep them narrow: prefer an exact value or a fixtures directory
+# over a wide path. Never allowlist a real credential; revoke and rotate it
+# instead (history is not rewritten for it, the credential is simply dead).
+#
+# A one-off value can also be suppressed at the line with a trailing
+# `gitleaks:allow` comment, which suits a single sample in source code.
+
+title = "Navree gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Paths whose whole content is canned data
+# ---------------------------------------------------------------------------
+
+[[allowlists]]
+description = """
+Test fixtures: key pairs generated for the tests (RSA, EC, Ed25519, Apple .p8,
+DKIM), the RFC 7515/7520/6238 test vectors, JWTs signed with throwaway
+secrets, provider sample payloads (Slack, HubSpot, Google, Microsoft, SNS) and
+the configuration loader's fixture apps with their .env files. Fuzzing seed
+corpora (fuzz/seeds) are copies of these fixtures. Nothing in either is
+deployed or trusted."""
+paths = ['''(^|/)(tests/fixtures|fuzz/seeds)/''']
+
+[[allowlists]]
+description = """
+The fake identity provider the SSO crate ships for tests and local development
+(a SAML IdP certificate and signing key generated for that purpose). It is a
+test double: no service trusts it."""
+paths = ['''(^|/)crates/navree-sso/src/fake/idp-(key|cert)\.pem$''']
+
+[[allowlists]]
+description = """
+The system app's local environment sample: the throwaway APP_KEY and JWT
+secret for the compose stack on a developer machine (127.0.0.1 services only)."""
+paths = ['''(^|/)apps/system-app/\.env\.example$''']
+
+[[allowlists]]
+description = """
+Documentation examples: sample responses and configuration in the docs show
+truncated or made-up tokens (`eyJ0eXAi...`, `nva_...`), a placeholder PEM
+body, and a sample TOTP secret. They are not issued by any system."""
+targetRules = ["generic-api-key", "jwt", "private-key"]
+paths = ['''(^|/)docs/.*\.mdx$''']
+
+[[allowlists]]
+description = """
+Seven commits of the history whose only findings are throwaway values: the
+benchmark harness's JWT secret and the compose stack's sample JWT secret
+(both fixed local-machine values, as they are in the files today, where they
+carry a `gitleaks:allow` comment or sit in an allowlisted path), and the
+IndexNow key of the website's deploy script, which IndexNow requires the site
+to publish at /<key>.txt. The commits are fixed; a new commit is scanned in
+full."""
+commits = [
+  '87e83526f189bdedf652054f002db3a92a95a26c',
+  '4a32ab55aac550a5b2f1512c9f9c19f0e41db86d',
+  '07d2ba173a0b30e3b04cb76758699551fe641bd2',
+  '00375a122f4269c93e342f0687ce0e85225d58c9',
+  'deb4fa472a416c97b9a4aed924bc3f3ccf9ab825',
+  'ee7f05f630823fb0687fcac26df5236a34528f21',
+  'f38d79686b6202eefa72784367926cda8b6dbbca',
+]
+
+# ---------------------------------------------------------------------------
+# Documented sample values that appear in source and test code
+# ---------------------------------------------------------------------------
+
+[[allowlists]]
+description = """
+Sample credentials copied from the providers' own documentation, so a parser
+test can use a realistic shape: Slack's example bot token and the verification
+and challenge strings from its Events API page, HubSpot's example refresh
+token, and the Web Push (RFC 8291) example auth secret."""
+regexes = [
+  '''xoxb-17653672481-19874698323(-pdFZKVeTuE8sk7oOcBrzbqgy)?''',
+  '''Jhj5dZrVaK7ZwHHjRyZWjbDl''',
+  '''3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P''',
+  '''6f18f21e-a743-4509-b7fd-1a5e632fffa1''',
+  '''BTBZMqHH6r4Tts7J_aSIgg''',
+]
+
+[[allowlists]]
+description = """
+The RFC 6238 / RFC 4226 test secret: the base32 form of the ASCII string
+"12345678901234567890" that every TOTP and HOTP implementation tests against."""
+regexes = ['''GEZDGNBVGY3TQOJQ(GEZDGNBVGY3TQOJQ)?''']
+
+[[allowlists]]
+description = """
+Obviously fake values in unit tests: a sequential-digit Stripe key, a
+placeholder JWT, a long literal used as a test signing secret, Paddle key
+prefixes cut off after the prefix, repeating-hex mail-webhook tokens, and the
+SCIM token of the directory's Debug-output test (a word after the prefix)."""
+regexes = [
+  '''sk_live_0123456789''',
+  '''hunter2\.jwt\.sig''',
+  '''a-very-long-jwt-secret-of-at-least-32-bytes''',
+  '''pdl_(live|sdbx)_apikey_01j8?''',
+  '''0123456789abcdef0123456789abcdef0123456789abcdef50''',
+  '''nvscim_c0ffee42''',
+]
+
+[[allowlists]]
+description = """
+Webhook signature test tokens: the mail-provider verification token and the
+SNS subscription token that the test signers in navree-webhooks and navree-mail
+generate (see tests/fixtures/sources/generate.py), used only to sign and verify
+canned payloads."""
+regexes = [
+  '''[ab]8ce0edb2dd8301dee6c2405235584e45aa91d1e9f979f3de0''',
+  '''2336412f37fb687f5d51e6e241d09c805a5a57b30d712f794cc5f6a988666d92''',
+]
+
+[[allowlists]]
+description = """
+The test services' fixed keys in scripts/ci-services.sh: the master key the
+search engines start with and the Stripe test key that stripe-mock accepts
+(it accepts any key). The services listen on 127.0.0.1 inside a CI runner or a
+developer machine and hold only test data."""
+regexes = [
+  '''navree-test-key-0123456789''',
+  '''sk_test_123''',
+]
+
+[[allowlists]]
+description = """
+The account key of Azurite, Microsoft's Azure Blob emulator. Microsoft
+publishes it for local development ("devstoreaccount1"), it appears in the
+storage tests and in scripts/ci-services.sh, and it opens only an emulator that
+listens on 127.0.0.1."""
+regexes = [
+  '''Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==''',
+]
+
+[[allowlists]]
+description = """
+Placeholder PEM bodies in the key-parsing tests ("AAAA", and "U0VDUkVU", which
+is base64 for the word SECRET): malformed keys on purpose, to test the error
+path and that errors never echo the input."""
+targetRules = ["private-key"]
+paths = ['''(^|/)crates/navree-crypto/tests/crypto/jose/keys\.rs$''']
+
+[[allowlists]]
+description = """
+The OAuth key reader's documentation (crates/navree-oauth/src/keys.rs), which
+names the two PEM armor lines it accepts, PKCS#8 and PKCS#1: prose, not a key.
+The pattern is a piece of that sentence, with its backticks, which no key holds."""
+targetRules = ["private-key"]
+regexes = ['''-----BEGIN PRIVATE KEY-----` or `-----BEGIN RSA''']
+
+[[allowlists]]
+description = """
+The social crate's test that provider keys never print (its options' Debug
+output): an Apple key given as a bare PEM armor line, with no key after it.
+The pattern is that line closing the test's JSON object, which no key holds."""
+targetRules = ["private-key"]
+regexes = ['''-----BEGIN PRIVATE KEY-----" \}''']
+
+[[allowlists]]
+description = """
+The sample key of the WebSocket specification (RFC 6455, section 1.3), which
+the handshake tests send. It is public text and authorizes nothing."""
+targetRules = ["generic-api-key"]
+regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''']
+
+[[allowlists]]
+description = """
+The scanners' own output: the reports that scripts/sast.sh writes to
+sast-reports/ (git-ignored) hold commit hashes and redacted findings, and the
+working-tree scan would otherwise read the history report back in."""
+paths = ['''(^|/)sast-reports/''']

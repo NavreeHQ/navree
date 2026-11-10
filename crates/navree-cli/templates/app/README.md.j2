@@ -1,0 +1,148 @@
+# {{ title }}
+
+A Navree app: a Rust API with modules,
+dependency injection, JWT authentication, roles and abilities, migrations,
+queues and OpenAPI docs.
+{% if ui_navree %}
+
+Its screens are drawn on the server with Navree UI: sign-in with two-factor
+authentication, workspaces you can switch between, a customers table with
+search, filters and sort, forms, a page for each customer, and a home page
+whose figures stay current. There is no front-end project to build.
+{% endif %}
+
+## Getting started
+
+{% if database == "timescaledb" %}
+You need Docker or Podman: `navree dock up` runs the database (TimescaleDB,
+PostgreSQL with time-series hypertables) in a container, as `dock.toml`
+describes.
+
+{% elif database == "postgres" %}
+You need Docker or Podman: `navree dock up` runs the database (PostgreSQL)
+in a container, as `dock.toml` describes.
+
+{% endif %}
+```sh
+cp .env.example .env
+{% if dock %}
+navree dock up               # the database on 127.0.0.1:5432; `navree dock down` stops it
+{% endif %}
+navree dev                   # build, serve on http://127.0.0.1:8080, rebuild on save
+```
+
+{% if ui_navree %}
+Then open http://127.0.0.1:8080 and sign in with `{{ demo_email }}` and the
+password `{{ demo_password }}`. The account and forty demo customers are made
+when the app starts. That happens in development and in tests, never when `env`
+is `production`: a deployed app has none of them. The API reference is at
+http://127.0.0.1:8080/api/docs.
+{% else %}
+Then open http://127.0.0.1:8080/api/docs for the API reference.
+{% endif %}
+{% if database == "mysql" %}
+
+The app connects to MySQL (or MariaDB) at `{{ database_url }}`: point
+`database.url` in config/app.toml, or `APP_DATABASE__URL`, at your server.
+{% endif %}
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `navree dev` | Serves the app and restarts it when the code changes |
+| `navree make:module <name> --crud` | Adds a feature module under `src/modules/` |
+| `navree make:<kind> <module> <name>` | Adds a controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, factory or seeder to a module |
+| `navree make:model <module> <Name> --all` | Adds an ORM model with its migration, factory, seeder, JSON controller and policy |
+| `navree model:show <Model>` | Shows a registered model: table, columns, casts, relationships, scopes, hooks, policy |
+| `navree migrate`, `navree migrate:fresh --seed` | Runs the migrations of every module |
+| `navree routes` | Lists every route with its access rule |
+| `navree check --graph` | Validates the module graph |
+| `navree queue:work` | Runs queued jobs |
+| `navree list` | Lists every command of the app (`navree --help` lists the CLI's own) |
+
+The CLI keeps a few commands for itself: `new`, `make:*`, `dev`, `check`, `gate`,
+`dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`,
+`deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`,
+`browser:install` and `openapi:client`. Every other command runs in the app binary
+(`cargo run -- <command>`), so production servers only need that binary.
+
+## Layout
+
+```text
+config/app.toml        settings (.env and APP_* environment variables override them)
+{% if dock %}
+dock.toml              the local services `navree dock up` runs
+{% endif %}
+src/app.rs             the root module: every module, configured once
+src/abilities.rs       what each user may do
+{% if ui_navree %}
+src/ui/                the shell, who is signed in (auth.rs), the live topic and formats
+src/modules/customers/ the example feature: table, forms, pages, demo data
+{% endif %}
+src/modules/<name>/    feature modules (mod.rs, controller.rs, service.rs,
+                       entity.rs, dto.rs, migrations/, tests/)
+tests/                 tests that boot the whole app
+AGENTS.md              conventions for coding agents (CLAUDE.md imports it)
+{% if ui_next %}
+web/                   the Next.js front end (`pnpm --dir web install && pnpm --dir web dev`, after building the Navree packages: see `web/README.md`)
+{% endif %}
+```
+{% if ui_navree %}
+
+## The screens
+
+| Address | Shows |
+|---|---|
+| `/` | figures that update when a customer changes, and the newest customers |
+| `/customers` | a table: search, filters, sort and pages, all in the address (`?search=ludhiana&filter[city][in]=Ludhiana,Amritsar&sort=-monthly_paise`) |
+| `/customers/new`, `/customers/{id}/edit` | the form that adds and edits a customer; mistakes appear under the fields |
+| `/customers/{id}` | one customer |
+| `/sign-in`, `/profile` | sign in (`?next=` is where to go afterwards), and who is signed in |
+| `/account/two-factor` | sets up two-factor authentication with an authenticator app |
+
+A page is a handler that takes the `Desk` extractor and returns the page it
+builds; see `src/modules/customers/pages.rs`. Search, sort, filters and pages in
+the address are the one list query every Navree list reads.
+
+## How sign-in works
+
+`AuthPages` (registered in `src/app.rs`) draws the sign-in, two-factor,
+forgotten password and reset pages and signs out, on the session cookie, with
+the throttle, two-factor authentication and the audit trail of `AuthModule`.
+`src/ui/auth.rs` gives the pages `CurrentAccount`, who is signed in. To mail a
+sign-in link or a code, or to sign in with a passkey, turn on
+`auth.magic_link.enabled`, `auth.otp.enabled` or `auth.passkeys.enabled`: the
+pages add the way in.
+
+Public sign-up is off (`auth.registration` in `config/app.toml`). Accounts
+exist because the seeder made the demo account, or because you make them.
+
+## Workspaces
+
+The demo account owns two workspaces, the Ludhiana desk and the Jalandhar desk,
+each with its own customers. The switcher beside every page heading changes the
+workspace; the customers table, the figures and the live updates are the
+workspace's own.
+
+## Live updates
+
+The app's live hub (`RealtimeModule`) serves `GET /broadcasting/stream`. The
+customers service nudges the workspace's `customers` topic after a change
+commits, and every open table and figure of that workspace fetches itself
+again. Open two windows to see it.
+{% endif %}
+
+## Tests
+
+```sh
+cargo test
+```
+
+{% if database == "timescaledb" %}
+Each test gets a fresh SQLite database, so tests need no server. The same
+migrations run there: hypertables become regular tables with the same keys
+and indexes.
+{% else %}
+Each test gets a fresh SQLite database, so tests need no server.
+{% endif %}

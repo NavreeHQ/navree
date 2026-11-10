@@ -1,0 +1,38 @@
+ # Dukaan shop API: local secrets and overrides. Copy to `.env` (git-ignored)
+# in the API's folder. Every key maps onto config/app.toml with the APP_ prefix
+# and `__` between levels: APP_DATABASE__URL -> database.url.
+
+# The application key: encrypts secrets (2FA) and derives the JWT signing
+# key. Without it, tokens stop working at every restart.
+# Generate one with: cargo run -p shop-api -- key:generate
+APP_KEY=
+
+# A dedicated JWT secret (at least 32 bytes) instead of one derived from APP_KEY.
+# APP_AUTH__JWT__SECRET=
+
+# Database (default: SQLite in storage/shop.db).
+# APP_DATABASE__URL=sqlite://storage/shop.db?mode=rwc
+
+# HTTP listener.
+# APP_HTTP__ADDR=127.0.0.1:8080
+
+# Proxies whose X-Forwarded-For names the client (default: loopback, where
+# shop-web's BFF calls from). Per-IP rate limits and the login throttle then
+# apply per browser instead of to every web user at once. List the BFF's
+# (and any reverse proxy's) address when they run on another host; an
+# empty value trusts none.
+# APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1
+
+# Real mail delivery instead of the log, e.g. a local Mailpit.
+# APP_MAIL__TRANSPORT=smtp://localhost:1025
+
+# Signs private channel subscriptions (default: random per process) and the
+# broadcasts workers relay to `serve` (default: a key derived from APP_KEY).
+# APP_REALTIME__SECRET=
+
+# Where queue:work and schedule:work send their broadcasts (config/app.toml:
+# `auto` = http.addr). Point it at the serve process when it runs elsewhere.
+# APP_REALTIME__RELAY_URL=http://127.0.0.1:8080
+
+# Protects GET /metrics with `Authorization: Bearer <token>`.
+# APP_OBSERVE__METRICS_TOKEN=

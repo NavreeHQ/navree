@@ -1,0 +1,29 @@
+[package]
+name = "ui-table-proof"
+description = "Proof of the data table and of reports: pages and tests against real databases, with no effect on the other proof pages' size or speed."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "ui-table-proof"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+# A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
+# cannot turn off default features that the workspace entry leaves on.
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "orm", "db", "postgres", "mysql", "sqlite", "mongo", "http", "sheets"] }
+serde = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# Report periods in zones with clock changes, in the report tests.
+chrono-tz = { workspace = true }

@@ -1,0 +1,5 @@
+error: field `secret` is #[public] but also declares #[roles]: a public field needs no authentication or authorization; remove one of them
+  --> tests/ui/public_and_restricted.rs:10:5
+   |
+10 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^

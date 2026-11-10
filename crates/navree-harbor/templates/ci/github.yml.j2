@@ -1,0 +1,28 @@
+name: Deploy{% if env_name != "production" %} ({{ env_name }}){% endif %}
+
+
+on:
+  push:
+    branches: [{{ branch }}]
+
+concurrency:
+  group: deploy-{{ env_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: {{ env_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - run: cargo install navree-cli --locked
+      - run: navree deploy{{ env_flag }}
+{% if working_directory %}
+        working-directory: {{ working_directory }}
+{% endif %}
+        env:
+          NAVREE_HARBOR_KEY: {{ "${{" }} secrets.NAVREE_HARBOR_KEY {{ "}}" }}
+          NAVREE_HARBOR_SSH_KEY: {{ "${{" }} secrets.NAVREE_HARBOR_SSH_KEY {{ "}}" }}

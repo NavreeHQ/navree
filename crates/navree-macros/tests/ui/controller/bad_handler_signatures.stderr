@@ -1,0 +1,29 @@
+error: route handler `not_async` must be an `async fn`
+  --> tests/ui/controller/bad_handler_signatures.rs:10:8
+   |
+10 |     fn not_async(&self) -> &'static str {
+   |        ^^^^^^^^^
+
+error: route handler `mutable` must take `&self`: the generated handler calls it on the shared controller
+  --> tests/ui/controller/bad_handler_signatures.rs:15:22
+   |
+15 |     async fn mutable(&mut self) -> &'static str {
+   |                      ^^^^^^^^^
+
+error: route handler `owned` must take `&self`: the generated handler calls it on the shared controller
+  --> tests/ui/controller/bad_handler_signatures.rs:20:20
+   |
+20 |     async fn owned(self) -> &'static str {
+   |                    ^^^^
+
+error: route handler `no_receiver` must take `&self`: the generated handler calls it on the shared controller
+  --> tests/ui/controller/bad_handler_signatures.rs:25:14
+   |
+25 |     async fn no_receiver() -> &'static str {
+   |              ^^^^^^^^^^^
+
+error: route handler `generic` cannot be generic: extractors need concrete types
+  --> tests/ui/controller/bad_handler_signatures.rs:30:21
+   |
+30 |     async fn generic<T: Send>(&self) -> &'static str {
+   |                     ^^^^^^^^^

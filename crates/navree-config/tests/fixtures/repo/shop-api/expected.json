@@ -1,0 +1,50 @@
+{
+  "api": {
+    "title": "Dukaan shop API"
+  },
+  "app": {
+    "url": "http://localhost:3000"
+  },
+  "auth": {
+    "password_reset": {
+      "url": "http://localhost:3000/reset-password"
+    },
+    "registration": "true"
+  },
+  "database": {
+    "migrate_on_boot": true,
+    "url": "postgres://shop:shop@db:5432/shop"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api",
+    "cors": {
+      "allowed_origins": "https://shop.example.com"
+    },
+    "trusted_proxies": "10.0.0.5,10.0.0.6"
+  },
+  "key": "",
+  "log": {
+    "level": "info"
+  },
+  "mail": {
+    "from": "Dukaan shop <shop@navree.test>",
+    "transport": "smtp://localhost:1025"
+  },
+  "mcp": {
+    "auth": "bearer",
+    "instructions": "Tools for the Dukaan shop. Orders move through the stages placed, packed, shipped, delivered and returned. Amounts are in paise.",
+    "name": "dukaan-shop",
+    "title": "Dukaan shop"
+  },
+  "queue": {
+    "driver": "database"
+  },
+  "realtime": {
+    "allowed_origins": [
+      "http://localhost:3000"
+    ],
+    "key": "dukaan-shop-key",
+    "relay_url": "http://127.0.0.1:8080"
+  }
+}

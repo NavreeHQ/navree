@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"documents\").where_full_text_with([\"search_vector\"],\n\"renewal pricing\", FullText::english().websearch_mode().vectors()))"
+---
+PostgreSQL: SELECT * FROM "documents" WHERE "search_vector" @@ websearch_to_tsquery('english', $1)
+  values: [String("renewal pricing")]
+MySQL: SELECT * FROM `documents` WHERE MATCH (`search_vector`) AGAINST (? IN BOOLEAN MODE)
+  values: [String("renewal pricing")]
+SQLite: error: a full-text condition (query an FTS5 table with where_raw instead) is not supported on SQLite

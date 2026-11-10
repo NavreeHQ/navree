@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/src/relations/has.rs
+expression: per_dialect(&query)
+---
+PostgreSQL: SELECT * FROM (SELECT "activities"."id", "activities"."deal_id", "activities"."subject", "activities"."due_at", "activities"."created_at", "activities"."updated_at", ROW_NUMBER() OVER (PARTITION BY "activities"."deal_id" ORDER BY "activities"."due_at" DESC NULLS LAST) AS "navree_row" FROM "activities") AS "navree_table" WHERE "navree_row" <= $1 ORDER BY "navree_row" ASC
+  values: [I64(1)]
+MySQL: SELECT * FROM (SELECT `activities`.`id`, `activities`.`deal_id`, `activities`.`subject`, `activities`.`due_at`, `activities`.`created_at`, `activities`.`updated_at`, ROW_NUMBER() OVER (PARTITION BY `activities`.`deal_id` ORDER BY `activities`.`due_at` IS NULL ASC, `activities`.`due_at` DESC) AS `navree_row` FROM `activities`) AS `navree_table` WHERE `navree_row` <= ? ORDER BY `navree_row` ASC
+  values: [I64(1)]
+SQLite: SELECT * FROM (SELECT "activities"."id", "activities"."deal_id", "activities"."subject", "activities"."due_at", "activities"."created_at", "activities"."updated_at", ROW_NUMBER() OVER (PARTITION BY "activities"."deal_id" ORDER BY "activities"."due_at" DESC NULLS LAST) AS "navree_row" FROM "activities") AS "navree_table" WHERE "navree_row" <= ? ORDER BY "navree_row" ASC
+  values: [I64(1)]

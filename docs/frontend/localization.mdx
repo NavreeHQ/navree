@@ -1,0 +1,151 @@
+---
+title: "Localization"
+description: "Front ends in several languages: `<html lang dir>` for right-to-left locales, API errors translated by their code, and the data table's labels."
+---
+
+A front end on Navree speaks the user's language in two places: the text it owns (labels, buttons, empty states) and the refusals the API sends back. The packages leave your own text to the translation library you already use, [next-intl](https://next-intl.dev) in Next.js or [@nuxtjs/i18n](https://i18n.nuxtjs.org) in Nuxt, and give you the two pieces they don't have: text direction and API errors keyed by code.
+
+## Right-to-left locales
+
+`direction(locale)` is `"rtl"` for Arabic, Aramaic, Hebrew, Persian, Urdu, Pashto, Sindhi, Uyghur, Yiddish, Dhivehi, Sorani Kurdish, Kashmiri and Syriac, with or without a region (`ar-AE`), and follows a script subtag when there is one (`pa-Arab` is right to left, `ku-Latn` isn't). `isRtl(locale)` is the same as a boolean.
+
+<Tabs>
+<Tab label="Next.js">
+
+```tsx title="web/src/app/[locale]/layout.tsx"
+import { localeAttributes } from "@navree/next";
+
+export default async function LocaleLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  return (
+    <html {...localeAttributes(locale)} className="dark">
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+`localeAttributes("ar-AE")` is `{ lang: "ar-AE", dir: "rtl" }`. It comes from `@navree/client` too, so any framework can use it; `@navree/nuxt/vue` re-exports it.
+
+</Tab>
+<Tab label="Nuxt">
+
+```html title="web/app/app.vue"
+<script setup lang="ts">
+import { direction } from "@navree/nuxt/vue";
+
+const { locale } = useI18n();
+useHead({ htmlAttrs: { lang: locale, dir: () => direction(locale.value) } });
+</script>
+```
+
+</Tab>
+</Tabs>
+
+With `dir="rtl"` on `<html>`, layouts written with logical properties mirror on their own: Tailwind's `ps-*`, `pe-*`, `ms-*`, `me-*`, `start-*`, `end-*`, `text-start` and `text-end`, and the `rtl:` and `ltr:` variants for the rest (`rtl:rotate-180` on a chevron). The data tables use logical properties throughout.
+
+## API errors by code
+
+Every error from a Navree API carries a stable `code` (`not_found`, `validation_failed`, `limit_reached`, `invoice_already_sent`): see [errors](/docs/basics/errors/). The front end translates the code, not the English message. `errorKey(error)` names the message, `errors.<code>` (`errors.network_error` when the request got no answer, `errors.unknown` for anything else), and `translateError(error, t)` looks it up:
+
+```json title="web/messages/fr.json"
+{
+  "errors": {
+    "not_found": "Cet élément n'existe plus.",
+    "limit_reached": "Votre forfait est au maximum : {message}",
+    "invoice_already_sent": "La facture a déjà été envoyée.",
+    "network_error": "Impossible de joindre le serveur. Vérifiez votre connexion.",
+    "unknown": "Une erreur s'est produite. Réessayez."
+  }
+}
+```
+
+<Tabs>
+<Tab label="next-intl">
+
+```tsx
+import { translateError } from "@navree/next";
+import { useTranslations } from "next-intl";
+
+const t = useTranslations();
+const mutation = useMutation({ onError: (error) => toast.error(translateError(error, t)) });
+```
+
+next-intl's `t` has `t.has(key)`, which `translateError` uses to pick the code's message, then `errors.unknown`, then the English sentence.
+
+</Tab>
+<Tab label="@nuxtjs/i18n">
+
+```ts
+import { translateError } from "@navree/nuxt/vue";
+
+const { t, te } = useI18n();
+const message = translateError(error, t, { has: te });
+```
+
+vue-i18n's `te` says which keys exist.
+
+</Tab>
+</Tabs>
+
+| Option | Default | Meaning |
+|---|---|---|
+| `has(key)` | the translator's `t.has` | Whether a key exists. Without one, the code's key is used as is. |
+| `prefix` | `errors` | The keys' prefix. |
+| `fallback` | the English sentence's own fallback | The text when nothing better is known. |
+
+The message gets `{status}` and the API's `{message}` as values, for codes whose detail matters ("Your plan includes 5 seats."). Validation errors keep their field messages: `applyFieldErrors` puts them on the fields, and the API translates them itself when it runs [localization](/docs/packages/localization/#validation-messages).
+
+## The data table's labels
+
+`DataTable` and `<NavreeDataTable>` take `labels`, so the table speaks the page's language, with numbers formatted for the locale:
+
+```ts
+const format = new Intl.NumberFormat(locale);
+const labels = {
+  previous: t("table.previous"),
+  next: t("table.next"),
+  empty: t("table.empty"),
+  loading: t("table.loading"),
+  pagination: t("table.pagination"),
+  range: (from: number, to: number, total: number) =>
+    t("table.range", { from: format.format(from), to: format.format(to), total: format.format(total) }),
+};
+```
+
+## Sending the locale to the API
+
+The browser's `Accept-Language` header passes through the BFF to the API, which uses it to pick the language of its own messages. To send the app's chosen locale instead of the browser's, set the header on the typed client:
+
+```ts
+export const api = createNavreeClient<paths>({ headers: { "Accept-Language": locale } });
+```
+
+## Fonts for other scripts
+
+The theme's faces cover Latin, Latin Extended and Vietnamese, and Geist also Cyrillic. For Arabic or Devanagari, add a face that covers the script ahead of the system fallbacks, self-hosted from @fontsource like the others:
+
+```css title="web/src/app/globals.css"
+@import "@fontsource-variable/noto-sans-arabic/wght.css";
+@import "@fontsource-variable/noto-sans-devanagari/wght.css";
+
+@theme inline {
+  --font-sans: var(--font-geist), "Noto Sans Arabic Variable", "Noto Sans Devanagari Variable", ui-sans-serif, system-ui, sans-serif;
+}
+```
+
+The browser picks a face per character, so a page that mixes English names with Arabic text uses Geist for one and Noto Sans Arabic for the other.
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/packages/localization/" title="Localization on the API">
+    Translate the API's own messages, validation errors and mail.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    The table whose labels you translate.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The error shape and the codes the framework sends.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8dc9cd65d9479107125e9011781a2462f08d5f8dfeea27adab248c751c6fc6ea # shrinks to rules = [(false, [StatusEq("open"), StatusEq("open")])], statuses = ["open", "open", "open", "open", "open", "open"], priorities = [1, 1, 1, 1, 1, 1], owners = [0, 0, 0, 0, 0, 0], closed = [None, None, None, None, None, None]

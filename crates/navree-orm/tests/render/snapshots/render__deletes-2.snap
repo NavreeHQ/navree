@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Delete\n{\n    alias: Some(Ident::new(\"d\")), using:\n    vec![Source::aliased(\"companies\", \"c\")],\n    ..Delete::new(\"deals\").filter(col(\"c.id\").eq(col(\"d.company_id\"))).filter(col(\"c.active\").eq(val(false)))\n})"
+---
+PostgreSQL: DELETE FROM "deals" AS "d" USING "companies" AS "c" WHERE "c"."id" = "d"."company_id" AND "c"."active" = $1
+  values: [Bool(false)]
+MySQL: DELETE `d` FROM `deals` AS `d`, `companies` AS `c` WHERE `c`.`id` = `d`.`company_id` AND `c`.`active` = ?
+  values: [Bool(false)]
+SQLite: error: a delete matching other tables (narrow the rows with an IN subquery) is not supported on SQLite

@@ -1,0 +1,631 @@
+---
+title: "Integrations"
+description: "Connect each workspace or organization to Microsoft 365, Google Workspace, Slack, any OAuth 2.0 API or an API key, with encrypted credentials."
+---
+
+## Quick start
+
+The smallest setup: add `IntegrationsModule`, let an admin connect a provider, and call its API from a handler. The rest of the page explains each part.
+
+```rust
+// src/app.rs: .module(IntegrationsModule::from_config())
+#[get("/users")]
+#[permissions("directory.read")]
+async fn users(&self, graph: Connection<MicrosoftGraph, DirectoryRead>) -> Result<Json<Vec<GraphUser>>> {
+    Ok(Json(graph.paginate("/users?$select=id,mail").await?))
+}
+```
+
+The feature is `integrations`, part of the default `full` feature. The module needs `CryptoModule` and `DatabaseModule`. `DirectoryRead` is a scope set you declare ([scope sets](#scope-sets)), and the admin approves it first ([connecting a provider](#connecting-a-provider)).
+
+## Introduction
+
+<Badge feature="integrations" /> A business app rarely works alone. It reads a customer's directory from Microsoft 365, sends mail through their Google Workspace, posts to their Slack and pulls alerts from the security tools they already run. Each of your customers connects their own accounts, and each connection has to keep working for months.
+
+`navree-integrations` gives every workspace or organization in your app its own connections to third-party APIs:
+
+- **Providers:** Microsoft Graph (admin consent with app-only tokens, or delegated tokens), Google Workspace (service-account keys with domain-wide delegation, or OAuth consent), Slack (app installs, with token rotation), any OAuth 2.0 API by its endpoints, and API keys sent in a header.
+- **Connect flows:** a consent URL with a sealed state (and PKCE where the provider supports it), and a callback that stores the connection. Service-account keys and API keys are posted and tried before they are saved.
+- **Encrypted credentials:** refresh tokens, keys and cached access tokens are encrypted with your application key in `integration_connections` and never leave the server.
+- **Token refresh under a lock:** a connection's token is refreshed once however many requests and instances need it at the same time, and rotated refresh tokens are kept.
+- **Scope sets:** each feature declares the scopes it needs, and each scope set is connected on its own, so reading the directory never grants sending mail.
+- **Health checks:** `integrations:check` runs on the scheduler, tries every connection's credentials and emits `ConnectionUnhealthy` when one stops working.
+- **Typed clients:** `Connection<MicrosoftGraph>` in a handler, then `graph.get("/users").send().await?`, on the app's [HTTP client](/docs/digging-deeper/http-client/) and its SSRF policy.
+
+Signing people in with these providers is a different job: [social sign-in](/docs/packages/social-sign-in/) links a provider account to one user. Integrations connect a tenant's account to a workspace or an organization, whoever is signed in.
+
+## Installation
+
+Turn on the `integrations` feature of the `navree` facade. It is part of the default `full` feature.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["integrations"] }
+```
+
+Add `IntegrationsModule` to your app. It encrypts credentials with the application key, so include `CryptoModule`, and it calls the providers through `HttpClientModule`:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config())          // encrypts credentials
+    .module(HttpModule::from_config())
+    .module(HttpClientModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(CacheModule::from_config())           // token locks, used states
+    .module(EventsModule::for_root())
+    .module(AccessModule::for_root(access))       // the routes' permission
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())       // workspace and organization owners
+    .module(ScheduleModule::for_root())           // runs integrations:check
+    .module(IntegrationsModule::from_config())    // section `integrations`
+    // ...
+```
+
+Only `ConfigModule`, `CryptoModule` and `DatabaseModule` are required. Without `CacheModule`, token locks and used states live in the process, which is enough for a single instance; with several instances, give the cache a shared store such as [Redis](/docs/digging-deeper/redis/) so two instances never refresh the same connection at once. Without `WorkspaceModule`, connections belong to the app itself.
+
+The module contributes the migration set `integrations`, which creates `integration_connections`: one row per owner, provider and scope set, with the encrypted credentials, the cached token and its expiry, the granted scopes, the tenant at the provider, and the health of the connection. It runs on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite; its UUID columns are `BINARY(16)` on MySQL and MariaDB, where [models write UUIDs as 16 bytes](/docs/database/columns/#uuid-columns-on-mysql).
+
+## Configuration
+
+Register an app with each provider you offer, then list the providers in the `integrations` section. Providers that connect through a consent screen send the admin back to `{redirect_base}/{provider}`; register that exact URL with the provider.
+
+```toml title="config/app.toml"
+[integrations]
+redirect_base = "https://app.acme.test/settings/integrations/callback"
+
+[integrations.providers.microsoft]
+client_id = "0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f"   # a multi-tenant app registration
+
+[integrations.providers.google]
+scopes = ["https://www.googleapis.com/auth/admin.directory.user.readonly"]
+
+[integrations.providers.slack]
+client_id = "4129031.6713"
+scopes = ["chat:write", "users:read"]
+
+[integrations.providers.hubspot]
+type = "oauth2"
+name = "HubSpot"
+client_id = "8b1c2d3e-4f5a-6b7c-8d9e-0f1a2b3c4d5e"
+authorize_url = "https://app.hubspot.com/oauth/authorize"
+token_url = "https://api.hubapi.com/oauth/v1/token"
+api_url = "https://api.hubapi.com"
+scopes = ["crm.objects.contacts.read"]
+
+[integrations.providers.edr]
+type = "api_key"
+name = "Sentinel EDR"
+header = "X-Api-Key"
+scheme = ""                   # send the key alone
+health_url = "/v1/health"
+```
+
+Client secrets go in `.env`:
+
+```env title=".env"
+APP_INTEGRATIONS__PROVIDERS__MICROSOFT__CLIENT_SECRET=Q8a8Q~mX2...
+APP_INTEGRATIONS__PROVIDERS__SLACK__CLIENT_SECRET=6b2f0c9e...
+APP_INTEGRATIONS__PROVIDERS__HUBSPOT__CLIENT_SECRET=d41f3e2a...
+```
+
+The keys `microsoft`, `google` and `slack` name their type themselves; any other key needs a `type`. A provider without its `client_id`, an `oauth2` provider without its three URLs, a URL that isn't absolute, a consent provider without `redirect_base` or a key with upper-case letters fails the boot, naming the key. `IntegrationsModule::for_root(IntegrationsOptions { .. })` takes the same options in code.
+
+### Providers
+
+| Type | Connects with | Calls |
+|---|---|---|
+| `microsoft` | Admin consent: a tenant admin approves your app once and Navree mints app-only tokens for that tenant (client credentials). With `mode = "delegated"`, a signed-in admin's own tokens instead (authorization code, `offline_access`, PKCE). | `https://graph.microsoft.com/v1.0` |
+| `google` | A service-account key with domain-wide delegation; Navree signs the RS256 assertion with the key and acts as `subject`. With a `client_id`, also OAuth consent (offline access, PKCE). | `https://www.googleapis.com` and the other `*.googleapis.com` hosts |
+| `slack` | An app install (OAuth v2). Bot tokens are used as they are; with token rotation on, they are refreshed. | `https://slack.com/api` |
+| `oauth2` | Authorization code with PKCE and refresh tokens, at the `authorize_url` and `token_url` you configure. | `api_url` |
+| `api_key` | A key an admin pastes, sent in `header` as `{scheme} {key}` (`Authorization: Bearer ...` by default). | `api_url`, or the connection's own |
+
+`microsoft.tenant` picks who may consent (`organizations` by default; `common` or one tenant id). Extra authorization URL parameters go in `params`, and `pkce = false` turns the challenge off for an `oauth2` provider that rejects it. Slack takes no PKCE challenge.
+
+## Connecting a provider
+
+<Diagram name="backend-for-frontend" />
+
+An admin connects a provider from your settings page. Navree's routes are token-based and a browser app keeps its tokens in its [backend-for-frontend](/docs/patterns/backend-for-frontend/) (BFF), so the flow runs through the BFF:
+
+1. The settings page links to a BFF route, say `/integrations/microsoft/connect`. The BFF calls `GET /api/integrations/microsoft/connect` as the admin, stores the returned `state` in a short-lived httpOnly cookie and redirects the browser to `url`.
+2. The admin approves at the provider, and the provider sends the browser to `https://app.acme.test/settings/integrations/callback/microsoft?...`.
+3. The callback page checks that the `state` in the URL equals the one in its cookie, then forwards the query string, unchanged, to `GET /api/integrations/microsoft/callback` as the same admin.
+4. Navree checks the state, finishes the flow with the provider and answers 201 with the connection and the `return_to` path.
+
+The state is sealed with your application key. It names the provider, the scope set, the workspace or organization, and the admin who started the flow, so a state can't be finished for another workspace or by another user. It expires after 10 minutes (`integrations.state_ttl_secs`) and works once.
+
+```http
+GET /api/integrations/microsoft/connect?return_to=/settings/integrations HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+X-Workspace: agra
+```
+
+```json wrap
+{
+  "url": "https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f&redirect_uri=https%3A%2F%2Fapp.acme.test%2Fsettings%2Fintegrations%2Fcallback%2Fmicrosoft&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&state=nvi1.Rk9...",
+  "state": "nvi1.Rk9..."
+}
+```
+
+Microsoft sends the tenant back instead of a code:
+
+```http
+GET /api/integrations/microsoft/callback?tenant=9188040d-6c67-4c5b-b112-36a304b66dad&admin_consent=True&state=nvi1.Rk9... HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+X-Workspace: agra
+```
+
+```json title="201 Created"
+{
+  "id": "019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b",
+  "owner_type": "workspace",
+  "owner_id": "019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29",
+  "provider": "microsoft",
+  "provider_name": "Microsoft 365",
+  "scope_set": "default",
+  "kind": "app_only",
+  "external_id": "9188040d-6c67-4c5b-b112-36a304b66dad",
+  "display_name": null,
+  "scopes": ["https://graph.microsoft.com/.default"],
+  "status": "healthy",
+  "failures": 0,
+  "last_error": null,
+  "last_checked_at": null,
+  "connected_by": "019a1eff-9b8a-7d6c-8e5f-4a3b2c1d0e9f",
+  "created_at": "2026-10-27T08:00:00Z",
+  "updated_at": "2026-10-27T08:00:00Z",
+  "return_to": "/settings/integrations"
+}
+```
+
+`external_id` is the connected tenant: the Microsoft tenant id, the Slack team id or the Google Workspace domain. For OAuth providers the callback carries a `code`, which Navree exchanges for tokens (with the PKCE verifier from the state). Connecting the same provider and scope set again replaces the credentials and keeps the connection's id.
+
+### Service accounts
+
+Google Workspace connects without a consent screen: a Google Workspace admin creates a service account, authorizes its client id for your scopes under domain-wide delegation in the Admin console, and uploads the key file to your settings page. Your page posts it:
+
+```http
+POST /api/integrations/google/service-account HTTP/1.1
+Content-Type: application/json
+X-Workspace: agra
+
+{
+  "key": { "type": "service_account", "client_email": "navree@acme-prod.iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\n...", "private_key_id": "4f2a9c" },
+  "subject": "admin@acme.test",
+  "scope_set": "directory"
+}
+```
+
+`key` is the file's JSON object or its text. Navree tries the key first: it signs an RS256 assertion for the scope set's scopes, acting as `subject` (an admin, for directory reads), and asks Google for a token. A key Google refuses (`unauthorized_client`, when delegation isn't set up for those scopes) is a 400 and isn't stored. The key's `token_uri` is ignored; tokens always come from the configured `token_url`.
+
+### API keys
+
+Security tools and other services hand out keys instead of consent screens. Post the key, and the connection's own API root when it differs per customer:
+
+```http
+POST /api/integrations/edr/api-key HTTP/1.1
+Content-Type: application/json
+X-Workspace: agra
+
+{ "key": "s1-4f2a9c...", "api_url": "https://agra.edr.example/api", "fields": { "site_id": "17" } }
+```
+
+With a `health_url`, the key is tried there first and a refused key (401, 403) is a 400. `fields` are stored encrypted with the key, for values such as a region or an account id. Code that signs its own requests reads them with `integrations.api_key(id)`.
+
+## Scope sets
+
+A connection with every scope your app might need is a liability: a token leaked from the directory sync could send mail as the CEO. Scope sets keep each feature to what it needs, and each one is connected on its own, so revoking one leaves the others working.
+
+A feature declares its scope set as a type:
+
+```rust title="src/modules/directory/scopes.rs"
+use navree::integrations::ScopeSet;
+
+/// Read users and groups.
+pub struct DirectoryRead;
+
+impl ScopeSet for DirectoryRead {
+    const NAME: &'static str = "directory";
+    const DESCRIPTION: &'static str = "Read users and groups";
+
+    fn scopes(provider: &str) -> &'static [&'static str] {
+        match provider {
+            "microsoft" => &[
+                "https://graph.microsoft.com/User.Read.All",
+                "https://graph.microsoft.com/Group.Read.All",
+            ],
+            "google" => &["https://www.googleapis.com/auth/admin.directory.user.readonly"],
+            _ => &[],
+        }
+    }
+}
+```
+
+Register it from the feature's module with `IntegrationsModule::for_feature::<DirectoryRead>()` in its imports, or with `m.integration_scope_set::<DirectoryRead>()` in its `register`. The settings page lists each provider's scope sets from `GET /api/integrations/providers`, and connects one with `?scope_set=directory`. A provider for which the set names no scopes doesn't offer it (400 `unknown_scope_set`). The `default` scope set is the provider's configured `scopes`.
+
+Microsoft app-only tokens carry every permission the app registration holds, whatever the consent screen asked for. To keep mail send apart from directory read, give the scope set its own registration:
+
+```toml
+[integrations.providers.microsoft.apps.mail_send]
+client_id = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a"
+# client_secret: APP_INTEGRATIONS__PROVIDERS__MICROSOFT__APPS__MAIL_SEND__CLIENT_SECRET
+```
+
+The `mail_send` consent screen and its tokens then use that registration, which holds `Mail.Send` and nothing else.
+
+## Workspaces and organizations
+
+`integrations.level` says whose connections the routes and the extractor use:
+
+| Level | Owner | Resolved by |
+|---|---|---|
+| `workspace` (default) | The request's workspace | The `InWorkspace` guard: `X-Workspace`, a path, a subdomain or a claim. The admin needs `integrations.manage` in that workspace. |
+| `organization` | The request's organization | The `InOrganization` guard (`X-Organization`, ...). Needs `workspace.organizations.enabled`. |
+| `app` | The app itself | Nothing. Without `WorkspaceModule`, `workspace` means `app`. |
+
+A workspace without its own connection uses its organization's, so a company connects Microsoft 365 once at the organization and every workspace in it can read the directory. The workspace's own connection comes first when it has one. `GET /api/integrations/connections` in a workspace lists its own connections, then its organization's (`owner_type: "organization"`); a workspace admin can read and check an inherited connection but not remove it (404). Deleting a workspace or an organization deletes its connections.
+
+## Calling the APIs
+
+`Connection<P>` gives a handler the request owner's connection to provider `P` and its typed client. Name a scope set as the second parameter:
+
+```rust title="src/modules/directory/controller.rs"
+use navree::integrations::{Connection, MicrosoftGraph};
+use navree::prelude::*;
+
+use super::scopes::DirectoryRead;
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct GraphUser {
+    pub id: String,
+    pub mail: Option<String>,
+}
+
+#[injectable]
+pub struct DirectoryController;
+
+#[controller("/directory", version = "1")]
+impl DirectoryController {
+    /// `GET /api/v1/directory/users`: everyone in the tenant.
+    #[get("/users")]
+    #[permissions("directory.read")]
+    async fn users(&self, graph: Connection<MicrosoftGraph, DirectoryRead>) -> Result<Json<Vec<GraphUser>>> {
+        Ok(Json(graph.paginate("/users?$select=id,mail").await?))
+    }
+}
+```
+
+Paths resolve against the provider's API root. Every request carries a current token: the cached one while it is fresh, else a new one from the provider, minted or refreshed under a lock so concurrent requests refresh a connection once. A `401` gets one more try with a new token. A missing connection is a 404 `integration_not_connected`, so the page can offer "Connect Microsoft 365".
+
+| Client | Provider | Adds |
+|---|---|---|
+| `GraphClient` | `MicrosoftGraph` | `paginate::<T>(path)` follows `@odata.nextLink`; `tenant_id()` |
+| `GoogleClient` | `GoogleWorkspace` | `paginate::<T>(path, items_key)` follows `nextPageToken`; `as_user(email)` acts as another user through domain-wide delegation; `domain()` |
+| `SlackClient` | `Slack` | `call(method, &args)` posts JSON and turns `ok: false` into `IntegrationsError::Api` (`ratelimited` into `Unavailable`); `team_id()` |
+| `IntegrationClient` | any | `get`, `post`, `put`, `patch`, `delete`, `request(method, path)`, then `.query(..)`, `.json(..)`, `.form(..)`, `.header(..)`, `.timeout(..)` and `.send()` or `.send_json::<T>()`; `token()`, `connection()`, `base_url()` |
+
+Each typed client dereferences to `IntegrationClient`, so `graph.get("/organization")` works too. `send()` returns the response as it came; `send_json()` turns a 4xx or 5xx into an error. An absolute URL works only on the provider's own hosts (`*.googleapis.com` for Google), so a token is never sent anywhere else.
+
+Outside a request, in a job or a command, ask the `Integrations` service for the client with the owner:
+
+```rust title="src/modules/directory/sync.rs"
+use navree::integrations::{GoogleWorkspace, Integrations, IntegrationsError, Owner};
+use serde_json::Value;
+
+pub async fn sync_google(integrations: &Integrations, workspace_id: uuid::Uuid) -> Result<usize, IntegrationsError> {
+    let google = integrations
+        .client_for::<GoogleWorkspace>(Owner::Workspace(workspace_id))
+        .await?;
+    let users: Vec<Value> = google
+        .paginate("https://admin.googleapis.com/admin/directory/v1/users?customer=my_customer", "users")
+        .await?;
+    Ok(users.len())
+}
+```
+
+`client_for::<P>(owner)` takes the default scope set, `client_in::<P, S>(owner)` scope set `S`, and `client(owner, provider, scope_set)` a provider by key. Give an `oauth2` or `api_key` provider a type of its own to use it in `Connection<P>`:
+
+```rust
+use navree::integrations::{IntegrationClient, Provider};
+
+/// `[integrations.providers.hubspot]`.
+pub struct HubSpot;
+
+impl Provider for HubSpot {
+    const KEY: &'static str = "hubspot";
+    type Client = IntegrationClient;
+}
+```
+
+### The Integrations service
+
+The routes, the extractor and the commands are built on the `Integrations` service:
+
+| Method | What it does |
+|---|---|
+| `providers()` | The configured providers, how each connects and its scope sets (`ProviderInfo`) |
+| `connect_url(owner, provider, ConnectOptions { scope_set, return_to, user_id, params })` | The consent URL and sealed state (`ConnectRedirect`) |
+| `complete(owner, provider, &callback, user_id)` | Checks the state and stores the connection (`CompletedConnection`) |
+| `connect_service_account(owner, provider, NewServiceAccount::new(key, subject))` | Tries and stores a service-account key |
+| `connect_api_key(owner, provider, NewApiKey::new(key))` | Tries and stores an API key |
+| `connections(owner)`, `connection(owner, provider, scope_set)` | The connections an owner can use (its own, then its organization's) |
+| `find(id)`, `find_for(owner, id)`, `all()` | One connection; one the owner can use; every connection |
+| `disconnect(id)`, `disconnect_for(owner, id)` | Removes a connection, revoking OAuth tokens where the provider supports it (Google, Slack, `revoke_url`) |
+| `token(id)`, `api_key(id)` | A current access token; an API key with its fields |
+| `client(..)`, `client_for::<P>(..)`, `client_in::<P, S>(..)`, `client_of(&connection)` | Typed clients |
+| `check(id)`, `check_due()`, `check_all()` | Health checks |
+
+Connecting and disconnecting are data changes: in a handler they join the request's unit of work, are audited and emit their events after the commit. Token refreshes and health results commit on their own, so a request that fails afterwards keeps a rotated refresh token.
+
+### The connections table
+
+`IntegrationConnection` is the [model](/docs/orm/models/) of `integration_connections`, so reports and admin pages query connections like any other records:
+
+```rust title="src/modules/integrations/report.rs"
+use navree::db::Db;
+use navree::integrations::IntegrationConnection;
+use navree::orm::{Model as _, OrmError};
+
+/// Unhealthy connections, by provider, for the operations dashboard.
+pub async fn unhealthy_by_provider(db: &Db) -> Result<Vec<(String, u64)>, OrmError> {
+    let mut counts = Vec::new();
+    for provider in ["microsoft", "google", "slack"] {
+        let unhealthy = IntegrationConnection::query()
+            .where_(IntegrationConnection::PROVIDER.eq(provider))
+            .where_(IntegrationConnection::STATUS.eq("unhealthy"))
+            .count(db)
+            .await?;
+        counts.push((provider.to_owned(), unhealthy));
+    }
+    Ok(counts)
+}
+```
+
+Its `credentials` and `access_token` columns hold ciphertexts; they are hidden from serialized records and from `Debug`. Read the table freely, and change connections through `Integrations`, which encrypts the credentials, emits the events and writes the audit entries. `ConnectionInfo` is the view to return from your own routes.
+
+### Notification bot routes
+
+With [notifications](/docs/digging-deeper/notification-channels/) in the app too (the `notify` feature; `integrations` and `notify` are both in `full`), `IntegrationsModule` registers notifications' `dyn ConnectionTokens` (`IntegrationTokens`). A Slack or Teams route that names a connection then sends with that connection's token, from `token(id)`:
+
+```rust
+use navree::notify::{SlackRoute, TeamsRoute};
+
+// The workspace's Slack install posts with its own bot token.
+SlackRoute::channel("C0123456789").connection(slack_connection.id);
+// A bot registered in the customer's tenant: a `microsoft` connection whose
+// scope set asks for https://api.botframework.com/.default.
+TeamsRoute::conversation(service_url, conversation_id).connection(teams_connection.id);
+```
+
+### Watched mailboxes
+
+With [inbound mail](/docs/digging-deeper/inbound-mail/) in the app too (the `mail-inbound` feature; both are in `full`), `IntegrationsModule` provides `MailboxWatches`. It watches the Microsoft 365 and Gmail mailboxes of a connection, through a Graph subscription or Gmail's `users.watch` and a Pub/Sub push, and hands every new message to the inbound pipeline, where your mailboxes handle it like mail from any other source:
+
+```rust
+let watch = watches.watch(microsoft.id, "security@contoso.example").await?;
+```
+
+The watches are `integration_mailbox_watches` rows in the `integrations` migration set, renewed hourly by `integrations:mailboxes --renew`. The [inbound mail page](/docs/digging-deeper/inbound-mail/#microsoft-365-and-gmail-mailboxes) covers the configuration (`integrations.mailboxes`), the routes and the scopes a connection needs.
+
+## Health checks
+
+A connection stops working without telling you: an admin removes your app from their tenant, a key is rotated, a service account is deleted. `integrations:check` finds out before your users do. For each connection it asks the provider for a new token (OAuth, app-only and service-account connections) and gets the provider's health probe (`health_url`, or Slack's `auth.test`). Then:
+
+- **It works:** the connection is `healthy`, its failure count goes back to 0.
+- **The provider refuses the credentials** (`invalid_grant`, `unauthorized_client`, a 401 or 403 from the probe): the connection is `unhealthy` at once.
+- **The provider can't be reached** (a 5xx, a timeout): the failure is counted, and the connection turns `unhealthy` after `integrations.unhealthy_after` failures in a row (3).
+
+The module schedules `integrations:check --due` every five minutes; it checks each connection whose last check is older than `integrations.check_interval_mins` (60). Add `ScheduleModule` and run `schedule:work` (or `schedule:run` from cron) to start it, and set the interval to 0 to turn scheduled checks off. A token request in normal use that the provider refuses also turns the connection unhealthy, and answers 409 `integration_reauthorization_required`.
+
+```sh
+navree integrations:check                       # every connection now
+navree integrations:check --id 019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b
+navree integrations:list
+```
+
+```text
+019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b  workspace:019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29  microsoft/directory  app_only  healthy
+019a2b40-1a2b-7c3d-8e4f-5a6b7c8d9e0f  organization:019a1f02-6b5a-7c4d-9e8f-0a1b2c3d4e5f  slack/default  oauth  unhealthy  invalid_auth
+```
+
+Listen for the event to tell the workspace's admins:
+
+```rust title="src/modules/integrations/listeners.rs"
+use navree::integrations::ConnectionUnhealthy;
+use navree::events::Listener;
+use navree::prelude::*;
+
+#[injectable]
+pub struct WarnAdmins;
+
+impl Listener<ConnectionUnhealthy> for WarnAdmins {
+    fn handle<'a>(
+        &'a self,
+        event: &'a ConnectionUnhealthy,
+        _ctx: &'a AppContext,
+    ) -> navree::BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            tracing::warn!(provider = %event.provider, error = %event.error, "an integration stopped working");
+            Ok(())
+        })
+    }
+}
+```
+
+Register it with `m.listen::<ConnectionUnhealthy, WarnAdmins>()`, and send a [notification](/docs/digging-deeper/notifications/) from it.
+
+## Events and audit entries
+
+| Event | `NAME` | When |
+|---|---|---|
+| `IntegrationConnected` | `integrations.connected` | A connection was made, or made again |
+| `IntegrationDisconnected` | `integrations.disconnected` | A connection was removed |
+| `ConnectionUnhealthy` | `integrations.unhealthy` | A healthy connection stopped working (once, on the change) |
+| `ConnectionRestored` | `integrations.restored` | An unhealthy connection works again |
+
+Each carries `connection_id`, `owner` (`{"type": "workspace", "id": "..."}`), `provider` and `scope_set`; `IntegrationConnected` adds `kind` and `connected_by`, and `ConnectionUnhealthy` adds `error` and `failures`. They are emitted after the change commits, when `EventsModule` is in the app.
+
+With the [audit log](/docs/security/audit-log/), connecting and disconnecting are recorded as `integration.connected` and `integration.disconnected`, by the admin who did it, with the connection as the subject (`IntegrationConnection` and its id) and the provider, scope set, kind and owner as metadata:
+
+```json
+{
+  "action": "integration.connected",
+  "actor_id": "019a1eff-9b8a-7d6c-8e5f-4a3b2c1d0e9f",
+  "subject_type": "IntegrationConnection",
+  "subject_id": "019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b",
+  "metadata": {
+    "provider": "microsoft",
+    "scope_set": "default",
+    "kind": "app_only",
+    "owner": { "type": "workspace", "id": "019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29" }
+  }
+}
+```
+
+The rows are written without row-level change events, so neither the credentials nor their ciphertexts reach the audit log. Token refreshes and health checks aren't recorded.
+
+## Errors
+
+| Answer | `code` | When |
+|---|---|---|
+| 400 `Invalid or expired state` | `invalid_state` | The state was changed, issued for another provider, owner or admin, has expired, or was used already |
+| 400 `Microsoft 365 consent was not granted: access_denied` | `consent_denied` | The admin declined, or Microsoft didn't report the consent |
+| 400 `Slack refused the connection: invalid_code` | `integration_refused` | The provider refused the code, the key or the service account |
+| 400 | `invalid_credentials` | A key file that isn't a service-account key, an empty API key, a subject that isn't an email address |
+| 400 `Unknown scope set ...` | `unknown_scope_set` | The scope set isn't registered, or names no scopes for this provider |
+| 400 `Slack does not connect with an API key` | `unsupported_connection` | The provider doesn't connect this way |
+| 400 | `invalid_return_to` | `return_to` isn't a relative path |
+| 404 | `unknown_integration` | No provider is configured under this key |
+| 404 `Microsoft 365 is not connected` | `integration_not_connected` | The owner has no connection for this provider and scope set |
+| 404 | `connection_not_found` | No connection has this id, or it belongs to someone else |
+| 409 `Connect Microsoft 365 again to continue` | `integration_reauthorization_required` | The provider refused the connection's credentials |
+| 502 `Slack is unavailable. Please try again.` | `integration_unavailable` | The provider couldn't be reached |
+| 502 | `integration_api_error` | A Slack call answered `ok: false` |
+
+Every answer carries its `code` in the [error body](/docs/basics/errors/#error-codes). `IntegrationsError` returned from a handler with `?` keeps its answer.
+
+## Testing
+
+`Integrations::fake()` returns an `Integrations` whose providers are an `IntegrationsFake`. States are still sealed and checked, credentials still encrypted and stored and service-account keys still sign their assertions; only the provider's side is replaced, and the typed clients send through a fake HTTP client you stub:
+
+```rust title="tests/integrations.rs"
+use http::Method;
+use navree::http_client::FakeResponse;
+use navree::integrations::{ConnectCallback, ConnectOptions, Integrations, MicrosoftGraph, Owner};
+use navree::prelude::*;
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn the_directory_is_read_from_the_connected_tenant() {
+    let (integrations, fake) = Integrations::fake();
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", navree::crypto::generate_key())
+        .config("integrations.routes", false)
+        .config("integrations.redirect_base", "https://app.acme.test/integrations/callback")
+        .config("integrations.providers.microsoft.client_id", "test-client")
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(IntegrationsModule::from_config())
+        .override_value(Arc::new(integrations))
+        .build()
+        .await;
+    let integrations = app.get::<Integrations>().await;
+
+    // An admin consents for their tenant.
+    let redirect = integrations
+        .connect_url(Owner::App, "microsoft", ConnectOptions::default())
+        .await
+        .unwrap();
+    let callback = ConnectCallback::admin_consent(redirect.state, "9188040d-6c67-4c5b-b112-36a304b66dad");
+    integrations.complete(Owner::App, "microsoft", &callback, None).await.unwrap();
+
+    fake.api().on(
+        Method::GET,
+        "https://graph.microsoft.com/v1.0/users*",
+        FakeResponse::new(200).json(&json!({ "value": [{ "id": "u1", "mail": "anu@acme.test" }] })),
+    );
+    let graph = integrations.client_for::<MicrosoftGraph>(Owner::App).await.unwrap();
+    let users: Vec<serde_json::Value> = graph.paginate("/users").await.unwrap();
+    assert_eq!(users[0]["mail"], "anu@acme.test");
+    assert_eq!(fake.minted()[0].grant_type, "client_credentials");
+}
+```
+
+| `IntegrationsFake` | Does |
+|---|---|
+| `on_code(provider, code, FakeGrant)` | Answers a consent code with a grant |
+| `on_code_error(provider, code, error)` | Refuses a code (`invalid_grant`): a 400 `integration_refused` |
+| `on_token(provider, FakeGrant)` | Answers refreshes, app-only and service-account tokens with a grant |
+| `refuse_tokens(provider, error)` | Refuses them: the connection turns unhealthy |
+| `fail_tokens(provider)` | Makes the token endpoint unreachable |
+| `restore_tokens(provider)` | Back to generated tokens |
+| `api()` | The `FakeServer` behind the typed clients and health probes |
+| `minted()`, `exchanged()`, `revoked()` | What was asked: grants (`Minted { provider, grant_type, scope_set, subject, client_id }`), codes and revoked tokens |
+
+`FakeGrant::new()` generates an access token that lasts an hour; set `access_token`, `refresh_token`, `expires_in`, `never_expires`, `scopes`, `external_id` and `display_name` as you need. A code the fake doesn't know is refused with `invalid_grant`, as a provider would. To test against a provider's real responses, keep the real `Integrations`, point its endpoint keys (`authority_url`, `token_url`, `api_url`, `revoke_url`) at a local mock server, and let the HTTP client reach it (`http_client.ssrf.allow_hosts = ["127.0.0.1"]`).
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `integrations.redirect_base` | none | Callback URLs are `{redirect_base}/{provider}`; required for consent providers |
+| `integrations.routes` | `true` | Mounts the `/api/integrations` routes |
+| `integrations.level` | `workspace` | `workspace`, `organization` or `app` |
+| `integrations.state_ttl_secs` | `600` | Lifetime of a sealed state |
+| `integrations.check_interval_mins` | `60` | Scheduled checks: how old a check may get; `0` turns them off |
+| `integrations.unhealthy_after` | `3` | Transient failures in a row before a connection is unhealthy |
+| `integrations.lock_timeout_secs` | `15` | How long a refresh waits for another refresh of the same connection |
+| `integrations.providers.<key>.type` | the key | `microsoft`, `google`, `slack`, `oauth2` or `api_key` |
+| `integrations.providers.<key>.name` | the provider's, or the key | Shown in messages and lists |
+| `integrations.providers.<key>.client_id`, `.client_secret` | none | The OAuth app; the secret from `.env` |
+| `integrations.providers.<key>.scopes` | `[]` | The `default` scope set (a list, or a comma-separated string) |
+| `integrations.providers.<key>.params` | `{}` | Extra authorization URL parameters |
+| `integrations.providers.<key>.pkce` | `true` (Slack: `false`) | Sends a PKCE challenge (S256) |
+| `integrations.providers.<key>.client_auth` | `post` | `post` or `basic` at the token endpoint |
+| `integrations.providers.<key>.tenant` | `organizations` | Microsoft: who may consent |
+| `integrations.providers.<key>.mode` | `app` | Microsoft: `app` (admin consent, app-only tokens) or `delegated` |
+| `integrations.providers.<key>.apps.<scope set>.client_id`, `.client_secret` | none | A separate app registration for one scope set |
+| `integrations.providers.<key>.authorize_url`, `.token_url`, `.api_url`, `.revoke_url` | the provider's | Endpoints; required for `oauth2` (but `revoke_url`) |
+| `integrations.providers.<key>.authority_url` | `https://login.microsoftonline.com` | Microsoft's sign-in host |
+| `integrations.providers.<key>.health_url` | none | A path under the API root that checks get; any 2xx is healthy |
+| `integrations.providers.<key>.header`, `.scheme` | `Authorization`, `Bearer` | `api_key`: where the key goes |
+| `integrations.mailboxes.graph_notification_url`, `.gmail_topic`, `.gmail_token`, `.renew_before_hours` | none, none, none, `24` | [Watched mailboxes](/docs/digging-deeper/inbound-mail/#microsoft-365-and-gmail-mailboxes), with `mail-inbound` |
+
+| Route | Answer |
+|---|---|
+| `GET /api/integrations/providers` | `{data: [ProviderInfo]}` |
+| `GET /api/integrations/connections` | `{data: [ConnectionInfo]}` |
+| `GET /api/integrations/connections/{id}` | The connection |
+| `POST /api/integrations/connections/{id}/check` | The `Health` after a check |
+| `DELETE /api/integrations/connections/{id}` | 204 |
+| `GET /api/integrations/{provider}/connect?scope_set&return_to` | `{url, state}` |
+| `GET /api/integrations/{provider}/callback?state&code&tenant&admin_consent&error` | 201, the connection and `return_to` |
+| `POST /api/integrations/{provider}/service-account` | 201, the connection |
+| `POST /api/integrations/{provider}/api-key` | 201, the connection |
+
+Every route requires the `integrations.manage` permission, in the request's workspace or organization at those levels.
+
+| Command | Does |
+|---|---|
+| `integrations:check` | Checks every connection; `--due` the ones due (what the scheduler runs); `--id <uuid>` one |
+| `integrations:list` | Lists the connections with their owner, kind and health |
+| `integrations:mailboxes` | Lists watched mailboxes; `--renew` renews the due ones (hourly on the scheduler); `--sync <id>` catches one up (with `mail-inbound`) |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/http-client/" title="HTTP client">
+    The client the typed clients send through, with its SSRF policy.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Connect once for every workspace in an organization.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Scheduling">
+    Run `integrations:check` on a schedule.
+  </LinkCard>
+  <LinkCard href="/docs/packages/social-sign-in/" title="Social sign-in">
+    Sign people in with the same providers.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,36 @@
+{
+  "api": {
+    "title": "Agra cloud API",
+    "undocumented": [
+      "/_lighthouse*",
+      "/_logbook*"
+    ]
+  },
+  "auth": {
+    "registration": true
+  },
+  "database": {
+    "migrate_on_boot": true,
+    "url": "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
+  },
+  "http": {
+    "addr": "127.0.0.1:8080",
+    "api_prefix": "/api"
+  },
+  "key": "",
+  "log": {
+    "level": "info"
+  },
+  "mail": {
+    "from": "Agra cloud <hello@example.com>",
+    "transport": "log"
+  },
+  "queue": {
+    "driver": "database"
+  },
+  "workspace": {
+    "resolvers": [
+      "header"
+    ]
+  }
+}

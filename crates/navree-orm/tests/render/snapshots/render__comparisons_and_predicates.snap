@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::And(vec![col(\"a\").ne(val(1_i64)), col(\"a\").lte(val(2_i64)),\ncol(\"a\").gte(val(3_i64)), col(\"b\").is_null(), col(\"c\").is_not_null(),\ncol(\"d\").in_list(vec![val(\"x\"), val(\"y\")]),\ncol(\"e\").not_in_list(vec![val(1_i64)]),\ncol(\"f\").between(val(1_i64), val(9_i64)), Expr::Between\n{\n    expr: Box::new(col(\"g\")), low: Box::new(col(\"lo\").add(Expr::int(1))),\n    high: Box::new(col(\"hi\")), negated: true,\n}, col(\"h\").binary(BinaryOp::NullSafeEq, val(\"x\")),\ncol(\"i\").binary(BinaryOp::NullSafeNotEq, val(\"x\")),]))"
+---
+PostgreSQL: "a" <> $1 AND "a" <= $2 AND "a" >= $3 AND "b" IS NULL AND "c" IS NOT NULL AND "d" IN ($4, $5) AND "e" NOT IN ($6) AND "f" BETWEEN $7 AND $8 AND "g" NOT BETWEEN "lo" + 1 AND "hi" AND "h" IS NOT DISTINCT FROM $9 AND "i" IS DISTINCT FROM $10
+  values: [I64(1), I64(2), I64(3), String("x"), String("y"), I64(1), I64(1), I64(9), String("x"), String("x")]
+MySQL: `a` <> ? AND `a` <= ? AND `a` >= ? AND `b` IS NULL AND `c` IS NOT NULL AND `d` IN (?, ?) AND `e` NOT IN (?) AND `f` BETWEEN ? AND ? AND `g` NOT BETWEEN `lo` + 1 AND `hi` AND `h` <=> ? AND NOT (`i` <=> ?)
+  values: [I64(1), I64(2), I64(3), String("x"), String("y"), I64(1), I64(1), I64(9), String("x"), String("x")]
+SQLite: "a" <> ? AND "a" <= ? AND "a" >= ? AND "b" IS NULL AND "c" IS NOT NULL AND "d" IN (?, ?) AND "e" NOT IN (?) AND "f" BETWEEN ? AND ? AND "g" NOT BETWEEN "lo" + 1 AND "hi" AND "h" IS ? AND "i" IS NOT ?
+  values: [I64(1), I64(2), I64(3), String("x"), String("y"), I64(1), I64(1), I64(9), String("x"), String("x")]

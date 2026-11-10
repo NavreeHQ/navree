@@ -1,0 +1,23 @@
+From: a@b.test
+Content-Type: multipart/mixed; boundary=f
+
+--f
+
+forwarded below
+--f
+Content-Type: message/rfc822
+
+Subject: inner
+Content-Type: multipart/alternative; boundary=g
+
+--g
+Content-Type: text/plain; charset=utf-7
+
+Hi +AKM-1
+--g--
+--f
+Content-Type: message/rfc822
+Content-Transfer-Encoding: base64
+
+U3ViamVjdDogZW5jb2RlZAoKYm9keQo=
+--f--

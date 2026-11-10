@@ -1,0 +1,30 @@
+{
+  "name": "{{ package }}-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+{% if navree_js_dir %}
+    "@navree/client": "link:{{ navree_js_dir }}/client",
+    "@navree/next": "link:{{ navree_js_dir }}/next",
+{% else %}
+    "@navree/client": "{{ navree_js_range }}",
+    "@navree/next": "{{ navree_js_range }}",
+{% endif %}
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

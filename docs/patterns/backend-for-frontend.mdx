@@ -1,0 +1,352 @@
+---
+title: "Backend for frontend"
+description: "A web front end that never sees a token: a Next.js or Nuxt backend-for-frontend keeps the JWTs in httpOnly cookies and calls the API for the browser."
+---
+
+## Introduction
+
+A token stored in `localStorage` can be read by any script on the page, so one cross-site scripting bug leaks every session. A **backend-for-frontend** (BFF) removes the token from the browser altogether. The browser talks only to its own web server, on the same origin. That server keeps the access and refresh tokens in httpOnly cookies, which no script can read, and calls the Navree API with `Authorization: Bearer`.
+
+The API doesn't change. It stays a plain bearer-token API that mobile apps, partners, other services and the BFF all call the same way. The BFF is the web app's own small backend: it signs in, forwards requests, rotates tokens and enforces the same-origin rule that protects the cookies.
+
+<Diagram name="backend-for-frontend" />
+
+The reference CRM has two front ends on the same contract: `crm/web`, a Next.js app that mounts the BFF with [`@navree/next`](/docs/frontend/nextjs/), and `crm/nuxt`, a Nuxt app that mounts it with [`@navree/nuxt`](/docs/frontend/nuxt/). The BFF itself is one package, [`@navree/bff`](/docs/frontend/auth-and-bff/): there is one implementation, and no app carries a copy of it. `navree new --ui next` generates a small Next.js app on the package, and the [SaaS starter kit](/docs/getting-started/starter-kits/) ships a full one. The code on this page comes from the package and the CRM; where the two frameworks differ, it shows both.
+
+## The shape
+
+| Party | Holds | Talks to |
+|---|---|---|
+| Browser | Cookies it can't read, the user resource, the access rules (`GET /api/me/abilities`) | The BFF, same origin; the WebSocket server for real time |
+| BFF (the Next.js or Nuxt server) | The access token, the refresh token, a pending two-factor challenge | The Navree API, with `Authorization: Bearer` |
+| Navree API | Users, refresh-token families, everything else | Nobody: it answers |
+
+The browser calls same-origin paths: `/api/auth/login`, `/api/v1/deals`, `/broadcasting/auth`. Route handlers in the Next.js app, or server routes in the Nuxt app, forward them to the API at `NAVREE_API_URL` with the same path, so the browser's API client and the API's OpenAPI document agree on every path.
+
+## One BFF, two frameworks
+
+The BFF is framework-free TypeScript: `createBff` takes the API's URL and a few options and returns functions that take a web `Request` and return a `Response`. Next.js route handlers already speak `Request` and `Response`; in Nuxt, Nitro's `toWebRequest(event)` turns an event into one and a handler may return a `Response`. So each framework adds only a thin layer, and the packages write it for you: `createNavree()` for Next.js, a module for Nuxt. The auth routes cover sign-in, the two-factor step, refresh and sign-out; one catch-all forwards every other `/api/*` call.
+
+| | Next.js (`crm/web`) | Nuxt (`crm/nuxt`) |
+|---|---|---|
+| The BFF | `@navree/bff`, mounted by `@navree/next` | `@navree/bff`, mounted by `@navree/nuxt` |
+| Its instance | `createNavree()` in `src/lib/navree.ts`, created on the first request from the `NAVREE_*` variables | The module, created on first use from the runtime config |
+| Routes | `src/app/api/[...path]/route.ts` and `src/app/broadcasting/auth/route.ts` export `navree.handlers` | Nitro routes the module adds: `/api/**` and `POST /broadcasting/auth` |
+| Pages | `navree.proxy()` in `proxy.ts`, for an app that wants pages behind sign-in on the server | The module's session gate |
+
+Either instance holds the single-flight refresh map (below), so it is shared by every request the server handles. The Next.js proxy and the Nuxt session gate send a page request without a session to the sign-in page and refresh an expired access token before the page renders; whether a token is still valid stays the API's call.
+
+## Signing in
+
+The browser posts the email and password to the BFF's `/api/auth/login`. The BFF calls `POST /api/auth/login` on Navree, keeps both tokens in cookies and returns only the user:
+
+```ts title="packages/js/bff/src/bff.ts"
+/** `POST /api/auth/login`: keeps the tokens, returns `{user}`. */
+async function login(request: Request): Promise<Response> {
+  if (!originAllowed(request)) return invalidOrigin();
+  let upstream: Response;
+  try {
+    upstream = await upstreamFetch(`${apiUrl}${authPrefix}/login`, {
+      method: "POST",
+      cache: "no-store",
+      headers: upstreamHeaders(request),
+      body: await request.arrayBuffer(),
+    });
+  } catch {
+    return unreachable();
+  }
+  if (!upstream.ok) return passThrough(upstream);
+
+  const data = (await upstream.json().catch(() => ({}))) as LoginBody;
+  if (data.two_factor_required === true && typeof data.challenge_token === "string") {
+    // Two-factor account: no session yet. The challenge token waits in a cookie only the code step receives.
+    const headers = new Headers({ "content-type": "application/json" });
+    setChallengeCookie(headers, data.challenge_token, data.expires_in);
+    const body = { two_factor_required: true, expires_in: data.expires_in ?? 300 };
+    return new Response(JSON.stringify(body), { status: 200, headers });
+  }
+  if (!isTokenPair(data)) return errorResponse(502, "Unexpected login response from the API", "unexpected_response");
+  return signedIn(upstream, data);
+}
+```
+
+A failed login passes Navree's answer through unchanged (a 401 "Invalid credentials", or a 429 from the login throttle), so the form shows the API's message. In Next.js there is no route to write for it: `navree.handlers` sends `POST /api/auth/login`, `/api/auth/2fa/verify`, `/api/auth/logout` and `/api/auth/refresh` to their handlers and forwards everything else, so one catch-all covers all of them. The app creates its Navree once and mounts the handlers:
+
+```ts title="crm/web/src/lib/navree.ts"
+import { createNavree } from "@navree/next/server";
+
+export const navree = createNavree();
+```
+
+```ts title="crm/web/src/app/api/[...path]/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;
+```
+
+In Nuxt the module mounts the same handler on `/api/**`, with nothing to write.
+
+The BFF sets three cookies, all `HttpOnly; SameSite=Lax`, and `Secure` in production:
+
+| Cookie | Holds | Lifetime | Path |
+|---|---|---|---|
+| `navree_at` | The JWT access token | `expires_in` from the API (`auth.jwt.access_ttl_secs`, 15 minutes by default) | `/` |
+| `navree_rt` | The refresh token | 30 days (`auth.jwt.refresh_ttl_secs`) | `/` |
+| `navree_2fa` | A pending two-factor challenge | As long as the challenge (5 minutes) | `/api/auth/2fa` |
+
+Accounts with two-factor authentication get a challenge instead of tokens. The challenge waits in `navree_2fa`, which only the code step receives. The login page then posts `{code}` or `{recovery_code}` to `/api/auth/2fa/verify`, and the BFF adds the challenge token, calls Navree and stores the tokens like a normal login. A wrong code keeps the challenge, so the person can try again until it expires.
+
+## Forwarding requests
+
+Every other `/api/*` request goes through the same catch-all: `handle` routes the four auth paths to their handlers and sends the rest to `proxy`.
+
+`proxy` sends the request to the same path on the API with:
+
+- `Authorization: Bearer` and the access token from `navree_at`;
+- an allow-list of request headers: `accept`, `accept-language`, `content-type`, `if-match`, `if-none-match`, `if-modified-since`, `last-event-id`, `user-agent` and `x-request-id`. Cookies never leave the BFF;
+- the workspace, in a multi-tenant app: the request's `X-Workspace` header, or the `navree_workspace` cookie when there is none;
+- the body, buffered so it can be replayed after a refresh.
+
+The CRM is not multi-tenant, so it never sets a workspace; in a [multi-tenant](/docs/patterns/multi-tenancy/) app the BFF forwards it the way [Auth and the BFF](/docs/frontend/auth-and-bff/) describes.
+
+The API's response comes back with its status, its body (streamed, so a CSV export isn't buffered) and an allow-list of headers, including `etag`, `location`, `retry-after`, `x-request-id` and the `x-ratelimit-*` headers. Authenticated responses are fetched with `cache: "no-store"`, so they never land in a shared cache.
+
+When an `/api/auth/*` response carries a token pair (changing the password returns a new one), the BFF moves the pair into the cookies and strips it from the body. The browser gets `{user}` or a 204.
+
+## Rotating refresh tokens
+
+Navree's access tokens are short-lived JWTs, and its refresh tokens rotate: every refresh revokes the token it was given and issues the next one in the same family. A refresh token that is used twice means two parties hold it, so Navree revokes the whole family and the session ends. See [Rotation and families](/docs/security/authentication/#rotation-and-families).
+
+That makes refreshing from a browser app subtle. A page that fires five requests the moment the access token expires gets five 401s, and five refreshes with the same token would end the session. The BFF therefore refreshes **once per refresh token**, and every concurrent request waits for that one call:
+
+```ts title="packages/js/bff/src/bff.ts"
+/** Single-flight refresh keyed by the refresh token being spent. */
+function refresh(refreshToken: string, request: Request): Promise<TokenPair | null> {
+  const now = Date.now();
+  for (const [key, entry] of refreshes) {
+    if (entry.settledAt !== undefined && now - entry.settledAt > refreshGraceMs) refreshes.delete(key);
+  }
+  const existing = refreshes.get(refreshToken);
+  if (existing) return existing.promise;
+  const entry: { promise: Promise<TokenPair | null>; settledAt?: number } = {
+    promise: callNavreeRefresh(refreshToken, request).then((pair) => {
+      entry.settledAt = Date.now();
+      if (!pair) refreshes.delete(refreshToken);
+      return pair;
+    }),
+  };
+  refreshes.set(refreshToken, entry);
+  return entry.promise;
+}
+```
+
+The rules `proxy` follows:
+
+1. If the access cookie has expired but the refresh cookie remains, refresh before sending.
+2. Send the request. On a 401, refresh once and retry with the new access token.
+3. When a refresh succeeds, set both cookies on the response.
+4. When it fails, clear both cookies and pass the 401 on. The browser's API client sends the user to `/login`.
+
+A completed refresh is remembered for 30 seconds (`refreshGraceMs`), so a request that was already in flight with the old cookie gets the new pair instead of spending the old token a second time.
+
+The single-flight map lives in one server process. When you run several BFF processes behind a load balancer, route each browser to one of them (sticky sessions), or two processes could spend the same refresh token at once and end the session.
+
+## Signing out
+
+`POST /api/auth/logout` revokes the refresh token at Navree, so the stolen copy of a cookie is worthless afterwards, then clears both cookies. If the access token has already expired, the BFF refreshes first to get a bearer token for the logout call. If Navree can't be reached, the browser is signed out anyway. Send `{"all": true}` to end every session of the user.
+
+## CSRF protection
+
+Cookies are sent with every request to their origin, so a page on another site could submit a form to the BFF and ride on the user's session. Two layers stop it:
+
+- **`SameSite=Lax`** keeps the cookies off cross-site `POST`, `PUT`, `PATCH` and `DELETE` requests in browsers that support it.
+- **An origin check** on every request that can change data. A request other than `GET`, `HEAD` or `OPTIONS` must carry an `Origin` header naming the app's own host (or one listed in `APP_ORIGINS`). A missing or foreign origin gets a 403 and never reaches the API:
+
+```ts title="packages/js/bff/src/bff.ts"
+/** Non-GET requests must come from this app: `Origin` host = the host the browser addressed. */
+function originAllowed(request: Request): boolean {
+  if (SAFE_METHODS.has(request.method.toUpperCase())) return true;
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") return false;
+  if (options.allowedOrigins?.includes(origin)) return true;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host");
+  const ownHost = host ?? new URL(request.url).host;
+  return originHost === ownHost;
+}
+```
+
+Login, logout and the two-factor step are guarded the same way. Keep `GET` requests free of side effects and the two layers cover every route.
+
+The API itself needs no CSRF token for this setup: it only ever sees bearer tokens, and Navree's session CSRF check applies to cookie sessions, not to bearer requests. If your app also signs users in with [sessions](/docs/basics/sessions-and-csrf/), that check covers those requests.
+
+## Client addresses and rate limits
+
+Navree's login throttle and per-IP rate limit key on the client's address. Behind a BFF, every browser reaches the API from the BFF's address, so all users would share one limit, and one person's wrong passwords would lock everyone out of that account.
+
+The BFF can name the browser in `X-Forwarded-For`, but only when it can trust the address itself:
+
+- The browser's own `X-Forwarded-For` and `X-Real-IP` are never passed on: anyone can forge them.
+- Put the Next.js server behind a reverse proxy that appends the client to `X-Forwarded-For`, make Next.js reachable only through it, and set `NAVREE_TRUSTED_PROXY_HOPS` to the number of such proxies. The BFF then sends the API one `X-Forwarded-For` entry: the address the outermost proxy saw.
+- Or, when the proxy sets a header to the bare client address and overwrites the browser's (`x-real-ip`, `cf-connecting-ip`), name that header with `clientIpHeader`, or with `NAVREE_CLIENT_IP_HEADER` where `@navree/next` or `@navree/nuxt` mounts the BFF. The BFF believes that header first.
+
+On the API side, list the BFF's address in `http.trusted_proxies`, so the API believes the header only from the BFF:
+
+```toml title="crm/api/config/app.toml"
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+# crm-web's BFF calls from here for every browser and names the browser in
+# X-Forwarded-For, so rate limits and the login throttle are per browser.
+# (Also the CRM's built-in default; list the BFF's address in production.)
+trusted_proxies = ["127.0.0.1", "::1"]
+```
+
+The CRM tests this from the API's side: six wrong passwords from one browser are throttled, and another browser signing in to the same account still succeeds.
+
+```rust title="crm/api/tests/bff.rs"
+#[tokio::test]
+async fn the_login_throttle_is_per_browser_behind_the_bff() {
+    let crm = crm().await;
+    for _ in 0..5 {
+        login(&crm, "203.0.113.10", "wrong password")
+            .await
+            .assert_status(401);
+    }
+    login(&crm, "203.0.113.10", "wrong password")
+        .await
+        .assert_status(429);
+    // Another browser signs in as the same user.
+    login(&crm, "203.0.113.20", DEMO_PASSWORD)
+        .await
+        .assert_status(200);
+    crm.shutdown().await;
+}
+```
+
+## Real time through the BFF
+
+The WebSocket goes straight from the browser to Navree's WebSocket server: it carries no token, only a socket id. Private channels need authorization, and that request needs the user's credentials, so it goes through the BFF like any other call:
+
+```ts title="crm/web/src/app/broadcasting/auth/route.ts"
+import { navree } from "@/lib/navree";
+
+/** Private-channel authorisation for the real-time client: forwarded to Navree with the bearer token. */
+export const dynamic = "force-dynamic";
+export const { POST } = navree.handlers;
+```
+
+The Nuxt module answers `POST /broadcasting/auth` the same way, with no `/api` prefix, so the path is the same in both apps.
+
+The browser's pusher-js client uses a custom authorizer that posts `{socket_id, channel_name}` to that same-origin route. Navree checks the channel against the user's access rules and signs the subscription. List the web app's origin in `realtime.allowed_origins` so the WebSocket handshake is accepted. If the socket can't connect, the CRM keeps working with refetch-on-focus. See [Broadcasting](/docs/digging-deeper/broadcasting/).
+
+## Calling the API from the browser
+
+The browser's API client is generated from the API's OpenAPI document and points at the BFF, so it needs no token handling at all: same-origin credentials, `Accept: application/json`, and hooks for 401 and 403. Both front ends call it with the typed fetch core of `@navree/client` (their `fetch.ts` is a copy of it) on the types `navree openapi:client` writes; the Nuxt app's client is `app/lib/api/client.ts`.
+
+```ts title="crm/web/src/lib/api/client.ts"
+const client = createClient<paths>({
+  baseUrl,
+  credentials: "same-origin",
+  headers: { Accept: "application/json" },
+  fetch: fetchApi,
+});
+```
+
+Because the BFF keeps the API's paths, `client.GET("/api/v1/deals/board")` is checked against the document by the TypeScript compiler and lands on the same route at the API. See [API-first](/docs/patterns/api-first/#typed-clients).
+
+## Configuration
+
+The BFF reads its settings from the environment when the server runs, not when it is built, so they change without a rebuild. The Nuxt app reads the same names when its BFF is first used (`NUXT_NAVREE_API_URL` and `NUXT_NAVREE_COOKIE_SECURE` work too):
+
+| Variable | Default | What it does |
+|---|---|---|
+| `NAVREE_API_URL` | `http://127.0.0.1:8080` | Where the Navree API listens. |
+| `NAVREE_COOKIE_SECURE` | on in production | `0` or `1`: the `Secure` flag on the cookies. Set `0` only to serve a production build over plain HTTP in a test environment. |
+| `APP_ORIGINS` | none | Extra origins allowed to send writes, comma-separated: the public URL when a proxy rewrites `Host`. |
+| `NAVREE_TRUSTED_PROXY_HOPS` | `0` | Reverse proxies in front of the BFF that append the client to `X-Forwarded-For`. |
+| `NAVREE_CLIENT_IP_HEADER` | none | A header the proxy in front of the BFF sets to the bare client address (`x-real-ip`). |
+| `NAVREE_WORKSPACE_HEADER` | `X-Workspace` | The API's `workspace.header`. |
+| `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | `127.0.0.1`, `8080` | The WebSocket server the browser connects to. |
+| `NEXT_PUBLIC_PUSHER_KEY` | `navree-crm-key` | The app key, `realtime.key` on the API. |
+| `NEXT_PUBLIC_REALTIME` | on | `0` turns real time off. |
+
+The Nuxt app takes the browser settings as public runtime config, so they too change without a rebuild: `NUXT_PUBLIC_NAVREE_REALTIME_WS_HOST`, `NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT`, `NUXT_PUBLIC_NAVREE_REALTIME_KEY` and `NUXT_PUBLIC_NAVREE_REALTIME` (`false` turns the socket off). In the CRM its `NAVREE_API_URL` and `NUXT_PUBLIC_NAVREE_REALTIME_WS_PORT` default to port 8092, where `pnpm api` runs a copy of the API for that app.
+
+On the API, nothing is BFF-specific beyond `http.trusted_proxies` and `realtime.allowed_origins`. Two settings are worth a look:
+
+- `auth.registration = false` when accounts are created by admins, as in the CRM. The BFF then has no sign-up route to forward.
+- `auth.jwt.audience` to issue tokens for one audience (`"crm-web"`), so a token minted for the web app is refused by another API that checks a different audience.
+
+## Testing
+
+The BFF is framework-free TypeScript: `createBff` takes the API URL and a `fetch`, so its unit tests run against a scripted fake API without a server (`@navree/bff/testing` has the helpers). This one proves that three concurrent requests share one refresh:
+
+```ts title="packages/js/bff/src/bff.test.ts"
+it("shares one refresh between concurrent requests (refresh tokens rotate; reuse revokes the family)", async () => {
+  let refreshCalls = 0;
+  const navree = fakeNavree({
+    "GET /api/v1/deals/board": (call) =>
+      call.headers.get("authorization") === "Bearer AT2"
+        ? Response.json({ ok: true })
+        : Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized" }, { status: 401 }),
+    "POST /api/auth/refresh": async () => {
+      refreshCalls += 1;
+      await new Promise((r) => setTimeout(r, 10));
+      return Response.json(tokens(2));
+    },
+  });
+  const bff = createBff({ apiUrl: API, fetch: navree.fetch });
+  const cookies = { [ACCESS_COOKIE]: "AT1", [REFRESH_COOKIE]: "RT1" };
+
+  const responses = await Promise.all(
+    [1, 2, 3].map(() => bff.proxy(request("/api/v1/deals/board", { cookies }), "/api/v1/deals/board")),
+  );
+
+  expect(responses.map((r) => r.status)).toEqual([200, 200, 200]);
+  expect(refreshCalls).toBe(1);
+});
+```
+
+The same suite covers the origin check, login and logout, two-factor sign-in, tokens stripped from responses and the client-address rules. On top of that:
+
+- `crm/web/src/lib/navree.test.ts` drives the app's real route handlers on the package: login keeps both tokens in httpOnly cookies, a call is forwarded with the bearer token, a cross-origin write gets a 403, and the channel authorization carries the token. `pnpm smoke` in `packages/js/next` builds a small app on `@navree/next` with `next build` and checks the running server against a scripted API.
+- `crm/api/tests/bff.rs` checks the API's side: per-browser throttling and rate limits behind a trusted BFF.
+- `E2E_REAL_API=1 pnpm e2e` in `crm/web`, and `pnpm e2e` in `crm/nuxt`, run the Playwright specs against the real API and a production build of the front end, end to end. The Nuxt app's `bff.spec.ts` checks the CSRF refusal, the refresh-cookie rotation and that signing out revokes the refresh token at the API.
+
+## Starting your own
+
+`navree new` generates the pattern for you:
+
+```sh
+navree new agra --ui next                # the API plus web/, a Next.js app on @navree/next
+navree new agra --kit saas               # the full SaaS kit on Next.js: sign-in, workspaces, billing, settings, admin
+```
+
+`--ui next` writes `web/lib/navree.ts` (the app's `createNavree()`), the route handler in `web/app/api/[...path]/route.ts`, `web/proxy.ts` that keeps pages behind sign-in, and a sign-in page and home page that use `auth()`; `navree dev` starts both servers. The packages come from npm (see [installing](/docs/frontend/introduction/#installing)). The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the same package. To see both front ends running, see the [CRM showcase](/showcase/crm/).
+
+The BFF is a package: [`@navree/bff`](/docs/frontend/auth-and-bff/) has everything on this page, plus sessions for server rendering and test helpers, and [`@navree/next`](/docs/frontend/nextjs/) and [`@navree/nuxt`](/docs/frontend/nuxt/) mount it in a Next.js or Nuxt app in a few lines.
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/introduction/" title="Front end">
+    The packages: the typed client, the BFF, Next.js, Nuxt and the theme.
+  </LinkCard>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Access tokens, rotating refresh tokens and reuse detection.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/" title="Starter kits">
+    The SaaS kit runs on this BFF with a complete front end.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    The reference API and its Next.js and Nuxt front ends.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/api-first/" title="API-first">
+    The contract the BFF and every other client build against.
+  </LinkCard>
+</LinkCards>

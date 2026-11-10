@@ -1,0 +1,15 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: sql
+---
+-- postgres
+-- error: invalid definition of `helpers`: column `created_at` is declared twice
+
+-- mysql
+-- error: invalid definition of `helpers`: column `created_at` is declared twice
+
+-- mariadb
+-- error: invalid definition of `helpers`: column `created_at` is declared twice
+
+-- sqlite
+-- error: invalid definition of `helpers`: column `created_at` is declared twice

@@ -1,0 +1,34 @@
+[package]
+name = "navree-pdf"
+description = "Navree's PDF object layer: a reader held to a memory and work budget, a writer, and text extraction in reading order."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "pdf"]
+categories = ["parser-implementations"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+aes = { workspace = true }
+bytes = { workspace = true }
+cbc = { workspace = true }
+flate2 = { workspace = true }
+indexmap = { workspace = true }
+md-5 = { workspace = true }
+rc4 = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+weezl = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

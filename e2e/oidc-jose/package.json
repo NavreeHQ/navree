@@ -1,0 +1,9 @@
+{
+  "name": "navree-oidc-jose",
+  "private": true,
+  "type": "module",
+  "description": "Verifies navree-oauth ID tokens (RS256 and EdDSA) with the jose library, apart from Navree (run by `cargo test -p navree-oauth --test oauth oidc::an_independent_jwt_library_verifies_the_id_tokens -- --ignored`).",
+  "dependencies": {
+    "jose": "6.2.13"
+  }
+}

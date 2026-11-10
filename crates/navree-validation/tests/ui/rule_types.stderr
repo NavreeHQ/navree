@@ -1,0 +1,161 @@
+error[E0277]: this rule checks text, and `u32` is not text
+ --> tests/ui/rule_types.rs:8:16
+  |
+6 | #[derive(Validate)]
+  |          -------- required by a bound introduced by this call
+7 | struct Mismatched {
+8 |     #[validate(email)]
+  |                ^^^^^ the rule needs a `String`, `&str`, `Cow<str>` or `Folded` text (or an `Option` of one)
+  |
+  = help: the trait `RuleInput` is not implemented for `u32`
+  = help: the following other types implement trait `RuleInput`:
+            &T
+            Arc<T>
+            Box<T>
+            Cow<'_, str>
+            Folded<T>
+            Option<T>
+            Rc<T>
+            String
+            str
+note: required by a bound in `email`
+ --> src/rules/mod.rs
+  |
+  | pub fn email<T: RuleInput + ?Sized>(value: &T) -> Result<(), Violation> {
+  |                 ^^^^^^^^^ required by this bound in `email`
+
+error[E0277]: `range` compares numbers, and `String` is not one
+  --> tests/ui/rule_types.rs:10:16
+   |
+ 6 | #[derive(Validate)]
+   |          -------- required by a bound introduced by this call
+...
+10 |     #[validate(range(min = 1))]
+   |                ^^^^^ `range` needs a number (or an `Option` of one); `length` measures text
+   |
+   = help: the trait `navree_validation::rules::Range` is not implemented for `String`
+   = help: the following other types implement trait `navree_validation::rules::Range`:
+             &T
+             Folded<T>
+             Option<T>
+             f32
+             f64
+             i128
+             i16
+             i32
+           and $N others
+note: required by a bound in `navree_validation::rules::range`
+  --> src/rules/measure.rs
+   |
+   | pub fn range<T: Range + ?Sized>(
+   |                 ^^^^^ required by this bound in `range`
+
+error[E0277]: `length` measures text and collections, and `u32` is neither
+  --> tests/ui/rule_types.rs:12:16
+   |
+ 6 | #[derive(Validate)]
+   |          -------- required by a bound introduced by this call
+...
+12 |     #[validate(length(max = 3))]
+   |                ^^^^^^ `length` needs a string, a list, a set or a map (or an `Option` of one)
+   |
+   = help: the trait `navree_validation::rules::Length` is not implemented for `u32`
+   = help: the following other types implement trait `navree_validation::rules::Length`:
+             &T
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cow<'_, str>
+             Folded<T>
+             HashMap<K, V, S>
+           and $N others
+note: required by a bound in `length`
+  --> src/rules/measure.rs
+   |
+   | pub fn length<T: Length + ?Sized>(
+   |                  ^^^^^^ required by this bound in `length`
+
+error[E0277]: `required` checks an `Option`, and `String` is not one
+  --> tests/ui/rule_types.rs:14:16
+   |
+ 6 | #[derive(Validate)]
+   |          -------- required by a bound introduced by this call
+...
+14 |     #[validate(required)]
+   |                ^^^^^^^^ make the field an `Option<_>`, or drop `required`
+   |
+   = help: the trait `navree_validation::rules::Required` is not implemented for `String`
+help: the following other types implement trait `navree_validation::rules::Required`
+  --> src/rules/measure.rs
+   |
+   | impl<T> Required for Option<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<T>`
+...
+   | impl<T: Required + ?Sized> Required for &T {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&T`
+note: required by a bound in `required`
+  --> src/rules/measure.rs
+   |
+   | pub fn required<T: Required + ?Sized>(value: &T) -> Result<(), Violation> {
+   |                    ^^^^^^^^ required by this bound in `required`
+
+error[E0277]: `each` checks the items of a collection, and `String` is not one
+  --> tests/ui/rule_types.rs:16:16
+   |
+ 6 | #[derive(Validate)]
+   |          -------- required by a bound introduced by this call
+...
+16 |     #[validate(each(length(max = 3)))]
+   |                ^^^^ `each` needs a list, a set or a map (or an `Option` of one)
+   |
+   = help: the trait `navree_validation::rules::Each` is not implemented for `String`
+   = help: the following other types implement trait `navree_validation::rules::Each`:
+             &C
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<C>
+             HashMap<K, V, S>
+             HashSet<T, S>
+             Option<C>
+             Vec<T>
+           and $N others
+
+error[E0277]: `String` has no rules of its own to check
+  --> tests/ui/rule_types.rs:18:16
+   |
+ 6 | #[derive(Validate)]
+   |          -------- required by a bound introduced by this call
+...
+18 |     #[validate(nested)]
+   |                ^^^^^^ derive `Validate` for it; `nested` takes such types (and lists, maps and `Option`s of them), text and numbers take rules
+   |
+   = help: the trait `Validate` is not implemented for `String`
+   = help: the following other types implement trait `Validate`:
+             &T
+             ()
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             HashMap<K, V, S>
+             HashSet<T, S>
+           and $N others
+
+error[E0277]: `range` compares numbers, and `String` is not one
+  --> tests/ui/rule_types.rs:10:28
+   |
+10 |     #[validate(range(min = 1))]
+   |                            ^ `range` needs a number (or an `Option` of one); `length` measures text
+   |
+   = help: the trait `navree_validation::rules::Range` is not implemented for `String`
+   = help: the following other types implement trait `navree_validation::rules::Range`:
+             &T
+             Folded<T>
+             Option<T>
+             f32
+             f64
+             i128
+             i16
+             i32
+           and $N others

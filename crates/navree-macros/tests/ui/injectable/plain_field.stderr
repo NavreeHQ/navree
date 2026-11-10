@@ -1,0 +1,5 @@
+error: #[injectable] cannot fill field `retries`: use `Arc<T>` for a provider, `Lazy<T>` for a handle resolved on first use, or mark the field #[inject(default)] to use `Default::default()`
+  --> tests/ui/injectable/plain_field.rs:10:14
+   |
+10 |     retries: u32,
+   |              ^^^

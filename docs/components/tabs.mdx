@@ -1,0 +1,129 @@
+---
+title: "Tabs"
+description: "A list of tabs and their panels. Each tab is a link, so it works with no script; the page switches them in place and keeps the address true."
+---
+
+<UiPreview example="tabs/default" />
+
+`Tabs` draws a tab list and a panel for each tab. Every tab is a link to the same page with its key in the query (`?tab=notes`), so with JavaScript off a click loads the page with that tab open. With the `menus` module (about 3.5 KB compressed, shared with [ToggleGroup](/docs/components/toggle-group/) and [DropdownMenu](/docs/components/dropdown-menu/)), a click switches the panel in the page with no request, pushes the address, and the arrow keys work as the tabs pattern asks. Back, forward and reload restore the open tab.
+
+```rust
+use navree::ui::*;
+
+Tabs::new("deal", "Deal sections")
+    .active_from(query.tab.as_deref())
+    .tab(Tab::new("overview", "Overview").panel(overview))
+    .tab(Tab::new("notes", "Notes").count("3").panel(notes))
+    .tab(Tab::new("files", "Files").disabled(true))
+```
+
+The first argument is the id, the second a name for the list. `active_from` takes the query's `tab`, which may be missing: a key that no enabled tab has opens the first one. The panel of every tab is in the page, so switching costs nothing. For a panel that is slow or private, [load it when it is first shown](#load-a-panel-on-demand).
+
+## When to use it
+
+Use tabs to switch between views of one thing, all on one page: a deal's overview, notes and history. For one place in a long page, use [Accordion](/docs/components/accordion/); to go to another page of the app, use the [sidebar](/docs/ui/app-shell/) or [Breadcrumb](/docs/components/breadcrumb/); to switch how one set of data is shown, a [ToggleGroup](/docs/components/toggle-group/).
+
+<UiChoose name="switch-view" current="Tabs" />
+
+## Anatomy
+
+<UiAnatomy component="tabs" />
+
+## Looks
+
+The default has a line under the open tab. `TabsVariant::Segmented` puts the tabs in one box and raises the open one.
+
+<UiPreview example="tabs/segmented" />
+
+## Vertical
+
+`.vertical()` runs the list down the side. The arrow keys follow: Up and Down move, and Left and Right do nothing.
+
+<UiPreview example="tabs/vertical" />
+
+## Sizes
+
+`.size(Size::Sm)` and `Size::Lg` change the height of the tabs. `.stretch()` shares the whole width among them.
+
+<UiPreview example="tabs/sizes" />
+
+## Icons and counts
+
+A tab can have an icon before or after its label, and a count. A tab with an icon and no text needs a name: `Tab::icon_only(key, icon, label)`.
+
+<UiPreview example="tabs/icons" />
+
+## Manual activation
+
+By default the arrow keys open the tab they land on, which is right when the panels are ready. When opening one costs something, such as a panel loaded from the server, `.activation(Activation::Manual)` makes the arrows only move focus, and Enter or Space opens the tab.
+
+<UiPreview example="tabs/manual" />
+
+## Many tabs
+
+A list wider than its box scrolls sideways, with a fade on the side where more wait, since a phone hides its scrollbar. The open tab is scrolled into view when it changes. There are no scroll buttons.
+
+## Load a panel on demand
+
+`Tab::lazy(src)` makes the panel a [region](/docs/ui/regions/): it loads the first time its tab is shown, keeps what it got, and `.fresh()` loads it again each time. `src` answers the panel's content as a fragment.
+
+```rust
+use navree::ui::*;
+
+Tabs::new("deal", "Deal sections")
+    .active_from(query.tab.as_deref())
+    .tab(Tab::new("overview", "Overview").panel(overview))
+    .tab(Tab::new("activity", "Activity").lazy("/deals/42/activity"))
+    .tab(Tab::new("files", "Files").lazy("/deals/42/files").fresh())
+```
+
+A slow answer shows a skeleton and marks the panel busy. A failed one shows an alert with a Retry button, and showing the tab again tries again. An answer that comes late never replaces a newer one. With JavaScript off a lazy tab is still a link to the page, so draw the tab that is open with its content: `.tab(Tab::new("activity", "Activity").lazy(src).panel(activity))` when `activity` is the open one. The words of the alert are `.labels(failed, retry)`.
+
+## The address
+
+Each tab's link is `?tab=key`. `.param("section")` changes the name, which two sets of tabs on one page need, and `.keep("q", "sutlej")` keeps another parameter in every link. A click adds a history entry. The arrow keys replace the entry instead, so moving across five tabs doesn't leave five steps to go back through. Back and forward between tabs of one page make no request; going back to another page works as it always does.
+
+## Find in page
+
+`.findable()` lets the browser's find-in-page search the panels that aren't showing and opens the tab that matches. It works where the browser supports `hidden="until-found"`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the open tab, and from there into its panel. |
+| `Left`, `Right` | Move to the previous or next tab and, by default, open it. They swap in a right-to-left page. Vertical tabs use `Up` and `Down`. |
+| `Home`, `End` | Move to the first or last tab. |
+| `Enter`, `Space` | Open the tab with focus (manual activation). |
+
+- The list has `role="tablist"` and its name; each tab `role="tab"`, `aria-selected` and `aria-controls`; each panel `role="tabpanel"`, `aria-labelledby` and a tab stop of its own.
+- Only the open tab is a tab stop. Disabled tabs are skipped by the arrows and have no link.
+- With JavaScript off every tab stays a tab stop, since they are links.
+- Arrow movement keeps focus on the list, so a screen reader reads each tab as it is reached.
+- A tab with only an icon needs `Tab::icon_only`'s label.
+
+</UiA11y>
+
+## API
+
+### Tabs
+
+<UiProps type="Tabs" />
+
+### Tab
+
+<UiProps type="Tab" />
+
+### TabsVariant
+
+<UiProps type="TabsVariant" />
+
+### Activation
+
+<UiProps type="Activation" />
+
+### Orientation
+
+<UiProps type="Orientation" />

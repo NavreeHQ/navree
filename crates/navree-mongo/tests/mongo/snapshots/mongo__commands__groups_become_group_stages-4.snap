@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").select([\"owner\"]).select_expr(Expr::max(Expr::col(\"amount\")),\n\"top\").group_by([\"owner\"]).having(col(\"owner\").like(\"a%\")).having(Expr::max(Expr::col(\"amount\")).lt(Expr::min(Expr::col(\"budget\")))))"
+---
+db.deals.aggregate([
+  {"$group": {"_id": {"g0": "$owner"}, "__navree_a0": {"$max": "$amount"}, "__navree_a1": {"$min": "$budget"}}},
+  {"$set": {"owner": "$_id.g0", "top": "$__navree_a0"}},
+  {"$match": {"$and": [{"$expr": {"$regexMatch": {"input": {"$toString": "$_id.g0"}, "regex": "^a", "options": "is"}}}, {"$expr": {"$and": [{"$gt": [{"$ifNull": ["$__navree_a0", null]}, null]}, {"$lt": [{"$ifNull": ["$__navree_a0", null]}, {"$ifNull": ["$__navree_a1", null]}]}]}}]}},
+  {"$project": {"owner": 1, "top": 1, "_id": 0}}
+])

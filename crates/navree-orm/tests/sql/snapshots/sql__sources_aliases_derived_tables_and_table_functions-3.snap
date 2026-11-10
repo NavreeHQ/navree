@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"ignored\").from_function(Expr::func(\"json_each\",\n[Expr::val(\"[1,2]\")]), \"item\"))"
+---
+PostgreSQL: SELECT * FROM json_each($1) AS "item"
+  values: [String("[1,2]")]
+MySQL: SELECT * FROM json_each(?) AS `item`
+  values: [String("[1,2]")]
+SQLite: SELECT * FROM json_each(?) AS "item"
+  values: [String("[1,2]")]

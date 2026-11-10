@@ -1,0 +1,47 @@
+---
+title: "ColorPicker"
+description: "A colour field: the browser's own colour control, with a hex field and swatches beside it. It posts a colour as #rrggbb, with or without JavaScript."
+---
+
+<UiPreview example="color-picker/swatches" />
+
+`ColorPicker` asks for one colour. The colour is the browser's own `<input type="color">`, so it has the platform's picker, its keys and its screen reader support, and it posts `#rrggbb`.
+
+```rust
+use navree::ui::*;
+
+Field::new("brand-colour", "Brand colour")
+    .control(
+        ColorPicker::new("brand")
+            .value("#ff9933")
+            .swatch("#ff9933", "Saffron")
+            .swatch("#138808", "Green"),
+    )
+```
+
+`ColorPicker::new(name)` posts the colour as `name`. A colour you give it is read the way the field posts one: `#rgb`, `#rrggbb` or either without the `#`, in any case. Text that is not a colour is ignored, so the field starts black rather than broken.
+
+## What a script adds
+
+With the `parts` module a hex field and a row of swatches sit beside the colour control and move in step with it. A swatch is a button named by its hex code, or by the name you give it, and the one that holds the current colour is marked pressed. Typing a hex code changes the colour as soon as it is whole; a code that is not a colour goes back to the colour when the field is left.
+
+Without a script the colour control alone is drawn. It posts all the same.
+
+<UiPreview example="color-picker/default" />
+
+## Reading what a form sent
+
+A browser posts `#rrggbb`, but a form can be sent by hand. `ColorPicker::parse(text)` reads a colour the same way the field does and gives `None` for anything else, so a handler can check what it was sent.
+
+```rust
+use navree::ui::ColorPicker;
+
+assert_eq!(ColorPicker::parse("ABC"), Some("#aabbcc".to_owned()));
+assert_eq!(ColorPicker::parse("red"), None);
+```
+
+## Options
+
+- `.swatches([..])` adds swatches named by their hex codes, and `.swatch(colour, name)` adds one with a name a reader hears.
+- `.labels(hex, swatches)` names the hex field and the group of swatches, for another language.
+- `.disabled(true)` and `.invalid(true)` work as they do on any field.

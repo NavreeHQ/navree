@@ -1,0 +1,214 @@
+---
+title: "Wizard"
+description: "A form in steps. The server checks each step before the next opens, keeps the progress in a draft the person can leave and come back to, and checks every step again at the end. Every move is a plain post, so it works with JavaScript off."
+---
+
+<UiPreview example="wizard/default" />
+
+A `Wizard` splits one long form into steps. Each step is a struct with `#[derive(Form)]`, so its fields and its rules are written once and checked on the server before the next step opens. What has been typed is kept in a **draft** on the server. The draft belongs to a person, not to a browser tab: its id is in the address, so a link resumes it from any window or device. The last step checks every step again, so a rule that changed, or a step that was skipped by hand, can't get through.
+
+```rust
+use navree::ui::*;
+use serde::Deserialize;
+
+#[derive(Deserialize, Validate, Form)]
+struct Basics {
+    /// Deal name
+    #[validate(length(min = 1, max = 60))]
+    title: String,
+}
+
+#[derive(Deserialize, Validate, Form)]
+struct Contact {
+    /// Email
+    #[validate(email)]
+    email: String,
+}
+
+fn deal_wizard() -> Wizard {
+    Wizard::new("deal")
+        .base("/deals/new")
+        .step(WizardStep::of::<Basics>("basics", "Basics").description("What the deal is"))
+        .step(WizardStep::of::<Contact>("contact", "Contact"))
+        .review()
+}
+```
+
+A wizard is built fresh for each request, which is cheap, so a step's choices can come from the database: `WizardStep::of::<Contact>(...).form(|view| view.options("owner", owners.clone()))` shapes the step's form the way `FormView` does.
+
+## The pages
+
+A step lives at `{base}/{draft id}/{step id}`. The wizard decides what a post means; the app loads and saves the draft.
+
+```rust
+use navree::ui::*;
+
+// GET {base}/start: the draft the person already has open, else a new one and its first step.
+async fn start(store: Drafts, session: Session, me: User) -> Result<Reply> {
+    let wizard = deal_wizard();
+    // The draft's id is kept in the session, so coming back to "New deal" goes back to the draft
+    // instead of starting another one every time.
+    if let Some(id) = session.get::<String>("deal_draft") {
+        if let Some(draft) = store.load(&me.id, &id).await? {
+            if !draft.submitted {
+                return Ok(Reply::redirect(wizard.url(&draft.id, &wizard.entry(&draft))));
+            }
+        }
+    }
+    let draft = wizard.start();
+    store.save(&me.id, &draft, None).await?;
+    session.insert("deal_draft", &draft.id)?;
+    Ok(Reply::redirect(wizard.url(&draft.id, &draft.step)))
+}
+
+// GET {base}/{id}/{step}: the step as a page.
+async fn show(shell: AppShell, Path((id, step)): Path<(String, String)>, store: Drafts, me: User) -> Response {
+    let wizard = deal_wizard();
+    let Some(draft) = store.load(&me.id, &id).await? else { return not_found() };
+    match wizard.page(&draft, &step) {
+        Ok(page) => shell.page("New deal").body(page.csrf(me.token)).into_response(),
+        // A step that can't be reached yet: go to the one that can.
+        Err(_) => Reply::redirect(wizard.url(&id, &wizard.entry(&draft))).into_response(),
+    }
+}
+
+// POST {base}/{id}/{step}: a move.
+async fn post(Path((id, step)): Path<(String, String)>, pairs: Pairs, store: Drafts, me: User) -> Response {
+    let wizard = deal_wizard();
+    let Some(mut draft) = store.load(&me.id, &id).await? else { return not_found() };
+    let before = draft.revision;
+    let outcome = wizard.submit(&mut draft, &step, &pairs);
+    if outcome.changed() {
+        // Two posts at once: only one is saved.
+        store.save(&me.id, &draft, Some(before)).await?;
+    }
+    match outcome {
+        WizardOutcome::Go(to) | WizardOutcome::Invalid(to) => Reply::redirect(wizard.url(&id, &to)),
+        WizardOutcome::Left => Reply::redirect("/deals"),
+        WizardOutcome::Done => {
+            create_deal(&draft)?;
+            store.discard(&me.id, &id).await?;
+            Reply::redirect("/deals")
+        }
+        WizardOutcome::Stale => stale_page(&wizard, &draft),
+        _ => bad_request(),
+    }
+}
+```
+
+`wizard.page(&draft, step)` draws the step: the stepper, the heading, the step's fields with their errors, and the buttons. `wizard.submit(&mut draft, step, &pairs)` reads the post: it stores what was typed, checks the step when the person pressed Next or Finish, and says where to go.
+
+## What each button does
+
+Every button is a submit button of the step's form, named `_wizard`, so it all works with scripts off.
+
+| Button | Stores what was typed | Checks the step | Then |
+|---|---|---|---|
+| Next | yes | yes | opens the next step, or stays on this one with its errors |
+| Back | yes | no | opens the step before |
+| A step of the stepper | yes | no | opens that step, if it can be reached |
+| Save and leave | yes | no | leaves; the draft waits |
+| Finish (on the review, or on the last step) | yes | every step | `Done`, or sends the person to the first step that fails |
+
+Back, the stepper and Save and leave skip the browser's own checks (`formnovalidate`), so a half typed step is never lost. A step the person has pressed Next on shows its errors every time it is drawn. A step they only passed through shows none.
+
+Pressing Enter in a field presses Next: the first button in the form is a hidden copy of it, so Enter never lands on the first step of the stepper.
+
+## The stepper
+
+The wizard draws a [Stepper](/docs/components/stepper/) of its steps, with their states worked out from the draft each time the page is drawn: **done** when the step has been tried and its rules hold, **error** when it was tried and they don't, **upcoming** when it can be reached, **disabled** when an earlier step is not done. Because the rules run again from what is stored, a rule that depends on the day turns a step back to error by itself.
+
+Steps are done in order by default. `.free()` lets them be opened in any order; Finish still checks every step. `.review()` ends with a summary. `.vertical()` puts the stepper at the side.
+
+An **optional** step (`WizardStep::of::<Extras>(...).optional()`) can be passed over without opening it. If it holds an answer, however the person left it (Next, Back, the stepper or Save), the answer must be valid: the stepper shows the step as having an error, the steps after it stay closed, the review flags it, and Finish refuses it. A step left with nothing in it is skipped.
+
+## The review
+
+<UiPreview example="wizard/review" />
+
+The review step shows every step's answers as text: a choice by its label, a switch as Yes or No, empty answers as a dash. Each step has an Edit button that opens it. A step that is not valid is marked, so the review can't hide a problem. Passwords and files are never shown.
+
+## The draft
+
+<UiPreview example="wizard/errors" />
+
+A `Draft` is plain data, with `serde`: an id, a revision, the step the person is on, and each step's last answers. Keep it where you keep other things. `MemoryDrafts` holds drafts in memory, bounded in count and in age, for tests and for an app with one process: when it is full, a new draft takes the place of the one touched longest ago (an owner at their limit of 100 gives up their own oldest first), so a full store never locks everyone else out. A person whose draft was forgotten finds nothing when they come back, as with one past its age. For a real app, implement `DraftStore` over a table: `load`, `save` and `discard`, with an owner on each, so one person's draft id finds nothing for another person.
+
+```rust
+use navree::ui::flow::{Draft, DraftError, DraftStore};
+
+// `save` is a compare and swap: with `None` the draft must be new, with
+// `Some(revision)` the stored one must still be at that revision, else
+// `DraftError::Conflict`.
+```
+
+What a draft holds is limited, since it is built from what a visitor posts: at most 256 KiB in all, 64 KiB for one value and 1,000 values for one step. A post that would go past that is refused and changes nothing. Only the fields of the step are kept, so extra fields in a post go nowhere.
+
+**Passwords and files are read to check the step and are never kept.** A step with a password in it is done if it passed when it was tried; the person types the password again if they leave and return, and what it got wrong is kept as words, not as the value. A rule's words can say the value back ("hunter2 is on the list of common passwords"), so the value is replaced with dots in the words before they are kept. If the wizard's last act needs a password, ask for it in the form that finishes, not in a step.
+
+## Two windows, and a double click
+
+Every form carries the draft's revision. A post made from an older revision, because the draft changed in another window, is refused with `WizardOutcome::Stale`: nothing is changed, and the app draws the draft as it is now with `page.stale()`, which says so. Nothing typed in the other window is lost.
+
+`Finish` marks the draft submitted and returns `Done` once. A second post of Finish, even at the same moment, is refused: a draft that is submitted takes nothing more, and the store's compare and swap lets only one of two simultaneous posts be saved. Make the record in the branch that got `Done`, then discard the draft. If making the record fails, `draft.reopen()` opens it again.
+
+## Reading the answers
+
+After `Done`, read each step as its own struct, with its rules run again:
+
+```rust
+let basics: Basics = draft.read("basics")?;
+```
+
+## Without JavaScript
+
+Nothing in a wizard needs a script. With the runtime, a step moves in place, the buttons show a pending state and the page does not reload; without it, every move is a post and a redirect to the next address.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The step's heading has `tabindex="-1"`, and the page title carries the step's name (`page.title_text()`), so a screen reader announces a new step when the page changes.
+- Errors are on their fields, as in any [form](/docs/ui/forms/).
+- The stepper's buttons and the step's buttons are in the tab order in the page's order: the stepper first, then the fields, then Back, Save and leave and Next.
+- The hidden copy of Next that makes Enter work is `aria-hidden`, has no tab stop and is never drawn.
+
+</UiA11y>
+
+## API
+
+### Wizard
+
+<UiProps type="Wizard" />
+
+### WizardStep
+
+<UiProps type="WizardStep" />
+
+### WizardStepOf
+
+<UiProps type="WizardStepOf" />
+
+### WizardPage
+
+<UiProps type="WizardPage" />
+
+### WizardOutcome
+
+<UiProps type="WizardOutcome" />
+
+### WizardAction
+
+<UiProps type="WizardAction" />
+
+### WizardLabels
+
+<UiProps type="WizardLabels" />
+
+### Draft
+
+<UiProps type="Draft" />
+
+### MemoryDrafts
+
+<UiProps type="MemoryDrafts" />

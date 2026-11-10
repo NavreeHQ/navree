@@ -1,0 +1,625 @@
+---
+title: "Media"
+description: "Attach files to models in collections, make responsive image variants, fetch remote files safely, unpack zips, read PDF and DOCX, and process video."
+---
+
+## Quick start
+
+The smallest setup: turn the feature on, let a model declare a collection and attach a file to it. The rest of the page explains each part.
+
+```toml title="Cargo.toml"
+navree = { version = "1", features = ["media"] }
+```
+
+```rust
+impl HasMedia for Course {
+    const MEDIA_TYPE: &'static str = "Course";
+    const MEDIA_TABLE: &'static str = "courses";
+    fn media_key(&self) -> String { self.id.to_string() }
+    fn media_collections(c: &mut MediaCollections) { c.collection("thumbnail").single_file().accepts(["image/*"]); }
+}
+// src/app.rs: .module(MediaModule::from_config()); the owning module: imports = [MediaModule::for_feature::<Course>()]
+let item = media.add(course.model(), "thumbnail", MediaSource::bytes(file_name, bytes)).save(&uow).await?;
+```
+
+The module needs `StorageModule` for the disks and `DatabaseModule` for the `media` table. [Models and collections](#models-and-collections) lists what a collection can do.
+
+## Introduction
+
+<Badge feature="media" /> Sooner or later a model needs files: a course has a thumbnail and attachments, a news post a gallery, a brand a logo, a knowledge base the documents it answers from. `navree-media` attaches files to your models and does the work around them:
+
+```rust
+let item = media
+    .add(course.model(), "thumbnail", MediaSource::bytes(file_name, bytes))
+    .property("alt", "The course cover")
+    .save(&uow)
+    .await?;
+Ok(Json(media.resource(&item).await?))
+```
+
+- **Collections.** A model declares named collections (`thumbnail`, `attachments`) that accept certain types, cap the size, and keep one file or the latest few. The type is sniffed from the content, never taken from the client.
+- **Rows and files.** Each file is a row of the `media` table (`MediaRecord`, a [navree-orm](/docs/orm/getting-started/) model) and bytes on a [storage](/docs/digging-deeper/storage/) disk, written in the request's unit of work and deleted with it.
+- **Image conversions.** Thumbnails, crops, WebP copies, greyscale and blurred versions, and responsive variants with a ready `srcset`, generated on a [queue](/docs/digging-deeper/queues/) worker and regenerated with `media:regenerate`. Originals lose their EXIF, XMP and text metadata, and SVG logos are rendered with resvg.
+- **Remote files.** `MediaSource::url` downloads through the [HTTP client](/docs/digging-deeper/http-client/) and its SSRF guard, capped in size and time.
+- **Archives.** `Archive` opens zip files with zip-slip, symlink, encryption and size-bomb guards and unpacks them to a disk, a SCORM package to the directory it is served from.
+- **Text.** `text::extract` reads PDF, DOCX, HTML and plain text, page by page, for [search](/docs/packages/search/) and [retrieval](/docs/ai/embeddings-and-rag/).
+- **Video and audio** (feature `media-ffmpeg`): an FFmpeg sidecar reads durations and sizes, grabs poster frames and transcodes to MP4, WebM, MP3 or M4A.
+- **Tests.** `MediaFake` runs the real pipeline on memory disks and rows, with fake downloads and a fake FFmpeg, and records what was added and deleted.
+
+## Installation
+
+The `media` feature of the `navree` facade is opt-in: it is not part of `full`, because the image codecs, the SVG renderer and the document readers add to your build. Turn it on by name, and add `media-ffmpeg` for video and audio:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["media"] }
+# or, with video and audio:
+navree = { version = "1", features = ["media-ffmpeg"] }
+```
+
+It brings `navree::media` (the `navree-media` crate) and puts `MediaModule`, `Media`, `HasMedia` and `ModuleBuilderMediaExt` in the prelude. Every codec is pure Rust: nothing to install for images, archives and text. `media-ffmpeg` runs the `ffmpeg` and `ffprobe` programs, which must be on the server.
+
+Add `MediaModule` to your app root, after the modules it builds on:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(StorageModule::from_config())
+    .module(QueueModule::from_config())
+    .module(MediaModule::from_config()) // section `media`
+    // ...
+```
+
+The module is global and provides `Arc<Media>` and `MediaOptions`. It needs `StorageModule` (the disks) and `DatabaseModule` (the `media` table, from the `media` migration set), unless `media.store` is `memory`. With `QueueModule`, conversions run on a worker; without it, while the file is added. With `HttpClientModule`, remote files are downloaded through the app's client and its SSRF policy; without it, through a client with the default policy. The app fails to boot when the options are invalid, `media.disk` names a disk storage doesn't have, or the `database` store has no database.
+
+## Configuration
+
+Every key is optional:
+
+```toml title="config/app.toml"
+[media]
+store = "database"            # where rows are kept: database or memory
+disk = "public"               # the disk originals go to (default: storage's default disk)
+conversions_disk = "public"   # the disk conversions go to (default: the original's)
+prefix = "media"              # an item's files live under {prefix}/{id}/
+max_file_size = 26214400      # 25 MiB; a collection can lower it
+queue_conversions = true      # generate conversions on the queue
+queue = "media"               # the queue conversion jobs go to (default: default)
+strip_metadata = true         # remove EXIF, XMP, IPTC and text metadata from originals
+delete_with_model = true      # delete a model's media when it is deleted
+url_ttl_secs = 3600           # temporary URLs in resources, for disks without a public URL
+download_timeout_secs = 30    # the longest a remote download may take
+
+[media.images]
+max_pixels = 50000000         # larger images are refused before they are decoded
+responsive_widths = [320, 640, 960, 1280, 1920, 2560]
+
+[media.archives]
+max_entries = 10000
+max_entry_bytes = 536870912   # 512 MiB
+max_total_bytes = 2147483648  # 2 GiB
+max_ratio = 200               # the highest compression ratio of an entry over 1 MiB
+
+[media.ffmpeg]                # with media-ffmpeg
+ffmpeg = "/usr/bin/ffmpeg"    # default: ffmpeg on the PATH
+ffprobe = "/usr/bin/ffprobe"  # default: ffprobe on the PATH
+timeout_secs = 600            # each run is killed after this
+threads = 2                   # encoder threads; 0 lets FFmpeg choose
+```
+
+FFmpeg starts with a clean environment. `ffmpeg` and `ffprobe` get only `PATH`, the temporary directory (`TMPDIR`; `TEMP` and `TMP` on Windows, where a tool without them would write its temporary files in the Windows directory) and, on Windows, `SystemRoot`, so a file they open cannot reach the server's secrets through the process. A build that needs `LD_LIBRARY_PATH` goes behind a wrapper script named in `media.ffmpeg.ffmpeg`.
+
+From the environment: `APP_MEDIA__DISK=public`, `APP_MEDIA__QUEUE=media`, `APP_MEDIA__IMAGES__RESPONSIVE_WIDTHS=480,960,1440` (lists are comma-separated), `APP_MEDIA__FFMPEG__FFMPEG=/usr/bin/ffmpeg`. `MediaModule::for_root(MediaOptions { .. })` takes the same options in code. An invalid value fails the boot with a message that names the key.
+
+## Models and collections
+
+A model gets media by implementing `HasMedia`: a stable type name for the `model_type` column, the record's key, and the collections it accepts.
+
+```rust title="src/modules/courses/model.rs"
+use navree::media::{Conversion, Fit, HasMedia, MediaCollections, OutputFormat};
+
+impl HasMedia for Course {
+    const MEDIA_TYPE: &'static str = "Course";
+    const MEDIA_TABLE: &'static str = "courses";
+
+    fn media_key(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn media_collections(collections: &mut MediaCollections) {
+        collections
+            .collection("thumbnail")
+            .single_file()
+            .accepts(["image/*"])
+            .conversion(Conversion::new("card").fit(Fit::Cover, 640, 360).format(OutputFormat::WebP));
+        collections
+            .collection("attachments")
+            .accepts(["application/pdf", "image/*", "text/*"])
+            .max_size(10 * 1024 * 1024);
+        collections.collection("scorm").accepts(["application/zip"]).disk("packages");
+    }
+}
+```
+
+| Collection method | What it does |
+|---|---|
+| `single_file()` | Keeps one file: adding a new one deletes the previous one |
+| `only_keep_latest(n)` | Keeps the `n` newest files |
+| `accepts([..])` | Exact types (`application/pdf`) or families (`image/*`), sniffed from the content; everything by default |
+| `max_size(bytes)` | The largest file, never more than `media.max_file_size` |
+| `disk(name)`, `conversions_disk(name)` | The disks this collection's files go to |
+| `conversion(Conversion)` | A conversion generated for every file of the collection ([conversions](#conversions)) |
+
+A model that declares no collections accepts any collection name with the module's limits. Collection names are 1 to 100 letters, digits, `-` and `_`; conversion names are lower-case.
+
+Register the model in the feature module that owns it:
+
+```rust title="src/modules/courses/mod.rs"
+#[module(imports = [MediaModule::for_feature::<Course>()])]
+pub struct CoursesModule;
+```
+
+Registration checks the collection and conversion names at boot, lets `media:regenerate` and queue workers find the model's conversions, and, with `MEDIA_TABLE` set, deletes a course's media when the course is deleted ([deleting](#deleting-media)). Adding a file also registers its model, but only in the process that adds it: register every model that has conversions, so a worker or a command that never added a file knows them. In a hand-written module, `m.media_model::<Course>()` does the same.
+
+`MEDIA_TYPE` is stored with every row: keep it stable, or rows of the old name lose their model.
+
+## Adding files
+
+Inject `Arc<Media>` and start with `add(model, collection, source)`. The source is where the file comes from:
+
+| `MediaSource` | The file |
+|---|---|
+| `bytes(file_name, bytes)` | Bytes in memory: a multipart upload's field |
+| `url(url)` | A remote `http` or `https` file ([remote files](#remote-files)) |
+| `disk(disk, path)` | A file already on a storage disk, such as a [direct upload](/docs/digging-deeper/storage/#direct-uploads); copied, not moved |
+| `file(path)` | A file on the local filesystem: imports and seeders |
+
+A multipart upload goes through the request's unit of work:
+
+```rust title="src/modules/courses/controller.rs"
+use navree::http::extract::Multipart;
+use navree::media::{Media, MediaResource, MediaSource};
+use navree::prelude::*;
+
+#[injectable]
+pub struct CourseMediaController {
+    media: Arc<Media>,
+}
+
+#[controller("/courses", version = "1")]
+impl CourseMediaController {
+    /// Replaces the course's thumbnail with the first file of the form.
+    #[post("/{id}/thumbnail")]
+    #[authenticated]
+    async fn thumbnail(
+        &self,
+        uow: Uow,
+        Path(id): Path<Uuid>,
+        mut form: Multipart,
+    ) -> Result<Json<MediaResource>> {
+        let course = Course::find_or_fail(&uow, id).await?;
+        let field = form
+            .next_field()
+            .await?
+            .ok_or_else(|| AppError::bad_request("thumbnail should not be empty"))?;
+        let file_name = field.file_name().unwrap_or("thumbnail").to_owned();
+        let bytes = field.bytes().await?;
+        let item = self
+            .media
+            .add(course.model(), "thumbnail", MediaSource::bytes(file_name, bytes))
+            .property("alt", course.title.clone())
+            .save(&uow)
+            .await?;
+        Ok(Json(self.media.resource(&item).await?))
+    }
+}
+```
+
+`save` does everything in order, and either all of it happens or nothing is kept:
+
+1. Reads the source, refusing an empty file and anything over the collection's size limit.
+2. Sniffs the type from the content and checks it against `accepts`. A renamed executable is not an image; a file `infer` doesn't recognise is `text/*` when it is UTF-8 text, `application/octet-stream` otherwise.
+3. For JPEG, PNG, GIF, WebP, BMP and SVG: reads the width and height, and removes the original's metadata ([what is removed](#original-images)). A file that claims one of these types and doesn't decode is refused (`invalid_image`).
+4. Writes the original to `{prefix}/{id}/{file_name}` on the collection's disk. The id is a UUID v7; the file name is the uploaded one with directories, control characters and `/\:*?"<>|` removed, at most 200 bytes.
+5. Generates the conversions that run now ([queued or not](#queued-conversions)), writes the row, deletes the files a `single_file` or `only_keep_latest` collection no longer keeps (after the unit of work commits), and queues the other conversions.
+
+`PendingMedia` takes `name(..)` (the display name, by default the file name without its extension), `file_name(..)` (the stored name, sanitized the same way) and any number of `property(key, value)` for your own data (`alt`, `caption`, `credit`), kept in the row's `custom_properties`.
+
+With `save(&uow)`, the row and the queued job are part of the unit of work: a rollback leaves no row and no job. The files are written at once; when the unit of work rolls back afterwards, they stay on the disk without a row. `save(None)` writes the row on its own, joining the current unit of work when the code runs inside one.
+
+## Remote files
+
+`MediaSource::url` re-hosts a file from another server, a logo a customer pasted or an image from a feed:
+
+```rust
+let logo = media
+    .add_from_url(brand.model(), "logo", "https://cdn.example.com/brand/logo.svg")
+    .save(&uow)
+    .await?;
+```
+
+The download goes through the app's `HttpClient`, so its [SSRF guard](/docs/digging-deeper/http-client/#the-ssrf-policy) refuses private, loopback, link-local and cloud metadata addresses, on every redirect too (`remote_file_blocked`). Only `http` and `https` URLs are downloaded. The size limit is checked against `Content-Length` and again while the body streams, so a large file stops at the limit (`payload_too_large`), and `media.download_timeout_secs` caps the whole download. A server error or a timeout is `remote_file_unavailable`. The file name comes from `Content-Disposition`, else from the URL's last segment. Error messages show the URL without its query string, so a token in a signed URL never reaches a response or a log.
+
+## Reading media
+
+```rust
+let thumbnail = media.first(course.model(), "thumbnail").await?;  // Option<MediaItem>
+let attachments = media.get(course.model(), "attachments").await?; // in order
+let everything = media.all(course.model()).await?;                 // by collection, then order
+let item = media.find_or_fail(id).await?;                          // 404 when missing
+```
+
+A `MediaItem` is one row: `id`, `model_type`, `model_id`, `collection`, `name`, `file_name`, `mime_type`, `disk`, `conversions_disk`, `path`, `size`, `width` and `height` (images and video), `conversions` (the generated ones, by name), `metadata` (what was read from the file, such as a video's `duration`), `custom_properties`, `order`, `created_at` and `updated_at`. `has_conversion(name)`, `property(key)`, `is_image()`, `is_video()` and `is_audio()` answer the usual questions.
+
+`media.list(&MediaQuery { .. })` selects rows by model type, model key, collection and ids, and pages in id order with `after` and `limit`. For anything else, query the table with navree-orm; it is yours to read:
+
+```rust
+use navree::media::MediaRecord;
+
+let large_pdfs = MediaRecord::query()
+    .where_(MediaRecord::MIME_TYPE.eq("application/pdf"))
+    .where_(MediaRecord::SIZE.gt(5_000_000))
+    .get(&db)
+    .await?;
+```
+
+Change media through `Media`, which keeps the files and the rows in step.
+
+## Presenting media
+
+`media.resource(&item)` is the item as an API returns it, with a URL for the original, one for each generated conversion, and a `srcset` for each responsive one:
+
+```json title="200 OK"
+{
+  "__type": "Media",
+  "id": "0199c4f1-3a2b-7c10-9d8e-5f4a3b2c1d0e",
+  "collection": "gallery",
+  "name": "launch",
+  "file_name": "launch.jpg",
+  "mime_type": "image/jpeg",
+  "size": 482113,
+  "width": 2400,
+  "height": 1600,
+  "url": "https://cdn.example.com/media/0199c4f1-3a2b-7c10-9d8e-5f4a3b2c1d0e/launch.jpg",
+  "conversions": {
+    "hero": "https://cdn.example.com/media/0199c4f1-3a2b-7c10-9d8e-5f4a3b2c1d0e/conversions/launch-hero.jpg"
+  },
+  "srcsets": {
+    "hero": "https://cdn.example.com/media/0199c4f1-.../responsive/launch-hero-320.jpg 320w, https://cdn.example.com/media/0199c4f1-.../responsive/launch-hero-640.jpg 640w, https://cdn.example.com/media/0199c4f1-.../conversions/launch-hero.jpg 1920w"
+  },
+  "custom_properties": { "alt": "The launch event" },
+  "order": 1,
+  "created_at": "2026-10-27T09:41:12.204Z"
+}
+```
+
+On a disk with a `public_url`, the URLs are public. On a disk without one (a private bucket, a local disk served by nobody), they are [temporary URLs](/docs/digging-deeper/storage/#temporary-urls) that last `media.url_ttl_secs`: signed by the provider on cloud disks, served by the storage route on local and memory disks. `__type` lets front-end permission checks read the subject type.
+
+The parts are there on their own too:
+
+| `Media` method | Returns |
+|---|---|
+| `url(&item)` | The original's public URL (`NoPublicUrl` on a disk without one) |
+| `conversion_url(&item, name)` | A conversion's public URL |
+| `srcset(&item, name)` | `url 320w, url 640w, ...` for a responsive conversion, with public URLs |
+| `temporary_url(&item, expires_at)` | An expiring link to the original |
+| `temporary_conversion_url(&item, name, expires_at)` | An expiring link to a conversion |
+| `read(&item)`, `read_conversion(&item, name)` | The bytes |
+
+## Changing and deleting media
+
+```rust
+let mut item = media.find_or_fail(id).await?;
+item.name = "Quarterly report".into();
+item.custom_properties.insert("caption".into(), json!("Q3 2026"));
+media.save(&uow, &item).await?;               // name, custom properties and order only
+
+media.reorder(&uow, &[third, first, second]).await?;  // order 1, 2, 3
+```
+
+`save` writes the item's `name`, `custom_properties` and `order`; the files, paths and conversions are the module's and stay as they are.
+
+### Deleting media
+
+```rust
+media.delete(&uow, id).await?;                          // one item; false when it did not exist
+media.clear(&uow, course.model(), "attachments").await?; // a collection
+media.delete_all(&uow, course.model()).await?;           // every file of the model
+```
+
+The rows go in the unit of work; the files (the original, its conversions and responsive variants, everything under `{prefix}/{id}/` on both disks) are deleted after it commits, so a rollback keeps them. Without a unit of work they go at once.
+
+When a model registered with `MediaModule::for_feature` names its `MEDIA_TABLE`, deleting one of its rows takes its media along: a change observer deletes the rows in the same transaction and the files after the commit. It sees deletes that record change events (a navree-orm record's `delete`, `Model::destroy`); bulk deletes from the query builder record none, so delete their media with `delete_all` first. Models with a `deleted_at` column keep their media when they are deleted, since a soft delete and a force delete look the same to the observer: call `delete_all` when you force-delete one. `media.delete_with_model = false` turns the observer off.
+
+## Conversions
+
+A conversion is a file generated from the original. Declare it on a collection; every file of the collection gets it:
+
+```rust
+use navree::media::{Conversion, Fit, OutputFormat};
+
+collections
+    .collection("gallery")
+    .accepts(["image/*"])
+    .conversion(Conversion::new("thumb").fit(Fit::Cover, 320, 320).format(OutputFormat::WebP))
+    .conversion(Conversion::new("hero").width(1920).responsive())
+    .conversion(Conversion::new("preview").width(48).blur(4.0).nonqueued());
+```
+
+| `Conversion` method | What it does |
+|---|---|
+| `width(px)`, `height(px)` | At most this wide or high; the other side follows the aspect ratio |
+| `fit(Fit, width, height)` | A box: `Contain` fits inside it (the default), `Cover` fills it and crops the overflow evenly, `Fill` stretches to it |
+| `upscale()` | Lets smaller images grow to the box (by default they keep their size; SVGs always scale) |
+| `format(OutputFormat)` | `Jpeg`, `Png` or `WebP` (lossless); by default JPEG, PNG and WebP keep theirs and other images become PNG. JPEG flattens transparency onto white |
+| `quality(1..=100)` | The JPEG quality (default 82) |
+| `greyscale()`, `blur(sigma)` | Filters |
+| `responsive()` | Also generates a copy for each width of `media.images.responsive_widths` below the conversion's own width, for `srcset` |
+| `nonqueued()`, `queued()` | Generates this one while the file is added, or on the queue, whatever `media.queue_conversions` says |
+| `frame_at(secs)` | For video: the frame the image is made from ([video](#video-and-audio)) |
+| `transcode(Transcode)` | For video and audio: re-encodes the file instead ([video](#video-and-audio)) |
+
+Images are decoded with a pixel limit (`media.images.max_pixels`) and their EXIF orientation applied, resized with SIMD (`fast_image_resize`, Lanczos), filtered and encoded without copying any metadata. SVGs are rendered with resvg at the conversion's size, without loading external files or URLs. Image conversions apply to JPEG, PNG, GIF (the first frame), WebP, BMP and SVG originals, and with `media-ffmpeg` to video frames; a PDF in a collection with a thumbnail conversion has no thumbnail.
+
+Generated files live next to the original: `{prefix}/{id}/conversions/{name of the file}-{conversion}.{ext}`, responsive copies under `{prefix}/{id}/responsive/`, on the collection's conversions disk. Each is recorded on the row with its path, type, size, width, height and variants.
+
+### Queued conversions
+
+With a queue in the app and `media.queue_conversions` on (the default), `save` stores the file and its row and dispatches one `media.conversions` job (`GenerateConversions`) on `media.queue` for the item's queued conversions, in the same unit of work. A worker generates them and saves them on the row; until then `has_conversion` is `false` and the resource has no URL for them. Conversions marked `nonqueued()` are generated before `save` returns, so a small preview is there at once. Without a queue, every conversion runs while the file is added.
+
+A conversion that runs while the file is added and fails fails the add, and nothing is kept. A queued one that fails is retried (three attempts with backoff; each attempt may take 15 minutes, enough for a transcode); an item deleted before its job runs is skipped. The job writes only the conversions onto the row, so a rename made meanwhile stays.
+
+### Original images
+
+With `media.strip_metadata` on (the default), originals lose what they say about the person who made them before they are stored: the EXIF and XMP segments, IPTC and comments of JPEGs, the `eXIf`, `tEXt`, `zTXt`, `iTXt` and `tIME` chunks of PNGs, and the `EXIF` and `XMP ` chunks of WebP files. Colour profiles stay. The bytes are cut out without re-encoding, except for photos whose EXIF orientation turns them: those are decoded, turned upright and re-encoded in their own format, since the orientation is part of what is removed. `width` and `height` are the displayed size.
+
+### Regenerating
+
+Change a conversion and generate it again for the files you already have:
+
+```sh
+navree media:regenerate                                   # every conversion of every item, here and now
+navree media:regenerate --model Course --collection thumbnail --only card
+navree media:regenerate --missing                         # only conversions not generated yet
+navree media:regenerate --id 0199c4f1-3a2b-7c10-9d8e-5f4a3b2c1d0e
+navree media:regenerate --queue                           # one batch of jobs on media.queue
+```
+
+```text
+Generated 214 conversions of 107 media items
+```
+
+`--queue` dispatches one [batch](/docs/digging-deeper/batches-and-operations/) named `media.regenerate`, one job per item, with `allow_failures` so one broken file doesn't cancel the rest; the command prints the batch id. In code, `media.regenerate(&Regenerate { .. })` does the work page by page and returns a `RegenerateReport` (items, conversions, and the items that failed with their errors), and `media.queue_regenerate(&filter)` dispatches the batch and returns the `JobBatch`, or `None` when nothing needs converting. `media.convert(id, only)` converts one item now.
+
+### Images without a model
+
+The image functions work on bytes too, in `navree::media::images`:
+
+```rust
+use navree::media::images::{self, ImageOptions};
+use navree::media::{Conversion, Fit, OutputFormat};
+
+let options = ImageOptions::default();
+let info = images::probe(&upload)?;                            // type, width, height
+let png = images::rasterize_svg(&logo_svg, Some(512), None, &options)?;
+let avatar = images::convert(
+    &upload,
+    info.mime_type,
+    &Conversion::new("avatar").fit(Fit::Cover, 256, 256).format(OutputFormat::WebP),
+    &options,
+)?;
+let clean = images::strip_metadata(&upload, info.mime_type, &options)?; // None: nothing to remove
+```
+
+`convert` returns a `ConvertedImage` with `bytes`, `mime_type`, `extension`, `width`, `height` and the responsive `variants`. These functions are CPU-bound: call them from `tokio::task::spawn_blocking` in a request, as `Media` does.
+
+## Archives
+
+`Archive` opens a zip file and checks every entry before you read one: no absolute paths, drive letters, `..` segments or control characters (zip slip), no symbolic links, no encrypted entries, no duplicates, and the declared sizes within `media.archives`. Reading an entry checks the bytes it actually inflates to as well, so a forged header gets nowhere.
+
+```rust
+use navree::media::archive::{Archive, ArchiveLimits};
+
+let mut package = Archive::open(bytes, &ArchiveLimits::default())?;
+if !package.contains("imsmanifest.xml") {
+    return Err(AppError::bad_request("not a SCORM package"));
+}
+let manifest = package.read("imsmanifest.xml")?;
+for entry in package.files() {
+    println!("{} ({} bytes)", entry.path, entry.size);
+}
+```
+
+A SCORM package uploaded as media unpacks to the directory it is served from:
+
+```rust
+let package = media
+    .add(course.model(), "scorm", MediaSource::bytes(file_name, bytes))
+    .save(&uow)
+    .await?;
+let report = media
+    .unpack(&package, "public", &format!("scorm/{}", package.id))
+    .await?;
+// report.files: ["scorm/0199.../imsmanifest.xml", "scorm/0199.../sco/index.html", ...]
+```
+
+`media.open_archive(&item)` opens an item's archive with the configured limits, and `Archive::extract_to(&disk, prefix)` writes every file under a prefix, checking the total again as it goes. Each entry is inflated on Tokio's blocking pool, so a large package does not hold up the task that awaits it. To build one, `ZipBuilder::new()` takes `file(path, bytes)` and `directory(path)` and refuses unsafe names; `media.zip(&items)` puts the originals of several items in one archive, naming duplicates `report (2).pdf`.
+
+| Limit | Default | Refused with |
+|---|---|---|
+| `max_entries` | 10 000 | `TooManyEntries`; the count the end of the archive declares is read before any entry is held |
+| `max_entry_bytes` | 512 MiB | `EntryTooLarge` |
+| `max_total_bytes` | 2 GiB | `TooLarge` |
+| `max_ratio` | 200 to 1, for entries over 1 MiB | `Ratio` (a zip bomb) |
+
+A `0` turns a limit off.
+
+## Text extraction
+
+`text::extract(bytes, mime_type)` reads the text of a document, for a search index or the passages of a knowledge base:
+
+```rust
+use navree::media::text;
+
+let document = media.extract_text(&item).await?; // or text::extract(&bytes, "application/pdf")?
+for (number, page) in document.pages.iter().enumerate() {
+    index.add(item.id, number + 1, page);
+}
+```
+
+| Type | What comes out |
+|---|---|
+| PDF | The text of each page in reading order (strings on one baseline form a line; right-to-left lines read from the right); the title from the document information |
+| DOCX | Paragraphs on their own lines, tabs and breaks kept; the title from the core properties |
+| HTML, XHTML | The visible text, blocks on their own lines, scripts and styles skipped; the `<title>` |
+| `text/*` | The text, byte-order mark and `\r\n` removed |
+
+`ExtractedText` has `text` (the whole document, whitespace collapsed, PDF pages separated by a blank line), `pages`, `title` and the `mime_type` it was read as. A type it doesn't read is sniffed from the content first; one that is still unsupported is `unsupported_media_type` (415), and a damaged document `invalid_document`. `text::supports(mime_type)` tells you in advance. Scanned PDFs have no text to extract: they need OCR, which this module doesn't do. PDFs are read with the `navree-pdf` reader that `Pdf::text` uses, and held to the same limits (see [Document limits](/docs/packages/documents-limits/#reading-text)): the document's objects in 256 MiB, a page's content in 64 MiB and 128 MiB of work (every operation, character code and object looked up costs some), the fonts' `ToUnicode` maps capped and counted, glyph names over 127 bytes unread; a PDF over one is `invalid_document`, and so is one that needs a password to open.
+
+## Video and audio
+
+<Badge feature="media-ffmpeg" /> With `media-ffmpeg`, video and audio files are probed when they are added, and conversions can grab frames and transcode. The work runs in `ffmpeg` and `ffprobe`, started as child processes without a shell and killed after `media.ffmpeg.timeout_secs`. Inputs are opened with `-protocol_whitelist file`, so a crafted upload (a playlist hidden in a container) cannot make FFmpeg fetch URLs. The tools start with an empty environment except `PATH`, the temporary directory (`TMPDIR`, or `TEMP` and `TMP` on Windows, so that temporary files go where your server puts them and not in the Windows directory) and, on Windows, `SystemRoot`, so a file they read cannot reach your `APP_KEY`, database URL or other secrets through the process. Only the ones your server has set are passed on. If your FFmpeg build needs more (`LD_LIBRARY_PATH` for a bundled copy, say), point `media.ffmpeg.ffmpeg` and `media.ffmpeg.ffprobe` at small wrapper scripts that set it. FFmpeg still parses whatever people upload: run it with the least privileges you can, in its own container or as a user that can read nothing else.
+
+```rust
+use navree::media::video::Transcode;
+
+collections
+    .collection("videos")
+    .accepts(["video/*"])
+    .conversion(Conversion::new("poster").fit(Fit::Cover, 1280, 720).format(OutputFormat::Jpeg).frame_at(2.0))
+    .conversion(Conversion::new("web").transcode(Transcode::mp4().height(720)));
+collections
+    .collection("recordings")
+    .accepts(["audio/*"])
+    .conversion(Conversion::new("web").transcode(Transcode::m4a()));
+```
+
+- **Probe.** An added video or audio file gets `width` and `height` (turned for phone videos recorded sideways) and `metadata.duration`, `metadata.video_codec` and `metadata.audio_codec`. When FFmpeg is missing or fails, the file is still added, without them, and a warning is logged.
+- **Poster frames.** An image conversion on a video takes the frame at `frame_at` seconds (default 1 s, or the middle of a shorter video) and converts it like any image.
+- **Transcodes.** `Conversion::transcode` re-encodes with a preset, adjusted as you need:
+
+| `Transcode` | Container | Video | Audio |
+|---|---|---|---|
+| `mp4()` | MP4, index at the front for streaming | H.264, CRF 23, preset `medium`, `yuv420p` | AAC 128k |
+| `webm()` | WebM | VP9, CRF 32 | Opus 96k |
+| `mp3()` | MP3 | none | MP3 192k |
+| `m4a()` | M4A | none | AAC 128k |
+
+`.height(720)` scales (the width follows, rounded to an even number), `.crf(..)`, `.preset(..)` and `.audio_bitrate(..)` tune the encoder, `.max_duration(secs)` keeps the start (previews), `.without_audio()` drops the sound, and `.arg(..)` adds FFmpeg output arguments.
+
+Transcodes are slow: keep them queued (the default), on a queue with workers sized for them (`media.queue`). `Ffmpeg` is also there on its own, as `media.ffmpeg()` or `Ffmpeg::new(FfmpegOptions)`, with `probe(path)`, `frame(input, secs, output)`, `transcode(input, output, &transcode)` and `version()`.
+
+## Errors
+
+Return a `MediaError` from a handler with `?`. A refused file answers with a status and a `code` of its own; everything else is a 500 whose details stay in the logs:
+
+| `MediaError` | Status | `code` | When |
+|---|---|---|---|
+| `UnknownCollection` | 400 | `unknown_media_collection` | The model declares collections, and not this one |
+| `TypeNotAllowed` | 400 | `file_type_not_allowed` | The collection doesn't accept the sniffed type |
+| `TooLarge` | 413 | `payload_too_large` | Over the collection's or `media.max_file_size` |
+| `Empty` | 400 | `empty_file` | The file has no content |
+| `Download` | 400 | `remote_file_unavailable` | A remote file failed: status, connection or timeout |
+| `Blocked` | 400 | `remote_file_blocked` | The SSRF guard refused the address, or the scheme isn't `http(s)` |
+| `Image` | 400 | `invalid_image` | The image doesn't decode, or has too many pixels |
+| `Archive(..)` | 400, 404 or 413 | `invalid_archive`, `unsafe_archive`, `archive_too_large`, `not_found` | See `ArchiveError` |
+| `Text` | 400 | `invalid_document` | A damaged PDF or DOCX |
+| `Unsupported` | 415 | `unsupported_media_type` | Text extraction of a type it doesn't read |
+| `NotFound` | 404 | `media_not_found` | No item has this id |
+| `MissingConversion` | 404 | `conversion_not_found` | The item has no generated conversion of this name |
+| `NoPublicUrl`, `Ffmpeg`, `File`, `Queue`, `Storage(..)`, `Db(..)`, `Orm(..)` | 500 | `internal_error` | A disk, the database, the queue or FFmpeg failed |
+
+## Testing
+
+`MediaFake` is the real `Media` on a memory disk named `media` and memory rows, with every conversion generated at once, remote downloads answered by a fake HTTP server, FFmpeg answered by `FfmpegFake`, and every add and delete recorded:
+
+```rust title="tests/course_media.rs"
+use navree::media::MediaFake;
+
+#[tokio::test]
+async fn uploading_a_thumbnail_makes_a_card() {
+    let fake = MediaFake::new().register::<Course>();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(CoursesModule)
+        .override_value(Arc::new(fake.media()))
+        .build()
+        .await;
+
+    // ... create a course and post a PNG to /api/v1/courses/{id}/thumbnail ...
+
+    fake.assert_added("Course", "thumbnail");
+    fake.assert_added_with(|item| item.has_conversion("card"));
+    let item = &fake.added()[0];
+    assert!(fake.storage().default_disk().exists(&item.path).await.unwrap());
+}
+```
+
+The fake replaces `Media` wherever it is injected, so the app needs neither `MediaModule` nor `StorageModule` for it.
+
+- `fake.added()`, `assert_added(model_type, collection)`, `assert_added_with(predicate)`, `assert_added_count(n)` and `assert_nothing_added()` check adds; `fake.deleted()` and `assert_deleted(id)` check deletes.
+- `fake.http()` is the `FakeServer` remote files come from: `fake.http().on(Method::GET, "https://cdn.example.com/*", FakeResponse::new(200).body(png))`. An unstubbed URL fails as unreachable.
+- `fake.ffmpeg()` (with `media-ffmpeg`) answers `ffprobe` with a 10-second 1280x720 H.264 video by default (`probe_json(..)` sets another), writes frames of the probed size and placeholder transcodes, records every run (`assert_ran`) and can `fail(..)`. To keep the real `Media` and fake only FFmpeg, override `Arc<dyn FfmpegRunner>` with `FfmpegFake::new().runner()`.
+- `MediaFake::with_options(MediaOptions { .. })` takes options (its disks are always the memory disk).
+
+To test with the real store, use `TestApp::builder().temp_database()` (a SQLite file, so the test build needs the `sqlite` feature: [database tests](/docs/testing/database-tests/#a-database-for-every-test)) and `StorageModule` with a memory disk: the migrations create `media`, and queued conversions are dispatched to whatever queue the app has (a `QueueFake` records them, and `GenerateConversions { .. }.handle(ctx)` runs one). Outside an app, `Media::builder(storage).options(..).register::<Course>().build()?` builds the service on your disks with memory rows.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `media.store` | `database` | `database` (the `media` table) or `memory` |
+| `media.disk` | storage's default disk | The disk originals go to |
+| `media.conversions_disk` | the original's | The disk conversions go to |
+| `media.prefix` | `media` | Files live under `{prefix}/{id}/` |
+| `media.max_file_size` | `26214400` (25 MiB) | The largest file |
+| `media.queue_conversions` | `true` | Generate conversions on the queue |
+| `media.queue` | `default` | The queue of `media.conversions` jobs and regeneration batches |
+| `media.strip_metadata` | `true` | Remove metadata from JPEG, PNG and WebP originals |
+| `media.delete_with_model` | `true` | Delete a registered model's media with it |
+| `media.url_ttl_secs` | `3600` | Temporary URLs in resources |
+| `media.download_timeout_secs` | `30` | Remote downloads |
+| `media.images.max_pixels` | `50000000` | Larger images are refused |
+| `media.images.responsive_widths` | `[320, 640, 960, 1280, 1920, 2560]` | Widths of responsive variants |
+| `media.archives.max_entries` | `10000` | Entries of an archive |
+| `media.archives.max_entry_bytes` | `536870912` (512 MiB) | One unpacked entry |
+| `media.archives.max_total_bytes` | `2147483648` (2 GiB) | All entries unpacked |
+| `media.archives.max_ratio` | `200` | Compression ratio of an entry over 1 MiB |
+| `media.ffmpeg.ffmpeg`, `media.ffmpeg.ffprobe` | `ffmpeg`, `ffprobe` | The programs |
+| `media.ffmpeg.timeout_secs` | `600` | One run |
+| `media.ffmpeg.threads` | `0` (FFmpeg chooses) | Encoder threads |
+
+| `Media` method | |
+|---|---|
+| `add(&model, collection, source)`, `add_from_url(&model, collection, url)` | A `PendingMedia`; `save(uow)` stores it |
+| `get`, `first`, `all`, `find`, `find_or_fail`, `list(&query)` | Reading |
+| `resource`, `url`, `conversion_url`, `srcset`, `temporary_url`, `temporary_conversion_url` | Presenting |
+| `read`, `read_conversion` | The bytes |
+| `save(uow, &item)`, `reorder(uow, &ids)` | Name, custom properties and order |
+| `delete(uow, id)`, `clear(uow, &model, collection)`, `delete_all(uow, &model)` | Deleting |
+| `convert(id, only)`, `regenerate(&filter)`, `queue_regenerate(&filter)` | Conversions |
+| `extract_text`, `open_archive`, `unpack`, `zip` | Documents and archives |
+| `register::<M>()`, `options()`, `storage()`, `store()`, `ffmpeg()` | The service |
+
+The `media` table: `id` (UUID; `BINARY(16)` on MySQL), `model_type`, `model_id`, `collection`, `name`, `file_name`, `mime_type`, `disk`, `conversions_disk`, `path`, `size`, `width`, `height`, `conversions`, `metadata` and `custom_properties` (JSON; `JSONB` on PostgreSQL), `order_column`, `created_at` and `updated_at`, indexed by `(model_type, model_id, collection)`. Rows are kept by a `MediaStore`: `DatabaseStore` or `MemoryStore`, or your own through `Media::builder(..).store(..)`; its `delete_owner(&Uow, model_type, model_id)` runs in the unit of work the change observer was given.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/storage/" title="File storage">
+    The disks media files live on, signed links and direct uploads.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Where conversions are generated.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/http-client/" title="HTTP client">
+    The SSRF guard remote files are downloaded through.
+  </LinkCard>
+  <LinkCard href="/docs/packages/documents/" title="Documents">
+    PDF and Word files from your templates and data.
+  </LinkCard>
+  <LinkCard href="/docs/ai/embeddings-and-rag/" title="Embeddings and RAG">
+    Answering from the text of your documents.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,26 @@
+{
+  "name": "@navree/deepmerge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Recursive merge of plain objects and arrays with deepmerge's API, and no key that reaches a prototype. The front-end installs use it for the `deepmerge` that Nitro's bundler asks for.",
+  "license": "MIT OR Apache-2.0",
+  "main": "./index.cjs",
+  "types": "./index.d.cts",
+  "exports": {
+    ".": {
+      "types": "./index.d.cts",
+      "default": "./index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

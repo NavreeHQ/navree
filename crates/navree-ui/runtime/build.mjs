@@ -1,0 +1,241 @@
+// Builds navree-ui's browser assets into ../dist and writes ../src/assets_gen.rs.
+// The output is committed, so `cargo build` never needs Node. `--check` fails
+// when the committed output differs from a fresh build.
+//
+//   npm ci && node build.mjs [--check]
+
+import { build } from "esbuild";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { brotliCompressSync, gunzipSync, gzipSync, constants } from "node:zlib";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const crate = join(here, "..");
+const dist = join(crate, "dist");
+const check = process.argv.includes("--check");
+const TARGET = ["chrome135", "firefox144", "safari26"];
+
+/** FNV-1a, 64 bits, as hex: the same function as `assets::content_hash`. */
+function hash(bytes) {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of bytes) {
+    h ^= BigInt(byte);
+    h = BigInt.asUintN(64, h * 0x100000001b3n);
+  }
+  return h.toString(16).padStart(16, "0").slice(0, 12);
+}
+
+/** @param {string} entry @param {Record<string, string>} [define] */
+async function js(entry, define = {}) {
+  const out = await build({
+    entryPoints: [join(here, "src", entry)],
+    bundle: true,
+    minify: true,
+    format: "esm",
+    target: TARGET,
+    write: false,
+    legalComments: "none",
+    define,
+  });
+  return Buffer.from(out.outputFiles[0].contents);
+}
+
+/**
+ * The sources in `styles` that only one module's parts use. Each is a sheet of its own, named after the
+ * module's script with `-styles` and linked by the same bit, and is left out of the sheet every page loads.
+ * A page links them after that sheet, in this order, which is the order of their names.
+ */
+const MODULE_STYLES = {
+  "table-styles": ["25-table.css"],
+  "select-styles": ["27-select.css"],
+  "phone-styles": ["28-phone.css"],
+  "slider-styles": ["31-slider.css"],
+  "menus-styles": ["32-menus.css"],
+  "split-styles": ["33-split.css"],
+  "tree-styles": ["33-tree.css"],
+  "lazy-styles": ["35-lazy.css"],
+  "toolbar-styles": ["35-toolbar.css"],
+  "dates-styles": ["36-dates.css"],
+  "time-styles": ["36-time.css"],
+};
+const OWNED = new Set(Object.values(MODULE_STYLES).flat());
+
+async function css() {
+  // Sources are concatenated in name order, tokens first; a module's own are not.
+  const dir = join(crate, "styles");
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".css") && !OWNED.has(f))
+    .sort((a, b) => (a === "tokens.css" ? -1 : b === "tokens.css" ? 1 : a.localeCompare(b)));
+  const source = files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+  const out = await build({
+    stdin: { contents: source, loader: "css" },
+    minify: true,
+    target: TARGET,
+    write: false,
+    legalComments: "none",
+  });
+  return Buffer.from(out.outputFiles[0].contents);
+}
+
+/** A stylesheet of its own from `styles/extra` (or `from`): the named files, in order. @param {string[]} names */
+async function extraCss(names, from = join(crate, "styles", "extra")) {
+  const source = names.map((f) => readFileSync(join(from, f), "utf8")).join("\n");
+  const out = await build({ stdin: { contents: source, loader: "css" }, minify: true, target: TARGET, write: false, legalComments: "none" });
+  return Buffer.from(out.outputFiles[0].contents);
+}
+
+// A page with no script: the browser fetches links marked safe when the pointer rests
+// on them, and those marked eager as soon as it can.
+const speculation = Buffer.from(
+  JSON.stringify({
+    prefetch: [
+      {
+        source: "document",
+        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch]" }, { not: { selector_matches: "[data-ui-noboost],[download],[data-ui-prefetch=eager]" } }] },
+        eagerness: "moderate",
+      },
+      {
+        source: "document",
+        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch=eager]" }, { not: { selector_matches: "[data-ui-noboost],[download]" } }] },
+        eagerness: "eager",
+      },
+    ],
+  }),
+);
+
+const FONT = hash(readFileSync(join(crate, "assets/fonts/geist.woff2")));
+// The phone module loads the plans from beside itself, by their hashed name.
+const PHONE_DATA = readFileSync(join(here, "src", "phone-data.json"));
+const PHONE_DATA_FILE = JSON.stringify(`phone-data-${hash(PHONE_DATA)}.json`);
+
+/** name, extension, content type, bytes, and the crate feature that ships it */
+const FILES = [
+  ["core", "js", "text/javascript; charset=utf-8", await js("core.js")],
+  ["sidebar", "js", "text/javascript; charset=utf-8", await js("sidebar.js")],
+  ["overlay", "js", "text/javascript; charset=utf-8", await js("overlay.js")],
+  ["table", "js", "text/javascript; charset=utf-8", await js("table.js")],
+  ["live", "js", "text/javascript; charset=utf-8", await js("live.js")],
+  ["select", "js", "text/javascript; charset=utf-8", await js("select.js")],
+  ["dates", "js", "text/javascript; charset=utf-8", await js("dates.js")],
+  ["date-text", "js", "text/javascript; charset=utf-8", await js("date-text.js")],
+  ["time", "js", "text/javascript; charset=utf-8", await js("time.js")],
+  ["menus", "js", "text/javascript; charset=utf-8", await js("menus.js")],
+  ["slider", "js", "text/javascript; charset=utf-8", await js("slider.js")],
+  ["tree", "js", "text/javascript; charset=utf-8", await js("tree.js")],
+  ["toolbar", "js", "text/javascript; charset=utf-8", await js("toolbar.js")],
+  ["split", "js", "text/javascript; charset=utf-8", await js("split.js")],
+  ["keys", "js", "text/javascript; charset=utf-8", await js("keys.js")],
+  ["lazy", "js", "text/javascript; charset=utf-8", await js("lazy.js")],
+  ["sortable", "js", "text/javascript; charset=utf-8", await js("sortable.js")],
+  ["upload", "js", "text/javascript; charset=utf-8", await js("upload.js")],
+  ["otp", "js", "text/javascript; charset=utf-8", await js("otp.js")],
+  ["carousel", "js", "text/javascript; charset=utf-8", await js("carousel.js")],
+  ["menubar", "js", "text/javascript; charset=utf-8", await js("menubar.js")],
+  ["charts", "js", "text/javascript; charset=utf-8", await js("charts.js")],
+  ["islands", "js", "text/javascript; charset=utf-8", await js("islands.js")],
+  ["parts", "js", "text/javascript; charset=utf-8", await js("parts.js")],
+  ["genui", "js", "text/javascript; charset=utf-8", await js("genui.js")],
+  ["phone", "js", "text/javascript; charset=utf-8", await js("phone.js", { PHONE_DATA_FILE }), "phone"],
+  // The numbering plans the phone module formats with, written by
+  // crates/navree-phone/tools/metadata.mjs.
+  ["phone-data", "json", "application/json", PHONE_DATA, "phone"],
+  ["navree-ui", "css", "text/css; charset=utf-8", Buffer.from((await css()).toString().replaceAll("geist.woff2", `geist-${FONT}.woff2`))],
+  ["speculation", "json", "application/speculationrules+json", speculation],
+  // The theme builder's styles, linked only where the builder is drawn.
+  ["theme-builder", "css", "text/css; charset=utf-8", await extraCss(["theme-builder-tokens.css", "theme-builder.css"])],
+  // The styles of Markdown and of a code block, linked only where one is drawn.
+  ["markdown", "css", "text/css; charset=utf-8", await extraCss(["markdown.css"])],
+  // A module's own styles are named after its script, with `-styles`, and share its bit.
+  ["upload-styles", "css", "text/css; charset=utf-8", await extraCss(["upload.css"])],
+  ["otp-styles", "css", "text/css; charset=utf-8", await extraCss(["otp.css"])],
+  ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
+  ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
+  ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
+  // The styles of the parts that need no script, and of the parts module's own.
+  ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
+];
+// The sheets of `MODULE_STYLES`, each from its sources in `styles`; the phone's ships with its feature.
+for (const [name, sources] of Object.entries(MODULE_STYLES)) {
+  FILES.push([name, "css", "text/css; charset=utf-8", await extraCss(sources, join(crate, "styles")), name === "phone-styles" ? "phone" : undefined]);
+}
+
+/** Files kept byte for byte: no compression gain, or already compressed. */
+const STATIC = [
+  ["geist", "woff2", "font/woff2", "assets/fonts/geist.woff2"],
+  ["favicon", "svg", "image/svg+xml", "assets/favicon.svg"],
+];
+
+const outputs = new Map();
+const entries = [];
+for (const [name, ext, type, bytes, feature] of FILES) {
+  const file = `${name}.${ext}`;
+  outputs.set(file, bytes);
+  outputs.set(`${file}.gz`, gzipSync(bytes, { level: 9 }));
+  outputs.set(
+    `${file}.br`,
+    brotliCompressSync(bytes, {
+      params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_MODE]: constants.BROTLI_MODE_TEXT },
+    }),
+  );
+  entries.push({ name, ext, type, file, hash: hash(bytes), compressed: true, path: `../dist/${file}`, feature });
+}
+for (const [name, ext, type, path] of STATIC) {
+  entries.push({ name, ext, type, file: `${name}.${ext}`, hash: hash(readFileSync(join(crate, path))), compressed: false, path: `../${path}` });
+}
+const buildId = hash(Buffer.from(entries.map((e) => e.hash).join("")));
+
+const url = (e) => `/_navree/ui/${e.name}-${e.hash}.${e.ext}`;
+let rust = "// Generated by runtime/build.mjs. Do not edit: run `node build.mjs` in crates/navree-ui/runtime.\n\nuse crate::assets::Asset;\n\n";
+rust += `/// The hash of all the assets: the build a page and an ops response belong to.\npub const BUILD: &str = "${buildId}";\n\n`;
+/** A file that ships only with a crate feature. */
+const cfg = (e, indent = "") => (e.feature ? `${indent}#[cfg(feature = "${e.feature}")]\n` : "");
+for (const e of entries) {
+  rust += `/// The URL of \`${e.file}\`.\n${cfg(e)}pub const ${e.name.toUpperCase().replace(/-/g, "_")}_URL: &str = "${url(e)}";\n\n`;
+}
+rust += `/// The \`Speculation-Rules\` header's value: the rule file's URL, quoted.
+pub const SPECULATION_HEADER: &str = "\\"${url(entries.find((e) => e.name === "speculation"))}\\"";
+
+`;
+rust += "/// Every file.\npub static FILES: &[Asset] = &[\n";
+for (const e of entries) {
+  rust += `${cfg(e, "    ")}    Asset {\n        name: "${e.name}",\n        ext: "${e.ext}",\n        hash: "${e.hash}",\n        content_type: "${e.type}",\n        bytes: include_bytes!("${e.path}"),\n`;
+  rust += e.compressed
+    ? `        gzip: Some(include_bytes!("${e.path}.gz")),\n        brotli: Some(include_bytes!("${e.path}.br")),\n`
+    : "        gzip: None,\n        brotli: None,\n";
+  rust += "    },\n";
+}
+rust += "];\n";
+
+const gen = join(crate, "src", "assets_gen.rs");
+if (check) {
+  const stale = [];
+  for (const [file, bytes] of outputs) {
+    const path = join(dist, file);
+    if (!existsSync(path)) {
+      stale.push(`dist/${file}`);
+      continue;
+    }
+    const committed = readFileSync(path);
+    // Node's gzip output depends on the zlib its machine runs, so a .gz is checked by
+    // what it holds: the file's own bytes. Every other output is compared byte for byte.
+    const current = file.endsWith(".gz") ? gunzipSync(committed).equals(outputs.get(file.slice(0, -3))) : committed.equals(bytes);
+    if (!current) stale.push(`dist/${file}`);
+  }
+  if (!existsSync(gen) || readFileSync(gen, "utf8") !== rust) stale.push("src/assets_gen.rs");
+  if (stale.length) {
+    console.error(`stale: ${stale.join(", ")}\nrun: node build.mjs`);
+    process.exit(1);
+  }
+  console.log("up to date");
+} else {
+  rmSync(dist, { recursive: true, force: true });
+  mkdirSync(dist, { recursive: true });
+  for (const [file, bytes] of outputs) writeFileSync(join(dist, file), bytes);
+  writeFileSync(gen, rust);
+}
+for (const [file, bytes] of outputs) {
+  if (!file.endsWith(".gz")) continue;
+  const base = file.slice(0, -3);
+  console.log(`${base.padEnd(20)} ${String(outputs.get(base).length).padStart(7)} raw ${String(bytes.length).padStart(7)} gzip ${String(outputs.get(`${base}.br`).length).padStart(7)} br`);
+}

@@ -1,0 +1,224 @@
+//! [`QueueModule`].
+
+use std::sync::Arc;
+
+use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
+use navree_contracts::{Clock, Dispatcher, JobMonitor, JobRegistration};
+use navree_db::{Db, ModuleBuilderDbExt};
+use navree_http::ModuleBuilderHttpExt;
+use navree_kernel::{
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+};
+use navree_realtime::ModuleBuilderRealtimeExt;
+use navree_schedule::ModuleBuilderScheduleExt;
+use navree_telemetry::{Telemetry, TracePolicy, TracePolicySection};
+
+use crate::operations::{QueueMonitor, authorize_channel};
+use crate::store::{DatabaseStore, MemoryStore, Store};
+use crate::{
+    Operations, OperationsController, Queue, QueueDriver, QueueOptions, QueueStore, SweepReport,
+    commands, migration,
+};
+
+/// The queue module. Global; provides and exports [`Queue`] (also as the
+/// app's `dyn Dispatcher`, so mail, events, notifications and schedules
+/// queue through it, and as the `dyn JobMonitor` behind
+/// `ctx.progress(..)`), [`Operations`] and [`QueueOptions`]; contributes
+/// the `queue` migrations (tables `jobs`, `failed_jobs`, `job_batches` and
+/// `operations`), the [`OperationsController`] routes, the private channel
+/// `operations.{id}` and the scheduled task `queue.watchdog` (every
+/// minute, in apps with `ScheduleModule`); registers the commands
+/// `queue:work [--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]`,
+/// `queue:failed`, `queue:retry <id|all>`, `queue:flush`,
+/// `queue:batches [--limit N]`, `queue:watchdog` and
+/// `queue:prune [--hours N]`.
+///
+/// Workers run the handler of every
+/// [`JobRegistration`](navree_contracts::JobRegistration) contributed by the
+/// app's modules (`m.job::<J>()`).
+///
+/// ```no_run
+/// use navree_kernel::Navree;
+/// use navree_queue::{QueueDriver, QueueModule, QueueOptions};
+///
+/// # fn main() -> Result<(), navree_kernel::BoxError> {
+/// Navree::app()
+///     .module(QueueModule::for_root(QueueOptions {
+///         driver: QueueDriver::Memory,
+///         ..QueueOptions::default()
+///     }))
+///     .run()
+/// # }
+/// ```
+///
+/// Used plainly (`.module(QueueModule)`) or through
+/// [`from_config`](QueueModule::from_config), it reads the `queue`
+/// configuration section, so the app must include `ConfigModule`. The
+/// database driver (the default) needs `DatabaseModule`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct QueueModule;
+
+impl QueueModule {
+    /// The module with explicit options (configure it once, in the app root).
+    pub fn for_root(options: QueueOptions) -> impl Module {
+        ConfiguredModule::<QueueModule, _>::for_root(options, register)
+    }
+
+    /// The module configured from section `queue` of the app configuration.
+    pub fn from_config() -> impl Module {
+        ConfiguredModule::<QueueModule, QueueOptions>::from_config(register)
+    }
+}
+
+impl Module for QueueModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        register(m, None);
+    }
+}
+
+fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
+    m.global();
+    let mut queue_deps = vec![ProviderKey::of::<QueueOptions>()];
+    match options {
+        Some(options) => {
+            if options.driver == QueueDriver::Database {
+                queue_deps.push(ProviderKey::of::<Db>());
+            }
+            let options = Arc::new(options);
+            m.factory(Factory::<QueueOptions>::new(move |_| {
+                let options = options.clone();
+                async move {
+                    options
+                        .validate()
+                        .map_err(|message| format!("invalid queue options: {message}"))?;
+                    Ok(options)
+                }
+            }));
+        }
+        None => {
+            m.config::<QueueOptions>();
+        }
+    }
+    m.exports::<QueueOptions>()
+        .factory(
+            Factory::<Queue>::new(|r: Resolver| async move {
+                let options = r.get::<QueueOptions>().await?;
+                let store = match options.driver {
+                    QueueDriver::Database => {
+                        Store::Database(DatabaseStore::new((*r.get::<Db>().await?).clone()))
+                    }
+                    QueueDriver::Memory => Store::Memory(MemoryStore::default()),
+                    QueueDriver::Redis => {
+                        let store = r.app().get_named::<dyn QueueStore>("redis").await.map_err(
+                            |error| {
+                                format!(
+                                    "queue.driver = \"redis\" needs RedisModule (navree-redis) in the app: {error}"
+                                )
+                            },
+                        )?;
+                        Store::Custom("Redis", store)
+                    }
+                };
+                let app = r.app();
+                let clock = app.try_get::<dyn Clock>().await;
+                let registrations = app
+                    .contributions::<JobRegistration>()
+                    .into_iter()
+                    .map(|c| (*c.value).clone());
+                let telemetry = Telemetry::from_app(&app).await;
+                let policy = match app.try_get::<Config>().await {
+                    Some(config) => TracePolicy::from_section(
+                        config.section_or_default::<TracePolicySection>(TracePolicy::SECTION)?,
+                        |name| std::env::var(name).ok(),
+                    )?,
+                    None => TracePolicy::default(),
+                };
+                Ok(Arc::new(
+                    Queue::new(
+                        store,
+                        (*options).clone(),
+                        clock,
+                        registrations,
+                        Some(app.downgrade()),
+                    )
+                    .instrumented(telemetry, policy),
+                ))
+            })
+            .deps(queue_deps),
+        )
+        .exports::<Queue>()
+        .factory(
+            Factory::<dyn Dispatcher>::new(|r: Resolver| async move {
+                Ok(r.get::<Queue>().await? as Arc<dyn Dispatcher>)
+            })
+            .deps(vec![ProviderKey::of::<Queue>()]),
+        )
+        .exports::<dyn Dispatcher>()
+        .factory(
+            Factory::<dyn JobMonitor>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                Ok(Arc::new(QueueMonitor { queue }) as Arc<dyn JobMonitor>)
+            })
+            .deps(vec![ProviderKey::of::<Queue>()]),
+        )
+        .exports::<dyn JobMonitor>()
+        // Operations live in the app database; an app without
+        // `DatabaseModule` still boots, and using them is
+        // `QueueError::NoDatabase`.
+        .factory(
+            Factory::<Operations>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                let options = r.get::<QueueOptions>().await?;
+                let app = r.app();
+                let db = app.try_get::<Db>().await.map(|db| (*db).clone());
+                Ok(Arc::new(Operations::new(
+                    db,
+                    queue,
+                    options.operations.clone(),
+                    Some(app.downgrade()),
+                )))
+            })
+            .deps(vec![
+                ProviderKey::of::<Queue>(),
+                ProviderKey::of::<QueueOptions>(),
+            ]),
+        )
+        .exports::<Operations>()
+        .controller::<OperationsController>()
+        .channel("operations.{id}", authorize_channel)
+        .migrations(migration::migrations());
+    #[cfg(feature = "ui")]
+    m.controller::<crate::ui::OperationProgressController>();
+    // Runs only in apps with `ScheduleModule`; inert otherwise.
+    m.schedule(|s| {
+        s.task(WATCHDOG_TASK, run_watchdog)
+            .every_minute()
+            .without_overlapping();
+    });
+    for command in commands::commands() {
+        m.command(command);
+    }
+}
+
+/// The name of the scheduled watchdog task.
+const WATCHDOG_TASK: &str = "queue.watchdog";
+
+/// One scheduled watchdog run: [`Operations::sweep`], unless
+/// `queue.operations.watchdog` is false.
+async fn run_watchdog(app: AppContext) -> Result<(), BoxError> {
+    let options = app.get::<QueueOptions>().await?;
+    if !options.operations.watchdog {
+        return Ok(());
+    }
+    let report = app.get::<Operations>().await?.sweep().await?;
+    if report != SweepReport::default() {
+        tracing::info!(
+            target: "navree::job",
+            failed = report.failed,
+            redispatched = report.redispatched,
+            finished = report.finished,
+            "watchdog swept stale operations"
+        );
+    }
+    Ok(())
+}

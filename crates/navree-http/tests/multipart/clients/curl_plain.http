@@ -1,0 +1,15 @@
+multipart/form-data; boundary=------------------------uz2PeQjkR6dsjlpA8Atjo4
+--------------------------uz2PeQjkR6dsjlpA8Atjo4
+Content-Disposition: form-data; name="a"
+
+1
+--------------------------uz2PeQjkR6dsjlpA8Atjo4
+Content-Disposition: form-data; name="f"; filename="src.bin"
+Content-Type: application/octet-stream
+
+
+--x
+file with a near miss
+--
+
+--------------------------uz2PeQjkR6dsjlpA8Atjo4--

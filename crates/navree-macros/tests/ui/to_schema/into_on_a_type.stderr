@@ -1,0 +1,5 @@
+error: #[serde(into = ..)] replaces this type's JSON, which #[derive(ToSchema)] can't see: write `impl ToSchema` by hand
+ --> tests/ui/to_schema/into_on_a_type.rs:6:8
+  |
+6 | struct Label {
+  |        ^^^^^

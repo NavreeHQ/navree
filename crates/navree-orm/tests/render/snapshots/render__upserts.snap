@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Insert\n{\n    on_conflict:\n    Some(OnConflict\n    { target: vec![Ident::new(\"name\")], action: ConflictAction::Ignore, }),\n    returning: vec![SelectItem::new(col(\"id\"))], ..tag()\n})"
+---
+PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT ("name") DO NOTHING RETURNING "id"
+  values: [String("vip"), String("gold")]
+MySQL: error: RETURNING is not supported on MySQL
+SQLite: INSERT INTO "tags" ("name", "color") VALUES (?, ?) ON CONFLICT ("name") DO NOTHING RETURNING "id"
+  values: [String("vip"), String("gold")]

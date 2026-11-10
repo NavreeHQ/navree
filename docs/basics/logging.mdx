@@ -1,0 +1,348 @@
+---
+title: "Logging"
+description: "Structured logging on tracing: levels per target, pretty or JSON output, redaction of secrets, rotating files and the per-request log line."
+---
+
+Navree logs with [tracing](https://docs.rs/tracing). `LoggerModule` (crate `navree-log`, feature `log`) installs one subscriber for the process with readable lines in development, JSON lines in production, redaction of fields that look like secrets, levels per target that you can change while the app runs, and an optional rotating log file. Every request writes one summary line, and every log line written during a request carries the request's id and user.
+
+## Getting started
+
+Apps created with `navree new` already include the module, right after `ConfigModule`:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app() -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(LoggerModule::from_config())
+        .module(HttpModule::from_config())
+        // ...
+}
+```
+
+`LoggerModule::from_config()`, or a plain `.module(LoggerModule)`, reads the `log` section of your configuration. Keep it right after `ConfigModule`: shutdown hooks run in reverse order, so the log file is flushed after every other module has logged its shutdown.
+
+To log from your own code, add `tracing` to your dependencies (the `navree` facade doesn't re-export it):
+
+```toml title="Cargo.toml"
+[dependencies]
+tracing = "0.1"
+```
+
+## Configuration
+
+Every key of the `log` section is optional:
+
+```toml title="config/app.toml"
+[log]
+format = "json"          # "pretty" or "json"; default: pretty in debug builds, json in release builds
+level = "info"           # trace, debug, info, warn, error or off
+levels = { navree_db = "debug", "navree::request" = "warn" }
+redact = [
+  "password", "passwd", "pwd", "passphrase", "secret", "token", "authorization",
+  "cookie", "credential", "dsn", "api_key", "api-key", "apikey", "private_key", "connection_string",
+]
+slow_query_ms = 200      # read by the database module
+
+[log.file]
+path = "storage/logs/navree.log"
+rotation = "daily"       # daily, hourly or never
+keep_days = 14
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `log.format` | `pretty` in debug builds, `json` in release builds | the line format on stdout and in the file |
+| `log.level` | `info` | the level of every target without its own entry |
+| `log.levels` | none | levels per target; a target covers its submodules |
+| `log.redact` | `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `api-key`, `apikey`, `private_key`, `connection_string` (the list shared with configuration, Logbook, Lighthouse, Fleet and the audit trail) | field-name fragments whose values are written as `[redacted]`; a list you set replaces the defaults |
+| `log.file` | none | a rotating log file, written in addition to stdout |
+| `log.file.path` | `storage/logs/navree.log` | the file; the date goes before the extension |
+| `log.file.rotation` | `daily` | when a new file starts (UTC) |
+| `log.file.keep_days` | `14` | how many days of files are kept (at least 1) |
+| `log.slow_query_ms` | `200` | the slow-query threshold, used when `database.slow_query_ms` isn't set |
+
+Level, format and rotation names are case-insensitive. Invalid values (an unknown level, a target with spaces, `keep_days = 0`) stop the boot with a message naming the key.
+
+Environment variables are strings, so the lists have a string form. A new app's `config/app.toml` sets `log.level`; [`.env` and real environment variables override the TOML file](/docs/getting-started/configuration/#where-settings-come-from), so all of these work from `.env`:
+
+```env
+APP_LOG__FORMAT=json
+APP_LOG__LEVEL=warn
+APP_LOG__LEVELS=navree::request=debug,sqlx=warn
+APP_LOG__LEVELS__NAVREE_QUEUE=debug
+APP_LOG__REDACT=password,token,ssn
+APP_LOG__FILE__PATH=storage/logs/app.log
+```
+
+You can also configure the module in code:
+
+```rust
+use std::path::PathBuf;
+
+use navree::log::{FileLog, LogFormat, LogOptions, Rotation};
+
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(LoggerModule::for_root(LogOptions {
+        format: LogFormat::Json,
+        level: "info".to_owned(),
+        file: Some(FileLog {
+            path: PathBuf::from("storage/logs/app.log"),
+            rotation: Rotation::Daily,
+            keep_days: 30,
+        }),
+        ..LogOptions::default()
+    }))
+```
+
+<Callout type="note" title="RUST_LOG">
+
+`LoggerModule` takes its levels from the configuration only; it doesn't read `RUST_LOG`. Use `APP_LOG__LEVEL` and `APP_LOG__LEVELS` instead. `RUST_LOG` is read by `init_for_tests` (see [testing](#testing)).
+
+</Callout>
+
+## Writing log messages
+
+Use tracing's macros. Put values in fields rather than in the message, so JSON output keeps them as data:
+
+```rust title="src/billing/service.rs"
+pub async fn charge(invoice_id: Uuid, amount_cents: i64, card_token: &str) {
+    tracing::info!(%invoice_id, amount_cents, "charging the card");
+    tracing::debug!(card_token, "gateway request prepared"); // card_token=[redacted]
+    let error = std::io::Error::other("connection reset");
+    tracing::error!(%invoice_id, error = &error as &dyn std::error::Error, "charge failed");
+}
+```
+
+```text wrap
+2026-10-26T08:28:41.431319Z  INFO my_app::billing::service: charging the card invoice_id=00000000-0000-0000-0000-000000000000 amount_cents=1250
+2026-10-26T08:28:41.431408Z DEBUG my_app::billing::service: gateway request prepared card_token=[redacted]
+2026-10-26T08:28:41.431411Z ERROR my_app::billing::service: charge failed invoice_id=00000000-0000-0000-0000-000000000000 error=connection reset
+```
+
+- `%value` records with `Display`, `?value` with `Debug`, and plain numbers, booleans and strings keep their type in JSON.
+- An `error` field holding a `&dyn std::error::Error` is written with its whole source chain in JSON output.
+- The target is your module path (`my_app::billing::service` above). Set one yourself with `target: "billing"` to group lines from several modules.
+- Records from crates that use the `log` crate are routed into tracing too.
+
+## Log levels
+
+`log.level` sets the level for everything; `log.levels` overrides it per target. A target covers everything below it, so `navree_db = "debug"` also covers `navree_db::query`. These are the main targets Navree itself writes to:
+
+| Target | What |
+|---|---|
+| `navree::request` | the request log line; app-wide request timeouts |
+| `navree::error` | 5xx responses and panics |
+| `navree::security` | rate limits hit, CSRF failures and other security events |
+| `navree::auth` | failed authentication (`DEBUG`), and problems such as a missing JWT secret or an unsent reset mail |
+| `navree_db::query` | slow queries (`WARN`), and every query (`DEBUG`) with `database.log_queries = true` |
+| `navree_db::migrate`, `navree_db::uow` | migrations, rollbacks that fail |
+| `navree::http` | the server starting and stopping, and maintenance-file problems |
+| `navree::job`, `navree::schedule`, `navree::mail`, `navree::notify`, `navree::realtime`, `navree::audit`, `navree::events`, `navree::session`, `navree::access`, `navree::storage`, `navree::api` | the module of the same name |
+
+To quiet the per-request lines in production, set `"navree::request" = "warn"`: timeouts are still logged, completed requests are not.
+
+### Changing levels at run time
+
+`LoggerModule` exports `LogControl`, which changes levels without a restart. Inject it anywhere, for example in an admin endpoint:
+
+```rust title="src/admin/log_level.rs"
+use navree::log::LogControl;
+
+#[derive(Deserialize)]
+pub struct SetLevel {
+    pub target: String,
+    pub level: String,
+}
+
+#[injectable]
+pub struct LogLevelController {
+    logs: Arc<LogControl>,
+}
+
+#[controller("/admin/log-level", version = "1")]
+#[roles("admin")]
+impl LogLevelController {
+    #[put("/")]
+    async fn update(&self, Json(input): Json<SetLevel>) -> Result<Json<String>> {
+        self.logs
+            .set_level(&input.target, &input.level)
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        Ok(Json(self.logs.directives()))
+    }
+}
+```
+
+- `set_level(target, level)` sets one target; `set_default_level(level)` sets everything else.
+- `directives()` returns the current filter, such as `info,navree_db=debug`.
+- Bad input is an error, never a broken filter: an unknown level gives `invalid log level` with the list of valid ones. Targets may only hold letters, digits, `_`, `-`, `.` and `:`, so a target can't smuggle in other filter directives.
+
+Changes apply to the running process only; the next start reads the configuration again.
+
+## Output formats
+
+### Pretty
+
+One readable line per event: the time, the level, the spans the event happened in, the target, the message and the fields. Lines are coloured when stdout is a terminal, unless `NO_COLOR` is set. A request in development looks like this:
+
+```text wrap
+2026-10-26T08:28:41.431228Z  INFO request{method=GET path=/api/v1/deals/42 request_id=01a1775378577591ae09744068208ab5 user_id=0192f0c1-0000-7000-8000-00000000000a}: my_app::deals: loading the deal deal_id=42 password=[redacted]
+2026-10-26T08:28:41.431269Z  INFO request{method=GET path=/api/v1/deals/42 request_id=01a1775378577591ae09744068208ab5 user_id=0192f0c1-0000-7000-8000-00000000000a}: navree::request: request completed method=GET route=/api/v1/deals/{id} status=200 latency_ms=0.091 request_id=01a1775378577591ae09744068208ab5 user_id=0192f0c1-0000-7000-8000-00000000000a ip=127.0.0.1
+```
+
+### JSON
+
+One JSON object per line, for log collectors:
+
+```json title="One line, formatted"
+{
+  "timestamp": "2026-10-26T08:18:20.384068Z",
+  "level": "INFO",
+  "target": "my_app::deals",
+  "fields": { "deal_id": 42, "message": "loading the deal", "password": "[redacted]" },
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span_id": "a3ce929d0e0e4736",
+  "span": {
+    "method": "GET",
+    "name": "request",
+    "path": "/api/v1/deals/42",
+    "request_id": "01a17749fe5f71caaee8974e482b5659",
+    "user_id": "0192f0c1-0000-7000-8000-00000000000a"
+  },
+  "spans": [
+    {
+      "method": "GET",
+      "name": "request",
+      "path": "/api/v1/deals/42",
+      "request_id": "01a17749fe5f71caaee8974e482b5659",
+      "user_id": "0192f0c1-0000-7000-8000-00000000000a"
+    }
+  ]
+}
+```
+
+- `timestamp` is UTC, RFC 3339. `level` is upper case.
+- `fields` holds the event's fields, the message included.
+- `trace_id` and `span_id` are the [trace](/docs/microservices/tracing/#logs-and-traces) of the request, job or scheduled task the line was written in. Both are absent outside one, and when `observe.tracing.enabled` is `false`.
+- `span` is the innermost span with its fields and `name`; `spans` lists every span from the outermost. Both are absent for events outside any span.
+
+## The request log line
+
+Every request writes one line at `INFO` on `navree::request` when it completes, with the message `request completed`:
+
+```json title="fields of the request log line"
+{
+  "ip": "127.0.0.1",
+  "latency_ms": 0.47,
+  "message": "request completed",
+  "method": "GET",
+  "request_id": "01a17749fe5f71caaee8974e482b5659",
+  "route": "/api/v1/deals/{id}",
+  "status": 200,
+  "user_id": "0192f0c1-0000-7000-8000-00000000000a"
+}
+```
+
+| Field | Value |
+|---|---|
+| `method` | the HTTP method |
+| `route` | the route **template** (`/api/v1/deals/{id}`), or `unmatched` when no route matched, so ids never end up in it |
+| `status` | the response status |
+| `latency_ms` | the time from the request arriving to the response being ready, in milliseconds |
+| `request_id` | the `X-Request-Id` of the response |
+| `user_id` | the authenticated user; absent for guests |
+| `ip` | the client address (see [proxies](/docs/basics/rate-limiting/#running-behind-a-proxy)) |
+
+Navree runs each request in a `request` span with the fields `method`, `path`, `request_id` and, once the user is known, `user_id`. Every line logged while the request runs, in your handlers and services too, carries these fields, so you can find every line of one request by its id.
+
+The request id is the client's `X-Request-Id` when it is 1 to 64 characters of letters, digits, `_` and `-`; anything else is replaced by a new UUID v7 in simple form (32 hex characters), so a client can't forge log lines through it. Either way it is echoed in the response's `X-Request-Id` header.
+
+## Redaction
+
+Before a line is written, any event or span field whose **name** contains one of the `log.redact` fragments, ignoring ASCII case, is written as `[redacted]`. With the defaults, `password`, `api_token`, `Authorization`, `session_cookie` and `client_secret` are all redacted, whatever their type. Redaction applies to every format and to the log file.
+
+```rust
+tracing::info!(user = "anu", password = "hunter2", "signed in");
+// INFO my_app: signed in user="anu" password=[redacted]
+```
+
+Setting `log.redact` replaces the default list, so include the defaults you still want:
+
+```toml title="config/app.toml"
+[log]
+redact = [
+  "password", "passwd", "pwd", "passphrase", "secret", "token", "authorization",
+  "cookie", "credential", "dsn", "api_key", "api-key", "apikey", "private_key", "connection_string",
+  "ssn", "iban",
+]
+```
+
+<Callout type="warning" title="Redaction goes by field name">
+
+Only field **names** are checked. A secret inside the message text, or in a field with an innocent name, is written as is: `tracing::info!("password is {password}")` leaks it. Keep secrets in named fields, or wrap them in `navree::contracts::Secret`, whose `Debug` and `Display` print `[redacted]`.
+
+</Callout>
+
+## Log files
+
+With `log.file` set, every line also goes to a file, rotated with [tracing-appender](https://docs.rs/tracing-appender):
+
+| `rotation` | File names | Old files |
+|---|---|---|
+| `daily` | `storage/logs/navree.2026-10-26.log` | the newest `keep_days` files are kept |
+| `hourly` | one file per hour | `keep_days × 24` files are kept |
+| `never` | `storage/logs/navree.log` | never rotated or deleted |
+
+- Relative paths are relative to the working directory; the directory is created when missing.
+- Lines in the file use `log.format` too, without colours.
+- A background thread writes the file, so logging never waits for the disk. If the disk falls behind by 128,000 lines, new file lines are dropped (stdout still gets them); `LogControl::dropped_file_lines()` counts them.
+- When the app shuts down, the module waits up to 5 seconds for queued lines to be written.
+
+## Other logs
+
+- **Server errors and panics** go to `navree::error`; see [errors](/docs/basics/errors/#logging-server-errors).
+- **Slow queries** go to `navree_db::query` at `WARN` with the SQL (never the bound values) and `elapsed_ms`. The threshold is `database.slow_query_ms`, or `log.slow_query_ms`; `0` turns it off. Set `database.log_queries = true` to log every query at `DEBUG`.
+- **Security events** (rate limits, CSRF failures) go to `navree::security` at `WARN`; with the audit module they're also written to the [audit log](/docs/security/audit-log/).
+
+## Testing
+
+Call `navree::log::init_for_tests()` at the start of a test to see log lines in the output of failing tests. It installs a pretty, colourless subscriber that writes through the test harness and takes its levels from `RUST_LOG` (`info` by default). Repeated calls do nothing.
+
+To assert on log lines, build a subscriber without installing it and capture what it writes:
+
+```rust title="tests/logging.rs"
+use navree::log::{CaptureWriter, LogFormat, LogOptions, build_subscriber};
+
+let writer = CaptureWriter::new();
+let options = LogOptions { format: LogFormat::Json, ..LogOptions::default() };
+let (dispatch, _control) = build_subscriber(&options, writer.clone())?;
+tracing::dispatcher::with_default(&dispatch, || {
+    tracing::info!(password = "hunter2", "signed in");
+});
+assert!(writer.contents().contains(r#""password":"[redacted]""#));
+```
+
+In an async test, keep the subscriber active across `.await`s with `let _guard = tracing::dispatcher::set_default(&dispatch);` in a single-threaded `#[tokio::test]`.
+
+## Limits
+
+- The subscriber is installed once per process. A second app booted in the same process (tests do this) reuses it: its `level` and `levels` apply, but its `format`, `file` and `redact` settings don't, and a warning says so.
+- If another global tracing subscriber was installed first, Navree leaves it in place, `LoggerModule` settings don't apply, and `LogControl` can't change levels.
+- `LoggerModule` writes to the console and to files. Exception tracking and alerts come from [Lighthouse](/docs/tools/lighthouse/), OpenTelemetry export from [ObserveModule](/docs/microservices/tracing/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    How 5xx errors and panics are logged.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    Config files, `.env` and `APP_*` variables.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
+    Prometheus metrics next to your logs.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    A durable trail of changes and security events.
+  </LinkCard>
+</LinkCards>

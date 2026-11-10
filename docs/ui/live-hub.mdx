@@ -1,0 +1,231 @@
+---
+title: "Live hub"
+description: "Tell every page that shows something that it changed: from a request, a queue worker or another server, scoped to the reader's user and workspace, over one connection a page that comes back from where it left off."
+---
+
+<Badge feature="realtime" /> When a deal changes, every page that shows it should show the change: the deals table of everyone in the workspace, the deal's own page, the pipeline totals in a sidebar. The live hub does that for Navree UI pages. Your code says *what* changed, as a topic, and *who* may hear it. Each page listens to the topics it shows, on one connection, and the parts of the page that show a topic fetch themselves again when it changes.
+
+The hub is part of [`RealtimeModule`](/docs/digging-deeper/broadcasting/), so a page hears what the WebSocket clients of your app hear, through the same rules: a change made in a queue worker or on another server reaches the page too.
+
+```rust
+// Anywhere: a handler, a service, a job.
+live.nudge([Topic::workspace(workspace.id(), "deals")]).await?;
+
+// On the page.
+let stream = LiveStream::topics(["deals"]);
+DataTable::new("deals", &query, &rows).live_on(stream.on("deals"))
+```
+
+## How it works
+
+- **A topic is a name.** `deals`, `deal.42`, `customer.7`: 1 to 64 letters, digits, `_`, `.` and `-`.
+- **A nudge carries no data.** It says only that a topic changed. The part of the page that shows it fetches its own source again, or with a [feed](/docs/ui/regions/#a-feed) or a [LazyList](/docs/components/lazy-list/), only what is new since its cursor. What a page shows always comes from your server, drawn for the reader under their own access, never from what a stream said.
+- **The publisher says who may hear.** A topic is published for everyone, for one user, or for the members of one workspace. The page names only the topic: the stream adds the reader's own user and workspace, so a page can't ask for another user's news or another workspace's.
+- **One connection a page.** A page names all its topics in one `LiveStream`; every live part on it shares the connection.
+- **Lazy by default.** Nothing runs for a topic nobody listens to, a page holds no connection while it is hidden, and a page that comes back after a dropped connection is told only what it missed.
+
+## Setting up
+
+Add `RealtimeModule` to the app. Nothing else is needed: it mounts the stream at `GET /broadcasting/stream` and provides `Live`, the publisher.
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(UiModule::from_config())
+    .module(RealtimeModule::from_config())
+```
+
+An app that signs people in hears all three kinds of topic. An app that signs nobody in (a public status page, a demo) hears the public ones.
+
+## Publishing
+
+Resolve `Live` (`Arc<Live>`, from `RealtimeModule`) and nudge the topics that changed:
+
+```rust title="src/deals/service.rs"
+use navree::realtime::{Live, Topic};
+
+impl DealService {
+    pub async fn move_deal(&self, uow: &Uow, workspace: Uuid, deal: &Deal) -> Result<()> {
+        // ... write the move in the unit of work ...
+        self.live
+            .nudge([
+                Topic::workspace(workspace, "deals"),
+                Topic::workspace(workspace, format!("deal.{}", deal.id)),
+            ])
+            .await?;
+        Ok(())
+    }
+}
+```
+
+| Topic | Who hears it |
+|---|---|
+| `Topic::public("status")` | Everyone who can open the page, guests included. |
+| `Topic::user(user_id, "inbox")` | That user, on every page they have open, in any workspace. |
+| `Topic::workspace(workspace_id, "deals")` | The members of that workspace, reading a page in it. |
+
+**Inside a unit of work, a nudge waits for the commit.** A page told before the commit would fetch before the change could be read, miss it, and have no reason to fetch again. So in a request handler or a job, the nudge goes out once the unit of work commits, and not at all if it rolls back. Outside one it goes at once.
+
+**From a queue worker or the scheduler.** `Live` works in every process of the app. In `queue:work` and `schedule:work` a nudge goes to the serving process through the [relay](/docs/digging-deeper/broadcasting/#broadcasting-from-workers), or to every serving process through the [Redis backplane](/docs/digging-deeper/broadcasting/#several-serving-processes):
+
+```rust title="src/deals/jobs.rs"
+impl Job for RecountPipeline {
+    const NAME: &'static str = "deals.recount_pipeline";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        // ... recount the stages ...
+        let live = ctx.app.get::<Live>().await?;
+        live.nudge([Topic::workspace(self.workspace, "pipeline")]).await
+    }
+}
+```
+
+A topic name that isn't 1 to 64 letters, digits, `_`, `.` and `-` is an error, and nothing is sent.
+
+## Listening on a page
+
+Build one `LiveStream` for the page with every topic it shows, and give each live part the names it listens for with `.on(name)`:
+
+```rust title="src/deals/pages.rs"
+use navree::ui::*;
+
+let stream = LiveStream::topics(["deals", "pipeline"]);
+
+Stack::gap(4).children((
+    Region::new("pipeline")
+        .src("/deals/fragments/pipeline")
+        .live_on(stream.on("pipeline")),
+    DataTable::new("deals", &query, &rows).live_on(stream.on("deals")),
+))
+```
+
+Every live part takes a `Live`:
+
+| Part | Method |
+|---|---|
+| [Region](/docs/ui/regions/) | `.live_on(live)`: fetched again, or asked for what is new with a feed |
+| [DataTable](/docs/ui/data-table/) | `.live_on(live)`: fetched again, keeping the reader's typing, focus and selection |
+| [LazyList](/docs/components/lazy-list/) | `.live_on(live, LazyEnd::End)`: asked for what changed since its revision, merged in place |
+| [ActivityFeed](/docs/components/activity-feed/) | `.in_region(id, src, live, cursor)`: new rows at the top |
+| `NavGroup` | `.live_on(id, src, live)`: the sidebar's counts |
+
+**Several names.** A part can listen for more than one topic: `.on("deal.42").event("clock")` fetches the deal's heading when the deal changes and when the clock ticks. Topics that change together can also be nudged together, in one `nudge`.
+
+**Names made at run time** are fine: `stream.on(format!("deal.{id}"))`.
+
+**Any other stream.** A part can still follow a server-sent event stream of your own: `Live::new("/my/stream")` (or just the address) listens for its unnamed events, `.event(name)` for named ones. The runtime treats it as described in [Regions](/docs/ui/regions/#live-from-a-stream), without the resuming below.
+
+## Workspaces and users
+
+The stream works out who is reading, for every connection:
+
+- the **user** is the one the request is signed in as (none for a guest);
+- the **workspace** is the one the [workspace module](/docs/workspaces/introduction/) resolves for the request, with the [resolvers](/docs/workspaces/resolution/) it is set up with and its membership rules: the same workspace `CurrentWorkspace` gives your handlers. A request that names a workspace the user may not enter is in none.
+
+For each topic the page names, the stream listens to the public topic, the reader's user topic and, when the request is in a workspace, that workspace's topic. A guest hears public topics only. A page can't name the channel of another user or workspace: a stream that tries is refused with `403`, and no app channel pattern may start with `navree-live.`, so no authoriser can open one either.
+
+When a user's access changes, or they sign out, [ending their subscriptions](/docs/digging-deeper/broadcasting/#disconnecting-users-when-their-access-changes) ends their streams as well: their pages come back, and are checked again.
+
+## Channels: the same rules as the API
+
+A page can also listen to your app's own realtime channels, the ones a React or Vue front end subscribes to over the WebSocket. Private and presence channels are checked by the same [channel authoriser](/docs/digging-deeper/broadcasting/#authorizing-channels):
+
+```rust
+let stream = LiveStream::topics(["pipeline"]).with_channels(["private-crm.deals"]);
+
+DataTable::new("deals", &query, &rows).live_on(stream.on("private-crm.deals"))
+```
+
+Every broadcast to the channel, from `Realtime::broadcast`, a `dyn Broadcaster`, a notification or a worker, nudges the page under the channel's name. A guest naming a private channel gets `401`, a user the authoriser refuses gets `403`, and a presence channel is listened to without joining it. A channel a page listens to must be 1 to 64 letters, digits, `_`, `.` and `-`, so it can be an event name.
+
+## Coming back after a dropped connection
+
+Every nudge has an id. When a connection drops (a train goes into a tunnel, a laptop sleeps, the server restarts), the page reconnects and sends the last id it heard. The hub tells it only what it missed since then, and every live part that missed nothing fetches nothing. A page left open for a long time on a busy hub costs one fetch per part that changed, not one per part.
+
+When the hub can't be sure what was missed, it says so and every live part fetches once, as it would for any other stream. That happens:
+
+- when the process the page reconnects to has no record that old: it keeps the last `realtime.streams.replay` broadcasts (1,024 by default) once it has served a stream;
+- when the page last heard from a process that has since restarted.
+
+Ids come from the clock of the process that sent the broadcast, and every process gives a broadcast the same id, so a page can come back to any server behind the load balancer. Because another server's clock may run a little behind, a page that comes back is also told what came in the five seconds before its last id: a nudge heard twice costs one fetch, one never heard would cost the page its news.
+
+A session that changes (another user signs in on the page) never resumes: everything on the page is fetched again for the new reader.
+
+## Backpressure and limits
+
+Sending a nudge never waits for a reader. Each stream keeps at most one unread nudge per name: a slow reader that missed ten nudges of `deals` gets one, the newest. A stream whose nudges stay unread for a minute while more come is closed, and the page comes back when it can.
+
+| Key | Default | What it does |
+|---|---|---|
+| `realtime.streams.names` | `32` | Topics and channels one stream may name. More is refused with `400`. |
+| `realtime.streams.per_user` | `16` | Streams one signed-in user may hold open at once, one per open tab. One more is refused with `429`, which the page tries again later. Guests are held by the server's connection limits. |
+| `realtime.streams.lifetime_secs` | `3600` | A stream ends after this, give or take a tenth, so streams opened together don't end together. The page comes back from its last id and is checked again. |
+| `realtime.streams.replay` | `1024` | Broadcasts kept for pages that come back. `0` keeps none: a page that comes back fetches every live part once. |
+
+Each open stream also counts against `http.server.max_connections` and `max_connections_per_ip`. Behind a reverse proxy every reader shares the proxy's address: raise the per-address limit to the number of readers you expect, and turn off response buffering for `/broadcasting/stream` (the stream sends `X-Accel-Buffering: no`, which nginx reads).
+
+## On the wire
+
+For a client other than a Navree UI page:
+
+```http
+GET /broadcasting/stream?topics=deals,pipeline&channels=private-crm.deals
+Accept: text/event-stream
+Last-Event-ID: 1730000000000-7
+```
+
+`last_event_id` in the query does the same as the header. The answer is `text/event-stream`:
+
+```text
+id: 1730000000000-7
+event: ui:resumed
+data: resumed
+
+id: 1730000000412-9
+event: deals
+data: changed
+```
+
+- The first event is `ui:resumed` when the stream resumed (what was missed follows), or `ui:live` when it started fresh (fetch everything once).
+- Each nudge's `event` is the topic's or the channel's name, its `data` the broadcast's event name (`changed` for `Live::nudge`), and its `id` what to send back to resume.
+- A comment every 15 seconds keeps a quiet stream open.
+- `204`: the request named nothing to listen to. `400`: a bad or too long list. `401` and `403`: a private channel the reader may not hear, a reserved name, or a page from an origin that isn't allowed (the same origins as the [WebSocket](/docs/digging-deeper/broadcasting/#allowed-origins)). `429`: too many streams for this user.
+
+## Testing
+
+A test can read a page's stream through the app's router and check what a change tells it:
+
+```rust title="tests/deals.rs"
+#[tokio::test]
+async fn moving_a_deal_tells_the_deals_table() {
+    let app = TestApp::builder().module(RealtimeModule::from_config())/* ... */.build().await;
+    let stream = app
+        .acting_as(principal(gurpreet))
+        .get("/broadcasting/stream?topics=deals")
+        .header("x-workspace", "ludhiana-sales")
+        .send_stream()
+        .await;
+    // Read the first event (`ui:live`), move a deal, then read `event: deals`.
+}
+```
+
+To check what your code publishes without a server, build a `Live` on a broadcaster of your own (`Live::new(Arc::new(recorder))`) and look at the channels it was asked to send to.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/ui/regions/" title="Regions and live updates">
+    How a live part fetches itself again, reconnects and shows its state.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Real-time broadcasting">
+    Channels, authorisers, the relay and the Redis backplane.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Jobs that tell pages what they changed.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/resolution/" title="Finding the workspace">
+    How a request's workspace is resolved.
+  </LinkCard>
+</LinkCards>

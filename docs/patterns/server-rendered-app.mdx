@@ -1,0 +1,126 @@
+---
+title: "Server-rendered app"
+description: "Draw your screens in Rust, in the same binary as your API: pages from typed components, forms on the session, live updates and one set of rules."
+---
+
+## Introduction
+
+In a server-rendered app, the server draws the screens. A handler returns [Navree UI](/docs/ui/overview/) components, the toolkit renders them to HTML, and the browser gets a page, one stylesheet and only the scripts that page uses. There is no front-end project to build, no second server to run and no token in the browser: a person signs in on a session cookie.
+
+The API doesn't go away. The same binary can serve JSON routes to mobile apps and partners, and pages and routes call the same modules, services and access rules.
+
+<Diagram name="server-rendered-app" />
+
+## When to choose it
+
+Choose a server-rendered app when:
+
+- the people who use it are your staff or your customers in a browser, as in an admin tool, a back office, a CRM or a support desk;
+- you want one language and one deployable, with the screens next to the services they show;
+- you want a screen to read what the server knows, without a client-side copy of it to keep in step.
+
+Choose a [backend for frontend](/docs/patterns/backend-for-frontend/) instead when you already have a web team working in Next.js or Nuxt. The two are not exclusive: a server-rendered back office and a BFF-backed customer app can share one API. [Choosing a UI](/docs/ui/choosing-a-ui/) sets the options side by side.
+
+## The shape
+
+| Party | Holds | Talks to |
+|---|---|---|
+| Browser | An `HttpOnly` session cookie, the page, a few small scripts | The app, on one origin |
+| The app | Pages, optional JSON routes, the live hub, the feature modules | The database |
+| Database | The data, and the session when you choose the database store | Nobody: it answers |
+
+The browser holds no token. Its requests carry the session cookie, and a state-changing one also carries the session's CSRF token, as a header the page's script sends or as a field in a plain form. See [sessions and CSRF](/docs/basics/sessions-and-csrf/).
+
+## A page is a handler
+
+A page handler takes the shell, the unit of work and whatever else it needs, and returns an `AppPage`. This one lists customers in a [DataTable](/docs/ui/data-table/): the search, the filters, the sort and the page are in the address, and they run in the database.
+
+```rust title="src/modules/customers/pages.rs"
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<CustomerRow>) -> Result<AppPage> {
+    let page = query
+        .load_as(Customer::query(), &uow, |record| {
+            CustomerRow::from(record.into_inner())
+        })
+        .await?;
+    Ok(shell
+        .page("Customers")
+        .crumb("Home", "/")
+        .actions(
+            Button::primary("New customer")
+                .icon(icons::PLUS)
+                .href("/customers/new"),
+        )
+        .body(customers_table(&query, &page)))
+}
+```
+
+A route says that it is a page and who may open it:
+
+```rust
+RouteDef::on(Method::GET, "!/customers", index)
+    .name("customers.index")
+    .authenticated()
+    .page(),
+```
+
+The `!` keeps the route off the API prefix. `.authenticated()` is the same declaration the API uses, so a guest is refused the same way. `.page()` makes a refusal a page: a guest gets the sign-in page with `next` set to where they were (with `ui.sign_in_redirect` on, they are sent straight there), and a 403, 404 or 500 is a page in the shell with the next step, where an API route keeps its JSON error. See [errors and states](/docs/ui/errors-and-states/).
+
+## Forms
+
+A form is one struct. The browser checks it first, the server checks it again, and a mistake that only the server can see, such as an email another customer already has, comes back under its field. A good post answers with a redirect and a toast:
+
+```rust
+Ok(Reply::redirect("/customers")
+    .toast(ToastTone::Success, format!("{} was added.", customer.name))
+    .into_response())
+```
+
+The same handler works with JavaScript off: the reply is a redirect, and a rejected form is the page again with what was typed. See [forms](/docs/ui/forms/) and [commands and ops](/docs/ui/commands-and-ops/).
+
+## Live updates
+
+A page that shows data other people change can follow it. The part of the page that shows a topic fetches itself again when the topic changes, and the new HTML morphs in without losing focus or what was typed. After a change commits, anywhere in your code, say who may hear it:
+
+```rust
+live.nudge([Topic::workspace(workspace.id(), "deals")]).await?;
+```
+
+and name the topic on the page:
+
+```rust
+let stream = LiveStream::topics(["deals"]);
+DataTable::new("deals", &query, &rows).live_on(stream.on("deals"))
+```
+
+A nudge carries no data. The page fetches what it shows from your server, drawn for the reader under their own access. See the [live hub](/docs/ui/live-hub/), [regions](/docs/ui/regions/) and, for what the browser does, [the UI runtime](/docs/architecture/ui-runtime/).
+
+## One set of rules
+
+Pages and API routes are two ways in to the same modules, so the rules are written once:
+
+- **Access.** `.authenticated()`, `.roles(..)`, `.permissions(..)` and `.can(..)` on a page route mean what `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]` mean on a JSON route, and both read the same [abilities](/docs/security/authorization/).
+- **Services.** A page calls the same service a route calls, in the request's unit of work, so a change and its events, jobs and audit entries commit together.
+- **Workspaces.** With `WorkspaceModule` in the app, a page resolves the workspace from the session and a `WorkspaceSwitcher` changes it. See [workspaces in Navree UI pages](/docs/workspaces/introduction/#workspaces-in-navree-ui-pages).
+
+## Testing
+
+`TestView` drives a page in a plain test, with no browser, and a test that boots the whole app walks a visitor through it over HTTP: sent to sign in, the table with its filters, a form with its mistakes, a good post and its toast. See [testing Navree UI pages](/docs/testing/ui-pages/).
+
+## Running it
+
+It is one binary, like any Navree app, so [Harbor](/docs/tools/harbor/) ships it the same way. It needs no Node at run time or in `cargo build`. The scripts and styles the toolkit serves are in the binary, at content-hashed addresses the browser caches for good.
+
+<LinkCards>
+  <LinkCard href="/docs/ui/overview/" title="Navree UI">
+    The components, the budgets and the security rules.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/#the-navree-ui-app" title="Start from an app">
+    `navree new shop --ui navree` writes sign-in, a table, forms and live updates.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/ui-runtime/" title="The UI runtime">
+    From the rendered tree to the screen.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    The other way to put a web app on the API.
+  </LinkCard>
+</LinkCards>

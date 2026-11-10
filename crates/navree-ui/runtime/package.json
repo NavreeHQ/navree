@@ -1,0 +1,13 @@
+{
+  "name": "navree-ui-runtime",
+  "private": true,
+  "type": "module",
+  "description": "Builds navree-ui's committed browser assets. Contributors only: cargo build needs none of this.",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

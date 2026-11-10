@@ -1,0 +1,54 @@
+---
+title: "Avatar"
+description: "A picture of a person beside their name: an image, or a neutral icon when there is none."
+---
+
+<UiPreview example="avatar/default" />
+
+`Avatar` shows a person's picture with `Avatar::image(src, alt)`, or a neutral person icon with `Avatar::placeholder(label)`. There is no way to put initials in it.
+
+```rust
+use navree::ui::*;
+
+Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh")
+```
+
+## When to use it
+
+Use an avatar next to a person's name: in a list of members, a message, the user menu.
+
+<UiChoose name="label" current="Avatar" />
+
+## Anatomy
+
+<UiAnatomy component="avatar" />
+
+## Sizes
+
+Avatars take the controls' sizes, with 4 px corners.
+
+<UiPreview example="avatar/sizes" />
+
+## When the picture fails
+
+`.fallback()` shows the person icon when the picture does not load. It needs the parts script, so a page with one loads a small script; without it a picture that fails shows the browser's own broken-image mark.
+
+```rust
+Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh").fallback()
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- An image avatar's `alt` is required. Next to the person's name, pass the name anyway: it's what a screen reader says if the picture is the only thing in a link.
+- A placeholder has `role="img"` and the label you give it.
+- Images load lazily and carry their width and height, so the page doesn't shift.
+
+</UiA11y>
+
+## API
+
+### Avatar
+
+<UiProps type="Avatar" />

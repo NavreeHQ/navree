@@ -1,0 +1,32 @@
+# Reviews are requested automatically from these owners. Pair this with a
+# branch-protection rule that requires code owner review on main. Later
+# matches win, so the general owner comes first.
+
+* @NavreeHQ/maintainers
+
+# CI, release tooling, docs, npm packages
+/.github/                    @NavreeHQ/maintainers
+/docs/                       @NavreeHQ/maintainers
+/xtask/                      @NavreeHQ/maintainers
+/packages/js/                @NavreeHQ/maintainers
+
+# Supply-chain policy and static analysis: dependency, license, ban and audit
+# configuration, the security policy, and the rules that scan the code
+/SECURITY.md                 @NavreeHQ/security
+/deny.toml                   @NavreeHQ/security
+/supply-chain/               @NavreeHQ/security
+/osv-scanner.toml            @NavreeHQ/security
+/.semgrep/                   @NavreeHQ/security
+/.gitleaks.toml              @NavreeHQ/security
+
+# Security-critical crates
+/crates/navree-auth/         @NavreeHQ/security
+/crates/navree-crypto/       @NavreeHQ/security
+/crates/navree-sso/          @NavreeHQ/security
+/crates/navree-oauth/        @NavreeHQ/security
+/crates/navree-session/      @NavreeHQ/security
+/crates/navree-access/       @NavreeHQ/security
+/crates/navree-orm/          @NavreeHQ/security
+/crates/navree-schema/       @NavreeHQ/security
+/crates/navree-db/           @NavreeHQ/security
+/crates/navree-http/         @NavreeHQ/security

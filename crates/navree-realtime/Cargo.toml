@@ -1,0 +1,59 @@
+[package]
+name = "navree-realtime"
+description = "Navree RealtimeModule: Pusher-protocol WebSocket server with public, private and presence channels, and live server-sent event streams for pages."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "websocket", "pusher", "realtime"]
+categories = ["web-programming::websocket"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Backplane messages.
+bytes = { workspace = true }
+dashmap = { workspace = true }
+# The body of a live stream.
+futures-util = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+# A live nudge inside a unit of work waits for its commit.
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
+rand = { workspace = true }
+# The relay: workers post broadcasts to the process serving the sockets.
+reqwest = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+http-body-util = { workspace = true }
+# A unit of work on SQLite, for the live nudge that waits for a commit.
+navree-db = { workspace = true, features = ["sqlite"] }
+# A paused clock, for a stream that stops reading.
+tokio = { workspace = true, features = ["test-util"] }
+tokio-tungstenite = { workspace = true }
+tower = { workspace = true }
+uuid = { workspace = true }

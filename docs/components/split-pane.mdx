@@ -1,0 +1,91 @@
+---
+title: "SplitPane"
+description: "Panes side by side or one above another, with separators people drag or move with the keys, sizes kept on your server, and one pane at a time on a phone."
+---
+
+<UiPreview example="split-pane/default" />
+
+`SplitPane` lays out two or more panes with a separator between each pair. People drag a separator, or focus it and use the arrow keys, to give a pane more room. One pane fills what the others leave. A support inbox, a mail client, a file browser and an editor with an outline are all built this way. The [support inbox example app](/showcase/inbox/) lays out its three panes with it.
+
+```rust
+use navree::ui::*;
+
+SplitPane::new("inbox")
+    .height(SplitHeight::Screen)
+    .stack_below(SplitWidth::Md)
+    .save_to("/inbox/panes")
+    .pane(Pane::new("list", "Conversations").size(30).min(22).max(45).body(list))
+    .pane(Pane::fill("thread", "Conversation").min(30).header(subject).body(messages).footer(composer))
+    .pane(Pane::new("customer", "Customer").size(26).collapsible().body(customer))
+    .current("thread")
+```
+
+## Sizes
+
+A pane's size is a percent of the split. `.min(...)` and `.max(...)` hold it, the separator stops there, and the server holds a saved size to them again. `Pane::fill` takes what the others leave and keeps its own `.min(...)`: the separators stop before they squeeze it.
+
+The server draws every size, so the first paint is already right and a page with JavaScript off keeps its layout. The content security policy forbids `style=""`, so a size is written as a whole percent the stylesheet reads, and the `split` module moves a pane through a CSS custom property while it is dragged.
+
+## Saved for each person
+
+`.save_to(url)` posts the sizes when someone changes them: after a pause, one request at a time, the latest always last. Read the post with `SplitSave`, which answers forgery as a form does, and check it against the layout with `SplitSizes`:
+
+```rust
+async fn panes(save: SplitSave, uow: Uow, me: Agent) -> Result<StatusCode> {
+    let Some(sizes) = save.sizes_for(&layout()) else {
+        return Ok(StatusCode::BAD_REQUEST);
+    };
+    keep(&uow, me.id, &sizes.to_text()).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+```
+
+Draw the next page with `layout().sizes(&SplitSizes::from_text(&kept, &layout())?)`. Sizes that no longer fit the layout are left out, so a saved size never breaks a page.
+
+## Collapsing
+
+A pane made `.collapsible()` collapses when its separator gets Enter, when it is dragged under half its least size, or from a `SplitPane::toggle` button. It comes back at the size it had. `.collapse_below(SplitWidth::Lg)` collapses it while the split is narrower than that, until someone opens it.
+
+<UiPreview example="split-pane/collapsed" />
+
+## On a phone
+
+`.stack_below(SplitWidth::Md)` shows one pane at a time below that width of the split itself: the one `.current(...)` names. The separators go. Put links between the panes for that layout, and wrap what only it needs in `SplitPane::stacked_only(...)`, such as a link back to the list.
+
+<UiPreview example="split-pane/stacked" />
+
+## One above another
+
+`.vertical()` stacks the panes, with separators moved up and down. Give the split a height.
+
+<UiPreview example="split-pane/vertical" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Each separator follows the WAI-ARIA window splitter pattern: `role="separator"`, named after the pane it moves, with `aria-valuenow`, `aria-valuemin`, `aria-valuemax` and `aria-controls`.
+- Left and Right (Up and Down for a vertical split) move it by 2%, with Shift by 10%. Home and End take the pane to its least and most size; a collapsible pane collapses on Home. Enter collapses a collapsible pane and brings it back.
+- In a right-to-left page the keys and the drag follow the reading direction.
+- Each pane is a region named by its label. A pane body made scrollable with `.body_label(...)` is a tab stop, so it scrolls from the keyboard.
+- With JavaScript off a separator is a line, not a tab stop.
+
+</UiA11y>
+
+## API
+
+### SplitPane
+
+<UiProps type="SplitPane" />
+
+### Pane
+
+<UiProps type="Pane" />
+
+### SplitSizes
+
+<UiProps type="SplitSizes" />
+
+### SplitSave
+
+<UiProps type="SplitSave" />

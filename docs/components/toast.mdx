@@ -1,0 +1,119 @@
+---
+title: "Toast"
+description: "A short message that goes by itself, raised by the server after a request, by a command in the page, or by the runtime's own failures."
+---
+
+<UiPreview example="toast/action" />
+
+A toast tells someone what just happened without taking their place on the page: a deal saved, a payment that failed. It is one piece of data, a `Toast`, and it can come from three places: the server after a request, a command in the page, and the runtime itself when a request fails. However it arrives it draws the same markup, so it looks the same.
+
+```rust
+use navree::ui::*;
+
+async fn archive(uow: Uow, id: Path<i64>) -> Result<Reply> {
+    // ...
+    Ok(Reply::ops_or_redirect("/deals").toast_with(
+        Toast::new(ToastTone::Success, "Sutlej Supply renewal moved to the archive.")
+            .title("Archived")
+            .action(ToastAction::post("Undo", format!("/deals/{id}/restore"))),
+    ))
+}
+```
+
+`Reply::toast(tone, text)` is the short form. With JavaScript on, the toast shows in the page, before any navigation the reply makes. With it off, the next page shows it: the shell reads the tone and text from a cookie and draws them as a toast. A title and an action travel only in the ops.
+
+## Tones
+
+`ToastTone::Info`, `Success`, `Warning` and `Danger`. Danger is the error toast. A danger toast is announced at once (`role="alert"`), the others politely (`role="status"`).
+
+<UiPreview example="toast/tones" />
+
+## Title, action and a name
+
+`.title(text)` adds a line in bold above the text. `.action(...)` offers one thing to do: `ToastAction::link(label, href)` goes somewhere, and `ToastAction::post(label, href)` posts, such as an Undo. A post's answer is ops, so it can raise a toast of its own, and the toast it came from goes. `.id(name)` names a toast: one with the same name replaces it and its time starts again, so "Saving…" can become "Saved." A toast has a close button unless you say `.closable(false)`; a sticky toast keeps its close button whatever you say, since it could not go otherwise. The close button is a link to the toast's own address with `role="button"`: with JavaScript off the page hides the toast that is the target, and with the runtime `Enter` and `Space` close it. A toast that the address already hides when a page loads counts as closed.
+
+## How long it stays
+
+`ToastDuration::Brief` is 3 seconds, `Normal` 5, `Long` 8 and `Sticky` until it is closed. Without `.duration(...)`, a warning, an error or a toast with an action stays 8 seconds and any other 5. Use `Sticky` only for what must not be missed, and keep its close button.
+
+The time is a CSS animation, so with no script a toast fades out by itself. Hovering a toast with a pointer that hovers, or focusing anything in it, pauses the animation, and leaving lets it run: nothing is held in script, so a missed event can't leave a toast stuck. A tab that is hidden pauses the toasts too.
+
+## The stack
+
+Toasts raised together stand one above the other, the newest by the screen's edge. Three show at a time; the rest wait, and each starts its time when it shows. On touch a toast is swiped sideways to dismiss it, and a short drag springs back.
+
+## Where they stand
+
+`Toaster::new().position(ToastPosition::TopEnd)` chooses one of six places, bottom end by default. A toaster is a labelled region that is always in the page, so a screen reader hears what is added to it. The shell puts one in every page; a page built by hand with `View` gets one made by the runtime. Set the words of its name and its close buttons with `.labels(region, dismiss)`.
+
+## From a command
+
+`Cmd::toast(tone, text)` raises a toast in the browser with no request, from any element.
+
+<UiPreview example="toast/live" />
+
+```rust
+use navree::ui::*;
+
+Button::outline("Copy link").on_click(vec![
+    Cmd::copy("https://app.example/deals/42"),
+    Cmd::toast(ToastTone::Info, "Link copied."),
+])
+```
+
+## Across a redirect
+
+A toast is not lost when the page changes. After a post that redirects, the toast shows first and stays through the navigation. When the next page is loaded for real, because the link was not boosted or the page was reloaded, the toasts still showing, with the time they have left, are handed to the next page of the site in that tab. A toast that was closed, or has ended, is not. They are kept for 30 seconds, as long as the flash cookie, and only for the person who is signed in: when the session changes in the tab, by signing out or in, the toasts showing go with it, and so do the posts they offer.
+
+A toast raised while a modal dialog is open stands inside it, above it and usable, since the page behind a modal is inert. With dialogs open over one another it stands in the top one, a toast that was showing when a dialog opened moves in with it, and the toaster returns to the page, or to the dialog below, as each closes. If a reply takes the dialog away, the toaster is back in the page first.
+
+## When to use it
+
+Use a toast for the result of something the reader just did, that needs no answer. For something about the page they are on, use an [Alert](/docs/components/alert/); for a question that needs an answer, an [AlertDialog](/docs/components/alert-dialog/); for a state on the control itself, the pending state a form and a button already show.
+
+<UiChoose name="message" current="Toast" />
+
+## Anatomy
+
+<UiAnatomy component="toast" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Alt` + `T` | Moves focus to the first toast's action or close button. |
+| `Tab` | Moves between a toast's action and close button, and on to the next toast. |
+| `Enter`, `Space` on the close button | Close that toast. |
+| `Esc` | Closes the toast with focus and returns focus to where it was. Inside a dialog the dialog stays open. |
+
+- The region has the name "Notifications" and is a direct child of the page's body, the last thing a keyboard reaches.
+- A status is announced when it is added, without moving focus; an error is announced at once.
+- A toast with an action stays long enough to reach it, and pauses while it has focus.
+- A toast raised while a dialog is open is usable once it stands inside the dialog; it comes back to the page when the dialog closes.
+- With reduced motion the toast still ends on time; it just doesn't slide.
+
+</UiA11y>
+
+## API
+
+### Toast
+
+<UiProps type="Toast" />
+
+### ToastAction
+
+<UiProps type="ToastAction" />
+
+### Toaster
+
+<UiProps type="Toaster" />
+
+### ToastDuration
+
+<UiProps type="ToastDuration" />
+
+### ToastPosition
+
+<UiProps type="ToastPosition" />

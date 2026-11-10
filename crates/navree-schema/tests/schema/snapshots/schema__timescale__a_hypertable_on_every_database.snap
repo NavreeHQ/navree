@@ -1,0 +1,33 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 26
+expression: sql
+---
+-- timescaledb
+CREATE TABLE "events" ("id" UUID NOT NULL, "workspace_id" UUID NOT NULL, "kind" VARCHAR(255) NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "payload" JSONB NOT NULL, PRIMARY KEY ("id", "occurred_at"));
+SELECT create_hypertable('events', by_range('occurred_at'));
+-- notice: the primary key of `events` is (id, occurred_at), not (id): a hypertable's unique keys must include its time column
+
+-- postgres
+CREATE TABLE "events" ("id" UUID NOT NULL, "workspace_id" UUID NOT NULL, "kind" VARCHAR(255) NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "payload" JSONB NOT NULL, PRIMARY KEY ("id", "occurred_at"));
+CREATE INDEX "events_occurred_at_index" ON "events" ("occurred_at" DESC);
+-- notice: the primary key of `events` is (id, occurred_at), not (id): a hypertable's unique keys must include its time column
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `events` is a regular table with an index on `occurred_at`
+
+-- mysql
+CREATE TABLE `events` (`id` BINARY(16) NOT NULL, `workspace_id` BINARY(16) NOT NULL, `kind` VARCHAR(255) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `payload` JSON NOT NULL, PRIMARY KEY (`id`, `occurred_at`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
+-- notice: the primary key of `events` is (id, occurred_at), not (id): a hypertable's unique keys must include its time column
+-- notice: MySQL does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`
+
+-- mariadb
+CREATE TABLE `events` (`id` BINARY(16) NOT NULL, `workspace_id` BINARY(16) NOT NULL, `kind` VARCHAR(255) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `payload` JSON NOT NULL, PRIMARY KEY (`id`, `occurred_at`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
+-- notice: the primary key of `events` is (id, occurred_at), not (id): a hypertable's unique keys must include its time column
+-- notice: MariaDB does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`
+
+-- sqlite
+CREATE TABLE "events" ("id" VARCHAR NOT NULL, "workspace_id" VARCHAR NOT NULL, "kind" VARCHAR NOT NULL, "occurred_at" DATETIME NOT NULL, "payload" TEXT NOT NULL, PRIMARY KEY ("id", "occurred_at"));
+CREATE INDEX "events_occurred_at_index" ON "events" ("occurred_at" DESC);
+-- notice: the primary key of `events` is (id, occurred_at), not (id): a hypertable's unique keys must include its time column
+-- notice: SQLite does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`

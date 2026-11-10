@@ -1,0 +1,225 @@
+---
+title: "Request lifecycle"
+description: "What happens from `cargo run -- serve` to a response: the boot, every global layer in order, the route pipeline, the handler and the way back out."
+---
+
+## Introduction
+
+You can build a Navree app without knowing what happens between a request arriving and your handler running. But when a request gets a 401 you didn't expect, or you need to decide where a piece of middleware belongs, it helps to know the order of things.
+
+This page follows an app from the command line to a running server, then follows one request through every layer of the pipeline to your handler and back out. Each stage links to the page that covers it in depth.
+
+## Booting the app
+
+### The command line
+
+An app's `main` builds the root modules and calls `run`:
+
+```rust title="src/main.rs"
+use navree::prelude::*;
+
+fn main() -> Result<(), BoxError> {
+    crm_api::app(ConfigSources::defaults()).run()
+}
+```
+
+`run` starts a multi-threaded Tokio runtime, starts listening for Ctrl-C (and `SIGTERM` on Unix), and reads the first command-line argument:
+
+| Command | What happens |
+|---|---|
+| `check [--graph]` | Validates the module graph without constructing anything, then exits |
+| `help` or `list` | Prints every command, without booting |
+| A registered command (`serve`, `migrate`, `queue:work`, ...) | Boots the app, runs the command, shuts the app down |
+| No command | Runs `serve` when a module registers it (`HttpModule` does), otherwise `help` |
+
+An unknown command fails before anything boots.
+
+### Building the module graph
+
+The kernel calls each module's `register` method once, starting from the root modules and following their imports. A module configured with `for_root` or `from_config` replaces plain imports of the same module. Then it validates the whole graph before constructing anything: every dependency must be visible, there must be no cycles, no singleton may depend on a request-scoped provider, and command names must be unique. Every problem found is reported together, each naming the module and the type. See [modules](/docs/architecture/modules/#boot-time-checks).
+
+### Constructing the container
+
+Next, every singleton is built, module by module in dependency order, so a module's imports are ready before the module itself. A provider's constructor receives its dependencies already built. `ConfigModule` loads the configuration first, `DatabaseModule` connects (and, with `database.migrate_on_boot`, migrates), and so on. Request-scoped and transient providers aren't built yet. See [providers](/docs/architecture/providers/).
+
+### Lifecycle hooks
+
+Then `on_init` runs for every provider that registered lifecycle hooks, followed by `on_bootstrap` for all of them. `HttpModule` uses its `on_bootstrap` to build the router once and check every route: a route without an access declaration, a route mounted twice, or a route that needs an authenticator the app doesn't have stops the boot here, before any port is bound. See [lifecycle hooks](/docs/architecture/lifecycle-hooks/).
+
+### Serving
+
+Finally the command runs. `serve` builds the router, binds `http.addr` (`127.0.0.1:8080` by default, or `--addr HOST:PORT`) and logs `listening on http://127.0.0.1:8080`. From here, every request goes through the pipeline below, until a shutdown signal starts the [graceful shutdown](/docs/architecture/lifecycle-hooks/#graceful-shutdown). Before that, the server itself bounds what a client can hold: a head that takes too long or a connection left idle never reaches the pipeline. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
+
+## The life of a request
+
+<Diagram name="request-lifecycle" />
+
+`navree-http` assembles the pipeline in `build_router`. A request passes through these layers, outermost first, and the response passes back through them in reverse:
+
+```text
+request
+ │
+ ├─ Edge slot          protocols that share the port but not the pipeline (gRPC)
+ ├─ request context    request id, client IP, tracing span; request log and metrics on the way out
+ ├─ CORS               only when http.cors.allowed_origins is set
+ ├─ panic catcher      a panicking handler becomes a 500
+ ├─ timeout            http.timeout_secs (30 s); a route's own timeout can extend it
+ ├─ security headers   http.security_headers
+ ├─ compression        http.compression
+ ├─ error rendering    Navree's JSON error shape, error mappers, 5xx logs
+ ├─ maintenance mode   503 while the maintenance file exists
+ ├─ per-IP rate limit  http.per_ip_rate_limit requests per minute (600)
+ ├─ Session slot       navree-session, when the app uses it
+ ├─ AuthContext slot   the app's Authenticator first, then the slot's other layers
+ ├─ Uow slot           navree-db's unit of work, then the slot's other layers
+ ├─ Context slot       request context for handlers (the locale), innermost
+ ├─ router             404 or 405 when no route matches
+ └─ route pipeline     body length, authentication, throttle, guards, authorization,
+                       route timeout, handler, audit action
+```
+
+The fixed layers always run in this order. Modules add their own layers only in the five slots; see [middleware](/docs/basics/middleware/).
+
+### Request context
+
+The outermost layer sets up what every other layer relies on:
+
+- **The request id.** An incoming `X-Request-Id` is kept if it's 1 to 64 characters of letters, digits, `-` and `_`; anything else is replaced by a new id (a UUID v7 as 32 hex digits). The id is put back in the request headers and in the request extensions as a `RequestId`, and every response carries it in `X-Request-Id`.
+- **The client IP.** Taken from the connection, or from `X-Forwarded-For` / `X-Real-IP` when the peer is a trusted proxy (`http.trusted_proxies`). It's stored as a `ClientIp`; see [requests](/docs/basics/requests/#the-client-ip-and-trusted-proxies).
+- **The app.** The `AppContext` and a fresh `RequestScope` go into the request extensions, so extractors can resolve providers and `Scoped<T>` gets one instance per request.
+- **A tracing span** named `request`, with the method, the path and the request id; the user id is added once the request is authenticated. Every log line written during the request carries these fields.
+
+On the way out, this layer writes one log line per request (target `navree::request`, message `request completed`) with the method, the route template, the status, the latency in milliseconds, the request id, the user id and the IP. It also records the `http_requests_total` counter and the `http_request_duration_seconds` histogram, labelled by method, route and status, whenever a `metrics` recorder is installed: [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) installs one and exports them to Prometheus. Without a recorder the labels aren't built at all.
+
+### CORS, panics and timeouts
+
+- **CORS** answers preflight requests (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) and adds the CORS headers for the origins listed in `http.cors.allowed_origins`; other origins get no CORS headers. With no origins listed (the default), there is no CORS layer. Because it sits outside the error layer, error responses get the CORS headers too. See [CORS and security headers](/docs/basics/cors-and-security-headers/).
+- **The panic catcher** turns a panic anywhere further in into a 500 `"Internal server error"`. The panic message is logged on target `navree::error`, never sent to the client.
+- **The timeout** gives every request `http.timeout_secs` (30 seconds by default). A request that runs out of time gets a 503 with the message `"The server did not finish the request in time."`. A route with its own `#[timeout]` can be shorter or longer: a longer one moves this deadline.
+
+### Security headers and compression
+
+- **Security headers** (`http.security_headers`, on by default) adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security: max-age=31536000; includeSubDomains` and a `Content-Security-Policy` of `default-src 'none'; frame-ancestors 'none'; base-uri 'none'` to every response that doesn't set them itself.
+- **Compression** (`http.compression`, on by default) compresses responses with gzip when the client accepts them, through Navree's `CompressionLayer` on flate2 (level 6). Brotli isn't built in. Server-sent events (`text/event-stream`), images other than SVG, gRPC other than gRPC-Web, bodies under 32 bytes and responses that already have a `Content-Encoding` or a `Content-Range` aren't compressed; every response that could be gets `Vary: accept-encoding`. A compressed body streams in frames of at most 4 KiB, read no faster than the client takes them, and whatever the handler has sent is flushed to the client as soon as the handler's body waits.
+
+### Error rendering
+
+This layer gives every error the same JSON shape:
+
+```json
+{ "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
+```
+
+Handlers, extractors, guards and inner layers return `AppError`s; this layer turns them into that JSON. A 500 that carries a source error first goes through the error mappers modules contribute (`DatabaseModule` maps "record not found" to 404 and unique and foreign-key violations to 409, including those the unit of work hits when it commits). Server errors are logged on target `navree::error`, with the request id and the whole error chain; for a 500 the client only sees `"Internal server error"`. Plain-text or empty error responses from Tower layers are rewritten into the same format, and a 422 for well-formed input of the wrong shape becomes a 400. See [errors](/docs/basics/errors/).
+
+### Maintenance mode, rate limit, body limit
+
+- **Maintenance mode.** While the file `http.maintenance_file` (default `storage/framework/down`) exists, every request gets a 503, except the paths in `http.maintenance_except` (default `/health/live`, `/health/ready` and `/metrics`). The `down` and `up` commands create and remove the file; the layer looks at it at most once a second. See [maintenance mode](/docs/digging-deeper/maintenance-mode/).
+- **Per-IP rate limit.** Each client IP may send `http.per_ip_rate_limit` requests per minute (600 by default). An IPv6 client is counted by network: the first `http.rate_limit_ipv6_prefix` bits of its address (64 by default, a /64), so a client cannot get a fresh budget by changing the low bits of its address. Over the limit, the answer is a 429 with `Retry-After`. See [rate limiting](/docs/basics/rate-limiting/), which also shows how to turn it off.
+- **Body limit.** Not a layer of its own: each route's pipeline sets the limit (`http.body_limit_bytes`, 2 MiB by default, or the route's own), and the body extractors (`Json`, `Form`, `String`, `Bytes`) read at most that much. More is a 413.
+
+### Session, authentication and the unit of work
+
+The five slots hold the layers that modules contribute. `Edge` is the outermost, ahead of the fixed layers; the other four follow the per-IP rate limit, in this order:
+
+1. **`Edge`.** Around the whole app, before the request id, the app context and the client IP exist. It is for protocols that share the HTTP port but not the HTTP pipeline: with `GrpcModule`, the layer that hands gRPC calls to the gRPC server sits here, and a response an `Edge` layer returns itself gets none of the fixed layers' treatment. See [gRPC](/docs/microservices/grpc/).
+2. **`Session`.** With `SessionModule`, the session layer loads the session from its cookie and enforces CSRF, before authentication runs. Most API apps, the CRM included, don't use sessions, and this slot stays empty. See [sessions and CSRF](/docs/basics/sessions-and-csrf/).
+3. **`AuthContext`.** Navree's authentication layer runs first in this slot. It calls the app's `dyn Authenticator` (with `AuthModule`, the JWT strategy reads `Authorization: Bearer`) and stores the result in the request as an `AuthState`: a `Principal` or a guest. A guest isn't an error here; routes decide later whether they need a user. But credentials that are present and invalid, such as an expired token, are rejected right here with the authenticator's 401, even on public routes and unknown paths. Other `AuthContext` layers run after it and can read the `AuthState`. See [authentication](/docs/security/authentication/).
+4. **`Uow`.** With `DatabaseModule`, a unit of work is opened for the request, lazily, with the authenticated user as the actor and the request id. If the request is dropped before it finishes (the client disconnected, or it timed out), the rest of it moves to a task on the app's tracker, so it still finishes and commits. On the way back, the unit of work commits when the status is below 400 and rolls back otherwise. See [the unit of work](/docs/database/unit-of-work/).
+5. **`Context`.** The innermost slot, inside the unit of work, for request context that handlers read, such as the locale `I18nModule` negotiates. The unit of work runs the rest of the request in a task of its own, so a layer that sets a Tokio task-local for handlers belongs here.
+
+### Routing
+
+The router matches the path and the method against every mounted route, segment by segment and without rewriting the path: a path with a `.` or `..` segment or a backslash, or whose parameters don't decode to clean text, is a 400 before any route code runs. A path no route matches gets the single 404; a known path with the wrong method gets a 405 with an `Allow` header, and an `OPTIONS` request a 204 with the same header. The global layers wrap the router, so a 404 is still logged, rate-limited and rendered in the error format. `HEAD` runs the `GET` route without its body. The router puts the decoded path parameters into the request as `PathParams`, where guards and the authorizer read them. See [routing](/docs/basics/routing/).
+
+## The route pipeline
+
+Each matched route runs its own small pipeline before the handler. It puts the route's `RouteMeta` (path, name, access declaration, limits) into the request extensions, then checks, in order:
+
+<Steps>
+<Step title="Body length">
+
+A `Content-Length` larger than the route's body limit (its own, or `http.body_limit_bytes`) is a 413 with the message `"The request body must not exceed N bytes."`, and nothing after this step runs. The 413 goes out at once. On HTTP/1 the connection then closes with a lingering close: the server ends its side and reads what the client is still sending, so a client that sends its whole body before reading gets the 413 and not a reset connection.
+
+</Step>
+<Step title="Authentication">
+
+A route that isn't `#[public]` needs a principal. Without one, the request gets a 401 `"Unauthorized"`, and nothing below runs.
+
+</Step>
+<Step title="Throttle">
+
+A route with `#[throttle(limit = 10, per = "1m")]` counts requests per user (per client IP for guests, an IPv6 client by its network as above). Over the limit: 429 with `Retry-After`.
+
+</Step>
+<Step title="Guards">
+
+The route's `#[guard]`s run in order (the impl block's first). The first guard that returns an error ends the request with that error.
+
+</Step>
+<Step title="Authorization">
+
+A route that declares `#[roles]`, `#[permissions]` or `#[can]` is checked by the app's `dyn RouteAuthorizer` (with `AccessModule`). A refusal is a 403; a `#[can(.., from = "id")]` route whose record doesn't exist is a 404. See [access control](/docs/basics/access-control/).
+
+</Step>
+<Step title="The handler">
+
+The handler runs, within the route's `#[timeout]` when it has one (503 when it runs out).
+
+</Step>
+<Step title="After the handler">
+
+A route with `#[audit(action = "..")]` writes that audit entry after a 2xx response. When the app has an audit sink, refusals along the way are recorded as security events too: throttling as `http.rate_limited`, 403s from guards and handlers as `access.denied`.
+
+</Step>
+</Steps>
+
+## The handler
+
+Navree calls your handler with its arguments built by extractors, in the order you declare them; the extractor that reads the body comes last. An extractor that fails ends the request with its rejection, rendered in the error format: a path parameter that doesn't parse is a 400, JSON without a `Content-Type: application/json` header is a 415, a body that doesn't deserialize is a 400. See [requests](/docs/basics/requests/).
+
+```rust
+#[patch("/{id}")]
+#[can(Update, Deal, from = "id")]
+async fn update(
+    &self,
+    uow: Uow,
+    CurrentUser(user): CurrentUser,
+    deal: Authorized<Deal, Update>,
+    Valid(Json(input)): Valid<Json<UpdateDeal>>,
+) -> Result<Json<DealResource>> {
+    Ok(Json(self.deals.update(&uow, user.id, deal, input).await?))
+}
+```
+
+This CRM handler receives the request's unit of work, the signed-in user loaded from the database, the deal the authorizer already loaded and checked, and the validated JSON body. By the time it runs, every check above has passed.
+
+A handler returns anything that implements `IntoResponse` (`navree::http::IntoResponse`). With the prelude, `Result<T>` means `Result<T, AppError>`, so `?` works on any error: errors without a specific mapping become a logged 500, and modules can map their own error types to specific statuses. See [responses](/docs/basics/responses/) and [errors](/docs/basics/errors/).
+
+## The way back out
+
+The response retraces the pipeline in reverse:
+
+1. The route pipeline writes the route's audit entry (on success) and records the route on the response, for the request log.
+2. The unit of work commits or rolls back. A failed commit replaces the response with a 500.
+3. The error layer renders any `AppError` the response carries, applies the error mappers, and logs server errors.
+4. Compression, security headers and CORS headers are added.
+5. The request context layer sets `X-Request-Id`, writes the request log line and records the metrics.
+
+A [Navree UI](/docs/ui/overview/) handler returns components instead of JSON, and its response takes the same way out. What the browser does with the page next is the subject of [the UI runtime](/docs/architecture/ui-runtime/).
+
+## Testing the whole pipeline
+
+`TestClient` from `navree::testing` sends requests through this same router in-process, with every layer above, so a test sees exactly what a client would: the request id, the error format, authentication and the unit of work. See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/middleware/" title="The request pipeline and middleware">
+    The global layers and adding your own.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control on routes">
+    How routes declare who may call them.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/lifecycle-hooks/" title="Lifecycle hooks">
+    Boot hooks and the graceful shutdown.
+  </LinkCard>
+</LinkCards>

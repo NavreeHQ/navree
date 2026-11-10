@@ -1,0 +1,96 @@
+[package]
+name = "navree-auth"
+description = "Navree AuthModule: JWT authentication with rotating refresh tokens, pluggable strategies and user accounts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "auth", "jwt", "totp", "passkeys"]
+categories = ["authentication", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["session", "ui"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL; also `tests/postgres.rs`).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+## Browser sign-in on navree-session's session: `SessionStrategy` and the
+## `AuthService::sign_in_session` family (two-factor, throttles, sign-in
+## policies and the audit trail as for tokens). The facade turns it on when
+## both its `auth` and `session` features are on.
+session = ["dep:navree-session"]
+## `AuthPages`: the sign-in, two-factor, forgotten and reset password and
+## sign-out pages, drawn with navree-ui on the session. The facade turns it
+## on when both its `auth` and `ui` features are on.
+ui = ["session", "dep:navree-ui"]
+
+[dependencies]
+# base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
+# and passkeys (WebAuthn signatures), until navree_crypto::jose carries them.
+# The service's own tokens, TOTP codes and QR codes are navree-crypto's.
+base64 = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+# `User` is the access subject `User` (no module import).
+navree-access = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+# Fetching trusted issuers' key sets (`auth.trusted_issuers.*.jwks_url`).
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+# navree-mail: the account flows (password reset mail).
+navree-mail = { workspace = true }
+navree-openapi = { workspace = true }
+# Browser sign-in (feature `session`) and its pages (feature `ui`).
+navree-session = { workspace = true, optional = true }
+navree-telemetry = { workspace = true }
+navree-ui = { workspace = true, optional = true }
+# The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
+# sign-in tokens, pending resets and passkeys are written through the ORM;
+# `User` is an access subject (`#[model(subject)]`, feature `access`).
+navree-orm = { workspace = true, features = ["access"] }
+navree-validation = { workspace = true }
+ring = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+# IDNA mapping of email domains (`email_domain`).
+url = { workspace = true }
+uuid = { workspace = true }
+# The two-factor secret and the token key are wiped when dropped.
+zeroize = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+# The crate's own tests sign browsers in and draw the pages.
+navree-auth = { path = ".", features = ["session", "ui"] }
+futures = { workspace = true }
+navree-api = { workspace = true }
+# The PostgreSQL test checks the impersonator column of the audit log.
+navree-audit = { workspace = true }
+navree-observe = { workspace = true }
+navree-testing = { workspace = true }
+# Tests boot MailModule, which needs ViewModule.
+navree-view = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

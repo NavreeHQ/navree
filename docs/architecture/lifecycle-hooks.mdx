@@ -1,0 +1,238 @@
+---
+title: "Lifecycle hooks"
+description: "Run code when the app boots and when it shuts down: `on_init`, `on_bootstrap`, `on_shutdown`, background tasks and graceful shutdown."
+---
+
+## Introduction
+
+Some providers need to do work at a particular moment: load data before the first request, start a background loop once everything is wired, flush a buffer or close a pool on the way out. Navree gives them three hooks:
+
+| Hook | When it runs |
+|---|---|
+| `on_init` | At boot, once every singleton exists |
+| `on_bootstrap` | At boot, after every `on_init` succeeded |
+| `on_shutdown` | During a graceful shutdown, after background tasks have stopped |
+
+The hooks belong to the `Lifecycle` trait, in `navree::kernel`. Each has a default that does nothing, so you implement only the ones you need.
+
+## Writing hooks
+
+This provider loads exchange rates at boot (and stops the boot if it can't), then refreshes them every hour until the app shuts down:
+
+```rust title="src/modules/rates/mod.rs"
+use std::collections::HashMap;
+use std::sync::RwLock;
+use std::time::Duration;
+
+use navree::BoxFuture;
+use navree::kernel::Lifecycle;
+use navree::prelude::*;
+
+/// Exchange rates, refreshed in the background.
+#[injectable]
+pub struct ExchangeRates {
+    #[inject(default)]
+    rates: RwLock<HashMap<String, f64>>,
+}
+
+impl ExchangeRates {
+    /// Fetches the current rates.
+    pub async fn refresh(&self) -> Result<(), BoxError> {
+        // ...
+    }
+
+    pub fn rate(&self, currency: &str) -> Option<f64> {
+        self.rates.read().ok()?.get(currency).copied()
+    }
+}
+
+/// Loads the rates before the app serves, then keeps them fresh.
+#[injectable]
+pub struct RatesRefresher {
+    rates: Arc<ExchangeRates>,
+}
+
+impl Lifecycle for RatesRefresher {
+    /// Every singleton exists; fail the boot if the rates cannot be loaded.
+    fn on_init(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move { self.rates.refresh().await })
+    }
+
+    /// Every `on_init` succeeded: start the background refresh.
+    fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        let rates = self.rates.clone();
+        let token = ctx.shutdown_token();
+        ctx.tracker().spawn(async move {
+            let mut every_hour = tokio::time::interval(Duration::from_secs(3600));
+            loop {
+                tokio::select! {
+                    () = token.cancelled() => break,
+                    _ = every_hour.tick() => {
+                        if let Err(error) = rates.refresh().await {
+                            eprintln!("could not refresh the exchange rates: {error}");
+                        }
+                    }
+                }
+            }
+        });
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[module(
+    providers = [ExchangeRates, RatesRefresher],
+    exports = [ExchangeRates],
+    register = Self::wire,
+)]
+pub struct RatesModule;
+
+impl RatesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.lifecycle::<RatesRefresher>();
+    }
+}
+```
+
+A hook runs only once you register it: `m.lifecycle::<T>()` tells the kernel to run the hooks of provider `T`. Two rules apply:
+
+- **`T` must be a provider of the same module.** Registering hooks for a type the module doesn't provide fails the boot (and `check`) with a "cannot resolve" error that says it's required by a lifecycle registration of the module.
+- **`T` must be a singleton.** The kernel resolves lifecycle providers at boot, outside any request scope, so a request-scoped one fails the boot with a "resolved outside a request scope" error. `check` doesn't catch this one; only a real boot does.
+
+Every hook receives the `AppContext`, a cheap handle to the booted app: use it to resolve other providers, to read the shutdown token and to spawn tracked tasks.
+
+## The order of the hooks
+
+### At boot
+
+When the app boots, for `serve`, any other command, or `TestApp`:
+
+<Steps>
+<Step title="The graph is validated">
+
+Every module's `register` runs once, and the kernel checks the graph: visibility, cycles, scopes, duplicate commands, lifecycle registrations. Nothing is constructed yet. See [boot-time checks](/docs/architecture/modules/#boot-time-checks).
+
+</Step>
+<Step title="Singletons are built">
+
+Every singleton is constructed, module by module in dependency order (a module's imports before the module).
+
+</Step>
+<Step title="on_init runs">
+
+`on_init` runs for every registered provider, in module dependency order, one at a time.
+
+</Step>
+<Step title="on_bootstrap runs">
+
+Once every `on_init` succeeded, `on_bootstrap` runs for every registered provider, in the same order.
+
+</Step>
+</Steps>
+
+Then the command runs (for `serve`, the server starts listening). Within one module, hooks run in the order the module registered them.
+
+If a hook returns an error, the boot stops with an error that names the module and the hook:
+
+```text
+`on_init` hook of module `RatesModule` failed: the rates service did not answer
+```
+
+A failed boot cancels the app's shutdown token, but it runs no `on_shutdown` hooks, not even for providers whose `on_init` already ran.
+
+### At shutdown
+
+A graceful shutdown (`App::shutdown`) has three phases:
+
+1. **The shutdown token is cancelled.** `serve` stops accepting connections, workers stop taking new jobs, and your background loops see `token.cancelled()`.
+2. **Tracked tasks drain.** The kernel waits for every task spawned on the app's tracker to finish.
+3. **`on_shutdown` runs** for every registered provider, in **reverse** module dependency order, so a module shuts down before the modules it depends on.
+
+Each of phases 2 and 3 may take up to the shutdown timeout, 30 seconds by default. Change it on the app builder:
+
+```rust
+Navree::app()
+    .module(RatesModule)
+    .shutdown_timeout(Duration::from_secs(10))
+```
+
+Every `on_shutdown` hook runs even if an earlier one fails; the failures are collected and returned together. A phase that runs out of time makes the shutdown return an error such as `graceful shutdown timed out after 10s waiting for tracked tasks`.
+
+## Background tasks
+
+Long-running work started by a hook (a poller, a cache warmer, a metrics upkeep loop) should:
+
+- watch `ctx.shutdown_token()`, a `CancellationToken`, and stop when it's cancelled;
+- be spawned with `ctx.tracker().spawn(..)`, so a graceful shutdown waits for it to finish.
+
+A plain `tokio::spawn` isn't waited for: the shutdown hooks may then run while your task is still using the services they close.
+
+## What the framework does in its hooks
+
+Navree's own modules use the same hooks, which shows what each is for:
+
+| Module | Hook | What it does |
+|---|---|---|
+| `HttpModule` | `on_bootstrap` | Builds the router once, so a route without an access declaration, a duplicate route or a missing authenticator stops the boot before a port is bound |
+| `ApiModule` | `on_bootstrap` | Builds the OpenAPI document, so a schema conflict stops the boot |
+| `ObserveModule` | `on_bootstrap` | Starts the Prometheus recorder's upkeep loop on the tracker |
+| `DatabaseModule` | `on_shutdown` | Closes the connection pool (SQLite then checkpoints its write-ahead log) |
+| `LoggerModule` | `on_shutdown` | Flushes the log file |
+| `EventsModule` | `on_shutdown` | Detaches the event bus, so no event is delivered once the app is shutting down |
+
+## Graceful shutdown
+
+`AppBuilder::run()`, which an app's `main` calls, starts a Tokio runtime, runs the command from the command line and listens for Ctrl-C (and `SIGTERM` on Unix). A signal cancels the shutdown token. For `serve`, that starts this sequence:
+
+<Steps>
+<Step title="The server stops accepting connections">
+
+`serve` closes connections with nothing in flight and lets in-flight requests finish, for up to `http.shutdown_grace_secs` (30 seconds by default). Requests still running after that are dropped, with a warning in the log.
+
+</Step>
+<Step title="Units of work complete">
+
+With `DatabaseModule`, a request whose client went away finishes in a task on the app's tracker, so it still commits or rolls back.
+
+</Step>
+<Step title="The app shuts down">
+
+The kernel waits for tracked tasks, then runs the `on_shutdown` hooks, each phase within the shutdown timeout.
+
+</Step>
+</Steps>
+
+Every other command shuts down the same way when it returns: `queue:work` and `schedule:work` stop at the signal, finish what they're doing and return, and then the hooks run. Dropping an `App` without calling `shutdown` cancels its token but runs no hooks.
+
+<Callout type="tip" title="Give the orchestrator enough time">
+
+A container platform that sends `SIGTERM` waits only so long before it kills the process. Keep `http.shutdown_grace_secs` plus the time your hooks need below that limit (Kubernetes waits 30 seconds by default).
+
+</Callout>
+
+## Testing hooks
+
+Boot the app as the test would run it, then shut it down explicitly; dropping a `TestApp` doesn't run the shutdown hooks:
+
+```rust
+#[tokio::test]
+async fn rates_are_loaded_at_boot() {
+    let app = Navree::app().module(RatesModule).boot().await.expect("boot");
+    let rates = app.ctx().get::<ExchangeRates>().await.unwrap();
+    assert_eq!(rates.rate("USD"), Some(1.08));
+    app.shutdown().await.expect("graceful shutdown");
+}
+```
+
+`TestApp::shutdown().await` does the same for a test app, and also deletes its temporary database.
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/request-lifecycle/" title="Request lifecycle">
+    Boot, serve and the path of a request.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/providers/" title="Providers and dependency injection">
+    How the singletons the hooks run on are built.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running the server, workers and the scheduler in production.
+  </LinkCard>
+</LinkCards>

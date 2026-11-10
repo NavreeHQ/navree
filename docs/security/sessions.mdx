@@ -1,0 +1,287 @@
+---
+title: "Sessions and step-up"
+description: "List and end a user's sessions, and ask for the password or a code again before sensitive actions with `#[recent_auth]`."
+---
+
+Every sign-in starts a session: one device, one browser, one refresh-token family. Users can list their sessions and end the ones they don't recognize. Sensitive routes can also ask for proof that the person at the keyboard is still the account's owner: a recent sign-in, or the password or a code confirmed a moment ago. This page assumes `AuthModule` is set up as described in [Authentication](/docs/security/authentication/).
+
+## What a session is
+
+A session is a [refresh-token family](/docs/security/authentication/#rotation-and-families). Signing in with a password, a second factor, a [magic link, an emailed code or a passkey](/docs/security/passwordless/), a [social provider](/docs/packages/social-sign-in/) or a [trusted token](/docs/security/authentication/#trusted-token-exchange) starts one. Each refresh issues the next token of the same family, so the session keeps its id for as long as the client keeps refreshing.
+
+Access tokens carry their session in two claims:
+
+| Claim | |
+|---|---|
+| `sid` | The session id (the family id) |
+| `auth_time` | When the user last proved who they are, in Unix seconds: the sign-in, or the last [confirmation](#confirming-the-password-or-a-code) |
+
+```json
+{
+  "sub": "01a17b6d-d0ef-77f7-8097-11dbb4b1f95b",
+  "iat": 1793072217,
+  "exp": 1793073117,
+  "iss": "navree",
+  "jti": "01a17b6dd10270caa025ff5edea7fc80",
+  "typ": "access",
+  "sid": "01a17b6d-d101-70d8-acae-37a6f4002faa",
+  "auth_time": 1793072217
+}
+```
+
+A refreshed access token keeps the session's `auth_time`: refreshing is not signing in. [Impersonation](/docs/security/impersonation/) tokens carry `sid` but no `auth_time`, and the challenge tokens of a two-factor or platform sign-in carry neither.
+
+A browser that [signs in on its session cookie](/docs/basics/sessions-and-csrf/#signing-in-with-a-session) has a session here too: the list below shows it, ending it signs that browser out at its next request, and `#[recent_auth]` reads its sign-in time. A browser confirms with `POST /api/auth/confirm` like a token client, and gets `204` instead of a new token. (`SessionModule`'s own record, behind the encrypted cookie, holds which of these sessions the browser is signed in with.)
+
+## Listing sessions
+
+`GET /api/auth/sessions` lists the signed-in user's live sessions, most recently used first:
+
+```http
+GET /api/auth/sessions HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "01a17b6d-d101-70d8-acae-37a6f4002faa",
+      "ip": "203.0.113.7",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/131.0",
+      "device": "Firefox on Windows",
+      "last_used_at": "2026-10-27T09:12:40.118Z",
+      "authenticated_at": "2026-10-27T08:01:02.004Z",
+      "expires_at": "2026-11-26T09:12:40.118Z",
+      "current": true,
+      "impersonator_id": null,
+      "platform": false
+    }
+  ]
+}
+```
+
+| Field | |
+|---|---|
+| `id` | The session id: the `sid` claim, and what `DELETE /api/auth/sessions/{id}` takes |
+| `ip`, `user_agent` | The client of the session's last sign-in or refresh |
+| `device` | A short description from the user agent: `Chrome on Android`, `Safari on iOS`, `curl`; null when it isn't recognized |
+| `last_used_at` | The session's last sign-in or refresh |
+| `authenticated_at` | The session's last sign-in or confirmation |
+| `expires_at` | When it ends unless it is refreshed |
+| `current` | Whether this request was made with it |
+| `impersonator_id` | For an [impersonation](/docs/security/impersonation/) session, the support agent acting as the user |
+| `platform` | Whether it is a [platform session](/docs/security/authentication/#platform-administrators) |
+
+A session is live while its newest refresh token is neither revoked nor expired. Sessions ended by a sign-out, a password change or reset, or [reuse detection](/docs/security/authentication/#reuse-detection) don't appear.
+
+## Ending a session
+
+`DELETE /api/auth/sessions/{id}` ends one of the user's sessions:
+
+```http
+DELETE /api/auth/sessions/01a17b6d-d101-70d8-acae-37a6f4002faa HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+The answer is `204 No Content`. The session's refresh tokens stop working at once; its access tokens keep working until they expire (15 minutes by default), as with every sign-out. Ending the current session is a sign-out. An id that isn't one of the user's live sessions gets `404 Not Found`, so nobody can probe other users' sessions. The route refuses [impersonation](/docs/security/impersonation/) sessions.
+
+To end every session at once, use `POST /api/auth/logout` with `{"all": true}` (see [Signing out](/docs/security/authentication/#signing-out)).
+
+## Requiring a recent sign-in
+
+Some actions deserve more than a valid token: deleting the account, exporting all data, changing billing details. A token that leaked, or a laptop left unlocked, shouldn't be enough. Put `#[recent_auth(minutes = N)]` on such a route:
+
+```rust title="src/modules/account/controller.rs"
+use navree::prelude::*;
+
+#[injectable]
+pub struct AccountController;
+
+#[controller("/account", version = "1")]
+#[authenticated]
+impl AccountController {
+    /// `DELETE /api/v1/account`: only within 10 minutes of signing in or
+    /// confirming, and never while impersonating.
+    #[delete("/")]
+    #[recent_auth(minutes = 10)]
+    #[not_while_impersonating]
+    async fn destroy(&self, CurrentUser(user): CurrentUser) -> Json<String> {
+        Json(format!("Deleting {}", user.email))
+    }
+}
+```
+
+The route accepts a request only when its access token's `auth_time` is at most 10 minutes old, by the app's `dyn Clock`. Everything else gets a 403 with the code `reauthentication_required`:
+
+```json
+{"statusCode": 403, "message": "Please confirm your identity to continue", "error": "Forbidden", "code": "reauthentication_required"}
+```
+
+That covers an older sign-in, an [impersonation](/docs/security/impersonation/) session (it never signed in, so it has no `auth_time`), and requests authenticated another way, such as a [session cookie](/docs/basics/sessions-and-csrf/) or an [API key strategy](/docs/security/authentication/#writing-your-own-strategy). The client then [confirms](#confirming-the-password-or-a-code) and retries.
+
+- `#[recent_auth]` takes between 1 and 10,080 minutes (a week); anything else is a compile error. It can sit on the impl block, where it applies to every route, and a route's own replaces the impl block's.
+- It is a guard, not an access declaration: the route still needs `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`.
+- It needs the `auth` feature of the `navree` facade (or `navree-auth` as a dependency).
+
+For hand-written routes, the guard is `navree::auth::recent_auth`:
+
+```rust
+use std::time::Duration;
+
+use navree::auth::recent_auth;
+
+RouteDef::on(Method::DELETE, "/", destroy)
+    .authenticated()
+    .guard(recent_auth(Duration::from_secs(600)))
+```
+
+### Confirming the password or a code
+
+`POST /api/auth/confirm` checks the password or a code from the authenticator app, and returns a new access token for the same session whose `auth_time` is now:
+
+```http
+POST /api/auth/confirm HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{"password": "correct horse battery"}
+```
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "auth_time": 1793073001,
+  "expires_in": 900,
+  "token_type": "Bearer"
+}
+```
+
+- Send exactly one of `password` and `code`. Without either, or with both, the answer is a 400 field error on `password`.
+- `code` is a current [TOTP code](/docs/security/account-flows/#two-factor-authentication). The account must have two-factor authentication on (`400 Two-factor authentication is not enabled` otherwise). Recovery codes are not accepted here.
+- A wrong password or code is a 400 field error on `password` or `code`. Wrong passwords count towards the [login throttle](/docs/security/authentication/#the-login-throttle) and wrong codes towards the two-factor throttle, so confirmation can't be used to guess either.
+- The session remembers the confirmation: tokens refreshed afterwards carry the new `auth_time`. No new refresh token is issued; keep the one you have.
+- Impersonation sessions get `403 Not allowed while impersonating a user`.
+
+A front end usually handles `reauthentication_required` in one place: show a password prompt, post it to `/api/auth/confirm`, swap in the new access token and repeat the request.
+
+## Reading the token's claims
+
+`AccessClaims` gives a handler the verified claims of the request's access token. It answers 401 when the request has none (a guest, or a request authenticated another way); take `Option<AccessClaims>` to make it optional.
+
+```rust
+use navree::auth::AccessClaims;
+use navree::prelude::*;
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct SessionInfoController;
+
+#[controller("/session-info")]
+impl SessionInfoController {
+    #[get("/")]
+    #[authenticated]
+    async fn show(&self, claims: AccessClaims) -> Json<Value> {
+        Json(json!({
+            "session_id": claims.session_id(),
+            "auth_time": claims.auth_time(),
+            "impersonator": claims.impersonator(),
+            "platform": claims.is_platform(),
+        }))
+    }
+}
+```
+
+`AccessClaims` dereferences to `navree::auth::Claims`, so `claims.sub`, `claims.exp` and the other fields are there too. The JWT strategy stores it in the request after verifying the token.
+
+## In code
+
+| `AuthService` method | What it does |
+|---|---|
+| `sessions(user_id, current)` | The user's live sessions as `SessionResource`s; the one with id `current` is marked `current` |
+| `revoke_session(user_id, session_id, &meta)` | Ends one session; `AuthError::SessionNotFound` when it isn't the user's |
+| `confirm(&claims, proof, &meta)` | Step-up confirmation with `ConfirmProof::Password(..)` or `ConfirmProof::Code(..)`: a `ConfirmedToken` |
+
+`JwtService::sign_session(user_id, typ, ttl, SessionClaims { session_id, auth_time, impersonator })` signs a token with session claims yourself; `verify_any(token, &[types])` verifies a token of any of several types.
+
+## Audit entries
+
+| Action | Kind | When |
+|---|---|---|
+| `auth.session_revoked` | `auth` | A session was ended; `metadata.session_id` |
+| `auth.confirmed` | `auth` | The user confirmed; `metadata.method` (`password` or `totp`) and `metadata.session_id` |
+
+`auth.refresh` entries carry the session in `metadata.family_id`.
+
+## The session columns
+
+Three columns of `refresh_tokens` hold the session's state, copied from token to token at each refresh:
+
+| Column | |
+|---|---|
+| `authenticated_at` | The session's last sign-in or confirmation: the `auth_time` of its tokens |
+| `impersonator_id` | For an impersonation session, the impersonating user |
+| `audience` | `platform` for a platform session; null for the app |
+
+App sessions slide: each refresh extends them by `auth.jwt.refresh_ttl_secs`. Impersonation and platform sessions end at a fixed time, however often they are refreshed. The migration `m20261027_000001_add_session_columns_to_refresh_tokens` of the `auth` set adds them.
+
+## Testing
+
+Override `dyn Clock` with a `FixedClock` to test `#[recent_auth]` routes: sign in, move the clock past the limit, and check that the route refuses until the client confirms.
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+
+use navree::contracts::{Clock, FixedClock};
+use serde_json::json;
+
+let clock = Arc::new(FixedClock::new(chrono::Utc::now()));
+let app = builder().override_value::<dyn Clock>(clock.clone()).build().await;
+let access = sign_in(&app, "anu@example.com").await;
+
+clock.advance(Duration::from_secs(11 * 60));
+app.client()
+    .delete("/api/v1/account")
+    .bearer(&access)
+    .send()
+    .await
+    .assert_error(403, "Please confirm your identity to continue");
+
+let confirmed = app
+    .client()
+    .post("/api/auth/confirm")
+    .bearer(&access)
+    .json(&json!({ "password": "correct horse battery" }))
+    .send()
+    .await
+    .assert_status(200)
+    .json_value();
+let fresh = confirmed["access_token"].as_str().unwrap();
+app.client()
+    .delete("/api/v1/account")
+    .bearer(fresh)
+    .send()
+    .await
+    .assert_status(200);
+```
+
+`builder` and `sign_in` stand for your test setup and a `POST /api/auth/login`, as in [Authentication](/docs/security/authentication/#testing).
+
+## Limits
+
+- **Access tokens outlive their session.** Ending a session stops its refresh tokens; an access token already issued works until it expires. Keep `auth.jwt.access_ttl_secs` short.
+- **Devices are guesses.** `device` comes from the user agent, which the client chooses.
+- **One second factor for confirmation.** `POST /api/auth/confirm` takes the password or a TOTP code, not a passkey.
+
+<LinkCards>
+  <LinkCard href="/docs/security/impersonation/" title="Impersonation">
+    Support staff signing in as a user, with guards and an audit trail.
+  </LinkCard>
+  <LinkCard href="/docs/security/passwordless/" title="Passwordless sign-in">
+    Magic links, emailed codes and passkeys.
+  </LinkCard>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Tokens, refresh rotation and strategies.
+  </LinkCard>
+</LinkCards>

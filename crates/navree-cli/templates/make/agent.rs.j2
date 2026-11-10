@@ -1,0 +1,55 @@
+//! The `{{ module_kebab }}-{{ kebab }}` agent.
+
+use navree::ai::{Agent, AgentOptions, AgentRun, agent};
+use navree::openapi::ToSchema;
+use navree::prelude::*;
+use navree::validation::Validate;
+use serde::{Deserialize, Serialize};
+
+/// The arguments of `lookup`.
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct Lookup {
+    /// What to look up, in the user's words.
+    #[validate(length(min = 1, max = 200))]
+    pub query: String,
+}
+
+/// What `lookup` returns to the model.
+#[derive(Debug, Serialize)]
+pub struct Found {
+    /// The query, echoed.
+    pub query: String,
+}
+
+/// {{ a_title }} agent of the {{ module_words }} module. Run it with
+/// `ai.agent::<{{ pascal }}>().acting_as(access).prompt(message)`.
+#[injectable]
+pub struct {{ pascal }};
+
+#[agent]
+impl Agent for {{ pascal }} {
+    const NAME: &'static str = "{{ module_kebab }}-{{ kebab }}";
+
+    fn instructions(&self, run: &AgentRun) -> String {
+        format!(
+            "You are the {{ words }} of the {{ module_words }} module, helping {}. \
+             Use the tools before you answer, and never guess.",
+            run.user().name
+        )
+    }
+
+    fn options(&self) -> AgentOptions {
+        AgentOptions {
+            max_steps: 8,
+            ..AgentOptions::default()
+        }
+    }
+
+    /// Looks something up for the user. Replace it with tools that call your
+    /// services with `run.uow()` and `run.access()`.
+    #[tool(read_only)]
+    async fn lookup(&self, run: &AgentRun, args: Lookup) -> Result<Found> {
+        let _ = run.user_id();
+        Ok(Found { query: args.query })
+    }
+}

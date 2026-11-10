@@ -1,0 +1,787 @@
+---
+title: "AI SDK"
+description: "One `Ai` service for Anthropic, OpenAI, Google Gemini, Mistral, Ollama and AWS Bedrock: text, typed output, streaming over SSE or real time, failover, token budgets and `AiFake` for tests."
+---
+
+## Introduction
+
+<Badge feature="ai" /> `navree-ai` puts language models behind one service. You name your models in configuration (`smart`, `fast`, `embed`), inject `Arc<Ai>`, and ask for what you need:
+
+```rust
+let summary = ai
+    .text(format!("Summarize this deal's activity:\n\n{timeline}"))
+    .system("You write two-sentence updates for sales managers.")
+    .model("fast")
+    .await?;
+```
+
+The provider's HTTP API, authentication, retries, failover to another model, token limits, usage metrics and error handling are the SDK's job. Your code never imports a vendor client, and moving a feature from one provider to another is a one-line configuration change.
+
+| You want | Use | Page |
+|---|---|---|
+| Text: summaries, drafts, rewrites | `ai.text(prompt)` | [Generating text](#generating-text) |
+| A typed value: extraction, classification | `ai.structured::<T>(prompt)` | [Structured output](#structured-output) |
+| Words on screen as they are generated | `ai.stream(prompt)` | [Streaming](#streaming) |
+| A model that calls your code to finish a task | `Agent` and `#[tool]` | [Agents and tools](/docs/ai/agents-and-tools/) |
+| Answers grounded in your own data | `Embeddings`, `VectorStore` | [Embeddings and RAG](/docs/ai/embeddings-and-rag/) |
+| AI clients that call your app | `McpModule` | [MCP servers](/docs/ai/mcp-servers/) |
+
+The examples on this page add AI features to the reference CRM, on top of its own services: a summary of a deal's activity, a follow-up email drafted for the rep, and both streamed to the browser.
+
+## Installation
+
+Turn on the `ai` feature of the `navree` facade. It is opt-in: `full` doesn't include it.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["ai"] }
+```
+
+The feature brings `navree-ai` and every provider, all pure Rust. Providers speak HTTP through [`navree-http-client`](/docs/digging-deeper/http-client/) (rustls, timeouts and its SSRF guard), so there is nothing else to install. The guard refuses private and internal addresses except the hosts you configure yourself: every `ai.providers.*.url`, `ai.vectors.url`, and `127.0.0.1` when a model uses Ollama at its default address. Add `AiModule` to your app root:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(LoggerModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config()) // conversation memory and pgvector
+        .module(CacheModule::from_config())    // token budgets and the embeddings cache
+        .module(AiModule::from_config())       // section `ai`
+        // ...
+}
+```
+
+`AiModule` is global: every module injects `Arc<Ai>`, `Arc<Embeddings>`, `Arc<VectorStore>` and `Arc<Conversations>` without importing it. It needs only `ConfigModule`. `DatabaseModule` is needed for [conversation memory](/docs/ai/agents-and-tools/#memory) and the pgvector store, and it needs a database driver feature of `navree` (`postgres`, `mysql` or `sqlite`; the pgvector store needs `postgres`). `CacheModule` makes [budgets](#token-limits-and-budgets) and the embeddings cache shared between processes; without it both live in the process's memory. [Agents](/docs/ai/agents-and-tools/) also need `AuthModule` (the user they act for) and `AccessModule` (that user's abilities).
+
+The module also contributes the `ai` [migration set](/docs/database/migrations/) (`ai_conversations` and `ai_messages`), the `ai:prune` command, and the mapping of an `AiError` returned from a handler to its status.
+
+## Configuration
+
+Configuration names your **providers** (accounts with a vendor) and your **models** (a provider plus a model id, under a name your code uses). Code asks for `fast`; configuration decides that `fast` is Claude Sonnet on Anthropic today. A provider named after its driver (`anthropic`, `openai`, `gemini`, `mistral`, `ollama`, `bedrock`) needs no table of its own when the defaults and the environment suit you.
+
+```toml title="config/app.toml"
+[ai]
+default = "smart"           # the model used when a request names none
+
+[ai.models.smart]
+provider = "anthropic"
+model = "claude-opus-5-5"
+fallbacks = ["fast"]        # tried in order when `smart` is unavailable
+
+[ai.models.fast]
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+max_tokens = 1024
+fallbacks = ["backup"]
+
+[ai.models.backup]
+provider = "openai"
+model = "gpt-5"
+
+[ai.models.embed]
+provider = "openai"
+model = "text-embedding-3-small"
+dimensions = 1536
+
+[ai.embeddings]
+model = "embed"
+```
+
+Keys are secrets, so they belong in `.env` or the environment, never in `config/app.toml`:
+
+```env title=".env"
+APP_AI__PROVIDERS__ANTHROPIC__API_KEY=sk-ant-api03-...
+APP_AI__PROVIDERS__OPENAI__API_KEY=sk-proj-...
+```
+
+A provider table needs no other key when the defaults suit you, so the two lines above are the whole provider configuration for this example. Every value maps to an environment variable the usual way (`APP_AI__DEFAULT=fast`, `APP_AI__MODELS__FAST__MODEL=claude-sonnet-5-5`), and `fallbacks` also accepts a comma-separated string (`APP_AI__MODELS__SMART__FALLBACKS=fast,backup`).
+
+The boot fails, naming the key, when a model names an unknown provider, a fallback names an unknown model, the fallbacks form a cycle, or `default` names no model. A missing API key doesn't fail the boot: requests to that provider fail with `AiError::Config`, and the log warns once at startup. `Config::redacted()` and the logs mask every `api_key`, `access_key_id`, `secret_access_key`, `session_token` and `key`.
+
+### Top-level keys
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ai.default` | the first model by name | The model a request uses when it names none. |
+| `ai.timeout_secs` | `60` | The limit of one attempt. For streams, the longest gap between two events. |
+| `ai.max_retries` | `2` | Retries of one model on a 429, a 5xx, a timeout or a connection failure, before its fallbacks. |
+| `ai.retry_base_ms` | `500` | The delay before the first retry; each later one doubles, up to 30 seconds. |
+| `ai.structured_retries` | `2` | How often [structured output](#structured-output) that doesn't match its type is sent back for repair. |
+| `ai.budget.daily_tokens_per_user` | `0` (off) | Tokens one user may spend per UTC day. See [budgets](#token-limits-and-budgets). |
+| `ai.log_content` | `false` | Log prompts and outputs at `debug`. Leave it off in production. |
+| `ai.fake` | `false` | Answer every request from an [`AiFake`](#testing-with-aifake). For tests. |
+
+The `ai.embeddings` and `ai.vectors` sections are described in [Embeddings and RAG](/docs/ai/embeddings-and-rag/#installation-and-configuration), and `ai.memory` in [Agents and tools](/docs/ai/agents-and-tools/#memory).
+
+### Providers
+
+The table's key is the provider's name. Set the keys you need; the rest have defaults.
+
+| Provider | Name | Keys | Text, tools, streaming | Embeddings |
+|---|---|---|---|---|
+| Anthropic | `anthropic` | `api_key`, `url` | Yes, with images and PDFs | No |
+| OpenAI | `openai` | `api_key`, `url`, `organization` | Yes, with images | Yes |
+| Google Gemini | `gemini` | `api_key`, `url` | Yes, with images and PDFs | Yes |
+| Mistral | `mistral` | `api_key`, `url` | Yes | Yes |
+| Ollama | `ollama` | `url` (default `http://127.0.0.1:11434`) | Yes, for models that support tools | Yes |
+| AWS Bedrock | `bedrock` | `region`, `access_key_id`, `secret_access_key`, `session_token`, `profile` | Yes, through the Converse API, with images and PDFs | Amazon Titan and Cohere models |
+
+- `url` replaces the vendor's API address, for a proxy or a gateway. With the `openai` driver it points at any server that speaks the OpenAI chat completions API.
+- Ollama reads images too. Mistral takes text only.
+- Bedrock requests are signed with AWS Signature Version 4 by `navree_crypto::sigv4`, without the AWS SDK: the one signer SES mail and SNS text messages use too, checked against AWS's published test suite. Without `region`, the driver reads `AWS_REGION`, then `AWS_DEFAULT_REGION`. Without `access_key_id`, it reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`, then the profile `profile` (else `AWS_PROFILE`, else `default`) of the shared credentials file (`AWS_SHARED_CREDENTIALS_FILE`, else `~/.aws/credentials`), then the role of the platform: the container credentials endpoint of an ECS task role or EKS Pod Identity (`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` or `AWS_CONTAINER_CREDENTIALS_FULL_URI`, with `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE` or `AWS_CONTAINER_AUTHORIZATION_TOKEN`), else the EC2 instance profile through the instance metadata service (IMDSv2; `AWS_EC2_METADATA_DISABLED=true` turns it off). Role credentials are cached and refreshed five minutes before they expire. Web identity tokens (EKS IAM roles for service accounts) aren't read.
+- Ollama needs no key and sends nothing off the machine. Run it next to your app and name a model you have pulled (`ollama pull llama3.3`).
+- Anthropic requests use API version `2026-10-21`, which has no sampling parameters, so the `anthropic` driver never sends a `temperature`.
+
+To use two accounts of one vendor, or an OpenAI-compatible server next to OpenAI itself, give the second table a name of its own and say which driver it uses:
+
+```toml title="config/app.toml"
+[ai.providers.local]
+driver = "openai"
+url = "http://127.0.0.1:8000/v1"
+
+[ai.models.private]
+provider = "local"
+model = "qwen3-32b"
+```
+
+### Models
+
+| Key | Default | Meaning |
+|---|---|---|
+| `provider` | required | A provider name from `ai.providers`, or a built-in one. |
+| `model` | required | The vendor's model id, sent as it is. |
+| `max_tokens` | `4096` | The output limit of a request that sets none. |
+| `temperature` | the vendor's | Sampling temperature, from `0.0`. Not sent to Anthropic. |
+| `fallbacks` | `[]` | Models tried in order when this one is [unavailable](#failover-and-retries). |
+| `timeout_secs` | `ai.timeout_secs` | This model's attempt limit. |
+| `dimensions` | the model's | For embedding models: the vector size. |
+
+Name models after their job, not their vendor: `smart`, `fast`, `vision`, `embed`. Upgrading to a new model is then one line in `config/app.toml`, and every feature that uses `fast` moves together.
+
+### Configuring in code
+
+`AiModule::for_root` takes the options directly, without reading configuration; invalid options fail the boot the same way:
+
+```rust
+use navree::ai::{AiOptions, ModelConfig, ProviderConfig};
+
+Navree::app().module(AiModule::for_root(AiOptions {
+    default: "local".into(),
+    providers: [("ollama".to_owned(), ProviderConfig::ollama("http://127.0.0.1:11434"))].into(),
+    models: [("local".to_owned(), ModelConfig::new("ollama", "llama3.3"))].into(),
+    ..AiOptions::default()
+}))
+```
+
+## Generating text
+
+`ai.text(prompt)` builds a request. Awaiting it sends the request and returns a `TextResponse`; a failure is an `AiError`, which `?` turns into an `AppError` in handlers.
+
+The CRM summarizes a deal's activity for whoever opens the deal. The service reads the timeline through `ActivityService`, with the reader's own access, so the summary never mentions an activity the reader couldn't open. It asks for the deal's activities with a [list query](/docs/basics/list-queries/), read against the activities' own `ListSpec`:
+
+```rust title="crates/crm-deals/src/insights.rs"
+use crm_activities::{ActivityList, ActivityService};
+use navree::access::{Accessible, PrincipalAccess};
+use navree::ai::Ai;
+use navree::orm::list::ListResource;
+use navree::prelude::*;
+use uuid::Uuid;
+
+use crate::DealResource;
+
+/// AI features on deals: summaries and follow-up drafts.
+#[injectable]
+pub struct DealInsights {
+    ai: Arc<Ai>,
+    activities: Arc<ActivityService>,
+}
+
+impl DealInsights {
+    /// Two sentences on where `deal` stands, from the activity `access` may read.
+    pub async fn summarize(
+        &self,
+        uow: &Uow,
+        access: &PrincipalAccess,
+        deal: &DealResource,
+    ) -> Result<String> {
+        let timeline = self.timeline(uow, access, deal.id).await?;
+        let response = self
+            .ai
+            .text(format!(
+                "Deal: {} ({} {} cents, stage {}, owner {}).\n\nActivity, newest first:\n{timeline}",
+                deal.title, deal.amount_cents, deal.currency, deal.stage.label(), deal.owner.name,
+            ))
+            .system(
+                "You summarize CRM deals for sales managers in at most two sentences. \
+                 Say what happened last and what the next step is. Never invent dates or amounts.",
+            )
+            .model("fast")
+            .max_tokens(200)
+            .user(access.user)
+            .await?;
+        Ok(response.text)
+    }
+
+    /// The deal's activities as one line each, newest first.
+    pub async fn timeline(&self, uow: &Uow, access: &PrincipalAccess, deal_id: Uuid) -> Result<String> {
+        let list = ActivityList::SPEC.parse(&format!(
+            "filter[subject_type]=deal&filter[subject_id]={deal_id}&per_page=50"
+        ))?;
+        let activities = self
+            .activities
+            .list(uow, Accessible::new(access.ability.clone()), &list)
+            .await?;
+        Ok(activities
+            .data
+            .iter()
+            .map(|a| format!("- {} {}: {}", a.created_at.date_naive(), a.kind, a.subject))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+```
+
+The route authorizes the deal like any other read, then asks the service:
+
+```rust title="crates/crm-deals/src/controller.rs"
+/// Two sentences on where the deal stands.
+#[get("/{id}/summary")]
+#[can(Read, Deal, from = "id")]
+async fn summary(
+    &self,
+    uow: Uow,
+    CurrentAccess(access): CurrentAccess,
+    deal: Authorized<Deal, Read>,
+) -> Result<Json<serde_json::Value>> {
+    let deal = self.deals.show(&uow, deal.into_inner()).await?;
+    let summary = self.insights.summarize(&uow, &access, &deal).await?;
+    Ok(Json(json!({ "summary": summary })))
+}
+```
+
+```http
+GET /api/v1/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/summary HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+```
+
+```json wrap
+{"summary": "Agra moved to negotiation after Tuesday's pricing call, where Daljit asked for a 12-month term. Next step: Sahil sends the revised quote by Friday."}
+```
+
+<Callout type="tip" title="Keep the model call out of the transaction">
+
+A model call takes seconds. Read what you need, then call the model; don't hold rows locked while it answers. The summary above only reads, so the request's unit of work never takes a lock.
+
+</Callout>
+
+### Request options
+
+Every request builder (`text`, `structured`, `stream`) takes the same options:
+
+| Method | Default | What it does |
+|---|---|---|
+| `.system(text)` | none | The system prompt: who the model is and the rules it follows. |
+| `.model(name)` | `ai.default` | A model name from `ai.models`. |
+| `.max_tokens(n)` | the model's `max_tokens` | The output limit of this request. |
+| `.temperature(t)` | the model's | Lower is more predictable. |
+| `.stop([..])` | none | Stop sequences. |
+| `.attach(attachment)` | none | An image or a document; see [below](#images-and-documents). |
+| `.user(id)` | none | The user the request is for (a `Uuid` or an `Option<Uuid>`): counts against their [budget](#token-limits-and-budgets) and labels the log line. |
+| `.timeout(duration)` | the model's | The attempt limit of this request. |
+
+### Conversations
+
+A prompt is a string or a list of messages. Pass the earlier turns to continue a conversation yourself:
+
+```rust
+use navree::ai::Message;
+
+let response = ai
+    .text(vec![
+        Message::user("Draft a one-line subject for the Agra renewal email."),
+        Message::assistant("Your Agra renewal: two options for next year"),
+        Message::user("Shorter, and without the colon."),
+    ])
+    .await?;
+```
+
+[Agents](/docs/ai/agents-and-tools/#memory) store conversations for you, per user, in your database.
+
+### The response
+
+| Field | Type | |
+|---|---|---|
+| `text` | `String` | The generated text. `TextResponse` also implements `Display`. |
+| `model` | `String` | The model name that answered, after any failover (`fast`, `backup`). |
+| `provider` | `String` | Its provider. |
+| `usage` | `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`. |
+| `finish` | `Finish` | `Stop`, `MaxTokens` (cut off by the limit) or `Refused` (the model declined). Agents also see `ToolCalls`. |
+
+Check `finish` when a cut-off answer would mislead: `Finish::MaxTokens` means the text ends mid-thought.
+
+### Images and documents
+
+Attach an image or a PDF to any request. The CRM reads the terms out of a contract a rep uploads:
+
+```rust
+use navree::ai::Attachment;
+
+let disk = storage.disk("local")?;
+let terms = ai
+    .structured::<ContractTerms>("Extract the commercial terms from this contract.")
+    .attach(Attachment::from_disk(&disk, &upload.path).await?)
+    .model("smart")
+    .await?;
+```
+
+`Attachment::image(bytes, "image/png")` and `Attachment::pdf(bytes)` build one from bytes; `Attachment::from_disk` reads a file from [storage](/docs/digging-deeper/storage/) and takes its type from the content (its magic bytes). Attachments go first in the last user message. Failover skips models whose provider can't read the attachment's type, and when no model in the chain can, the request fails with `AiError::Unsupported` before anything is sent.
+
+## Structured output
+
+Free text is for people. When code consumes the answer, ask for a type. `ai.structured::<T>(prompt)` returns a `T`:
+
+```rust title="crates/crm-deals/src/insights.rs"
+use chrono::NaiveDate;
+use navree::validation::Validate;
+use serde::{Deserialize, Serialize};
+use navree::openapi::ToSchema;
+
+/// A follow-up email the rep can edit before sending.
+#[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
+pub struct FollowUpEmail {
+    /// The subject line, without a prefix like "Re:".
+    #[validate(length(min = 1, max = 80))]
+    pub subject: String,
+    /// The plain-text body, signed with the rep's first name.
+    #[validate(length(min = 1, max = 2000))]
+    pub body: String,
+    /// The day to send it, when the activity suggests one.
+    #[validate(skip)]
+    pub send_on: Option<NaiveDate>,
+}
+
+impl DealInsights {
+    /// Drafts a follow-up email for `deal`'s main contact, signed by `rep`.
+    pub async fn draft_follow_up(
+        &self,
+        uow: &Uow,
+        access: &PrincipalAccess,
+        deal: &DealResource,
+        rep: &str,
+    ) -> Result<FollowUpEmail> {
+        let timeline = self.timeline(uow, access, deal.id).await?;
+        let contact = deal.contact.as_ref().map_or("the customer", |c| c.full_name.as_str());
+        Ok(self
+            .ai
+            .structured::<FollowUpEmail>(format!(
+                "Write a follow-up email from {rep} to {contact} about \"{}\".\n\nActivity:\n{timeline}",
+                deal.title,
+            ))
+            .system("You draft short, specific sales follow-ups. No filler, no exclamation marks.")
+            .model("fast")
+            .validated()
+            .await?)
+    }
+}
+```
+
+How it works:
+
+1. The JSON Schema comes from `ToSchema`, the same derive your [OpenAPI](/docs/digging-deeper/openapi/) document uses, with the types it refers to under `$defs`. Doc comments become field descriptions, and the model reads them, so write them for the model: units, formats, what to leave out. The derive is `navree::openapi::ToSchema`, also in the prelude.
+2. Navree asks the provider for JSON that matches the schema with the provider's own structured-output mode (Anthropic, OpenAI, Gemini, Mistral and Ollama have one). Bedrock gets the schema in the system prompt instead. The answer is read as JSON (code fences and surrounding prose are tolerated) and deserialized into `T`.
+3. With `.validated()` (available when `T` derives `Validate`), the value is also checked against its rules, the same rules as a [validated request](/docs/basics/validation/).
+4. When the answer doesn't deserialize or breaks a rule, the errors go back to the model with a request to correct it, up to `ai.structured_retries` times. After that the request fails with `AiError::InvalidOutput`.
+
+`T` needs `Deserialize` and `ToSchema`. A refusal fails a structured request with `AiError::Refused`. Enums work as they do in your API, so classification is a type; a `T` that isn't an object (an enum, a list) is asked for as `{"value": ...}` and unwrapped, since providers want an object at the top:
+
+```rust
+/// How a customer email reads.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Sentiment {
+    Positive,
+    Neutral,
+    /// The customer is unhappy, considering leaving, or asking to cancel.
+    AtRisk,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct Triage {
+    pub sentiment: Sentiment,
+    /// One sentence for the account owner.
+    pub reason: String,
+}
+
+let triage = ai.structured::<Triage>(email_body).model("fast").await?;
+```
+
+## Streaming
+
+A summary that takes eight seconds to generate feels slow; the same summary appearing word by word from the first half second doesn't. `ai.stream(prompt)` takes the same options as `ai.text` and returns a `TextStream` as soon as the provider starts answering. It is a `Stream` of `StreamEvent`s:
+
+| Event | When |
+|---|---|
+| `StreamEvent::Text(String)` | A piece of the answer. |
+| `StreamEvent::Done(Completion)` | Last: the `model`, `provider`, `usage` and `finish` of the whole answer. |
+
+Agents stream more kinds, `ToolCall`, `ToolResult` and `Approval`, and on a page `Surface` and `State`; see [streaming agents](/docs/ai/agents-and-tools/#streaming-a-run) and [generative UI](/docs/ai/generative-ui/). `StreamEvent` is `#[non_exhaustive]`, so a `match` on it ends with `_ => ...`.
+
+### To the browser over SSE
+
+A `TextStream` is a response. Return it from a handler and the browser receives [server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html):
+
+```rust title="crates/crm-deals/src/controller.rs"
+use navree::ai::TextStream;
+
+/// Streams a summary of the deal as server-sent events.
+#[get("/{id}/summary/stream")]
+#[can(Read, Deal, from = "id")]
+async fn summary_stream(
+    &self,
+    uow: Uow,
+    CurrentAccess(access): CurrentAccess,
+    deal: Authorized<Deal, Read>,
+) -> Result<TextStream> {
+    let deal = self.deals.show(&uow, deal.into_inner()).await?;
+    let timeline = self.insights.timeline(&uow, &access, deal.id).await?;
+    Ok(self
+        .ai
+        .stream(format!("Summarize the deal \"{}\":\n{timeline}", deal.title))
+        .system("You summarize CRM deals in at most two sentences.")
+        .model("fast")
+        .await?)
+}
+```
+
+```text title="Response body (text/event-stream)"
+event: text
+data: {"text":"Agra moved to negotiation"}
+
+event: text
+data: {"text":" after Tuesday's pricing call."}
+
+event: done
+data: {"model":"fast","provider":"anthropic","usage":{"input_tokens":912,"output_tokens":41,"cached_input_tokens":0},"finish":"stop"}
+```
+
+- Errors before the first event (a bad model name, every provider down) are ordinary error responses, because `ai.stream(..).await?` fails before the handler returns.
+- An error after the first event arrives as `event: error` with Navree's error body, `{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable"}`, and ends the stream.
+- The response sets `Cache-Control: no-cache` and `X-Accel-Buffering: no` (so nginx passes events through at once) and sends a keep-alive comment every 15 seconds.
+- Once the handler has returned the stream, `http.timeout_secs` no longer applies; `ai.timeout_secs` (or the model's `timeout_secs`, or the request's `.timeout(..)`) limits the gap between events instead, and a stall ends the stream with an `error` event.
+- When the client disconnects, Navree stops reading from the provider, which ends the generation and its cost.
+- The tokens count against the user's [budget](#token-limits-and-budgets) and the metrics when the `done` event is produced.
+
+In the browser, `EventSource` connects to the route. It sends cookies but no `Authorization` header, so it suits the [backend-for-frontend](/docs/patterns/backend-for-frontend/) setup, where the BFF holds the tokens. With a bearer token, read the stream with `fetch`:
+
+```ts title="web/lib/stream.ts"
+export async function streamSummary(dealId: string, token: string, onText: (text: string) => void) {
+  const res = await fetch(`/api/v1/deals/${dealId}/summary/stream`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+  });
+  if (!res.ok) throw new Error((await res.json()).message);
+
+  const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value;
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const raw of events) {
+      const type = /^event: (.*)$/m.exec(raw)?.[1];
+      const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] ?? "null");
+      if (type === "text") onText(data.text);
+      if (type === "error") throw new Error(data.message);
+    }
+  }
+}
+```
+
+### With Navree UI
+
+A Navree UI page doesn't read event payloads: a live part of a page hears that something changed and fetches what it shows again, so everything it draws comes from the server under the reader's own access. An agent's answer reaches such a page through [`navree_ai::ui`](/docs/ai/generative-ui/): the run writes the answer into the conversation's items as it streams, every 120 ms, and the live hub tells the reader's pages, which merge the growing answer in place. No script of yours reads the stream, and a page with JavaScript off shows where the answer is when it is drawn again.
+
+### Saving what was streamed
+
+`on_finish` runs once the last event is sent, with the whole answer as a `TextResponse`. Use it to store what the user saw:
+
+```rust
+let stream = self.ai.stream(prompt).model("fast").await?;
+let notes = self.notes.clone();
+Ok(stream.on_finish(move |response| async move {
+    notes.save_summary(deal_id, &response.text).await
+}))
+```
+
+It runs on its own task once the stream has ended after its `done` event. It doesn't run when the client disconnects first, because the generation stopped, nor after an error. Errors it returns are logged at `warn`, since the response has already been sent.
+
+### Over real time
+
+A stream tied to one request ends with the request. For work that should outlive it, or reach every tab the user has open, generate in a [queued job](/docs/digging-deeper/queues/) and send the pieces over [real-time broadcasting](/docs/digging-deeper/broadcasting/) to the user's private channel:
+
+```rust title="crates/crm-deals/src/jobs/draft.rs"
+use futures::StreamExt;
+use navree::ai::{Ai, StreamEvent};
+use navree::contracts::{BoxError, Broadcaster, Job, JobContext};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::time::Duration;
+use uuid::Uuid;
+
+/// Drafts a follow-up and streams it to the requesting user's browsers.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StreamFollowUp {
+    pub draft_id: Uuid,
+    pub user_id: Uuid,
+    pub prompt: String,
+}
+
+impl Job for StreamFollowUp {
+    const NAME: &'static str = "deals.stream_follow_up";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let ai = ctx.app.get::<Ai>().await?;
+        let broadcaster = ctx.app.get::<dyn Broadcaster>().await?;
+        let channel = vec![format!("private-users.{}", self.user_id)];
+
+        let mut stream = ai
+            .stream(self.prompt)
+            .model("fast")
+            .user(self.user_id)
+            .await?
+            .chunked(Duration::from_millis(100)); // one broadcast per 100 ms, not per token
+        while let Some(event) = stream.next().await {
+            let (name, data) = match event? {
+                StreamEvent::Text(text) => ("ai.draft.text", json!({ "draft_id": self.draft_id, "text": text })),
+                StreamEvent::Done(done) => ("ai.draft.done", json!({ "draft_id": self.draft_id, "usage": done.usage })),
+                _ => continue,
+            };
+            broadcaster.broadcast(channel.clone(), name.into(), data).await?;
+        }
+        Ok(())
+    }
+}
+```
+
+The handler dispatches the job and answers `202 Accepted` with the `draft_id`; the page listens on the user's channel:
+
+```ts
+echo.private(`users.${userId}`)
+  .listen(".ai.draft.text", (e: { draft_id: string; text: string }) => appendToDraft(e.draft_id, e.text))
+  .listen(".ai.draft.done", (e: { draft_id: string }) => markDone(e.draft_id));
+```
+
+A worker doesn't hold the WebSocket connections, so it hands its broadcasts to the serving process through `realtime.relay_url` (see [broadcasting from workers](/docs/digging-deeper/broadcasting/#broadcasting-from-workers)). `chunked(window)` merges the text that arrives within each window into one event, which keeps the broadcast rate steady whatever the model's speed.
+
+## Failover and retries
+
+Providers have bad minutes. A request moves through its model's attempts, then its fallbacks, before it gives up:
+
+1. The model is tried, and retried up to `ai.max_retries` times after a 429, a 5xx, a timeout or a connection failure. Retries back off exponentially from `ai.retry_base_ms` (500 ms) and wait at least the provider's `retry-after`; a wait longer than the model's attempt limit ends that model's retries at once.
+2. When the retries are used up, the first model in `fallbacks` gets the request, with its own retries, then the next.
+3. When every model has failed, the request fails with `AiError::Unavailable` (or `RateLimited` when the last failure was a 429).
+
+Failover happens only when trying again elsewhere can help. A request the provider rejects as invalid (a prompt longer than the context window, an unreadable image) fails at once with `AiError::Request`; a rejected API key fails with `AiError::Config` and is logged at `error`; a refusal is an answer, not a failure. A stream fails over only before its first event.
+
+The response says who answered (`response.model`, `response.provider`), and the request's log line names every model it tried, so a dashboard of `outcome="failover"` shows a provider having a bad day before your users notice.
+
+<Callout type="warning" title="Fallbacks answer differently">
+
+A fallback on another vendor reads prompts differently and follows instructions with a different accent. Test the prompts that matter against every model in their chain, and prefer [structured output](#structured-output) where code consumes the answer: validation holds every model to the same contract.
+
+</Callout>
+
+## Token limits and budgets
+
+Three limits keep spending predictable:
+
+- **Per request**: `.max_tokens(n)`, or the model's `max_tokens` (default 4096), caps the output.
+- **Per user**: with `ai.budget.daily_tokens_per_user` set, requests marked `.user(id)` count their input and output tokens against that user's allowance for the UTC day (by the app's `dyn Clock`). A request that starts when the allowance is spent fails with `AiError::BudgetExceeded`, a 429 whose `Retry-After` points at midnight UTC; a request that starts under it finishes, so a day can end slightly over. Counts live in the app's cache, under `ai:budget:<user>:<date>`; use a shared cache store when several processes serve the app. `ai.tokens_used_today(user_id)` reads the count, for a usage meter.
+- **Per agent run**: agents stop after `max_steps` model calls; see [agent options](/docs/ai/agents-and-tools/#agent-options).
+
+Usage is measured on every request, through the `metrics` crate, so the `/metrics` endpoint of [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) gets:
+
+| Metric | Labels |
+|---|---|
+| `ai_requests_total` | `model`, `provider`, `outcome` (`ok`, `failover`, `error`) |
+| `ai_tokens_total` | `model`, `provider`, `type` (`input`, `output`, `cached_input`) |
+| `ai_request_duration_seconds` | `model`, `provider` |
+
+Each request also writes one log line at target `navree::ai` with the `model`, `provider`, `user_id`, token counts, `duration_ms`, `outcome`, the models it `tried` and the request id. Prompts and outputs are never logged unless `ai.log_content` is on, and then at `debug`.
+
+## Errors
+
+Every method returns `Result<_, AiError>`. In handlers `?` converts it into an `AppError` with Navree's error shape:
+
+| `AiError` | When | Status |
+|---|---|---|
+| `Unavailable` | 5xx, timeouts and connection failures outlasted the retries and fallbacks | 503, "The AI provider is unavailable" |
+| `RateLimited` | The provider's rate limit outlasted the retries and fallbacks | 429, with `Retry-After` |
+| `BudgetExceeded` | The user's daily tokens are spent | 429, with `Retry-After` |
+| `InvalidOutput` | Structured output still didn't match its type after the repairs | 502 |
+| `Refused` | The model declined, for structured output (text requests return `Finish::Refused` instead) | 502 |
+| `Request` | The provider rejected the request as invalid | 500, logged with the provider's message |
+| `Unsupported` | No model in the chain supports an attachment or a feature | 500 |
+| `Config` | An unknown model, a provider without credentials, or a rejected key | 500, logged at `error` |
+| `NotFound` | An [agent](/docs/ai/agents-and-tools/) conversation that isn't the user's, or an unknown tool call to approve | 404 |
+| `Unauthenticated` | An agent run without a signed-in user | 401 |
+| `NoFakeReply` | [`AiFake`](#testing-with-aifake) has no reply for a request | 500 |
+| `Internal` | Anything else: a database error in conversation memory, a vector store failure | 500 |
+
+`error.status()` gives the status and `error.to_app_error()` the response. `AiError::unavailable(provider)`, `rate_limited(provider, retry_after)`, `request(provider, message)`, `config(message)`, `not_found(message)` and `internal(message)` build one, for fakes and tests.
+
+```json title="503 Service Unavailable"
+{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable"}
+```
+
+The provider's own error text never reaches the client; it is in the log. When an AI feature is optional, handle the error and carry on:
+
+```rust
+let summary = match self.insights.summarize(&uow, &access, &deal).await {
+    Ok(summary) => Some(summary),
+    Err(error) if error.status.is_server_error() => None, // show the deal without a summary
+    Err(error) => return Err(error),
+};
+```
+
+## Testing with AiFake
+
+`AiFake` answers requests without a network or an API key and records every request, so tests are fast, free and the same every time.
+
+### Installing the fake
+
+Set `ai.fake` and take the fake from the app. This works with any test builder, including the CRM's `TestCrm`:
+
+```rust title="crm/api/tests/deal_summary.rs"
+use crm_testkit::{Role, TestCrm};
+use navree::ai::{Ai, FakeReply};
+use serde_json::json;
+
+#[tokio::test]
+async fn the_summary_is_written_from_the_deal_activity() {
+    let crm = TestCrm::builder()
+        .app(crm_api::app)
+        .config("ai.fake", true)
+        .build()
+        .await;
+    let ai = crm.get::<Ai>().await.fake().unwrap();
+    ai.respond(FakeReply::text("Agra is in negotiation. Sahil sends the revised quote on Friday."));
+
+    let rep = crm.login_as(Role::Rep1).await;
+    let company = rep
+        .post("/api/v1/companies")
+        .json(&json!({ "name": "Agra" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let deal = rep
+        .post("/api/v1/deals")
+        .json(&json!({ "title": "Agra renewal", "company_id": company["id"], "amount_cents": 1_200_000 }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+
+    rep.get(&format!("/api/v1/deals/{}/summary", deal["id"].as_str().unwrap()))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("summary", json!("Agra is in negotiation. Sahil sends the revised quote on Friday."));
+
+    ai.assert_prompt_count(1);
+    ai.assert_prompted(|request| {
+        request.model() == "fast" && request.last_user_message().contains("Agra renewal")
+    });
+}
+```
+
+In a `TestApp` you build yourself, you can also install a fake you created: `.override_value(Arc::new(fake.ai()))`. Such an `Ai` isn't tied to the app, so it serves `text`, `structured`, `stream`, embeddings and reranking; agents need the app's own `Ai`, so test them with `ai.fake`. Outside an app, `AiFake::new().ai()` is a working `Ai` on its own, and `fake.ai_with(options)` takes options (`max_retries`, `ai.memory`, ...).
+
+### Scripting replies
+
+The fake answers from a queue of replies, in order:
+
+```rust
+ai.respond(FakeReply::text("Two sentences."));
+ai.respond(FakeReply::json(json!({ "subject": "Next steps", "body": "Hi Daljit, ...", "send_on": null })));
+ai.respond(FakeReply::error(AiError::unavailable("anthropic")));
+ai.respond_with([FakeReply::text("first"), FakeReply::text("second")]);
+```
+
+| Reply | Answers with |
+|---|---|
+| `FakeReply::text(s)` | Text. Streams split it into words. |
+| `FakeReply::json(value)` | A structured value, checked against `T` and its rules like a real answer. Invalid JSON triggers the repair loop, so you can test it. |
+| `FakeReply::tool_call(name, args)` | A tool call, for [agents](/docs/ai/agents-and-tools/#testing-agents). |
+| `FakeReply::refusal()` | A refusal: `Finish::Refused` for text, `AiError::Refused` for structured output. |
+| `FakeReply::error(e)` | An `AiError`, which goes through retries and failover like a real one. |
+| `.with_usage(input, output)` | Any of the above, reporting these token counts (otherwise about four characters per token). |
+
+`ai.respond_when(predicate, reply)` answers matching requests with `reply` every time, ahead of the queue, for tests where the order of calls doesn't matter. A request that nothing answers fails with `AiError::NoFakeReply`, naming the prompt, so a test never passes by accident.
+
+A transient error (`unavailable`, `rate_limited`) is retried `ai.max_retries` times and then fails over, as in production, but without the waits; each retry takes the next reply. To see the error itself, set `ai.max_retries` to `0` or queue errors for every attempt.
+
+### Assertions
+
+| Assertion | Checks |
+|---|---|
+| `assert_prompted(predicate)` | Some recorded request matches. |
+| `assert_not_prompted(predicate)` | No recorded request matches. |
+| `assert_prompt_count(n)` | Exactly `n` requests were made. |
+| `assert_nothing_prompted()` | No request was made. |
+| `assert_tool_called(name)`, `assert_tool_not_called(name)` | An agent did or didn't call the tool. |
+
+`ai.requests()` returns the recorded requests, each a `FakeRequest` with `model()` (the name from `ai.models`, any name works with the fake), `system()`, `messages()`, `last_user_message()`, `tools()` (the tool names offered), `max_tokens()`, `user()` and `is_structured()`. `ai.tool_results(name)` returns what an agent's tool returned to the model, and `ai.embedded()` the texts embedded so far. The fake's [embeddings](/docs/ai/embeddings-and-rag/#testing) are deterministic too.
+
+## Reference
+
+### The `Ai` service
+
+| Method | Returns (awaited) |
+|---|---|
+| `text(prompt)` | `TextResponse` |
+| `structured::<T>(prompt)` | `T` (`.validated()` adds its validation rules) |
+| `stream(prompt)` | `TextStream`: a `Stream` of `StreamEvent`, and a response |
+| `agent::<A>()` | An agent run builder; see [Agents and tools](/docs/ai/agents-and-tools/) |
+| `rerank(query, matches)` | The matches re-ordered; see [reranking](/docs/ai/embeddings-and-rag/#reranking) |
+| `fake()` | `Option<AiFake>`: the fake when `ai.fake` is on |
+| `tokens_used_today(user_id)` | `u64`: the user's tokens this UTC day |
+| `options()` | `&AiOptions` |
+
+`Ai::new(options)` builds one outside an app (budgets and the embeddings cache then live in its memory).
+
+### Types
+
+| Type | |
+|---|---|
+| `Ai` | The service. Inject `Arc<Ai>`. |
+| `AiOptions`, `ProviderConfig`, `ModelConfig` | The `ai` section, for `AiModule::for_root`. `ProviderConfig::anthropic(key)`, `openai(key)`, `openai_compatible(url)`, `gemini(key)`, `mistral(key)`, `ollama(url)`, `bedrock(region)`; `ModelConfig::new(provider, model)` with `.fallbacks([..])`, `.max_tokens(n)`, `.dimensions(n)`. |
+| `BudgetOptions`, `EmbeddingsOptions`, `VectorsOptions`, `MemoryOptions` | The `ai.budget`, `ai.embeddings`, `ai.vectors` and `ai.memory` tables. |
+| `TextRequest`, `StructuredRequest<T>`, `StreamRequest` | The request builders `text`, `structured` and `stream` return; await them to send. |
+| `Message`, `Role`, `Part`, `Prompt` | `Message::user`, `Message::assistant`, for prompts with history. A prompt is anything that converts into `Prompt`: a string or a `Vec<Message>`. |
+| `Attachment` | `image`, `pdf`, `from_disk`. |
+| `TextResponse`, `Usage`, `Finish` | A text answer and its accounting. |
+| `TextStream`, `StreamEvent`, `Completion` | Streams. `TextStream` has `chunked(window)` and `on_finish(f)`. |
+| `AiError` | Every failure; converts into `AppError`. |
+| `AiFake`, `FakeReply`, `FakeRequest` | The test fake. |
+| `json_schema::<T>()` | The JSON Schema Navree sends for a `ToSchema` type. |
+
+<LinkCards>
+  <LinkCard href="/docs/ai/agents-and-tools/" title="Agents and tools">
+    Let the model call your services, under the user's permissions.
+  </LinkCard>
+  <LinkCard href="/docs/ai/embeddings-and-rag/" title="Embeddings and RAG">
+    Answer questions from your own notes and documents.
+  </LinkCard>
+  <LinkCard href="/docs/ai/mcp-servers/" title="MCP servers">
+    Expose your app's tools to AI clients.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Real-time broadcasting">
+    Private channels for streamed output.
+  </LinkCard>
+</LinkCards>

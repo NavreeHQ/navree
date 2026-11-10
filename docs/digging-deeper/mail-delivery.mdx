@@ -1,0 +1,617 @@
+---
+title: "Mail delivery"
+description: "Send mail for your customers: email API transports, a transport per domain or workspace, a delivery log, suppressions, approval holds, tracking, DKIM and domain checks."
+---
+
+## Introduction
+
+<Badge feature="mail" /> [Mail](/docs/digging-deeper/mail/) covers rendering a message and handing it to a transport. A product that sends mail on behalf of its customers needs more than that. Each customer wants mail to come from their own domain, through their own provider. Every message has to be traceable after the fact. An address that bounces must not be mailed again. A send to the whole company may need someone to approve it first. `navree-mail` covers all of that:
+
+| Part | What it does |
+|---|---|
+| [Email API transports](#email-api-transports) | Amazon SES, Mailgun, Postmark and Resend over HTTPS, each returning the provider's message id. |
+| [Named transports](#named-transports) | Several configured transports, picked per message with `mailer.via("campaigns")`. |
+| [Tenant transports](#tenant-transports) | Transports stored per sending domain, workspace, organization or for the platform, encrypted, with a check before a customer saves one. |
+| [The delivery log](#the-delivery-log) | One row per message: who it went to (as a hash), through what, and what happened to it. |
+| [Provider events](#provider-events) | Webhook routes for SES, Mailgun, Postmark and Resend that record deliveries, bounces, complaints, opens and clicks, and emit them as events. |
+| [Suppressions](#suppressions) | Addresses mail is not sent to. Hard bounces and complaints add them automatically. |
+| [Hold for approval](#hold-for-approval) | `mail.hold(reason)` parks a message in an outbox until an admin releases or discards it. |
+| [Tracking](#open-and-click-tracking) | An open image and signed click redirects, both logged against the delivery. |
+| [DKIM signing](#dkim-signing) | `DKIM-Signature` headers for mail sent over SMTP, with RSA or Ed25519 keys. |
+| [Sending domains](#sending-domains) | SPF, DKIM and DMARC checks for a domain, as a service and as `mail:domains`. |
+
+The API transports, named transports, DKIM signing and domain checks work with the plain `MailModule`. Everything that stores rows needs `mail.delivery.enabled`.
+
+## Email API transports
+
+Four transports send through a provider's HTTP API instead of SMTP. Each one is a `mail.transport` like any other, so the [configuration](/docs/digging-deeper/mail/#configuration) you know applies:
+
+| Transport | Short form | Table form |
+|---|---|---|
+| SES | `"ses://KEY_ID:SECRET@eu-west-1?configuration_set=events"` | `{ type = "ses", region, access_key_id, secret_access_key, session_token, configuration_set }` |
+| Mailgun | `"mailgun://API_KEY@mg.acme.test?region=eu"` | `{ type = "mailgun", domain, api_key, region }` |
+| Postmark | `"postmark://SERVER_TOKEN@api.postmarkapp.com?stream=outbound"` | `{ type = "postmark", server_token, message_stream }` |
+| Resend | `"resend://API_KEY@api.resend.com"` | `{ type = "resend", api_key }` |
+
+The short form fits in one environment variable:
+
+```env title=".env"
+APP_MAIL__TRANSPORT=ses://AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI%2FK7MDENG%2BbPxRfiCYEXAMPLEKEY@eu-west-1?configuration_set=events
+```
+
+Percent-encode reserved characters in credentials: an SES secret's `/` is `%2F` and its `+` is `%2B`. An `ses://` URL without credentials (`ses://eu-west-1`) reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` from the environment when the transport is built. Keys, secrets and tokens are `Secret`s: they never appear in `Debug` output or errors.
+
+What each transport sends:
+
+| Transport | Request | Extra headers | `Message::metadata` | Attachments | Provider id |
+|---|---|---|---|---|---|
+| SES | `POST /v2/email/outbound-emails`, signed with AWS Signature Version 4 | `Headers` | message tags (characters other than letters, digits, `_` and `-` become `_`) | the whole message as `Raw` content (MIME, as SMTP sends it), up to 40 MB | `MessageId` |
+| Mailgun | `POST /v3/<domain>/messages`, a form with `api:<key>` | `h:<name>` | `v:<key>` variables | `attachment` files in a `multipart/form-data` form, up to 25 MB | `id`, without its angle brackets |
+| Postmark | `POST /email` with `X-Postmark-Server-Token` | `Headers` | `Metadata` | `Attachments`, base64, up to 10 MB | `MessageID` |
+| Resend | `POST /emails` with a bearer token | `headers` | `tags` | `attachments`, base64, up to 40 MB | `id` |
+
+The sizes count the attachments base64-encoded; a larger message is `MailError::TooLarge` before anything is sent (see [attachments](/docs/digging-deeper/mail/#attachments)). Resend also takes the message's idempotency key as its `Idempotency-Key` header: a queued message's retries send the same key, so Resend delivers it once. SES, Mailgun and Postmark take no key, so a retried job can deliver twice if an earlier attempt reached them.
+
+SES sends the message to the configuration set when one is configured. That set's event destination (an SNS topic) is what reports deliveries and bounces back, as described under [provider events](#provider-events). A refused request is `MailError::Provider { transport, status, message }`, with the provider's own message and never the request. Each transport also takes an `endpoint` (`?endpoint=` in the short form) to reach another base URL, such as a regional endpoint or a local mock server in tests.
+
+### Named transports
+
+`mail.transport` is the default. Name more under `mail.transports` and pick one per message with `via`, for instance to send bulk campaigns through a separate SES configuration set so their bounces don't count against your account mail:
+
+```toml title="config/app.toml"
+[mail]
+from = "Agra <hello@acme.test>"
+transport = "ses://eu-west-1?configuration_set=account"
+
+[mail.transports.campaigns]
+type = "ses"
+region = "eu-west-1"
+configuration_set = "campaigns"
+```
+
+```rust
+mailer.via("campaigns").queue(&newsletter).await?;
+```
+
+`via` returns a `ScopedMailer` with `send`, `deliver` and `queue`. A queued message keeps its transport name: the `mail.send` job sends it through the same one. An unknown name is `MailError::Config`, and an invalid named transport fails the boot with its key in the message (`` `transports.campaigns`: ... ``).
+
+### What a send reports
+
+`send` and `queue` return `()`. `deliver` does what `send` does and returns a `SendReport`:
+
+```rust
+let report = mailer.deliver(&mail).await?;
+tracing::info!(
+    status = %report.status,                 // sent, held or suppressed
+    transport = ?report.transport,           // Some("ses")
+    tier = ?report.tier,                     // Some(TransportTier::Workspace)
+    provider_id = ?report.provider_id,       // SES's MessageId
+    delivery = ?report.delivery_id,          // the delivery log row
+    "mail sent"
+);
+```
+
+`report.suppressed` lists the recipients that were left out, and `report.outbox_id` names the outbox row of a held message.
+
+## Turning on the delivery pipeline
+
+The log, provider events, suppressions, the outbox, tenant transports and tracking all store rows, so they need the database. Turn them on with `mail.delivery.enabled`:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())   // encrypts stored transports and held mail
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())      // MailBounced and friends
+    .module(ViewModule::from_config())
+    .module(MailModule::from_config())
+    // ...
+```
+
+```toml title="config/app.toml"
+[mail.delivery]
+enabled = true
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mail.delivery.enabled` | `false` | Log every message, leave out suppressed recipients, hold messages for approval, resolve tenant transports. |
+| `mail.delivery.suppress` | `true` | Leave out recipients in `mail_suppressions`. |
+| `mail.delivery.auto_suppress` | `true` | Suppress an address after a hard bounce or a complaint. |
+| `mail.delivery.tenants` | `true` | Look up tenant transports in `mail_transports`. |
+| `mail.delivery.routes` | `true` | Mount the [admin routes](#admin-routes) under `/api/mail`. They need a route authorizer (`AccessModule`) and an authenticator, like every permission-checked route: set it to `false` in an app without them. |
+
+`MailModule` contributes the migration set `mail` whether the pipeline is on or not. It creates `mail_transports`, `mail_deliveries`, `mail_events`, `mail_suppressions` and `mail_outbox` on PostgreSQL (with TimescaleDB), MySQL and SQLite (the `sqlite` feature). With `enabled = true` and no `DatabaseModule`, the boot fails. Stored transports and held messages are encrypted with the app key, so they also need `CryptoModule` and `APP_KEY`.
+
+The services below are the way to change these tables. To read them directly (a report, an export), `navree::mail::entity` has a record per table: `TransportRow`, `DeliveryRow`, `EventRow`, `SuppressionRow` and `OutboxRow`.
+
+```rust
+use navree::db::Record as _;
+use navree::mail::entity::DeliveryRow;
+
+let bounced = DeliveryRow::select()
+    .eq("status", "bounced")
+    .eq("workspace_id", workspace_id)
+    .count(&*db)
+    .await?;
+```
+
+When the pipeline is off, none of this runs: the mailer renders, validates and hands the message to the transport, as described on the [mail page](/docs/digging-deeper/mail/).
+
+### Writes and transactions
+
+The pipeline writes through the unit of work of the current task when there is an unfinished one. That is the request's unit of work while a handler runs. So the delivery row of a message sent from a handler commits with the request, and on SQLite the write doesn't wait behind the request's own lock. Mail sent from a queue worker, a command or an `after_commit` hook gets its own unit of work.
+
+## Sending for a tenant
+
+`MailScope` says who a message is sent for: a workspace, an organization, or both. `for_scope` sends with it, so that tenant's transport, suppressions and log apply:
+
+```rust title="src/modules/announcements/service.rs"
+use navree::mail::{MailError, Mailer, TemplateMail};
+use navree::prelude::*;
+use navree::workspace::CurrentWorkspace;
+use serde_json::json;
+
+#[injectable]
+pub struct Announcements {
+    mailer: Arc<Mailer>,
+}
+
+impl Announcements {
+    pub async fn notify(&self, workspace: &CurrentWorkspace, to: &str) -> Result<(), MailError> {
+        let mail = TemplateMail::new(to, "A new announcement", "mail/announcement")
+            .context(json!({ "workspace": workspace.workspace().name }));
+        self.mailer
+            .for_scope(&workspace.mail_scope())
+            .queue(&mail)
+            .await
+    }
+}
+```
+
+- `CurrentWorkspace::mail_scope()` is the workspace and its organization. `CurrentOrganization::mail_scope()` is the organization alone, and `MailScope::from(&workspace)` works from a stored workspace in a job.
+- Build one by hand with `MailScope::workspace(id)`, `MailScope::organization(id)` and `.with_organization(id)`. `MailScope::platform()` is no tenant at all.
+- A queued message keeps its scope. Suppressions and tenant transports are checked when the job runs, so an address suppressed in the meantime is still left out.
+- `for_scope(..).via("campaigns")` combines both: the scope's suppressions and log, through a named transport.
+
+## Tenant transports
+
+A tenant transport is a transport stored in `mail_transports` instead of configuration. `TransportResolver` looks one up for every message, most specific first:
+
+| Tier | Applies to | Stored with |
+|---|---|---|
+| `domain` | Mail whose sender is in the domain (`hello@acme.test`), sent for the workspace or organization that owns the domain, or for anyone when nobody does | `TransportOwner::domain`, `workspace_domain`, `organization_domain` |
+| `workspace` | Mail sent for the workspace | `TransportOwner::workspace(id)` |
+| `organization` | Mail sent for the organization or one of its workspaces | `TransportOwner::organization(id)` |
+| `platform` | Every message, ahead of the configuration | `TransportOwner::Platform` |
+| `config` | Everything else: `mail.transport`, or the named transport `via` picks | configuration |
+
+`via` skips the stored tiers. `mail.delivery.tenants = false` skips them everywhere.
+
+### Saving a tenant's transport
+
+A settings page usually checks the settings with `usable`, then stores them with `set`:
+
+```rust title="src/modules/settings/mail.rs"
+use navree::mail::{StoredTransport, TransportConfig, TransportOwner, TransportResolver};
+use navree::prelude::*;
+use navree::workspace::{CurrentWorkspace, InWorkspace};
+
+#[injectable]
+pub struct MailSettings {
+    transports: Arc<TransportResolver>,
+}
+
+#[controller("/settings/mail")]
+#[guard(InWorkspace::guard())]
+impl MailSettings {
+    #[put("/transport")]
+    #[permissions("settings.mail")]
+    async fn save(
+        &self,
+        uow: Uow,
+        workspace: CurrentWorkspace,
+        Json(config): Json<TransportConfig>,
+    ) -> Result<Json<StoredTransport>> {
+        self.transports.usable(&config).await?;
+        let stored = self
+            .transports
+            .set(&uow, TransportOwner::workspace(workspace.id()), &config)
+            .await?;
+        Ok(Json(stored))
+    }
+}
+```
+
+The body is a transport's table form, such as `{"type": "smtp", "url": "smtps://..."}` or `{"type": "mailgun", "domain": "mg.acme.test", "api_key": "..."}`.
+
+- **`usable(&config)`** builds the transport and runs its check without sending anything. SMTP connects and authenticates; SES calls `GetAccount`; Mailgun reads the domain; Postmark reads the server; Resend lists the domains. A failure is `MailError::Unusable` with the reason, which the error mapping turns into a 422 with code `mail_transport_unusable`.
+- **`set(&uow, owner, &config)`** encrypts the settings with the app key and stores them, replacing the owner's transport if it has one, and enables it. `check_stored(id)` runs the check on a stored transport and records `checked_at`.
+- **Tenant safety.** A domain, workspace or organization transport may not set an `endpoint`, and an SMTP host on a private, loopback or other reserved network is refused under the [HTTP client's SSRF policy](/docs/digging-deeper/http-client/). The platform tier may use an internal relay.
+- **Reading and changing.** `get(&owner)`, `list(tier)`, `config(id)` (the decrypted settings), `set_enabled(&uow, id, false)` and `remove(&uow, &owner)`.
+
+Built transports are cached until their row changes, so an SMTP connection pool is reused across messages.
+
+## The delivery log
+
+With the pipeline on, every message gets a row in `mail_deliveries` before it goes to the transport, and the transport's answer updates it. `Deliveries` reads the log:
+
+```rust
+use navree::mail::{Deliveries, DeliveryFilter, DeliveryStatus};
+
+let bounced = deliveries
+    .list(
+        &DeliveryFilter {
+            workspace_id: Some(workspace.id()),
+            status: Some(DeliveryStatus::Bounced),
+            ..DeliveryFilter::default()
+        },
+        PageQuery::new(1, 50),
+    )
+    .await?;
+for delivery in &bounced.data {
+    let events = deliveries.events(delivery.id).await?;
+    // ...
+}
+```
+
+A `Delivery` has the workspace and organization, the `status`, the `transport` and its `tier`, the `provider_id`, the `template`, the `subject`, the `sender`, the number of `recipients`, the transport's `error` when it failed, and `opened_at` and `clicked_at`. Recipients are not stored as addresses. `recipient_hash` is the SHA-256 of the first recipient's address in lower case, so `DeliveryFilter { recipient: Some("anu@example.com".into()), .. }` finds a person's mail without the log holding their address.
+
+| Status | Meaning |
+|---|---|
+| `sending` | Handed to the transport, no answer yet. |
+| `sent` | The transport accepted it. |
+| `delivered` | The provider delivered it to the recipient's server. |
+| `bounced` | It bounced permanently. |
+| `complained` | The recipient marked it as spam. |
+| `failed` | The transport refused it (`error` says why). |
+| `suppressed` | Every recipient was suppressed: nothing was sent. |
+
+`find(id)`, `find_by_provider_id(id)`, `list(filter, page)` and `events(id)` read it. `record(event)` writes to it, as described next.
+
+## Provider events
+
+Providers report what happened to a message by calling a webhook. `MailModule` mounts one route per provider whose secret is configured, under `/api/mail/webhooks`:
+
+```toml title="config/app.toml"
+[mail.webhooks.ses]
+token = "..."              # SNS subscribes https://api.acme.test/api/mail/webhooks/ses?token=...
+topic_arns = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]   # required with token
+
+[mail.webhooks.mailgun]
+signing_key = "..."        # the HTTP webhook signing key
+
+[mail.webhooks.postmark]
+token = "..."              # https://postmark:TOKEN@api.acme.test/api/mail/webhooks/postmark
+
+[mail.webhooks.resend]
+secret = "whsec_..."       # the webhook's signing secret
+```
+
+| Route | Verified by |
+|---|---|
+| `POST /api/mail/webhooks/ses` | The SNS message signature, the topic (one of `topic_arns`), the message's age (at most `tolerance_secs`, an hour by default), and the `token` query parameter. Subscription confirmations are confirmed by fetching their `SubscribeURL` (only `https://sns.<region>.amazonaws.com`; `confirm_subscriptions = false` logs the URL instead). |
+| `POST /api/mail/webhooks/mailgun` | The HMAC-SHA256 of `timestamp` and `token` with the signing key, at most 15 minutes old. |
+| `POST /api/mail/webhooks/postmark` | The token as the basic-auth password of the webhook URL, or a `token` query parameter. |
+| `POST /api/mail/webhooks/resend` | The `svix-signature` HMAC of the message id, timestamp and body, at most 15 minutes old. |
+
+Each answers 204 once the events are recorded, and 401 with code `invalid_signature` when verification fails. The routes need the pipeline (`mail.delivery.enabled`). Put their secrets in `.env`: `APP_MAIL__WEBHOOKS__MAILGUN__SIGNING_KEY=...`.
+
+The SES route trusts an event only when Amazon SNS signed it. For each message it checks, before anything is recorded:
+
+1. the topic: `TopicArn` must be one of `topic_arns`. The list is required, because SNS signs every topic's messages with the same keys, so a valid signature alone only says that some topic sent the message;
+2. the signing certificate's URL: HTTPS on `sns.<region>.amazonaws.com` (or `.amazonaws.com.cn`), a `.pem` file, no query;
+3. the age: `Timestamp` within `tolerance_secs` of now (3600 by default, the longest SNS retries a delivery);
+4. the signature, version 1 (SHA-1) or 2 (SHA-256), with the key of that certificate. The route fetches each certificate once and keeps it for a day;
+5. the `token` in the subscription URL, on top of the signature.
+
+A message that fails a check is a 401 and changes nothing. When the certificate can't be fetched, the route answers 503 and SNS delivers the message again. Subscribe the route with raw message delivery off: a raw message carries no signature. The check is the one [incoming webhooks](/docs/packages/webhooks/#senders-that-sign-with-their-own-keys) run for `AwsSns`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mail.webhooks.ses.token` | none | The secret in the subscription URL; the route is mounted when it is set. |
+| `mail.webhooks.ses.topic_arns` | `[]` | The SNS topics accepted. Required with `token`. |
+| `mail.webhooks.ses.tolerance_secs` | `3600` | How far a message's `Timestamp` may be from now, in seconds. |
+| `mail.webhooks.ses.confirm_subscriptions` | `true` | Fetch the `SubscribeURL` of a verified subscription confirmation. |
+
+Recording an event, with `Deliveries::record`:
+
+1. finds the delivery by its provider id and logs the event in `mail_events`;
+2. moves the delivery to `delivered`, `bounced` (hard bounces only) or `complained`, and stamps the first open and click (a click counts as an open; the earliest wins when events arrive out of order);
+3. suppresses the recipient after a hard bounce or a complaint, in the delivery's workspace;
+4. emits an event once the unit of work commits.
+
+A delivered event moves only a message that is still `sending` or `sent`, and a bounce never replaces a complaint. An event for a message the log doesn't know is still logged and still suppresses. The delivery is locked while an event is recorded, so events about one message that arrive at the same time apply one after the other.
+
+| Event | Name | Fields besides `delivery_id`, `workspace_id`, `provider`, `recipient`, `occurred_at` |
+|---|---|---|
+| `MailDelivered` | `mail.delivered` | |
+| `MailBounced` | `mail.bounced` | `permanent`, `detail` |
+| `MailComplained` | `mail.complained` | |
+| `MailOpened` | `mail.opened` | |
+| `MailClicked` | `mail.clicked` | `url` |
+
+Listen to them like any [event](/docs/digging-deeper/events/), for instance to flag a contact whose address bounced:
+
+```rust title="src/modules/contacts/listeners.rs"
+use navree::events::Listener;
+use navree::mail::events::MailBounced;
+use navree::prelude::*;
+
+#[injectable]
+pub struct FlagBouncedContact {
+    contacts: Arc<ContactService>,
+}
+
+impl Listener<MailBounced> for FlagBouncedContact {
+    fn handle<'a>(&'a self, event: &'a MailBounced, _ctx: &'a AppContext) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            if let (true, Some(email)) = (event.permanent, &event.recipient) {
+                self.contacts.mark_bounced(event.workspace_id, email).await?;
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+Register it with `m.listen::<MailBounced, FlagBouncedContact>()`.
+
+### Your own sources
+
+`ProviderEvent::from_ses`, `from_mailgun`, `from_postmark` and `from_resend` parse a provider's payload, and `ProviderEvent::new(provider, provider_id, kind)` builds one by hand. Hand them to `Deliveries::record` from any route of your own, such as one behind your own signature check:
+
+```rust
+use navree::mail::{Deliveries, MailEventKind, ProviderEvent};
+
+let event = ProviderEvent::new("relay", message_id, MailEventKind::Bounced)
+    .recipient("anu@example.com")
+    .permanent()
+    .detail("550 5.1.1 user unknown");
+deliveries.record(event).await?;
+```
+
+## Suppressions
+
+A suppressed address gets no mail. When every recipient of a message is suppressed, nothing is sent and the log has a `suppressed` row. When only some are, they are left out of `to`, `cc` and `bcc`, and `report.suppressed` names them.
+
+A suppression applies to one workspace, or to every workspace when its `workspace_id` is `None`. Hard bounces and complaints suppress in the delivery's workspace, and in every workspace for mail sent without one. To manage the list yourself, use `Suppressions`:
+
+```rust
+use navree::mail::{SuppressionReason, Suppressions};
+
+// The unsubscribe link of a newsletter.
+suppressions
+    .add(&uow, Some(workspace_id), &email, SuppressionReason::Unsubscribed, None)
+    .await?;
+
+if suppressions.is_suppressed(Some(workspace_id), "anu@example.com").await? {
+    // ...
+}
+```
+
+`add` is idempotent: adding an address that is already suppressed in that workspace returns the existing row. `remove(&uow, id)`, `remove_email(&uow, workspace_id, email)`, `find(id)` and `list(workspace_id, email, page)` do the rest. Reasons are `hard_bounce`, `complaint`, `unsubscribed` and `manual`. Addresses are stored in lower case, without their display name.
+
+## Hold for approval
+
+Some mail should not go out until someone has looked at it: a message to every employee, the first send of a new template, mail from a workspace on trial. `hold` puts a mailable in the outbox instead of sending it:
+
+```rust
+use navree::mail::Mailable;
+
+let mail = TemplateMail::new("all@acme.test", "Quarterly results", "mail/results")
+    .context(json!({ "quarter": "Q3" }))
+    .hold("Mail to every employee needs approval");
+let report = mailer.for_scope(&workspace.mail_scope()).deliver(&mail).await?;
+assert_eq!(report.status, DeliveryStatus::Held);
+```
+
+`Message::hold(reason)` does the same for a built message. `queue` holds at once rather than queueing. The rendered message is stored encrypted in `mail_outbox` with its scope, its named transport and its template. An admin then decides through `Outbox`, or through the [admin routes](#admin-routes):
+
+- `list(status, workspace_id, page)` and `find(id)` show what is waiting; `message(id)` decrypts the message for a preview.
+- `release(id, by)` sends it now, through its scope and transport, and marks it `released`. It returns the `SendReport`. If sending fails, it stays held.
+- `discard(id, by)` marks it `discarded`; it is never sent.
+
+Releasing or discarding anything but a held message is `MailError::Conflict` (409), so two admins can't both release one. `by` is the admin's user id, stored in `decided_by`.
+
+Holding mail needs the pipeline. Without it, `send` returns `MailError::Missing`.
+
+## Open and click tracking
+
+With tracking on, the mailer rewrites each HTML body before sending it:
+
+```toml title="config/app.toml"
+[mail.tracking]
+opens = true                            # a 1x1 image before </body>
+clicks = true                           # links go through a signed redirect
+base_url = "https://links.acme.test"    # default: app.url
+ttl_days = 365                          # how long tracked links work
+```
+
+- **Clicks.** Every `<a href="http(s)://...">` becomes `{base_url}/mail/t/c/{delivery}?u=<link>&expires=..&signature=..`. The route records a `clicked` event with the link and answers 302 to it. `mailto:` and `#` links are left alone, and so is any link with a `data-no-track` attribute.
+- **Opens.** An image at `{base_url}/mail/t/o/{delivery}?expires=..&signature=..` records an `opened` event and answers with a transparent GIF.
+
+Links are signed with the app's [`UrlSigner`](/docs/basics/middleware/#guards) (`http.signing_key`, or a key derived from `app.key`), so a link can't be changed to redirect elsewhere: a bad or expired signature is a 404. The routes sit at the root, outside the API prefix. Point `base_url` at the domain that serves them.
+
+Tracking needs the pipeline, since links name the delivery: with `opens` or `clicks` on and `mail.delivery.enabled` off, the boot fails. It also fails without a base URL. Many mail clients load images through a proxy or block them, so treat opens as a lower bound.
+
+## DKIM signing
+
+Mail sent through an API provider is signed by the provider. Mail sent over SMTP to a relay that doesn't sign needs a `DKIM-Signature` of its own. Give the SMTP transport a key:
+
+```toml title="config/app.toml"
+[mail.transport]
+type = "smtp"
+url = "smtps://hello%40agra.test:app-password@smtp.acme.test"
+
+[mail.transport.dkim]
+domain = "acme.test"
+selector = "mail"
+# private_key in .env: APP_MAIL__TRANSPORT__DKIM__PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+```
+
+| Key | Meaning |
+|---|---|
+| `domain` | The signing domain (`d=`). Mail from this domain or a subdomain is signed; other mail is sent unsigned. |
+| `selector` | The selector (`s=`): the public key lives at `mail._domainkey.acme.test`. |
+| `private_key` | A PEM key: RSA of 2048 bits or more (PKCS#8 or PKCS#1), or Ed25519 (PKCS#8). A key pasted on one line with literal `\n` works. |
+| `headers` | The headers to sign; by default `From`, `Reply-To`, `Subject`, `Date`, `To`, `Cc`, `Message-ID`, `MIME-Version`, `Content-Type` and `Content-Transfer-Encoding` when present. `From` is always signed. |
+
+Signatures use `relaxed/relaxed` canonicalization, with `rsa-sha256` or `ed25519-sha256` (RFC 8463). Signing runs on `ring`. `DkimSigner` prints the record to publish:
+
+```rust
+use navree::mail::DkimSigner;
+
+let signer = DkimSigner::from_pem("acme.test", "mail", &pem)?;
+println!("{} TXT \"{}\"", signer.record_name(), signer.dns_record());
+// mail._domainkey.acme.test TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
+```
+
+Tenant SMTP transports take the same `dkim` table, so each customer's domain signs with its own key. An SMTP transport also takes `ca`, the PEM text of a certificate to trust for a relay with a private certificate (see [SMTP](/docs/digging-deeper/mail/#smtp)).
+
+## Sending domains
+
+Before a customer sends from their own domain, check that it publishes what receivers look for. `SendingDomains` reads the domain's SPF and DMARC records and the DKIM keys you name:
+
+```rust
+use navree::mail::{CheckStatus, DomainExpectations, SendingDomains};
+
+let report = domains
+    .check(
+        "acme.test",
+        &DomainExpectations::new()
+            .selector("mail")
+            .spf_include("amazonses.com"),
+    )
+    .await?;
+if !report.ready() {
+    for problem in &report.spf.problems {
+        // "the record does not include `include:amazonses.com`"
+    }
+}
+```
+
+| Record | Fails when | Warns when |
+|---|---|---|
+| SPF at the domain | there is none or more than one, an expected `include:` is missing, it ends in `+all`, or it needs more than ten DNS lookups | it ends in `?all`, or has no `all` mechanism and no `redirect=` |
+| DKIM at `<selector>._domainkey.<domain>` | there is none, the key is revoked (empty `p=`) or isn't base64, or the key type is unknown | an RSA key is shorter than 2048 bits |
+| DMARC at `_dmarc.<domain>` | there is none or more than one, it has no policy, or the policy is unknown | the policy is `p=none`, `pct` is below 100, or there is no `rua=` address |
+
+Each `RecordCheck` has a `status` (`pass`, `warn` or `fail`), the `name` looked up, the `record` found and its `problems`. `ready()` is true when nothing fails. The report is `Serialize`, so a settings page can return it as it is. Lookups go through `dyn DnsResolver`: `SystemResolver` asks the system's resolvers, and `StaticResolver` answers from a table in tests. `SystemResolver::with_nameserver(addr)` asks one name server on any port instead, for a private resolver.
+
+The command does the same from a terminal:
+
+```sh
+navree mail:domains acme.test --selector mail --spf-include amazonses.com
+```
+
+```text
+acme.test
+  SPF          pass  acme.test
+               v=spf1 include:amazonses.com ~all
+  DKIM mail    pass  mail._domainkey.acme.test
+               v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+  DMARC        warn  _dmarc.acme.test
+               v=DMARC1; p=none; rua=mailto:dmarc@acme.test
+               - `p=none` only monitors: move to `quarantine` or `reject`
+Ready to send.
+```
+
+It exits with an error when the domain isn't ready, so it can gate a deployment script.
+
+## Admin routes
+
+With the pipeline on, `MailModule` mounts these routes under `/api/mail`. Each requires the permission `mail.manage`, so the app needs a route authorizer such as `AccessModule`:
+
+| Route | Answer |
+|---|---|
+| `GET /mail/deliveries?workspace_id&status&recipient&template&page&per_page` | A page of deliveries, newest first. |
+| `GET /mail/deliveries/{id}` | The delivery with its `events`. |
+| `GET /mail/suppressions?workspace_id&email` | A page of suppressions. |
+| `POST /mail/suppressions` `{email, workspace_id?, reason?, detail?}` | 201, the suppression (`manual` by default). |
+| `DELETE /mail/suppressions/{id}` | 204. |
+| `GET /mail/outbox?status&workspace_id` | A page of held mail; `status` defaults to `held`, `all` lists every one. |
+| `POST /mail/outbox/{id}/release` | `{status, delivery_id, transport, tier}`; 409 unless held. |
+| `POST /mail/outbox/{id}/discard` | The held mail, now `discarded`; 409 unless held. |
+| `POST /mail/transports/usable` (a transport's settings) | `{usable: true, kind}`, or 422 `mail_transport_unusable`. |
+
+These are platform routes: they act on every workspace and filter by `workspace_id`. For screens a workspace admin uses, build routes on the same services behind `InWorkspace`, as in [saving a tenant's transport](#saving-a-tenants-transport). Set `mail.delivery.routes = false` to mount none.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `mail:test <to> [--via <transport>] [--workspace <id>] [--organization <id>] [--subject <text>]` | Sends a short test message through the scope's transport and prints how it went: `sent via ses (workspace)  provider_id=...  delivery=...`. |
+| `mail:suppressions [list\|add\|remove] [<email>] [--workspace <id>] [--reason <reason>]` | Lists, adds or removes suppressed addresses. |
+| `mail:domains <domain> [--selector <s>]... [--spf-include <domain>]...` | Checks a sending domain, as shown [above](#sending-domains). |
+
+## Testing
+
+`MailFake` is a transport that records every message and plays the provider. Install it in place of the transport, then report what the provider would:
+
+```rust title="tests/contacts.rs"
+use navree::mail::{MailFake, MailTransport, Suppressions};
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn a_bounced_address_is_not_mailed_again() {
+    let fake = MailFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", navree::crypto::generate_key())
+        .config("mail.delivery.enabled", true)
+        .config("mail.delivery.routes", false) // no AccessModule in this test
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(ContactsModule)
+        .override_value::<dyn MailTransport>(fake.transport())
+        .build()
+        .await;
+
+    app.get::<Newsletter>().await.send_to("anu@example.com").await.unwrap();
+    fake.bounce(app.ctx(), "anu@example.com").await.unwrap();
+
+    let suppressions = app.get::<Suppressions>().await;
+    assert!(suppressions.is_suppressed(None, "anu@example.com").await.unwrap());
+    app.get::<Newsletter>().await.send_to("anu@example.com").await.unwrap();
+    assert_eq!(fake.sent_to("anu@example.com").len(), 1);
+}
+```
+
+- `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
+- `sent()`, `sent_to(address)`, `assert_sent(predicate)` and `assert_nothing_sent()` read what was sent. Each message gets the provider id `fake-1`, `fake-2` and so on.
+- `deliver`, `bounce`, `soft_bounce`, `complain`, `open` and `click` report an event for the last message sent to an address, through `Deliveries::record`, so the log, suppressions and `Mail*` events all follow. `events()` lists what the fake reported.
+- For the API transports, point `endpoint` at a local mock server: a configured endpoint's host is allowed through the SSRF policy.
+- For domain checks, override `dyn DnsResolver` with a `StaticResolver`: `StaticResolver::new().record("acme.test", "v=spf1 -all")`.
+
+## Errors
+
+Besides the errors on the [mail page](/docs/digging-deeper/mail/#validation-and-errors):
+
+| Variant | When | In a route |
+|---|---|---|
+| `Header` | An extra header has an invalid name, a line break, or is one the transport writes. | 400 |
+| `Provider` | An email API refused the request; carries its status and message. | 500 |
+| `Unusable` | A transport failed its `usable` check, or names a private SMTP host. | 422 `mail_transport_unusable` |
+| `NotFound` | A delivery, held message, suppression or stored transport doesn't exist. | 404 |
+| `Conflict` | Releasing or discarding mail that is no longer held. | 409 |
+| `Missing` | A feature needs something the app lacks (the pipeline, `DatabaseModule`, an app key). | 500 |
+| `Dns` | A DNS lookup failed (a missing record is not an error). | 500 |
+| `Store` | Reading or writing the mail tables failed. `db_error()` returns the database error, whose `kind()` tells a lost connection or a deadlock (`is_retryable()`) from a broken constraint. | 404 for a row that is gone, 409 for a unique or foreign-key violation, else 500 |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Mailables, templates, the SMTP transport and queued mail.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/inbound-mail/" title="Inbound mail">
+    Replies and other received mail, routed to mailboxes by address.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Workspaces grouped under an organization.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/events/" title="Events">
+    Listening to `MailBounced` and the other mail events.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,18 @@
+//! `navree_http::serve` against real sockets, with a client that misbehaves
+//! on purpose. Limits are configured short and every bound on how late
+//! something may happen is generous, so a loaded machine slows these tests
+//! down but cannot fail them.
+
+mod attacks;
+mod compression;
+mod connections;
+mod early_answers;
+mod http2;
+mod multipart;
+mod requests;
+mod shutdown;
+mod slow_clients;
+mod slow_readers;
+mod support;
+mod websocket_attacks;
+mod websockets;

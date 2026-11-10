@@ -1,0 +1,294 @@
+{
+  "_comment": "The UI tools the crawler photographs. `roots` and `variants` are where the walk starts; every same-origin link inside `scope` is followed from there. `service` names the compose service that serves the tool (web, web-dev, mailpit); `states` and `custom` name the extra states in states.mjs; `expect` is text the first page must show.",
+  "tools": [
+    {
+      "name": "lighthouse",
+      "title": "Lighthouse",
+      "package": "navree-lighthouse",
+      "service": "web",
+      "scope": [
+        "/_lighthouse"
+      ],
+      "roots": [
+        "/_lighthouse"
+      ],
+      "variants": [
+        "/_lighthouse?period=1h",
+        "/_lighthouse?period=7d",
+        "/_lighthouse/issues?status=open",
+        "/_lighthouse/issues?status=resolved",
+        "/_lighthouse/issues?status=ignored",
+        "/_lighthouse/issues?kind=exception",
+        "/_lighthouse/issues?kind=slow_query",
+        "/_lighthouse/issues?kind=slow_request",
+        "/_lighthouse/issues?kind=failed_job",
+        "/_lighthouse/issues?kind=outgoing_request",
+        "/_lighthouse/issues?kind=scheduled_task",
+        "/_lighthouse/requests?period=7d",
+        "/_lighthouse/queries?period=7d",
+        "/_lighthouse/jobs?period=7d",
+        "/_lighthouse/outgoing?period=7d"
+      ],
+      "avoid": [
+        "/sign-out"
+      ],
+      "keep_values": [
+        "status",
+        "kind",
+        "level"
+      ],
+      "per_template": {
+        "/_lighthouse/issues/{id}": 8,
+        "/_lighthouse/requests/route": 8,
+        "/_lighthouse/traces/{id}": 4
+      },
+      "max_pages": 80,
+      "expect": "Overview",
+      "not_found": "/_lighthouse/issues/00000000-0000-7000-8000-000000000000",
+      "states": [
+        "signed-out",
+        "wrong-password",
+        "forbidden",
+        "view-only",
+        "not-found"
+      ],
+      "state_pages": [
+        "/_lighthouse/issues"
+      ],
+      "custom": [
+        "lighthouse-issue-actions"
+      ],
+      "max_query_variants": 16,
+      "per_list": {
+        "/_lighthouse/requests/route": 4,
+        "/_lighthouse/traces/{id}": 2
+      }
+    },
+    {
+      "name": "fleet",
+      "title": "Fleet",
+      "package": "navree-fleet",
+      "service": "web",
+      "scope": [
+        "/_fleet"
+      ],
+      "roots": [
+        "/_fleet"
+      ],
+      "variants": [
+        "/_fleet",
+        "/_fleet/supervisors",
+        "/_fleet/jobs",
+        "/_fleet/failed",
+        "/_fleet/metrics"
+      ],
+      "avoid": [],
+      "max_pages": 30,
+      "expect": "Overview",
+      "states": [
+        "signed-out",
+        "wrong-password",
+        "forbidden",
+        "view-only"
+      ],
+      "state_pages": [
+        "/_fleet/failed"
+      ],
+      "custom": [
+        "fleet-retry",
+        "fleet-pause",
+        "fleet-burst"
+      ]
+    },
+    {
+      "name": "helm",
+      "title": "Helm",
+      "package": "navree-helm",
+      "service": "web",
+      "scope": [
+        "/admin"
+      ],
+      "roots": [
+        "/admin"
+      ],
+      "variants": [],
+      "avoid": [
+        "/sign-out",
+        "/delete$",
+        "/actions$"
+      ],
+      "keep_values": [],
+      "per_template": 3,
+      "max_query_variants": 6,
+      "max_pages": 110,
+      "expect": "Dashboard",
+      "not_found": "/admin/resources/not-a-resource",
+      "states": [
+        "signed-out",
+        "wrong-password",
+        "forbidden",
+        "view-only",
+        "not-found"
+      ],
+      "state_pages": [
+        "/admin/resources/tasks"
+      ],
+      "custom": [
+        "helm-lists",
+        "helm-forms",
+        "helm-edit-invalid",
+        "helm-bulk",
+        "helm-viewer-action"
+      ],
+      "avoid_text": [
+        "^Load task"
+      ]
+    },
+    {
+      "name": "logbook",
+      "title": "Logbook",
+      "package": "navree-logbook",
+      "service": "web-dev",
+      "scope": [
+        "/_logbook"
+      ],
+      "roots": [
+        "/_logbook"
+      ],
+      "variants": [],
+      "avoid": [
+        "/api/",
+        "/replay"
+      ],
+      "per_template": 4,
+      "max_pages": 40,
+      "expect": "Logbook",
+      "states": [],
+      "custom": [
+        "logbook-light"
+      ]
+    },
+    {
+      "name": "api-docs",
+      "title": "API reference",
+      "package": "navree-api",
+      "service": "web",
+      "scope": [
+        "/api/docs"
+      ],
+      "roots": [
+        "/api/docs"
+      ],
+      "variants": [],
+      "settle_ms": 2500,
+      "max_pages": 4,
+      "states": [],
+      "custom": [
+        "api-docs-operation"
+      ]
+    },
+    {
+      "name": "graphiql",
+      "title": "GraphiQL (introspection off, the release default)",
+      "package": "navree-graphql",
+      "service": "web",
+      "scope": [
+        "/graphql"
+      ],
+      "roots": [
+        "/graphql"
+      ],
+      "variants": [],
+      "settle_ms": 2500,
+      "max_pages": 3,
+      "states": [],
+      "custom": [
+        "graphiql-run"
+      ]
+    },
+    {
+      "name": "graphiql-dev",
+      "title": "GraphiQL (introspection on)",
+      "package": "navree-graphql",
+      "service": "web-dev",
+      "scope": [
+        "/graphql"
+      ],
+      "roots": [
+        "/graphql"
+      ],
+      "variants": [],
+      "settle_ms": 2500,
+      "max_pages": 3,
+      "states": [],
+      "custom": [
+        "graphiql-run"
+      ]
+    },
+    {
+      "name": "ui-gallery",
+      "title": "Component gallery",
+      "package": "navree-ui",
+      "service": "web",
+      "scope": [
+        "/_navree/ui/gallery"
+      ],
+      "roots": [
+        "/_navree/ui/gallery"
+      ],
+      "variants": [
+        "/_navree/ui/gallery/dashboard",
+        "/_navree/ui/gallery/sign-in"
+      ],
+      "avoid": [
+        "[?&](sort|page)="
+      ],
+      "max_pages": 6,
+      "states": [],
+      "custom": [],
+      "sign_in_pages": [
+        "/gallery/sign-in"
+      ]
+    },
+    {
+      "name": "oauth",
+      "title": "OAuth authorize error page",
+      "package": "navree-oauth",
+      "service": "web",
+      "scope": [
+        "/oauth"
+      ],
+      "roots": [
+        "/oauth/authorize?client_id=unknown&response_type=code&redirect_uri=https%3A%2F%2Fexample.test%2Fcb"
+      ],
+      "expect_status": 400,
+      "max_pages": 1,
+      "states": [],
+      "custom": []
+    },
+    {
+      "name": "mailpit",
+      "title": "Mailpit (the mail catcher the app sends through)",
+      "package": "navree-mail",
+      "service": "mailpit",
+      "scope": [
+        "/"
+      ],
+      "roots": [
+        "/"
+      ],
+      "variants": [],
+      "avoid": [
+        "/api/",
+        "/view/",
+        "/dist/"
+      ],
+      "per_template": 2,
+      "max_pages": 6,
+      "states": [],
+      "custom": [
+        "mailpit-alert"
+      ]
+    }
+  ]
+}

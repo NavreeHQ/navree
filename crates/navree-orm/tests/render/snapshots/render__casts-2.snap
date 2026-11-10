@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(col(\"a\").cast(SqlType::Custom(\"int); DROP TABLE x\".into())))"
+---
+PostgreSQL: error: invalid query: `int); DROP TABLE x` is not a type name CAST takes
+MySQL: error: invalid query: `int); DROP TABLE x` is not a type name CAST takes
+SQLite: error: invalid query: `int); DROP TABLE x` is not a type name CAST takes

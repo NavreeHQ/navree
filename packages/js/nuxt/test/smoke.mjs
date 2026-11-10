@@ -1,0 +1,184 @@
+// Builds test/fixture (a Nuxt app on the module) and checks the running server against a
+// scripted Navree API: the session gate (with a token refresh), server-side rendering with
+// the composables, and the BFF routes.
+//
+//   pnpm --filter @navree/nuxt smoke          (build + check)
+//   node test/smoke.mjs --no-build             (check an existing build)
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import assert from "node:assert/strict";
+import { readSetCookies, serveFakeNavree, tokenPair, unsignedJwt } from "@navree/bff/testing";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const fixture = join(root, "test", "fixture");
+const port = 3900 + Math.floor(Math.random() * 90);
+const base = `http://127.0.0.1:${port}`;
+const user = { __type: "User", id: "u1", name: "Anu" };
+const unauthorized = () =>
+  Response.json({ statusCode: 401, message: "Unauthorized", error: "Unauthorized", code: "unauthenticated" }, { status: 401 });
+
+if (!process.argv.includes("--no-build")) {
+  const nuxt = join(root, "node_modules", ".bin", process.platform === "win32" ? "nuxt.CMD" : "nuxt");
+  const build = spawnSync(`"${nuxt}" build "${fixture}"`, { cwd: root, stdio: "inherit", shell: true });
+  if (build.status !== 0) process.exit(build.status ?? 1);
+}
+
+const api = await serveFakeNavree({
+  "POST /api/auth/login": () => Response.json({ user, ...tokenPair(1) }),
+  "POST /api/auth/refresh": (call) => (JSON.parse(call.body).refresh_token === "RT0" ? Response.json(tokenPair(1)) : unauthorized()),
+  "GET /api/auth/me": (call) => (call.headers.get("authorization") === "Bearer AT1" ? Response.json(user) : unauthorized()),
+  "GET /api/me/abilities": () => Response.json([{ action: "read", subject: "Deal" }]),
+  "GET /api/v1/deals": (call) => Response.json({ auth: call.headers.get("authorization"), workspace: call.headers.get("x-workspace") }),
+  "GET /admin/users": () =>
+    new Response("<h1>Users</h1>", { headers: { "content-type": "text/html", "content-security-policy": "default-src 'self'" } }),
+  "GET /api/auth/social/github/redirect": () =>
+    Response.json({ url: "https://github.com/login/oauth/authorize?state=S1", state: "S1" }),
+  "POST /api/auth/social/github/callback": () => Response.json({ ...tokenPair(1), return_to: "/?from=github" }),
+  "GET /api/auth/email/verify/u1/h1": () => new Response(null, { status: 204 }),
+  "POST /broadcasting/auth": () => Response.json({ auth: "app-key:sig" }),
+});
+
+const server = spawn(process.execPath, [join(fixture, ".output", "server", "index.mjs")], {
+  env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", NODE_ENV: "production", NAVREE_API_URL: api.url, NAVREE_COOKIE_SECURE: "0" },
+  stdio: ["ignore", "pipe", "inherit"],
+});
+
+async function ready() {
+  for (let i = 0; i < 100; i++) {
+    try {
+      await fetch(`${base}/about`);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  throw new Error("the server did not start");
+}
+
+const html = { accept: "text/html" };
+const json = { origin: base, "content-type": "application/json" };
+const checks = [];
+const check = (name, fn) => checks.push([name, fn]);
+
+check("a public page renders", async () => {
+  const response = await fetch(`${base}/about`, { headers: html });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /About/);
+});
+
+check("a page behind sign-in redirects to /login?next=", async () => {
+  const response = await fetch(`${base}/?tab=open`, { headers: html, redirect: "manual" });
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("location"), "/login?next=%2F%3Ftab%3Dopen");
+});
+
+check("the sign-in page is public", async () => {
+  const response = await fetch(`${base}/login`, { headers: html });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Sign in/);
+});
+
+check("sign-in sets httpOnly token cookies and returns only the user", async () => {
+  const response = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ email: "a", password: "b" }) });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { user });
+  const cookies = readSetCookies(response);
+  assert.equal(cookies.navree_at.value, "AT1");
+  assert.ok(cookies.navree_rt.attrs.includes("HttpOnly"));
+});
+
+check("server-side rendering loads the user and calls the API through the BFF with the workspace", async () => {
+  const response = await fetch(`${base}/?filter[stage]=won`, { headers: { ...html, cookie: "navree_at=AT1; navree_workspace=agra" } });
+  assert.equal(response.status, 200);
+  const page = await response.text();
+  assert.match(page, /user:Anu/);
+  assert.match(page, /ws:agra auth:Bearer AT1/);
+  assert.match(page, /data-slot="data-table"/);
+  assert.match(page, /Agra renewal/);
+  // The table's search, export, selection and filter chips render on the server and carry the list query of the address.
+  assert.match(page, /role="search"/);
+  assert.match(page, /href="\/api\/v1\/deals\/export\?filter%5Bstage%5D=won"/);
+  assert.match(page, /Select all on this page/);
+  assert.match(page, /Clear filters/);
+});
+
+check("the gate refreshes an expired token before the page renders", async () => {
+  const stale = unsignedJwt({ sub: "u1", exp: Math.floor(Date.now() / 1000) - 60 });
+  const response = await fetch(`${base}/`, { headers: { ...html, cookie: `navree_at=${stale}; navree_rt=RT0` } });
+  assert.equal(response.status, 200);
+  assert.equal(readSetCookies(response).navree_at.value, "AT1");
+  assert.match(await response.text(), /user:Anu/);
+});
+
+check("the BFF refuses a write from another origin", async () => {
+  const response = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { origin: "https://evil.example", "content-type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "invalid_origin");
+});
+
+check("a mounted prefix proxies a server-rendered page with its security headers", async () => {
+  const response = await fetch(`${base}/admin/users`, { headers: { cookie: "navree_at=AT1" } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-security-policy"), "default-src 'self'");
+  assert.match(await response.text(), /Users/);
+});
+
+check("channel authorization goes through the BFF", async () => {
+  const response = await fetch(`${base}/broadcasting/auth`, {
+    method: "POST",
+    headers: { ...json, cookie: "navree_at=AT1" },
+    body: JSON.stringify({ socket_id: "1.2", channel_name: "private-crm.deals" }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { auth: "app-key:sig" });
+});
+
+check("social sign-in starts at the provider, comes back with the state and signs in", async () => {
+  const start = await fetch(`${base}/auth/social/github?next=/`, { headers: html, redirect: "manual" });
+  assert.equal(start.status, 303);
+  assert.equal(start.headers.get("location"), "https://github.com/login/oauth/authorize?state=S1");
+  const state = readSetCookies(start).navree_social;
+  assert.equal(state.value, "S1");
+  assert.ok(state.attrs.includes("Path=/auth/callback") && state.attrs.includes("HttpOnly"));
+
+  const back = await fetch(`${base}/auth/callback/github?code=C1&state=S1`, {
+    headers: { ...html, cookie: "navree_social=S1" },
+    redirect: "manual",
+  });
+  assert.equal(back.status, 303);
+  assert.equal(back.headers.get("location"), "/?from=github");
+  assert.equal(readSetCookies(back).navree_at.value, "AT1");
+
+  const forged = await fetch(`${base}/auth/callback/github?code=C1&state=S1`, { headers: html, redirect: "manual" });
+  assert.equal(forged.headers.get("location"), "/login?error=social_state");
+});
+
+check("the link in the verification mail ends on the verify-email page", async () => {
+  const response = await fetch(`${base}/api/auth/email/verify/u1/h1?expires=1&signature=s`, { headers: html, redirect: "manual" });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/verify-email?status=verified");
+});
+
+let failed = 0;
+try {
+  await ready();
+  for (const [name, fn] of checks) {
+    try {
+      await fn();
+      console.log(`ok   ${name}`);
+    } catch (error) {
+      failed += 1;
+      console.log(`FAIL ${name}\n     ${error.message}`);
+    }
+  }
+} finally {
+  server.kill();
+  await api.close();
+}
+console.log(failed === 0 ? `\n${checks.length} checks passed` : `\n${failed} of ${checks.length} checks failed`);
+process.exit(failed === 0 ? 0 : 1);

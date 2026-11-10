@@ -1,0 +1,37 @@
+/*
+ * navree-ui's stylesheet: TimePicker, and a date and a time together (DateTimePicker).
+ * Provenance: structure, slot names and variant names follow shadcn/ui's style layer (MIT,
+ * Copyright (c) 2023 shadcn), compact "Nova" style; the values, the 4px and 6px corners and
+ * the app rules are Navree's own. See THIRD_PARTY.md.
+ */
+/* A time picker: a box with a button, a popover holding the list of times. */
+[data-slot=time-picker]{position:relative;display:block;min-width:0}
+[data-slot=time-picker] [data-slot=input-group-addon]{padding-inline:.125rem}
+[data-slot=time-picker] [data-slot=input-group-addon] [data-slot=button]{--b:1.5rem;width:var(--b);height:var(--b)}
+[data-ui-dates]:not([data-ui-dates=datetime]):not([data-has-value]) [data-ui-act=clear]{display:none}
+[data-slot=time-picker] [data-slot=field-error]{margin:.375rem 0 0}
+/* A date and a time together: the two boxes side by side, the time narrower, on one line where they fit. */
+[data-slot=date-time-picker]{position:relative;display:block;min-width:0}
+[data-slot=date-time-picker-ui]{display:flex;flex-wrap:wrap;align-items:flex-start;gap:.5rem}
+[data-slot=date-time-picker-ui] > [data-slot=date-picker]{flex:3 1 9rem}
+[data-slot=date-time-picker-ui] > [data-slot=time-picker]{flex:2 1 7rem}
+[data-slot=date-time-picker] > [data-slot=field-description]{margin:.375rem 0 0}
+
+/* The list of times. The overlay module places it. */
+[data-slot=popover-content][data-variant=times]{padding:0;width:max-content;max-width:calc(100vw - 1rem);max-height:calc(100dvh - 1rem);overflow:auto}
+[data-slot=time-list]{position:relative;list-style:none;margin:0;padding:.25rem;min-width:8rem;max-height:min(16rem,calc(100dvh - 2rem));overflow:auto;scrollbar-width:thin;font-variant-numeric:tabular-nums;
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+  & [role=option]{padding:.375rem .625rem;border-radius:var(--radius);color:var(--fg-1);cursor:pointer;white-space:nowrap}
+  & [role=option]:hover{background:var(--ink-3);color:var(--fg)}
+  & [role=option][aria-selected=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+  & [role=option][data-active]:not([aria-selected=true]){background:var(--ink-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-3)}
+  &:focus-visible [role=option][data-active][aria-selected=true]{outline:2px solid var(--fg);outline-offset:-3px}
+}
+
+/* With JavaScript off the native field does the work. */
+@media (scripting:none){
+  [data-slot=time-picker-ui],[data-slot=date-time-picker-ui]{display:none}
+}
+@media (scripting:enabled){
+  [data-ui-dates=time] > [data-ui-native],[data-ui-dates=datetime] > [data-ui-joint]{position:absolute;inset-block-start:0;inset-inline-start:0;width:1px;height:1px;margin:0;padding:0;border:0;opacity:0;overflow:hidden;pointer-events:none}
+}

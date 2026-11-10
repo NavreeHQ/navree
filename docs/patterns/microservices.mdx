@@ -1,0 +1,334 @@
+---
+title: "Microservices"
+description: "Split modules into services that talk over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, and serve gRPC, with the same module code, guards and tests."
+---
+
+## Introduction
+
+In a microservice architecture, the system is several programs, each deployed, scaled and owned on its own, talking over the network. Each service owns its data, and other services reach it only through its messages and events.
+
+Navree treats a service as a module that happens to run in its own binary. A message handler is written like an HTTP route: it lives in a module, gets its dependencies injected, declares who may call it, validates its input and runs in a unit of work. [navree-micro](/docs/microservices/introduction/) carries the messages between services over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, and the transport is configuration, not code.
+
+<Diagram name="microservices" />
+
+That has two consequences:
+
+- **You don't start here.** Start with a [modular monolith](/docs/patterns/modular-monolith/). Its modules already have the boundaries services need, and splitting one out later changes how it is called, not how it is written.
+- **Services stay Navree apps.** Each has the same structure, the same configuration, the same error shape, the same health checks and the same tests as the monolith it came from.
+
+This page splits the reference CRM into services: `crm-api` keeps serving the web app, and the deals, notifications and activities features move into services of their own.
+
+## When to split
+
+Microservices buy independence at the price of a network between your features. Every call can now be slow or fail, data lives in several databases, and a change that spans services needs a plan. Split when the independence is worth that:
+
+| Reason | Example |
+|---|---|
+| Different scaling | Notifications fan out to thousands of users after a bulk import; the rest of the CRM needs two small web processes. |
+| Different deploy cadence | The deals team ships ten times a day; the rest of the app weekly. |
+| Isolation | A payment service must keep running, and keep its data separate, when the main app is down. |
+| Team ownership | One team owns a feature end to end, with its own on-call. |
+
+If none of these apply, a modular monolith with several processes (`serve`, `queue:work`, `schedule:work`) scales further than most products need. [Choosing an architecture](/docs/patterns/overview/) compares the shapes.
+
+## Drawing the boundaries
+
+A service boundary is a module boundary, kept. Look at what each module exports and which events it emits: that is the service's API.
+
+| In the monolith | Between services |
+|---|---|
+| `DealsModule` exports `DealService` | The deals service answers `deals.get`, `deals.move` and the other `deals.*` messages |
+| `DealService` emits `DealWon` on the event bus | The deals service publishes `deal.won` on the broker |
+| `NotifyDealOwner` listens to `DealWon` | The notifications service handles `deal.won` with `#[event_pattern]` |
+| One database, one transaction | Each service owns its tables in its own database |
+
+Three rules keep services independent:
+
+- **Each service owns its data.** No service reads another service's tables. If the activities service needs a deal's title, it asks the deals service, or keeps its own copy updated from events.
+- **Talk through contracts.** Payloads and events live in a shared contracts crate, never in a service's internal types.
+- **Prefer events for reactions.** A service that must answer before the user sees a result sends a message. A service that reacts to something that already happened handles an event, and the emitter doesn't wait for it.
+
+The CRM as services:
+
+<FileTree title="The CRM as services">{`
+  Cargo.toml                  # the workspace
+  crates/
+    crm-contracts/ *          # payloads and patterns every service shares
+      src/
+        lib.rs
+        deals.rs
+  services/
+    crm-api/                  # HTTP for the web app; calls the services
+    deals/                    # answers deals.*; emits deal.won and deal.assigned
+    notifications/            # handles deal.won and deal.assigned
+    activities/               # handles deal.won
+`}</FileTree>
+
+## A shared contracts crate
+
+Payloads are plain serde types in a crate every service depends on, so a change to a payload is a compile error on both sides instead of a failure in production:
+
+```rust title="crates/crm-contracts/src/deals.rs"
+use navree::events::Event;
+use navree::validation::Validate;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// `deals.get`: one deal. Replies with a [`DealView`].
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
+pub struct GetDeal {
+    #[validate(skip)]
+    pub id: Uuid,
+}
+
+/// A deal as other services see it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DealView {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub company_id: Uuid,
+    pub owner_id: Uuid,
+}
+
+/// `deal.won`: a deal moved to `won`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DealWon {
+    pub deal_id: Uuid,
+    pub title: String,
+    pub owner_id: Uuid,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub won_by: Uuid,
+}
+
+impl Event for DealWon {
+    const NAME: &'static str = "deal.won";
+}
+```
+
+`DealWon` is the same kind of [event](/docs/digging-deeper/events/) the monolith emits in process. Its `NAME` is the pattern it travels under between services, so moving an event from the bus to the broker doesn't rename it.
+
+Keep the crate small and versioned like a public API: add fields with `#[serde(default)]`, and introduce a new pattern (`deals.get.v2`) for a breaking change while the old one keeps working.
+
+## Request-response or events
+
+Services talk in two ways, and the choice shapes how the system behaves when something is slow or down:
+
+| | Request-response | Events |
+|---|---|---|
+| Handler | `#[message_pattern("deals.get")]` | `#[event_pattern("deal.won")]` |
+| Caller | `client.send(pattern, &payload)` waits for the reply | `client.emit(pattern, &event)` returns once the event is stored |
+| Receivers | One instance of one service | Every service that handles the pattern |
+| When the receiver is down | The caller gets an error after its deadline | The event waits in the broker; nothing is lost |
+| Use it for | Questions the caller needs answered now: read a deal, check a limit | Facts others react to: a deal was won, a user signed up |
+
+Most systems need both. The web app's `GET /api/v1/deals/{id}` needs the deal now, so `crm-api` sends `deals.get`. Nobody needs to wait for the owner's notification, so the deals service emits `deal.won` and moves on.
+
+## Moving a module into a service
+
+Here is the split of the CRM's deals module, step by step.
+
+<Steps>
+<Step title="Give the module its own binary">
+
+Move the deals crate under `services/deals/` with a `main.rs` that adds `MicroModule` next to the platform modules:
+
+```rust title="services/deals/src/main.rs"
+use crm_core::{CrmCoreModule, platform};
+use deals::DealsModule;
+use navree::prelude::*;
+
+fn main() -> Result<(), BoxError> {
+    platform(Navree::app(), ConfigSources::defaults())
+        .module(MicroModule::from_config())
+        .module(CrmCoreModule)
+        .module(DealsModule)
+        .run()
+}
+```
+
+```toml title="services/deals/config/app.toml"
+[http]
+addr = "127.0.0.1:8081"     # health checks and metrics
+
+[micro]
+service = "deals"
+transport = "nats"
+url = "nats://127.0.0.1:4222"
+```
+
+The `micro` feature of `navree` and the feature of the transport (`micro-nats` here) are not on by default: add them to the service's dependency, as [Installation](/docs/microservices/introduction/#installation) shows. `navree new deals --kit micro` writes a service, a shared contracts crate and a NATS setup for development.
+
+</Step>
+<Step title="Answer messages with the services the module exported">
+
+The handlers call `DealService`, the provider the module used to export. Access rules come along: `#[can(Read, Deal, from = "id")]` loads the deal named by the payload's `id` and refuses with a 404 or a 403 before the handler runs, as it does for a route's `{id}`.
+
+```rust title="services/deals/src/handlers.rs"
+use crm_contracts::deals::{DealView, GetDeal};
+use crm_core::Deal;
+use navree::prelude::*;
+
+use crate::service::DealService;
+
+#[injectable]
+pub struct DealsHandlers {
+    deals: Arc<DealService>,
+}
+
+#[message_handlers]
+impl DealsHandlers {
+    /// `deals.get`: the deal whose id is in the payload.
+    #[message_pattern("deals.get")]
+    #[can(Read, Deal, from = "id")]
+    async fn get(&self, uow: Uow, deal: Authorized<Deal, Read>) -> Result<DealView> {
+        self.deals.view(&uow, deal.into_inner()).await
+    }
+}
+```
+
+Register them in the module, where the controller used to be:
+
+```rust title="services/deals/src/lib.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<DealsHandlers>();
+        m.forward_event::<DealWon>();
+        m.forward_event::<DealAssigned>();
+    }
+}
+```
+
+`forward_event` publishes every `DealWon` the service emits on its bus to the broker as well, so `DealService` keeps calling `events.emit(..)` and doesn't change.
+
+</Step>
+<Step title="Call the service instead of the provider">
+
+In `crm-api`, the controller that injected `DealService` injects `ServiceClient` and sends the message:
+
+```rust title="services/crm-api/src/deals/controller.rs"
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl DealsController {
+    #[get("/{id}")]
+    async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<DealView>> {
+        // Before: Ok(Json(self.deals.show(&uow, deal).await?))
+        let deal: DealView = self.client.send("deals.get", &GetDeal { id }).await?;
+        Ok(Json(deal))
+    }
+}
+```
+
+The message carries the user's bearer token, the request id, the current workspace and the trace context. The deals service authenticates the token itself, so a 403 or a 404 there comes back to `crm-api`, and `?` hands it to the browser in the same JSON error shape.
+
+</Step>
+<Step title="Turn listeners into event handlers">
+
+`NotifyDealOwner` moves to the notifications service and becomes an event handler. What it does doesn't change, only how it is subscribed:
+
+```rust title="services/notifications/src/deals.rs"
+#[injectable]
+pub struct DealEvents {
+    notifier: Arc<Notifier>,
+    auth: Arc<AuthService>,
+}
+
+#[message_handlers]
+impl DealEvents {
+    #[event_pattern("deal.won")]
+    async fn deal_won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> {
+        self.notify_owner(&uow, event.owner_id, event.deal_id, "Deal won").await
+    }
+}
+```
+
+</Step>
+</Steps>
+
+The module's tests move with it. Its HTTP tests become message tests against `MicroFake`'s in-memory transport, and everything else (the service, its rules, its migrations) is the same code.
+
+## Hybrid services
+
+A service can serve HTTP and handle messages from one binary. With `HttpModule` and `MicroModule` both in the app, `serve` starts the HTTP server and the message listener together, and stops both gracefully on SIGTERM. That's how the deals service answers `deals.get` and serves `/health/ready` to the orchestrator from one process.
+
+Scale the two sides separately from the same build when the load differs: run `serve` with `micro.listen_with_serve = false` on the web servers, and `micro:listen` on the consumers. See [Hybrid applications](/docs/microservices/introduction/#hybrid-applications).
+
+## Data and consistency
+
+Each service has its own database, so one transaction no longer spans the system. Three tools replace it.
+
+**The outbox.** An event emitted inside a unit of work is written to the service's `micro_outbox` table in the same transaction as the change, and published after the commit. A deal that is saved always gets its `deal.won`; a deal that rolls back never does. It is the same guarantee the monolith gets from queued listeners, now across the network. See [Event-driven](/docs/patterns/event-driven/#the-outbox-events-and-the-unit-of-work).
+
+**Idempotent consumers.** Brokers deliver events at least once. The inbox (`micro.inbox`) records each handled message id and skips duplicates, and handlers that set state rather than toggle it are safe to run twice anyway.
+
+**Copies kept by events.** When the activities service shows a deal's title next to each note, it stores the title and updates it when the deals service emits `deal.renamed`, instead of calling the deals service for every row. Reads stay fast and keep working when the deals service is down; the copy is a moment behind.
+
+For a process that spans services (a deal won creates an invoice in billing, which provisions an account), let each step react to the previous step's event, and give each step a compensating event for when a later one fails. Keep such chains short: a long one is a sign the boundaries are in the wrong place.
+
+## Workspaces across services
+
+In a [multi-tenant](/docs/patterns/multi-tenancy/) app, the current workspace travels with every message, next to the caller's credentials. The receiving service resolves `CurrentWorkspace` from the message as it would from an HTTP request, checks membership and scopes its queries, so a service never handles one workspace's message with another workspace's data.
+
+## Tracing across services
+
+Every message carries the request id and the OpenTelemetry trace context. A request to `crm-api` that sends `deals.get`, which emits `deal.won`, which the notifications service handles, is one trace in your tracing backend: each service continues the trace its message carried, so its queries, jobs and mail are spans of the same trace. Logs carry the same request id in every service. See [Distributed tracing](/docs/microservices/tracing/).
+
+## gRPC between services
+
+Messages suit traffic between your own services. When another team or another language calls a service, a `.proto` contract and gRPC fit better. [navree-grpc](/docs/microservices/grpc/) registers a tonic service in a module, so it shares the container, the guards and the access rules with your message handlers and routes. One service can expose all three.
+
+## Deploying services
+
+Each service is one binary with its own configuration, so it deploys like the monolith did. [Harbor](/docs/tools/harbor/) provisions servers and ships zero-downtime releases; give each service its own release and its own servers or roles in `harbor.toml`, and deploy them independently. `navree build:image` builds a container image of any service for platforms that run containers.
+
+Run the broker where every service can reach it. In development, `navree dock up` starts NATS with PostgreSQL and the other local services ([Dock](/docs/tools/dock/)).
+
+Each service reports its own health: with `ObserveModule`, `/health/ready` includes a `micro` check that fails while the broker is unreachable, so an orchestrator stops routing to an instance that can't do its work.
+
+## Testing
+
+Test each service on its own, without a broker. `MicroFake` gives the app an in-memory transport: send messages into the app's handlers, stub the services it calls, and assert on what it sent and emitted.
+
+```rust title="services/deals/tests/get.rs"
+#[tokio::test]
+async fn a_rep_reads_their_deal() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(MicroModule::for_root(micro.transport()))
+        .module(DealsModule)
+        .build()
+        .await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+
+    let deal: DealView = micro
+        .client()
+        .acting_as(principal(rep))
+        .send("deals.get", &GetDeal { id: deal_id })
+        .await
+        .unwrap();
+    assert_eq!(deal.owner_id, rep);
+
+    app.shutdown().await.unwrap();
+}
+```
+
+The contracts crate is what keeps services compatible, so test it too: a test per payload that deserializes a JSON sample from the previous release catches a change that would break a service still running the old version.
+
+<LinkCards>
+  <LinkCard href="/docs/microservices/introduction/" title="Microservices">
+    `MicroModule`, message handlers, `ServiceClient` and configuration.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/transports/" title="Transports">
+    NATS, Kafka, RabbitMQ, Redis Streams, MQTT and TCP.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/events/" title="Events between services">
+    Fan-out, retries, dead letters, the outbox and the inbox.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/modular-monolith/" title="Modular monolith">
+    Where every service starts: modules with explicit boundaries.
+  </LinkCard>
+</LinkCards>

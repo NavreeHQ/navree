@@ -1,0 +1,50 @@
+//! The messages and events the service handles. A handler is written like
+//! an HTTP route: dependencies are injected, it declares who may call it,
+//! its payload is validated, and it runs in a unit of work that commits
+//! when it returns `Ok`.
+
+use std::sync::Arc;
+
+use navree::db::Uow;
+use navree::http::Result;
+use navree::micro::Payload;
+use navree::validation::Valid;
+use navree::{injectable, message_handlers};
+
+use {{ contracts_crate }}::{DealWon, GetInvoice, Invoice};
+
+use super::service::InvoiceService;
+
+/// `invoices.get` and `deal.won`.
+#[injectable]
+pub struct InvoiceHandlers {
+    invoices: Arc<InvoiceService>,
+}
+
+#[message_handlers]
+impl InvoiceHandlers {
+    /// Request-response: another service asks for an invoice. The caller's
+    /// bearer token travels with the message.
+    #[message_pattern("invoices.get")]
+    #[authenticated]
+    async fn get(
+        &self,
+        uow: Uow,
+        Valid(Payload(input)): Valid<Payload<GetInvoice>>,
+    ) -> Result<Invoice> {
+        self.invoices.find(&uow, input.id).await
+    }
+
+    /// An event: a deal was won somewhere else. Events are facts, so they
+    /// take no access declaration; a failure is retried, then dead-lettered
+    /// (`micro:failed`).
+    #[event_pattern("deal.won")]
+    async fn deal_won(
+        &self,
+        uow: Uow,
+        Valid(Payload(event)): Valid<Payload<DealWon>>,
+    ) -> Result<()> {
+        self.invoices.draft_for_deal(&uow, &event).await?;
+        Ok(())
+    }
+}

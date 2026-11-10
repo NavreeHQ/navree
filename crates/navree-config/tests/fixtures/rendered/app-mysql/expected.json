@@ -1,0 +1,35 @@
+{
+  "api": {
+    "title": "Agra cloud API",
+    "undocumented": [
+      "/_lighthouse*",
+      "/_logbook*"
+    ]
+  },
+  "auth": {
+    "registration": "false"
+  },
+  "database": {
+    "max_connections": "20",
+    "migrate_on_boot": true,
+    "url": "mysql://navree:navree@127.0.0.1:3306/agra_cloud"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api"
+  },
+  "key": "base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=",
+  "log": {
+    "level": "debug"
+  },
+  "mail": {
+    "from": "Agra cloud <hello@example.com>",
+    "transport": "log"
+  },
+  "queue": {
+    "driver": "redis"
+  },
+  "workspace": {
+    "resolvers": "header,subdomain"
+  }
+}

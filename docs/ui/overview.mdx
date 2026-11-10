@@ -1,0 +1,129 @@
+---
+title: "Navree UI"
+description: "Typed Rust components rendered to HTML on the server, one stylesheet, and a small runtime that loads only when a page needs it."
+---
+
+Navree UI is the toolkit in `navree::ui` (the `navree-ui` crate). A handler returns components; the toolkit renders them to HTML on the server. A page with nothing interactive ships no JavaScript. There is no per-tab state on the server, no WebAssembly, and no Node at run time or in `cargo build`.
+
+```rust
+use navree::ui::*;
+
+async fn show(shell: AppShell) -> AppPage {
+    shell
+        .page("Sutlej Supply renewal")
+        .crumb("Deals", "/deals")
+        .actions(Button::primary("Edit").href("/deals/42/edit"))
+        .body(Card::titled("Notes").body(Text::new("Two-year term, same price.")))
+}
+```
+
+## How it works
+
+<Diagram name="navree-ui" />
+
+- **One tree.** Every component is a plain struct with builder methods that turns into one `Node`. Variants are Rust enums, so a misspelt variant doesn't compile. `render` writes a tree in one pass into one `String`, sized ahead of time.
+- **One attribute contract.** `data-slot` says what a part is (`button`, `card-title`). `data-variant`, `data-size` and `data-tone` are closed choices; `data-invalid`, `data-pending`, `data-selected` and `data-collapsed` are states; `data-ui-*` are the runtime's hooks. The stylesheet and the runtime read nothing else. Each component page draws its parts in an anatomy diagram.
+- **The browser does the work it already knows.** Dialogs are `<dialog>` opened by the `command` attribute, accordions are `<details>`, popovers are `popover`, switches are checkboxes. They work with no script.
+- **Errors are pages.** A request for a page that ends in a 401, 403, 404 or 500 gets a page in the shell, with the next step and a reference, and an API route keeps its JSON error. A card, a region or a table row that cannot show its content says why with the same markup. See [Errors and states](/docs/ui/errors-and-states/).
+- **Actions answer with ops.** A form or a command posts to a handler, which answers with a `Reply`: a closed list of ops (morph this element, show a toast, close this dialog) for the runtime, and a redirect or a full page for a browser with JavaScript off. See [Commands and ops](/docs/ui/commands-and-ops/).
+
+To use it, keep the `ui` feature of `navree` (it is on by default) and add `UiModule::from_config()` to your app: it serves the toolkit's files and picks ops or a page for each reply.
+
+```rust title="src/main.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(HttpModule::from_config())
+    .module(UiModule::from_config())
+    .run()
+```
+
+## What ships to the browser
+
+Every page loads one stylesheet. A component with styles of its own, such as a chart, adds its own small sheet, and only on the pages that draw it. Script loads only for what a page's markup uses, and the toolkit works out which from the tree as it renders.
+
+| A page with | Loads |
+|---|---|
+| Nothing interactive | No script. Links you mark with `prefetch` are fetched ahead by the browser, from a `Speculation-Rules` header. |
+| A dialog, an accordion, a switch | No script: `<dialog>`, `command`, `<details>`, `<input>`. |
+| A popover, a tooltip or a hover card | `overlay`: placing the popup and the hover delay. |
+| A form, a region or a command | `core`: delegation, commands, ops, morphing, boosted links, pending states. |
+| A select, a combobox, a multi-select or a command palette | `overlay` and `select`: the keys, the search, the chips and the palette. |
+| A data table | `core`, `table` and `overlay`. |
+| A line, area, bar, donut or funnel chart, or one that is loading, failed or empty | `charts` and the charts' stylesheet: the tooltip, the crosshair and the keys. |
+| A sparkline | No script and no sheet of its own: the toolkit's stylesheet draws it. |
+| A live region, or a table that follows an event stream | `core` and `live`: one connection per stream, its reconnects and the fetches. |
+| A phone input | `phone` and `overlay`; the numbering plans (`phone-data`) the first time someone focuses one. |
+| The app shell | `core` and `sidebar`. |
+| A calendar | `dates`. |
+| A date range picker, or a date picker drawn as a button | `dates` and `overlay`. |
+| A date picker with a box to type in | `dates`, `date-text` and `overlay`. |
+| A time picker | `time` and `overlay`. |
+| A date and time picker | `dates`, `date-text`, `time` and `overlay`. |
+| A dropdown menu, or the actions of a table row | `menus` and `overlay`. |
+| A context menu | `menus` and `menubar`. |
+| A menu bar, or a navigation menu | `menubar` and `overlay`; a menu bar also loads `menus`. |
+| Tabs, or a toggle group | `menus`: the keys. |
+| A slider, a tree view or a toolbar | `slider`, `tree` or `toolbar`; a toolbar's More menu loads `menus` and `overlay`. |
+| A split pane, or a single-key shortcut | `split` or `keys`. |
+| A lazy list | `lazy`, and `live` when it follows an event stream. |
+| A sortable that moves items | `core` and `sortable`. |
+| An upload, a one-time code field or a carousel | `upload`, `otp` or `carousel`, each with a small stylesheet of its own. |
+| Markdown text | A stylesheet, `markdown`, and no script. |
+
+The files on this version of Navree, measured from the files themselves. The site writes this table from the toolkit's build, so it changes when they do:
+
+<UiAssets />
+
+The files are embedded in your binary with their brotli and gzip forms, and served at content-hash URLs under `/_navree/ui/` as immutable. A page of 32 KiB or more goes out in brotli quality 5, with a window that holds the whole page, to a client that takes brotli; a smaller one goes through the HTTP pipeline's gzip. Geist is the one web font, preloaded, with `font-display: optional`; monospace text uses the system's font.
+
+### The budgets
+
+`tests/budgets.rs` in the crate holds ceilings, and a change that crosses one fails the build:
+
+<UiBudgets />
+
+In a release build the same file also checks that a 1,000-row data table renders in under 3 ms, as the median of 50 runs, and that a combobox of 10,000 options renders in under 40 ms, as the median of 20. That is a ceiling to catch a change of scale, not a measurement of your pages.
+
+## Security
+
+Every page carries a strict content security policy: scripts, styles, fonts and requests from the page's own origin only, no inline script or style, and no framing.
+
+<UiCsp />
+
+The toolkit is built so that a page can't break that policy or be turned against its users:
+
+- **One escaping path.** Text goes through one escaper. Attribute names are `&'static str`, so a request can't choose one. `style`, `srcdoc` and `on*` attributes are refused, and so are elements that load or run something: `script`, `style`, `link`, `meta`, `base`, `iframe`, `object`, `embed`.
+- **URLs are checked.** Every URL attribute goes through `Href`, which refuses `javascript:` and any other scheme it doesn't know.
+- **Commands are data.** What an element does in the browser is a `Cmd` from a closed list, interpreted by the runtime. No expression is evaluated, and a command can set only state attributes, never where something points.
+- **Redirects stay on the site.** `Reply::redirect` and `Op::navigate` refuse a URL that would leave it, so a `next` parameter can't send a user away. Leaving is `redirect_external`, by name.
+- **Forms refuse forgery.** `Submit<T>` refuses a body from another site with 403 (by `Sec-Fetch-Site`, or `Origin`, unless that origin is in `http.cors.allowed_origins`), a body that isn't a form with 415, `GET` with 405, and more than 1,000 fields with 413. Only the struct's own fields are read, and a rejected form never writes a password back. See [Forms](/docs/ui/forms/).
+- **Hovering changes nothing.** Nothing is fetched ahead of a click unless you ask, link by link, with `prefetch`, and anything that writes is a `POST`.
+
+The docs' own previews run under the same policy: each is a page rendered by the toolkit, framed on its own, so the toolkit's styles and this site's never meet.
+
+## Testing a page
+
+`TestView` drives a page in a plain test, with no browser: check what it shows, click a link or a button by its name, fill a form and read it back as your struct.
+
+```rust
+use navree::ui::test_view::Clicked;
+use navree::ui::{Button, TestView, View};
+
+let page = TestView::of(&View::new("Deal").body(Button::primary("Edit").href("/edit")));
+assert!(page.sees("Edit"));
+assert_eq!(page.click("Edit"), Clicked::Link("/edit".to_owned()));
+```
+
+[Testing Navree UI pages](/docs/testing/ui-pages/) goes further: routes over HTTP, live streams and real browsers.
+
+<LinkCards>
+  <LinkCard href="/docs/components/overview/" title="Components">
+    Every component, live, by group.
+  </LinkCard>
+  <LinkCard href="/docs/ui/foundations/" title="Foundations">
+    Tokens, colour, corners, sizes and type.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/#the-navree-ui-app" title="Start from an app">
+    A new app with sign-in, a table, forms and live updates: navree new shop --ui navree.
+  </LinkCard>
+</LinkCards>

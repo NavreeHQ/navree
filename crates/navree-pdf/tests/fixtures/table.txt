@@ -1,0 +1,6 @@
+Quarterly figures
+Revenue grew in every region.
+Region Q1 Q2
+North 1,200 1,350
+South 980 1,010
+Italic note and bold text in one paragraph.

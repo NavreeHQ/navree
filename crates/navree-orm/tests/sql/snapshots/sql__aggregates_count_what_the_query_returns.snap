@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d| render_aggregate(&plain.clone().into_ir(), &count, d))"
+---
+PostgreSQL: SELECT COUNT(*) AS "aggregate" FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."deleted_at" IS NULL
+  values: [String("won")]
+MySQL: SELECT COUNT(*) AS `aggregate` FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`deleted_at` IS NULL
+  values: [String("won")]
+SQLite: SELECT COUNT(*) AS "aggregate" FROM "deals" WHERE "deals"."stage" = ? AND "deals"."deleted_at" IS NULL
+  values: [String("won")]

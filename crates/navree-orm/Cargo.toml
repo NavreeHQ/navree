@@ -1,0 +1,105 @@
+[package]
+name = "navree-orm"
+description = "Navree ORM: active-record models, a typed query builder, dirty tracking and pagination on PostgreSQL/TimescaleDB, MySQL and SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "orm", "active-record", "sql", "database"]
+categories = ["database"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["access", "phone", "testing", "validation"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver, which
+## binds pgvector's `vector` for `cast = "vector"` fields).
+test-postgres = ["navree-db/postgres"]
+## Run on MySQL / MariaDB (navree-db's `mysql` driver: `mysql://` and
+## `mariadb://` URLs). SQL for every dialect is generated without any
+## feature.
+test-mysql = ["navree-db/mysql"]
+## Access control on models: `#[model(subject, policy)]`, navree-access's
+## abilities as query filters (`accessible`) and record checks
+## (`AbilityExt`), `Authorized<Model, A>` routes. The facade turns it on
+## when both `orm` and `access` are on.
+access = ["dep:navree-access"]
+## Testing helpers on navree-testing's `TestApp` (`app.seed::<S>()`). The
+## facade turns it on when both `orm` and `testing` are on.
+testing = ["dep:navree-testing"]
+## Validation rules that query models (`validation::unique`,
+## `validation::exists`) for navree-validation's `ValidAsync`. The facade
+## turns it on when both `orm` and `validation` are on.
+validation = ["dep:navree-validation"]
+## Phone numbers as fields, stored as E.164 text: navree-phone's
+## `PhoneNumber` and, with `validation`, navree-validation's `Phone`. The
+## facade turns it on when both `orm` and `validation-phone` are on.
+phone = ["dep:navree-phone", "navree-validation?/phone"]
+
+[dependencies]
+# PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
+argon2 = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+# Streams (`lazy`, `cursor`) and the channel their generator hands rows over.
+futures = { workspace = true }
+heck = { workspace = true }
+http = { workspace = true }
+indexmap = { workspace = true }
+navree-access = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
+navree-api = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+navree-orm-macros = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true, optional = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Task-local scopes: quiet writes, suspended touching, scoped morph maps,
+# lazy-loading rules, cast services, guard suspension, the connection of
+# `using_connection` and the current workspace; the lazy factories'
+# once-cells.
+tokio = { workspace = true }
+tracing = { workspace = true }
+# `url::Url` fields (serialized as their text).
+url = { workspace = true, features = ["serde"] }
+# OpenAPI schemas of models and pages.
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+insta = { workspace = true }
+# The crate's own tests use its `access`, `testing` and `validation`
+# features.
+navree-orm = { path = ".", features = ["access", "testing", "validation"] }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+trybuild = { workspace = true }
+
+# Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL
+# (a TimescaleDB server) or NAVREE_TEST_MYSQL_URL is set:
+# `cargo test -p navree-orm --features test-postgres,test-mysql --test servers`.
+[[test]]
+name = "servers"
+required-features = ["test-postgres", "test-mysql"]

@@ -1,0 +1,295 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Edge cases",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/opid-special/a": {
+      "get": {
+        "operationId": "a.b-c d/é#f",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/opid-tilde/a": {
+      "get": {
+        "operationId": "a~b",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/opid-numeric/a": {
+      "get": {
+        "operationId": "5",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "007",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/param-ref-in-schema/a": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/P"
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/param-ref-nested/a": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/P/schema"
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/param-ref-path-param/a": {
+      "get": {
+        "parameters": [
+          {
+            "name": "a",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/paths/~1param-ref-path-param~1a/get/parameters/0"
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/deprecated-everywhere/a": {
+      "get": {
+        "operationId": "d",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "deprecated": true,
+        "summary": "S",
+        "description": "D",
+        "tags": [
+          "t"
+        ]
+      }
+    },
+    "/param-no-name/a": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query"
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/opid-empty/a": {
+      "get": {
+        "operationId": "",
+        "responses": {}
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "comment_edge_A": {
+        "type": "string",
+        "description": "a\r\nb\rc d ef\tg h﻿i */ j"
+      },
+      "comment_edge2_A": {
+        "type": "string",
+        "title": "\n\nlead",
+        "summary": "tail  \n",
+        "description": "   "
+      },
+      "comment_edge3_A": {
+        "type": "string",
+        "description": "x\n   indented\n\tTabbed\n\n\n",
+        "example": "\n"
+      },
+      "big_numbers_A": {
+        "enum": [
+          1e+300,
+          1.7976931348623157e+308,
+          5e-324,
+          123456789012345680000,
+          0.1,
+          100,
+          1e-7,
+          0,
+          9007199254740992,
+          4.35,
+          0.000001
+        ]
+      },
+      "utf8_names_Ünï": {
+        "type": "object",
+        "properties": {
+          "ç": {
+            "type": "string"
+          },
+          "😀": {
+            "type": "string"
+          },
+          " ": {
+            "type": "string"
+          }
+        }
+      },
+      "enum_comment_A": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "a"
+        ],
+        "nullable": true
+      },
+      "enum_comment_B": {
+        "enum": [
+          "a"
+        ]
+      },
+      "enum_comment_C": {
+        "type": "integer",
+        "enum": [
+          1
+        ],
+        "nullable": true
+      },
+      "const_comment_A": {
+        "const": null
+      },
+      "const_comment_B": {
+        "const": 0
+      },
+      "const_comment_C": {
+        "const": ""
+      },
+      "const_comment_D": {
+        "type": "string",
+        "const": "x"
+      },
+      "format_nonstring_A": {
+        "type": "string",
+        "format": 5,
+        "title": "x"
+      },
+      "nullable_unknown_A": {
+        "nullable": true
+      },
+      "nullable_emptyunion_A": {
+        "oneOf": [
+          {}
+        ],
+        "nullable": true
+      },
+      "bool_defs_A": {
+        "type": "object",
+        "properties": {
+          "a": true,
+          "b": false
+        },
+        "additionalProperties": true
+      },
+      "ref_percent_Foo Bar": {
+        "type": "string"
+      },
+      "ref_percent_B": {
+        "$ref": "#/components/schemas/ref_percent_Foo%20Bar"
+      },
+      "ref_slash_Foo/Bar": {
+        "type": "string"
+      },
+      "ref_slash_B": {
+        "$ref": "#/components/schemas/ref_slash_Foo~1Bar"
+      },
+      "ref_chain_A": {
+        "$ref": "#/components/schemas/ref_chain_B"
+      },
+      "ref_chain_B": {
+        "$ref": "#/components/schemas/ref_chain_C"
+      },
+      "ref_chain_C": {
+        "type": "string"
+      },
+      "ref_nested_A": {
+        "type": "object",
+        "properties": {
+          "b": {
+            "type": "string"
+          }
+        }
+      },
+      "ref_nested_B": {
+        "$ref": "#/components/schemas/ref_nested_A/properties/b"
+      },
+      "ref_allof_chain_A": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "string"
+          }
+        }
+      },
+      "ref_allof_chain_B": {
+        "$ref": "#/components/schemas/ref_allof_chain_A"
+      },
+      "ref_allof_chain_C": {
+        "required": [
+          "x"
+        ],
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ref_allof_chain_B"
+          }
+        ]
+      },
+      "addprops_array_A": {
+        "type": "object",
+        "additionalProperties": []
+      },
+      "type_object_obj_enum_ok_A": {
+        "type": "object",
+        "enum": [
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "parameters": {
+      "P": {
+        "name": "p",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

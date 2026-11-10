@@ -1,0 +1,23 @@
+error: a filter or sort field is one column of the model: this field is not (`#[model(skip)]` or `#[model(columns(..))]`); index it as text only, or put the value in a column
+ --> tests/ui/searchable/columns.rs:6:13
+  |
+6 |     #[model(skip)]
+  |             ^^^^
+
+error: a filter or sort field is one column of the model: this field is not (`#[model(skip)]` or `#[model(columns(..))]`); index it as text only, or put the value in a column
+ --> tests/ui/searchable/columns.rs:9:13
+  |
+9 |     #[model(columns(amount: i64, currency: String))]
+  |             ^^^^^^^
+
+error: cannot find attribute `model` in this scope
+ --> tests/ui/searchable/columns.rs:6:7
+  |
+6 |     #[model(skip)]
+  |       ^^^^^
+
+error: cannot find attribute `model` in this scope
+ --> tests/ui/searchable/columns.rs:9:7
+  |
+9 |     #[model(columns(amount: i64, currency: String))]
+  |       ^^^^^

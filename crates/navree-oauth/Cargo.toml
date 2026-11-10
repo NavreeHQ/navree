@@ -1,0 +1,79 @@
+[package]
+name = "navree-oauth"
+description = "Navree OAuthServerModule: an OAuth 2.1 authorization server and OpenID Connect provider with scopes, consent and device codes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "oauth2", "oidc", "authorization"]
+categories = ["authentication"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["testing", "ui"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+## The consent page, drawn with Navree UI and served at `/oauth/consent`. The facade turns it
+## on when both `ui` and `oauth` are on.
+ui = ["dep:navree-ui"]
+## `navree_oauth::testing`: helpers that walk the authorization code flow with
+## navree-testing's `TestClient`. The facade turns it on with its own `testing` feature.
+testing = ["dep:navree-testing"]
+
+[dependencies]
+base64 = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-bounded = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# Token digests, and `jose`: Ed25519 (EdDSA) ID tokens and the JWKS.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+# The OAuth tables are models (`Client`, `PersonalAccessToken`, ...).
+navree-orm = { workspace = true }
+# Feature `testing`: `navree_oauth::testing` drives the flows with navree-testing's TestClient.
+navree-testing = { workspace = true, optional = true }
+navree-ui = { workspace = true, optional = true }
+# Workspace-limited clients pin their tokens with `PinnedWorkspace`.
+navree-workspace = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The crate's own tests draw the consent page.
+navree-oauth = { path = ".", features = ["ui", "testing"] }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+http-body-util = { workspace = true }
+navree-api = { workspace = true }
+# ID token signatures are checked with `ring` directly, apart from the code
+# under test.
+ring = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

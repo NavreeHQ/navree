@@ -1,0 +1,120 @@
+# Compiles the facade (`navree`) with the feature sets an app really builds.
+#
+# rust-suites.yml builds everything with --all-features, so a missing `#[cfg]`
+# or a missing feature edge in a smaller build would never be seen. This
+# workflow checks, with `cargo check`:
+#
+# 1. each of the facade's features on its own (about 80 builds), tests
+#    included, so a test target that names too few features fails here;
+# 2. the sets apps, kits and tools use: the defaults with each database
+#    driver, the toolkit alone, the sets the starter kits turn on, each tool
+#    alone, the modules that have test kits with and without `testing`, the
+#    parts of `documents`, and everything;
+# 3. what a build with the default features and no database driver tests: the
+#    facade's own tests that need no SQLite, run, and the targets the build
+#    leaves out, listed.
+#
+# Every test target of the facade names its features in crates/navree/Cargo.toml
+# (`required-features`), so a build that lacks one leaves the target out and
+# `scripts/facade-features.sh skipped` names it. Run the same checks by hand
+# with `scripts/facade-features.sh each|sets|skipped FLAGS`.
+name: Facade features
+
+on:
+  pull_request:
+    paths:
+      - "crates/navree/**"
+      - "crates/*/Cargo.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/facade-features.sh"
+      - ".github/workflows/features.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree/**"
+      - "crates/*/Cargo.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/facade-features.sh"
+      - ".github/workflows/features.yml"
+  schedule:
+    # Sundays 05:17 UTC, after the weekly suites.
+    - cron: "17 5 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: features-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  each-feature:
+    name: Each feature on its own
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: features
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check each feature
+        run: scripts/facade-features.sh each
+
+  sets:
+    name: The sets of apps, kits and tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: features
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check each set
+        run: scripts/facade-features.sh sets
+
+  default-features:
+    name: The default features, no database driver
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: features
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: List the test targets this build leaves out
+        run: scripts/facade-features.sh skipped
+
+      - name: Test the facade
+        # The targets that need SQLite are left out (the list above); the others
+        # run. A build with no database driver must not fail on them.
+        run: cargo test --locked --package navree --tests --no-fail-fast

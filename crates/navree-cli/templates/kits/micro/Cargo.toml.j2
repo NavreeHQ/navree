@@ -1,0 +1,45 @@
+# {{ title }}: a Navree microservice, started from the `micro` starter kit.
+# A Cargo workspace of two crates: the service, and the contracts the
+# services that call it depend on.
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# `cargo run`, `navree dev` and every forwarded command (`navree migrate`,
+# `navree micro:patterns`, ...) run the service.
+default-members = ["crates/{{ package }}"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+# The starter kit this service began from (`navree new {{ package }} --kit {{ kit }}`).
+# Nothing reads it at run time: it tells you which kit to compare with.
+[workspace.metadata.navree]
+kit = "{{ kit }}"
+kit_version = "{{ kit_version }}"
+
+[workspace.dependencies]
+{{ contracts_package }} = { path = "crates/{{ contracts_package }}" }
+chrono = { version = "0.4", features = ["serde"] }
+# Each crate turns on the navree features it uses.
+navree = {{ navree_workspace_dependency }}
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+
+# Small debug info: faster links, so `navree dev` restarts sooner.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Password hashing (Argon2id) is unbearably slow unoptimised.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

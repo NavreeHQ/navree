@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest something Navree should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a question or a rough idea, start a discussion first. Use this form once you know what you want.
+  - type: input
+    id: crate
+    attributes:
+      label: Crate or area
+      description: Where the feature would live, if you know. For example `navree-queue` or the docs.
+    validations:
+      required: false
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and why you cannot do it today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How it could work. A code sketch of the API you would like to write helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other ways you considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I could help build this.

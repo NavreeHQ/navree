@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"ignored\").from_raw(\"SELECT 1\", [] as [i64; 0]))"
+---
+PostgreSQL: error: invalid query: from_raw takes a table function, `name(arguments) [AS] alias`, not `SELECT 1` (use from_sub for a subquery)
+MySQL: error: invalid query: from_raw takes a table function, `name(arguments) [AS] alias`, not `SELECT 1` (use from_sub for a subquery)
+SQLite: error: invalid query: from_raw takes a table function, `name(arguments) [AS] alias`, not `SELECT 1` (use from_sub for a subquery)

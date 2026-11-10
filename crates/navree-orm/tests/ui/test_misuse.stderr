@@ -1,0 +1,43 @@
+error: `#[navree::test]` goes on an `async fn`
+ --> tests/ui/test_misuse.rs:6:1
+  |
+6 | fn not_async() {}
+  | ^^
+
+error: a test function takes at most one parameter: its database (`db: TestDb`)
+ --> tests/ui/test_misuse.rs:9:24
+  |
+9 | async fn two_databases(first: TestDb, second: TestDb) {}
+  |                        ^^^^^
+
+error: an in-memory database has no template: drop `template` or use "sqlite"
+  --> tests/ui/test_misuse.rs:11:31
+   |
+11 | #[navree_orm::test(template = DATABASE, database = "memory")]
+   |                               ^^^^^^^^
+
+error: unknown database `oracle`: use "sqlite" (the default), "memory", "postgres" or "mysql"
+  --> tests/ui/test_misuse.rs:14:31
+   |
+14 | #[navree_orm::test(database = "oracle")]
+   |                               ^^^^^^^^
+
+error: name the test's database as a parameter: `async fn name(db: TestDb)`
+  --> tests/ui/test_misuse.rs:18:10
+   |
+18 | async fn no_parameter() {}
+   |          ^^^^^^^^^^^^
+
+error: unknown option: expected `template` or `database`
+  --> tests/ui/test_misuse.rs:20:20
+   |
+20 | #[navree_orm::test(templates = DATABASE)]
+   |                    ^^^^^^^^^
+
+warning: unused import: `TestDb`
+ --> tests/ui/test_misuse.rs:1:47
+  |
+1 | use navree_orm::testing::database::{Template, TestDb};
+  |                                               ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

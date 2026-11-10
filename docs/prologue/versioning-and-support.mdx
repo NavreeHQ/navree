@@ -1,0 +1,76 @@
+---
+title: "Versioning and support"
+description: "How Navree numbers releases, what stays the same across 1.x, how deprecation works, the minimum Rust version and how long each release line is supported."
+---
+
+Navree follows [semantic versioning](https://semver.org). This page says what that means for an app built on Navree: what you can rely on across 1.x, how a change is announced before it lands, which Rust version you need and how long a release line gets fixes.
+
+## One version for everything
+
+Every crate, the `navree` command-line tool, the starter kits and the five `@navree/*` npm packages carry the same version number. Navree 1.2.0 means `navree` 1.2.0, `navree-cli` 1.2.0, `@navree/client` 1.2.0 and every other part at 1.2.0. You never match a crate version to a package version.
+
+Navree's crates require each other at exactly one version, because they call each other's internals and the macros generate code that calls the crates that run it. You write `navree = "1"` in your `Cargo.toml`, as with any crate. `cargo update` then moves your whole app, together, to the next release that was tested as a set. Do not list several Navree crates with different versions: depend on `navree` and turn on the [features](/docs/architecture/facade-and-features/) you use, or depend on one crate and let it bring the rest.
+
+## What the numbers mean
+
+Releases are numbered `major.minor.patch`.
+
+| Release | What it may contain | What you do |
+|---|---|---|
+| Patch (1.0.1) | Bug fixes and security fixes. Nothing new is added. | Take it. |
+| Minor (1.1.0) | New features, new optional features, deprecations, and a higher minimum Rust version (see below). Nothing that worked stops working. | Take it, and read the [release notes](/docs/prologue/release-notes/). |
+| Major (2.0.0) | Removals and changes that can break your code. | Follow the upgrade guide. |
+
+A change that can break an app that follows the public API waits for the next major release. A major release is announced at least three months ahead, and comes at most once a year.
+
+## What counts as public API
+
+These are covered by the rules above, and stay compatible across 1.x:
+
+- the items documented on [docs.rs](https://docs.rs/navree) and in these docs: types, functions, traits, macros and their documented behaviour;
+- the names of Cargo features, and of the configuration keys and environment variables in the [configuration reference](/docs/configuration/reference/);
+- HTTP routes and wire formats Navree serves: the paths of its endpoints, the list-query format, the one JSON error shape and its stable `code` values, and the formats of tokens and cookies;
+- the commands and options of the `navree` tool and of the commands every app has;
+- the exports of the `@navree/*` packages.
+
+These are not public API, and may change in any release:
+
+- items marked `#[doc(hidden)]`. Navree's crates use them to cooperate, and the macros generate calls to them. Do not call them yourself;
+- the internals of test kits and fakes, beyond what the [testing docs](/docs/testing/getting-started/) describe;
+- the exact text of log lines, error messages and generated markup, and the pixel layout of Navree UI;
+- the contents of a generated project beyond what [Directory structure](/docs/getting-started/directory-structure/) describes: the starter kits give you code to own and change;
+- anything marked as experimental or in development in these docs.
+
+Navree's error enums, and the other public enums that will gain variants, are marked `#[non_exhaustive]`, so a new variant is not a breaking change: end your `match` with a wildcard arm. Configuration and options types that will gain fields are built through their builders, `Default` or deserialisation, for the same reason.
+
+## Deprecation
+
+A feature is not removed without notice. Before a major release removes something, a minor release deprecates it and names its replacement:
+
+- **Rust items** get `#[deprecated(since = "1.4.0", note = "use X")]`, a line in the changelog and a note on the docs page. The compiler warns you where you use them.
+- **Configuration keys, routes and wire formats** log a warning at boot that names the replacement.
+- **npm packages** mark the export `@deprecated` in its JSDoc and warn in development builds.
+
+A deprecated item stays for at least one minor release and three months before a major release removes it. Each major release comes with an upgrade guide: an estimate of the time it takes, the changes grouped by how likely they are to affect you, before-and-after code and the list of removed deprecations. There is no upgrade guide for 1.0, because it is the first release.
+
+## The minimum Rust version
+
+Navree 1.0 needs Rust 1.95 or newer, and every crate says so in its `rust-version`. The minimum rises only in a minor release, and only to a Rust release that is at least six months old. The changelog announces each rise on its first line, and a CI job builds every release with the stated version.
+
+## How long a release line is supported
+
+| Line | Bug fixes | Security fixes |
+|---|---|---|
+| The current major (1.x until 2.0 ships) | The latest minor only: upgrade minors to get fixes. | The latest minor. |
+| The previous major, after the next one ships | 6 months | 12 months |
+
+There is no long-term support line at launch. When 2.0 ships, the policy says whether any 1.x minor becomes one.
+
+Security fixes are released for every supported line together, with a published advisory that names the affected and fixed versions. See [`SECURITY.md`](https://github.com/NavreeHQ/navree/blob/main/SECURITY.md) for how to report a vulnerability.
+
+## Where changes are announced
+
+- [`CHANGELOG.md`](https://github.com/NavreeHQ/navree/blob/main/CHANGELOG.md) lists every release, with Added, Changed, Deprecated, Removed, Fixed and Security sections.
+- The [release notes](/docs/prologue/release-notes/) give an overview of each minor and major release. Patches appear only in the changelog.
+- Each tag has a GitHub Release with the changelog section, the `navree` binaries for Linux, macOS and Windows, and their checksums.
+- The [roadmap](/docs/prologue/roadmap/) lists what comes next.

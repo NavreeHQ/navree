@@ -1,0 +1,83 @@
+{
+  "name": "@navree/client",
+  "version": "1.0.0",
+  "description": "A typed client for Navree APIs on the app's OpenAPI document, Navree's error shape with codes, list queries, pagination, operations and real time.",
+  "license": "MIT OR Apache-2.0",
+  "author": "Amritpal Singh",
+  "homepage": "https://navree.com/docs/frontend/typed-client/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavreeHQ/navree.git",
+    "directory": "packages/js/client"
+  },
+  "bugs": {
+    "url": "https://github.com/NavreeHQ/navree/issues"
+  },
+  "keywords": [
+    "navree",
+    "openapi",
+    "typed-client",
+    "fetch",
+    "list-query"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "!src/**/*.test.ts",
+    "!src/**/*.test-d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./fetch": {
+      "types": "./dist/fetch.d.ts",
+      "import": "./dist/fetch.js"
+    },
+    "./abilities": {
+      "types": "./dist/abilities.d.ts",
+      "import": "./dist/abilities.js"
+    },
+    "./realtime": {
+      "types": "./dist/realtime.d.ts",
+      "import": "./dist/realtime.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@casl/ability": "^6.0.0 || ^7.0.0",
+    "pusher-js": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@casl/ability": {
+      "optional": true
+    },
+    "pusher-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@casl/ability": "7.0.2",
+    "@types/node": "^24.19.2",
+    "pusher-js": "8.6.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

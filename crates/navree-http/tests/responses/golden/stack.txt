@@ -1,0 +1,360 @@
+GET /text []
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["text"] | 4..4
+
+GET /text [("accept-encoding", "gzip")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["text"] | 4..4
+
+GET /text [("origin", "http://localhost:3000")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["text"] | 4..4
+
+GET /text [("origin", "http://evil.example")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["text"] | 4..4
+
+HEAD /text []
+200 | content-type: text/plain; charset=utf-8 / content-length: 4 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /text []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /text []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /text []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /json []
+200 | content-type: application/json / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["{\"a\":1}"] | 7..7
+
+GET /json [("accept-encoding", "gzip")]
+200 | content-type: application/json / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["{\"a\":1}"] | 7..7
+
+GET /json [("origin", "http://localhost:3000")]
+200 | content-type: application/json / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"a\":1}"] | 7..7
+
+GET /json [("origin", "http://evil.example")]
+200 | content-type: application/json / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["{\"a\":1}"] | 7..7
+
+HEAD /json []
+200 | content-type: application/json / content-length: 7 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /json []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /json []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /json []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /redirect []
+303 | location: /text / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+GET /redirect [("accept-encoding", "gzip")]
+303 | location: /text / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+GET /redirect [("origin", "http://localhost:3000")]
+303 | location: /text / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | [] | 0..0
+
+GET /redirect [("origin", "http://evil.example")]
+303 | location: /text / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+HEAD /redirect []
+303 | location: /text / content-length: 0 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /redirect []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /redirect []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /redirect []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /deals/7 []
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["deal 7"] | 6..6
+
+GET /deals/7 [("accept-encoding", "gzip")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["deal 7"] | 6..6
+
+GET /deals/7 [("origin", "http://localhost:3000")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["deal 7"] | 6..6
+
+GET /deals/7 [("origin", "http://evil.example")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["deal 7"] | 6..6
+
+HEAD /deals/7 []
+200 | content-type: text/plain; charset=utf-8 / content-length: 6 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /deals/7 []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /deals/7 []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /deals/7 []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /deals/x []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: Cannot parse `x` to a `u32`\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+GET /deals/x [("accept-encoding", "gzip")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["{\"statusCode\":400,\"message\":\"Invalid URL: Cannot parse `x` to a `u32`\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 0..
+
+GET /deals/x [("origin", "http://localhost:3000")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"statusCode\":400,\"message\":\"Invalid URL: Cannot parse `x` to a `u32`\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+GET /deals/x [("origin", "http://evil.example")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: Cannot parse `x` to a `u32`\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+HEAD /deals/x []
+400 | content-type: application/json / x-content-type-options: nosniff / content-length: 114 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
+
+POST /deals/x []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /deals/x []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /deals/x []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /deals/%2F []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: `id` holds an encoded slash\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+GET /deals/%2F [("accept-encoding", "gzip")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["{\"statusCode\":400,\"message\":\"Invalid URL: `id` holds an encoded slash\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 0..
+
+GET /deals/%2F [("origin", "http://localhost:3000")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"statusCode\":400,\"message\":\"Invalid URL: `id` holds an encoded slash\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+GET /deals/%2F [("origin", "http://evil.example")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: `id` holds an encoded slash\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+HEAD /deals/%2F []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: `id` holds an encoded slash\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
+
+POST /deals/%2F []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /deals/%2F []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /deals/%2F []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /status []
+202 | content-type: text/plain; charset=utf-8 / x-a: 1 / x-b: 2 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["accepted"] | 8..8
+
+GET /status [("accept-encoding", "gzip")]
+202 | content-type: text/plain; charset=utf-8 / x-a: 1 / x-b: 2 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["accepted"] | 8..8
+
+GET /status [("origin", "http://localhost:3000")]
+202 | content-type: text/plain; charset=utf-8 / x-a: 1 / x-b: 2 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["accepted"] | 8..8
+
+GET /status [("origin", "http://evil.example")]
+202 | content-type: text/plain; charset=utf-8 / x-a: 1 / x-b: 2 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["accepted"] | 8..8
+
+HEAD /status []
+202 | content-type: text/plain; charset=utf-8 / x-a: 1 / x-b: 2 / content-length: 8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /status []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /status []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /status []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /empty-error []
+502 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+GET /empty-error [("accept-encoding", "gzip")]
+502 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+GET /empty-error [("origin", "http://localhost:3000")]
+502 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | [] | 0..0
+
+GET /empty-error [("origin", "http://evil.example")]
+502 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+HEAD /empty-error []
+502 | content-length: 0 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /empty-error []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /empty-error []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /empty-error []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /app-error []
+409 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":409,\"message\":\"Taken.\",\"error\":\"Conflict\",\"code\":\"conflict\"}"] | 74..74
+
+GET /app-error [("accept-encoding", "gzip")]
+409 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["{\"statusCode\":409,\"message\":\"Taken.\",\"error\":\"Conflict\",\"code\":\"conflict\"}"] | 0..
+
+GET /app-error [("origin", "http://localhost:3000")]
+409 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"statusCode\":409,\"message\":\"Taken.\",\"error\":\"Conflict\",\"code\":\"conflict\"}"] | 74..74
+
+GET /app-error [("origin", "http://evil.example")]
+409 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":409,\"message\":\"Taken.\",\"error\":\"Conflict\",\"code\":\"conflict\"}"] | 74..74
+
+HEAD /app-error []
+409 | content-type: application/json / x-content-type-options: nosniff / content-length: 74 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
+
+POST /app-error []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /app-error []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /app-error []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /stream []
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["one", "two", "three"] | 0..
+
+GET /stream [("accept-encoding", "gzip")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["onetwothree"] | 0..
+
+GET /stream [("origin", "http://localhost:3000")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["one", "two", "three"] | 0..
+
+GET /stream [("origin", "http://evil.example")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["one", "two", "three"] | 0..
+
+HEAD /stream []
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
+
+POST /stream []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /stream []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /stream []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /broken []
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["start"] | 0.. | error: gone
+
+GET /broken [("accept-encoding", "gzip")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["start"] | 0.. | error: gone
+
+GET /broken [("origin", "http://localhost:3000")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["start"] | 0.. | error: gone
+
+GET /broken [("origin", "http://evil.example")]
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["start"] | 0.. | error: gone
+
+HEAD /broken []
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
+
+POST /broken []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /broken []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /broken []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /events []
+200 | content-type: text/event-stream / cache-control: no-cache / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["data: 1\n\n", "data: 2\n\n"] | 0..
+
+GET /events [("accept-encoding", "gzip")]
+200 | content-type: text/event-stream / cache-control: no-cache / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["data: 1\n\n", "data: 2\n\n"] | 0..
+
+GET /events [("origin", "http://localhost:3000")]
+200 | content-type: text/event-stream / cache-control: no-cache / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["data: 1\n\n", "data: 2\n\n"] | 0..
+
+GET /events [("origin", "http://evil.example")]
+200 | content-type: text/event-stream / cache-control: no-cache / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | ["data: 1\n\n", "data: 2\n\n"] | 0..
+
+HEAD /events []
+200 | content-type: text/event-stream / cache-control: no-cache / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+POST /events []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /events []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /events []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /large []
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] | 4096..4096
+
+GET /large [("accept-encoding", "gzip")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] | 0..
+
+GET /large [("origin", "http://localhost:3000")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] | 4096..4096
+
+GET /large [("origin", "http://evil.example")]
+200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] | 4096..4096
+
+HEAD /large []
+200 | content-type: text/plain; charset=utf-8 / content-length: 4096 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
+
+POST /large []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+OPTIONS /large []
+204 | allow: GET, HEAD, OPTIONS / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+
+DELETE /large []
+405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
+
+GET /nothing []
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+GET /nothing [("accept-encoding", "gzip")]
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 0..
+
+GET /nothing [("origin", "http://localhost:3000")]
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+GET /nothing [("origin", "http://evil.example")]
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+HEAD /nothing []
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+POST /nothing []
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+OPTIONS /nothing []
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+DELETE /nothing []
+404 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":404,\"message\":\"Not Found\",\"error\":\"Not Found\",\"code\":\"not_found\"}"] | 79..79
+
+GET /a/../b []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+GET /a/../b [("accept-encoding", "gzip")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / content-encoding: gzip | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 0..
+
+GET /a/../b [("origin", "http://localhost:3000")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin / access-control-allow-origin: http://localhost:3000 / access-control-allow-credentials: true | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+GET /a/../b [("origin", "http://evil.example")]
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+HEAD /a/../b []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+POST /a/../b []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+OPTIONS /a/../b []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+
+DELETE /a/../b []
+400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: the path has a `.` or `..` segment\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 121..121
+

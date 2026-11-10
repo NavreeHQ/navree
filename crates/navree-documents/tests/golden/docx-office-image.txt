@@ -1,0 +1,4 @@
+Before the image
+Inline: [image] after the inline image.
+[image]A paragraph with a text box that stays in the flow.
+After the text box

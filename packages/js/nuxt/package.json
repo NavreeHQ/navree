@@ -1,0 +1,110 @@
+{
+  "name": "@navree/nuxt",
+  "version": "1.0.0",
+  "description": "Nuxt on a Navree API: a module with the backend-for-frontend as Nitro routes (httpOnly token cookies, refresh rotation, CSRF, channel authorization), a session gate, and composables for auth, workspaces, abilities, real-time channels, operations, list queries and a DataTable.",
+  "license": "MIT OR Apache-2.0",
+  "author": "Amritpal Singh",
+  "homepage": "https://navree.com/docs/frontend/nuxt/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavreeHQ/navree.git",
+    "directory": "packages/js/nuxt"
+  },
+  "bugs": {
+    "url": "https://github.com/NavreeHQ/navree/issues"
+  },
+  "keywords": [
+    "navree",
+    "nuxt",
+    "nitro",
+    "vue",
+    "auth",
+    "data-table"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "import": "./dist/module.js"
+    },
+    "./vue": {
+      "types": "./dist/vue/index.d.ts",
+      "import": "./dist/vue/index.js"
+    },
+    "./abilities": {
+      "types": "./dist/vue/abilities.d.ts",
+      "import": "./dist/vue/abilities.js"
+    },
+    "./realtime": {
+      "types": "./dist/vue/realtime.d.ts",
+      "import": "./dist/vue/realtime.js"
+    },
+    "./server": {
+      "types": "./dist/server/handlers.d.ts",
+      "import": "./dist/server/handlers.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "smoke": "node test/smoke.mjs"
+  },
+  "//": "h3 stays on ^1: the server handlers run inside Nitro and must use the h3 it provides. Nuxt 4.6 runs nitropack 2.13, which is on h3 ^1.15; move to h3 2 together with the Nuxt and Nitro release built on it.",
+  "dependencies": {
+    "@navree/bff": "workspace:*",
+    "@navree/client": "workspace:*",
+    "@nuxt/kit": "^4.6.3",
+    "@nuxt/schema": "^4.6.3",
+    "@tanstack/vue-table": "^9.3.1",
+    "defu": "^6.1.7",
+    "h3": "^1.15.11"
+  },
+  "peerDependencies": {
+    "@casl/ability": "^6.0.0 || ^7.0.0",
+    "@casl/vue": "^2.2.0 || ^3.0.0",
+    "nuxt": "^4.6.3",
+    "pusher-js": "^8.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@casl/ability": {
+      "optional": true
+    },
+    "@casl/vue": {
+      "optional": true
+    },
+    "pusher-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@casl/ability": "7.0.2",
+    "@casl/vue": "3.0.1",
+    "@types/node": "^24.19.2",
+    "@vue/test-utils": "2.5.1",
+    "happy-dom": "21.0.4",
+    "pusher-js": "8.6.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

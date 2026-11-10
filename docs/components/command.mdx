@@ -1,0 +1,124 @@
+---
+title: "Command"
+description: "A command palette in a modal dialog, opened by Ctrl or Cmd and K: groups, shortcuts, recent items, links, actions and results from the server."
+---
+
+<UiPreview example="command/default" />
+
+`Command` is a modal dialog with a search box and a list of items in groups. The page builds only the items the person may use. Choosing an item goes to a page, posts an action or runs a browser command, and the palette closes.
+
+```rust
+use navree::ui::*;
+
+Command::new("palette")
+    .placeholder("Type a command or search…")
+    .recent(4)
+    .group(
+        CommandGroup::new("Go to")
+            .item(CommandItem::link("Deals", "/deals").icon(icons::HANDSHAKE).shortcut("alt+d"))
+            .item(CommandItem::link("New deal", "/deals/new").icon(icons::CIRCLE_PLUS)),
+    )
+    .group(
+        CommandGroup::new("Account")
+            .item(CommandItem::post("Sign out", "/sign-out").not_recent())
+            .item(CommandItem::disabled("Billing", "Only owners can open billing.")),
+    )
+    .csrf(session.csrf_token())
+```
+
+## Putting it on a page
+
+`Command::trigger(id, label)` is a button that opens the palette with no script, showing `Ctrl K`. In the app shell, put both in its search slot, so every page has them:
+
+```rust
+let palette = Command::new("palette").group(/* … */);
+
+Shell::new("Cloudworks CRM")
+    .search(Node::list((Command::trigger("palette", "Search…"), palette)))
+```
+
+`Ctrl+K` (`Cmd+K` on Apple devices) opens it from anywhere on a page that has one. `.shortcut(false)` turns that off. The palette is a native `<dialog>`: it traps focus, `Esc` closes it, and focus goes back to where it was.
+
+<UiAnatomy component="command" />
+
+## Items
+
+| Item | Does | Needs script |
+|---|---|---|
+| `CommandItem::link(label, href)` | Goes to a page. | No |
+| `CommandItem::post(label, action)` | Posts a form to `action`. With script the post goes through the form runtime, which sends the session's CSRF token as the `x-xsrf-token` header, as for every form, so a route behind the session check accepts it. Without script a post carries nothing else, so give the palette `.csrf(token)`: it is put in the form as `_csrf`. | No |
+| `CommandItem::run(label, cmd)` | Runs a browser [Cmd](/docs/ui/commands-and-ops/#commands): opens a dialog, copies text. | Yes |
+| `CommandItem::disabled(label, reason)` | Shows the item and says why it can't be used. | No |
+
+An item can have an icon, a description, `keywords` that find it though the label doesn't hold them, and a shortcut.
+
+The palette only decides what to show. Leaving an item out of it protects nothing: the route behind a `post` item, and the page behind a `link`, check who is asking, as they do when the address is typed.
+
+## Finding an item
+
+Typing ranks the items: those whose label starts with the text, then whose words do, then those that contain it, then keywords. Items keep the order the page gave them within a group. Case and accents don't matter, and the words can come in any order. Nothing found says so.
+
+## Shortcuts
+
+`.shortcut("mod+shift+n")` shows the chord on the item and runs the item when it is pressed, from anywhere on the page. `mod` is `Cmd` on Apple devices and `Ctrl` elsewhere. A chord needs `ctrl`, `alt`, `meta` or `mod`, and one key: a bare letter would fire while someone types, so it is refused and nothing is shown. The runtime ignores a chord while a dialog is open. The browser's own shortcuts are the app's to avoid.
+
+## Recent items
+
+`.recent(n)` shows the last `n` items chosen, kept in this browser, at the top while the box is empty. An item that is in the list shows there only: it isn't shown twice. `CommandItem::not_recent()` keeps an item out, for a sign-out or a delete.
+
+## Results from the server
+
+`.source(url)` adds results from the server below the page's own items. The runtime asks `url?q=text` after a short pause, ignores a late answer, and shows the groups of the [ChoiceList](/docs/components/combobox/#searching-on-the-server) that comes back. A choice made `.link(href)` is an item that goes to that page:
+
+```rust
+use navree::prelude::*;
+use navree::ui::*;
+
+const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
+
+async fn palette_search(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
+    // People whose name contains the text, as links
+    let people = PEOPLE
+        .find(Person::query(), &query, &uow, "/palette/search", |record| {
+            let person = record.into_inner();
+            Choice::new(person.id.to_string(), person.name).link(format!("/people/{}", person.id))
+        })
+        .await?;
+    Ok(people)
+}
+```
+
+The same rules hold as for a searched combobox: only the elements and attributes of an option survive, a link off the site is dropped, and the route's own permission check applies.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Ctrl+K`, `Cmd+K` | Opens or closes the palette. |
+| Typing | Narrows the items. |
+| `↓`, `↑` | Move the active item. They wrap at the ends. |
+| `Enter` | Runs the active item. |
+| `Esc` | Closes the palette. |
+
+- The box has `role="combobox"` and the list is a `listbox`; focus stays in the box and the active item is `aria-activedescendant`.
+- A disabled item can't be made active, and its reason is part of its text.
+- How many items match is said politely when typing stops.
+- With JavaScript off the button still opens the dialog and a link item still goes; typing doesn't narrow the list.
+
+</UiA11y>
+
+## API
+
+### Command
+
+<UiProps type="Command" />
+
+### CommandGroup
+
+<UiProps type="CommandGroup" />
+
+### CommandItem
+
+<UiProps type="CommandItem" />

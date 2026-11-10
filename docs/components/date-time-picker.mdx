@@ -1,0 +1,84 @@
+---
+title: "DateTimePicker"
+description: "A date and a time of day in one control: a date box with its calendar beside a time box with its list. It posts one value, the date and the time on a wall clock."
+---
+
+<UiPreview example="date-time-picker/default" />
+
+`DateTimePicker` puts a date picker and a time picker side by side under one label, and posts the two as one value: `2026-11-12T14:30`, or `2026-11-12T14:30:15` with seconds. That is the form a browser's own date-and-time field posts, and with JavaScript off the picker is that field.
+
+```rust
+use chrono::NaiveDate;
+use navree::ui::dates::*;
+use navree::ui::*;
+
+let starts = NaiveDate::from_ymd_opt(2026, 11, 12).and_then(|day| day.and_hms_opt(14, 30, 0));
+Field::new("starts", "Starts")
+    .control(DateTimePicker::new("starts").value_opt(starts))
+```
+
+Read it back with `DateTimePicker::read`, which takes the value with or without seconds, and hold each half to the rules that drew it (`check` gives the reason in words):
+
+```rust
+/// Whether a posted value is one the picker offers: `days` and `hours` are the rules it was drawn with.
+fn allowed(posted: &str, days: &DateRules, hours: &TimeRules) -> bool {
+    DateTimePicker::read(posted).is_some_and(|at| days.allows(at.date()) && hours.allows(at.time()))
+}
+```
+
+## When to use it
+
+Use it when the date and the time are one fact: when a meeting starts, when a delivery is booked, when a reminder goes off. When only the day matters, use a `DatePicker`; for a time that repeats every day, such as an opening hour, use a `TimePicker`.
+
+<UiChoose name="date-time" current="DateTimePicker" />
+
+## Anatomy
+
+<UiAnatomy component="date-time-picker" />
+
+## Both halves, or nothing
+
+The picker posts nothing until both halves are filled. A date with no time is not sent as midnight: when one half is filled and the other is empty, the empty box holds the form back and says why, in the words its own half uses for text it can't read ("Enter a time like 2:30 PM."). `.required()` makes both halves required.
+
+## Days and times that can't be chosen
+
+`.date_rules(rules)` takes the days out of the calendar, as a `DatePicker`'s rules do, and `.time_rules(rules)` takes the times out of the list, as a `TimePicker`'s do. A typed date or time that the rules refuse is said at its box. The server holds the posted value to the same two rules.
+
+<UiPreview example="date-time-picker/rules" />
+
+## A date and a time on a wall
+
+Like a `TimePicker`, it has no zone: `2026-11-12T14:30` is whatever that is where the person is. To store *when* something happens, resolve it in the zone it was meant in with `dates::zoned::resolve(at.date(), at.time(), &zone)`, which tells you when the clocks make the time impossible or doubled (see [TimePicker](/docs/components/time-picker/)). `.zone_note(text)` writes the zone under the picker.
+
+<UiPreview example="date-time-picker/zone" />
+
+## States
+
+<UiPreview example="date-time-picker/states" />
+
+## JavaScript off
+
+A native `<input type="datetime-local">` stands in and posts the same value. It is told the first and the last day of the date rules, and the time's step when the rules are strict or seconds are on. With JavaScript on, it stays behind the two boxes and carries no limits of its own: what the rules refuse is said at the box, and the server decides either way.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves from the date box to its button, then to the time box and its button. |
+| `↓` in the date box | Opens the calendar on the chosen day. |
+| `↓` in the time box | Opens the list on the chosen time. With no list, steps the time down. |
+| Keys in the calendar and the list | As in a [DatePicker](/docs/components/date-picker/) and a [TimePicker](/docs/components/time-picker/). |
+
+- The picker is a `group` named by its label. The label names the date box; the time box is named "Pick a time".
+- A wrong box has `aria-invalid="true"` and its message is announced. An error the server gives the field is tied to both boxes.
+- The page hears one `input` and one `change`, on the joint field, when the value changes; never the halves' own.
+
+</UiA11y>
+
+## API
+
+### DateTimePicker
+
+<UiProps type="DateTimePicker" />

@@ -1,0 +1,97 @@
+---
+title: "Dates and times"
+description: "How Navree UI treats a day, a time and a window: what is stored, who decides, how languages and week starts work, and what clock changes do."
+---
+
+Four components choose dates and times: [Calendar](/docs/components/calendar/), [DatePicker](/docs/components/date-picker/), [DateRangePicker](/docs/components/date-range-picker/) and [TimePicker](/docs/components/time-picker/). This page is what they share.
+
+<UiChoose name="date-time" current="DatePicker" />
+
+## A day is a day
+
+A day is a year, a month and a day: `NaiveDate` in Rust, `2026-11-03` on the wire. Nowhere in the toolkit, on the server or in the browser, does a day pass through a time zone. The browser module counts days from 1970-01-01 with whole-number arithmetic and never builds a `Date`, so the browser's zone and its clock can't move a day by one. This is the usual way a date picker goes wrong: a day chosen at local midnight, read back in another zone, is yesterday.
+
+"Today" is a date the page says: `.today(date)`, in the zone the page counts its days in. A calendar never asks the clock. A page is the same wherever it is read, and a test can name its own today.
+
+## The server decides
+
+The browser only helps a person get to a value. What comes back is parsed and checked on the server:
+
+- A date is read with `chrono` as `YYYY-MM-DD`. A value that isn't a day, such as `2026-02-30`, is refused.
+- `DateRules` holds the limits, the weekdays, the lists and the function that the calendar was drawn with. `rules.check(day)` is the same question the calendar asked, so the page and the server can't disagree. A day outside the years 1 to 9999 is refused.
+- `TimeRules` does the same for a time.
+- In a form, `#[form(widget = date_picker)]` and `#[form(widget = time_picker)]` draw the pickers, the field's type reads the value, and `#[validate(custom(...))]` runs your rule. Add `date_rules = path` or `time_rules = path`, the function that gives the rules, and the picker is drawn with them and the server holds the posted value to them, with no `custom` rule needed. A message sits under the field.
+- A range from a request is read with `DateRangeQuery` and held to a `RangeRules`, the same value the picker was given with `.limits(...)`, so the browser and the server can't differ. A year outside 1 to 9999 is no day in a range or a list, and a key sent twice is read as its first value (a query read into a `HashMap` keeps the last, so read an address one way).
+- A time is a time of day: a leap second (`16:59:60`) or a fraction of a second is refused.
+
+What a person types is never posted. The browser reads it by the locale's rules and writes an ISO date into the field behind it.
+
+## What is stored
+
+| You choose | It holds | Store |
+|---|---|---|
+| A day | `NaiveDate` | A `date` column. |
+| A time of day | `NaiveTime`, on a wall, no zone | A `time` column, with the zone's name beside it if the zone matters. |
+| A window of days | `DateRange { from, to }`, both days included | Two `date` columns, or two instants from `utc_bounds`. |
+| When something happens | A date, a time and a zone, resolved | A UTC instant (`timestamptz`), and the zone's name if the wall time matters later. |
+
+Dates and instants are different things. A birthday is a day. A meeting is an instant that was meant on a wall.
+
+## Whole days
+
+A `DateRange` is whole days: from the first moment of `from` to the last moment of `to`. A query wants instants, and `utc_bounds(zone)` gives them as `[start, end)`. The end is the start of the day after `to`, so the last day counts whole, and a day of 23 or 25 hours, when clocks change, counts as the one day it is. Reports that turn a picked range into local midnights drop the last picked day from an inclusive comparison. This does not.
+
+## Clock changes
+
+A time on a wall has two kinds of trouble, twice a year, in many zones. `dates::zoned::resolve(date, time, &zone)` says which one:
+
+| Result | New York, 2026 |
+|---|---|
+| `Single` | 09:00 on 3 November: one instant. |
+| `Gap` | 02:30 on 8 March: the clocks jump from 02:00 to 03:00, so the time never happens. |
+| `Ambiguous` | 01:30 on 1 November: the clocks go back from 02:00 to 01:00, so it happens twice. |
+
+It handles zones that change by half an hour, such as Lord Howe Island, zones with no change, such as India, far zones, and Samoa, which skipped the whole of 30 December 2011. It works with any `chrono` time zone, so it adds no data of its own. What to tell the person is your page's decision; the toolkit gives you the facts.
+
+## Languages
+
+A `DateLocale` holds what a calendar needs to know about a language and region:
+
+- the names of the months, on their own and inside a date (Russian and Polish differ), and short names;
+- the names of the weekdays, in full and short;
+- the order and separators of a typed date, and its hint (`MM/DD/YYYY`, `TT.MM.JJJJ`);
+- the first day of the week;
+- the 12 or 24 hour clock and the day and night markers;
+- the direction of the text;
+- the words on the controls: previous month, today, clear, and the messages.
+
+`DateLocale::of("de-AT")` finds it. The language picks the names and the region sets the first day of the week, and for a few English regions the clock and the order of a date. A tag the table doesn't have falls back to English.
+
+| Built in | |
+|---|---|
+| Latin script | English (US, UK and others), German, French, Spanish, Italian, Portuguese, Dutch, Swedish, Polish, Turkish, Indonesian |
+| Other scripts | Russian, Japanese, Chinese, Korean, Arabic, Hebrew, Hindi |
+
+The first day of the week follows the Unicode CLDR's week data: Sunday in the United States, Canada, Japan, Korea, India, Israel, Brazil and Mexico, Saturday in Egypt and most of the Gulf, and Monday in most of Europe, China and Australia. `.week_start(Weekday)` overrides it for one picker.
+
+For a language that isn't built in, make a `LocaleData`, set its fields, and pass `DateLocale::custom(data)`. `.labels(...)` on a locale changes only the words on the controls. The server writes the locale into the control and the browser reads it back, so a month's name is the same on the first month and on the next one the browser draws. Digits are Western in what is written. Digits of any script are read.
+
+The words on the controls, the messages and the names of the presets are built in for all nineteen, and `.preset_label` sets any one of them for a page. The built-in words are short common phrases that were written for Navree and not yet read by a native speaker of each language, so check the ones your users will see. Gregorian is the only calendar.
+
+<UiProps type="DateLocale" />
+
+## Rules
+
+<UiProps type="DateRules" />
+
+## What ships to the browser
+
+A page with no picker ships nothing for dates. A page with a Calendar or a picker loads the `dates` module, and the popover placement from `overlay`. Nothing the module does asks the server: moving a month, choosing a day, typing and reading a date all happen in the browser. The server sends a calendar's first month; a picker sends an empty shell and the browser draws the months when it opens, so a form with a date field costs a few kilobytes of markup.
+
+## Limits
+
+- Years 1 to 9999. Gregorian only.
+- A rule function limits navigation to about three years around the month it opens on. The server checks every date regardless.
+- The browser is sent at most 1,000 runs of days that are off. The server keeps them all.
+- A step of the time list has to divide a day. Below five minutes there is no list.
+- A date and a time together are two fields in one form. A single control for both is not built yet.

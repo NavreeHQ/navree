@@ -1,0 +1,62 @@
+[package]
+name = "navree-navigator"
+description = "Navree Navigator: the MCP server for coding agents, with the app's routes, schema, logs and version-matched docs, and the agent skills."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "mcp", "agents", "ai"]
+categories = ["development-tools"]
+readme = "README.md"
+include = [
+    "src/**",
+    "build.rs",
+    "skills/**",
+    "docs/**",
+    "catalog.json",
+    "README.md",
+    "LICENSE-*",
+]
+# Embeds the agent skills (`skills/`), the docs (`docs/`) and the UI component
+# catalog (`docs/ui-data/catalog.json`): from this folder when it holds copies
+# (a published crate does), else from the repository's.
+build = "build.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+futures-util = { workspace = true }
+# Reads the HTML of a page the app drew, for `render_page`'s outline.
+html5ever = { workspace = true }
+# Reads the app's configuration exactly as the app does.
+navree-config = { workspace = true }
+# The settings `navree dev` passes to the app when it has a `dock.toml`.
+navree-dock = { workspace = true }
+# Downloads the docs bundle of the app's Navree version (rustls with ring).
+reqwest = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# SQLite (bundled) and PostgreSQL with rustls and ring: the tool reads the
+# databases of any app, so it carries both drivers whatever the app compiles.
+sqlx = { workspace = true, features = ["postgres", "sqlite-bundled", "tls-rustls-ring-webpki"] }
+sqlparser = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+url = { workspace = true }
+
+[build-dependencies]
+# Cuts the UI component catalog down to what `list_components` answers with.
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wiremock = { workspace = true }

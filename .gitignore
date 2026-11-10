@@ -1,0 +1,70 @@
+# Rust build output
+target/
+# Fuzzing: working corpora, crashes and coverage stay out of the repository
+# (the seeds in fuzz/seeds are committed).
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
+# trybuild writes failing UI test output next to the crate (accept reviewed
+# snapshots with TRYBUILD=overwrite)
+/crates/*/wip/
+
+# Node / Next.js
+node_modules/
+.next/
+# Written and rewritten by `next dev`
+/apps/*/AGENTS.md
+/apps/*/CLAUDE.md
+
+# Runtime data written by Navree apps (storage/framework/down, storage/*.db, uploads)
+/storage/
+/apps/*/storage/
+
+# Databases and local secrets
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+# The configuration loader's test fixtures are apps, .env files included.
+!crates/navree-config/tests/fixtures/**/.env
+!crates/navree-config/tests/fixtures/**/.env.*
+.npmrc
+.netrc
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+
+# insta pending snapshots
+*.snap.new
+*.pending-snap
+
+__pycache__/
+
+# Local deploy credentials: never commit
+cf.token
+*.token
+
+# CycloneDX SBOMs written by `cargo cyclonedx` (CI generates them; see .github/workflows/sbom.yml)
+*.cdx.json
+
+# Static analysis reports (scripts/sast.sh)
+/sast-reports/
+
+# Local editor and tool files
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.aider*
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

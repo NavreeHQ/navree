@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Company::query().in_random_order().limit(3))"
+---
+db.companies.aggregate([
+  {"$set": {"__navree_random0": {"$rand": {}}}},
+  {"$sort": {"__navree_random0": 1}},
+  {"$limit": 3},
+  {"$project": {"_id": 1, "name": 1, "country": 1, "employees": 1, "created_at": 1, "updated_at": 1}}
+])

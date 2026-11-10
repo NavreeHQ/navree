@@ -1,0 +1,88 @@
+[package]
+name = "navree-workspace"
+description = "Navree WorkspaceModule: multi-tenancy by workspace, with members, roles, invitations, and row, schema or database isolation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "multi-tenancy", "saas", "tenancy"]
+categories = ["web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["session", "testing", "ui"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL driver (row-level security and schema isolation run there).
+test-postgres = ["navree-db/postgres"]
+## MySQL driver, for the real-server tests of shared libraries
+## (`NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+## `navree_workspace::testing`: isolation suites (`WorkspaceTenancy`,
+## `IsolationSuiteExt::factory`) on navree-testing's `TestApp`. The facade
+## turns it on when both its `workspace` and `testing` features are on.
+testing = ["dep:navree-testing"]
+## The `session` workspace resolver and `POST /workspace/switch`: a browser
+## switches workspace and its navree-session session keeps the choice. The
+## facade turns it on when both its `workspace` and `session` features are on.
+session = ["dep:navree-session"]
+## `WorkspaceSwitcher`, the Navree UI menu that posts to the switch route.
+## The facade turns it on when both its `workspace` and `ui` features are on.
+ui = ["session", "dep:navree-ui"]
+
+[dependencies]
+base64 = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+# The conformity checks name a model's default table as its derive does.
+heck = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-mail = { workspace = true }
+navree-openapi = { workspace = true }
+# The workspace tables are models (`Workspace`, `Member`, `Organization`, ...),
+# seven of them access subjects (`#[model(subject)]`, feature `access`).
+navree-orm = { workspace = true, features = ["access"] }
+navree-schedule = { workspace = true }
+navree-session = { workspace = true, optional = true }
+navree-telemetry = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-time = { workspace = true }
+navree-ui = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+# The crate's own tests run isolation suites (feature `testing`), switch
+# workspaces in a session (`session`) and draw the switcher (`ui`).
+navree-workspace = { path = ".", features = ["testing", "session", "ui"] }
+# The session the `session` resolver reads.
+navree-session = { workspace = true }
+navree-ui = { workspace = true }
+# ORM models under each isolation strategy; the test servers' settings.
+navree-orm = { workspace = true, features = ["testing"] }
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

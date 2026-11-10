@@ -1,0 +1,35 @@
+error: unknown #[recent_auth] key `hours`: expected `minutes = 10`
+  --> tests/ui/controller/auth_guard_misuse.rs:10:19
+   |
+10 |     #[recent_auth(hours = 1)]
+   |                   ^^^^^
+
+error: #[recent_auth] takes between 1 and 10080 minutes (a week)
+  --> tests/ui/controller/auth_guard_misuse.rs:16:29
+   |
+16 |     #[recent_auth(minutes = 0)]
+   |                             ^
+
+error: expected #[recent_auth(minutes = 10)]
+  --> tests/ui/controller/auth_guard_misuse.rs:22:5
+   |
+22 |     #[recent_auth]
+   |     ^^^^^^^^^^^^^^
+
+error: #[not_while_impersonating] takes no arguments
+  --> tests/ui/controller/auth_guard_misuse.rs:28:5
+   |
+28 |     #[not_while_impersonating(strict)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: duplicate #[not_while_impersonating]
+  --> tests/ui/controller/auth_guard_misuse.rs:35:5
+   |
+35 |     #[not_while_impersonating]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: route `index` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)
+  --> tests/ui/controller/auth_guard_misuse.rs:54:14
+   |
+54 |     async fn index(&self) -> &'static str {
+   |              ^^^^^

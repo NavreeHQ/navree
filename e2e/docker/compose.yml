@@ -1,0 +1,307 @@
+# The system-test stack: the backing services a Navree app talks to, the
+# system app itself (web, worker, scheduler from one image) and the
+# checkers (k6, Playwright). `e2e/run.sh` drives it; see e2e/README.md.
+#
+# Profiles start only what a run needs:
+#
+#   (none)    TimescaleDB, Redis and Mailpit: always on
+#   search    Meilisearch (the app's search engine)
+#   typesense Typesense, for search's Typesense engine checks (on Docker
+#             Desktop's WSL2 kernel 6.18 every Typesense image from 28 to
+#             30.1 exits with a segfault before printing anything; it runs
+#             on stock Linux hosts)
+#   storage   MinIO (S3) and its bucket
+#   nats      NATS with JetStream (micro, events)
+#   mysql     MySQL 8.4
+#   mongo     MongoDB 8 as a one-node replica set
+#   app       the system app: web, worker, scheduler (needs search,
+#             storage and nats: the app is configured against them)
+#   load      k6 (`docker compose run --rm k6 run /scripts/...`)
+#   browser   Playwright with Chromium (screenshots)
+#   ui        a second web process with Logbook on (development tooling,
+#             off in the release configuration) for the UI run
+#
+# Every host port is overridable (E2E_*_PORT) so the stack can run next to a
+# development stack started by `navree dock`. The project name defaults to
+# `navree-e2e` (run.sh passes -p).
+name: navree-e2e
+
+x-healthcheck: &healthcheck
+  interval: 3s
+  timeout: 5s
+  retries: 60
+  start_period: 5s
+
+x-app: &app
+  image: ${E2E_APP_IMAGE:-navree-system-app:local}
+  profiles: ["app"]
+  restart: "no"
+  env_file:
+    - ./system.env
+  environment: &app-env
+    APP_ENV: production
+    APP_KEY: ${E2E_APP_KEY:-base64:ZXZpZGVuY2UtYXBwLWtleS0zMi1ieXRlcy1sb25nISE=}
+    APP_AUTH__JWT__SECRET: ${E2E_JWT_SECRET:-system-jwt-secret-at-least-32-bytes-long}
+    APP_DATABASE__URL: postgres://navree:navree@postgres:5432/system
+    RUST_LOG: ${E2E_RUST_LOG:-info}
+    # The OpenAPI document and the API reference page are off in production
+    # unless asked for; the checks and the UI run read both.
+    APP_API__OPENAPI_JSON: "true"
+    APP_API__DOCS_UI: "true"
+    # Lighthouse's detail queue and trace sampling (its defaults). A run
+    # with a small queue and every trace wanted shows details sampled out
+    # while the counts stay exact (see the lighthouse scenario).
+    APP_LIGHTHOUSE__BUFFER: ${E2E_LIGHTHOUSE_BUFFER:-10000}
+    APP_LIGHTHOUSE__SAMPLE__REQUESTS: ${E2E_LIGHTHOUSE_SAMPLE_REQUESTS:-0.1}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    mailpit: { condition: service_healthy }
+    meilisearch: { condition: service_healthy }
+    minio-bucket: { condition: service_completed_successfully }
+    nats: { condition: service_healthy }
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.31.0-pg17
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=timescaledb
+      - -c
+      - timescaledb.telemetry_level=off
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=512MB
+    environment:
+      POSTGRES_USER: navree
+      POSTGRES_PASSWORD: navree
+      POSTGRES_DB: system
+      TIMESCALEDB_TELEMETRY: "off"
+    ports: ["${E2E_PG_PORT:-47432}:5432"]
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      <<: *healthcheck
+      # Over TCP: during its first start the image runs a temporary server
+      # on the Unix socket only.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "navree", "-d", "system"]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["--maxmemory", "256mb", "--appendonly", "no", "--save", ""]
+    ports: ["${E2E_REDIS_PORT:-47379}:6379"]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "redis-cli", "ping"]
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "5000"
+    ports:
+      - "${E2E_SMTP_PORT:-47025}:1025"
+      - "${E2E_MAILPIT_PORT:-47825}:8025"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8025/readyz"]
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.55
+    profiles: ["search", "app"]
+    environment:
+      MEILI_MASTER_KEY: system-meili-master-key
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports: ["${E2E_MEILI_PORT:-47700}:7700"]
+    volumes: [meili:/meili_data]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+
+  typesense:
+    image: typesense/typesense:30.1
+    profiles: ["typesense"]
+    command: ["--data-dir", "/data", "--api-key", "system-typesense-key", "--enable-cors"]
+    ports: ["${E2E_TYPESENSE_PORT:-47108}:8108"]
+    volumes: [typesense:/data]
+    healthcheck:
+      <<: *healthcheck
+      # The image has neither curl nor wget: bash's /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8108 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q '"ok":true' <&3
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    profiles: ["storage", "app"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: navree
+      MINIO_ROOT_PASSWORD: navree-minio-secret
+    ports:
+      - "${E2E_MINIO_PORT:-47900}:9000"
+      - "${E2E_MINIO_CONSOLE_PORT:-47901}:9001"
+    volumes: [minio:/data]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+
+  # Creates the app's bucket once MinIO is up, then exits.
+  minio-bucket:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    profiles: ["storage", "app"]
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mc mb --ignore-existing system/system"]
+    environment:
+      MC_HOST_system: http://navree:navree-minio-secret@minio:9000
+    depends_on:
+      minio: { condition: service_healthy }
+
+  nats:
+    image: nats:2.14-alpine
+    profiles: ["nats", "app"]
+    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    ports:
+      - "${E2E_NATS_PORT:-47222}:4222"
+      - "${E2E_NATS_MONITOR_PORT:-47822}:8222"
+    volumes: [nats:/data]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+
+  mysql:
+    image: mysql:8.4
+    profiles: ["mysql"]
+    environment:
+      MYSQL_ROOT_PASSWORD: navree
+      MYSQL_DATABASE: system
+      MYSQL_USER: navree
+      MYSQL_PASSWORD: navree
+    ports: ["${E2E_MYSQL_PORT:-47306}:3306"]
+    volumes: [mysql:/var/lib/mysql]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-unavree", "-pnavree", "--silent"]
+
+  mongo:
+    image: mongo:8.0
+    profiles: ["mongo"]
+    # One node, but a replica set: transactions and change streams need one.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports: ["${E2E_MONGO_PORT:-47017}:27017"]
+    volumes: [mongo:/data/db]
+    healthcheck:
+      <<: *healthcheck
+      # Initiates the set on the first check; healthy once it has a primary.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}).ok }; db.hello().isWritablePrimary || quit(1)"
+
+  # ---------------------------------------------------------------------
+  # The system app: one image, three process types.
+  # ---------------------------------------------------------------------
+  web:
+    <<: *app
+    command: ["serve"]
+    ports: ["${E2E_APP_PORT:-47080}:8080"]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
+
+  # A second web process with Logbook turned on, for the UI run
+  # (`e2e/run.sh ui`): Logbook records every request's bodies and is
+  # development tooling, so the main `web` keeps it off.
+  web-dev:
+    <<: *app
+    profiles: ["ui"]
+    command: ["serve"]
+    environment:
+      <<: *app-env
+      APP_LOGBOOK__ENABLED: "true"
+      # GraphiQL's explorer reads the schema by introspection, which is off
+      # in release builds unless asked for.
+      APP_GRAPHQL__INTROSPECTION: "true"
+    ports: ["${E2E_APP_DEV_PORT:-47081}:8080"]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
+
+  worker:
+    <<: *app
+    command: ["fleet"]
+    depends_on:
+      web: { condition: service_healthy }
+    healthcheck:
+      disable: true
+
+  scheduler:
+    <<: *app
+    command: ["schedule:work"]
+    depends_on:
+      web: { condition: service_healthy }
+    healthcheck:
+      disable: true
+
+  # ---------------------------------------------------------------------
+  # Checkers.
+  # ---------------------------------------------------------------------
+  k6:
+    image: grafana/k6:1.4.0
+    profiles: ["load"]
+    volumes:
+      - ../load:/scripts:ro
+      - ../checks:/checks:ro
+      - ${E2E_OUT_DIR:-../../target/e2e-results/adhoc}:/out
+    environment:
+      BASE_URL: http://web:8080
+      K6_SUMMARY_DIR: /out/k6
+    entrypoint: ["k6"]
+
+  browser:
+    build:
+      context: ../browser
+    image: navree-system-browser:local
+    profiles: ["browser"]
+    # In the web container's network namespace: the browser opens the app
+    # on localhost, as a person does in development. The tools' session
+    # cookies are `Secure` on every host but loopback, so on http://web:8080
+    # the browser would drop them.
+    network_mode: "service:web"
+    volumes:
+      - ../browser:/runner/src:ro
+      - ${E2E_OUT_DIR:-../../target/e2e-results/adhoc}:/out
+    environment:
+      BASE_URL: http://localhost:8080
+      OUT_DIR: /out/screenshots
+      SERVICE: web
+
+  # The same runner in web-dev's namespace: Logbook answers loopback
+  # clients only.
+  browser-dev:
+    image: navree-system-browser:local
+    profiles: ["ui"]
+    network_mode: "service:web-dev"
+    volumes:
+      - ../browser:/runner/src:ro
+      - ${E2E_OUT_DIR:-../../target/e2e-results/adhoc}:/out
+    environment:
+      BASE_URL: http://localhost:8080
+      OUT_DIR: /out/screenshots
+      SERVICE: web-dev
+
+volumes:
+  postgres:
+  meili:
+  typesense:
+  minio:
+  nats:
+  mysql:
+  mongo:

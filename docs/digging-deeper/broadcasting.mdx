@@ -1,0 +1,553 @@
+---
+title: "Real-time broadcasting"
+description: "A Pusher-protocol WebSocket server inside your app: public, private and presence channels, channel authorisation, a signed relay for workers, a Redis backplane for several servers, and pusher-js on the front end."
+---
+
+<Badge feature="realtime" /> When a deal moves on one person's board, everyone else looking at the board should see it move. `navree-realtime` makes that possible without an external service: it is a [Pusher](https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/)-protocol (version 7) WebSocket server that runs inside your app's own HTTP server. [pusher-js](https://github.com/pusher/pusher-js) and any other Pusher client connect to it unchanged.
+
+You get public, private and presence channels, an endpoint that authorises private channels with your own rules, broadcasting from any service, a signed relay so queue workers and the scheduler can broadcast too, and a way to end a user's subscriptions when their access changes. The same module is the [live hub](/docs/ui/live-hub/) of Navree UI pages: a page hears your broadcasts over server-sent events, through the same rules.
+
+<Callout type="note" title="Limits">
+
+- **One serving process, unless you add a backplane.** Each `serve` process only reaches the sockets connected to it. To run several behind a load balancer, connect them with the [Redis backplane](#several-serving-processes).
+- **No client events.** `client-…` events sent by browsers are ignored, not relayed to other subscribers.
+- **No Pusher HTTP API.** You can't trigger events with a Pusher server SDK; broadcast from your app instead. Pusher's user authentication (`pusher:signin`) and webhooks are not supported either.
+
+</Callout>
+
+## Configuration
+
+Add `RealtimeModule` next to `HttpModule`. Private and presence channels are authorised by an authenticated route, so an app that uses them also needs an authenticator, usually [`AuthModule`](/docs/security/authentication/) (which needs `CryptoModule` and `DatabaseModule`). Without one, the route is not mounted and only public channels and topics can be heard:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(CryptoModule::from_config()) // APP_KEY: also keys the relay
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(RealtimeModule::from_config()) // section `realtime`
+}
+```
+
+This is the reference CRM's `realtime` section:
+
+```toml title="config/app.toml"
+[realtime]
+# ws://127.0.0.1:8080/app/navree-crm-key
+key = "navree-crm-key"
+allowed_origins = ["http://localhost:3000"]
+# queue:work and schedule:work hand their broadcasts to `serve`.
+relay_url = "auto"
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `realtime.app_id` | `navree` | The application id, used in the relay's URL. |
+| `realtime.key` | `navree` | The public key clients connect with (`ws://host/app/{key}`): letters, digits, `-`, `_` and `.`. |
+| `realtime.secret` | empty | Signs private and presence subscriptions. Empty means a random secret per process, which is enough: the same process signs and checks. If set, it also keys the relay. |
+| `realtime.allowed_origins` | `[]` | Origins whose pages may connect, or `*`. Empty means `http.cors.allowed_origins`. See [Allowed origins](#allowed-origins). |
+| `realtime.activity_timeout_secs` | `120` | Seconds of silence before the server pings a client (at least 1). |
+| `realtime.relay_url` | empty | Where other processes send their broadcasts: empty, `auto` or a URL. See [Broadcasting from workers](#broadcasting-from-workers). |
+| `realtime.backplane` | `none` | `none`, or `redis` to share broadcasts and presence between processes. Needs `realtime.secret`. See [Several serving processes](#several-serving-processes). |
+| `realtime.streams.*` | | The caps of the live streams pages listen to: `names` (32), `per_user` (16), `lifetime_secs` (3600) and `replay` (1024). See the [live hub](/docs/ui/live-hub/#backpressure-and-limits). |
+
+From the environment, lists are comma-separated: `APP_REALTIME__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. Invalid options fail the boot, naming the key and never echoing the secret. In code, use `RealtimeModule::for_root(RealtimeOptions { key, allowed_origins, ..RealtimeOptions::default() })`.
+
+`RealtimeModule` is global. It provides `Realtime` and `dyn Broadcaster` (the same instance) and `Live`, the live hub's publisher, and mounts these routes, none of them under the API prefix:
+
+| Route | Access | Purpose |
+|---|---|---|
+| `GET /app/{key}` | public, origin-checked | The WebSocket. |
+| `POST /broadcasting/auth` | signed-in users | Signs private and presence subscriptions. |
+| `POST /apps/{app_id}/events` | public, signed | Receives broadcasts relayed by the app's other processes. |
+| `GET /broadcasting/stream` | public, origin-checked | The [live hub](/docs/ui/live-hub/): a server-sent event stream of topics and channels for a page. Private channels are checked here by the same authorisers. |
+
+## Channels
+
+A channel's name says what kind it is:
+
+- **public** channels (`announcements`) are open to anyone who connects;
+- **private** channels (`private-crm.deals`) need a signature from your app, given only to users your [channel authoriser](#authorizing-channels) allows;
+- **presence** channels (`presence-deals.42`) are private channels that also tell every subscriber who else is there.
+
+Names are 1 to 200 characters from `A-Z a-z 0-9 _ - = @ , . ;`. A connection can subscribe to at most 100 channels.
+
+## Authorizing channels
+
+Register an authoriser for each family of private or presence channels with `m.channel(pattern, authorize)`, from any module (it doesn't need to import `RealtimeModule`). This is how the reference CRM does it:
+
+```rust title="crates/crm-core/src/platform.rs"
+use std::collections::HashMap;
+
+use navree::access::{AbilityFactory, READ};
+use navree::contracts::Principal;
+use navree::realtime::ChannelDecision;
+use navree::{BoxFuture, prelude::*};
+
+struct CrmPlatformModule;
+
+impl Module for CrmPlatformModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.channel("crm.deals", deals_channel)
+            .channel("users.{id}", user_channel);
+    }
+}
+
+/// `private-crm.deals`: users who can read deals.
+fn deals_channel(
+    principal: &Principal,
+    _params: &HashMap<String, String>,
+    ctx: &AppContext,
+) -> BoxFuture<'static, Result<ChannelDecision, BoxError>> {
+    let (principal, ctx) = (principal.clone(), ctx.clone());
+    Box::pin(async move {
+        let factory = ctx.get::<AbilityFactory>().await?;
+        let ability = factory.for_principal(&Some(principal)).await?;
+        Ok(if ability.can(READ, "Deal", None) {
+            ChannelDecision::Allow
+        } else {
+            ChannelDecision::Deny
+        })
+    })
+}
+
+/// `private-users.{id}` (notifications): only that user.
+fn user_channel(
+    principal: &Principal,
+    params: &HashMap<String, String>,
+    _ctx: &AppContext,
+) -> BoxFuture<'static, Result<ChannelDecision, BoxError>> {
+    let own = params.get("id") == Some(&principal.user_id.to_string());
+    Box::pin(async move {
+        Ok(if own {
+            ChannelDecision::Allow
+        } else {
+            ChannelDecision::Deny
+        })
+    })
+}
+```
+
+- **Patterns** are written without the `private-` or `presence-` prefix. They hold literal text and `{name}` parameters; a parameter matches one or more characters other than `.`, and its value is in `params` (`params["id"]` for `users.{id}`).
+- **The first matching pattern decides**, in module dependency order. A channel no pattern matches is refused.
+- **Mistakes fail the boot**: a malformed pattern, a pattern written with its prefix, or the same pattern registered twice.
+- The authoriser gets the `Principal` asking and the `AppContext`, so it can resolve any service, such as the ability factory above (see [Authorization](/docs/security/authorization/)).
+
+It returns a `ChannelDecision`:
+
+| Decision | Meaning |
+|---|---|
+| `Deny` | The auth endpoint answers `403`. |
+| `Allow` | The user may subscribe. On a presence channel they appear with no `user_info`. |
+| `Presence(json)` | The user may subscribe; on a presence channel the other members see `json` as their `user_info`. On a private channel it is the same as `Allow`. |
+
+### The auth endpoint
+
+Pusher clients call `POST /broadcasting/auth` before subscribing to a private or presence channel, with the `socket_id` the server gave them and the `channel_name`, as a form or as JSON. The route needs a signed-in user. It runs the matching authoriser and answers with the signature the client sends along with its subscription:
+
+```json title="200 OK"
+{"auth":"navree-crm-key:c7e10e5fbc0debca8d30201094d66a914cbccb4aefd786831a01284eed0a9ab6"}
+```
+
+The `auth` value is `<key>:<hex HMAC-SHA-256 of "socket_id:channel">` under `realtime.secret`; for presence channels the response also has `channel_data`, and the signature covers it. Otherwise:
+
+| Situation | Response |
+|---|---|
+| No authoriser matches, it returns `Deny`, or the channel is public | `403` |
+| No signed-in user | `401` |
+| A missing or malformed `socket_id` or `channel_name` | `400` validation error, e.g. `channel_name should not be empty` |
+| The authoriser returns an error | `500` (logged) |
+
+A subscription with a missing or wrong signature gets `pusher:error` `4009` (`Connection is unauthorized`) and is not joined; the connection stays open. To sign subscriptions from your own endpoint, call `Realtime::sign(socket_id, channel, channel_data)`.
+
+### Presence channels
+
+On a presence channel, each member is a user id plus the `user_info` your authoriser returned. Subscribers get the member list when they join (`{"presence": {"ids", "hash", "count"}}`), then `pusher_internal:member_added` and `member_removed` as people come and go. A user with two tabs open counts once, and leaves when their last connection does.
+
+```rust
+/// `presence-deals.{id}`: who is looking at a deal right now.
+fn deal_viewers(
+    principal: &Principal,
+    _params: &HashMap<String, String>,
+    ctx: &AppContext,
+) -> BoxFuture<'static, Result<ChannelDecision, BoxError>> {
+    let (user_id, ctx) = (principal.user_id, ctx.clone());
+    Box::pin(async move {
+        let auth = ctx.get::<AuthService>().await?;
+        Ok(match auth.find_user(user_id).await? {
+            Some(user) => ChannelDecision::Presence(json!({ "name": user.name })),
+            None => ChannelDecision::Deny,
+        })
+    })
+}
+
+// In the module: m.channel("deals.{id}", deal_viewers);
+```
+
+## Broadcasting events
+
+To send an event, resolve `Arc<dyn Broadcaster>` (from `navree::contracts`) and call `broadcast(channels, event, data)`. It works the same in every process: the one serving the sockets delivers the event itself, and the others hand it over [through the relay](#broadcasting-from-workers).
+
+```rust title="src/modules/announcements/mod.rs"
+use navree::contracts::Broadcaster;
+use navree::prelude::*;
+use serde_json::json;
+
+#[injectable]
+pub struct Announcements {
+    broadcaster: Arc<dyn Broadcaster>,
+}
+
+impl Announcements {
+    /// Sends `announcement.created` to everyone on the public `announcements` channel.
+    pub async fn publish(&self, text: &str) -> Result<(), BoxError> {
+        self.broadcaster
+            .broadcast(
+                vec!["announcements".to_owned()],
+                "announcement.created".to_owned(),
+                json!({ "text": text }),
+            )
+            .await
+    }
+}
+
+#[module(providers = [Announcements], exports = [Announcements])]
+pub struct AnnouncementsModule;
+```
+
+When the event reports a change to your data, broadcast after the change is committed, never before: a broadcast for a change that rolls back would show users something that never happened. The CRM's deal service does it with the unit of work's `after_commit` hook:
+
+```rust title="crates/crm-deals/src/service.rs"
+use navree::contracts::Broadcaster;
+use navree::prelude::*;
+use serde_json::json;
+
+#[injectable]
+pub struct DealService {
+    broadcaster: Arc<dyn Broadcaster>,
+    // ...
+}
+
+impl DealService {
+    /// Broadcasts `deal` as `deal.updated` on `private-crm.deals` once the
+    /// unit of work commits. A failed broadcast is logged: the change stands.
+    fn broadcast(&self, uow: &Uow, deal: &DealResource) {
+        let broadcaster = self.broadcaster.clone();
+        let data = json!({ "deal": deal });
+        uow.after_commit(move || {
+            Box::pin(async move {
+                let channels = vec!["private-crm.deals".to_owned()];
+                if let Err(error) = broadcaster
+                    .broadcast(channels, "deal.updated".to_owned(), data)
+                    .await
+                {
+                    tracing::warn!(%error, "the deal.updated broadcast failed");
+                }
+            })
+        });
+    }
+}
+```
+
+Subscribers receive a Pusher frame whose `data` is the JSON you sent, encoded as a string:
+
+```json wrap
+{"event":"deal.updated","channel":"private-crm.deals","data":"{\"deal\":{\"__type\":\"Deal\",\"id\":\"01a17746-...\",\"stage\":\"proposal\"}}"}
+```
+
+Event names are 1 to 200 characters and may not start with `pusher:` or `pusher_internal:`; anything else is refused before it is sent. Fan-out never waits for a slow client: each connection has a bounded queue (512 frames), and a connection that falls that far behind is closed with code `4100` so it reconnects after a back-off.
+
+[Notifications](/docs/digging-deeper/notifications/) sent on the broadcast channel use the same contract: they go out as `notification.created` on `private-users.{id}`.
+
+### Broadcasting from the serving process
+
+`Realtime::broadcast` sends synchronously and returns how many deliveries it queued, which is handy in the process that serves the sockets:
+
+```rust
+let delivered = realtime.broadcast(["announcements"], "announcement.created", json!({ "text": text }))?;
+```
+
+<Callout type="warning" title="Realtime::broadcast doesn't use the relay">
+
+Without a backplane, `Realtime::broadcast` only reaches connections held by the process it runs in. Called from `queue:work`, `schedule:work` or a command, it reaches nobody and still succeeds. In code that may run in a worker (jobs, listeners, scheduled tasks, services they call), use `dyn Broadcaster`, which relays. With a [backplane](#several-serving-processes), both reach every process; the count `Realtime::broadcast` returns is still this process's deliveries.
+
+</Callout>
+
+## Broadcasting from workers
+
+The sockets live in the `serve` process, but queued listeners run in `queue:work` and scheduled tasks in `schedule:work`. Set `realtime.relay_url` so those processes hand their broadcasts to `serve`:
+
+- `auto`: `http://` plus `http.addr` (a wildcard address such as `0.0.0.0` becomes loopback). Use it when workers run on the same host as `serve`.
+- a URL such as `http://api.internal:8080`: the base URL of the serving process.
+- empty (the default): broadcasts stay in the process. A worker's broadcasts then reach nobody, silently.
+
+A process relays when it doesn't serve HTTP itself and holds no connections. Its `dyn Broadcaster` posts each broadcast, and each `end_user_subscriptions` call, to `POST /apps/{app_id}/events` on the serving process, which delivers it to its own connections. Errors (the server is down, answers an error, or takes longer than 5 seconds) come back from `broadcast`, so the caller can log them, as the CRM does.
+
+Relayed messages are signed with HMAC-SHA-256 under a key derived from `realtime.secret`, or, when there is no secret, from the app key through `CryptoModule`'s `Encrypter` (an `APP_KEY` alone, without `CryptoModule` in the app, doesn't count), in an `X-Navree-Relay-Signature: t=<unix seconds>,v1=<hex>` header. The receiver refuses a missing or wrong signature (`401`), a signature more than five minutes away from its own clock (`401`, so a captured request can't be replayed later) and another app id (`404`). Without a secret or an app key, the endpoint answers `404` and `relay_url` is ignored with a warning.
+
+<Callout type="warning" title="Every process needs the same key">
+
+Run `serve`, `queue:work` and `schedule:work` with the same `.env`, so they share `APP_KEY` (or `realtime.secret`). Otherwise every relayed broadcast is refused with `401`.
+
+</Callout>
+
+Two more things to know:
+
+- **Maintenance mode blocks the relay.** `/apps/{app_id}/events` is not in `http.maintenance_except` by default, so while the app is [down](/docs/digging-deeper/maintenance-mode/), workers' broadcasts fail with `503`. Add the path to the list if workers keep running during maintenance.
+- **Commands warn when `serve` isn't running.** Anything that ends subscriptions or broadcasts from a command, such as `db:seed` assigning roles, logs a warning for each relay attempt that can't reach `serve`. The command still succeeds.
+
+## Several serving processes
+
+<Badge feature="redis" /> Behind a load balancer, the users on one board may be connected to different `serve` processes. A **backplane** connects the processes: with `realtime.backplane = "redis"`, every process publishes its broadcasts on a Redis pub/sub channel and delivers the others' to its own sockets. Add [`RedisModule`](/docs/digging-deeper/redis/) and give every process the same secret:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(AuthModule::from_config())
+    .module(RedisModule::from_config())
+    .module(RealtimeModule::from_config())
+```
+
+```toml title="config/app.toml"
+[redis]
+url = "redis://10.0.0.5:6379"
+
+[realtime]
+key = "navree-crm-key"
+backplane = "redis"
+```
+
+```env title=".env"
+APP_REALTIME__SECRET=a-long-random-string-shared-by-every-process
+```
+
+`realtime.secret` is required with a backplane, because the process that signs a subscription (the one that answered `/broadcasting/auth`) is often not the one holding the socket; without it the boot fails. In code: `RealtimeOptions { backplane: BackplaneKind::Redis, secret, ..RealtimeOptions::default() }` (`navree::realtime::BackplaneKind`).
+
+What the processes share:
+
+- **Broadcasts.** `dyn Broadcaster` and `Realtime::broadcast` reach the sockets of every process. Workers (`queue:work`, `schedule:work`, commands) publish on the backplane directly, so with a backplane they need no `relay_url`.
+- **Presence.** A presence channel lists its members across all processes, and `member_added` / `member_removed` go out once per user: when their first connection anywhere joins, and when their last one leaves. `Realtime::members(channel)` returns the user ids across all processes.
+- **Disconnections.** `end_user_subscriptions` and `disconnect_user` close the user's connections in every process. Both still return the number closed in the calling process.
+
+How it holds together: each process has a random node id, says hello when it starts (the others answer with their presence members), sends a heartbeat every 5 seconds, resends all its members every 30 seconds and says goodbye when it shuts down. A process that stops sending heartbeats for 20 seconds, because it crashed, is forgotten along with its members, which are announced as removed. Redis pub/sub delivers at most once: a process that loses its connection to Redis misses the broadcasts sent meanwhile (it subscribes again by itself) and catches up on presence at the next 30-second resend. A process that starts while Redis is down boots anyway and keeps trying to subscribe.
+
+The backplane uses the connection `redis.connections.realtime` when you define one. Anyone who can publish to the channel `<redis.prefix>realtime:<app_id>` can broadcast to your users, so keep Redis on a private network with a password, as you would anyway. `Realtime::has_backplane()` tells whether the process is on one.
+
+## Client setup
+
+On the front end, install [pusher-js](https://github.com/pusher/pusher-js) and point it at your app: your `realtime.key`, your API's host and port, and the auth endpoint:
+
+```ts title="lib/realtime.ts"
+import Pusher from "pusher-js";
+
+export const pusher = new Pusher("navree-crm-key", {
+  cluster: "mt1", // pusher-js requires one; it isn't used with wsHost
+  wsHost: "127.0.0.1",
+  wsPort: 8080,
+  wssPort: 8080,
+  forceTLS: false,
+  enabledTransports: ["ws", "wss"],
+  disableStats: true,
+  channelAuthorization: { endpoint: "/broadcasting/auth", transport: "ajax" },
+});
+
+pusher.subscribe("private-crm.deals").bind("deal.updated", (payload: { deal: { id: string } }) => {
+  // refresh the deal on the board
+});
+```
+
+- Channel names carry their kind as a prefix: `private-crm.deals` is a private channel, and `pusher.subscribe("presence-deals.42")` joins a presence channel.
+- Bind the event name exactly as the server broadcasts it (`deal.updated`).
+- The auth endpoint must reach `POST /broadcasting/auth` **with the user's credentials**. A browser app holding a bearer token can add it with `headers: { Authorization: "Bearer …" }` in `channelAuthorization`.
+
+### Through a backend-for-frontend
+
+The reference front end, `crm/web`, never lets the browser see a token: its Next.js server keeps them in httpOnly cookies (see the [CRM tour](/docs/example-app/crm-tour/#the-web-app)). So the WebSocket goes straight to Navree, while channel authorisation goes to a same-origin route that adds the bearer token:
+
+```ts title="crm/web/src/app/broadcasting/auth/route.ts"
+import { navree } from "@/lib/navree";
+
+export const dynamic = "force-dynamic";
+export const { POST } = navree.handlers;
+```
+
+`navree` is the app's `createNavree()` from `@navree/next/server`; its handlers forward the request to Navree with the bearer token. The real-time client (`connectRealtime` in `@navree/client/realtime`, on pusher-js) authorizes private and presence channels by posting `{socket_id, channel_name}` as JSON to that route on the page's own origin. The WebSocket host, port and key come from `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`, and `NEXT_PUBLIC_REALTIME=0` turns real time off. If the socket can't connect, the app keeps working with refetch-on-focus and polling.
+
+## Allowed origins
+
+Browsers let any page open a WebSocket to any server, so the server checks the page's `Origin` header. A connection is accepted when:
+
+- its `Origin` is listed in `realtime.allowed_origins` (exact origins such as `https://crm.example.com`, compared case-insensitively), or the list is `["*"]`;
+- the list is empty and the origin is in `http.cors.allowed_origins`;
+- its `Origin` is the server's own origin (its host matches the `Host` header);
+- it has no `Origin` at all (not a browser: a native app, a script, a test).
+
+Any other page gets `pusher:error` `4009` (`Origin not allowed`) and the socket closes; the attempt is logged as a warning under `navree::security`. A connection with the wrong key in its URL gets `4001` (`Application does not exist`).
+
+## Connections
+
+When a client connects, the server sends `pusher:connection_established` with its `socket_id` and the `activity_timeout`:
+
+```json wrap
+{"event":"pusher:connection_established","data":"{\"activity_timeout\":120,\"socket_id\":\"3710267687.715371358\"}"}
+```
+
+Clients keep the connection alive with `pusher:ping` (the server answers `pusher:pong`). After `activity_timeout_secs` of silence the server pings the client; if it stays silent for another `min(activity_timeout, 30 s)`, the server closes the connection with `4201` so the client reconnects. Messages are limited to 64 KiB. When the app shuts down, every connection is closed with `4200` (reconnect now), and graceful shutdown waits for them.
+
+| Close or error code | Meaning | Client behaviour |
+|---|---|---|
+| `4001` | Unknown app key | Doesn't reconnect |
+| `4009` | Origin not allowed, a bad subscription signature (as an error, the socket stays open), or the user was disconnected by the app | Doesn't reconnect |
+| `4100` | Too slow: the connection fell behind | Reconnects after a back-off |
+| `4200` | Reconnect now (shutdown, or the user's subscriptions ended) | Reconnects at once |
+| `4201` | No answer to a ping | Reconnects |
+
+## Disconnecting users when their access changes
+
+A private subscription is authorised once, when it is made. If a user then loses a role or a permission, or signs out, they would keep receiving events they may no longer see. Navree closes their connections when that happens:
+
+- [navree-access](/docs/security/authorization/) does it after a change commits: a user's roles or direct permissions change, a role loses permissions (for all its members) or a role is deleted;
+- [navree-auth](/docs/security/authentication/) does it when a user signs out.
+
+Both call `Broadcaster::end_user_subscriptions(user_id)`, which also works from workers through the relay or the backplane. The user's connections close with `4200`; the client reconnects and authorises each private channel again with the user's current access, so the channels they may no longer join stay closed. A failure is logged and the change itself stands.
+
+You can do the same yourself with `Realtime`:
+
+```rust
+use navree::realtime::Realtime;
+
+// Close and let the client reconnect and re-authorise (4200).
+realtime.end_user_subscriptions(user_id);
+
+// Close for good: the client doesn't reconnect on its own (4009).
+realtime.disconnect_user(user_id);
+```
+
+Both return the number of connections closed in this process; with a backplane, the other processes close the user's connections too. A connection belongs to a user once the auth endpoint has signed a channel for it on their behalf, it has joined a presence channel as them, or its WebSocket handshake was authenticated. A connection that only joined public channels belongs to nobody.
+
+## Testing
+
+Channel authorisers run behind `POST /broadcasting/auth`, so test them over HTTP. `TestApp` installs a test authenticator when the app has none, and `acting_as` signs requests in:
+
+```rust title="tests/channels.rs"
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+use serde_json::json;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn users_may_only_join_their_own_channel() {
+    let app = TestApp::builder()
+        .module(RealtimeModule::from_config())
+        .module(UserChannels) // registers m.channel("users.{id}", user_channel)
+        .build()
+        .await;
+    let (me, someone_else) = (Uuid::now_v7(), Uuid::now_v7());
+    let auth = |channel: String| {
+        app.acting_as(principal(me))
+            .post("/broadcasting/auth")
+            .json(&json!({ "socket_id": "1234.5678", "channel_name": channel }))
+    };
+
+    auth(format!("private-users.{me}")).send().await.assert_status(200);
+    auth(format!("private-users.{someone_else}")).send().await.assert_status(403);
+    app.shutdown().await.unwrap();
+}
+```
+
+To check what your code broadcasts, replace `dyn Broadcaster` with a recorder:
+
+```rust
+use std::sync::Mutex;
+
+use navree::BoxFuture;
+use navree::contracts::Broadcaster;
+use serde_json::Value;
+
+/// Records every broadcast.
+#[derive(Default)]
+struct RecordingBroadcaster(Mutex<Vec<(Vec<String>, String, Value)>>);
+
+impl Broadcaster for RecordingBroadcaster {
+    fn broadcast(
+        &self,
+        channels: Vec<String>,
+        event: String,
+        data: Value,
+    ) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.0.lock().unwrap().push((channels, event, data));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[tokio::test]
+async fn announcements_are_broadcast() {
+    let broadcasts = Arc::new(RecordingBroadcaster::default());
+    let app = TestApp::builder()
+        .module(AnnouncementsModule)
+        .override_value::<dyn Broadcaster>(broadcasts.clone())
+        .build()
+        .await;
+
+    app.get::<Announcements>().await.publish("Deploy at 18:00").await.unwrap();
+
+    let sent = broadcasts.0.lock().unwrap().clone();
+    assert_eq!(sent[0].1, "announcement.created");
+    app.shutdown().await.unwrap();
+}
+```
+
+To test code that runs on several processes, give two test apps one `MemoryBackplane` (`navree::realtime::MemoryBackplane`), the in-process stand-in for Redis. When `realtime.backplane` is `none`, an unnamed `dyn Backplane` the app provides is used, so `override_value` plugs it in. A broadcast in one app then reaches the other app's sockets, and their presence lists agree:
+
+```rust title="tests/backplane.rs"
+use navree::prelude::*;
+use navree::realtime::{Backplane, MemoryBackplane, Realtime};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn broadcasts_reach_the_other_process() {
+    let backplane = MemoryBackplane::new();
+    let app = || {
+        TestApp::builder()
+            .config("realtime.secret", "test-secret")
+            .override_value::<dyn Backplane>(Arc::new(backplane.clone()))
+            .module(RealtimeModule::from_config())
+            .build()
+    };
+    let (first, second) = (app().await, app().await);
+    let realtime = first.get::<Realtime>().await;
+    assert!(realtime.has_backplane() && second.get::<Realtime>().await.has_backplane());
+    // A client connected to `second` receives this:
+    realtime.broadcast(["announcements"], "posted", json!({ "id": 1 })).unwrap();
+}
+```
+
+The CRM's Playwright suite also checks the whole path in two real browsers: a deal moved by one user moves on another user's board without a reload (`crm/web/e2e/realtime.spec.ts`).
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/ui/live-hub/" title="Live hub">
+    Navree UI pages that hear your broadcasts and topics.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Notifications broadcast on `private-users.{id}`.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Abilities to decide who may join a channel.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Workers that broadcast through the relay.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    Live deal boards end to end.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Insert::values(\"companies\", [\"name\", \"country\"],\nvec![vec![val(\"Agra\")]]))"
+---
+PostgreSQL: error: invalid query: an insert into `companies` has 2 columns but a row of 1 values
+MySQL: error: invalid query: an insert into `companies` has 2 columns but a row of 1 values
+SQLite: error: invalid query: an insert into `companies` has 2 columns but a row of 1 values

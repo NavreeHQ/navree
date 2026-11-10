@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"deals\").from_as(\"d\").where_(col(\"d.stage\").eq(\"won\")))"
+---
+PostgreSQL: SELECT * FROM "deals" AS "d" WHERE "d"."stage" = $1
+  values: [String("won")]
+MySQL: SELECT * FROM `deals` AS `d` WHERE `d`.`stage` = ?
+  values: [String("won")]
+SQLite: SELECT * FROM "deals" AS "d" WHERE "d"."stage" = ?
+  values: [String("won")]

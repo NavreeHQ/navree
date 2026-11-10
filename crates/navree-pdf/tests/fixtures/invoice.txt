@@ -1,0 +1,32 @@
+INVOICE
+INV-2026-0042
+Issued 27 October 2026
+Due 26 November 2026
+FROM BILL TO
+Acme Security Ltd Northwind Traders GmbH
+12 Harbour Road Speicherstraße 7
+Dublin D02 X285, Ireland 20457 Hamburg, Germany
+billing@acme.example VAT DE 123 456 789
+Description Qty Unit price Amount
+Security audit 1 €4,500.00 €4,500.00
+Quarterly review of 42 controls
+Penetration test 3 €1,200.00 €3,600.00
+External perimeter, 3 days
+Multi-factor rollout 12 €95.00 €1,140.00
+Configuration and training
+Backup restore drill 2 €350.00 €700.00
+Database and object storage
+Incident response retainer 1 €800.00 €800.00
+October 2026
+Travel 2 €182.50 €365.00
+Two on-site visits
+Subtotal €11,105.00
+VAT 20% €2,221.00
+Total due €13,326.00
+Payment
+Pay by bank transfer to IE29 AIBK 9311 5212 3456 78 (BIC AIBKIE2D), quoting INV-2026-0042, or online
+at https://pay.acme.example/INV-2026-0042.
+Payment is due within 30 days of the invoice date. Late payments carry interest at 8 percentage points above the reference
+rate, as the late payment directive allows. Questions about this invoice go to billing@acme.example; quote the invoice
+number.
+Acme Security Ltd · billing@acme.example · Invoice INV-2026-0042 · Page 1 of 1

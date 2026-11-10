@@ -1,0 +1,64 @@
+# Servers and deploys with Harbor (https://navree.com/docs/tools/harbor/).
+#
+#   navree harbor:secrets set APP_KEY --generate
+#   navree harbor:provision        # prepares the servers below
+#   navree deploy                  # builds, uploads, migrates, health-checks, switches
+#
+# Replace the domain and the server's address with yours.
+app = "{{ package }}"
+domain = "{{ package }}.example.com"
+
+[deploy]
+health_check = "/health/ready"
+
+[processes]
+web = { command = "serve" }
+worker = { command = "queue:work" }
+scheduler = { command = "schedule:work" }
+
+[servers.app-1]
+host = "203.0.113.10"
+roles = ["web", "worker", "scheduler", "postgres"]
+{% if web %}
+
+# The Next.js app in web/ ships in the same release as the API, so a page and
+# the API it calls always come from the same build. Caddy serves `domain`
+# from it; the API stays on loopback behind its backend-for-frontend.
+[frontend]
+path = "web"
+{% if navree_js_dir %}
+# package.json links @navree/next and @navree/client from your Navree
+# checkout, which the build server does not have. So the
+# build takes them from Navree's repository into web/.navree-packages, builds
+# them, points the two links there for the build (so the release ships them)
+# and installs without the frozen lock, which does not list the links.
+# package.json and pnpm-lock.yaml are put back afterwards. To use the
+# published packages, set version ranges and the one-line build:
+#   build = "pnpm install --frozen-lockfile && pnpm build"
+build = '''
+cp package.json .deploy-package.json && cp pnpm-lock.yaml .deploy-pnpm-lock.yaml
+rm -rf .navree-packages \
+  && git clone --depth 1 --filter=blob:none --sparse https://github.com/NavreeHQ/navree.git .navree-packages \
+  && git -C .navree-packages sparse-checkout set packages/js \
+  && rm -rf .navree-packages/.git \
+  && pnpm --dir .navree-packages/packages/js install --frozen-lockfile \
+  && pnpm --dir .navree-packages/packages/js build \
+  && node -e "const fs = require('fs'); const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); for (const name of Object.keys(p.dependencies)) if (name.startsWith('@navree/')) p.dependencies[name] = 'link:.navree-packages/packages/js/' + name.slice(8); fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')" \
+  && pnpm install --no-frozen-lockfile \
+  && pnpm build
+built=$?
+mv -f .deploy-package.json package.json && mv -f .deploy-pnpm-lock.yaml pnpm-lock.yaml
+[ "$built" -eq 0 ]
+'''
+{% else %}
+build = "pnpm install --frozen-lockfile && pnpm build"
+{% endif %}
+command = "pnpm start"
+health_check = "/"
+{% endif %}
+
+[env]
+APP_APP__URL = "https://{{ package }}.example.com"
+APP_MAIL__FROM = "{{ title }} <hello@{{ package }}.example.com>"
+APP_BILLING__PROVIDER = "stripe"
+APP_LOG__LEVEL = "info"

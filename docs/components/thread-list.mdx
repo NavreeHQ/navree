@@ -1,0 +1,37 @@
+---
+title: "ThreadList"
+description: "The reader's conversations, newest first, each a link to its page. The open one is marked as the current page."
+---
+
+<UiPreview example="thread-list/default" />
+
+`ThreadList` is the list of a reader's past conversations with the assistant, to put in a sidebar or beside the [Conversation](/docs/components/conversation/). Each is a link to the conversation's own page.
+
+```rust
+use navree::ui::genui::*;
+
+ThreadList::new("Your conversations")
+    .thread("Payments by method this week", "/assistant/7", true)
+    .thread("Pending refunds in Ludhiana", "/assistant/6", false)
+    .thread("GST summary for October", "/assistant/5", false)
+```
+
+The argument is the name of the list for assistive technology. Each `.thread(title, href, current)` is a link: `href` stays on your site, and `current` is true for the conversation that is open. Give the threads in the order you want them listed, newest first. A title is cut at 80 characters.
+
+A conversation that has no title yet can use the words `ChatLabels::untitled` ("New conversation").
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The list is a navigation landmark with a name, holding a list of links.
+- The open conversation is marked with `aria-current="page"`, so it is spoken as the current page and not only shown in a different colour.
+- The links are plain links: a reader can open one in a new tab.
+
+</UiA11y>
+
+## API
+
+### ThreadList
+
+<UiProps type="ThreadList" />

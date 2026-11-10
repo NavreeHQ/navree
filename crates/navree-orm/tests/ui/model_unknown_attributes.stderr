@@ -1,0 +1,23 @@
+error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, collection, primary_key, key_type, timestamps, soft_deletes, connection, driver, per_page, global_scopes, touches, morph_name, with, with_count, pivot, factory, route_key, workspace, subject, permission_prefix, policy, observers, dispatches, broadcasts, prunable, mass_prunable, fillable, guarded, unguarded, hidden, visible, appends, encrypter, serialize_dates_with, resource
+ --> tests/ui/model_unknown_attributes.rs:4:9
+  |
+4 | #[model(tabel = "deals")]
+  |         ^^^^^
+
+error: unknown field attribute `colum` (did you mean `column`?); expected one of: column, cast, default, skip, hidden, fillable, guarded, set_with, schema, inbound, columns
+ --> tests/ui/model_unknown_attributes.rs:7:13
+  |
+7 |     #[model(colum = "name")]
+  |             ^^^^^
+
+error: unknown key type `serial`: use "int" (the database assigns it), "uuid" (UUID v7), "uuid_v4", "ulid", "object_id" (MongoDB) or "manual" (the application sets it)
+  --> tests/ui/model_unknown_attributes.rs:12:20
+   |
+12 | #[model(key_type = "serial")]
+   |                    ^^^^^^^^
+
+error: unknown cast `money`: use "json", "string_enum", "int_enum", "decimal(N)", "datetime_format(\"...\")", "unix_timestamp", "unix_timestamp_ms", "encrypted", "encrypted_json", "hashed", "binary_uuid", "binary_ulid", "vector", or the path of a type implementing `Cast`
+  --> tests/ui/model_unknown_attributes.rs:15:20
+   |
+15 |     #[model(cast = "money")]
+   |                    ^^^^^^^

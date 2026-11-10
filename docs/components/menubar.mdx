@@ -1,0 +1,87 @@
+---
+title: "Menubar"
+description: "A row of menu buttons, as in a desktop application. It has the keys of the menu bar pattern, and moves from one open menu to the next."
+---
+
+<UiPreview example="menubar/default" />
+
+`Menubar` draws a bar of buttons, and each button opens a menu with the entries of a [DropdownMenu](/docs/components/dropdown-menu/). The bar is one tab stop. `Left` and `Right` move between its buttons, `Down` opens a menu, and with a menu open `Left` and `Right` open the menu beside it. Without the script every button still opens its menu as a popover, and every button can be reached with `Tab`.
+
+```rust
+use navree::ui::*;
+
+Menubar::new("app-bar", "Application")
+    .menu(
+        MenubarMenu::new("File")
+            .item(MenuItem::link("New invoice", "/invoices/new").shortcut("Ctrl+N"))
+            .item(MenuItem::action("Open recent"))
+            .separator()
+            .item(MenuItem::link("Export as PDF", "/invoices/export.pdf")),
+    )
+    .menu(MenubarMenu::new("Reports").item(MenuItem::link("Sales in Ludhiana", "/reports/ldh")))
+    .link("Help", "/help")
+```
+
+`Menubar::new(id, label)` names the bar for assistive technology. The id also starts the ids of its menus (`app-bar-m1`, `app-bar-m2`, and so on), so keep it unique on the page.
+
+## Menus
+
+`MenubarMenu::new("File")` is a button and the menu it opens. It takes the entries a dropdown menu takes: `item`, `header`, `separator`, `group`, `checkbox`, `radios` and `submenu`. Items can link, post, run commands or open a dialog, have icons and shortcut hints, and be destructive or disabled.
+
+The preview shows one menu open in place.
+
+<UiPreview example="menubar/open" />
+
+## Checkboxes, radios and submenus
+
+<UiPreview example="menubar/choices" />
+
+## A button with no menu
+
+`.link(label, href)` adds a button to the bar that goes to a page. `MenubarMenu::new("Admin").disabled(true)` keeps a menu's button in the bar and opens nothing. The arrow keys still reach it, as the pattern asks.
+
+<UiPreview example="menubar/link" />
+
+## With the pointer
+
+A press opens a menu and a second press closes it. With one menu open, the pointer moving to another button opens that one.
+
+## When to use it
+
+Use a menu bar when an application has many commands in a few groups, as a desktop program does. For one button's actions use a [DropdownMenu](/docs/components/dropdown-menu/). For the links of a site, use a [NavigationMenu](/docs/components/navigation-menu/), which follows the navigation pattern, not the menu bar pattern.
+
+## Anatomy
+
+<UiAnatomy component="menubar" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the bar on its one stop, and out of it. |
+| `Right`, `Left` (swapped in a right-to-left page) | Move to the next or previous button, and round at the ends. |
+| `Home`, `End` | Move to the first or last button. |
+| `Down`, `Enter`, `Space` | Open the menu with focus on the first item. |
+| `Up` | Opens the menu with focus on the last item. |
+| `Right`, `Left` in an open menu | Close it and open the menu of the next or previous button. Inside a submenu, `Left` closes only the submenu. |
+| `Esc` | Closes the menu and returns focus to its button. |
+| Other keys in a menu | As in a [DropdownMenu](/docs/components/dropdown-menu/): `Down`, `Up`, `Home`, `End`, letters, `Enter` and `Space`. |
+
+- The bar has `role="menubar"` and the name you gave it. Each button has `role="menuitem"`, and those that open a menu have `aria-haspopup="menu"` and `aria-expanded`.
+- Each menu has `role="menu"`, named by its button.
+- A disabled button has `aria-disabled` and stays in the arrow order.
+- The bar keeps one tab stop: the button that last had focus.
+
+</UiA11y>
+
+## API
+
+### Menubar
+
+<UiProps type="Menubar" />
+
+### MenubarMenu
+
+<UiProps type="MenubarMenu" />

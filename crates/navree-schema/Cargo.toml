@@ -1,0 +1,45 @@
+[package]
+name = "navree-schema"
+description = "Navree schema builder: tables, columns, indexes and foreign keys in Rust, compiled for PostgreSQL with TimescaleDB, MySQL/MariaDB and SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "schema", "migrations", "ddl", "sql"]
+categories = ["database"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["mysql", "postgres"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The real-server tests on PostgreSQL (`NAVREE_TEST_POSTGRES_URL`); the
+## library is the same with or without it.
+postgres = ["sqlx/postgres"]
+## The real-server tests on MySQL and MariaDB (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["sqlx/mysql"]
+
+[dependencies]
+navree-config = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+# The tests' own connections (SQLite files; the real servers with the
+# `postgres` and `mysql` features). The library reaches databases only
+# through `SchemaConnection`.
+sqlx = { workspace = true, features = ["rust_decimal", "sqlite-bundled"] }
+tempfile = { workspace = true }
+tokio = { workspace = true }

@@ -1,0 +1,20 @@
+/target/
+
+# Local secrets and settings (commit .env.example instead). Runtime data
+# (logs, uploads) stays in storage/, which has its own .gitignore.
+.env
+
+# Dock's generated Compose file.
+/.navree/
+{% if web %}
+
+# The Next.js front end
+/web/node_modules/
+/web/.next/
+/web/.env.local
+# Navree's packages, which a deploy fetches when the front end links them from a checkout.
+/web/.navree-packages/
+/web/test-results/
+/web/playwright-report/
+/web/next-env.d.ts
+{% endif %}

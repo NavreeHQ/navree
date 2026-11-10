@@ -1,0 +1,26 @@
+{
+  "app": {
+    "name": "navigator-app"
+  },
+  "database": {
+    "migrate_on_boot": true,
+    "url": "sqlite://storage/app.db?mode=rwc"
+  },
+  "http": {
+    "addr": "127.0.0.1:9999",
+    "api_prefix": "/api"
+  },
+  "log": {
+    "file": {
+      "keep_days": "7",
+      "path": "storage/logs/navree.log",
+      "rotation": "never"
+    },
+    "format": "json",
+    "level": "info"
+  },
+  "mail": {
+    "password": "from-the-environment",
+    "transport": "log"
+  }
+}

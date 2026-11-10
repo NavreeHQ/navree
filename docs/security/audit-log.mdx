@@ -1,0 +1,467 @@
+---
+title: "The audit log"
+description: "An audit trail of data changes, sign-ins, permission changes and access denials: recorded by default, queryable over HTTP and in code, and pruned on a schedule."
+---
+
+An audit log answers "who did what, and when?" after the fact: who changed a deal's amount, who signed in from where, who gave a user the admin role, who tried to open a record they weren't allowed to. Once `AuditModule` is in your app, Navree keeps that trail in the `audit_logs` table without any code of yours. You can read it over HTTP or in code, add your own entries, and delete old ones on a schedule.
+
+## Setting up
+
+<Badge feature="audit" /> The `audit` feature of the `navree` facade (part of the default `full` feature) brings `navree-audit`, which builds on `http`, `db` and `orm`. Add `AuditModule` to your app root:
+
+```rust title="src/main.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(AuditModule::from_config()) // section `audit`
+```
+
+`AuditModule` is global and needs `DatabaseModule`; the app refuses to boot without it. It contributes the migration set `audit`, which creates `audit_logs` with indexes on the subject, the actor and the time. The table has no foreign key to `users`, so auditing works without `navree-auth`, and entries outlive the users they mention. On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), Navree's default database, the set then makes `audit_logs` a hypertable on `created_at`, a week per chunk; elsewhere it stays a regular table.
+
+The module also mounts `GET /api/audit`, which requires the permission `audit.read`. Checking a permission needs the [access module](/docs/security/authorization/); in an app without it, turn the route off with `audit.routes = false`, or the app refuses to boot.
+
+## What is recorded
+
+### Data changes
+
+Every insert, update and delete you make through a [model](/docs/orm/models/) in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits (the audit log is a change observer that writes through the unit of work), so a change that rolls back leaves no entry, and an entry never exists without its change.
+
+```json
+{
+  "id": "01a1775b-95a0-73be-bb57-3baa53629a47",
+  "kind": "data",
+  "action": "user.updated",
+  "actor_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
+  "impersonator_id": null,
+  "subject_type": "User",
+  "subject_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
+  "old_values": {"name": "Anu Lakhotia", "updated_at": "2026-10-26T08:37:33.199180700Z"},
+  "new_values": {"name": "Anu Kaur", "updated_at": "2026-10-26T08:37:33.215315600Z"},
+  "request_id": null,
+  "ip": null,
+  "user_agent": null,
+  "metadata": {},
+  "created_at": "2026-10-26T08:37:33.216114700Z"
+}
+```
+
+- The **subject type** comes from the table name, singular and in PascalCase: `deals` is `Deal`, `companies` is `Company`, `deal_notes` is `DealNote`. Only the last word is made singular, with simple English rules; map irregular names with `audit.subject_types`.
+- The **action** is the subject type in snake case plus `created`, `updated` or `deleted`: `deal.updated`, `deal_note.created`.
+- The **actor** and the **request id** are those of the unit of work: in a request, the signed-in user and the request's id. In an [impersonation](/docs/security/impersonation/) session the unit of work also carries the **impersonator**, so the entry names both the user and the support agent acting as them.
+- A **created** record is stored whole in `new_values`, a **deleted** one in `old_values`. An **update** keeps only the fields that changed, before and after; an update that changes nothing records nothing.
+
+Data entries don't carry the client's IP address or user agent. To see where a change came from, match its `request_id` with the request's [log](/docs/basics/logging/) lines or its other audit entries.
+
+<Callout type="warning" title="Only changes the unit of work records">
+
+The audit log sees the changes that models record in the unit of work. Writes made around it, with raw SQL, mass updates and deletes (a model query's `update` or `delete`), or a record saved straight to a pool or a transaction you began yourself, aren't audited. Add an entry yourself when such a write matters (see [Adding entries](#adding-entries)).
+
+</Callout>
+
+### Sign-ins and account events
+
+`navree-auth` records every sign-in, failed sign-in, refresh, sign-out and account change: `auth.login`, `auth.login_failed`, `auth.throttled`, `auth.refresh_reuse_detected`, `auth.password_reset`, `auth.two_factor_confirmed` and more. The full lists are on [Authentication](/docs/security/authentication/#audit-entries) and [Account flows](/docs/security/account-flows/#events-and-audit-entries). Passwords, tokens and codes are never recorded.
+
+### Permission changes
+
+`navree-access` records each change made through `AccessService`, with the kind `access`, once its unit of work commits:
+
+| Action | Subject | Values |
+|---|---|---|
+| `access.role_created`, `access.role_deleted` | `role`, the role name | The role; its permissions when deleted |
+| `access.permission_granted`, `access.permission_revoked` | `role` | `{"permission": ...}` |
+| `access.role_permissions_synced` | `role` | `{"permissions": [...]}` before and after |
+| `access.role_assigned`, `access.role_removed` | `user`, the user id | `{"role": ...}` |
+| `access.user_roles_synced` | `user` | `{"roles": [...]}` before and after |
+| `access.user_permission_granted`, `access.user_permission_revoked` | `user` | `{"permission": ...}` |
+
+```json
+{
+  "kind": "access",
+  "action": "access.role_assigned",
+  "actor_id": null,
+  "subject_type": "user",
+  "subject_id": "01a17749-d2c5-70b9-99c8-0c19e9c995f8",
+  "old_values": null,
+  "new_values": {"role": "admin"}
+}
+```
+
+The actor is the unit of work's: the signed-in user for a change made in a request, `null` for one made by a seeder or a command.
+
+### Denials and other security events
+
+Security events have the kind `security`:
+
+| Action | Recorded when |
+|---|---|
+| `access.denied` | A request got a 403: from a role, permission or ability check (`metadata.check` is `roles`, `permissions` or `can`), from a route guard (`guard`), or from the handler itself (`handler`). `metadata` also holds the method and the route |
+| `http.rate_limited` | The per-IP limit (`metadata.limit` is `per_ip`) or a route throttle (`route`) refused a request; once per client and window, so a flood is one entry |
+| `csrf.mismatch` | A cookie-session request failed the CSRF check ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) |
+| `auth.*` | Failed sign-ins, throttled attempts, reused refresh tokens, wrong two-factor codes |
+
+```json
+{
+  "kind": "security",
+  "action": "access.denied",
+  "actor_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
+  "subject_type": null,
+  "subject_id": null,
+  "request_id": "01a1775b95a376f49fc68d30735f58b4",
+  "ip": "127.0.0.1",
+  "metadata": {"check": "permissions", "method": "GET", "permission": "audit.read", "route": "/api/audit"}
+}
+```
+
+A record check that fails names the record as the subject (`"subject_type": "Post", "subject_id": "..."`). Security entries are written on the audit log's own database connection, outside the request's transaction, so they survive the rollback that follows a refused request.
+
+### Route actions
+
+A route can record that it was used. `#[audit(action = "...")]` writes a `custom` entry after every 2xx response, with the user, the client's IP address and user agent, the request id, the method and the route. The CRM records contact exports this way:
+
+```rust title="crm/api/crates/crm-companies/src/contacts/controller.rs"
+#[get("/export")]
+#[can(Export, Contact)]
+#[audit(action = "contacts.exported")]
+async fn export(
+    &self,
+    uow: Uow,
+    scope: Accessible<Contact, Read>,
+    list: List<ContactList>,
+) -> Result<Response> {
+    let contacts = self.contacts.all(&uow, scope, &list).await?;
+    csv_response(&contacts)
+}
+```
+
+```json
+{
+  "kind": "custom",
+  "action": "contacts.exported",
+  "actor_id": "01a1775b-9590-7301-9e07-5981d6951b2f",
+  "request_id": "01a1775b95a176b29630a13a252f14bf",
+  "ip": "127.0.0.1",
+  "user_agent": "Mozilla/5.0",
+  "metadata": {"method": "GET", "route": "/api/v1/contacts/export"}
+}
+```
+
+Hand-written routes use `.audit("contacts.exported")` on `RouteDef`.
+
+## The record shape
+
+Each row of `audit_logs` is a `navree::audit::AuditRecord`: a model of Navree's ORM (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`). The audit log writes rows with navree-db's statements (`AuditRecord` is also a `navree::db::Record`), on its own connection or in the unit of work it is given, never in a request's transaction by accident. `GET /api/audit` returns the same fields:
+
+| Field | Type | |
+|---|---|---|
+| `id` | UUID v7 | Ordered by time |
+| `kind` | string | `data`, `auth`, `access`, `security` or `custom` |
+| `action` | string | What happened: `deal.updated`, `auth.login`, `access.denied` |
+| `actor_id` | UUID or null | The user who did it |
+| `impersonator_id` | UUID or null | The user impersonating the actor when it happened ([impersonation](/docs/security/impersonation/)) |
+| `subject_type`, `subject_id` | string or null | What it happened to: `Deal` and its id |
+| `old_values`, `new_values` | object or null | Values before and after (changed fields only for updates) |
+| `request_id` | string or null | The request, to connect the entries of one request |
+| `ip`, `user_agent` | string or null | The client |
+| `metadata` | object | Anything else; `{}` when empty |
+| `created_at` | UTC time | When it was recorded, by the app's `dyn Clock` |
+
+## Reading the trail
+
+### Over HTTP
+
+`GET /api/audit` lists entries newest first, a page at a time. It requires the permission `audit.read`; in the CRM only admins have it, through the super-admin role, and the admin's Settings → Audit screen reads this route. Grant `audit.read` to a role to let others read the trail.
+
+```http
+GET /api/audit?filter[action]=role_assigned HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+```json
+{
+  "data": [
+    {
+      "action": "access.role_assigned",
+      "actor_id": null,
+      "created_at": "2026-10-26T08:18:39.191850400Z",
+      "id": "01a17749-d366-77ef-ae74-0b7ff47b1c62",
+      "ip": null,
+      "kind": "access",
+      "metadata": {},
+      "new_values": {"role": "admin"},
+      "old_values": null,
+      "request_id": null,
+      "subject_id": "01a17749-d2c5-70b9-99c8-0c19e9c995f8",
+      "subject_type": "user",
+      "user_agent": null
+    }
+  ],
+  "meta": {"current_page": 1, "last_page": 1, "per_page": 15, "total": 1}
+}
+```
+
+| Parameter | Keeps entries |
+|---|---|
+| `filter[actor_id]` | By this user (a UUID); also `[ne]`, `[in]`, `[not_in]`, and `[null]=true` for entries no signed-in user wrote |
+| `filter[impersonator_id]` | Written while this user impersonated someone (a UUID); the same operators |
+| `filter[subject_type]`, `filter[subject_id]` | About this kind of record, or this record; also `[ne]`, `[in]`, `[not_in]`, `[null]` |
+| `filter[action]` | With this action: exactly (`deal.updated`), or, without a `.`, any action ending in it (`updated` matches `deal.updated` and `company.updated`). `%` and `_` are plain characters |
+| `filter[kind]` | Of this kind (`data`, `auth`, `access`, `security`, `custom`); also `[ne]`, `[in]`, `[not_in]` |
+| `filter[created_at][gte]`, `[gt]`, `[lte]`, `[lt]` | Written from or until a date (the whole day in UTC) or a date and time |
+| `page`, `per_page` | The page (default 1) and its size (default 15, at most 100) |
+
+The filters combine with AND; the list is always newest first. This is the [list-query grammar](/docs/basics/list-queries/) every list reads (`navree::audit::AuditList`): an unknown filter or operator, a malformed UUID or an unknown kind is a 400 that names the parameter:
+
+```json wrap
+{
+  "statusCode": 400,
+  "message": ["`nope` is not a UUID", "`other` is not one of: data, auth, access, security, custom"],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "filter[actor_id]": ["`nope` is not a UUID"],
+    "filter[kind]": ["`other` is not one of: data, auth, access, security, custom"]
+  }
+}
+```
+
+The route is in the OpenAPI document, with its list query (response schema `AuditPage`). `audit.routes = false` removes it.
+
+### In code
+
+Inject `Arc<AuditLog>` and call `list` with an `AuditFilter`:
+
+```rust
+use navree::audit::{AuditFilter, AuditLog};
+use navree::contracts::AuditKind;
+use navree::db::PageQuery;
+use navree::orm::OrmError;
+
+pub async fn history_of_deal(log: &AuditLog, id: &str) -> Result<(), OrmError> {
+    let page = log
+        .list(
+            &AuditFilter {
+                subject_type: Some("Deal".to_owned()),
+                subject_id: Some(id.to_owned()),
+                ..AuditFilter::default()
+            },
+            PageQuery::new(1, 50),
+        )
+        .await?;
+    for entry in page.data {
+        println!("{} {} by {:?}", entry.created_at, entry.action, entry.actor_id);
+    }
+    let failed = log
+        .list(
+            &AuditFilter {
+                kind: Some(AuditKind::Security),
+                action: Some("login_failed".to_owned()),
+                ..AuditFilter::default()
+            },
+            PageQuery::new(1, 100),
+        )
+        .await?;
+    println!("{}", failed.meta.total);
+    Ok(())
+}
+```
+
+For queries `list` can't express, `AuditFilter::query()` gives the filter's entries as an ORM query to order, limit, count or stream:
+
+```rust
+use navree::audit::{AuditFilter, AuditRecord};
+use navree::orm::Model as _;
+
+let filter = AuditFilter {
+    actor_id: Some(user_id),
+    ..AuditFilter::default()
+};
+let total = filter.query().count(&db).await?;
+let latest = filter
+    .query()
+    .latest_by(AuditRecord::CREATED_AT)
+    .limit(10)
+    .get(&db)
+    .await?;
+```
+
+## Adding entries
+
+Build an entry with `navree::contracts::AuditEntry::new(kind, action)` and its setters: `actor`, `impersonator`, `subject`, `old_values`, `new_values`, `request_id`, `ip`, `user_agent` and `metadata`. Then choose where to write it:
+
+```rust title="src/modules/deals/exports.rs"
+use navree::audit::{AuditError, AuditLog};
+use navree::contracts::{AuditEntry, AuditKind};
+use navree::db::DbError;
+use navree::prelude::*;
+use serde_json::json;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealExports {
+    audit: Arc<AuditLog>,
+}
+
+impl DealExports {
+    /// Outside the unit of work: kept even if the request fails later.
+    pub async fn exported(&self, user_id: Uuid, rows: usize) -> Result<(), AuditError> {
+        self.audit
+            .record(
+                AuditEntry::new(AuditKind::Custom, "deals.exported")
+                    .actor(user_id)
+                    .metadata(json!({ "rows": rows })),
+            )
+            .await
+    }
+
+    /// Inside the unit of work: commits or rolls back with the change.
+    pub async fn won(&self, uow: &Uow, deal_id: Uuid) -> Result<(), DbError> {
+        self.audit
+            .record_in(
+                uow,
+                AuditEntry::new(AuditKind::Custom, "deal.won").subject("Deal", deal_id.to_string()),
+            )
+            .await
+    }
+}
+```
+
+- **`record`** writes on the audit log's own connection, outside any transaction: the entry stays even if the request fails afterwards. Use it for attempts and security events. Entries go into a queue of 4,096 and a background task writes them in order; `record` fails with `AuditError::QueueFull` only when that queue is full, and the entry is then dropped with a warning in the log. `flush().await` waits until everything queued so far is written. An entry without an impersonator gets the one of the task's current unit of work (`Uow::current()`), so entries written during an impersonated request name the impersonator.
+- **`record_in`** writes inside the unit of work's transaction, so the entry commits or rolls back with the work. Use it for business events that belong to a change. The actor, the impersonator and the request id default to the unit of work's. It fails with the `navree::db::DbError` of the insert.
+
+`list` fails with the ORM's `OrmError`, and `prune` and `prune_before` with a `DbError`.
+
+When the app shuts down gracefully, the queue is written out first; entries recorded after that are written directly.
+
+A module that shouldn't depend on `navree-audit` writes through the `AuditSink` contract instead, and does nothing when the app has no audit log:
+
+```rust
+use navree::contracts::{AuditEntry, AuditKind, AuditSink};
+use navree::kernel::AppContext;
+
+pub async fn note(ctx: &AppContext) {
+    if let Some(sink) = ctx.try_get::<dyn AuditSink>().await {
+        let _ = sink
+            .record(AuditEntry::new(AuditKind::Custom, "report.generated"))
+            .await;
+    }
+}
+```
+
+That is how `navree-auth`, `navree-access` and `navree-http` write theirs.
+
+## Keeping secrets out
+
+These field names never reach the table, whatever the configuration says: `password`, `password_hash`, `token`, `token_hash`, `secret`, `two_factor_secret`, `two_factor_recovery_codes` and `remember_token` (`navree::audit::DEFAULT_SKIP_FIELDS`). They are removed from old values, new values and metadata, at any depth and in any letter case.
+
+Add your own with `audit.skip_fields`:
+
+- a plain name (`ssn`) is removed everywhere, at any depth;
+- `table.field` (`users.phone`) is removed from the top level of that table's values only. A subject type works in place of the table name (`User.phone`).
+
+`audit.skip_entities` leaves whole tables out of the data entries, by table name or subject type (`sessions` or `Session`). The `audit_logs` table itself is never audited.
+
+## Retention and pruning
+
+`audit:prune` deletes entries older than `audit.retention_days` (365 days by default); `--days N` overrides it for one run. On TimescaleDB it drops the weeks entirely before the cutoff as whole chunks, so pruning a large trail takes no row-by-row delete:
+
+```sh
+navree audit:prune
+navree audit:prune --days 90
+```
+
+```text
+Pruned 1204 audit entries older than 90 days.
+```
+
+With `audit.retention_days = 0` and no `--days`, the command keeps everything and says so. Nothing prunes on its own: schedule the command. The CRM runs it every night at 03:00 UTC, from its activities module:
+
+```rust
+m.schedule(|s| {
+    s.command("audit:prune", &[])
+        .daily_at("03:00")
+        .without_overlapping();
+});
+```
+
+See [Task scheduling](/docs/digging-deeper/scheduling/). In code, `AuditLog::prune(days)` and `AuditLog::prune_before(cutoff)` return the number of entries deleted.
+
+## Configuration
+
+Every key of the `audit` section is optional:
+
+```toml title="config/app.toml"
+[audit]
+enabled = true
+retention_days = 365                  # audit:prune deletes older entries; 0 keeps them forever
+skip_entities = ["sessions"]          # tables (or subject types) never audited
+skip_fields = ["ssn", "users.phone"]  # fields never stored (`table.field` for one table)
+subject_types = { people = "Person" } # subject type of a table (default: `deals` → `Deal`)
+routes = true                         # GET /api/audit (permission `audit.read`)
+```
+
+| Key | Default | |
+|---|---|---|
+| `audit.enabled` | `true` | When off, nothing is written; existing entries can still be listed and pruned |
+| `audit.retention_days` | `365` | How many days `audit:prune` keeps; `0` keeps everything |
+| `audit.skip_entities` | `[]` | Tables left out of data entries, by table name or subject type |
+| `audit.skip_fields` | the default names | Field names, or `table.field`, never stored. The default names are always skipped, even when you set this list |
+| `audit.subject_types` | `{}` | Subject type per table, overriding the derived name |
+| `audit.routes` | `true` | Mounts `GET /api/audit` |
+
+From the environment, lists are comma-separated strings: `APP_AUDIT__SKIP_FIELDS=ssn,users.phone`. In code, pass `AuditOptions` to `AuditModule::for_root`:
+
+```rust
+use navree::audit::AuditOptions;
+
+AuditModule::for_root(AuditOptions {
+    retention_days: 90,
+    skip_entities: vec!["sessions".to_owned()],
+    ..AuditOptions::default()
+})
+```
+
+## Testing
+
+Entries written with `record` (and every security entry) go through the background queue, so call `flush` before you look for them. The CRM's security tests read the trail like this:
+
+```rust title="crm/api/tests/security_audit.rs"
+async fn entries(crm: &TestCrm, action: &str) -> Vec<AuditRecord> {
+    let log = crm.get::<AuditLog>().await;
+    log.flush().await;
+    log.list(
+        &AuditFilter {
+            action: Some(action.to_owned()),
+            ..AuditFilter::default()
+        },
+        PageQuery::new(1, 100),
+    )
+    .await
+    .expect("the audit log lists")
+    .data
+}
+```
+
+- On SQLite, don't call `flush` while your test holds an open unit of work: the writer needs the database's write lock.
+- `created_at` comes from the app's `dyn Clock`, so override it with a `FixedClock` to test retention.
+- Run the prune command with `app.run_command("audit:prune", &["--days", "30"])`.
+
+## Limits
+
+- Data changes are seen only through models and the unit of work.
+- Entries are ordinary rows in your database: there is no tamper protection, and anyone who can write to the table can change it.
+- Under extreme load, `record` drops entries once 4,096 are waiting, with a warning in the log.
+- There is no export or forwarding to an external log service.
+
+<LinkCards>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    The permission `audit.read`, and where denials come from.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work and transactions">
+    How changes are collected and committed.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Run `audit:prune` every night.
+  </LinkCard>
+</LinkCards>

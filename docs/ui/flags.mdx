@@ -1,0 +1,113 @@
+---
+title: "Flags"
+description: "A flag for every country and for the European Union, the United Nations, the UK's four nations and more, drawn inline in a few sizes and shapes, with the country's name for assistive technology."
+---
+
+<UiPreview example="flags/usage" />
+
+`Flag` draws a country's flag as inline SVG: no image request, no sprite, nothing to host. The set is [flag-icons](https://github.com/lipis/flag-icons) (MIT): the 249 ISO 3166-1 countries and Kosovo, the European Union and the United Nations, England, Northern Ireland, Scotland and Wales, Catalonia, Galicia and the Basque Country, and a few more places and bodies. 270 flags in all.
+
+## Find a flag
+
+Type a country, a code or a word such as `region`.
+
+<UiPreview example="flags/all" />
+
+## Name a flag
+
+Like icons, a flag is a constant, so a binary holds the flags its code names and no others.
+
+- **A constant**, `flags::IN`. Your editor completes it, and a code that does not exist does not compile.
+- **`flag!("in")`** takes the code as a person writes it, in any case, with `-` or `_` in `GB-SCT`. It is checked while your app compiles, and a code no flag has stops the build.
+- **`Flag::country(code)`** is for a code that comes from data. It finds the flag in any case, and a code no flag has draws a neutral placeholder and never panics. Because the code could be any flag, this one call puts all of them in the binary: in a release build, naming two flags adds about 17 KB to a program, and calling `Flag::country` adds 3.7 MB.
+
+```rust
+use navree::ui::{Flag, flag, flags};
+
+Flag::new(flags::IN)        // a constant
+flag!("gb-sct")             // a literal, checked while the app compiles
+Flag::country(&row.country) // data: the whole set comes along
+```
+
+A code is a `CountryCode`: a small `Copy` value that holds the code, the English name and the artwork. It sorts, hashes, prints, parses with `FromStr` and reads and writes as its code in serde, so it can sit in a form or a database column. `CountryCode::parse` returns an `Option`; `CountryCode::countries()` lists the countries for a picker.
+
+## Sizes
+
+The size is the width: 20, 24 (the default), 32, 40 or 48 px. A rectangle is a quarter shorter than it is wide.
+
+<UiPreview example="flags/sizes" />
+
+## Shapes
+
+A flag is four by three, the way a flag is drawn. `FlagShape::Square` uses the artwork drawn for a square, which keeps the part of a flag that matters when it is cropped. `FlagShape::Round` is that square art cropped to a circle.
+
+<UiPreview example="flags/shapes" />
+
+## Regions and bodies
+
+Not every flag is a country's. `CodeKind` says which: `Country`, `Region` (a nation of the UK, a region of Spain, an island group) or `Organisation` (the EU, the UN, ASEAN).
+
+<UiPreview example="flags/places" />
+
+## In a select
+
+`Choice::flag(code)` puts a country's flag before a choice's label, in the list and in the control. The flag is hidden from assistive technology, so the label should be the country's name. `Choice::lead(node)` takes any small node in its place: a coloured dot, a logo.
+
+```rust
+Select::new("country")
+    .choice(Choice::new("IN", "India").flag(flags::IN))
+    .choice(Choice::new("NP", "Nepal").flag(flags::NP))
+```
+
+## Many flags, one definition
+
+A heavy flag is tens of kilobytes (Serbia's is 179 KB), and a table of a hundred rows would repeat it a hundred times. `Flag::sprite()` draws a flag as a pointer, about a hundred bytes, to a definition made once on the page by a `FlagSprite`. Put the sprite on the page once, anywhere (it draws nothing and is hidden from assistive technology), with the codes the page shows; a flag whose code is missing from it is drawn empty. `FlagSprite::with_squares()` also defines the square art, for a square or round flag.
+
+```rust
+FlagSprite::new([flags::IN, flags::RS, flags::IN]) // each flag is defined once
+Flag::new(flags::RS).sprite()
+```
+
+## Beside other things
+
+A flag is a node, so it goes wherever a node does: a badge, a table cell, a row of text. Where a component has a slot for a node, the flag goes in it.
+
+<UiPreview example="flags/in-components" />
+
+## A code from data
+
+<UiPreview example="flags/from-data" />
+
+## Accessibility
+
+By default a flag is an image whose name is the country's English name from Unicode CLDR: a flag alone in a table cell still says which country it is. Beside the country's name that would be read twice, so say `.decorative()` and the flag is hidden from assistive technology. `.label("...")` replaces the name, for a flag that stands for something else, such as a language.
+
+## What they weigh
+
+<UiFlagWeights />
+
+## Where they come from
+
+The artwork is flag-icons 7.6.0, recorded with its SHA-512 in `crates/navree-ui/icons.lock.json` and cleaned by `node crates/navree-ui/runtime/icons.mjs`: ids are made unique per flag and shape, so two flags on one page never share one, and styles, classes and anything that could load or run are removed. A flag keeps its colours in every theme; a faint outline keeps a white flag visible on a light page. The names are English names from Unicode CLDR 49 (Unicode License v3), and for six places and bodies CLDR does not name, flag-icons' own. Notices are in `THIRD_PARTY.md`.
+
+## API
+
+### Flag
+
+<UiProps type="Flag" />
+
+### FlagShape
+
+<UiProps type="FlagShape" />
+
+### FlagSize
+
+<UiProps type="FlagSize" />
+
+### CountryCode
+
+<UiProps type="CountryCode" />
+
+### CodeKind
+
+<UiProps type="CodeKind" />
