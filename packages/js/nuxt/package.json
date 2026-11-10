@@ -70,7 +70,7 @@
     "@nuxt/schema": "^4.6.3",
     "@tanstack/vue-table": "^9.3.1",
     "defu": "^6.1.7",
-    "h3": "^1.15.11"
+    "h3": "^2.0.8"
   },
   "peerDependencies": {
     "@casl/ability": "^6.0.0 || ^7.0.0",
