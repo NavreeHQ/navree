@@ -1,0 +1,68 @@
+---
+title: "Alert"
+description: "A message inside the page, in four tones, with the role that matches how urgent it is."
+---
+
+<UiPreview example="alert/default" />
+
+`Alert` is a message that stays on the page: a title, a description and an icon chosen by its tone. Neutral and success alerts have `role="status"`; warning and danger alerts have `role="alert"`, which interrupts a screen reader.
+
+```rust
+use navree::ui::*;
+
+Alert::new(AlertTone::Success)
+    .title("Deal saved")
+    .body("Sutlej Supply renewal moved to Proposal.")
+```
+
+## When to use it
+
+Use an alert for something about the page the reader is on: an archived record, a failed payment. After an action, a [toast](/docs/components/toast/) says it's done.
+
+<UiChoose name="message" current="Alert" />
+
+## Anatomy
+
+<UiAnatomy component="alert" />
+
+## Tones
+
+<UiPreview example="alert/tones" />
+
+## A title alone
+
+<UiPreview example="alert/title-only" />
+
+`.icon(icon)` replaces the tone's icon.
+
+## Actions and closing
+
+`.actions(...)` adds buttons or links under the description: what the reader can do about it. `.dismissible(id, label)` adds a close button, named `label` for assistive technology, that hides the alert in the browser with no request; the alert takes the id `id`. With no script the close button is not drawn and the alert stays.
+
+```rust
+Alert::new(AlertTone::Warning)
+    .title("Payment failed")
+    .body("The card ending 4242 was declined.")
+    .actions(Button::outline("Update card").href("/billing"))
+    .dismissible("payment-alert", "Close")
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- `role="status"` is announced when the screen reader is idle; `role="alert"` at once. Keep warning and danger for what can't wait.
+- An alert in the page when it loads is read with the page. The roles matter most for an alert that arrives later, in a [region](/docs/ui/regions/) or by an op.
+- The icon is hidden from assistive technology: the title says what happened.
+
+</UiA11y>
+
+## API
+
+### Alert
+
+<UiProps type="Alert" />
+
+### AlertTone
+
+<UiProps type="AlertTone" />

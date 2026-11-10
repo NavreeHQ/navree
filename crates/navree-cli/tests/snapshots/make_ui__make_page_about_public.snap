@@ -1,0 +1,81 @@
+---
+source: crates/navree-cli/tests/make_ui.rs
+expression: files.to_string()
+---
+==> pages/about.rs <==
+//! `GET /about`: the about page of the users module.
+
+use navree::ui::{AppPage, AppShell, Card, Text};
+use navree::{controller, injectable};
+
+/// The about page, drawn in the app's shell. Anyone may open it:
+/// `#[public]` marks every route of the block below `.public()`. Use
+/// `#[authenticated]` (`.authenticated()`) for signed-in users only.
+#[injectable]
+pub struct AboutPage;
+
+#[controller]
+#[public]
+impl AboutPage {
+    /// `GET /about`. A path that starts with `!` sits at the site's root,
+    /// not under `/api`.
+    #[get("!/about")]
+    async fn show(&self, shell: AppShell) -> AppPage {
+        shell
+            .page("About")
+            .crumb("Home", "/")
+            .body(Card::new().body(Text::new("Replace this card with the page.")))
+    }
+}
+
+==> tests/about_page.rs <==
+//! The about page of the users module, booted in a shell of its own.
+
+use std::sync::Arc;
+
+use navree::access::AccessModule;
+use navree::db::DatabaseModule;
+use navree::kernel::{Factory, Module, ModuleBuilder};
+use navree::testing::TestApp;
+use navree::ui::{Shell, UiModule};
+
+use super::super::UsersModule;
+
+/// The shell `AppShell` reads. The app registers its own, in a global module so
+/// that every module's pages can see it; a test needs only a name.
+struct TestShell;
+
+impl Module for TestShell {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.global();
+        m.factory(Factory::<Shell>::new(|_| async {
+            Ok(Arc::new(Shell::new("Sutlej Supply")))
+        }))
+        .exports::<Shell>();
+    }
+}
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule)
+        .module(AccessModule)
+        .module(UiModule)
+        .module(TestShell)
+        .module(UsersModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_may_open_the_page() {
+    let app = app().await;
+    let page = app
+        .client()
+        .get("/about")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(page.contains("About"), "{page}");
+}

@@ -1,0 +1,70 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 394
+expression: sql
+---
+-- timescaledb
+ALTER TABLE "readings" SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+SELECT add_compression_policy('readings', INTERVAL '14 days');
+SELECT remove_compression_policy('readings', if_exists => TRUE);
+SELECT add_compression_policy('readings', INTERVAL '30 days');
+SELECT add_continuous_aggregate_policy('readings_hourly', start_offset => INTERVAL '1 day', end_offset => NULL, schedule_interval => INTERVAL '1 hour');
+SELECT remove_continuous_aggregate_policy('readings_hourly', if_exists => TRUE);
+SELECT add_retention_policy('readings', INTERVAL '1 year');
+SELECT remove_retention_policy('readings', if_exists => TRUE);
+SELECT add_reorder_policy('readings', 'readings_device_id_taken_at_index');
+SELECT remove_reorder_policy('readings', if_exists => TRUE);
+SELECT set_chunk_time_interval('readings', INTERVAL '2 days');
+CALL refresh_continuous_aggregate('readings_hourly', now() - INTERVAL '2 days', NULL);
+
+-- postgres
+-- notice: TimescaleDB is not installed in this PostgreSQL database: the compression of `readings` is skipped
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `readings` has no compression policy to remove
+-- notice: TimescaleDB is not installed in this PostgreSQL database: the compression policy of `readings` is skipped
+-- notice: TimescaleDB is not installed in this PostgreSQL database: the refresh policy of `readings_hourly` is skipped: as a plain view it is always current
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `readings_hourly` has no refresh policy to remove
+-- notice: TimescaleDB is not installed in this PostgreSQL database: the retention policy of `readings` is skipped
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `readings` has no retention policy to remove
+-- notice: TimescaleDB is not installed in this PostgreSQL database: the reorder policy of `readings` is skipped
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `readings` has no reorder policy to remove
+-- notice: TimescaleDB is not installed in this PostgreSQL database: setting the chunk interval of `readings` is skipped
+-- notice: TimescaleDB is not installed in this PostgreSQL database: refreshing `readings_hourly` is skipped: as a plain view it is always current
+
+-- mysql
+-- notice: MySQL does not support TimescaleDB: the compression of `readings` is skipped
+-- notice: MySQL does not support TimescaleDB: `readings` has no compression policy to remove
+-- notice: MySQL does not support TimescaleDB: the compression policy of `readings` is skipped
+-- notice: MySQL does not support TimescaleDB: the refresh policy of `readings_hourly` is skipped: as a plain view it is always current
+-- notice: MySQL does not support TimescaleDB: `readings_hourly` has no refresh policy to remove
+-- notice: MySQL does not support TimescaleDB: the retention policy of `readings` is skipped
+-- notice: MySQL does not support TimescaleDB: `readings` has no retention policy to remove
+-- notice: MySQL does not support TimescaleDB: the reorder policy of `readings` is skipped
+-- notice: MySQL does not support TimescaleDB: `readings` has no reorder policy to remove
+-- notice: MySQL does not support TimescaleDB: setting the chunk interval of `readings` is skipped
+-- notice: MySQL does not support TimescaleDB: refreshing `readings_hourly` is skipped: as a plain view it is always current
+
+-- mariadb
+-- notice: MariaDB does not support TimescaleDB: the compression of `readings` is skipped
+-- notice: MariaDB does not support TimescaleDB: `readings` has no compression policy to remove
+-- notice: MariaDB does not support TimescaleDB: the compression policy of `readings` is skipped
+-- notice: MariaDB does not support TimescaleDB: the refresh policy of `readings_hourly` is skipped: as a plain view it is always current
+-- notice: MariaDB does not support TimescaleDB: `readings_hourly` has no refresh policy to remove
+-- notice: MariaDB does not support TimescaleDB: the retention policy of `readings` is skipped
+-- notice: MariaDB does not support TimescaleDB: `readings` has no retention policy to remove
+-- notice: MariaDB does not support TimescaleDB: the reorder policy of `readings` is skipped
+-- notice: MariaDB does not support TimescaleDB: `readings` has no reorder policy to remove
+-- notice: MariaDB does not support TimescaleDB: setting the chunk interval of `readings` is skipped
+-- notice: MariaDB does not support TimescaleDB: refreshing `readings_hourly` is skipped: as a plain view it is always current
+
+-- sqlite
+-- notice: SQLite does not support TimescaleDB: the compression of `readings` is skipped
+-- notice: SQLite does not support TimescaleDB: `readings` has no compression policy to remove
+-- notice: SQLite does not support TimescaleDB: the compression policy of `readings` is skipped
+-- notice: SQLite does not support TimescaleDB: the refresh policy of `readings_hourly` is skipped: as a plain view it is always current
+-- notice: SQLite does not support TimescaleDB: `readings_hourly` has no refresh policy to remove
+-- notice: SQLite does not support TimescaleDB: the retention policy of `readings` is skipped
+-- notice: SQLite does not support TimescaleDB: `readings` has no retention policy to remove
+-- notice: SQLite does not support TimescaleDB: the reorder policy of `readings` is skipped
+-- notice: SQLite does not support TimescaleDB: `readings` has no reorder policy to remove
+-- notice: SQLite does not support TimescaleDB: setting the chunk interval of `readings` is skipped
+-- notice: SQLite does not support TimescaleDB: refreshing `readings_hourly` is skipped: as a plain view it is always current

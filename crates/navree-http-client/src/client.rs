@@ -1,0 +1,613 @@
+//! [`HttpClient`]: the shared outgoing HTTP client.
+
+use std::fmt;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+
+use bytes::BytesMut;
+use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
+use navree_config::ConfigSection;
+use navree_telemetry::{
+    EventKind, HttpClientRequest, SpanId, Telemetry, TelemetryContext, TelemetryEvent, TraceContext,
+};
+use tokio::time::Instant;
+use url::Url;
+
+use crate::backoff::Backoff;
+use crate::error::{display_url, shown_url};
+use crate::fake::{FakeServer, FakeState};
+use crate::request::PreparedRequest;
+use crate::retry_after::parse_retry_after;
+use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
+use crate::streaming::BodyStream;
+use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse};
+use futures_util::StreamExt;
+
+/// The outgoing HTTP client: cheap to clone, shared as a singleton.
+///
+/// Inside a request or job with a trace (a
+/// [`TelemetryContext`](navree_telemetry::TelemetryContext) whose trace is
+/// set), every request carries a W3C `traceparent` for a new client span of
+/// that trace, and its `tracestate`, unless the caller set `traceparent`
+/// itself. Each finished request (after retries) is reported as an
+/// [`HttpClientRequest`] event to the client's telemetry (the app's, for
+/// the module's client) or, without one, to the current context's.
+#[derive(Clone)]
+pub struct HttpClient {
+    inner: Arc<Inner>,
+    telemetry: Telemetry,
+}
+
+/// The W3C Trace Context headers.
+static TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
+static TRACESTATE: HeaderName = HeaderName::from_static("tracestate");
+
+/// The longest wait between two attempts. A `Retry-After` asking for more
+/// ends the retries: the caller gets the answer and can try again later.
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
+
+/// Options and transport, shared by every clone.
+struct Inner {
+    options: HttpClientOptions,
+    user_agent: HeaderValue,
+    guard: Arc<SsrfGuard>,
+    transport: Transport,
+}
+
+/// Where requests go.
+enum Transport {
+    /// reqwest on rustls (ring), with the SSRF resolver and redirect policy.
+    Real(reqwest::Client),
+    /// Stubbed responses; never touches the network.
+    Fake(Arc<FakeState>),
+}
+
+impl HttpClient {
+    /// A real client: rustls with the ring provider, system proxies ignored,
+    /// redirects (at most 10) and DNS answers checked against
+    /// `options.ssrf`.
+    pub fn new(options: HttpClientOptions) -> Result<HttpClient, HttpClientError> {
+        options.validate().map_err(HttpClientError::Build)?;
+        let guard = Arc::new(SsrfGuard::new(&options.ssrf));
+        // reqwest is built without a default crypto provider: use ring. An
+        // error only means a process-wide provider is already installed.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(options.connect_timeout_secs))
+            .dns_resolver(SsrfResolver::new(guard.clone()))
+            .redirect(guard.redirect_policy())
+            .no_proxy()
+            .build()
+            .map_err(|error| {
+                HttpClientError::Build(format!("cannot build the HTTP client: {error}"))
+            })?;
+        Self::with_transport(options, guard, Transport::Real(client))
+    }
+
+    /// A fake client with default options, and the [`FakeServer`] that stubs
+    /// its responses and records its requests.
+    pub fn fake() -> (HttpClient, FakeServer) {
+        Self::fake_with(HttpClientOptions::default())
+    }
+
+    /// A fake client with `options`: retries, timeouts and the response size
+    /// limit apply as they would for a real client; the SSRF policy applies
+    /// to literal IP URLs (a fake resolves no host names).
+    ///
+    /// # Panics
+    ///
+    /// If `options` are invalid (a zero timeout or size limit, a user agent
+    /// that is not a valid header value).
+    pub fn fake_with(options: HttpClientOptions) -> (HttpClient, FakeServer) {
+        if let Err(message) = options.validate() {
+            panic!("invalid fake client options: {message}");
+        }
+        let state = Arc::new(FakeState::default());
+        let guard = Arc::new(SsrfGuard::new(&options.ssrf));
+        let client = Self::with_transport(options, guard, Transport::Fake(state.clone()))
+            .expect("valid fake client options");
+        (client, FakeServer::new(state))
+    }
+
+    /// A client sending through `transport`.
+    fn with_transport(
+        options: HttpClientOptions,
+        guard: Arc<SsrfGuard>,
+        transport: Transport,
+    ) -> Result<HttpClient, HttpClientError> {
+        let user_agent = HeaderValue::try_from(options.user_agent.as_str()).map_err(|_| {
+            HttpClientError::Build("`user_agent` is not a valid header value".to_owned())
+        })?;
+        Ok(HttpClient {
+            inner: Arc::new(Inner {
+                options,
+                user_agent,
+                guard,
+                transport,
+            }),
+            telemetry: Telemetry::disabled(),
+        })
+    }
+
+    /// This client, reporting [`HttpClientRequest`] events to `telemetry`
+    /// (`HttpClientModule` gives its client the app's registry).
+    #[must_use]
+    pub fn with_telemetry(mut self, telemetry: Telemetry) -> HttpClient {
+        self.telemetry = telemetry;
+        self
+    }
+
+    /// The registry this client reports to (disabled unless set).
+    pub fn telemetry(&self) -> &Telemetry {
+        &self.telemetry
+    }
+
+    /// The options this client was built with.
+    pub fn options(&self) -> &HttpClientOptions {
+        &self.inner.options
+    }
+
+    /// Starts a `method` request to `url`.
+    pub fn request(&self, method: Method, url: impl AsRef<str>) -> RequestBuilder {
+        RequestBuilder::new(self.clone(), method, url.as_ref().to_owned())
+    }
+
+    /// Starts a `GET` request.
+    pub fn get(&self, url: impl AsRef<str>) -> RequestBuilder {
+        self.request(Method::GET, url)
+    }
+
+    /// Starts a `POST` request.
+    pub fn post(&self, url: impl AsRef<str>) -> RequestBuilder {
+        self.request(Method::POST, url)
+    }
+
+    /// Starts a `PUT` request.
+    pub fn put(&self, url: impl AsRef<str>) -> RequestBuilder {
+        self.request(Method::PUT, url)
+    }
+
+    /// Starts a `PATCH` request.
+    pub fn patch(&self, url: impl AsRef<str>) -> RequestBuilder {
+        self.request(Method::PATCH, url)
+    }
+
+    /// Starts a `DELETE` request.
+    pub fn delete(&self, url: impl AsRef<str>) -> RequestBuilder {
+        self.request(Method::DELETE, url)
+    }
+
+    /// Checks `url` against this client's SSRF policy without sending
+    /// anything, for URLs stored to be called later (webhook endpoints,
+    /// callback URLs): the scheme must be `http` or `https`, and the host
+    /// must not be a refused address. A real client resolves a host name
+    /// and checks every address it resolves to (unless the name is on the
+    /// allow list); a fake client resolves no names, so it checks IP
+    /// literals only.
+    ///
+    /// Errors: [`HttpClientError::Build`] for a malformed URL or another
+    /// scheme, [`HttpClientError::Blocked`] for a refused destination, and
+    /// [`HttpClientError::Connect`] when the host name does not resolve.
+    /// Requests are still checked when they are sent (DNS answers can
+    /// change).
+    pub async fn check_destination(&self, url: &str) -> Result<(), HttpClientError> {
+        let url = Url::parse(url)
+            .map_err(|error| HttpClientError::Build(format!("invalid URL: {error}")))?;
+        self.inner.guard.check_url(&url)?;
+        let (Transport::Real(_), Some(url::Host::Domain(host))) =
+            (&self.inner.transport, url.host())
+        else {
+            return Ok(());
+        };
+        if self.inner.guard.host_allowed(host) {
+            return Ok(());
+        }
+        let port = url.port_or_known_default().unwrap_or(0);
+        let addrs = tokio::net::lookup_host((host, port))
+            .await
+            .map_err(|error| HttpClientError::Connect {
+                url: display_url(&url),
+                source: Box::new(error),
+            })?;
+        for addr in addrs {
+            self.inner
+                .guard
+                .check_ip(addr.ip())
+                .map_err(|reason| HttpClientError::Blocked {
+                    host: host.to_owned(),
+                    reason,
+                })?;
+        }
+        Ok(())
+    }
+
+    /// The `User-Agent` header value.
+    pub(crate) fn user_agent(&self) -> &HeaderValue {
+        &self.inner.user_agent
+    }
+
+    /// Sends `request`, retrying idempotent requests (and requests with an
+    /// idempotency key) on connection errors, 5xx and 429 with exponential
+    /// backoff (jittered, doubling from `retry_base_ms`), waiting at least
+    /// what a `Retry-After` header asks. A `Retry-After` beyond
+    /// [`MAX_RETRY_DELAY`] ends the retries. After the last retry the last
+    /// outcome is returned.
+    pub(crate) async fn send(
+        &self,
+        mut request: PreparedRequest,
+        retries: Option<u32>,
+        timeout: Option<Duration>,
+    ) -> Result<Response, HttpClientError> {
+        self.inner.guard.check_url(&request.url)?;
+        let span_id = inject_trace(&mut request.headers);
+        let options = &self.inner.options;
+        let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
+        let retries = if is_idempotent(&request.method) || request.idempotent {
+            retries.unwrap_or(options.retries)
+        } else {
+            0
+        };
+        let mut delays = Backoff::new(
+            Duration::from_millis(options.retry_base_ms),
+            MAX_RETRY_DELAY,
+            retries,
+        );
+        let url = shown_url(&request.url, request.secret_url);
+        let started = Instant::now();
+        let mut attempts = 1;
+        let outcome = loop {
+            let outcome = tokio::time::timeout(timeout, self.execute(request.clone()))
+                .await
+                .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }));
+            if !is_retryable(&outcome) {
+                break outcome;
+            }
+            let asked = retry_after(&outcome);
+            if asked.is_some_and(|wait| wait > MAX_RETRY_DELAY) {
+                tracing::debug!(
+                    method = %request.method,
+                    url = %url,
+                    attempt = attempts,
+                    "the server asks to retry later than the client waits; returning its answer"
+                );
+                break outcome;
+            }
+            let Some(delay) = delays.next() else {
+                break outcome;
+            };
+            // Never sooner than the server asked, never sooner than the
+            // backoff schedule.
+            let delay = asked.map_or(delay, |wait| delay.max(wait));
+            tracing::debug!(
+                method = %request.method,
+                url = %url,
+                attempt = attempts,
+                delay_ms = delay.as_millis() as u64,
+                "retrying outgoing request"
+            );
+            tokio::time::sleep(delay).await;
+            attempts += 1;
+        };
+        let outcome = outcome.map(|response| response.with_secret_url(request.secret_url));
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        let status = outcome.as_ref().map(Response::status);
+        self.report(&request, &url, status, elapsed, attempts, span_id);
+        match &outcome {
+            Ok(response) => tracing::debug!(
+                method = %request.method,
+                url = %url,
+                status = response.status().as_u16(),
+                attempts,
+                elapsed_ms,
+                "outgoing request"
+            ),
+            Err(error) => tracing::debug!(
+                method = %request.method,
+                url = %url,
+                %error,
+                attempts,
+                elapsed_ms,
+                "outgoing request failed"
+            ),
+        }
+        outcome
+    }
+
+    /// Emits an [`HttpClientRequest`] to this client's telemetry, or to the
+    /// current context's when the client has none.
+    fn report(
+        &self,
+        request: &PreparedRequest,
+        url: &str,
+        outcome: Result<StatusCode, &HttpClientError>,
+        duration: Duration,
+        attempts: u32,
+        span_id: Option<SpanId>,
+    ) {
+        let current;
+        let telemetry = if self.telemetry.is_active() {
+            &self.telemetry
+        } else {
+            current = Telemetry::current();
+            &current
+        };
+        telemetry.emit_with(EventKind::HttpClientRequest, || {
+            let (status, error) = match outcome {
+                Ok(status) => (Some(status.as_u16()), None),
+                Err(error) => (None, Some(error.to_string())),
+            };
+            TelemetryEvent::HttpClientRequest(HttpClientRequest {
+                method: request.method.to_string(),
+                url: url.to_owned(),
+                status,
+                duration,
+                attempts,
+                error,
+                span_id,
+            })
+        });
+    }
+
+    /// Sends `request` once and returns at its response headers; `timeout`
+    /// (default: the options' attempt timeout) covers the wait for them.
+    pub(crate) async fn send_streaming(
+        &self,
+        mut request: PreparedRequest,
+        timeout: Option<Duration>,
+    ) -> Result<StreamingResponse, HttpClientError> {
+        self.inner.guard.check_url(&request.url)?;
+        let span_id = inject_trace(&mut request.headers);
+        let options = &self.inner.options;
+        let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
+        let url = shown_url(&request.url, request.secret_url);
+        let limit = options.max_response_bytes;
+        let started = Instant::now();
+        let method = request.method.clone();
+        let outcome = match &self.inner.transport {
+            Transport::Real(client) => {
+                tokio::time::timeout(timeout, open_real(client, request.clone(), limit))
+                    .await
+                    .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+            }
+            Transport::Fake(state) => tokio::time::timeout(timeout, state.execute(&request))
+                .await
+                .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+                .map(|response| {
+                    let body = response.bytes();
+                    let stream: BodyStream = Box::pin(futures_util::stream::iter([Ok(body)]));
+                    StreamingResponse::new(
+                        response.status(),
+                        response.headers().clone(),
+                        response.url().clone(),
+                        stream,
+                        limit,
+                    )
+                }),
+        };
+        let outcome = outcome.map(|response| response.with_secret_url(request.secret_url));
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        let status = outcome.as_ref().map(StreamingResponse::status);
+        self.report(&request, &url, status, elapsed, 1, span_id);
+        match &outcome {
+            Ok(response) => tracing::debug!(
+                method = %method,
+                url = %url,
+                status = response.status().as_u16(),
+                elapsed_ms,
+                "outgoing streaming request"
+            ),
+            Err(error) => tracing::debug!(
+                method = %method,
+                url = %url,
+                %error,
+                elapsed_ms,
+                "outgoing streaming request failed"
+            ),
+        }
+        outcome
+    }
+
+    /// Sends `request` once.
+    async fn execute(&self, request: PreparedRequest) -> Result<Response, HttpClientError> {
+        let limit = self.inner.options.max_response_bytes;
+        match &self.inner.transport {
+            Transport::Real(client) => execute_real(client, request, limit).await,
+            Transport::Fake(state) => {
+                let response = state.execute(&request).await?;
+                if response.bytes().len() as u64 > limit {
+                    return Err(too_large(&Target::of(&request), limit));
+                }
+                Ok(response)
+            }
+        }
+    }
+}
+
+/// [`HttpClientError::BodyTooLarge`].
+fn too_large(target: &Target, limit: u64) -> HttpClientError {
+    HttpClientError::BodyTooLarge {
+        url: target.shown(),
+        limit,
+    }
+}
+
+/// Where a transport's errors say a request went.
+#[derive(Clone)]
+struct Target {
+    url: Url,
+    secret: bool,
+}
+
+impl Target {
+    fn of(request: &PreparedRequest) -> Self {
+        Self {
+            url: request.url.clone(),
+            secret: request.secret_url,
+        }
+    }
+
+    fn shown(&self) -> String {
+        shown_url(&self.url, self.secret)
+    }
+}
+
+/// Sends `request` with reqwest and reads the whole body (at most `limit`
+/// bytes).
+async fn execute_real(
+    client: &reqwest::Client,
+    request: PreparedRequest,
+    limit: u64,
+) -> Result<Response, HttpClientError> {
+    let target = Target::of(&request);
+    let mut builder = client
+        .request(request.method, request.url.clone())
+        .headers(request.headers);
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+    let mut response = builder
+        .send()
+        .await
+        .map_err(|error| transport_error(error, &target))?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit)
+    {
+        return Err(too_large(&target, limit));
+    }
+    let mut body = BytesMut::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| transport_error(error, &target))?
+    {
+        if (body.len() + chunk.len()) as u64 > limit {
+            return Err(too_large(&target, limit));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let status = response.status();
+    let headers = response.headers().clone();
+    let url = response.url().clone();
+    Ok(Response::new(status, headers, body.freeze(), url))
+}
+
+/// Sends `request` with reqwest and returns at the response headers, the
+/// body as a stream.
+async fn open_real(
+    client: &reqwest::Client,
+    request: PreparedRequest,
+    limit: u64,
+) -> Result<StreamingResponse, HttpClientError> {
+    let target = Target::of(&request);
+    let mut builder = client
+        .request(request.method, request.url.clone())
+        .headers(request.headers);
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+    let response = builder
+        .send()
+        .await
+        .map_err(|error| transport_error(error, &target))?;
+    let status = response.status();
+    let headers = response.headers().clone();
+    let url = response.url().clone();
+    let body: BodyStream = Box::pin(
+        response
+            .bytes_stream()
+            .map(move |chunk| chunk.map_err(|error| transport_error(error, &target))),
+    );
+    Ok(StreamingResponse::new(status, headers, url, body, limit))
+}
+
+/// Maps a reqwest error: an SSRF refusal anywhere in the chain is
+/// [`HttpClientError::Blocked`]; the URL (and its query) is dropped from the
+/// source so it cannot leak into logs.
+fn transport_error(error: reqwest::Error, target: &Target) -> HttpClientError {
+    if let Some(refused) = Refused::find(&error) {
+        return refused.clone().into_error();
+    }
+    let url = target.shown();
+    let error = error.without_url();
+    if error.is_connect() {
+        HttpClientError::Connect {
+            url,
+            source: Box::new(error),
+        }
+    } else if error.is_timeout() {
+        HttpClientError::Timeout { url }
+    } else {
+        HttpClientError::Request {
+            url,
+            source: Box::new(error),
+        }
+    }
+}
+
+/// Adds `traceparent` (and `tracestate`) for a new child span of the
+/// current trace, unless there is no trace or the caller set its own;
+/// returns the new span's id.
+fn inject_trace(headers: &mut HeaderMap) -> Option<SpanId> {
+    if headers.contains_key(&TRACEPARENT) {
+        return None;
+    }
+    let span = TelemetryContext::with_current(|context| context.trace().map(TraceContext::child))
+        .flatten()?;
+    let traceparent = HeaderValue::from_str(&span.traceparent()).ok()?;
+    headers.insert(TRACEPARENT.clone(), traceparent);
+    if let Some(state) = span
+        .trace_state
+        .as_deref()
+        .and_then(|state| HeaderValue::from_str(state).ok())
+    {
+        headers.insert(TRACESTATE.clone(), state);
+    }
+    Some(span.span_id)
+}
+
+/// Methods that are safe to repeat (RFC 9110, section 9.2.2).
+fn is_idempotent(method: &Method) -> bool {
+    [
+        Method::GET,
+        Method::HEAD,
+        Method::OPTIONS,
+        Method::TRACE,
+        Method::PUT,
+        Method::DELETE,
+    ]
+    .contains(method)
+}
+
+/// The wait a retryable response's `Retry-After` header asks for, if it has
+/// a readable one.
+fn retry_after(outcome: &Result<Response, HttpClientError>) -> Option<Duration> {
+    let value = outcome.as_ref().ok()?.header("retry-after")?;
+    parse_retry_after(value, SystemTime::now())
+}
+
+/// Connection errors, 5xx and 429 are worth another attempt.
+fn is_retryable(outcome: &Result<Response, HttpClientError>) -> bool {
+    match outcome {
+        Ok(response) => {
+            response.status().is_server_error()
+                || response.status() == StatusCode::TOO_MANY_REQUESTS
+        }
+        Err(error) => matches!(error, HttpClientError::Connect { .. }),
+    }
+}
+
+impl fmt::Debug for HttpClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let transport = match self.inner.transport {
+            Transport::Real(_) => "reqwest",
+            Transport::Fake(_) => "fake",
+        };
+        f.debug_struct("HttpClient")
+            .field("transport", &transport)
+            .field("options", &self.inner.options)
+            .finish()
+    }
+}

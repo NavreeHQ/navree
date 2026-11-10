@@ -1,0 +1,5 @@
+error: #[derive(Model)] needs a struct with named fields
+ --> tests/ui/model_on_tuple_struct.rs:4:8
+  |
+4 | struct Deal(i64, String);
+  |        ^^^^

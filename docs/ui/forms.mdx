@@ -1,0 +1,221 @@
+---
+title: "Forms"
+description: "One struct is the form, its rules, its errors and its input: `#[derive(Validate, Form)]`, `FormView` to draw it and `Submit<T>` to read it back."
+---
+
+<UiPreview example="forms/default" />
+
+A form in Navree UI is one struct. Its doc comments are the labels, its field types pick the widgets, and its `#[validate]` rules set `required`, `maxlength` and `min` in the browser and run again on the server. `FormView` draws it; `Submit<T>` reads it back, and answers field errors under the inputs, or the page again with JavaScript off.
+
+```rust title="src/deals/form.rs"
+use navree::ui::form::Money;
+use navree::ui::{Form, Options, Validate};
+use serde::Deserialize;
+
+#[derive(Clone, Copy, Debug, Deserialize, Options)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Qualified,
+    Proposal,
+    #[option(label = "Won (100%)")]
+    Won,
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+pub struct NewDeal {
+    /// Deal name
+    #[validate(length(min = 1, max = 255))]
+    #[form(placeholder = "Annual platform license", wide, error = "Give the deal a name.")]
+    pub title: String,
+    /// Value
+    #[validate(skip)]
+    #[form(placeholder = "1,25,000", help = "In rupees.")]
+    pub amount: Money,
+    /// Stage
+    #[validate(skip)]
+    pub stage: Stage,
+    /// Expected close
+    #[validate(skip)]
+    pub closes_on: Option<chrono::NaiveDate>,
+    /// Hot deal
+    #[validate(skip)]
+    pub hot: bool,
+}
+```
+
+The preview above is this struct, drawn by:
+
+```rust
+FormView::<NewDeal>::new()
+    .post("/deals")
+    .submit("Create deal")
+    .cancel("Cancel", "/deals")
+```
+
+## Widgets from types
+
+| Field type | Widget |
+|---|---|
+| `String`, `Uuid` | a text input |
+| integers and floats | a number input |
+| `Decimal` (from `rust_decimal`) | a number input that takes any fraction; the value is read as typed, so `12.50` keeps its scale |
+| `bool` | a checkbox |
+| `NaiveDate`, `NaiveTime`, `NaiveDateTime` | the browser's own date, time or date-and-time input |
+| `DateTime<Utc>` | the browser's date-and-time input, shown and read in UTC |
+| `Money` | an amount typed like `12,50,000.50` or `1,250,000.50`, stored in its smallest unit; `display_grouped(Grouping::Indian)` writes it in lakhs and crores |
+| `Phone`, `PhoneNumber` | a [phone input](/docs/components/phone-input/): a country list and the number, read on the server in the country chosen (`validation-phone`) |
+| an enum with `#[derive(Options)]` | a select of its variants |
+| `Many<T>` | a [MultiSelect](/docs/components/multi-select/): every value posted under the name, in order |
+| `Option<T>` | the same widget, and it may be left empty |
+
+`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `date_picker`, `time_picker`, `hidden`, `textarea`, `select`, `listbox`, `combobox`, `multiselect`, `radio`, `checkbox`, `switch`, `money`, `phone`, `slider` or `file`. A `file` field is an [upload](/docs/components/upload/#a-file-field-in-a-derived-form) and holds the stored file's path. A `String` field with `#[validate(phone)]` is a `tel` input; with `widget = phone` it is a phone input and holds the number in E.164, refusing a number that isn't valid or has an extension. `FormView::phone_region(region)` sets the country phone fields start on, and `FormView::phone_flags(flag)` draws the flags in their country lists with your own function. `date_picker` and `time_picker` draw a [DatePicker](/docs/components/date-picker/) and a [TimePicker](/docs/components/time-picker/); `FormView::dates(locale, today)` sets their language and today. A browser's time field posts `14:30`, and the form reads it as `14:30:00`. A date-and-time field posts `2026-11-04T14:30`, and the form reads it as `2026-11-04T14:30:00`. A `NaiveDateTime` keeps what was typed. A `DateTime<Utc>` reads it as UTC, because the browser sends no zone: to read what a person typed in their own zone, use a `NaiveDateTime` and turn it into an instant with `dates::zoned::resolve`. An edit form shows a date and time to the minute, or to the second when the seconds are not zero, and the field then steps by the second. A year outside 1 to 9999, a leap second and a fraction of a second are always refused; for a `DateTime<Utc>` the year is checked in UTC as well, so `9999-12-31T23:30-05:00` is refused. A `DateTime<Utc>` field says "Time in UTC" under its input, and only `DateTime<Utc>` is read as an instant. A `Decimal` is read exactly: more than 28 decimal places is refused, not rounded. A number that is not a number, and text that is not a date and time, are errors on their field: "enter a number" and "enter a date and time". A select whose choices come from the database takes them from `FormView::options(field, choices)`, and a picker whose choices show more than a label (an icon or a picture before it, a line under it, words it is found by) from `FormView::choices(field, choices)`, a list of [`Choice`](/docs/components/combobox/). `select` is the browser's own; `listbox` is a styled [Select](/docs/components/select/), and `combobox` a [Combobox](/docs/components/combobox/), whose options come from the same place or are searched on the server with `FormView::search(field, url)`. The form reads what a picker posts as text and doesn't know the value is one of the options: check it in the handler with `OptionSource::all_pickable` or `Choice::all_among`, and answer a failure with `Rejected::after_decode` ([how](/docs/components/combobox/#check-what-was-picked)). `#[form(max = n)]` on a `Many<T>` field limits a multi-select and holds the post to the limit.
+
+| `#[form(...)]` | Means |
+|---|---|
+| `label = "..."` | the label, in place of the doc comment |
+| `placeholder`, `help`, `prompt` | the hint while empty, the help below, a select's empty first choice |
+| `error = "..."` | the message for any failed rule, in place of the rule's own |
+| `addon = "field"` | draws another field (a currency) inside this one's input group |
+| `rows = 4` | a textarea's height |
+| `max = 3` | the most values a `Many<T>` field takes: the multi-select stops there, and a post with more is refused |
+| `autofocus`, `wide` | takes focus on load; takes the form's whole width |
+| `skip` | not drawn and never read from the request |
+
+Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
+
+## Reading it back
+
+`Submit<T>` is an extractor. It decodes the form, runs the rules and hands you a valid `T`, or a `Rejected<T>`, whose `respond` draws your page again around a form that holds what was typed and the errors:
+
+```rust title="src/deals/pages.rs"
+async fn store(shell: AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal>>) -> Response {
+    match submit {
+        Ok(Submit(deal)) => Reply::redirect("/deals")
+            .toast(ToastTone::Success, format!("{} created", deal.title))
+            .into_response(),
+        Err(rejected) => rejected.respond(|form| {
+            shell.page("New deal").body(form.post("/deals").submit("Create deal"))
+        }),
+    }
+}
+```
+
+With the runtime, a rejected form answers `422` with an `errors` op, and the errors appear under the fields without reloading the page. With JavaScript off, it answers `422` with the page.
+
+## Messages in the reader's language
+
+A form says what your API says. `Submit` reads its messages where the [validated extractors](/docs/basics/validation/#custom-messages) do: your `validation.messages` and `validation.attributes`, and, with [localization](/docs/packages/localization/) in the app, the reader's language. A French reader gets French errors under the fields, from the messages Navree ships or from your own.
+
+The field's label names it in the message: `Work email must be a valid email address`. A label wins over `validation.attributes`, and a translated name (a `field-email` message in your locale files) wins over both. A field's `#[form(error = "...")]` replaces every message of that field.
+
+A form has a few messages of its own, for a value of the wrong type and the like. Each has a key, so you can change it or translate it like any rule's message:
+
+| Key | When | Default |
+|---|---|---|
+| `form.number` | a number field holds something else | `Seats: enter a number.` |
+| `form.amount` | a money field holds something else | `Amount: enter an amount, like 12,500.50.` |
+| `form.date`, `form.time`, `form.moment` | a date, a time, or a date and time that doesn't read | `Due: enter a date.` |
+| `form.choice` | a value that isn't one of the options | `Stage: choose one of the options.` |
+| `form.phone`, `form.phone_extension` | a phone number that doesn't read in its country, or a text number with an extension | `Phone: enter a phone number, with its country.` |
+| `form.decimal_places` | a decimal with more than 28 places | `Rate: use at most 28 decimal places.` |
+| `form.max_choices` | a list with more values than it takes (`:max`) | `Choose at most 3.` |
+| `form.invalid` | any other value of the wrong type | `Field is not valid.` |
+| `form.unreadable` | a post the form can't read at all | `This form could not be read.` |
+
+```toml title="config/app.toml"
+[validation.messages]
+"form.number" = ":attribute takes digits only"
+"seats.form.number" = "How many seats?"
+```
+
+With localization, a `validation-form-number` message in a locale file says it in that language.
+
+## Database rules
+
+The [database rules](/docs/basics/validation/#database-rules) your API runs with `ValidAsync` run for a form too. Implement `AsyncRules` on the struct and `Submit` runs them once the form's own rules pass, in the request's unit of work:
+
+```rust title="src/people/forms.rs"
+#[derive(Deserialize, Validate, Form)]
+pub struct SignUp {
+    /// Work email
+    #[validate(email)]
+    pub email: String,
+    /// Team
+    #[validate(skip)]
+    pub team_id: Option<i64>,
+}
+
+impl AsyncRules for SignUp {
+    fn async_rules(&self) -> Vec<AsyncRule> {
+        vec![
+            AsyncRule::unique("email", "people", "email", self.email.clone(), None),
+            AsyncRule::exists("team_id", "teams", "id", self.team_id),
+        ]
+    }
+}
+```
+
+A taken address is a field error, `Work email has already been taken`, with the same message and in the same language as the API's, and the form comes back with what was posted. An empty optional field has no value, so its rule needs no query. A rule that can't run, because the app has no database or the database fails, is a server error, not a field error. A generic struct's rules are not picked up.
+
+## What was posted
+
+A `Rejected<T>` holds what was posted. `value("owner_id")` is the first text sent under a field, `values_of("tags")` every text sent under a list field, and `values()` all of them, as `(field, text)` pairs of the form's own fields: never what a password input holds, and never a field marked `#[form(skip)]`.
+
+A picker that searches the server, such as a [Combobox](/docs/components/combobox/#searching-on-the-server), posts only the id of its choice, and the page that comes back would show that id. Give the form the label before you answer, with `choices(field, ...)`, or `options(field, ...)` for a plain `(value, label)` pair.
+
+Take the label from the people the caller may pick, never from a lookup by id alone. A posted id is whatever a client chose to send, and a refusal that names a person the caller may not see is a leak. `OptionSource::pickable` asks the same scoped query the search uses, and gives back a choice only for each posted value that query holds:
+
+```rust
+async fn store(
+    shell: AppShell,
+    uow: Uow,
+    submit: Result<Submit<NewDeal>, Rejected<NewDeal>>,
+) -> Result<Response> {
+    match submit {
+        Ok(Submit(deal)) => Ok(Reply::redirect("/deals")
+            .toast(ToastTone::Success, format!("{} created", deal.title))
+            .into_response()),
+        Err(rejected) => {
+            // `PEOPLE` is the `OptionSource` the owner search uses.
+            let owners = PEOPLE
+                .pickable(
+                    Person::query(),
+                    rejected.values_of("owner_id"),
+                    &uow,
+                    OptionSource::as_int,
+                    |record| {
+                        let person = record.into_inner();
+                        Choice::new(person.id.to_string(), person.name)
+                    },
+                )
+                .await?;
+            Ok(rejected.choices("owner_id", owners).respond(|form| {
+                shell.page("New deal").body(form.post("/deals").submit("Create deal"))
+            }))
+        }
+    }
+}
+```
+
+The runtime keeps the page and shows only the errors, so the label matters for the page that answers with JavaScript off. A person the caller may not pick, or who is not there, leaves the id as it was posted, with no name. In your own code, `Person::query()` is the scoped query you pass to `find` and `all_pickable`: the workspace, the team or the access rule.
+
+## Sent back with errors
+
+<UiPreview example="forms/errors" />
+
+## What a form accepts
+
+- A body from another site is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send that, unless its `Origin` is in `http.cors.allowed_origins`.
+- A body that isn't a urlencoded form gets 415; `GET` and `HEAD` get 405; past 1,000 fields, 413.
+- Only the struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach.
+- A rejected form never writes back what a password input holds. A `String` field named `password`, or ending in it (`new_password`, `password_confirmation`), is drawn as one; `#[form(widget = password)]` makes any other field one, which is what a token or a key needs. `Rejected`'s `Debug` holds field names and errors, not values.
+- Behind a session, a plain form with JavaScript off proves itself with the token field: `FormView::csrf(session.csrf_token())`. The runtime sends the token as a header itself.
+
+Rules run once every field has the right type, so a form with a wrongly typed value reports the type errors first and the rules after they are fixed.
+
+## API
+
+### FormView
+
+<UiProps type="FormView" />

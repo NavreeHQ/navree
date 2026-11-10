@@ -1,0 +1,309 @@
+---
+title: "Getting started"
+description: "Choose a database (TimescaleDB, PostgreSQL, MySQL, SQLite), configure the pool and run your first queries with the ORM."
+---
+
+A Navree app works with its data through the [ORM](/docs/orm/getting-started/): models are plain Rust structs with `#[derive(Model)]`, queried with typed columns and saved as records that track their own changes. Underneath, the `navree-db` crate (the `db` feature of the `navree` facade, on by default) owns the connections, which run on SQLx, and adds what an application needs around them:
+
+- a connection pool configured from the `database` section of your configuration;
+- a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds, and records every change for the [audit log](/docs/security/audit-log/);
+- [migrations](/docs/database/migrations/) owned by modules and written with the [schema builder](/docs/database/schema-builder/) (with [TimescaleDB hypertables](/docs/database/timescaledb/)), [run](/docs/database/running-migrations/) by `migrate` and its sibling commands and [squashed](/docs/database/squashing-migrations/) by `schema:dump`;
+- [seeders](/docs/database/seeding-and-factories/) and the `db:seed` command;
+- [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
+- [models and records](/docs/database/entities-and-repositories/): how a table maps to a model, and the change events its writes record.
+
+## Choose your database
+
+Navree supports four SQL databases and, through the ORM's document driver, MongoDB. Each has a page of its own for its connection, its settings and how Navree behaves on it.
+
+| Database | Cargo feature | You run it | Choose it when | Page |
+|---|---|---|---|---|
+| TimescaleDB | `postgres` | `navree dock up` starts it in a container | You want the default, or you keep time-series data: the audit log, events, metrics | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
+| PostgreSQL | `postgres` | Your server; `navree dock up` runs one too | You want PostgreSQL without the extension: hypertables become regular tables | [PostgreSQL and TimescaleDB](/docs/database/postgresql/) |
+| MySQL | `mysql` | Your server | Your organization runs MySQL 8.4 | [MySQL and MariaDB](/docs/database/mysql/) |
+| MariaDB | `mysql` | Your server | Your organization runs MariaDB 11.4 or 10.6 | [MySQL and MariaDB](/docs/database/mysql/) |
+| SQLite | `sqlite` | Nothing: the feature compiles SQLite into your app | Tests, tools and single-writer apps | [SQLite](/docs/database/sqlite/) |
+| MongoDB | `mongo` | Your server | You store documents through the ORM's document driver | [MongoDB](/docs/orm/mongodb/) |
+
+`navree new my-app` makes a TimescaleDB app with the `postgres` feature; `--database postgres`, `--database mysql` and `--database sqlite` make the others, each with its own feature.
+
+Each driver is a feature of its own, and none is on by default: a PostgreSQL or MySQL build compiles no SQLite, and a SQLite build compiles no PostgreSQL or MySQL driver. Turn on the one you use (`navree = { version = "1", features = ["postgres"] }`), and a second one only when the app talks to two kinds of server. An app whose `database.url` names a driver it was built without fails to boot with a message naming the feature to enable (for example "enable the `sqlite` feature of navree-db").
+
+## Configuration
+
+`DatabaseModule` reads the `database` section of your configuration. Every key is optional:
+
+```toml title="config/app.toml"
+[database]
+url = "postgres://navree:navree@127.0.0.1:5432/my_app"
+max_connections = 10
+min_connections = 0
+connect_timeout_secs = 8
+test_before_acquire = false
+idle_timeout_secs = 600
+max_lifetime_secs = 1800
+log_queries = false
+slow_query_ms = 200
+migrate_on_boot = false
+transaction_settings = true
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `postgres://...` (TimescaleDB or PostgreSQL), `mysql://...`, `mariadb://...` or `sqlite://...`. A new app sets a TimescaleDB URL, the one Dock's `postgres` service serves. Without a URL, Navree uses a SQLite file, which needs the `sqlite` feature: an app built without it stops at boot and asks for the feature or a URL. |
+| `read_urls` | `[]` | Read replicas of the database at `url`: reads outside a transaction go to them in turn, writes and transactions to `url`. From the environment, a comma-separated list. See [read replicas](/docs/orm/connections-and-transactions/#read-replicas). |
+| `sticky` | `true` | After a unit of work wrote, its task reads from the writer, so a request sees its own writes while replicas catch up. |
+| `direct_url` | unset | A direct connection to the same database that bypasses a transaction-mode pooler (PgBouncer, RDS Proxy) in front of `url`. Migrations run on it, and `db.direct()` hands it out for session work such as advisory locks. It must name the same kind of database as `url`. |
+| `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
+| `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
+| `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
+| `test_before_acquire` | `false` | Pings every connection taken from the pool before handing it out, which costs one round trip per checkout. Off, only a connection that sat idle in the pool for 30 seconds or more is pinged first ([the pool](/docs/database/postgresql/#the-pool)). |
+| `idle_timeout_secs` | `600` | Closes a connection idle in the pool this long, as long as `min_connections` stay open. `0` keeps idle connections. |
+| `max_lifetime_secs` | `1800` | Replaces a connection once it is this old. `0` sets no limit. |
+| `log_queries` | `false` | Logs every statement at debug level. |
+| `slow_query_ms` | `200` | Logs statements slower than this at warn level. `0` turns it off. When you leave it out, the logger's `log.slow_query_ms` applies. |
+| `migrate_on_boot` | `false` | Runs pending migrations when the app boots. Handy in development and tests; run `migrate` in deployments instead. |
+| `transaction_settings` | `true` | Makes the actor and request id of every unit of work readable in SQL: `navree.actor` and `navree.request_id` on PostgreSQL, `@navree_actor` and `@navree_request_id` on MySQL and MariaDB. Turn it off when no trigger or policy reads them: each transaction then saves the statement that sets them (and on MySQL the one that clears them). |
+
+The sections `[database.postgres]` ([session settings](/docs/database/postgresql/#session-settings)), `[database.mysql]` ([SQL mode and isolation level](/docs/database/mysql/#sql-mode-and-isolation-level)) and `[database.sqlite]` ([SQLite settings](/docs/database/sqlite/#sqlite-settings)) shape the session of every connection to that kind of database, and `[database.connections.<name>]` adds [named connections](/docs/orm/connections-and-transactions/#named-connections), each with any key of this section.
+
+Like every section, these keys can come from environment variables with the `APP_` prefix and `__` between levels: `APP_DATABASE__URL` sets `database.url`. Keep a production URL, and its password, in the environment rather than in `config/app.toml`. A `.env` entry overrides `config/app.toml`, so `APP_DATABASE__URL` in `.env` replaces the `database.url` that a new app's `config/app.toml` sets. See [configuration](/docs/getting-started/configuration/) for the order in which sources apply.
+
+An invalid section stops the boot with a message naming `database` and the problem (an empty `url`, `max_connections = 0`, `min_connections` above `max_connections`, a `direct_url` of another kind of database than `url`, a `database.mysql.modes` entry that isn't an SQL mode name, or a value `database.postgres` or `database.sqlite` doesn't accept). Navree never prints the password of the URL: `DbOptions`'s `Debug` output and connection errors show it as `***`.
+
+## Registering the module
+
+Add `DatabaseModule` to your app's root, after `ConfigModule`, and `OrmModule` after it:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(OrmModule::from_config())
+        .module(CompaniesModule)
+        .module(DealsModule)
+}
+```
+
+`navree new` writes both. `OrmModule` reads the `orm` section, which configures the models ([ORM configuration](/docs/orm/getting-started/#configuration)). `DatabaseModule::from_config()` and a plain `.module(DatabaseModule)` both read the `database` section when the app boots. To configure the module in code instead, pass the options to `for_root`:
+
+```rust
+use navree::db::DbOptions;
+
+Navree::app().module(DatabaseModule::for_root(DbOptions {
+    url: "postgres://navree:navree@127.0.0.1:5432/my_app".into(),
+    max_connections: 5,
+    ..DbOptions::default()
+}))
+```
+
+The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` without importing it. It also brings:
+
+- the unit-of-work layer of the request pipeline and the `Uow` extractor;
+- the mapping of database errors to error responses ([below](#database-errors));
+- the `database` health check, which pings the pool (served by `GET /health/ready` when the app has `ObserveModule`, see [health and metrics](/docs/digging-deeper/health-and-metrics/));
+- the commands `migrate`, `migrate:install`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `schema:dump`, `db:seed`, `db:monitor` (the connections each database has open) and `db` (the database's own client: `psql`, `mysql`, `mariadb` or `sqlite3`; [watching statements](/docs/orm/connections-and-transactions/#watching-statements));
+- closing the pool when the app shuts down, so SQLite checkpoints its write-ahead log.
+
+## TimescaleDB
+
+<Badge feature="postgres" /> TimescaleDB is PostgreSQL with an extension for time-series data, so it connects through the same driver: a `postgres://` URL and the `postgres` feature of the facade. A new app is set up for it: `navree new` turns on the feature, writes the URL of Dock's `postgres` service into `config/app.toml`, and adds a `dock.toml` that runs TimescaleDB 2.31 on PostgreSQL 17:
+
+```sh
+navree dock up               # TimescaleDB on 127.0.0.1:5432
+navree dev
+```
+
+[PostgreSQL and TimescaleDB](/docs/database/postgresql/#timescaledb) says how to run it in production. [TimescaleDB](/docs/database/timescaledb/) covers hypertables, compression and retention.
+
+## PostgreSQL
+
+<Badge feature="postgres" /> Turn on the `postgres` feature of the facade, then point `database.url` at the server:
+
+```sh
+export APP_DATABASE__URL=postgres://crm:secret@db.internal:5432/crm
+```
+
+[PostgreSQL and TimescaleDB](/docs/database/postgresql/) covers the session settings, the pool, how Navree behaves on PostgreSQL and what has run against a server.
+
+## MySQL and MariaDB
+
+<Badge feature="mysql" /> Turn on the `mysql` feature of the facade, then point `database.url` at the server. `mariadb://` works the same as `mysql://`:
+
+```sh
+export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
+```
+
+Navree's MySQL suites run in CI on MySQL 8.4 and on MariaDB 11.4 and 10.6. MariaDB connects through the same driver. [MySQL and MariaDB](/docs/database/mysql/) covers TLS, the SQL mode, the types and collations and how Navree behaves on MySQL.
+
+## SQLite
+
+<Badge feature="sqlite" /> SQLite is the `sqlite` Cargo feature, and it is off unless you turn it on. `navree new my-app --database sqlite` writes that for you. The feature compiles the bundled SQLite library, so there is nothing to install; a PostgreSQL or MySQL build compiles none of it. Tests run on SQLite, each in a file of its own, so an app on another database turns the feature on for its tests only, in `[dev-dependencies]`.
+
+[SQLite](/docs/database/sqlite/) covers the URL, how every connection opens, the write lock and the settings.
+
+## Running queries
+
+Queries go through [models](/docs/orm/models/): a struct with `#[derive(Model)]` maps a table, and its typed columns build the conditions:
+
+```rust
+let deals = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))
+    .latest()
+    .get(&uow)
+    .await?;
+```
+
+Every method that touches the database takes an **executor** first, and what Navree decides is which one you pass:
+
+| Where the code runs | Executor |
+|---|---|
+| A handler, or a service that takes `&Uow` | The request's unit of work: `&uow` |
+| A service with no `&Uow` | Its injected `Arc<Db>`, which joins the current unit of work |
+| A command, seeder or test outside any unit of work | The pool, `&db`, or a unit of work you open and commit |
+
+[Connections and transactions](/docs/orm/connections-and-transactions/) has the details, named connections and read replicas included.
+
+### In a request
+
+Take the request's unit of work as an extractor and pass it to the model. The transaction begins with the first statement and commits when the response status is below 400:
+
+```rust title="src/modules/companies/controller.rs"
+#[controller("/companies", version = "1")]
+impl CompaniesController {
+    #[get("/{id}")]
+    #[authenticated]
+    async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Record<Company>>> {
+        let company = Company::find_or_fail(&uow, id).await?;
+        Ok(Json(company))
+    }
+}
+```
+
+`find_or_fail` answers 404 when no company has that id; [route model binding](/docs/orm/route-model-binding/) does the lookup for you. Services take the unit of work as a `&Uow` parameter rather than having it injected. [The unit of work](/docs/database/unit-of-work/) covers it in detail.
+
+### In services without a unit of work
+
+Some code can't take a `&Uow`: a service called from many places, or a trait whose signature you don't control. Inject `Arc<Db>` and pass it instead:
+
+```rust title="src/modules/companies/directory.rs"
+use navree::db::Db;
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct CompanyDirectory {
+    db: Arc<Db>,
+}
+
+impl CompanyDirectory {
+    /// The company with `id`, unless it is soft-deleted.
+    pub async fn find(&self, id: Uuid) -> navree::orm::Result<Option<Record<Company>>> {
+        Company::find(&self.db, id).await
+    }
+}
+```
+
+A `Db` executor reads through the open transaction of the current task's unit of work (the request's, while a handler runs) when there is one, and through the pool otherwise; its writes join that unit of work too. That matters on SQLite: an open unit of work holds the write lock on its connection, and a request that then waits for a second pool connection can starve the pool once about `max_connections` requests run together. Reading through the transaction also sees the request's own uncommitted writes. `Company` declares [soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes), so `find` leaves deleted companies out by itself.
+
+Where no unit of work is running (commands, seeders, test assertions), `&db` runs on the pool. To write atomically there, open a unit of work and commit it ([transactions in commands and jobs](/docs/orm/connections-and-transactions/#transactions-in-commands-and-jobs)).
+
+### Raw SQL
+
+When the query builder can't express a statement, write the SQL with `?` placeholders and pass the values; the ORM binds them on every database ([raw SQL](/docs/orm/query-builder/#raw-sql)):
+
+```rust
+use navree::orm::{raw, scalar};
+
+let owned: Option<i64> =
+    scalar(&db, raw("SELECT COUNT(*) FROM companies WHERE owner_id = ?", [owner_id])).await?;
+```
+
+Below the ORM, every executor (`&uow`, `&db`, a `Pool`, a `Transaction`) runs navree-db `Statement`s. `Statement::portable` takes `?` placeholders on every database; `Statement::new(backend, sql, values)` takes the backend's own (`$1`, `$2` on PostgreSQL). Rows come back as `Row`s whose columns you read with `get`:
+
+```rust
+use navree::db::{Executor, ExecutorExt, Statement};
+
+let owner_id = Uuid::now_v7();
+let statement = Statement::portable(
+    "SELECT COUNT(*) AS n FROM companies WHERE owner_id = ?",
+    [owner_id.into()],
+);
+let count: i64 = db.fetch_scalar(&statement).await?;
+
+let rows = db.fetch_all(&Statement::text("SELECT id, name FROM companies")).await?;
+for row in &rows {
+    let name: String = row.get("name")?;
+    println!("{name}");
+}
+```
+
+`execute` runs a statement that returns no rows and reports how many it changed (`Executed { rows_affected, last_insert_id }`), `fetch_optional` and `fetch_one` read one row, `fetch` streams rows as the database sends them, and `execute_script` runs `;`-separated SQL without values. Errors are `DbError`s, classified the same way on every database ([below](#database-errors)).
+
+### Searching text
+
+SQLite's `LOWER`, `UPPER` and `LIKE` only fold ASCII letters, so `LOWER(name) LIKE '%équipe%'` misses "Équipe". On MySQL, comparisons follow the column's collation, which may ignore accents as well as case, or neither. The query builder has two column helpers that ignore case for every letter, and never ignore accents, on every database:
+
+- `contains_ignore_case(term)`: the column contains `term`;
+- `eq_ignore_case(value)`: the column equals `value`.
+
+They are conditions for a model query's `where_`:
+
+```rust
+let companies = Company::query()
+    .where_(Company::NAME.contains_ignore_case("équipe"))
+    .get(&db)
+    .await?;
+```
+
+On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`). On PostgreSQL a term whose cased letters are all ASCII uses `LOWER(..) LIKE`; a term with other letters becomes a regular expression that lists every case variant of each letter, so the result doesn't depend on the database's locale. On MySQL and MariaDB they compare the lower-cased column byte for byte (`INSTR(CAST(LOWER(name) AS BINARY), CAST('équipe' AS BINARY)) > 0`), which ignores case under any collation, `_bin` and `_cs` ones included; the column must be `utf8mb4`, the connection's character set. Wildcards in the term (`%`, `_`, `*`, `?`, `[`, `\`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table. The query builder's own `like` and `ilike` conditions ([conditions](/docs/orm/query-builder/#conditions)) fold case as each database does.
+
+## Database errors
+
+A handler can return an `OrmError` or a `DbError` with `?`. `DatabaseModule` turns it into an error response, and no SQL reaches the client:
+
+| Error | Response |
+|---|---|
+| A missing record (`ErrorKind::NotFound`; `OrmError::ModelNotFound` from `find_or_fail`) | 404, "Not Found" |
+| A unique constraint violation (`ErrorKind::UniqueViolation`) | 409, "A record with the same unique value already exists." |
+| A foreign key violation (`ErrorKind::ForeignKeyViolation`) | 409, "The change conflicts with a related record." |
+| Anything else | 500, logged with its details |
+
+`DbError::kind()` classifies every error the same way on every database, with the server's own details in `code()` and `constraint()`; `is_unique_violation()`, `is_foreign_key_violation()`, `is_not_found()` and `is_retryable()` answer the questions a handler asks. `map_db_error(&error)` gives the response an error maps to, or `None` for a 500.
+
+Navree recognises the violations on every database: SQLite's extended result codes, PostgreSQL's SQLSTATEs `23505` and `23503`, and MySQL's and MariaDB's error numbers (1062 for a duplicate entry, 1451 and 1452 for foreign keys, and their relatives, such as 1859 for a duplicate found while `ALTER TABLE` builds a unique index).
+
+The same mapping applies to an error raised while the unit of work commits, after the handler returned: a constraint that is only checked at commit, or a constraint violation from a [change observer](/docs/database/unit-of-work/#change-events-and-observers), is a 409, and any other commit failure is a 500. The ORM's `OrmError` answers the same way, with a 404 for a record `find_or_fail` didn't find ([ORM errors](/docs/orm/getting-started/#errors)).
+
+## Logging queries
+
+Set `database.log_queries = true` to log every statement at debug level, and `database.slow_query_ms` to log slow ones at warn level. Both use the tracing target `navree_db::query`, so the [logger's](/docs/basics/logging/) level decides what you see. Only the SQL text is logged, never the bound values.
+
+## Testing
+
+Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards, also in an app made for TimescaleDB: the same migrations run there. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it, and the ORM's [testing helpers](/docs/orm/testing/) add `#[navree::test]` databases, templates copied per test, and assertions on rows and records; [Dock](/docs/tools/dock/#tests-against-timescaledb) shows how to run a test against the server it runs.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/getting-started/" title="The ORM">
+    Models, queries, relationships and records that track their changes.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Hypertables, compression, retention and time-bucket queries.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    One lazy transaction per request, committed when it succeeds.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Module-owned migrations written with the schema builder.
+  </LinkCard>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Models and records">
+    Tables as models, and the change events their writes record.
+  </LinkCard>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    A fresh database per test, factories and assertions.
+  </LinkCard>
+</LinkCards>

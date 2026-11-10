@@ -1,0 +1,302 @@
+---
+title: "MongoDB"
+description: "Run the ORM's models on MongoDB: `MongoModule`, ObjectId keys, queries compiled to filters and pipelines, transactions, migrations and what differs."
+---
+
+<Badge feature="mongo" /> MongoDB is supported as a document database under the same model API: models declare `driver = "mongodb"`, and every builder method compiles to a filter document or an aggregation pipeline instead of SQL. Records keep their dirty tracking, timestamps, soft deletes, scopes, events, relations and pagination.
+
+```rust
+use navree::mongo::{MongoDb, ObjectId};
+
+/// Embedded in each deal.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Terms {
+    pub net_days: u32,
+    pub currency: String,
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize, Deserialize)]
+#[model(collection = "deals", driver = "mongodb", timestamps, soft_deletes)]
+pub struct Deal {
+    pub id: ObjectId,
+    pub company_id: Option<ObjectId>,
+    pub title: String,
+    pub amount: i64,
+    #[model(cast = "json")]
+    pub terms: Option<Terms>,   // an embedded document
+    #[model(cast = "json")]
+    pub tags: Vec<String>,      // an array
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+let titles: Vec<String> = Deal::query()
+    .where_json_contains("tags", "vip")
+    .order_by_desc(Deal::AMOUNT)
+    .limit(10)
+    .pluck(&mongo, Deal::TITLE)
+    .await?;
+```
+
+## Setting up
+
+Turn on the `mongo` feature of the facade (also called `mongodb`; it is opt-in, not in `full`), add `MongoModule`, and point it at a server:
+
+```toml title="Cargo.toml"
+navree = { version = "1", features = ["mongo"] }
+```
+
+```rust title="src/app.rs"
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(MongoModule::from_config())
+        // ...
+}
+```
+
+```toml title="config/app.toml"
+[database.mongodb]
+url = "mongodb://127.0.0.1:27017/crm?replicaSet=rs0"   # mongodb+srv:// too
+database = "crm"                  # else the URL's path, else `navree`
+max_pool_size = 10
+read_preference = "primary"       # primaryPreferred, secondary, secondaryPreferred, nearest
+write_concern = "majority"
+slow_query_ms = 500               # warn about commands slower than this (0: off)
+migrate_on_boot = false
+
+[database.mongodb.connections.analytics]   # another server or database
+url = "mongodb://10.0.0.9:27017/analytics"
+```
+
+Every key is optional and can come from the environment (`APP_DATABASE__MONGODB__URL`). The URL's own options (`?replicaSet=rs0&tls=true&authSource=admin`) apply too; the keys win over them. TLS goes through rustls. Other keys set the pool (`min_pool_size`, `max_idle_time_ms`), timeouts (`connect_timeout_ms`, `server_selection_timeout_ms`), `read_concern`, `journal`, `retry_writes`, `retry_reads` and `log_queries`.
+
+`MongoModule` provides `MongoDb`, the connection and an executor: inject `Arc<MongoDb>` and pass it where SQL code passes `&Db`. It also registers a `mongodb` readiness check for `/health/ready` and the `mongo:migrate` commands. `navree::mongo` re-exports the official driver (`navree::mongo::mongodb`) and BSON (`navree::mongo::bson`, with `doc!`) for what the module doesn't wrap.
+
+## Models
+
+A model names its collection (`collection = "deals"`, or `table`, which means the same) and the driver. Its key lives in the document's `_id`: a field `id` is stored there.
+
+| Key type | Value |
+|---|---|
+| `ObjectId` (`navree::mongo::ObjectId`) | Generated before the insert when it is all zeros, so the record knows its key without a round trip; ObjectIds sort by creation time. |
+| `i64` and the other integers | Counted per collection in a `navree_sequences` collection, one atomic counter each. |
+| `Uuid`, `Ulid`, `String` | As on SQL databases: generated, or set by you. |
+
+Embedded documents and arrays are [JSON casts](/docs/orm/casts-and-accessors/): `#[model(cast = "json")]` on a struct, a `Vec`, a map. Conditions reach inside them with paths, as on SQL databases: `col("terms->currency").eq("EUR")` is `{"terms.currency": "EUR"}`. Date-times are kept to the millisecond: the ORM truncates timestamps before saving, so a saved record equals its stored document.
+
+## Queries
+
+A query compiles to a `find` when its stages fit one (a filter, an order, a page, a projection), and to an aggregation pipeline otherwise. `to_mongo()` shows the command without running it:
+
+```rust
+use navree::mongo::ToMongo;
+
+let query = Deal::query()
+    .where_(Deal::AMOUNT.gte(10_000))
+    .where_json_contains("tags", "vip")
+    .order_by_desc(Deal::CREATED_AT)
+    .limit(25);
+println!("{}", query.to_mongo()?);
+```
+
+```text wrap
+db.deals.find({"amount": {"$gte": 10000}, "tags": "vip", "deleted_at": null}, {"_id": 1, "company_id": 1, "title": 1, "amount": 1, "terms": 1, "tags": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1}).sort({"created_at": -1}).limit(25)
+```
+
+| Query | MongoDB |
+|---|---|
+| comparisons with a value | the query language: `{"amount": {"$gte": 10000}}` |
+| comparisons between fields or computed values | `$expr` |
+| `LIKE` | an escaped `$regex`, anchored unless the pattern starts or ends with `%` |
+| `contains_ignore_case`, `eq_ignore_case` | the text as an escaped `$regex` with the `i` option, which folds non-ASCII letters too and keeps accents |
+| date parts | `$dateToString`, `$dayOfMonth`, `$month`, `$year`, in UTC |
+| JSON paths, containment, length, keys | dot paths, `$all`, `$size`, `$exists` |
+| full text | `$text` |
+| joins | `$lookup` and `$unwind` |
+| `EXISTS`, `IN (subquery)`, scalar subqueries | a correlated `$lookup` |
+| unions | `$unionWith` |
+| groups and `HAVING`, `DISTINCT` | `$group`, then `$match` |
+| `time_bucket`, `first`, `last` | TimescaleDB's alignment in milliseconds, `$dateTrunc` for months and years; `$top`, `$bottom` |
+| a plain count | `countDocuments` |
+
+Aggregates, plucks, pagination (offset and cursor), chunks, lazy streams and cursors work as on SQL databases; streams read MongoDB cursors batch by batch.
+
+### MongoDB's own language
+
+For what typed columns don't say, write a filter document, or add pipeline stages after the query's own:
+
+```rust
+use navree::mongo::bson::doc;
+use navree::mongo::{MongoFilter, MongoQuery};
+
+let near = Filter::document(doc! {
+    "location": { "$geoWithin": { "$centerSphere": [[-73.97, 40.77], 0.001] } }
+});
+let stores = table("stores").where_(near).where_(col("open").eq(true));
+
+let sampled = table("deals")
+    .where_(col("stage").eq("won"))
+    .pipeline([doc! { "$sample": { "size": 5 } }]);
+```
+
+`Filter::document` joins the query's other conditions like any condition; SQL databases refuse it. `MongoStream::stream(exec)` yields a query's records as the cursor delivers them.
+
+## Relations
+
+Relations work on MongoDB: belongs-to, has-one, has-many and polymorphic eager loads are batched `$in` queries, many-to-many relations join their pivot collection with `$lookup` (and `attach`, `sync` and friends write pivot documents), and existence checks and relation counts (`where_has`, `with_count`) compile to `$lookup`s.
+
+```rust
+let deals = Deal::query().with("company").get(&mongo).await?;
+let companies = Company::query().with_count("deals").get(&mongo).await?;
+```
+
+A limit per parent in a constrained eager load (`with_constrained(.., |q| q.limit(3))`) needs a window function, which the MongoDB compiler refuses with `OrmError::Unsupported`: load the relation without the limit, or query each parent's records.
+
+## Writes and units of work
+
+Inserts are one `insertMany`, updates one `updateMany` (`$set`, `$inc`, or an update pipeline for computed values), deletes one `deleteMany`. A duplicate key is a unique violation, a 409 over HTTP. The bulk writes work too: `insert_or_ignore` skips duplicates, `upsert` updates by the unique fields.
+
+A **unit of work** on MongoDB is a session with a transaction, carrying the actor and request id, the change events of model writes and after-commit hooks:
+
+```rust
+let uow = mongo.begin().await?;
+let mut deal = Deal::query().where_(Deal::TITLE.eq(title)).first_or_fail(&uow).await?;
+deal.amount = 0;
+deal.save(&uow).await?;
+uow.after_commit(|| Box::pin(async { /* notify */ }));
+uow.commit().await?;
+```
+
+`mongo.transaction(|uow| async move { .. })` runs a closure in a unit of work and runs it again, up to three times, on a transient transaction error such as a write conflict:
+
+```rust
+let moved = mongo
+    .transaction(|uow| async move {
+        let n = Deal::query()
+            .where_(Deal::AMOUNT.lt(0))
+            .update(&uow, [Deal::AMOUNT.set(0)])
+            .await?;
+        Ok(n)
+    })
+    .await?;
+```
+
+On commit, the unit of work shows its change events to the app's `MongoChangeObserver`s (registered with `m.mongo_change_observer::<O>()`) inside the transaction, commits, then runs the after-commit hooks; [model listeners](/docs/orm/events-and-observers/) hear "-ed" events then. `scope` makes it the task's current unit of work, which a plain `MongoDb` of the same connection joins, and `mongo.session()` gives a session without a transaction (reads see their writes).
+
+`mongo.begin_in(&uow)` joins a SQL unit of work, the request's: change events go to it (and to the audit log), and the MongoDB transaction commits in an after-commit hook of it. The two commits are not atomic together; a MongoDB commit that fails after the SQL one is logged.
+
+Transactions need a replica set or a sharded cluster. A single-node replica set is enough for development (`mongod --replSet rs0`, then `rs.initiate()`); a standalone server's refusal says so.
+
+## Migrations
+
+An app on MongoDB alone needs no SQL database: MongoDB has its own migrations, written with navree-schema's blueprints:
+
+```rust title="src/modules/deals/mongo_migrations/m20261027_090000_create_deals.rs"
+use navree::mongo::{MongoMigration, MongoResult, MongoSchema};
+
+pub struct Migration;
+
+impl MongoMigration for Migration {
+    async fn up(&self, schema: &MongoSchema) -> MongoResult {
+        schema
+            .create("deals", |t| {
+                t.object_id_primary();
+                t.object_id("company_id").nullable().index();
+                t.string("title");
+                t.big_integer("amount");
+                t.json("terms").nullable();
+                t.json("tags");
+                t.timestamps_tz();
+                t.soft_deletes_tz();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &MongoSchema) -> MongoResult {
+        schema.drop_if_exists("deals").await
+    }
+}
+```
+
+A module lists them in a `MongoMigrationSet` and contributes it:
+
+```rust title="src/modules/deals/mongo_migrations/mod.rs"
+use navree::mongo::{MongoMigrationSet, mongo_migration};
+
+mod m20261027_090000_create_deals;
+
+pub fn migrations() -> MongoMigrationSet {
+    MongoMigrationSet::new("deals").migration(mongo_migration!(m20261027_090000_create_deals))
+}
+
+// in the module's wire: m.mongo_migrations(mongo_migrations::migrations());
+```
+
+`create` makes the collection with a `$jsonSchema` validator built from the columns (types, `null` for nullable ones, string lengths, enum values), then its indexes:
+
+```text wrap
+db.runCommand({"create": "deals", "validator": {"$jsonSchema": {"bsonType": "object", "required": ["_id", "title", "amount", "tags"], "properties": {"_id": {"bsonType": "objectId"}, "company_id": {"bsonType": ["objectId", "null"]}, "title": {"bsonType": "string", "maxLength": 255}, "amount": {"bsonType": ["int", "long"]}, ...}}}})
+db.runCommand({"createIndexes": "deals", "indexes": [{"key": {"company_id": 1}, "name": "deals_company_id_index"}]})
+```
+
+`table` adds, changes, renames and drops fields in every document, with their indexes, and updates the validator. A unique index over a nullable field is partial, so `NULL`s don't collide; MongoDB enforces no foreign keys, so a foreign key becomes an index, with a notice. Migrations are recorded in `navree_migrations`, and the commands mirror the SQL ones:
+
+```sh
+navree mongo:migrate              # --pretend, --step
+navree mongo:migrate:status
+navree mongo:migrate:rollback     # --step N, --batch N
+navree mongo:migrate:reset
+navree mongo:migrate:refresh
+navree mongo:migrate:fresh
+```
+
+Schema changes run outside transactions (MongoDB refuses most in one); a data migration returns `true` from `within_transaction`, and its writes through `schema.uow()` commit with its record. `migrate_on_boot` runs pending migrations while `MongoDb` is built.
+
+### Time series and expiring documents
+
+A hypertable is a **time-series collection** on MongoDB: the time column becomes the `timeField`, a space partition the `metaField`, the chunk interval the `granularity`, and the retention `expireAfterSeconds`. So the same migration makes a TimescaleDB hypertable and a MongoDB time-series collection:
+
+```rust
+schema
+    .create_hypertable("page_views", "viewed_at", |t| {
+        t.object_id_primary();
+        t.string("path");
+        t.timestamp_tz("viewed_at");
+        t.hypertable("viewed_at").chunk_interval("1 hour").retain_for("30 days");
+    })
+    .await?;
+
+schema
+    .create("sessions", |t| {
+        t.object_id_primary();
+        t.timestamp_tz("last_seen_at");
+        t.expire_after("last_seen_at", "2 hours");   // a TTL index
+    })
+    .await?;
+```
+
+MongoDB takes no validator on time-series collections, and can't turn an existing collection into one (the error gives the steps). Described continuous aggregates become views, and `capped(size, max)`, `validation_level` and `validation_action` set MongoDB's collection options. `MongoSchema::pretending()` records the commands instead of running them.
+
+## What works differently
+
+- **Transactions** need a replica set; schema changes run outside them.
+- **Refused**, with an `OrmError::Unsupported` that names what to do instead: raw SQL (conditions, expressions, orders), row locks (two transactions writing the same document conflict, and one is retried), `RIGHT JOIN`, and full text inside `OR`, `NOT` or a group.
+- **NULL.** Comparisons follow SQL where it matters: no ordering comparison holds for `NULL` or a missing field, and `NULL` keys join nothing. Negations (`<>`, `NOT IN`, `NOT LIKE`, `where_not`) keep MongoDB's rule: they match documents whose field is null or missing.
+- **Date-times** are kept to the millisecond.
+- **Commands** are reported to telemetry with their shape (values replaced by `?`), so [Logbook](/docs/tools/logbook/) and slow-command warnings work as for SQL.
+
+## Testing
+
+A test runs against a real server from `NAVREE_TEST_MONGODB_URL` (a replica set), each in a database of its own; without the variable, it returns early with a notice, as the [SQL server tests](/docs/orm/testing/#real-servers) do.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/models/" title="Models">
+    The model API, the same on every database.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Hypertables: the same migrations on PostgreSQL.
+  </LinkCard>
+</LinkCards>

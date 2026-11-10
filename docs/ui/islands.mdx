@@ -1,0 +1,66 @@
+---
+title: "Islands"
+description: "A part of a server-drawn page that a script of your own draws in the browser, mounted once, kept through every morph, and let go of when it leaves."
+---
+
+An island is a part of a page that a script of your own draws in the browser: a map, a rich text editor, a chart Navree UI doesn't draw. The rest of the page stays the server's. The server writes the island with its props and with what shows before the script runs, and with no script at all. A page with an island loads the `islands` module (under 1 KB) and the island's own script, nothing more.
+
+```rust
+use navree::prelude::*;
+use navree::ui::*;
+
+/// The script, compiled into the app: at most 8 KB, or the app doesn't build.
+static DEPOTS: IslandScript = IslandScript::new("depots", include_bytes!("../islands/depots.js"), 8 * 1024);
+
+#[derive(serde::Serialize)]
+struct Depots {
+    cities: Vec<&'static str>,
+}
+
+fn depots() -> Island {
+    Island::new("depots", &DEPOTS)
+        .label("Depots on a map")
+        .props(&Depots { cities: vec!["Ludhiana", "Jalandhar", "Amritsar"] })
+        .fallback(el("p").child("Ludhiana, Jalandhar and Amritsar"))
+}
+
+// In one of the app's modules: the toolkit serves the script.
+fn register(m: &mut ModuleBuilder) {
+    m.contribute(DEPOTS);
+}
+```
+
+## The script
+
+The script is a JavaScript module that exports `mount`:
+
+```js
+export function mount(body, props, island) {
+  const map = drawMap(body, props.cities);
+  return {
+    update(next) {
+      map.show(next.cities);
+    },
+    leave() {
+      map.destroy();
+    },
+  };
+}
+```
+
+- `body` is the island's own element. The script draws in it, and no morph touches it: a boosted link to the same page, a region's answer and a live swap all leave what the script drew, and the focus in it, as they are.
+- `props` is the JSON the server wrote, parsed. It is data: the browser reads it with `JSON.parse` from an attribute the server escaped, so a value can't become markup or code. Write props into the page as text (`textContent`), not as HTML.
+- `mount` returns a function, or an object with `update` and `leave`, or nothing. A function, or `leave`, is called when the island leaves the page: its element is gone after a swap, or it now names another script. It undoes what `mount` did outside the body, such as listeners on the window, timers and sockets. `update(props)` takes the props a morph brings, in place; without it, an island with new props is let go of and mounted again.
+- Once mounted, the island carries `data-ui-mounted`. A script that fails to load, or throws, leaves `data-ui-failed`, and the fallback stays.
+
+## What runs
+
+Only a script of your app's own runs. The `islands` module imports an address on the page's own origin under `/_navree/ui/island/`, named by its content hash (`depots-1a2b3c4d5e6f.js`), and nothing else, whatever a page's markup says. The script is served `immutable`, under the page's own content security policy: `script-src 'self'`, no inline code, nothing from another site. An old hash still gets the current script, uncached, so a page that stays open across a deploy keeps working.
+
+## Size
+
+`IslandScript::new` takes the script's ceiling in bytes. A script that grows past it fails the app's build, so each island has a budget of its own, checked by the compiler.
+
+## With no script
+
+With JavaScript off, or before the script has run, the island shows its fallback: the same numbers as a table, a picture, a link. Write one that says what the island would show.

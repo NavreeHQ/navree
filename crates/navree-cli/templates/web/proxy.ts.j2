@@ -1,0 +1,10 @@
+import { navree } from "@/lib/navree";
+
+/**
+ * Pages behind sign-in: a browser without a session goes to `/login` and comes back, and an
+ * expired access token is refreshed before the page renders. Add the pages anyone may open to
+ * `publicPaths` (`["/about", "/docs/*"]`).
+ */
+export const proxy = navree.proxy({ loginPath: "/login" });
+
+export const config = { matcher: ["/((?!_next/|favicon.ico).*)"] };

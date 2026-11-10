@@ -1,0 +1,44 @@
+import Link from "next/link";
+import { navree } from "@/lib/navree";
+import { SignOut } from "./sign-out";
+
+interface User {
+  id: string;
+  name?: string;
+  email?: string;
+}
+
+interface Profile {
+  user_id: string;
+  bio: string | null;
+  timezone: string;
+}
+
+/** The signed-in user's profile (`GET /api/v1/profile`), called with the session's access token. */
+async function loadProfile(accessToken: string): Promise<Profile | null> {
+  const response = await navree.bff().api("/api/v1/profile", { accessToken });
+  return response.ok ? ((await response.json()) as Profile) : null;
+}
+
+/** `/` is behind sign-in (`proxy.ts`), so a browser that gets here has a session. */
+export default async function Home() {
+  const session = await navree.auth<User>();
+  const profile = session ? await loadProfile(session.accessToken) : null;
+
+  return (
+    <main>
+      <h1>{{ title }}</h1>
+      {session ? (
+        <>
+          <p>Signed in as {session.user.email ?? session.user.id}.</p>
+          {profile && <p>Time zone: {profile.timezone}</p>}
+          <SignOut />
+        </>
+      ) : (
+        <p>
+          You are signed out. <Link href="/login">Sign in</Link>
+        </p>
+      )}
+    </main>
+  );
+}

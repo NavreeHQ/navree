@@ -1,0 +1,89 @@
+---
+title: "Area chart"
+description: "A line with a wash under it; stacked, the parts of a total over time. Drawn on the server as SVG, with a table of the same numbers and keyboard access."
+---
+
+<UiPreview example="area-chart/default" />
+
+`Chart::area` is a [line chart](/docs/components/line-chart/) with a wash under each line. It takes the same x values, series, annotations, formats and states. Its value axis always includes zero, because the wash starts there.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Chart::area("Active shoppers")
+    .smooth()
+    .categories(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    .series(Series::new("Active", [3_410, 3_620, 3_540, 3_980, 4_210, 3_300, 3_150]))
+```
+
+`.smooth()` draws a monotone curve through the points. It never overshoots a value, so between two points the curve stays between them, and a peak is never drawn higher than the data. It works on lines too.
+
+## When to use it
+
+Use an area when the size of the whole matters as much as its change: users, stock, a backlog. Use a plain [line](/docs/components/line-chart/) to compare several series, because washes over each other hide the lines behind. To compare amounts at a few points, use [bars](/docs/components/bar-chart/).
+
+<UiChoose name="chart" current="Area chart" />
+
+## Anatomy
+
+<UiAnatomy component="area-chart" />
+
+## Parts of a total
+
+`.stacked()` stacks the series. Each series is drawn on top of the ones before it, so the top edge is the total. The table gets a Total column. Only the first series stands on a flat baseline, so the others are harder to compare with each other. To compare them, use lines or grouped [bars](/docs/components/bar-chart/).
+
+<UiPreview example="area-chart/stacked" />
+
+A value below zero stacks downward from the baseline, away from the positive values. A stack of one series is not stacked. A stacked chart has no [toggles](/docs/components/line-chart/#hiding-series-and-colors-that-mean-something): hiding a layer would move the ones above it.
+
+## Stacked to 100%
+
+`.stacked_percent()` stacks each x as shares of its own total, and the value axis runs from 0% to 100%. Use it when the mix matters more than the amounts. The table still holds the real values, and only positive values count toward a total.
+
+<UiPreview example="area-chart/percent" />
+
+## Targets, events and bands
+
+Annotations work as they do on a [line chart](/docs/components/line-chart/#targets-events-and-bands). In a stacked chart a target is a level of the total.
+
+## Formats and languages
+
+`.format(NumberFormat)` and `.locale(tag)` write the axis, the tooltip and the table for a language, and `.labels(ChartLabels)` changes the words. See [Formats and languages](/docs/components/line-chart/#formats-and-languages) on the line chart page, which also lists the words a chart writes. A percent chart writes its axis as whole percentages in the chart's locale.
+
+## Loading, failed, empty and the table
+
+`.loading()`, `.failed(reason)`, `.retry(href)` and `.empty(title, text)` work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), and so does `.table(TableMode)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next value. |
+| `Home`, `End` | Moves to the first or the last value. |
+| `Page Up`, `Page Down` | Moves about a tenth of the way back or on. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary. A move by key is announced politely: the value's name, then each series and its value.
+- The table twin is always in the page, read by screen readers, and shown by the "Show table" switch. The switch is a checkbox and works with JavaScript off. A stacked chart's table ends with the total of each row.
+- Layers are told apart by the legend and the tooltip, not by color alone, and a status tone adds an icon to the legend. In a stack the layers also keep their order, so the first is always at the bottom.
+- The wash is a quiet fill behind the line, so the line carries the contrast.
+
+</UiA11y>
+
+## Data rules
+
+An area follows the [data rules of a line chart](/docs/components/line-chart/#data-rules): one shared x, gaps for `None`, NaN and infinity, at most eight series with the rest folded into Other, and at most 640 points. In a stack, a gap counts as nothing for that x, and the table shows a dash.
+
+## API
+
+### Chart
+
+<UiProps type="Chart" />
+
+### Series
+
+<UiProps type="Series" />

@@ -1,0 +1,31 @@
+---
+title: "Trace"
+description: "The steps of something that happened, or is happening, down a line: what an agent did, how an import went, where a deploy is."
+---
+
+<UiPreview example="trace/default" />
+
+`Trace` lists the steps of a process. Each step has a mark for its state, a title, a line of description and detail that opens by itself.
+
+```rust
+use navree::ui::*;
+
+Trace::new("Reconciling the March ledger")
+    .step(TraceStep::new("Read 4,812 entries").description("From the Pune branch"))
+    .step(TraceStep::new("Matched with bank lines").state(TraceState::Running))
+    .step(TraceStep::new("Write the report").state(TraceState::Pending))
+```
+
+## States
+
+A step is `Done` (a check), `Running` (a turning mark, and the step is the current one), `Pending` (a dashed ring) or `Failed` (a cross). The colour never carries the state alone: the state is spoken before the step's title ("Done", "Running", "Not started", "Failed"), and the running step is marked as the current step. `.labels(..)` sets those words for another language.
+
+## Detail
+
+`TraceStep::detail(..)` adds detail that opens and closes under the step with no script: the output of a command, the reasoning, a list of what was found. `.summary(..)` names the control that opens it (`Details` by default) and `.open()` draws it open. A step with no detail has no control.
+
+<UiPreview example="trace/detail" />
+
+## Streaming a run
+
+A trace is plain markup, so a run that is still going is drawn the way any list that changes is: put the trace in a region that follows the live hub or polls, and the steps that finish appear in place.

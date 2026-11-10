@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(like(LikeCase::Match, true, Some('\\\\')))"
+---
+PostgreSQL: "title" NOT LIKE $1 ESCAPE E'\\'
+  values: [String("50\\%%")]
+MySQL: `title` NOT LIKE BINARY ? ESCAPE '\\'
+  values: [String("50\\%%")]
+SQLite: error: a case-sensitive LIKE with an ESCAPE character is not supported on SQLite

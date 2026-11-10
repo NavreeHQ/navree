@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: out
+---
+PostgreSQL: TRUNCATE TABLE "deals" RESTART IDENTITY
+MySQL: TRUNCATE TABLE `deals`
+SQLite: DELETE FROM "sqlite_sequence" WHERE "name" = ? -- [String("deals")]
+SQLite: DELETE FROM "deals"
+cascade: TRUNCATE TABLE "audit"."events" RESTART IDENTITY CASCADE

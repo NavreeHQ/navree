@@ -1,0 +1,61 @@
+[package]
+name = "navree-observe"
+description = "Navree ObserveModule: health checks, readiness aggregation and Prometheus metrics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "health", "metrics", "prometheus"]
+categories = ["development-tools::debugging", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["otel"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## OTLP export of spans (gRPC and HTTP/protobuf) through the OpenTelemetry SDK.
+otel = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:rustls",
+]
+
+[dependencies]
+chrono = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
+metrics = { workspace = true }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+metrics-exporter-prometheus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+subtle = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+navree-http-client = { workspace = true }
+opentelemetry-proto = { workspace = true }
+prost = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true }
+tracing-subscriber = { workspace = true }

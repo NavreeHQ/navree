@@ -1,0 +1,214 @@
+# AGENTS.md
+
+Instructions for coding agents working on {{ title }}, a Navree app: a Rust
+backend built from modules wired by dependency injection. Read this file
+before changing code.
+
+## Layout
+
+```text
+config/app.toml        settings shared by every environment (committed)
+.env                   this machine's secrets, such as APP_KEY (never committed)
+{% if dock %}
+dock.toml              the local services (the database) `navree dock up` runs
+{% endif %}
+src/main.rs            runs the app: `serve` by default, or any other command
+src/app.rs             the root module: every module, configured once
+src/abilities.rs       who may do what: permissions and ability rules
+{% if ui_navree %}
+src/ui/                the screens' shell and `Desk` extractor (shell.rs), who is signed
+                       in (auth.rs), the live topic (live.rs) and formats (rupees,
+                       phone numbers, days)
+src/modules/customers/ the example feature drawn with Navree UI: table.rs,
+                       form.rs, pages.rs, home.rs, seed.rs
+{% endif %}
+src/modules/<name>/    feature modules: mod.rs, controller.rs, service.rs,
+                       entity.rs, dto.rs, migrations/, tests/
+tests/                 tests that boot the whole app
+{% if ui_navree %}
+tests/journey.rs       a visitor's whole way through the screens, over HTTP
+{% endif %}
+{% if database == "sqlite" %}
+storage/               runtime data: the SQLite database, logs, uploads
+{% else %}
+storage/               runtime data: logs, uploads
+{% endif %}
+{% if ui_next %}
+web/                   the Next.js front end; its server holds the API tokens
+{% endif %}
+```
+
+## Commands
+
+```sh
+{% if dock %}
+navree dock up                              # start the database (see dock.toml) first
+{% endif %}
+navree dev                                  # serve on http://127.0.0.1:8080, rebuild on save
+cargo test                                  # every test; each gets its own SQLite database
+cargo clippy --all-targets -- -D warnings   # must pass
+cargo fmt                                   # must leave nothing to change
+navree check                                # validate the module graph without booting
+navree routes                               # every route with its access rule
+navree migrate                              # run pending migrations
+navree list                                 # every command of the app
+```
+
+`navree <command>` runs `cargo run --quiet -- <command>` here. The API
+reference is served at http://127.0.0.1:8080/api/docs while `navree dev`
+runs.
+
+## Generate code, then fill it in
+
+Use the generators instead of writing files by hand: they follow the
+conventions below and register what they create at the marker comments
+`// navree:modules` (src/app.rs), `// navree:wire` (a module's `wire`) and
+`// navree:policies` (src/abilities.rs). Keep those markers. Names are
+snake_case; module names are plural. Generators never overwrite a file.
+
+| To add | Run |
+|---|---|
+| A feature module with a CRUD JSON API, entity, migration and tests | `navree make:module posts --crud` |
+| A controller in a module | `navree make:controller posts admin` |
+| A service | `navree make:service posts pricing` |
+| An entity, then its table | `navree make:entity posts tag`, then `navree make:migration posts create_tags_table` |
+| An ORM model with its migration, factory, seeder, JSON controller and policy | `navree make:model posts Comment --all` (or any of `--migration --factory --seeder --controller --policy`); a many-to-many table: `navree make:model posts post_tag --pivot --all` |
+| A model factory, a seeder | `navree make:factory posts pinned_comment --model comment`, `navree make:seeder posts demo_posts` |
+| A migration | `navree make:migration posts add_slug_to_posts` |
+| A queued job | `navree make:job posts publish_post` |
+| An event and a listener | `navree make:event posts post_published`, then `navree make:listener posts notify_followers --event post_published` |
+| A mail (HTML and text templates) | `navree make:mail posts welcome` |
+| A notification | `navree make:notification posts post_liked` |
+| Ability rules | `navree make:policy posts moderation` |
+| A console command | `navree make:command posts publish_scheduled` |
+| A test | `navree make:test posts publishing` |
+
+## Conventions
+
+- **Deny by default.** Every route declares who may call it with
+  `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or
+  `#[can(Action, Subject)]` (`from = "id"` checks the record in the path).
+  A route without one does not compile. Never make a route `#[public]` to
+  get past a 401 or a 403: grant the permission or add an ability rule in
+  `src/abilities.rs`.
+- **Modules.** Services are `#[injectable]` structs whose `Arc<T>` fields
+  are injected. A module lists them in `#[module(imports = [..],
+  providers = [..], controllers = [..], exports = [..], register =
+  Self::wire)]`; migrations, jobs, listeners, commands and templates are
+  registered in `wire`. A module only sees its own providers, the exports of
+  modules it imports, and global modules.
+- **Input.** Request bodies are DTOs deriving `Deserialize` and
+  `navree::validation::Validate`; every field has a `#[validate(..)]` rule or
+  `#[validate(skip)]`. Handlers take `Valid(Json(input)): Valid<Json<T>>`
+  (or `Valid<Query<T>>`), so invalid input never reaches them.
+- **Errors.** Handlers return `Result<T>` (`navree::Result`, error type
+  `AppError`): `AppError::not_found()`, `AppError::forbidden()`,
+  `AppError::bad_request("..")`, `AppError::conflict("..")`. Any other
+  error with `?` is a logged 500. Every error response has one JSON shape:
+
+  ```json
+  { "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
+  ```
+
+  `code` is the stable machine-readable code a front end maps to a
+  translation key; give a refusal its own with
+  `AppError::conflict("..").with_code("invoice_already_sent")`. Validation
+  errors are 400s (`"code": "validation_failed"`) whose `message` lists
+  every problem, plus `"errors": { "field": ["field should not be empty"] }`.
+- **Database.** Tables are ORM models: `#[derive(Model)]` structs
+  (`#[model(table = "posts", timestamps)]`) whose `id` is a UUID v7 the ORM
+  generates, with `created_at` and `updated_at` it fills in. Services take
+  the request's `&Uow` as a parameter; read with `Post::query()` and write
+  with `Post::create(uow, Post { .. })`, `record.save(uow)` and
+  `record.delete(uow)` (they record the changes for the audit log).
+  Anything else, such as a hand-written statement, runs on the `&Uow` as an
+  `Executor`. The unit of work commits when the response status is below
+  400 and rolls back otherwise. Lists take `PageQuery`, return `Page<T>`
+  (`{ "data", "meta" }`) and filter with `Accessible<Post, Read>`
+  (`scope.query().paginate(uow, page)`). `navree check` requires every
+  model to be classified: `m.global_entity::<Post>()` in its module's
+  `wire` for one set of rows shared by every workspace (what the generators
+  write), or `#[model(workspace)]` with a `workspace_id` column for rows
+  that belong to one workspace.
+- **Migrations** belong to their module's `MigrationSet`; never edit one
+  that has run anywhere, add a new one.
+{% if ui_navree %}
+- **Screens.** Pages are drawn on the server with `navree::ui`; there is no
+  front-end project. A page is a handler that takes `Desk` (the shell, the
+  signed-in account and the workspace) and returns an
+  `AppPage` (see `src/modules/customers/pages.rs`); its route is a `RouteDef`
+  marked `.authenticated()` and `.page()`, so a guest is sent to `/sign-in`
+  and back. A form is a struct deriving `Validate` and `Form`, drawn by
+  `FormView` and read by `Submit<T>`; a table is a struct deriving `TableRow`,
+  drawn by `DataTable` (see `form.rs` and `table.rs`). Lists use the one list
+  query: `search`, `filter[col][op]`, `sort`, `page` and `per_page`. Money is
+  stored in paise and shown with `ui::format::rupees` (`₹1,00,000`).
+- **Signing in.** `AuthPages` (registered in `src/app.rs`) draws the sign-in,
+  two-factor, forgotten password and reset pages and answers `POST /sign-out`
+  on the session cookie, with the throttle, two-factor authentication and the
+  audit trail of `AuthModule`. Pages use `CurrentAccount` (or `Desk`) and
+  never touch the cookie, the session or the password hasher.
+- **Workspaces.** Customers belong to a workspace. A browser is in the
+  workspace it last switched to (the switcher beside every page heading posts
+  to `/workspace/switch`); read and write customers with
+  `WorkspaceRepo::<Customer>` and the workspace id of the `Desk`.
+- **Live updates.** After a change to data a screen shows, nudge the topic with
+  `Live::nudge` once the unit of work commits (`uow.after_commit`), as
+  `CustomerService` does; tables and figures that follow the stream
+  (`stream().on(TOPIC)`) fetch themselves again. Only the members of the
+  workspace the topic names hear it.
+- **Demo data.** `src/modules/customers/seed.rs` (two demo workspaces) and the
+  demo account in `auth.rs` are made at boot outside production. Do not rely on them in
+  anything that runs in production.
+{% endif %}
+{% if database == "timescaledb" %}
+- **TimescaleDB.** The database is TimescaleDB (PostgreSQL with
+  time-series hypertables), started by `navree dock up`; tests run on
+  SQLite, where the same migrations give regular tables. Make a table a
+  hypertable when it is append-mostly, keyed by time and large (events,
+  logs, metrics, history): `schema.create_hypertable("events",
+  "occurred_at", |t| ..)` with a `uuid_primary()` key (UUID v7, so ids sort
+  by time). Keep records that are updated in place or referenced by
+  foreign keys (users, orders, settings) regular tables.
+{% elif database == "postgres" %}
+- **PostgreSQL** runs locally with `navree dock up`; tests run on SQLite,
+  with the same migrations.
+{% endif %}
+{% if database == "mysql" %}
+- **Drivers.** The app compiles only the `mysql` feature of `navree`;
+  `[dev-dependencies]` turns `sqlite` on for the tests, so a release build
+  compiles no SQLite.
+{% elif database != "sqlite" %}
+- **Drivers.** The app compiles only the `postgres` feature of `navree`;
+  `[dev-dependencies]` turns `sqlite` on for the tests, so a release build
+  compiles no SQLite.
+{% endif %}
+- **Configuration.** `config/app.toml` holds shared settings; `.env` (this
+  machine's settings and secrets) overrides it, and `APP_*` environment
+  variables override both (`APP_DATABASE__URL` sets `database.url`). Set a
+  key in one place. Never commit `.env` or put secrets in config/app.toml.
+- **Tests.** Every change comes with tests. Module tests boot the module
+  with `navree::testing::TestApp::builder().temp_database()`; call routes
+  with `app.client()` (a guest) or `app.acting_as(principal(user_id))`,
+  and assert with `assert_status`, `assert_json_path`, `assert_error` and
+  `assert_validation_error`.
+
+## Before you finish
+
+Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and
+`cargo test`, and fix everything they report.
+
+## Documentation and skills
+
+- Docs: https://navree.com/docs/ (for models: https://navree.com/llms.txt,
+  and every page as Markdown at `https://navree.com/docs/<section>/<page>.md`).
+- Agent skills, one per common task (modules, routing, validation, the
+  database, auth, access control, queues, tests and more):
+  `navree skills:install` copies the skills of this Navree version into
+  `.claude/skills/` and `.agents/skills/` (or use
+  `npx skills add NavreeHQ/navree`). Start with the `navree` skill.
+- Navigator (`navree mcp`, an MCP server over stdio) shows the running
+  app: routes, the module graph and providers, the database schema,
+  read-only SQL, the log file and the last error, the configuration, and
+  the docs of this Navree version. Check routes, providers and the schema
+  with it before changing them.

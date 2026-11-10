@@ -1,0 +1,35 @@
+error: #[timeout] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard], #[throttle], #[page], #[json_only], #[not_while_impersonating] and #[recent_auth] apply to every route
+ --> tests/ui/controller/misplaced_attributes.rs:8:1
+  |
+8 | #[timeout("5s")]
+  | ^^^^^^^^^^^^^^^^
+
+error: #[get] goes on a method of the impl block, not on the impl block
+ --> tests/ui/controller/misplaced_attributes.rs:9:1
+  |
+9 | #[get("/")]
+  | ^^^^^^^^^^^
+
+error: a method is one route: `index` already has #[get]
+  --> tests/ui/controller/misplaced_attributes.rs:12:5
+   |
+12 |     #[post("/")]
+   |     ^^^^^^^^^^^^
+
+error: duplicate #[timeout]
+  --> tests/ui/controller/misplaced_attributes.rs:19:5
+   |
+19 |     #[timeout("2s")]
+   |     ^^^^^^^^^^^^^^^^
+
+error: duplicate #[name]
+  --> tests/ui/controller/misplaced_attributes.rs:21:5
+   |
+21 |     #[name("deals.view")]
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+error: #[roles] only applies to routes: `helper` has no route attribute (#[get], #[post], #[put], #[patch] or #[delete])
+  --> tests/ui/controller/misplaced_attributes.rs:27:5
+   |
+27 |     #[roles("admin")]
+   |     ^^^^^^^^^^^^^^^^^

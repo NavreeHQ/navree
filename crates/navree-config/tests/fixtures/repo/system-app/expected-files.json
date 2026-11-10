@@ -1,0 +1,205 @@
+{
+  "ai": {
+    "default": "smart",
+    "fake": true,
+    "models": {
+      "smart": {
+        "model": "claude-opus-5-5",
+        "provider": "anthropic"
+      }
+    }
+  },
+  "api": {
+    "title": "Navree System API",
+    "undocumented": [
+      "/admin*",
+      "/_lighthouse*",
+      "/_logbook*",
+      "/_fleet*"
+    ]
+  },
+  "app": {
+    "name": "Navree System",
+    "url": "http://localhost:8080"
+  },
+  "auth": {
+    "jwt": {
+      "secret": "system-jwt-secret-at-least-32-bytes-long"
+    },
+    "registration": true,
+    "two_factor": {
+      "issuer": "Navree System"
+    }
+  },
+  "billing": {
+    "plans": {
+      "pro": {
+        "name": "Pro",
+        "prices": {
+          "monthly": "price_pro_monthly",
+          "yearly": "price_pro_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      },
+      "starter": {
+        "name": "Starter",
+        "prices": {
+          "monthly": "price_starter_monthly",
+          "yearly": "price_starter_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      }
+    },
+    "provider": "fake"
+  },
+  "cache": {
+    "store": "redis"
+  },
+  "database": {
+    "migrate_on_boot": false,
+    "url": "postgres://navree:navree@127.0.0.1:47432/system"
+  },
+  "fleet": {
+    "supervisors": {
+      "default": {
+        "balance": "auto",
+        "max_jobs": 10000,
+        "max_memory_mb": 512,
+        "max_processes": 8,
+        "min_processes": 1,
+        "queues": [
+          "default",
+          "search",
+          "mail",
+          "notifications"
+        ]
+      }
+    }
+  },
+  "helm": {
+    "title": "Navree System admin"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api",
+    "per_ip_rate_limit": 10000000
+  },
+  "i18n": {
+    "default_locale": "en",
+    "locales": [
+      "en",
+      "fr"
+    ]
+  },
+  "key": "base64:ZXZpZGVuY2UtYXBwLWtleS0zMi1ieXRlcy1sb25nISE=",
+  "log": {
+    "format": "json",
+    "level": "info"
+  },
+  "logbook": {
+    "enabled": false
+  },
+  "mail": {
+    "from": "Navree System <system@navree.test>",
+    "transport": "smtp://127.0.0.1:47025"
+  },
+  "mcp": {
+    "auth": "bearer",
+    "instructions": "Tools for the Navree system app: projects, tasks and reports in workspaces.",
+    "name": "navree-system",
+    "title": "Navree System"
+  },
+  "micro": {
+    "nats": {
+      "stream": "SYSTEM"
+    },
+    "service": "system",
+    "transport": "nats",
+    "url": "nats://127.0.0.1:47222"
+  },
+  "oauth": {
+    "consent_url": "http://localhost:47080/oauth/consent",
+    "device_url": "http://localhost:47080/oauth/device"
+  },
+  "queue": {
+    "driver": "redis",
+    "queues": [
+      "default",
+      "search",
+      "mail",
+      "notifications"
+    ],
+    "workers": 8
+  },
+  "realtime": {
+    "app_id": "system",
+    "backplane": "redis",
+    "key": "system",
+    "secret": "system-realtime-secret-32-bytes-long"
+  },
+  "redis": {
+    "url": "redis://127.0.0.1:47379"
+  },
+  "search": {
+    "engine": "meilisearch",
+    "key": "system-meili-master-key",
+    "prefix": "system_",
+    "queue": "search",
+    "sync": "queued",
+    "url": "http://127.0.0.1:47700"
+  },
+  "social": {
+    "redirect_base": "http://localhost:47080/auth/callback"
+  },
+  "storage": {
+    "default": "s3",
+    "disks": {
+      "local": {
+        "driver": "local",
+        "root": "storage/app"
+      },
+      "s3": {
+        "access_key": "navree",
+        "bucket": "system",
+        "driver": "s3",
+        "endpoint": "http://127.0.0.1:47900",
+        "region": "us-east-1",
+        "secret_key": "navree-minio-secret"
+      }
+    }
+  },
+  "workspace": {
+    "resolvers": [
+      "header"
+    ],
+    "roles": {
+      "admin": {
+        "permissions": [
+          "projects.*",
+          "tasks.*",
+          "reports.*",
+          "billing.manage"
+        ]
+      },
+      "member": {
+        "permissions": [
+          "projects.read",
+          "projects.create",
+          "projects.update",
+          "projects.delete",
+          "tasks.*",
+          "reports.*"
+        ]
+      },
+      "viewer": {
+        "permissions": [
+          "projects.read",
+          "tasks.read",
+          "reports.read"
+        ]
+      }
+    }
+  }
+}

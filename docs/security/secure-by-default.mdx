@@ -1,0 +1,47 @@
+---
+title: "Secure by default"
+description: "What a new Navree app already does for security, from denied routes to hashed passwords and redacted logs, with a link to the page that explains each."
+---
+
+Navree starts from the safe setting and asks you to loosen it, not the other way round. The table lists what is on before you write any security code. Each row links to the page that shows how it works and how to change it. How a client stays signed in, with tokens or with a session cookie, is drawn in [authentication](/docs/security/authentication/#how-it-works).
+
+| Area | On by default | Read more |
+|---|---|---|
+| Routes | A route has to say who may call it. `#[controller]` refuses to compile one that doesn't, and a guest on a protected route gets a 401. | [Protecting routes](/docs/security/authentication/#protecting-routes), [Access control](/docs/basics/access-control/) |
+| Passwords | Hashed with Argon2id at the recommended minimum cost, off the async worker threads. A password never appears in debug output or an error message. | [Hashing passwords](/docs/security/encryption-and-hashing/#hashing-passwords) |
+| Access tokens | HS256 only: an unsigned token, another algorithm or a header that points at a key is refused. A token lasts 15 minutes and carries no roles. | [Access tokens](/docs/security/authentication/#access-tokens) |
+| Refresh tokens | Used once, and stored as a SHA-256 digest. Presenting a spent one again signs the session out everywhere and is recorded in the audit log. | [Refresh tokens](/docs/security/authentication/#refresh-tokens), [Reuse detection](/docs/security/authentication/#reuse-detection) |
+| Password guessing | After 5 failed sign-ins for one email from one client, further attempts get a 429 for the rest of the minute. | [The login throttle](/docs/basics/rate-limiting/#the-login-throttle) |
+| Sessions | The cookie holds only an encrypted session id. It is `HttpOnly`, `Secure` and `SameSite=Lax`, and a sign-in gives the session a new id. | [How the cookie works](/docs/basics/sessions-and-csrf/#how-the-cookie-works) |
+| CSRF | A state-changing request that carries the session cookie must send the session's CSRF token, or it gets a 403 before any handler runs. | [CSRF protection](/docs/basics/sessions-and-csrf/#csrf-protection) |
+| CORS | Off until you list exact origins. A `*` fails the boot. | [CORS](/docs/basics/cors-and-security-headers/#cors) |
+| Response headers | Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` and a content security policy. | [Security headers](/docs/basics/cors-and-security-headers/#security-headers) |
+| Pages | A [Navree UI](/docs/ui/overview/) page allows scripts, styles, fonts and requests from its own origin only, with no inline script or style and no framing. | [Navree UI overview](/docs/ui/overview/) |
+| Templates | An `.html` template escapes what it prints, and printing a variable the context doesn't define is an error. | [Escaping](/docs/digging-deeper/views/#escaping) |
+| Size and rate | A request body may be 2 MiB, and one client address may send 600 requests a minute. Past either, the answer is a 413 or a 429. | [Body limits](/docs/basics/requests/#body-limits), [The per-IP limit](/docs/basics/rate-limiting/#the-per-ip-limit) |
+| Outgoing requests | The HTTP client refuses internal addresses unless you allow the host. | [The SSRF policy](/docs/digging-deeper/http-client/#the-ssrf-policy) |
+| Queries | Values are always bound, never written into the SQL. | [The query builder](/docs/orm/query-builder/) |
+| Secrets | Encrypted values use AES-256-GCM with the application key, and a rotated key still decrypts old values. Two-factor secrets are stored encrypted. | [Encrypting values](/docs/security/encryption-and-hashing/#encrypting-values), [Rotating keys](/docs/security/encryption-and-hashing/#rotating-keys), [Two-factor authentication](/docs/security/account-flows/#two-factor-authentication) |
+| Logs | Fields named like `password`, `token`, `authorization`, `cookie` or `secret` are written as `[redacted]`. | [Redaction](/docs/basics/logging/#redaction) |
+| Record of events | Once `AuditModule` is in the app, sign-ins, failures, permission changes and denials are recorded without code of yours. | [The audit log](/docs/security/audit-log/) |
+
+## What you still decide
+
+Some protections need a choice from you, so they are off until you make it:
+
+- **Two-factor authentication** is available to every user. To make it a rule for some roles, [name them in `auth.two_factor.required_for`](/docs/security/account-flows/#requiring-two-factor-authentication).
+- **Route throttles** apply only to routes that declare `#[throttle]`. The per-IP limit covers the rest, and its counters are kept per process unless you [share them with Redis](/docs/basics/rate-limiting/#shared-limits-with-redis).
+- **CORS origins** are yours to list, one exact origin for each front end.
+- **Old refresh tokens** are kept. Spent, revoked and expired rows are never deleted, so prune them yourself on a [schedule](/docs/digging-deeper/scheduling/).
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Access tokens, rotating refresh tokens and browser sign-in.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles, permissions and abilities that decide who may do what.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    Who did what, and when.
+  </LinkCard>
+</LinkCards>

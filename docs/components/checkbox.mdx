@@ -1,0 +1,61 @@
+---
+title: "Checkbox"
+description: "A checkbox that posts `true` when checked, with its label around it: a yes or no sent with a form."
+---
+
+<UiPreview example="checkbox/default" />
+
+`Checkbox` draws an `<input type="checkbox">` that posts `name=true` when it is checked. With `.label(text)`, a `<label>` wraps it, so clicking the text checks it.
+
+```rust
+use navree::ui::*;
+
+Checkbox::new("terms").label("Accept the terms").required()
+```
+
+## When to use it
+
+Use a checkbox for a yes or no that is sent with a form, such as accepting terms, or for picking any number from a list.
+
+<UiChoose name="on-off" current="Checkbox" />
+
+## Anatomy
+
+<UiAnatomy component="checkbox" />
+
+## States
+
+<UiPreview example="checkbox/states" />
+
+## A line under the label, and some chosen
+
+`.description(text)` adds a line under the label that says more and ties it to the box, so a screen reader reads it after the label. Its id is made from the box's id, or its name when it has no id, so give boxes that share a name an `.id(..)` of their own.
+
+`.indeterminate(true)` draws a box that stands for a group as neither checked nor unchecked: some of what it stands for is chosen. A script makes it so, and a click makes it checked. Without a script it is drawn unchecked, and it posts nothing until it is checked.
+
+```rust
+Checkbox::new("all_deals")
+    .label("Every deal")
+    .description("Includes archived deals.")
+    .indeterminate(true)
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the checkbox. |
+| `Space` | Checks or unchecks it. |
+
+- The label wraps the input, so its text is the checkbox's name and a click on it toggles the box.
+- A checkbox that isn't checked posts nothing: read a missing field as `false`.
+
+</UiA11y>
+
+## API
+
+### Checkbox
+
+<UiProps type="Checkbox" />

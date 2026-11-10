@@ -1,0 +1,329 @@
+---
+title: "Logbook"
+description: "A local debugging timeline of every request, query, job, mail, event, cache call and log line, with filters by tag and user, and request replay."
+---
+
+## Introduction
+
+<Badge feature="logbook" /> Logbook shows you what your app did. While you develop, it records every request with everything that happened during it: the queries it ran, the events it emitted, the mail it sent, the cache calls it made, the data it changed and the log lines it wrote. It shows them as one timeline at `/_logbook`, served by your app. Filter it by type, tag or user, open a request beside the list to see its queries in order, and replay it after you change the code.
+
+Logbook is for development. It records full request and response bodies, which is what you want on your machine and never on a server. In a release build it is off: it records nothing and serves nothing, unless you [turn it on deliberately](#release-builds).
+
+<ToolMock name="logbook" />
+
+## Quick start
+
+<Steps>
+<Step title="Check the module is in the app">
+
+An app made with `navree new` already has `LogbookModule`. In another app, add `LogbookModule::from_config()` to `src/app.rs`. See [Installation](#installation).
+
+</Step>
+<Step title="Start the app">
+
+```sh
+navree dev
+```
+
+</Step>
+<Step title="Open the timeline">
+
+Use the app, then open `http://127.0.0.1:8080/_logbook`. Choose a request to see its queries, events, mail and log lines beside the list. Logbook answers requests from your own machine only. See [The timeline](#the-timeline).
+
+</Step>
+</Steps>
+
+## Installation
+
+The `logbook` feature of the `navree` facade brings the crate `navree-logbook`. It is part of `full`, the default, and an app made with `navree new` already includes the module. To add it to an existing app:
+
+```rust title="src/app.rs" {7}
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(LoggerModule::from_config())
+        .module(HttpModule::from_config())
+        // ... your other modules
+        .module(LogbookModule::from_config())
+}
+```
+
+`LogbookModule` is global and needs nothing but `HttpModule`. It records what the modules in your app do, so a module you leave out (say, `MailModule`) has nothing to show. It keeps its entries in a SQLite file of its own, `storage/logbook.db`, never in your app's database. That file store is part of the [`sqlite` feature](/docs/database/sqlite/) of the `navree` facade, which compiles the bundled SQLite library: an app on SQLite has it (`navree new --database sqlite` writes it), and an app on PostgreSQL or MySQL adds it next to its driver to get the file, as in `features = ["postgres", "sqlite"]`. Without the feature Logbook keeps its entries in memory, and `logbook.store = "file"` stops the boot with a message naming the feature.
+
+Start the app and open the timeline:
+
+```sh
+navree dev
+```
+
+```text wrap
+2026-10-26T09:02:11.204118Z  INFO navree::logbook: recording to storage/logbook.db, open http://127.0.0.1:8080/_logbook
+2026-10-26T09:02:11.219502Z  INFO navree::http: listening on http://127.0.0.1:8080 addr=127.0.0.1:8080
+```
+
+The first line reads `recording to memory` when Logbook keeps its entries in memory. Entries in the file are stored on disk, so they survive the restarts `navree dev` makes when you change the code: the request that failed before your fix is still there after it. Entries in memory are gone with each restart.
+
+## The timeline
+
+The pages are drawn with [Navree UI](/docs/ui/overview/) and served by your app. The page is a shell with the entry types down the side, the list in a pane, and the open entry in the pane beside it.
+
+- **The entry types.** The sidebar lists every type (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps, AI calls, broadcasts, storage, webhooks, searches, sign-ins, UI operations), each with how many entries of it there are, and **All** for the default list. A type keeps the text of the search box. The sidebar collapses to its icons.
+- **The list.** Entries, newest first, arriving live. Requests, jobs and scheduled tasks are **batches**: one row each, with the method and path or the job type, the status or outcome, the duration, and small counters for the queries, events, jobs, mail, cache calls, log lines, exceptions and outgoing calls inside. Failed batches are marked in amber, and so are batches with slow or [duplicate queries](#duplicate-queries). The search box in the top bar takes [filter terms](#filtering).
+- **The entry.** Opening a row shows its summary first: the method, path, route template, status, duration, request id, client address, user, workspace and trace. Below, one card each for the request (headers, query string, body), the response, the queries, the events, the jobs, the mail, the cache calls, the log lines, the exceptions, the outgoing calls, the data changes, the dumps, the AI calls, broadcasts, file operations, webhook attempts, searches, sign-ins and UI operations, the **timeline** (a waterfall of everything the request did, in order, drawn against the request's duration) and [Replay](#replaying-requests). A row of links above the cards jumps to each, with how many it holds.
+
+On a wide screen the entry opens beside the list and the list stays where it is. On a phone one of them has the page at a time: the list, and an entry when you open one, with the breadcrumb and the back button to return. Every entry has an address of its own, `/_logbook/entries/<id>`, which carries the type and the search text of the list it was opened from, so a link, a new tab and the back button all show what you saw. The page is dark whatever the system asks for, like the app's other tools.
+
+A queued job continues the trace of the request that dispatched it. A job's detail links back to that request (**Dispatched by**), and a request's Jobs card lists the job attempts in its trace, so you can follow work from the click to the worker and back.
+
+## What Logbook records
+
+Each kind of entry comes from a **watcher**. Every watcher is on by default; turn one off with `logbook.watchers.<name> = false`. Logbook builds on the app's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events) and on the data changes that models record in a unit of work.
+
+| Watcher | Records | Detail |
+|---|---|---|
+| `requests` | Every HTTP request | Method, path, route, status, duration, user, workspace, headers, query string, request and response bodies |
+| `queries` | Every SQL statement | The SQL with its placeholders (the database module reports no bound values), the duration, the connection, and where it ran (the request, job or scheduled task) |
+| `jobs` | Every job attempt | Type, queue, job id, attempt, outcome (`processed`, `released` for another attempt, or `failed`), error, duration |
+| `mail` | Every message the `Mailer` hands to its transport | Sender, recipients, subject, the rendered HTML and text bodies, the transport |
+| `events` | Every event emitted or published | Name, payload, the listeners that ran, the ones queued and the ones that failed |
+| `cache` | Every cache call | Operation (`hit`, `miss`, `write`, `forget`), key, store |
+| `logs` | Log lines at `logbook.log_level` (`debug`) or above | Level, target, message, fields |
+| `exceptions` | 5xx responses, panics and errors you report with `Telemetry::report_exception` | The error and its source chain, the location of a panic |
+| `http_client` | Calls through `HttpClient` | Method, URL, status, duration, attempts, error |
+| `notifications` | Every notification, one entry per channel | Type, notifiable, channel, notification id |
+| `models` | Every insert, update and delete a model makes in a unit of work | Table, id, the changed columns with old and new values |
+| `schedule` | Every scheduled task that runs | Task, the minute it was due, error, duration |
+| `ai` | Every call to a model provider | Provider, model, operation, input, output and cached tokens, cost when the app prices its models, duration, error; never the prompt or the answer |
+| `broadcasts` | Every event pushed to real-time channels | Channels, event name, how many subscribers it reached, duration; never the data |
+| `storage` | Every read, write, delete and listing on a storage disk | Disk, driver, operation, path, bytes, duration, error; never the contents |
+| `webhooks` | Every attempt to deliver a webhook | Endpoint, event, attempt, the status it answered, duration, error; never the payload |
+| `search` | Every search | Engine, index, mode, the length of the term (never the term), hits, duration, error |
+| `sign_ins` | Every sign-in attempt, and every refusal | Method, provider, outcome, the reason code, and the user when it worked; never the email address or a secret |
+| `ui` | Every operation Navree UI's runtime asks of the server | Route, kind (form post, action, region, fragment), how many ops the answer held, status, duration; never the values |
+
+A job's error is part of its entry; the `exceptions` watcher records errors of requests and your own reports.
+
+The last seven watchers show what the platform modules report: see [Telemetry](/docs/digging-deeper/telemetry/) for each event and what it leaves out. They are entries in the request, job or task that made them, counted on its row (`ai`, `bcast`, `file`, `hook`, `srch`, `auth`, `ui`) and listed in a card of their own when it is open.
+
+Log lines reach Logbook after the [log filter](/docs/basics/logging/): Logbook keeps the lines that pass `log.level` and are at `logbook.log_level` or above. To see `debug` lines in Logbook, set `log.level` (or the target in `log.levels`) to `debug` as well.
+
+Logbook leaves its own routes out, and the paths in `logbook.ignore.routes` (`/health/*` and `/metrics` by default): nothing those requests do is recorded.
+
+It also leaves out what the framework does by itself, which nobody is using the app to cause: the requests for the toolkit's own files (`/_navree/ui/*`) and, outside any request, job or scheduled task, the poll of the transactional outbox with the `BEGIN`, `COMMIT` and actor statements around it, and any other statement on a table of the framework's own (`micro_outbox`, `micro_inbox`, `navree_migrations`). Without this an idle app records four queries a second. Set `logbook.ignore.framework = false` to see all of it. A statement your own code runs outside a request, such as a background task's, is recorded.
+
+## Filtering
+
+The search box takes free text, which matches paths, routes, SQL, job types, event names, mail subjects and recipients, log messages and targets, and these terms:
+
+| Term | Shows |
+|---|---|
+| `user:0192f0c1-…` | Entries of one user (a prefix of the id is enough) |
+| `tag:deal:0199c1d2` | Entries whose batch has a tag starting with this |
+| `status:500`, `status:4xx` | Requests by status or status class |
+| `route:/api/v1/deals/{id}` | Requests to one route |
+| `type:query` | One kind of entry, like the buttons: `request`, `query`, `job`, `mail`, `event`, `cache`, `log`, `exception`, `http_client`, `notification`, `model`, `schedule`, `dump`, `ai`, `broadcast`, `storage`, `webhook`, `search`, `sign_in`, `ui` (plurals work too; several `type:` terms show any of them) |
+| `slow` | Slow queries, and the batches that ran one |
+| `failed` | Failed requests (5xx), jobs, queries, outgoing calls, scheduled tasks, and AI calls, file operations, webhook attempts, searches and sign-ins that did not work |
+| `duration>200`, `duration<5` | Entries that took longer (or shorter) than this many milliseconds |
+| `batch:01a17749…` | Everything inside one batch, by request id or job id (a prefix is enough) |
+| `trace:4bf92f35…` | Everything in one trace: a request and the jobs it queued |
+| `"two words"` | Free text with spaces |
+
+Terms combine: `user:0192f0c1 status:4xx route:/api/v1/deals/{id}` shows one user's failed calls to one route. Without a `type:`, `batch:` or `trace:` term the list shows batches and entries outside any batch. Clicking a user, a tag, a route or a status anywhere in the detail view filters by it.
+
+### Tags
+
+Logbook tags entries for you:
+
+- every batch with `user:<id>` and, with [workspaces](/docs/workspaces/introduction/), `workspace:<id>`;
+- requests with `route:<template>` and `status:<code>`, and replays with `replay`;
+- jobs with `job:<type>` and `queue:<name>`, scheduled runs with `schedule:<task>`;
+- data changes with the entity in the singular and its id, such as `deal:0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23`, on the batch that made the change, so `tag:deal:0199c1d2` finds every request and job that touched that deal.
+
+Add your own to the current batch through the `Logbook` service:
+
+```rust title="src/modules/contacts/import.rs"
+use navree::logbook::Logbook;
+use navree::prelude::*;
+
+#[injectable]
+pub struct ContactImport {
+    logbook: Arc<Logbook>,
+}
+
+impl ContactImport {
+    pub async fn run(&self, file: &ImportFile) -> Result<ImportReport, BoxError> {
+        self.logbook.tag(format!("import:{}", file.id));
+        let rows = parse_rows(file)?;
+        self.logbook.dump("parsed rows", &rows[..rows.len().min(5)]);
+        // ...
+    }
+}
+```
+
+`tag` labels the running request, job or scheduled task. `dump(label, &value)` records any `Serialize` value as an entry of its own, in its place on the batch's timeline: the quickest way to see what a variable held without a `println!` in your terminal. Both do nothing outside a batch (a `dump` there is an entry on its own) and nothing at all when Logbook is off, so they can stay in your code.
+
+## Duplicate queries
+
+When the same statement runs `logbook.duplicate_queries` times (5) or more in one batch, Logbook marks the batch and the queries. Statements are compared as SQL with placeholders, so loading twenty companies by id is one statement run twenty times. That is usually a loop loading related records one at a time:
+
+```text title="GET /api/v1/deals · Queries"
+Repeated statements
+SELECT ... FROM companies WHERE id = ?                  × 20    41.9 ms
+
+Every statement
+SELECT ... FROM deals ORDER BY created_at DESC LIMIT ?          4.1 ms
+SELECT ... FROM companies WHERE id = ?        repeated          2.3 ms
+...
+SELECT COUNT(*) FROM deals                                      1.2 ms
+```
+
+The Queries card lists the repeated statements first, with how many times each ran and their total time, then every statement in order. Fix the loop with one `IN` query or a join. Queries slower than `logbook.slow_query_ms` (100 ms) are marked too, and so is the batch that ran them.
+
+## Replaying requests
+
+A request's entry has a **Replay** card, which the **Replay** button above it jumps to. It opens the recorded request in an editor: the method, the path and query string, the headers and the body, all prefilled and all editable. Send it and Logbook runs it through your app's router again, in-process, and records the result as a new batch tagged `replay` whose request links to the original. Fix the bug, wait for `navree dev` to restart, and replay the request that failed without going back to your front end.
+
+- **As the same user.** When the app includes `AuthModule`, Replay sends the request as the user who made it: Logbook signs a fresh access token for them, valid for five minutes. Recorded `Authorization` headers are never stored, so a replay never reuses one. Untick the **As …** box, which names the user's id, to send it as a guest.
+- **Unsafe methods ask first.** A `POST`, `PUT`, `PATCH` or `DELETE` replays only after you confirm: it changes data again, and creates a second deal if the first request created one.
+- **Copy as curl.** The request as a `curl` command against `http.addr`, without credentials.
+
+Mail has **Open HTML**, which shows the rendered message in a new tab, sandboxed and without scripts: with the `log` mail transport you read every message your app sends without a mail catcher.
+
+Turn replay off with `logbook.replay = false`.
+
+From code, `Logbook::replay(id, ReplayRequest { .. })` does the same and returns the status, headers and body (`ReplayRequest::default()` replays as recorded; set `confirm: true` for unsafe methods, `as_guest: true` to drop the user), and `Logbook::curl(id)` gives the command.
+
+### The API
+
+The page reads a JSON API under the same path, with the same access rules:
+
+| Route | Does |
+|---|---|
+| `GET /_logbook/api/entries?q=&type=&before=&after=&limit=` | Entries matching a filter, newest first: `{ "data": [...], "next": <seq> }` |
+| `GET /_logbook/api/entries/{id}` | One entry |
+| `GET /_logbook/api/batches/{id}` | A batch: its entries in order and its `duplicate_queries` |
+| `POST /_logbook/api/requests/{id}/replay` | Replays a request (the body is a `ReplayRequest`); 409 for an unconfirmed unsafe method |
+| `GET /_logbook/api/requests/{id}/curl` | The request as a `curl` command |
+| `DELETE /_logbook/api/entries` | Deletes every entry |
+
+## Storage and pruning
+
+| Store | Where | Use it for |
+|---|---|---|
+| `file` (default with the `sqlite` feature) | A SQLite file, `logbook.file` (`storage/logbook.db`) | Everyday development: entries survive restarts. Needs the `sqlite` feature. |
+| `memory` (default without it) | The process's memory | Tests, builds without SQLite, and machines where you'd rather not write the file. |
+
+Logbook keeps the newest `logbook.max_entries` entries (10,000) and nothing older than `logbook.keep_hours` (24), pruning at boot and every five minutes while the app runs. Batches are pruned whole, never half. To start over:
+
+```sh
+navree logbook:clear
+```
+
+Bodies longer than `logbook.capture.max_body_kb` (64 KiB) are cut, with the original size shown. Binary bodies are stored as their size and content type only, and streamed bodies (server-sent events, bodies of unknown or very large size) are passed through untouched.
+
+## Security
+
+Logbook shows everything, so it is built to stay on your machine.
+
+- **Off in release builds.** In a binary built with `--release`, `logbook.enabled` defaults to `false`: no routes, no watchers, nothing written. See [release builds](#release-builds) for the one exception.
+- **Local requests only.** The UI and its API answer requests from loopback addresses (`127.0.0.1`, `::1`) and nothing else, whatever `http.addr` is. Another machine on your network gets a 404. To open it to others, for a shared staging server for example, set `logbook.allow_remote = true`: then every request needs a signed-in user with the permission `logbook.view`, checked by the app's route authorizer ([`AccessModule`](/docs/security/authorization/)). Without one, the app fails to boot.
+- **Secrets are masked.** `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers are never stored, and values whose names contain a fragment of `log.redact` (`password`, `token`, `secret` and the rest) are stored as `[redacted]`, in headers, query strings, JSON bodies and form bodies. Point Logbook at development data, not at a copy of production.
+
+### Release builds
+
+To use Logbook on a staging server built with `--release`, set `logbook.enabled = true`, and `logbook.allow_remote = true` with a route authorizer to reach it from another machine. The app then logs a warning at every boot, `Logbook is recording in a release build`, so it can't stay on by accident. In production, use [Lighthouse](/docs/tools/lighthouse/): it samples, masks bodies by default and is built to run there.
+
+You can also leave the module out of release builds entirely:
+
+```rust title="src/app.rs"
+let mut app = Navree::app()
+    .module(ConfigModule::for_root(sources))
+    // ...
+    .module(DealsModule);
+if cfg!(debug_assertions) {
+    app = app.module(LogbookModule::from_config());
+}
+app
+```
+
+## Using Logbook in tests
+
+Logbook can tell a test what a request did, which makes "this page runs three queries" something you can assert. `TestApp` turns Logbook off; turn it back on with the memory store and read the last batch:
+
+```rust title="tests/deals_board.rs"
+use navree::logbook::Logbook;
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn the_board_loads_in_three_queries() {
+    let app = TestApp::builder()
+        .temp_database()
+        .config("logbook.enabled", true)
+        .config("logbook.store", "memory")
+        .module(DatabaseModule::from_config())
+        .module(LogbookModule::from_config())
+        .module(DealsModule)
+        .build()
+        .await;
+    seed_board(&app, 20).await;
+
+    app.acting_as(principal(rep_id()))
+        .get("/api/v1/deals/board")
+        .send()
+        .await
+        .assert_status(200);
+
+    let batch = app.get::<Logbook>().await.last_request().await.unwrap();
+    assert!(batch.queries().len() <= 3, "{:#?}", batch.queries());
+    assert!(batch.duplicate_queries().is_empty());
+    app.shutdown().await.unwrap();
+}
+```
+
+On PostgreSQL and MySQL, a unit of work also runs a statement of its own that makes `navree.actor` and `navree.request_id` readable in SQL (`database.transaction_settings`, on by default). Logbook lists it like any other query, so a test on those databases that counts queries leaves it out or sets `database.transaction_settings` to `false`.
+
+A `Batch` has `queries()`, `duplicate_queries()`, `events()`, `jobs()`, `mail()`, `cache_calls()`, `logs()`, `exceptions()`, `http_calls()`, `notifications()`, `models()`, `dumps()`, `ai_calls()`, `broadcasts()`, `storage_ops()`, `webhooks()`, `searches()`, `sign_ins()`, `ui_operations()`, `tags()`, its own entry as `head()` (with `request()` for a request) and `entries()` for everything, in order. `last_request()`, `last_job()`, `last_schedule()` and `batch(id)` find one; `entries(&ListQuery)` takes a [filter](#filtering); `clear()` empties the store between steps of a test. `Logbook::in_memory(options)` gives a recording Logbook outside an app.
+
+## Configuration
+
+Every key of the `logbook` section is optional. From the environment: `APP_LOGBOOK__STORE=memory`, `APP_LOGBOOK__WATCHERS__CACHE=false`, and lists as comma-separated strings (`APP_LOGBOOK__IGNORE__ROUTES=/health/*,/metrics,/up`).
+
+| Key | Default | What it does |
+|---|---|---|
+| `logbook.enabled` | `true` in debug builds, `false` in release builds | Record and serve anything at all. |
+| `logbook.path` | `/_logbook` | Where the UI is served. |
+| `logbook.store` | `file` with the `sqlite` feature, `memory` without it | `file` or `memory`. `file` in a build without the `sqlite` feature stops the boot. |
+| `logbook.file` | `storage/logbook.db` | The SQLite file of the `file` store. |
+| `logbook.max_entries` | `10000` | Entries kept. |
+| `logbook.keep_hours` | `24` | Age after which entries are pruned. |
+| `logbook.allow_remote` | `false` | Serve the UI to non-loopback clients, behind the permission `logbook.view`. |
+| `logbook.log_level` | `debug` | The lowest level of log lines recorded. |
+| `logbook.slow_query_ms` | `100` | When a query is marked slow. |
+| `logbook.duplicate_queries` | `5` | Repeats of one statement in a batch that mark it as duplicated. |
+| `logbook.capture.request_body` | `true` | Store request bodies. |
+| `logbook.capture.response_body` | `true` | Store response bodies. |
+| `logbook.capture.max_body_kb` | `64` | Bodies are cut after this size. |
+| `logbook.replay` | `true` | Allow replaying requests. |
+| `logbook.ignore.routes` | `["/health/*", "/metrics"]` | Paths never recorded (`*` matches anything). |
+| `logbook.ignore.framework` | `true` | Leave out the framework's own polling and the toolkit's files, as [above](#what-logbook-records). |
+| `logbook.watchers.<name>` | `true` | Each [watcher](#what-logbook-records): `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule`, `ai`, `broadcasts`, `storage`, `webhooks`, `search`, `sign_ins`, `ui`. |
+
+A bad value fails the boot with an error naming the key.
+
+| Command | What it does |
+|---|---|
+| `logbook:clear` | Deletes every entry (also from `logbook.file` when Logbook is off in this build). |
+
+<LinkCards>
+  <LinkCard href="/docs/tools/lighthouse/" title="Lighthouse">
+    Monitoring for production: issues, traces and alerts.
+  </LinkCard>
+  <LinkCard href="/docs/basics/logging/" title="Logging">
+    Levels, targets and redaction.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/cli/" title="The CLI">
+    `navree dev` and the commands it forwards.
+  </LinkCard>
+</LinkCards>

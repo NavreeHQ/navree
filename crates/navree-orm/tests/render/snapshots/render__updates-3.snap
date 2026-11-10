@@ -1,0 +1,8 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Update\n{\n    order_by: vec![col(\"created_at\").asc()], limit: Some(100),\n    ..Update::new(\"sessions\",\n    vec![Assignment::new(\"expired\",\n    val(true))]).filter(col(\"user_id\").eq(val(7_i64)))\n})"
+---
+PostgreSQL: error: an update with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on PostgreSQL
+MySQL: UPDATE `sessions` SET `expired` = ? WHERE `user_id` = ? ORDER BY `created_at` ASC LIMIT ?
+  values: [Bool(true), I64(7), U64(100)]
+SQLite: error: an update with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on SQLite

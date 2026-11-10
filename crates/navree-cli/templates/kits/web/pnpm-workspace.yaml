@@ -1,0 +1,4 @@
+# pnpm settings for the web app. Packages whose install scripts may run;
+# none is needed to build or test.
+allowBuilds:
+  sharp: false

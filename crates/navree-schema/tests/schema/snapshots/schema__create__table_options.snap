@@ -1,0 +1,22 @@
+---
+source: crates/navree-schema/tests/schema/create.rs
+expression: sql
+---
+-- postgres
+CREATE TABLE IF NOT EXISTS "caches" ("key" VARCHAR(255) NOT NULL, "value" TEXT NOT NULL, PRIMARY KEY ("key"));
+COMMENT ON TABLE "caches" IS 'process cache';
+CREATE TEMPORARY TABLE "scratch" ("n" INTEGER NOT NULL);
+
+-- mysql
+CREATE TABLE IF NOT EXISTS `caches` (`key` VARCHAR(255) NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY (`key`)) DEFAULT CHARACTER SET ascii COLLATE 'ascii_bin' ENGINE = MEMORY;
+ALTER TABLE `caches` COMMENT = 'process cache';
+CREATE TEMPORARY TABLE `scratch` (`n` INT NOT NULL) DEFAULT CHARACTER SET utf8mb4;
+
+-- mariadb
+CREATE TABLE IF NOT EXISTS `caches` (`key` VARCHAR(255) NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY (`key`)) DEFAULT CHARACTER SET ascii COLLATE 'ascii_bin' ENGINE = MEMORY;
+ALTER TABLE `caches` COMMENT = 'process cache';
+CREATE TEMPORARY TABLE `scratch` (`n` INT NOT NULL) DEFAULT CHARACTER SET utf8mb4;
+
+-- sqlite
+CREATE TABLE IF NOT EXISTS "caches" ("key" VARCHAR NOT NULL, "value" TEXT NOT NULL, PRIMARY KEY ("key"));
+CREATE TEMPORARY TABLE "scratch" ("n" INTEGER NOT NULL);

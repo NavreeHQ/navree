@@ -1,0 +1,70 @@
+---
+title: "Skeleton"
+description: "A placeholder in the shape of content that is loading, hidden from assistive technology."
+---
+
+<UiPreview example="skeleton/default" />
+
+`Skeleton` holds the place of content that is coming, in its shape, so the page doesn't jump when it arrives. A lazy [Region](/docs/ui/regions/) shows two skeleton lines until its content loads.
+
+```rust
+use navree::ui::*;
+
+Skeleton::new(SkeletonShape::Line)
+```
+
+## When to use it
+
+Use it when you know the shape of what is coming.
+
+<UiChoose name="loading" current="Skeleton" />
+
+## In a page
+
+A report that takes a moment to compute does not hold up the rest of the page. Its region loads after the page has painted and shows skeleton lines until its content arrives:
+
+```rust
+Card::titled("Revenue by month").body(
+    Region::new("revenue").src("/fragments/revenue").lazy(),
+)
+```
+
+The page does not jump when the report arrives, because the lines hold its place. [Regions and live updates](/docs/ui/regions/) covers the source, polling and failures.
+
+## Anatomy
+
+<UiAnatomy component="skeleton" />
+
+## Shapes
+
+<UiPreview example="skeleton/shapes" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A skeleton has `aria-hidden="true"`: it says nothing. Mark what is loading as busy instead; a lazy region sets `aria-busy` for you.
+- The pulse stops when the reader asks for reduced motion.
+
+</UiA11y>
+
+## API
+
+### Skeleton
+
+<UiProps type="Skeleton" />
+
+### SkeletonShape
+
+<UiProps type="SkeletonShape" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/ui/regions/" title="Regions and live updates">
+    Parts of a page that load, poll or follow a stream.
+  </LinkCard>
+  <LinkCard href="/docs/components/spinner/" title="Spinner">
+    Work under way, with no known end.
+  </LinkCard>
+</LinkCards>

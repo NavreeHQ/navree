@@ -1,0 +1,129 @@
+# Settings for every environment. `.env` ranks above this file and holds the
+# settings of one machine (secrets such as APP_KEY), and APP_* environment
+# variables override any key: APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
+
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+
+[database]
+{% if database == "timescaledb" %}
+# TimescaleDB (PostgreSQL with time-series hypertables): `navree dock up`
+# runs it on this machine. Production sets APP_DATABASE__URL instead.
+{% elif database == "postgres" %}
+# PostgreSQL: `navree dock up` runs it on this machine. Production sets
+# APP_DATABASE__URL instead.
+{% elif database == "mysql" %}
+# MySQL or MariaDB (`mariadb://` works too). Production sets
+# APP_DATABASE__URL instead.
+{% endif %}
+url = "{{ database_url }}"
+# Run pending migrations at boot (handy in development; use `navree migrate`
+# in deployments).
+migrate_on_boot = true
+{% if database == "timescaledb" %}
+
+[schema]
+# Hypertables (`schema.create_hypertable(...)` in migrations) use TimescaleDB
+# when the database has it, and are regular tables elsewhere (tests run on
+# SQLite). Production sets APP_SCHEMA__TIMESCALEDB=require, so a database
+# without TimescaleDB stops the migration instead.
+timescaledb = "auto"
+{% endif %}
+
+[log]
+level = "info"
+
+[mail]
+# "log" writes messages to the log. To send them, set the transport to an
+# address such as smtps://user:pass@host:465: keep the password out of this
+# file and set APP_MAIL__TRANSPORT as a real environment variable instead.
+# The sender (mail.from) is in .env.
+transport = "log"
+
+[queue]
+driver = "database"
+
+[auth]
+{% if ui_navree %}
+# Public sign-up at POST /api/auth/register is off: the screens are for your own
+# staff, and accounts come from the seeder (development) or from you. Turn it
+# on, and give new accounts only what they may do in src/abilities.rs, to let
+# people register.
+registration = false
+{% else %}
+# Public sign-up at POST /api/auth/register.
+registration = true
+{% endif %}
+{% if not ui_navree %}
+
+[session]
+# The session cookie (signing in to the tools' pages) goes over plain HTTP
+# while you develop. Production serves HTTPS and sets APP_SESSION__SECURE=true;
+# `navree config:check --env production` fails until it does.
+secure = false
+
+[workspace]
+# Where a request's workspace comes from: the X-Workspace header. Create the
+# first workspace with POST /api/workspaces (the signed-in user owns it).
+resolvers = ["header"]
+{% endif %}
+{% if ui_navree %}
+
+[auth.password_reset]
+# The mail's link opens the reset page of AuthPages. Production sets the
+# address of the site.
+url = "http://127.0.0.1:8080/reset-password"
+
+[session]
+# A browser that signs in keeps its state on the server (AuthPages, in
+# src/app.rs). The database store survives the restarts `navree dev` does on
+# every save.
+store = "database"
+# The session cookie goes over plain HTTP while you develop. Production serves
+# HTTPS and sets APP_SESSION__SECURE=true; `navree config:check --env
+# production` fails until it does.
+secure = false
+
+[workspace]
+# A browser is in the workspace it last switched to; API clients name theirs in
+# the X-Workspace header.
+resolvers = ["session", "header"]
+# Until a browser switches, it is in the first workspace its account belongs to.
+session_default = true
+
+[ui]
+sign_in = "/sign-in"
+# A guest who asks for a page goes straight to sign-in, and back afterwards.
+sign_in_redirect = true
+
+[validation.phone]
+# Phone numbers typed without a country code are Indian numbers.
+default_region = "IN"
+
+[i18n]
+# The languages of the pages: Indian English (amounts in lakhs: ₹1,00,000),
+# then Hindi. A browser asks for one with Accept-Language.
+default_locale = "en-IN"
+locales = ["en-IN", "hi"]
+{% endif %}
+
+[api]
+title = "{{ title }} API"
+# The Lighthouse and Logbook dashboards are pages, not API routes:
+# `navree check` doesn't ask them for #[api] docs.
+{% if ui_navree %}
+# Neither does it ask this app's own screens. The framework's pages (sign-in,
+# the account pages, the workspace switch, live updates, the toolkit's files)
+# document themselves.
+undocumented = [
+    "/_lighthouse*",
+    "/_logbook*",
+    "/",
+    "/profile",
+    "/customers*",
+    "/fragments/*",
+]
+{% else %}
+undocumented = ["/_lighthouse*", "/_logbook*"]
+{% endif %}

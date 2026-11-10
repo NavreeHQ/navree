@@ -1,0 +1,61 @@
+{
+  "name": "@navree/bff",
+  "version": "1.0.0",
+  "description": "The backend-for-frontend for Navree APIs on web-standard Request and Response: httpOnly token cookies, single-flight refresh, two-factor sign-in, CSRF origin checks and a streaming proxy. Used by @navree/next and @navree/nuxt.",
+  "license": "MIT OR Apache-2.0",
+  "author": "Amritpal Singh",
+  "homepage": "https://navree.com/docs/frontend/auth-and-bff/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavreeHQ/navree.git",
+    "directory": "packages/js/bff"
+  },
+  "bugs": {
+    "url": "https://github.com/NavreeHQ/navree/issues"
+  },
+  "keywords": [
+    "navree",
+    "backend-for-frontend",
+    "bff",
+    "httpOnly",
+    "cookies",
+    "session"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

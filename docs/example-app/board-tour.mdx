@@ -1,0 +1,94 @@
+---
+title: "A tour of the board"
+description: "The board example app: cards that move by mouse, touch or keys, limits and roles the server enforces, a drawer for each card and live moves."
+---
+
+`apps/board-demo` is the board of a product team at Rangla Looms, an invented fabric exporter in Ludhiana, planning the next release of its order and shipment app. Five columns of cards move by pointer, finger or keys, and the server decides whether each move is allowed. It is one Rust crate on SQLite, drawn with [Navree UI](/docs/ui/overview/). [The board's page](/showcase/board/) has its screens, and [the example apps](/docs/example-app/ui-apps/) compares it with the store and the inbox.
+
+## Running it
+
+```sh
+cargo run -p board-demo
+```
+
+The app listens on `http://127.0.0.1:8097`. `PORT` picks another port, and `BOARD_DATABASE_URL` another database (`sqlite://target/board-demo.db?mode=rwc` by default). The board is written afresh at every start. While the app runs, a teammate moves a card about every 25 seconds, so a second window shows a move arrive; `BOARD_SIMULATOR=<milliseconds>` changes the pace and `BOARD_SIMULATOR=off` stops it.
+
+## The columns and their rules
+
+The columns are Backlog, Ready, In progress, Review and Done. Work in progress is kept small on purpose, and the limits are in the code:
+
+```rust title="src/data.rs"
+pub const fn limit(self) -> Option<u32> {
+    match self {
+        Self::Ready => Some(5),
+        Self::Doing => Some(3),
+        Self::Review => Some(2),
+        Self::Backlog | Self::Done => None,
+    }
+}
+```
+
+A person is a member or a lead, and only a lead closes cards: moving a card to Done, or back out of it, is refused to a member with a message that says why. A visitor picks who they are from the account menu; the board has no sign-in.
+
+## A board that moves cards
+
+The board is a [Sortable](/docs/components/sortable/) with its columns as lists. The browser moves a card at once and posts the move to `POST /board/moves`; if the server says no, the card goes back and a toast says why. Every step is said to screen readers, as the [drag and drop guide](/docs/ui/drag-and-drop/) describes, and with JavaScript off each card has a form that moves it.
+
+```rust title="src/views/board.rs"
+Sortable::new("columns", format!("{PROJECT} board"))
+    .board()
+    .post(moves_action(&pairs))
+    .lists(data.columns.iter().map(|page| column(page, &data.people, viewer, filters, today)))
+```
+
+## The server places the move
+
+The move handler places the card by rank, in a transaction the toolkit begins. The transaction locks the two columns as its first statement, so two moves into one column run one after the other, and only then does it read the board as it is now:
+
+```rust title="src/pages.rs"
+let placed = mv
+    .transaction(&self.db, &ColumnRow::KEY, |uow| {
+        let made = mv.clone();
+        async move {
+            let viewer = store::viewer(&uow, who).await?;
+            store::place_and_write(&uow, &viewer, &made, now()).await
+        }
+    })
+    .await;
+```
+
+`place_and_write` in `src/store.rs` holds the rules the page cannot: a column's limit, who may move a card in or out of Done, and where the card really is now. A move can be refused for any of these. A refusal puts the card back with its message. A *stale* refusal, from a page that was drawn before another move landed, also invalidates the board's region, so it fetches itself again. When two neighbouring cards have no rank left between them, the ranks of that column are renewed once and the move is placed again.
+
+## Live moves
+
+A move that lands nudges the app's [live hub](/docs/ui/live-hub/). The board is a single [region](/docs/ui/regions/) that follows the board topic, so every open board fetches itself again and the cards slide to their new places. Only the server draws, so a nudge cannot put anything on a page.
+
+```rust title="src/views/board.rs"
+Region::new(REGION)
+    .src(format!("/fragments/board{}", query(&pairs)))
+    .live_on(crate::live::stream().on(crate::live::TOPIC))
+```
+
+## Long columns
+
+The seed puts thousands of cards in the backlog and in Done, so a column never draws them all. Each column draws a first page and a link to the next, `GET /columns/{column}`, which takes a cursor. The board stops at a cap and says so, and asks the reader to filter or press `Ctrl` and `K` to find the rest. The palette searches cards through `GET /cards/search`, and the filters by person, label and due date apply to every column at once.
+
+## A card in a drawer
+
+A card's title opens it in a [drawer](/docs/components/sheet/) over the board: its description, a checklist whose lines move the same way as cards, comments and what happened to it. Comments and history show the newest first and fetch older ones by cursor, from `GET /cards/{id}/comments` and `GET /cards/{id}/history`; `POST /cards/{id}/checks/moves` reorders the checklist and `POST /checks/{id}/done` ticks a line. With JavaScript off, `/cards/{id}` is the same card on a page of its own.
+
+## Tests
+
+The browser suite is `e2e/ui/tests/board.test.mjs`. It runs the app with the teammate off and its test hooks on (`BOARD_SIMULATOR=off BOARD_TEST_HOOKS=1 cargo run --release -p board-demo`) and drives it in real browsers: moves by mouse, touch and keys, every step announced, refusals put back, limits held, two viewers kept in step, long columns loaded a page at a time, and JavaScript off.
+
+<LinkCards>
+  <LinkCard href="/docs/example-app/ui-apps/" title="The Navree UI example apps">
+    The store, the board and the inbox side by side.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/store-tour/" title="A tour of the store">
+    A table over lakhs of orders, an order in a drawer and refunds checked on the server.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/inbox-tour/" title="A tour of the inbox">
+    Three panes and a desk of a lakh of conversations.
+  </LinkCard>
+</LinkCards>

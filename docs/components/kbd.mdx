@@ -1,0 +1,66 @@
+---
+title: "Kbd"
+description: "A `<kbd>` element drawn as a key, for shortcuts and instructions such as Ctrl+K."
+---
+
+<UiPreview example="kbd/default" />
+
+`Kbd` writes a `<kbd>` element: a key to press, in a shortcut or an instruction.
+
+```rust
+use navree::ui::*;
+
+Row::gap(1).children((Kbd::new("Ctrl"), "+", Kbd::new("K")))
+```
+
+## When to use it
+
+Use it to name keys. For a status or a category, use a [Badge](/docs/components/badge/).
+
+<UiChoose name="label" current="Kbd" />
+
+## In a page
+
+A list of shortcuts puts each key beside what it does. The inbox example app lists its keys this way in a dialog:
+
+```rust
+Stack::gap(2).children((
+    Row::gap(3).children((Kbd::new("j"), Text::new("Next conversation"))),
+    Row::gap(3).children((Kbd::new("k"), Text::new("Previous conversation"))),
+    Row::gap(3).children((
+        Row::gap(1).children((Kbd::new("Ctrl"), "+", Kbd::new("K"))),
+        Text::new("Open the command palette"),
+    )),
+))
+```
+
+The keys go in the `Row` as separate `Kbd`s, with a plain `+` between a chord. [A tour of the inbox](/docs/example-app/inbox-tour/#keys-and-the-palette) shows the whole dialog.
+
+## Anatomy
+
+<UiAnatomy component="kbd" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- `<kbd>` is read as its text. Write the key's name in full where a symbol alone could be unclear.
+
+</UiA11y>
+
+## API
+
+### Kbd
+
+<UiProps type="Kbd" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/command/" title="Command">
+    The palette that `Ctrl` and `K` open.
+  </LinkCard>
+  <LinkCard href="/docs/components/input-group/" title="InputGroup">
+    A field with a hint such as a key at its end.
+  </LinkCard>
+</LinkCards>

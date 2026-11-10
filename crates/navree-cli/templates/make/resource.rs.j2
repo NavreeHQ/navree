@@ -1,0 +1,39 @@
+//! {{ label }} in the admin panel (Helm), at `/admin/resources/{{ slug }}`.
+
+use navree::helm::{Field, Resource};
+use navree::injectable;
+
+use {{ model_path }}::{{ model }};
+
+/// {{ label }} in the panel. What a user sees and changes follows their
+/// abilities on `{{ subject }}`: grant `{{ permission_prefix }}.read` (and `.create`,
+/// `.update`, `.delete`) to the roles that manage them, and `helm.view` to
+/// let them into the panel.
+#[injectable]
+pub struct {{ pascal }}Resource;
+
+impl Resource for {{ pascal }}Resource {
+    type Model = {{ model }};
+
+    const LABEL: &'static str = "{{ label }}";
+    const SINGULAR: &'static str = "{{ singular }}";
+    const TITLE: &'static str = "{{ title }}";
+{% if search %}
+    const SEARCH: &'static [&'static str] = &[{{ search }}];
+{% endif %}
+
+    fn fields(&self) -> Vec<Field> {
+{% if left_out %}
+        // Left out: {{ left_out }}. A column the model hides, or named like a
+        // secret, reaches no screen.
+{% endif %}
+        vec![
+{% for field in fields %}
+{% if field.comment %}
+            // {{ field.comment }}
+{% endif %}
+            {{ field.code }},
+{% endfor %}
+        ]
+    }
+}

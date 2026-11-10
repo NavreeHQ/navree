@@ -1,0 +1,34 @@
+//! `GET /{{ route }}`: the {{ words }} page of the {{ module_words }} module.
+
+use navree::ui::{AppPage, AppShell, Card, Text};
+use navree::{controller, injectable};
+
+{% if public %}
+/// The {{ words }} page, drawn in the app's shell. Anyone may open it:
+/// `#[public]` marks every route of the block below `.public()`. Use
+/// `#[authenticated]` (`.authenticated()`) for signed-in users only.
+{% else %}
+/// The {{ words }} page, drawn in the app's shell. Signed-in users only:
+/// `#[authenticated]` marks every route of the block below `.authenticated()`.
+/// Use `#[public]` (`.public()`) for a page anyone may open.
+{% endif %}
+#[injectable]
+pub struct {{ type_name }};
+
+#[controller]
+{% if public %}
+#[public]
+{% else %}
+#[authenticated]
+{% endif %}
+impl {{ type_name }} {
+    /// `GET /{{ route }}`. A path that starts with `!` sits at the site's root,
+    /// not under `/api`.
+    #[get("!/{{ route }}")]
+    async fn show(&self, shell: AppShell) -> AppPage {
+        shell
+            .page("{{ title }}")
+            .crumb("Home", "/")
+            .body(Card::new().body(Text::new("Replace this card with the page.")))
+    }
+}

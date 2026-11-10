@@ -1,0 +1,47 @@
+# Written by navree harbor:provision. Each app's site is in /etc/caddy/sites/.
+{% set forwarded_for = trusted_proxies and not proxy_protocol %}
+{% if proxy_protocol or custom_domains.enabled or forwarded_for %}
+{
+{% if forwarded_for %}
+	# An HTTP load balancer sits in front: keep the X-Forwarded-For it sends
+	# (Caddy adds its address) instead of replacing it with the balancer's
+	# own, so the app sees each client. These are `deploy.trusted_proxies`.
+	servers {
+		trusted_proxies static {{ trusted_proxies | join(" ") }}
+	}
+{% endif %}
+{% if custom_domains.enabled %}
+	# Workspaces' own domains: a certificate on each one's first visit,
+	# once the app's ask endpoint allows the domain.
+	on_demand_tls {
+		ask {{ custom_domains.ask_url }}
+	}
+{% endif %}
+{% if proxy_protocol %}
+	# The load balancer sends the PROXY protocol on ports 80 and 443.
+	servers :443 {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+{% for proxy in trusted_proxies %}
+				allow {{ proxy }}
+{% endfor %}
+			}
+			tls
+		}
+	}
+	servers :80 {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+{% for proxy in trusted_proxies %}
+				allow {{ proxy }}
+{% endfor %}
+			}
+		}
+	}
+{% endif %}
+}
+{% endif %}
+
+import /etc/caddy/sites/*.caddy

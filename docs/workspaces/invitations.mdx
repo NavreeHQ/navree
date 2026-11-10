@@ -1,0 +1,223 @@
+---
+title: "Invitations"
+description: "Invite people to a workspace by email, let them accept with a single-use token, and revoke invitations or let them expire."
+---
+
+Invitations bring people into a workspace who may not have an account yet. An admin invites an email address with a role; Navree mails a link carrying a single-use token; the invitee signs in (or signs up) and accepts, and joins the workspace with that role.
+
+## The flow
+
+1. An admin calls `POST /api/workspaces/{workspace}/invitations` with `{"email", "role"}`.
+2. Navree stores the invitation with a SHA-256 digest of a random 48-character token, and once the request commits, mails the token to the address.
+3. The invitee opens the link in your front end, signs in or [registers](/docs/security/authentication/), and the front end posts the token to `POST /api/invitations/accept`.
+4. Navree checks the token, the expiry and the address, adds the member and marks the invitation accepted.
+
+## Sending an invitation
+
+Over HTTP, with the `workspace.invitations.create` permission (owners and admins have it):
+
+```http
+POST /api/workspaces/agra/invitations HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+
+{"email": "gauri@example.com", "role": "admin"}
+```
+
+```json title="201 Created"
+{
+  "__type": "WorkspaceInvitation",
+  "id": "0199f3c3-0a1b-7c2d-8e3f-4a5b6c7d8e9f",
+  "workspace_id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
+  "email": "gauri@example.com",
+  "role": "admin",
+  "invited_by": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "expires_at": "2026-11-02T09:00:00Z",
+  "created_at": "2026-10-26T09:00:00Z"
+}
+```
+
+`role` defaults to `member`. The response never contains the token: it travels in the mail only.
+
+In code, `Invitations::invite` returns the invitation and the plain token, for apps that deliver it another way (its `Debug` output hides the token):
+
+```rust
+use navree::workspace::{Invitations, WorkspaceRole};
+
+let sent = invitations
+    .invite(&uow, workspace_id, "gauri@example.com", WorkspaceRole::Admin, Some(inviter_id))
+    .await?;
+// sent.invitation: the row; sent.token: the token to deliver
+```
+
+The rules:
+
+- The address is trimmed and lower-cased, and must look like an email address (a 400 on `email` otherwise).
+- The role is any built-in or configured role except `owner` (a 400 on `role`). To make someone the owner, invite them as `admin`, then [transfer ownership](/docs/workspaces/members-and-roles/#the-owner).
+- An address that belongs to a member already is a 409, `The user is already a member of this workspace.`
+- Inviting an address again replaces its pending invitation: the old token stops working.
+
+## The mail
+
+With `MailModule` in the app, the mail goes out once the request commits, through `Mailer::queue` (on a queue worker when the app has a queue). Without a mailer the invitation is created, nothing is mailed, and a warning is logged.
+
+Set the page of your front end that accepts invitations, and the mail links to it with the token as a query parameter:
+
+```toml title="config/app.toml"
+[workspace.invitations]
+url = "https://app.example.com/invitations/accept"
+```
+
+```text title="The built-in mail" wrap
+Subject: You're invited to join Agra
+
+Hello,
+
+Anu Lakhotia invited you to join Agra as admin.
+
+Accept the invitation: https://app.example.com/invitations/accept?token=Xq3...
+
+The invitation expires in 7 days.
+
+If you did not expect this invitation, you can ignore this email.
+```
+
+Without `url`, the mail carries the token itself, for API and mobile clients. The inviter's name comes from the [user directory](/docs/workspaces/members-and-roles/#names-and-emails-of-members).
+
+To write your own mail, point `mail_template` at a [view](/docs/digging-deeper/views/) pair (`{template}.html` and `{template}.txt`):
+
+```toml title="config/app.toml"
+[workspace.invitations]
+url = "https://app.example.com/invitations/accept"
+mail_template = "mail/workspace-invitation"
+```
+
+```jinja title="resources/views/mail/workspace-invitation.txt"
+{{ inviter }} invited you to {{ workspace }} as {{ role }}.
+
+Join here: {{ url }}
+
+This link works for {{ expires_in_days }} days.
+```
+
+The template receives `workspace` (the name), `email`, `role`, `inviter` (empty when unknown), `token`, `url` (empty without `url`) and `expires_in_days`. The subject stays `You're invited to join <workspace>`.
+
+## Accepting
+
+The invitee must be signed in. Your front end posts the token from the link:
+
+```http
+POST /api/invitations/accept HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+
+{"token": "Xq3..."}
+```
+
+```json title="200 OK"
+{
+  "workspace": { "__type": "Workspace", "slug": "agra", "role": "admin", "...": "..." },
+  "member": { "__type": "WorkspaceMember", "role": "admin", "...": "..." }
+}
+```
+
+| Situation | Status | `message` |
+|---|---|---|
+| Unknown, revoked or already used token | 404 | `Invitation not found.` |
+| The invitation has expired | 410 | `The invitation has expired.` |
+| Signed in as another address | 403 | `This invitation was sent to a different email address.` |
+| Already a member | 409 | `The user is already a member of this workspace.` |
+| More than 10 attempts a minute | 429 | `Too Many Requests` |
+
+Someone without an account signs up first (`POST /api/auth/register` with the invited address), then accepts with the same token. Keep the token in the front end across the sign-up.
+
+In code:
+
+```rust
+let accepted = invitations.accept(&uow, &token, user_id).await?;
+// accepted.workspace, accepted.member
+```
+
+### Matching the address
+
+With `workspace.invitations.require_matching_email` (the default), only the account whose email is the invited address can accept. Navree asks the user directory for the accepting user's address. When the directory doesn't know the user (no `users` table, or `users_table = ""`), the check can't pass and acceptance is refused with the 403 above: register a [user directory](/docs/workspaces/members-and-roles/#names-and-emails-of-members) for your user store, or turn the check off to treat the token alone as proof:
+
+```toml title="config/app.toml"
+[workspace.invitations]
+require_matching_email = false
+```
+
+## Revoking
+
+```http
+DELETE /api/workspaces/agra/invitations/0199f3c3-0a1b-7c2d-8e3f-4a5b6c7d8e9f HTTP/1.1
+```
+
+Revoking (permission `workspace.invitations.delete`) deletes the pending invitation, and its token stops working. `GET /api/workspaces/{workspace}/invitations` (permission `workspace.invitations.read`) lists the pending ones, newest first. In code: `invitations.revoke(&uow, workspace_id, invitation_id)` and `invitations.pending(workspace_id)`.
+
+## Expiry
+
+An invitation can be accepted for `workspace.invitations.ttl_secs` seconds, seven days by default. Expired invitations drop out of the pending list and `find_by_token`, and accepting one is a 410. The rows stay until you prune them:
+
+```sh
+navree workspace:prune-invitations
+```
+
+Schedule it daily:
+
+```rust
+#[module(register = Self::wire)]
+pub struct HousekeepingModule;
+
+impl HousekeepingModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.schedule(|s| {
+            s.command("workspace:prune-invitations", &[])
+                .daily_at("03:00")
+                .without_overlapping();
+        });
+    }
+}
+```
+
+## Showing an invitation before accepting
+
+`invitations.find_by_token(&token)` returns the pending invitation (with its `workspace_id`, `email` and `role`), or `None` for an unknown, used or expired token. Use it in your own route to show "Anu invited you to Agra" before the user accepts.
+
+## Events
+
+| Event | Name | Payload |
+|---|---|---|
+| `InvitationSent` | `workspace.invitation_sent` | `workspace_id`, `invitation_id`, `email`, `role`, `invited_by`, `expires_at` (never the token) |
+| `InvitationAccepted` | `workspace.invitation_accepted` | `workspace_id`, `invitation_id`, `user_id`, `role` |
+
+Accepting also emits `MemberAdded`.
+
+## Testing
+
+Read the token from the mail the array transport kept, and move time with a fixed clock:
+
+```rust
+let sent = app.get::<Mailer>().await.array_transport().unwrap().sent();
+let text = sent.last().unwrap().text.clone().unwrap();
+let token = text.split("token=").nth(1).unwrap().split_whitespace().next().unwrap();
+
+clock.advance(std::time::Duration::from_secs(8 * 24 * 3600));
+app.acting_as(principal(gauri))
+    .post("/api/invitations/accept")
+    .json(&json!({ "token": token }))
+    .send()
+    .await
+    .assert_error(410, "The invitation has expired.");
+```
+
+Register the clock with `override_value::<dyn Clock>(clock.clone())` where `clock` is an `Arc<FixedClock>`, and set `mail.transport = "array"`.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Transports, templates and queued sending.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/members-and-roles/" title="Members and roles">
+    What the invited role allows.
+  </LinkCard>
+</LinkCards>

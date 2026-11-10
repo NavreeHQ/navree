@@ -1,0 +1,68 @@
+<section class="section">
+  <h2 class="section-title">Workspaces</h2>
+  <div class="card table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Workspace</th>
+          <th>Members</th>
+          <th>Projects</th>
+          <th>Open tasks</th>
+          <th>Overdue</th>
+          <th>Reports</th>
+          <th>Last report</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data.workspaces %}
+        <tr>
+          <td><strong>{{ row.name }}</strong> <span class="muted mono">{{ row.slug }}</span></td>
+          <td>{{ row.members }}</td>
+          <td>{{ row.projects }}</td>
+          <td>{{ row.open_tasks }}</td>
+          <td>{% if row.overdue > 0 %}<span class="badge tone-3">{{ row.overdue }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+          <td>{{ row.reports }}</td>
+          <td>{% if row.last_report %}{{ row.last_report }}{% else %}<span class="muted">none yet</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Tasks by status</h2>
+  <div class="card">
+    <ul class="bars">
+      {% for bar in data.statuses %}
+      <li>
+        <span class="bar-label">{{ bar.label }}</span>
+        <span class="bar-value">{{ bar.count }}</span>
+        <svg class="bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-track" width="100" height="6" rx="3"></rect><rect class="bar-fill" width="{{ bar.percent }}" height="6" rx="3"></rect></svg>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Latest activity</h2>
+  <div class="card table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>When</th><th>Action</th><th>Subject</th></tr>
+      </thead>
+      <tbody>
+        {% for entry in data.activity %}
+        <tr>
+          <td class="mono">{{ entry.when }}</td>
+          <td>{{ entry.action }}</td>
+          <td>{% if entry.subject %}{{ entry.subject }}{% else %}<span class="muted">-</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">Nothing recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

@@ -1,0 +1,76 @@
+[package]
+name = "navree-settings"
+description = "Navree SettingsModule: typed settings stored per scope, inherited down the chain, with the source of every value."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "settings", "preferences"]
+categories = ["config"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["notify"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
+## `servers` tests run the store and resolution on a database of their own.
+test-postgres = ["navree-db/postgres"]
+## MySQL for the tests, with `NAVREE_TEST_MYSQL_URL`.
+test-mysql = ["navree-db/mysql"]
+## How notification mail looks, as settings: the `notification-templates`
+## group (logo, brand color, footer, subject and body overrides per
+## notification type) and navree-notify's `dyn TemplateOverrides` read from
+## it.
+notify = ["dep:navree-notify", "dep:url"]
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-audit = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# `#[derive(Settings)]`, re-exported next to the `SettingsGroup` trait.
+navree-macros = { workspace = true }
+# Feature `notify`: `SettingsTemplateOverrides` is navree-notify's
+# `dyn TemplateOverrides`.
+navree-notify = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
+# The settings table is a model (`setting::Model`).
+navree-orm = { workspace = true }
+navree-validation = { workspace = true }
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+# Feature `notify`: the logo URL check.
+url = { workspace = true, optional = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-api = { workspace = true }
+# The `notify` feature's tests (`tests/settings/notify.rs`): notification
+# mail rendered by navree-mail's array transport.
+navree-mail = { workspace = true }
+navree-settings = { path = ".", features = ["notify"] }
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

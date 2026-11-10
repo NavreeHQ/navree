@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "query(Note::query().where_morphed_to(\"notable\", &Record::new(deal())))"
+---
+PostgreSQL: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."notable_type" = $1 AND "notes"."notable_id" IN ($2)
+  values: [String("deal"), I64(7)]
+MySQL: SELECT `notes`.`id`, `notes`.`notable_type`, `notes`.`notable_id`, `notes`.`body` FROM `notes` WHERE `notes`.`notable_type` = ? AND `notes`.`notable_id` IN (?)
+  values: [String("deal"), I64(7)]
+SQLite: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."notable_type" = ? AND "notes"."notable_id" IN (?)
+  values: [String("deal"), I64(7)]

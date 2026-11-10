@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Update\n{\n    alias: Some(Ident::new(\"d\")), from:\n    vec![Source::aliased(\"companies\", \"c\")], returning:\n    vec![SelectItem::new(col(\"d.id\"))],\n    ..Update::new(\"deals\",\n    vec![Assignment::new(\"stage\",\n    val(\"lost\"))]).filter(col(\"c.id\").eq(col(\"d.company_id\"))).filter(col(\"c.active\").eq(val(false)))\n})"
+---
+PostgreSQL: UPDATE "deals" AS "d" SET "stage" = $1 FROM "companies" AS "c" WHERE "c"."id" = "d"."company_id" AND "c"."active" = $2 RETURNING "d"."id"
+  values: [String("lost"), Bool(false)]
+MySQL: error: RETURNING is not supported on MySQL
+SQLite: UPDATE "deals" AS "d" SET "stage" = ? FROM "companies" AS "c" WHERE "c"."id" = "d"."company_id" AND "c"."active" = ? RETURNING "d"."id"
+  values: [String("lost"), Bool(false)]

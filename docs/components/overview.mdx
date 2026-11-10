@@ -1,0 +1,56 @@
+---
+title: "Components"
+description: "Every component of Navree UI, rendered live by the Rust toolkit, grouped the way you look for them."
+---
+
+Each component is a Rust struct with builder methods that turns into HTML on the server. The previews below are the real thing: navree-ui renders every one, with its own stylesheet, in a frame of its own. Open one to see its variants, states, parts, keyboard behavior and API.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Sutlej Supply renewal")
+    .description("Proposal · ₹48,000")
+    .footer(Button::primary("Mark won"))
+```
+
+To choose between Navree UI and a JavaScript front end, see [Choosing a UI](/docs/ui/choosing-a-ui/). For how it works and what ships to the browser, see the [overview](/docs/ui/overview/). To build pages from a design you already have, see [Bring your design](/docs/getting-started/bring-your-design/).
+
+## Start with three pages
+
+Most screens are one of three pages. Each recipe names the components it needs and where a working one is.
+
+### A list page
+
+A table of records, with search, filters and pages. The store's orders are this page.
+
+- [AppShell](/docs/ui/app-shell/) gives the page its sidebar, breadcrumb and title.
+- [DataTable](/docs/ui/data-table/) is the list: one struct says the columns, and the server runs the search, the filters, the sort and the pages.
+- [Badge](/docs/components/badge/) shows a status in a column, and [Empty](/docs/components/empty/) shows what a search with no match says.
+- `.live_on` keeps the list current from the [live hub](/docs/ui/live-hub/).
+
+The working one is [the store](/showcase/store/), and [its tour](/docs/example-app/store-tour/#the-orders-table) shows the table's code.
+
+### A record page
+
+One record in full, over the list it came from, so the reader keeps their place. An order in the store is this page.
+
+- [Sheet](/docs/components/sheet/) is the drawer; with JavaScript off the same detail is a page of its own.
+- [Card](/docs/components/card/), [FactCard](/docs/components/fact-card/), [Timeline](/docs/components/timeline/) and [Table](/docs/components/table/) hold the facts, the steps and the lines.
+- A [Region](/docs/ui/regions/) loads the slow parts, such as the history, after the drawer opens.
+- [AlertDialog](/docs/components/alert-dialog/) confirms a destructive action, and [Toast](/docs/components/toast/) says what happened.
+
+The working one is [the store's order drawer](/showcase/store/), and [its tour](/docs/example-app/store-tour/#an-order-in-a-drawer) shows how it opens.
+
+### A form page
+
+A form that checks its input on the server and sends it back with the errors under the fields.
+
+- [Forms](/docs/ui/forms/): one struct is the fields, the rules and the errors, `FormView` draws it and `Submit<T>` reads it back.
+- [Field](/docs/components/field/), [Input](/docs/components/input/), [Select](/docs/components/select/), [DatePicker](/docs/components/date-picker/) and [Checkbox](/docs/components/checkbox/) are the widgets the field types pick.
+- [Wizard](/docs/components/wizard/) splits a long form into steps whose progress is kept on the server.
+
+[The starter kit's Navree UI app](/docs/getting-started/starter-kits/#the-navree-ui-app) has a form page beside its customers table.
+
+## All the components
+
+<UiGrid />

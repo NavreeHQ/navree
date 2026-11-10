@@ -1,0 +1,69 @@
+---
+title: "Input"
+description: "A single-line input of a closed set of kinds, from text and email to dates and files."
+---
+
+<UiPreview example="input/default" />
+
+`Input` draws an `<input>` that posts as `name`. Its kind is an `InputKind`, so the browser's own keyboard, validation and pickers come with it.
+
+```rust
+use navree::ui::*;
+
+Input::email("email").required().autocomplete("email")
+```
+
+## When to use it
+
+Use an input for one line of text: a name, an amount, a date. Put it in a [Field](/docs/components/field/) so it has a label.
+
+<UiChoose name="text" current="Input" />
+
+## Anatomy
+
+<UiAnatomy component="input" />
+
+## Kinds
+
+`Input::text`, `email`, `password`, `search`, `number` and `date` are shortcuts; `Input::new(InputKind::Tel, name)` takes any kind. `InputKind::Hidden` posts a value nobody sees.
+
+<UiPreview example="input/kinds" />
+
+A password input takes no value: `.value` does nothing on one, so a page never holds a password.
+
+## States
+
+<UiPreview example="input/states" />
+
+## Size and clearing
+
+`.size(Size)` sets the height and type size: the same four sizes as a button (`Xs`, `Sm`, `Md`, the default, and `Lg`). `.clearable(label)` adds a button, named `label` for assistive technology, that empties the field and puts the caret back in it. It shows while the field holds something, and only where a script runs; without one the field is a plain input. The field is drawn inside an [InputGroup](/docs/components/input-group/)'s frame.
+
+```rust
+Input::search("q").size(Size::Sm).clearable("Clear search")
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the input. |
+| Typing | Edits the value; date and number kinds bring the browser's own keys. |
+
+- An input needs a name: put it in a [Field](/docs/components/field/), or give it a `Label`.
+- `.invalid(true)` sets `aria-invalid`; a field does this for you when it has an error.
+- `.autocomplete` and `.inputmode` tell phones which keyboard and which suggestions to offer.
+
+</UiA11y>
+
+## API
+
+### Input
+
+<UiProps type="Input" />
+
+### InputKind
+
+<UiProps type="InputKind" />

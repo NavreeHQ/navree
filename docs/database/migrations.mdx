@@ -1,0 +1,253 @@
+---
+title: "Migrations"
+description: "Module-owned migrations written with the schema builder: generating them, `up` and `down`, their order, transactions, data changes and rewriting one."
+---
+
+Migrations are version control for your schema: each one changes the database a step and records that it ran, so every copy of the database (yours, a colleague's, CI's, production's) reaches the same structure by running the same steps. In Navree a migration is a Rust type with an `up` method that applies a change and a `down` method that reverses it, written with the [schema builder](/docs/database/schema-builder/), which writes the right SQL for PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite.
+
+Each module owns its migrations as a `MigrationSet`, says which modules' tables it needs first, and one migrator runs every set of the app in order. Navree's own modules ship their tables the same way, so adding `AuthModule` to an app brings the `users` table with it.
+
+These pages cover the migration system:
+
+| Page | Covers |
+|---|---|
+| Migrations (this page) | Writing migrations, sets, ordering, transactions |
+| [Running migrations](/docs/database/running-migrations/) | `migrate`, rolling back, refreshing, pretending, production |
+| [Schema builder](/docs/database/schema-builder/) | Creating, altering and dropping tables; reading the schema; previews |
+| [Columns](/docs/database/columns/) | Every column type per database, modifiers, changing columns |
+| [Indexes and foreign keys](/docs/database/indexes-and-foreign-keys/) | Indexes of every kind, constraints, their names |
+| [Squashing migrations](/docs/database/squashing-migrations/) | `schema:dump`: one SQL file instead of hundreds of migrations |
+
+## Generating migrations
+
+The CLI writes the file and registers it:
+
+```sh
+navree make:migration deals create_deals_table
+navree make:migration deals add_currency_to_deals
+navree make:migration deals backfill_deal_stages
+```
+
+Each command creates `src/modules/deals/migrations/m<date>_<time>_<name>.rs`, for example `m20261026_093000_create_deals_table.rs`, declares it in `migrations/mod.rs` and adds it to the module's set. If the module had no migrations yet, it also creates that file and registers the set in the module's `wire`. The name picks the starting point:
+
+| Name | Starts with |
+|---|---|
+| `create_<table>_table` (or `create_<table>`) | `schema.create("<table>", ...)` with a UUID primary key and timestamps, and `drop_if_exists` in `down` |
+| `<change>_to_<table>`, `<change>_from_<table>`, `<change>_in_<table>` (`_table` optional) | `schema.table("<table>", ...)` in `up` and `down` |
+| anything else | an empty `up` and `down` |
+
+`navree make:model deals Deal --migration` writes a model together with its `create_deals_table` migration.
+
+## Writing migrations
+
+```rust title="src/modules/deals/migrations/m20261026_093000_create_deals_table.rs"
+//! Creates the `deals` table.
+
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid_primary();
+                t.foreign_uuid("company_id").constrained().restrict_on_delete();
+                t.foreign_uuid("owner_id").constrained_on("users", "id");
+                t.string("title");
+                t.big_integer("amount_cents");
+                t.string("stage").length(16).default("lead").index();
+                t.timestamps_tz();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
+    }
+}
+```
+
+`up` and `down` take the `Schema` the migrator hands them, which runs on the migration's connection and transaction. `schema.create` describes a new table on a `Blueprint` (`t`): its [columns](/docs/database/columns/), [indexes and foreign keys](/docs/database/indexes-and-foreign-keys/). `constrained()` adds a foreign key to the conventional table, so `company_id` references `companies.id`; `constrained_on` names the table and column.
+
+Changing a table later is another migration:
+
+```rust title="src/modules/deals/migrations/m20261027_120000_add_currency_to_deals.rs"
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("deals", |t| {
+                t.char("currency", 3).default("INR");
+                t.text("title").change();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("deals", |t| {
+                t.drop_column("currency");
+                t.string("title").change();
+            })
+            .await
+    }
+}
+```
+
+`change()` alters an existing column to the definition given, which is complete: a default or `nullable` you leave out is removed. On SQLite, which can't change columns in place, the builder rebuilds the table and keeps its rows, indexes, triggers and constraints ([SQLite](/docs/database/schema-builder/#sqlite)).
+
+Write `down` so it undoes `up` exactly: `navree migrate:refresh` reverts every migration and runs them again, which is how you find out. Never edit a migration that has run anywhere but your machine; add a new one.
+
+### Reading the database
+
+A migration can look at the database before it changes it:
+
+```rust
+if !schema.has_column("deals", "currency").await? {
+    schema.table("deals", |t| { t.char("currency", 3).default("INR"); }).await?;
+}
+```
+
+`has_table`, `has_column`, `columns`, `indexes`, `foreign_keys`, `tables` and `views` read the live schema ([reading the schema](/docs/database/schema-builder/#reading-the-schema)). Checks like this make a migration safe to run twice, which matters on MySQL, where a migration that fails part way keeps what it did ([transactions](#transactions)).
+
+### Changing data
+
+`schema.statement(sql)` runs any SQL in the migration's transaction, which is how a migration moves data along with the structure:
+
+```rust
+async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+    schema.table("deals", |t| { t.string("stage").length(16).default("lead"); }).await?;
+    schema.statement("UPDATE deals SET stage = 'won' WHERE closed_at IS NOT NULL").await?;
+    Ok(())
+}
+```
+
+Keep data changes in SQL rather than in your models: a migration must keep working as written after the models change.
+
+### Time-series tables
+
+A table can be a TimescaleDB hypertable, declared in the migration: `schema.create_hypertable("events", "occurred_at", |t| ..)`, or `t.hypertable("occurred_at")` with chunk intervals, compression and retention. On PostgreSQL without TimescaleDB, MySQL and SQLite the same migration creates a regular table with time indexes, and says so in a notice. [TimescaleDB](/docs/database/timescaledb/) covers it.
+
+## Migration sets
+
+A module's migrations form one `MigrationSet`: a name, the sets it must run after, and the migrations. `migration!` adds a migration file, named after the file:
+
+```rust title="src/modules/deals/migrations/mod.rs"
+use navree::db::MigrationSet;
+use navree::schema::migration;
+
+mod m20261026_093000_create_deals_table;
+mod m20261027_120000_add_currency_to_deals;
+
+/// The deals module's set, recorded under `deals` in `navree_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("deals")
+        .after(["companies", "auth"])
+        .migration(migration!(m20261026_093000_create_deals_table))
+        .migration(migration!(m20261027_120000_add_currency_to_deals))
+}
+```
+
+The module contributes the set when it registers:
+
+```rust title="src/modules/deals/mod.rs"
+#[module(
+    providers = [DealService],
+    controllers = [DealsController],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+    }
+}
+```
+
+The set's name is recorded with every migration it runs, so keep it stable once it has run anywhere, and unique in the app. `SchemaMigration::new(name, migration)` names a migration explicitly, for a migration type that isn't in a file of its own.
+
+### Ordering
+
+1. **Sets** run in dependency order: a set runs after every set its `after` list names. Sets that don't depend on each other run in alphabetical order of their names.
+2. **Inside a set**, migrations run in name order, which is why their names start with a date and time.
+
+`.after(["companies", "auth"])` makes sure `companies` and `users` exist before the deals table's foreign keys point at them. An `after` entry naming a set that isn't in the app is ignored, so a module can name an optional dependency. A cycle of `after` lists, two sets with the same name, or two migrations with the same name in one set stop the run with an error before anything runs.
+
+Navree's own modules contribute these sets, among others:
+
+| Set | Module | Runs after |
+|---|---|---|
+| `auth` | `AuthModule` (`users` and the token tables) | |
+| `access` | `AccessModule` (roles and permissions) | `auth` |
+| `audit` | `AuditModule` (`audit_logs`, a hypertable on TimescaleDB) | |
+| `queue` | `QueueModule` (the database driver's tables, created whatever the driver) | |
+| `notify` | `NotifyModule` | |
+| `schedule` | `ScheduleModule` (`schedule_runs`, a hypertable on TimescaleDB) | |
+| `session` | `SessionModule` (the database store's table, created whatever the store) | |
+
+## Transactions
+
+On SQLite and PostgreSQL, each migration runs in its own transaction, together with the `navree_migrations` row that records it. Both roll back schema changes, so a migration that fails part way leaves nothing behind and isn't recorded; fix it and run `migrate` again. Migrations that ran before it in the same run stay applied.
+
+MySQL and MariaDB commit every schema change as it runs, so there a migration runs outside a transaction. A migration that fails part way keeps the statements that ran before the failure and isn't recorded, so keep one change per migration, or write `up` so it can run again (check `has_table` or `has_column` first).
+
+A data migration on MySQL can still ask for a transaction, so its `INSERT`s and `UPDATE`s roll back with its `navree_migrations` row when it fails:
+
+```rust
+impl navree::schema::Migration for Migration {
+    fn within_transaction_on_mysql(&self) -> bool {
+        true
+    }
+
+    // up and down as usual
+}
+```
+
+Some statements can't run in a transaction: PostgreSQL's `CREATE INDEX CONCURRENTLY` (an index's `.online()`), or refreshing a TimescaleDB continuous aggregate. Opt such a migration out:
+
+```rust
+impl navree::schema::Migration for Migration {
+    fn within_transaction(&self) -> bool {
+        false
+    }
+
+    // up and down as usual
+}
+```
+
+On SQLite, migrations run on a connection of their own with foreign keys off, so rebuilding a table never runs the `ON DELETE` actions of the tables that reference it. Before each migration commits, `PRAGMA foreign_key_check` must find no row pointing at a row that doesn't exist; a migration that leaves one fails and rolls back, naming the rows.
+
+That connection uses your `database.sqlite` settings (journal mode, `busy_timeout`, pragmas), and each migration's transaction begins with `BEGIN IMMEDIATE`, as units of work do, taking SQLite's write lock before the migration reads anything. While workers, a scheduler or another process write to the same file, a migration therefore waits its turn (up to `busy_timeout`, 5 seconds by default) instead of failing with `database is locked` when it goes from reading a table to changing it. The migration's own changes and its `navree_migrations` row are written on that one connection, in that one transaction.
+
+## Rewriting a migration
+
+The schema builder is the one way to write a migration: `MigrationSet::migration` takes a `navree::schema::Migration`, and so do the per-workspace sets (`m.workspace_migrations(..)`, for [schema and database isolation](/docs/workspaces/isolation/)).
+
+A migration is recorded by its module and name. One you rewrite keeps its exact name, so the row `navree_migrations` already holds for it still counts and it doesn't run again: change the body, not the name. `migration!(m20261026_093000_create_deals_table)` takes the file's module name, and `SchemaMigration::new(name, migration)` takes the name as a string when the type isn't in a file of its own. Rewrite one migration at a time and run `navree migrate --pretend` on a database that has already run them: it must plan nothing.
+
+## Testing migrations
+
+`TestApp::builder().temp_database()` turns `migrate_on_boot` on, so every test app runs your migrations on an empty database, and a broken `up` fails every test that uses it. A test that runs `migrate:refresh` checks your `down` methods too:
+
+```rust
+app.run_command("migrate:refresh", &[]).await?;
+```
+
+[Running migrations](/docs/database/running-migrations/#running-migrations-from-code) shows the migrator's API for tests that inspect what ran.
+
+<LinkCards>
+  <LinkCard href="/docs/database/running-migrations/" title="Running migrations">
+    `migrate`, rolling back, pretending and production.
+  </LinkCard>
+  <LinkCard href="/docs/database/columns/" title="Columns">
+    Every column type and modifier, per database.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Hypertables, compression, retention and continuous aggregates.
+  </LinkCard>
+</LinkCards>

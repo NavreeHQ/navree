@@ -1,0 +1,402 @@
+//! The shop's assistant with the model scripted: the week's UPI payments as a donut drawn
+//! from the reader's own data, a refund that waits for the manager's approval, an
+//! order's card whose buttons only the manager gets and which refund once after asking,
+//! and an order's page telling the assistant which order it is about.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use agent_demo::assistant::ShopAssistant;
+use agent_demo::shop::{self, DEMO_PASSWORD, MANAGER, Order, SAMPLE_ORDER, STAFF, rupees};
+use agent_demo::{Settings, app};
+use http::Uri;
+use navree::access::{AbilityFactory, PrincipalAccess};
+use navree::ai::ui::{Acted, Assistant};
+use navree::ai::{Ai, AiFake, FakeReply};
+use navree::auth::AuthService;
+use navree::contracts::{AuthVia, Principal};
+use navree::db::{Db, ExecutorExt as _, Statement, Value};
+use navree::orm::Model as _;
+use navree::testing::{TestApp, TestClient, TestResponse};
+use navree::ui::LazyAsk;
+use serde_json::json;
+use uuid::Uuid;
+
+/// The app on a database file of its own, removed when the test ends.
+struct Shop {
+    app: TestApp,
+    path: PathBuf,
+}
+
+impl Drop for Shop {
+    fn drop(&mut self) {
+        for end in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{end}", self.path.display()));
+        }
+    }
+}
+
+async fn shop(name: &str) -> Shop {
+    let path = std::env::temp_dir().join(format!("agent-demo-{name}-{}.db", std::process::id()));
+    for end in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{end}", path.display()));
+    }
+    let url = format!("sqlite://{}?mode=rwc", path.display());
+    let app = TestApp::from_builder(app(0, url, Settings::default())).await;
+    Shop { app, path }
+}
+
+/// The access of the person with `email`, as their request would have it.
+async fn access(app: &TestApp, email: &str) -> Arc<PrincipalAccess> {
+    let user = app
+        .get::<AuthService>()
+        .await
+        .find_by_email(email)
+        .await
+        .unwrap()
+        .expect("the seed made them");
+    let principal = Principal {
+        user_id: user.id,
+        via: AuthVia::Token,
+        token_abilities: None,
+        session_id: None,
+    };
+    app.get::<AbilityFactory>()
+        .await
+        .access_for(Some(&principal))
+        .await
+        .unwrap()
+}
+
+async fn assistant(app: &TestApp) -> Arc<Assistant<ShopAssistant>> {
+    app.get::<Assistant<ShopAssistant>>().await
+}
+
+async fn fake(app: &TestApp) -> AiFake {
+    app.get::<Ai>().await.fake().expect("the demo runs AiFake")
+}
+
+/// Whether the conversation's run has ended. Between two steps (a tool's call and its
+/// component, or its approval) nothing on the page is being written, but the run goes on;
+/// its end is written after its last item.
+async fn run_ended(app: &TestApp, id: Uuid) -> bool {
+    app.get::<Db>()
+        .await
+        .fetch_scalar::<String>(&Statement::portable(
+            "SELECT status FROM ai_runs WHERE conversation_id = ?",
+            [Value::from(id)],
+        ))
+        .await
+        .is_ok_and(|status| status != "running")
+}
+
+/// The conversation once its run has ended.
+async fn settled(app: &TestApp, access: &Arc<PrincipalAccess>, id: Uuid) -> String {
+    let assistant = assistant(app).await;
+    // Up to 30 s: a run on a busy machine takes its time; the loop ends as soon as it does.
+    for _ in 0..3000 {
+        if run_ended(app, id).await {
+            return assistant
+                .items(access.clone(), id, &LazyAsk::First, Some("tok"))
+                .await
+                .unwrap()
+                .to_html();
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the answer is still being written");
+}
+
+/// The signed URLs of the buttons in `html`.
+fn buttons(html: &str) -> Vec<String> {
+    html.match_indices(r#"action="/assistant/act?"#)
+        .map(|(at, _)| {
+            let rest = &html[at + r#"action=""#.len()..];
+            rest[..rest.find('"').unwrap()].replace("&amp;", "&")
+        })
+        .collect()
+}
+
+/// Posts a form as the page does, with the session's CSRF token.
+async fn post_form(client: &TestClient, path: &str, fields: &[(&str, &str)]) -> TestResponse {
+    if client.cookie("XSRF-TOKEN").is_none() {
+        client
+            .get("/sign-in")
+            .header("accept", "text/html")
+            .send()
+            .await
+            .assert_status(200);
+    }
+    let csrf = client.cookie("XSRF-TOKEN").expect("the XSRF-TOKEN cookie");
+    let mut all = fields.to_vec();
+    all.push(("_csrf", csrf.as_str()));
+    client
+        .post(path)
+        .header("accept", "text/html")
+        .form(&all)
+        .send()
+        .await
+}
+
+async fn sample(app: &TestApp) -> Order {
+    Order::query()
+        .get(&*app.get::<Db>().await)
+        .await
+        .unwrap()
+        .into_models()
+        .into_iter()
+        .find(|order| order.number == SAMPLE_ORDER)
+        .unwrap()
+}
+
+#[tokio::test]
+async fn upi_this_week_is_a_donut_of_the_readers_own_payments() {
+    let shop = shop("donut").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    fake.respond_with([
+        FakeReply::tool_call("show_payments_by_method", json!({ "period": "this_week" })),
+        FakeReply::text("UPI took the most this week."),
+    ]);
+    let id = assistant(app)
+        .await
+        .start(simran.clone(), "How did UPI do this week?", None)
+        .await
+        .unwrap();
+    let html = settled(app, &simran, id).await;
+
+    assert!(html.contains(r#"data-genui="surface""#), "{html}");
+    assert!(html.contains("Payments this week"), "{html}");
+    assert!(html.contains("UPI"), "{html}");
+    let since = shop::period_start("this_week", chrono::Utc::now());
+    let orders: Vec<Order> = Order::query()
+        .get(&*app.get::<Db>().await)
+        .await
+        .unwrap()
+        .into_models()
+        .into_iter()
+        .filter(|order| order.placed_at >= since)
+        .collect();
+    assert!(html.contains(&format!("{} orders", orders.len())), "{html}");
+    let total: i64 = orders.iter().map(Order::left).sum();
+    assert!(html.contains(&rupees(total)), "{} in {html}", rupees(total));
+    // The model chose the period; it never read the numbers.
+    let result = fake.tool_results("show_payments_by_method")[0].to_string();
+    assert!(!result.contains(&rupees(total)), "{result}");
+}
+
+#[tokio::test]
+async fn a_refund_waits_for_the_managers_approval_in_the_page() {
+    let shop = shop("approve").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    fake.respond(FakeReply::tool_call(
+        "refund_order",
+        json!({ "order": SAMPLE_ORDER }),
+    ));
+    let assistant = assistant(app).await;
+    let id = assistant
+        .start(simran.clone(), "Refund order KK-1042", None)
+        .await
+        .unwrap();
+    settled(app, &simran, id).await;
+    let region = navree::ui::render(
+        &assistant
+            .approval(simran.clone(), id, Some("tok"))
+            .await
+            .unwrap(),
+    );
+
+    assert!(
+        region.contains("The assistant asks to: Refund an order"),
+        "{region}"
+    );
+    assert!(region.contains(SAMPLE_ORDER), "{region}");
+    assert_eq!(sample(app).await.status, "paid", "nothing ran yet");
+
+    let call = region
+        .split(r#"name="call_id" value=""#)
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .unwrap()
+        .to_owned();
+    fake.respond(FakeReply::text("Refunded ₹1,250 to Harpreet Kaur."));
+    assistant.approve(simran.clone(), id, &call).await.unwrap();
+    let html = settled(app, &simran, id).await;
+    assert!(html.contains("Refunded ₹1,250 to Harpreet Kaur."), "{html}");
+    let order = sample(app).await;
+    assert_eq!(
+        (order.status.as_str(), order.refunded),
+        ("refunded", 125_000)
+    );
+}
+
+#[tokio::test]
+async fn staff_are_not_offered_refunds_and_see_an_order_without_buttons() {
+    let shop = shop("staff").await;
+    let app = &shop.app;
+    let arjun = access(app, STAFF.1).await;
+    let fake = fake(app).await;
+    fake.respond_with([
+        FakeReply::tool_call("show_order_card", json!({ "order": SAMPLE_ORDER })),
+        FakeReply::text("Here is the order."),
+    ]);
+    let id = assistant(app)
+        .await
+        .start(arjun.clone(), "Show order KK-1042", None)
+        .await
+        .unwrap();
+    let html = settled(app, &arjun, id).await;
+
+    assert!(
+        !fake.requests()[0]
+            .tools()
+            .iter()
+            .any(|t| t == "refund_order")
+    );
+    assert!(html.contains("Harpreet Kaur"), "{html}");
+    assert!(
+        html.contains("Only a manager can change an order."),
+        "{html}"
+    );
+    assert!(buttons(&html).is_empty(), "{html}");
+}
+
+#[tokio::test]
+async fn the_cards_refund_asks_first_and_runs_once() {
+    let shop = shop("card").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    fake.respond_with([
+        FakeReply::tool_call("show_order_card", json!({ "order": SAMPLE_ORDER })),
+        FakeReply::text("Here it is."),
+    ]);
+    let assistant = assistant(app).await;
+    let id = assistant
+        .start(simran.clone(), "Show order KK-1042", None)
+        .await
+        .unwrap();
+    let html = settled(app, &simran, id).await;
+    let urls = buttons(&html);
+    assert_eq!(urls.len(), 2, "Mark delivered and Refund: {html}");
+    assert!(html.contains("Refund order KK-1042?"), "{html}");
+    let refund: Uri = urls[1].parse().unwrap();
+
+    let (_, asked) = assistant.act(simran.clone(), &refund, false).await.unwrap();
+    assert_eq!(
+        asked,
+        Acted::Ask {
+            label: "Refund ₹1,250".into()
+        }
+    );
+    assert_eq!(sample(app).await.status, "paid");
+    let (_, done) = assistant.act(simran.clone(), &refund, true).await.unwrap();
+    assert_eq!(
+        done,
+        Acted::Done("Refunded ₹1,250 for order KK-1042".into())
+    );
+    assert_eq!(sample(app).await.status, "refunded");
+    let again = assistant
+        .act(simran.clone(), &refund, true)
+        .await
+        .unwrap_err();
+    assert_eq!(again.status.as_u16(), 409);
+    // Arjun can't post Simran's button.
+    let arjun = access(app, STAFF.1).await;
+    let error = assistant.act(arjun, &refund, true).await.unwrap_err();
+    assert_eq!(error.status.as_u16(), 403);
+}
+
+#[tokio::test]
+async fn an_orders_page_tells_the_assistant_which_order_it_is_about() {
+    let shop = shop("context").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    fake.respond(FakeReply::text("It was paid by UPI this morning."));
+    let assistant = assistant(app).await;
+    let order = sample(app).await;
+    let context = assistant.context_ref(simran.user.unwrap(), "order", &order.id.to_string());
+    let id = assistant
+        .start(simran.clone(), "What about this order?", Some(&context))
+        .await
+        .unwrap();
+    settled(app, &simran, id).await;
+    let system = fake.requests().last().unwrap().system().unwrap().to_owned();
+    assert!(
+        system.contains("order KK-1042 by Harpreet Kaur of Ludhiana: ₹1,250 by UPI, paid"),
+        "{system}"
+    );
+}
+
+// The composer's posts go through the whole app, as a browser sends them: the request's
+// own unit of work is open around the handler while the answer is written beside it.
+#[tokio::test]
+async fn a_question_asked_from_the_page_is_answered() {
+    let shop = shop("page").await;
+    let app = &shop.app;
+    let simran = access(app, MANAGER.1).await;
+    let fake = fake(app).await;
+    let browser = app.client();
+    let signed_in = post_form(
+        &browser,
+        "/sign-in",
+        &[("email", MANAGER.1), ("password", DEMO_PASSWORD)],
+    )
+    .await;
+    assert_eq!(signed_in.status(), 303, "{}", signed_in.text());
+    browser
+        .get("/assistant")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+
+    fake.respond(FakeReply::text("UPI took the most this week."));
+    let asked = post_form(
+        &browser,
+        "/assistant",
+        &[("message", "How did UPI do this week?")],
+    )
+    .await;
+    assert_eq!(asked.status(), 303, "{}", asked.text());
+    let page = asked
+        .header("location")
+        .expect("the conversation's page")
+        .to_owned();
+    let id: Uuid = page
+        .strip_prefix("/assistant/")
+        .and_then(|id| id.parse().ok())
+        .unwrap_or_else(|| panic!("a conversation's page: {page}"));
+    let html = settled(app, &simran, id).await;
+    assert!(html.contains("How did UPI do this week?"), "{html}");
+    assert!(html.contains("UPI took the most this week."), "{html}");
+    browser
+        .get(&page)
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+
+    // The next message, in the same conversation.
+    fake.respond(FakeReply::text("Card came second."));
+    let sent = post_form(
+        &browser,
+        &format!("{page}/messages"),
+        &[("message", "And cards?")],
+    )
+    .await;
+    assert!(
+        sent.status().is_success() || sent.status().is_redirection(),
+        "{}: {}",
+        sent.status(),
+        sent.text()
+    );
+    let html = settled(app, &simran, id).await;
+    assert!(html.contains("And cards?"), "{html}");
+    assert!(html.contains("Card came second."), "{html}");
+}

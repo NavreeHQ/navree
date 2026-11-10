@@ -1,0 +1,454 @@
+# Every Rust test suite in the workspace, on Linux and on Windows.
+#
+# Linux runs against real servers: SQLite, PostgreSQL 17 with TimescaleDB,
+# MySQL 8.4, MariaDB 11.4 and 10.6, and MongoDB 8.0 (replica set rs0), plus
+# Redis, an S3 server, Google Cloud Storage and Azure Blob emulators, Qdrant,
+# pgvector, Typesense, Meilisearch, stripe-mock, Pebble, NATS, MQTT, Kafka
+# (each also with a login and over TLS), RabbitMQ and four Mailpit servers
+# (plain, with login, STARTTLS, TLS).
+# scripts/ci-services.sh starts them from scripts/services/compose.yml; the
+# suites find them through NAVREE_TEST_* variables. A server that does not
+# answer is started once more, then named in the step's output (with its log
+# and the memory of the machine); the suites that do not need it still run, and
+# the job fails in its last step. After the workspace run the servers that only
+# it uses are stopped, so the database runs have the memory.
+# NAVREE_TEST_REQUIRE_SERVICES=1 turns a missing server, Chrome, Node.js or
+# FFmpeg into a failure instead of a skip. Each run keeps its output (cargo
+# test ... -- --show-output) and a step counts the "skipped" notices in it: a
+# service test that skipped itself fails the job. The job's summary shows,
+# per run, the tests passed, failed and ignored and the unexpected skips; the
+# logs are kept as the run's `rust-suites-logs` artifact.
+# Each test step runs scripts/ci-watch.sh beside it: the memory every few
+# seconds, the largest processes every minute, the kernel's out-of-memory kills
+# and every SIGTERM or SIGKILL sent to a whole process group or to the runner,
+# with its sender, in the step's own log, so a step that ends the runner still
+# says why.
+# The job builds every test binary once (all features), then runs:
+#
+# 1. the whole workspace on SQLite, with the servers up for the suites that
+#    name them (unit tests, integration tests, doctests);
+# 2. the 26 crates that take their database from NAVREE_TEST_DATABASE again on
+#    PostgreSQL and on MySQL;
+# 3. the MySQL suites of navree-db, navree-orm and navree-schema, and those 26
+#    crates, on MariaDB 11.4 and on MariaDB 10.6 (NAVREE_TEST_MYSQL_URL set to
+#    the MariaDB server);
+# 4. the crates with code that only exists when a feature is off, on their
+#    default features;
+# 5. the navree-mcp suite that drives the official TypeScript SDK, and
+#    navree-oauth's ID tokens verified by the jose library (also on every
+#    change to navree-oauth: oidc-jose.yml).
+#
+# Windows runs the workspace on SQLite (a hosted Windows runner has no Linux
+# containers, so the suites that name a server print SKIPPED and pass), with
+# Chrome, Node.js and FFmpeg.
+#
+# The connectors that need more than one container of their own (identity
+# providers, mail servers, an SSH host) run in integrations.yml.
+#
+# Once a month a third job builds the projects `navree new` generates (the API,
+# SaaS and microservice kits) and runs their own tests and lints: the suites
+# marked `#[ignore]` in navree-cli, minutes each.
+#
+# The schedule is not on every push: a run takes about an hour and a half on
+# a two-core Linux runner, and Windows minutes count twice. Linux runs weekly;
+# Windows and the generated projects run monthly. Estimated minutes (from the
+# CPU time of a local build and test run of the workspace, not yet measured on
+# the runners): Linux about 100 a run, Windows about 80 a run (160 billed), the
+# generated projects about 75; about 670 billed minutes a month. Compiling the
+# workspace's own crates dominates, so the dependency cache saves little. Run
+# the workflow by hand (workflow_dispatch) after changing a crate that nothing
+# else covers, and before a release on both platforms.
+#
+# Not run here: the measurements marked `#[ignore]` in navree-http and
+# navree-db (timings printed for a person to read), the fixture rewriter in
+# navree-cli (`config_fixtures`), the fuzz targets (fuzz.yml) and the Playwright
+# and system suites (they are not Rust suites).
+name: Rust suites
+
+on:
+  schedule:
+    # Sundays 03:47 UTC: Linux.
+    - cron: "47 3 * * 0"
+    # The first of the month, 04:47 UTC: Windows and the generated projects.
+    - cron: "47 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      linux:
+        description: Linux (real servers)
+        type: boolean
+        default: true
+      windows:
+        description: Windows (SQLite)
+        type: boolean
+        default: true
+      generated:
+        description: Generated projects (slow)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-suites-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Debug info makes test binaries several times larger and nothing here reads
+  # it; no incremental state is kept between runs.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  RUST_BACKTRACE: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+  # The crates whose suites take their database from NAVREE_TEST_DATABASE
+  # (sqlite, postgres or mysql).
+  DATABASE_CRATES: >-
+    navree-access navree-ai navree-audit navree-auth navree-billing
+    navree-directory navree-domains navree-flags navree-fleet navree-helm
+    navree-i18n navree-integrations navree-lighthouse navree-logbook
+    navree-media navree-notify navree-oauth navree-queue navree-search
+    navree-settings navree-sheets navree-social navree-sso navree-webhooks
+    navree-workflows navree-workspace
+  # The crates with code or tests that only exist when a feature is off.
+  FEATURE_OFF_CRATES: >-
+    navree-documents navree-helm navree-logbook navree-media navree-micro
+    navree-observe navree-search navree-sheets navree-storage navree-validation
+
+jobs:
+  linux:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '47 3 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && inputs.linux)
+    # MongoDB refuses to start on Linux kernels 6.19 through 7.0.13 (a TCMalloc
+    # incompatibility; see the warning in the MongoDB 8.0 release notes), and
+    # the ubuntu-24.04 image from 2026-10-25 ships such a kernel (the same
+    # reason mongodb.yml runs on ubuntu-22.04). Move back to ubuntu-latest once
+    # its kernel is 7.0.14 or newer.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      # Fail instead of skipping when a server, Chrome, Node.js or FFmpeg is
+      # missing.
+      NAVREE_TEST_REQUIRE_SERVICES: "1"
+      # Dock starts and removes its own Redis and Mailpit containers.
+      NAVREE_TEST_DOCKER: "1"
+      # The Software-as-a-Service kit's web app: pnpm install, lint, test and build.
+      NAVREE_TEST_KIT_WEB: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          # The test binaries of the whole workspace are several gigabytes.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+          df --human-readable /
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          # navree-cli's suites format and lint the projects they generate.
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # A cold build is the longest step: keep what it compiled when a
+          # test fails, so the next run starts from it.
+          cache-on-failure: true
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: packages/js/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/js/pnpm-lock.yaml
+
+      - name: Install FFmpeg, find Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version | head -n 1
+          # navree-documents takes Chrome from this variable.
+          chrome="$(command -v google-chrome)"
+          "$chrome" --version
+          echo "NAVREE_BROWSER_CHROME=$chrome" >> "$GITHUB_ENV"
+          # A runner may refuse unprivileged user namespaces, which Chrome's
+          # sandbox needs (the key does not exist on every image).
+          sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Build every test binary
+        run: |
+          # The images download while the compiler works (the network and the
+          # CPU are not competing), the servers start once it is done.
+          scripts/ci-services.sh pull &
+          pulling=$!
+          cargo test --locked --workspace --all-features --no-run
+          wait "$pulling"
+          df --human-readable /
+
+      - name: Build the front-end packages
+        run: |
+          pnpm --dir packages/js install --frozen-lockfile
+          pnpm --dir packages/js build
+
+      - name: Start the servers
+        id: servers
+        # A server that does not start is named in the output and fails the
+        # job in the last step, but the suites that do not need it still run:
+        # the build before this step takes an hour.
+        continue-on-error: true
+        run: scripts/ci-services.sh start
+
+      # The steps below run with whatever started. A suite whose server is
+      # missing fails (NAVREE_TEST_REQUIRE_SERVICES=1), so nothing is skipped
+      # quietly.
+
+      - name: Test the workspace on SQLite
+        shell: bash
+        run: |
+          setsid scripts/ci-watch.sh "$$" &
+          mkdir -p target/logs
+          cargo test --locked --workspace --all-features --no-fail-fast -- --show-output 2>&1 | tee target/logs/sqlite.log
+
+      - name: Stop the servers the database runs do not use
+        # The runs below take their database from NAVREE_TEST_DATABASE and
+        # use, besides the databases, only the vector and search servers,
+        # stripe-mock and Pebble. The brokers (two JVMs among them), the object
+        # stores, the mail servers and Redis are used by the workspace run
+        # above and by nothing below; their memory goes to the databases.
+        if: ${{ !cancelled() }}
+        run: >-
+          scripts/ci-services.sh drop mongodb redis s3 gcs azurite nats nats-secure mqtt
+          kafka kafka-secure rabbitmq mailpit mailpit-auth mailpit-starttls mailpit-tls
+
+      - name: Test on PostgreSQL
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          NAVREE_TEST_DATABASE: postgres
+        run: |
+          setsid scripts/ci-watch.sh "$$" &
+          packages=()
+          for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
+          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output 2>&1 | tee target/logs/postgres.log
+
+      - name: Test on MySQL
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          NAVREE_TEST_DATABASE: mysql
+        run: |
+          setsid scripts/ci-watch.sh "$$" &
+          packages=()
+          for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
+          cargo test --locked --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output 2>&1 | tee target/logs/mysql.log
+
+      - name: Test on MariaDB 11.4 and 10.6
+        # The MySQL suites against MariaDB: the database crates' own MySQL
+        # suites, then the crates that take their database from
+        # NAVREE_TEST_DATABASE.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          setsid scripts/ci-watch.sh "$$" &
+          packages=()
+          for crate in $DATABASE_CRATES; do packages+=(--package "$crate"); done
+          status=0
+          for server in 11.4 10.6; do
+            if [ "$server" = 11.4 ]; then
+              url="$NAVREE_TEST_MARIADB_URL"
+            else
+              url="$NAVREE_TEST_MARIADB_10_6_URL"
+            fi
+            {
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-db --test mysql --test engine --test migrator -- --show-output || status=1
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-orm --test servers --test differential --test integration -- --show-output || status=1
+              NAVREE_TEST_MYSQL_URL="$url" cargo test --locked --all-features --no-fail-fast \
+                --package navree-schema --test servers -- --show-output || status=1
+              NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL="$url" cargo test --locked \
+                --all-features --no-fail-fast --tests "${packages[@]}" -- --show-output || status=1
+              exit "$status"
+            } 2>&1 | tee "target/logs/mariadb-$server.log" || status=1
+          done
+          exit "$status"
+
+      - name: Count the skipped service tests
+        # With NAVREE_TEST_REQUIRE_SERVICES=1 a service test fails instead of
+        # skipping, so a "skipped" notice that is not on the list of by-design
+        # skips (scripts/services/skips.allow) means a test did not check
+        # that.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          status=0
+          for log in target/logs/sqlite.log target/logs/postgres.log target/logs/mysql.log \
+            target/logs/mariadb-11.4.log target/logs/mariadb-10.6.log; do
+            echo "::group::$log"
+            scripts/ci-services.sh check-skips "$log" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+      - name: Summarise the test runs
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          scripts/ci-services.sh summary target/logs/sqlite.log target/logs/postgres.log \
+            target/logs/mysql.log target/logs/mariadb-11.4.log target/logs/mariadb-10.6.log |
+            tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the test logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-suites-logs
+          path: target/logs
+          if-no-files-found: ignore
+
+      - name: Test with the default features
+        if: ${{ !cancelled() }}
+        env:
+          # The server suites are compiled out of these builds.
+          NAVREE_TEST_REQUIRE_SERVICES: ""
+        run: |
+          setsid scripts/ci-watch.sh "$$" &
+          packages=()
+          for crate in $FEATURE_OFF_CRATES; do packages+=(--package "$crate"); done
+          cargo test --locked --no-fail-fast --tests "${packages[@]}"
+
+      - name: Test navree-mcp against the TypeScript SDK
+        if: ${{ !cancelled() }}
+        run: |
+          npm ci --prefix e2e/mcp-sdk --ignore-scripts
+          cargo test --locked --workspace --all-features --test sdk_conformance -- --ignored --nocapture
+
+      - name: Verify navree-oauth's ID tokens with the jose library
+        if: ${{ !cancelled() }}
+        run: |
+          npm ci --prefix e2e/oidc-jose --ignore-scripts
+          cargo test --locked --all-features --package navree-oauth --test oauth             oidc::an_independent_jwt_library_verifies_the_id_tokens -- --ignored --exact --nocapture
+
+      - name: Test billing on the Stripe test mode and the Paddle sandbox
+        # Opt-in: runs only when the repository has the secrets (a Stripe
+        # test-mode key, a Paddle sandbox API key); without them each test
+        # says so and passes. Nothing is charged in either environment.
+        if: ${{ !cancelled() }}
+        env:
+          STRIPE_TEST_SECRET: ${{ secrets.STRIPE_TEST_SECRET }}
+          PADDLE_SANDBOX_KEY: ${{ secrets.PADDLE_SANDBOX_KEY }}
+        run: cargo test --locked --all-features --package navree-billing --test sandboxes -- --nocapture
+
+      - name: Fail the job when a server did not start
+        if: ${{ !cancelled() && steps.servers.outcome == 'failure' }}
+        run: |
+          echo "A server did not start: see the output of the step that starts them."
+          exit 1
+
+      - name: Show the servers' logs after a failure
+        if: ${{ failure() }}
+        run: |
+          for name in $(docker ps --all --format '{{.Names}}' | grep '^navree-ci-'); do
+            echo "::group::$name"
+            docker logs --tail 60 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  windows:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '47 4 1 * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.windows)
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: packages/js/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/js/pnpm-lock.yaml
+
+      - name: Install FFmpeg, find Chrome
+        shell: pwsh
+        run: |
+          choco install ffmpeg --yes --no-progress
+          ffmpeg -version | Select-Object -First 1
+          # navree-documents takes Chrome from this variable.
+          $chrome = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+          if (-not (Test-Path $chrome)) { throw "Chrome is not at $chrome" }
+          "NAVREE_BROWSER_CHROME=$chrome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Build every test binary
+        run: cargo test --locked --workspace --all-features --no-run
+
+      - name: Build the front-end packages
+        run: |
+          pnpm --dir packages/js install --frozen-lockfile
+          pnpm --dir packages/js build
+
+      - name: Test the workspace on SQLite
+        run: cargo test --locked --workspace --all-features --no-fail-fast
+
+      - name: Test with the default features
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $packages = "$env:FEATURE_OFF_CRATES".Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { '--package'; $_ }
+          cargo test --locked --no-fail-fast --tests @packages
+
+  generated:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '47 4 1 * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.generated)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /usr/share/swift "$AGENT_TOOLSDIRECTORY/CodeQL"
+          df --human-readable /
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+
+      - name: Test the generated projects
+        # Each test generates a project that depends on this checkout, builds
+        # it (the framework compiles once into target/generated-kits, shared by
+        # the kits), and runs its tests, clippy and its own commands.
+        run: >-
+          cargo test --locked --package navree-cli --all-features --no-fail-fast
+          --test generated_app --test generated_kits --test navigator
+          -- --ignored --test-threads 1

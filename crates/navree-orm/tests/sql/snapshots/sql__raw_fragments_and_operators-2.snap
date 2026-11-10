@@ -1,0 +1,8 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_(Deal::TAGS.op(\"@>\", vec![\"a\".to_owned()])))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."tags" @> $1 AND "deals"."deleted_at" IS NULL
+  values: [Json(Array [String("a")])]
+MySQL: error: the operator `@>` is not supported on MySQL
+SQLite: error: the operator `@>` is not supported on SQLite

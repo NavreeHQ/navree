@@ -1,0 +1,50 @@
+---
+title: "Accordion"
+description: "Sections that open and close, on the browser's `<details>`: no script, and one at a time when you ask."
+---
+
+<UiPreview example="accordion/default" />
+
+`Accordion` is a stack of `<details>` elements. Each section opens and closes in the browser, with no script and with its keyboard. `.exclusive(name)` gives them a shared `name`, so opening one closes the others.
+
+```rust
+use navree::ui::*;
+
+Accordion::new()
+    .open_item("What does the plan include?", "Unlimited deals, 5 seats and the API.")
+    .item("Can I change plans later?", "Yes, at any time.")
+```
+
+## When to use it
+
+Use an accordion for several sections that readers open one by one, such as questions and answers.
+
+<UiChoose name="disclosure" current="Accordion" />
+
+## Anatomy
+
+<UiAnatomy component="accordion" />
+
+## One open at a time
+
+<UiPreview example="accordion/exclusive" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves between the sections' titles. |
+| `Enter`, `Space` | Opens or closes a section. |
+
+- Each title is a `<summary>`, announced as a button that is expanded or collapsed.
+- The browser's find-in-page opens a closed section when it holds the match.
+
+</UiA11y>
+
+## API
+
+### Accordion
+
+<UiProps type="Accordion" />

@@ -1,0 +1,455 @@
+---
+source: crates/navree-cli/tests/make_module.rs
+expression: files.to_string()
+---
+==> posts/mod.rs <==
+//! The posts module: the `posts` table, its service and its JSON
+//! API under `/api/v1/posts`.
+//!
+//! ```text
+//! posts/
+//! ├── mod.rs           # PostsModule: what the module provides and imports
+//! ├── controller.rs    # PostController: the HTTP routes
+//! ├── service.rs       # PostService: the business logic
+//! ├── entity.rs        # the `posts` table, as an ORM model
+//! ├── dto.rs           # request bodies and their validation rules
+//! ├── migrations/      # migrations owned by this module
+//! └── tests/           # tests on a fresh database
+//! ```
+
+mod controller;
+pub mod dto;
+pub mod entity;
+mod migrations;
+mod service;
+#[cfg(test)]
+mod tests;
+
+use navree::access::AccessModule;
+use navree::db::ModuleBuilderDbExt;
+use navree::kernel::ModuleBuilder;
+use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
+use navree::workspace::ModuleBuilderWorkspaceExt;
+
+pub use controller::PostController;
+pub use entity::Post;
+pub use service::PostService;
+
+/// Posts: CRUD under `/api/v1/posts`.
+///
+/// Every route checks the caller's abilities on `Post`. Grant them
+/// with permissions (`posts.read`, `.create`, `.update`, `.delete`, or
+/// `posts.manage` for all) or with rules in the app's abilities function.
+#[module(
+    imports = [AccessModule::for_feature::<Post>()],
+    providers = [PostService],
+    controllers = [PostController],
+    exports = [PostService],
+    register = Self::wire,
+)]
+pub struct PostsModule;
+
+impl PostsModule {
+    /// Registrations `#[module]` has no key for (migrations, models, jobs,
+    /// listeners, commands, templates). `navree make:*` adds its lines above
+    /// the `navree:wire` marker.
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.migrations(migrations::migrations());
+        m.model::<Post>();
+        // Shared by every workspace; per workspace: #[model(workspace)] and a workspace_id column.
+        m.global_entity::<Post>();
+        // navree:wire
+    }
+}
+
+==> posts/controller.rs <==
+//! The posts JSON API: `/api/v1/posts`.
+
+use std::sync::Arc;
+
+use navree::access::{Accessible, Authorized, Create, Delete, Read, Update};
+use navree::db::{Page, PageQuery, Uow};
+use navree::http::{Created, Json, NoContent, Result};
+use navree::orm::Record;
+use navree::validation::Valid;
+use navree::{controller, injectable};
+
+use super::dto::{CreatePost, UpdatePost};
+use super::entity::Post;
+use super::service::PostService;
+
+/// The routes of the posts resource. Each one checks the
+/// caller's abilities on `Post` before the handler runs; routes with
+/// `from = "id"` load the record first (404 when it does not exist).
+#[injectable]
+pub struct PostController {
+    posts: Arc<PostService>,
+}
+
+#[controller("/posts", version = "1")]
+impl PostController {
+    /// Lists the posts the user may read, newest first
+    /// (`?page=2&per_page=50`).
+    #[get("/")]
+    #[can(Read, Post)]
+    #[api(summary = "List posts", tag = "Post")]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Post, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Record<Post>>> {
+        Ok(self.posts.list(&uow, scope, page).await?)
+    }
+
+    /// Shows one post.
+    #[get("/{id}")]
+    #[can(Read, Post, from = "id")]
+    #[api(summary = "Show a post", tag = "Post")]
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
+        Json(post.into_inner())
+    }
+
+    /// Creates a post owned by the caller.
+    #[post("/")]
+    #[can(Create, Post)]
+    #[api(summary = "Create a post", tag = "Post", status = 201)]
+    async fn store(
+        &self,
+        uow: Uow,
+        Valid(Json(input)): Valid<Json<CreatePost>>,
+    ) -> Result<Created<Record<Post>>> {
+        let post = self.posts.create(&uow, input).await?;
+        Ok(Created(format!("/api/v1/posts/{}", post.id), post))
+    }
+
+    /// Updates the fields present in the body.
+    #[patch("/{id}")]
+    #[can(Update, Post, from = "id")]
+    #[api(summary = "Update a post", tag = "Post")]
+    async fn update(
+        &self,
+        uow: Uow,
+        post: Authorized<Post, Update>,
+        Valid(Json(input)): Valid<Json<UpdatePost>>,
+    ) -> Result<Json<Record<Post>>> {
+        post.check_fields(&input.changed_fields())?;
+        let post = self.posts.update(&uow, post.into_inner(), input).await?;
+        Ok(Json(post))
+    }
+
+    /// Deletes a post.
+    #[delete("/{id}")]
+    #[can(Delete, Post, from = "id")]
+    #[api(summary = "Delete a post", tag = "Post", status = 204)]
+    async fn destroy(&self, uow: Uow, post: Authorized<Post, Delete>) -> Result<NoContent> {
+        self.posts.delete(&uow, post.into_inner()).await?;
+        Ok(NoContent)
+    }
+}
+
+==> posts/service.rs <==
+//! The business logic of the posts module.
+
+use navree::access::{Accessible, Read};
+use navree::db::{Page, PageQuery, Uow};
+use navree::injectable;
+use navree::orm::access::AccessibleQuery as _;
+use navree::orm::{Model as _, OrmError, Record};
+
+use super::dto::{CreatePost, UpdatePost};
+use super::entity::Post;
+
+/// Lists, creates, updates and deletes posts.
+///
+/// Writes go through the model's records inside the caller's unit of work:
+/// they commit with the request (or roll back with it) and record change
+/// events for the audit log and change observers.
+#[injectable]
+pub struct PostService;
+
+impl PostService {
+    /// One page of the posts `scope` lets the user read, newest first.
+    pub async fn list(
+        &self,
+        uow: &Uow,
+        scope: Accessible<Post, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Record<Post>>, OrmError> {
+        scope
+            .query()
+            .order_by_desc(Post::CREATED_AT)
+            .order_by_desc(Post::ID)
+            .paginate(uow, page)
+            .await
+    }
+
+    /// Creates a post owned by the acting user. The ORM generates the
+    /// id (a UUID v7) and sets the timestamps.
+    pub async fn create(&self, uow: &Uow, input: CreatePost) -> Result<Record<Post>, OrmError> {
+        Post::create(
+            uow,
+            Post {
+                owner_id: uow.actor(),
+                name: input.name,
+                ..Post::default()
+            },
+        )
+        .await
+    }
+
+    /// Applies the fields present in `input`.
+    pub async fn update(
+        &self,
+        uow: &Uow,
+        mut post: Record<Post>,
+        input: UpdatePost,
+    ) -> Result<Record<Post>, OrmError> {
+        if let Some(name) = input.name {
+            post.name = name;
+        }
+        // Writes only the changed columns, sets `updated_at` and records the
+        // change.
+        post.save(uow).await?;
+        Ok(post)
+    }
+
+    /// Deletes `post`.
+    pub async fn delete(&self, uow: &Uow, mut post: Record<Post>) -> Result<(), OrmError> {
+        post.delete(uow).await?;
+        Ok(())
+    }
+}
+
+==> posts/entity.rs <==
+//! The `posts` table as an ORM model.
+
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
+use serde::Serialize;
+use uuid::Uuid;
+
+/// A post. Serialized as is in API responses: keep secrets out
+/// of it (or skip them with `#[serde(skip)]`). Query it with
+/// `Post::query()`. The model is the access subject
+/// `Post`, with permissions `posts.<action>`
+/// (`posts.update`, `posts.manage`, ...): rules name it
+/// `Post`, and routes use it as `#[can(Read, Post)]` and
+/// `Authorized<Post, Update>`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "posts", timestamps, subject)]
+pub struct Post {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
+    pub id: Uuid,
+    /// The user who created it (abilities can test `owner_id`).
+    pub owner_id: Option<Uuid>,
+    /// The name.
+    pub name: String,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
+}
+
+==> posts/dto.rs <==
+//! Request bodies of the posts API, with their validation rules
+//! (checked by the `Valid` extractor before the handler runs).
+
+use navree::validation::Validate;
+use serde::Deserialize;
+
+/// The body of `POST /api/v1/posts`.
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreatePost {
+    /// 1 to 255 characters.
+    #[validate(length(min = 1, max = 255))]
+    pub name: String,
+}
+
+/// The body of `PATCH /api/v1/posts/{id}`: only the fields present change.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdatePost {
+    /// 1 to 255 characters.
+    #[validate(length(min = 1, max = 255))]
+    pub name: Option<String>,
+}
+
+impl UpdatePost {
+    /// The fields this update changes, for field-level ability checks.
+    pub fn changed_fields(&self) -> Vec<&'static str> {
+        let mut fields = Vec::new();
+        if self.name.is_some() {
+            fields.push("name");
+        }
+        fields
+    }
+}
+
+==> posts/migrations/mod.rs <==
+//! The migrations of the posts module. `navree migrate` runs every
+//! module's set in dependency order and each set in name order;
+//! `navree make:migration posts <name>` adds one here.
+
+use navree::db::MigrationSet;
+use navree::schema::migration;
+
+mod m20261025_143005_create_posts_table;
+
+/// The module's migration set, recorded under `posts` in `navree_migrations`.
+pub fn migrations() -> MigrationSet {
+    MigrationSet::new("posts")
+        .migration(migration!(m20261025_143005_create_posts_table))
+}
+
+==> posts/migrations/m20261025_143005_create_posts_table.rs <==
+//! Creates the `posts` table.
+
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("posts", |t| {
+                t.uuid_primary();
+                t.uuid("owner_id").nullable().index();
+                t.string("name");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("posts").await
+    }
+}
+
+==> posts/tests/mod.rs <==
+//! Tests of the posts module: each one boots the module with a fresh
+//! SQLite database and calls its routes in-process.
+
+use navree::access::{
+    AbilityCtx, AccessModule, AccessOptions, CREATE, DELETE, READ, Rules, UPDATE, field,
+};
+use navree::db::DatabaseModule;
+use navree::testing::{TestApp, principal};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use super::PostsModule;
+
+/// Test abilities: signed-in users read and create posts, and
+/// update or delete their own.
+fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    rules.can(READ, "Post");
+    rules.can(CREATE, "Post");
+    rules
+        .can(UPDATE, "Post")
+        .when(field("owner_id").eq(user.id));
+    rules
+        .can(DELETE, "Post")
+        .when(field("owner_id").eq(user.id));
+}
+
+async fn app() -> TestApp {
+    TestApp::builder()
+        .temp_database()
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(DatabaseModule)
+        .module(AccessModule::for_root(AccessOptions {
+            abilities,
+            super_admin_role: None,
+        }))
+        .module(PostsModule)
+        .build()
+        .await
+}
+
+#[tokio::test]
+async fn guests_must_sign_in() {
+    let app = app().await;
+    app.client()
+        .get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(401);
+}
+
+#[tokio::test]
+async fn create_show_update_list_and_delete() {
+    let app = app().await;
+    let user = app.acting_as(principal(Uuid::now_v7()));
+
+    let created = user
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "First" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let path = format!("/api/v1/posts/{}", created["id"].as_str().unwrap());
+
+    user.get(&path)
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("name", json!("First"));
+    user.patch(&path)
+        .json(&json!({ "name": "Renamed" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("name", json!("Renamed"));
+    user.get("/api/v1/posts")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", json!(1))
+        .assert_json_path("data.0.name", json!("Renamed"));
+    user.delete(&path).send().await.assert_status(204);
+    user.get(&path).send().await.assert_status(404);
+}
+
+#[tokio::test]
+async fn only_the_owner_may_update_or_delete() {
+    let app = app().await;
+    let owner = app.acting_as(principal(Uuid::now_v7()));
+    let created = owner
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "Mine" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let path = format!("/api/v1/posts/{}", created["id"].as_str().unwrap());
+
+    let other = app.acting_as(principal(Uuid::now_v7()));
+    other.get(&path).send().await.assert_status(200);
+    other
+        .patch(&path)
+        .json(&json!({ "name": "Taken" }))
+        .send()
+        .await
+        .assert_status(403);
+    other.delete(&path).send().await.assert_status(403);
+}
+
+#[tokio::test]
+async fn invalid_input_is_rejected() {
+    let app = app().await;
+    // A 400 JSON error, with the messages under `errors.name`.
+    app.acting_as(principal(Uuid::now_v7()))
+        .post("/api/v1/posts")
+        .json(&json!({ "name": "" }))
+        .send()
+        .await
+        .assert_validation_error("name");
+}

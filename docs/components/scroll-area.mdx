@@ -1,0 +1,69 @@
+---
+title: "ScrollArea"
+description: "A scrolling region with thin scrollbars that a keyboard can reach and a screen reader can name."
+---
+
+<UiPreview example="scroll-area/default" />
+
+`ScrollArea` is a region that scrolls on its own, with thin scrollbars. It takes focus, so a keyboard can scroll it, and it is named, so a screen reader can find it.
+
+```rust
+use navree::ui::*;
+
+ScrollArea::new("Activity")
+    .max_height(ScrollHeight::Md)
+    .children(Text::muted("Gurpreet moved Sutlej Supply renewal to Proposal"))
+```
+
+## When to use it
+
+Use it for a list that would otherwise make the page too long: a log, an activity feed. An area scrolls only when its height is limited, so give it a height with `max_height` or `height`. Without either it is as tall as its content, unless the container around it limits it.
+
+<UiChoose name="disclosure" current="ScrollArea" />
+
+## Height
+
+The toolkit sets the height with a size from a short list, because the content security policy allows no `style` attribute.
+
+| Size | Height |
+|---|---|
+| `ScrollHeight::Sm` | 12 rem |
+| `ScrollHeight::Md` | 20 rem |
+| `ScrollHeight::Lg` | 32 rem |
+| `ScrollHeight::Xl` | 48 rem |
+| `ScrollHeight::Fill` | What is left of the window, never less than 12 rem |
+
+`max_height(size)` lets the area grow with its content up to that size and scroll beyond it. A short list takes only the room it needs. The preview at the top uses it.
+
+`height(size)` makes the area that tall whatever it holds. Use it when the space should not change as rows come and go, such as a live feed in a column that sits beside others.
+
+<UiPreview example="scroll-area/fixed" />
+
+The last of the two calls wins: they replace each other. `ScrollHeight::Auto` is the default, with no limit. For a size that is not in the list, put the area in a container that has the height you want.
+
+## Anatomy
+
+<UiAnatomy component="scroll-area" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the area. |
+| `↑`, `↓`, `Page Up`, `Page Down` | Scroll it. |
+
+- It has `role="region"` and the label you give it, and `tabindex="0"`.
+
+</UiA11y>
+
+## API
+
+### ScrollArea
+
+<UiProps type="ScrollArea" />
+
+### ScrollHeight
+
+<UiProps type="ScrollHeight" />

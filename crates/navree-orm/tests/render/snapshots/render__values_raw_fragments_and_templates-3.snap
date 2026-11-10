@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::template(\"f({}, {})\", vec![col(\"a\")]))"
+---
+PostgreSQL: error: invalid query: the template `f({}, {})` has 2 hole(s) but 1 argument(s)
+MySQL: error: invalid query: the template `f({}, {})` has 2 hole(s) but 1 argument(s)
+SQLite: error: invalid query: the template `f({}, {})` has 2 hole(s) but 1 argument(s)

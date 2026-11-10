@@ -1,0 +1,55 @@
+---
+title: "SQLite"
+description: "Use a SQLite file: the feature, the URL, how every connection opens, the write lock, the settings and why in-memory databases fail."
+---
+
+[Getting started](/docs/database/getting-started/) covers what every database shares (the `database` section, the module, queries and errors). This page covers SQLite.
+
+## Turning it on
+
+SQLite is the `sqlite` Cargo feature, and it is off unless you turn it on: `navree = { version = "1", features = ["sqlite"] }`. `navree new my-app --database sqlite` writes that for you. The feature compiles the bundled SQLite library (a C library, built with the C compiler your Rust toolchain links with); a PostgreSQL or MySQL build compiles none of it. An app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`, and without the feature that default stops the boot with "enable the `sqlite` feature of navree-db", so an app on another database always sets its URL.
+
+Tests run on SQLite, each in a file of its own, so an app on PostgreSQL turns the feature on for its tests only, in `[dev-dependencies]`, and its release build still compiles no SQLite. `navree new` writes this:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["postgres"] }
+
+[dev-dependencies]
+navree = { version = "1", features = ["sqlite"] }
+```
+
+Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
+
+## The file and its connections
+
+A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
+
+Navree opens every SQLite connection with:
+
+- the write-ahead log (`journal_mode = WAL`), so readers don't block the writer;
+- `busy_timeout = 5000`: a statement waits up to 5 seconds for a lock before failing;
+- `foreign_keys = ON`, so foreign keys are enforced (SQLite's default is off).
+
+Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite's write lock at once. Concurrent requests that write therefore queue for up to 5 seconds instead of failing halfway through. SQLite allows one writer at a time, so this is also its limit: a busy app that writes on most requests outgrows it.
+
+<Callout type="warning" title="Don't use in-memory SQLite">
+
+An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/). The one exception is `TestApp`'s `memory_database()`, which keeps the pool to a single connection.
+
+</Callout>
+
+## SQLite settings
+
+The `database.sqlite` section changes these, and adds pragmas, for every connection the pool opens. Every key is optional:
+
+```toml title="config/app.toml"
+[database.sqlite]
+journal_mode = "wal"      # delete, truncate, persist, memory, wal or off
+busy_timeout_ms = 5000    # how long a connection waits for a lock
+foreign_keys = true
+synchronous = "normal"    # off, normal, full or extra; SQLite's own default when unset
+pragmas = { cache_size = "-20000", temp_store = "memory" }
+```
+
+`pragmas` runs further `PRAGMA name = value` statements on every connection: a name is letters, digits and `_`, a value letters, digits, `_`, `-` and `.`. Other databases ignore the section.

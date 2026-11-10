@@ -1,0 +1,5 @@
+error: #[serde(serialize_with = ..)] changes this field's JSON, which #[derive(ToSchema)] can't see: say what it is with #[schema(value_type = ..)] or #[schema(schema_with = ..)]
+  --> tests/ui/to_schema/with_on_a_field.rs:10:5
+   |
+10 |     #[serde(serialize_with = "as_text")]
+   |     ^

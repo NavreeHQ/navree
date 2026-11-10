@@ -1,0 +1,8 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 442
+expression: sql
+---
+-- timescaledb
+CREATE TABLE "events" ("id" UUID NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, PRIMARY KEY ("id", "occurred_at"));
+SELECT create_hypertable('events', by_range('occurred_at', INTERVAL '6 hours'));

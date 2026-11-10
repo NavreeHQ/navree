@@ -1,0 +1,7 @@
+GET 1
+Host: own.example.com
+Origin: https://evil.example
+Connection: Upgrade
+Upgrade: websocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==

@@ -1,0 +1,5 @@
+error: route `show` has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default; a #[guard] alone is not an access declaration)
+  --> tests/ui/guard_alone_is_not_access.rs:12:14
+   |
+12 |     async fn show(&self) -> &'static str {
+   |              ^^^^

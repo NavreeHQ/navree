@@ -1,0 +1,46 @@
+---
+title: "HoverCard"
+description: "A card on hover or focus with more about a link, for mouse users who save a click; the link stays the way in for everyone."
+---
+
+<UiPreview example="hover-card/default" />
+
+`HoverCard` shows a preview of what a link points to when a mouse rests on it or it takes focus: a person, a record. It opens after the same 300 ms as a tooltip and stays open while the pointer is on the card.
+
+The preview shows the card in place. Hover the link to see the real one.
+
+```rust
+use navree::ui::*;
+
+HoverCard::new("gurpreet-card", el("a").href("/people/gurpreet").child("Gurpreet Singh"))
+    .body(Text::muted("Account executive · 42 open deals"))
+```
+
+## When to use it
+
+Use it to save a click for readers with a mouse. The same content must be reachable another way: the link itself.
+
+<UiChoose name="hint" current="HoverCard" />
+
+## Anatomy
+
+<UiAnatomy component="hover-card" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Focusing the link shows the card. |
+| `Esc` | Hides it. |
+
+- The card isn't announced and holds nothing that only it offers; the link leads to the full page.
+
+</UiA11y>
+
+## API
+
+### HoverCard
+
+<UiProps type="HoverCard" />

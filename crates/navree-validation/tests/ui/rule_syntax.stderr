@@ -1,0 +1,68 @@
+error: unknown rule `frobnicate`: expected one of skip, rename, required, length, range, email, url, ip, ipv4, ipv6, ascii, alphanumeric, credit_card, phone, contains, starts_with, ends_with, pattern, same_as, custom, nested, each
+ --> tests/ui/rule_syntax.rs:7:16
+  |
+7 |     #[validate(frobnicate)]
+  |                ^^^^^^^^^^
+
+error: unknown rule `dive`: use `nested`, to validate a field that derives `Validate`
+  --> tests/ui/rule_syntax.rs:13:16
+   |
+13 |     #[validate(dive)]
+   |                ^^^^
+
+error: a field with `skip` has no other rules: remove `skip` or this rule
+  --> tests/ui/rule_syntax.rs:19:22
+   |
+19 |     #[validate(skip, email)]
+   |                      ^^^^^
+
+error: duplicate `email`: give each rule once (only `custom` may repeat)
+  --> tests/ui/rule_syntax.rs:25:40
+   |
+25 |     #[validate(email, length(max = 5), email)]
+   |                                        ^^^^^
+
+error: `length` needs a bound: `length(min = 1, max = 100)`
+  --> tests/ui/rule_syntax.rs:31:16
+   |
+31 |     #[validate(length())]
+   |                ^^^^^^
+
+error: `range` can never pass: `min` (10) is above `max` (1)
+  --> tests/ui/rule_syntax.rs:37:38
+   |
+37 |     #[validate(range(min = 10, max = 1))]
+   |                                      ^
+
+error: `length` counts characters already: remove `chars` (write `bytes` to count bytes)
+  --> tests/ui/rule_syntax.rs:43:23
+   |
+43 |     #[validate(length(chars, max = 10))]
+   |                       ^^^^^
+
+error: invalid regular expression: regex parse error:
+           [a-z
+           ^
+       error: unclosed character class
+  --> tests/ui/rule_syntax.rs:49:24
+   |
+49 |     #[validate(pattern("[a-z"))]
+   |                        ^^^^^^
+
+error: `email` takes no arguments
+  --> tests/ui/rule_syntax.rs:55:21
+   |
+55 |     #[validate(email(strict))]
+   |                     ^
+
+error: `each` needs the rules its items follow: `each(length(max = 30))`
+  --> tests/ui/rule_syntax.rs:61:16
+   |
+61 |     #[validate(each())]
+   |                ^^^^
+
+error: unknown option `strict` on a type: expected `crate = "..."` or `skip_unmarked` (rules go on fields)
+  --> tests/ui/rule_syntax.rs:66:12
+   |
+66 | #[validate(strict)]
+   |            ^^^^^^

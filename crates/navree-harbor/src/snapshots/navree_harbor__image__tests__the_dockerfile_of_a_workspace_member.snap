@@ -1,0 +1,32 @@
+---
+source: crates/navree-harbor/src/image.rs
+expression: app.dockerfile().unwrap()
+---
+# syntax=docker/dockerfile:1
+# shop-api: written by navree build:image. Once this file is in your app,
+# `navree build:image` builds with it, so change it as you like.
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked --package shop-api --features postgres \
+    && mkdir -p /out \
+    && cp target/release/shop-api /out/shop-api
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin app
+WORKDIR /app
+COPY --from=build /out/shop-api /app/shop-api
+COPY apps/shop-api/config /app/config
+RUN mkdir -p /app/storage && chown 10001:10001 /app/storage
+VOLUME /app/storage
+USER 10001
+ENV APP_HTTP__ADDR=0.0.0.0:8080
+EXPOSE 8080
+ENTRYPOINT ["/app/shop-api"]
+CMD ["serve"]

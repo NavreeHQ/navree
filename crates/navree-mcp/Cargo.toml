@@ -1,0 +1,70 @@
+[package]
+name = "navree-mcp"
+description = "Navree McpModule: MCP servers from #[mcp_server] services over streamable HTTP and stdio, with Navree auth and per-tool permissions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "mcp", "ai", "agents"]
+categories = ["api-bindings", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["testing"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## Entry points for the fuzz targets in `fuzz/` (`navree_mcp::fuzzing`). Not
+## part of the API.
+fuzzing = []
+## `navree_mcp::testing::McpTestClient`: speaks the protocol to a `TestApp` in
+## process. The facade turns it on with its own `testing` feature.
+testing = ["dep:navree-testing"]
+
+[dependencies]
+async-trait = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The crate's own tests use `McpTestClient`.
+navree-mcp = { path = ".", features = ["testing"] }
+navree-crypto = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-macros = { workspace = true }
+# The tests' `deals` table is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
+tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
+trybuild = { workspace = true }

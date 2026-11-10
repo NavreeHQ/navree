@@ -1,0 +1,146 @@
+# AGENTS.md
+
+Instructions for coding agents working on {{ title }}, a multi-tenant Navree
+app from the `{{ kit }}` starter kit: a Rust API built from modules wired by
+dependency injection{% if web %}, and a Next.js front end in `web/` that
+reaches it through its own server (a backend-for-frontend){% endif %}. Read
+this file before changing code.
+
+## Layout
+
+```text
+config/app.toml        settings shared by every environment (committed)
+.env                   this machine's secrets and Dock's settings (never committed)
+dock.toml              local services: `navree dock up` (PostgreSQL, Mailpit)
+harbor.toml            servers and deploys: `navree deploy`
+src/main.rs            runs the app: `serve` by default, or any other command
+src/app.rs             the root: platform() plus the feature modules
+src/platform.rs        the framework modules, configured once
+src/abilities.rs       who may do what: permissions and ability rules
+src/seed.rs            the demo workspace (`navree migrate:fresh --seed`)
+src/modules/<name>/    feature modules: accounts, settings, projects, admin
+tests/                 tests that boot the whole app on a fresh database
+{% if web %}
+web/                   the Next.js front end; its server holds the API tokens
+{% endif %}
+```
+
+## Commands
+
+```sh
+navree dock up                              # {{ database_name }} and Mailpit in containers
+navree dev                                  # API on :8080{% if web %}, web app on :3000{% endif %}, rebuild on save
+cargo test                                  # every test; each boots the app on its own SQLite database
+cargo clippy --all-targets -- -D warnings   # must pass
+cargo fmt                                   # must leave nothing to change
+navree check                                # validate the module graph without booting
+navree routes                               # every route with its access rule
+navree migrate:fresh --seed                 # rebuild the database with the demo data
+navree openapi:export openapi.json          # the API contract, committed and checked in CI
+{% if web %}
+pnpm --dir web test                         # the social sign-in routes' and the API client's unit tests
+pnpm --dir web build                        # type check and build the front end
+{% endif %}
+```
+
+The demo accounts are `owner@{{ package | replace("_", "-") }}.test` (also a super admin, for
+`/admin`) and `member@{{ package | replace("_", "-") }}.test`, password `password123`, in the
+workspace `demo`.
+
+## Workspaces come first
+
+Every product route belongs to a workspace. Copy the shape of
+`src/modules/projects/`:
+
+- the model (`entity.rs`) is `#[model(workspace, subject)]` with a
+  `workspace_id` column and implements `WorkspaceScoped`; its migration runs
+  `.after(["workspace"])` and adds the PostgreSQL row-level security policy
+  (`RlsPolicy::new("<table>")`);
+- the module registers `m.model::<Project>()` and
+  `m.workspace_scoped::<Project>()` and imports
+  `AccessModule::for_feature::<Project>()`;
+- the controller has `#[guard(InWorkspace::guard())]`, takes
+  `CurrentWorkspace` and `WorkspaceUow`, and declares access per route with
+  `#[can(Action, Subject)]` (`from = "id"` loads the record: another
+  workspace's is a 404);
+- the service reads and writes through `WorkspaceRepo::<Project>` only.
+
+The workspace comes from the `X-Workspace` header (its slug or id). Grant
+each workspace role its permissions in `config/app.toml`
+(`[workspace.roles.member] permissions = ["projects.read", ...]`); add
+conditional rules in `src/abilities.rs`.
+
+## Generate code, then fill it in
+
+Use the generators: they follow the conventions and register what they
+create at the marker comments `// navree:modules` (src/app.rs),
+`// navree:wire` (a module's `wire`) and `// navree:policies`
+(src/abilities.rs). Keep those markers. Names are snake_case; module names
+are plural. Generators never overwrite a file.
+
+| To add | Run |
+|---|---|
+| A feature module (then make it workspace-scoped like `projects/`) | `navree make:module invoices --crud` |
+| A migration | `navree make:migration invoices add_due_date_to_invoices` |
+| A queued job | `navree make:job invoices send_reminder` |
+| An event and a listener | `navree make:event invoices invoice_paid`, then `navree make:listener invoices notify_owner --event invoice_paid` |
+| A mail | `navree make:mail invoices overdue` |
+| An admin-panel resource (over a model: `navree make:model invoices Invoice --policy` first) | `navree make:resource invoices Invoice` |
+| A test | `navree make:test invoices reminders` |
+
+## Conventions
+
+- **Deny by default.** Every route declares who may call it with
+  `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or
+  `#[can(Action, Subject)]`. Never make a route `#[public]` to get past a
+  401 or a 403: grant the permission or add an ability rule.
+- **Input.** Request bodies are DTOs deriving `Deserialize`,
+  `navree::validation::Validate` and `navree::openapi::ToSchema`; handlers take
+  `Valid(Json(input)): Valid<Json<T>>`, and declare `#[api(..)]` so the
+  OpenAPI document{% if web %} (and the front end's generated client){% endif %} stays exact.
+- **Errors.** Handlers return `Result<T>` (`AppError`): `AppError::not_found()`,
+  `AppError::forbidden()`, `AppError::bad_request("..")`,
+  `AppError::conflict("..").with_code("..")`. Every error response is
+  `{ "statusCode", "message", "error", "code" }`.
+- **Database.** navree-orm models with UUID v7 ids (`#[derive(Model)]`);
+  reads and writes take the request's unit of work first (`Project::create`,
+  `record.save(&uow)`, `WorkspaceRepo`), so they are audited. Lists take
+  `List<R>` (see `ProjectList`: the filters, sorts and search a list allows),
+  apply it with `Builder::list` and return `Page<T>`; clients write
+  `filter[status]=active`, `search=web`, `sort=-created_at`, `page` and `per_page`.
+- **Migrations** belong to their module's `MigrationSet`; never edit one
+  that has run anywhere, add a new one.
+- **Configuration.** `config/app.toml` holds shared settings; secrets go in
+  `.env` or the environment (`APP_BILLING__STRIPE__SECRET_KEY`).
+- **Tests.** Every change comes with tests. `tests/support/mod.rs` boots the
+  app with the committed `config/app.toml` on a fresh database and has
+  helpers for accounts, sign-in and workspaces.
+{% if web %}
+- **Front end.** The browser calls only the web app's own routes;
+  the backend-for-frontend (`@navree/next`, created in `web/lib/navree.ts`)
+  forwards them to the API with the bearer token from an httpOnly cookie.
+  Never put a token in browser storage. After changing a
+  DTO, run `pnpm --dir web gen:api`: it exports `openapi.json` and
+  regenerates `web/lib/api/schema.d.ts`; commit both.
+- **UI components.** shadcn/ui primitives live in `web/components/ui`.
+  Add one with `cd web && pnpm dlx shadcn@latest add <component>`; never
+  add the `shadcn` package to `package.json` (its one stylesheet is
+  vendored as `web/app/shadcn-tailwind.css`). Restyle what it adds to the
+  theme in `web/app/globals.css`.
+{% endif %}
+
+## Before you finish
+
+Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and
+`cargo test`{% if web %}, and `pnpm --dir web lint`, `pnpm --dir web test` and
+`pnpm --dir web build`{% endif %}, and fix everything they report.
+
+## Documentation and skills
+
+- Docs: https://navree.com/docs/ (the kit:
+  https://navree.com/docs/getting-started/starter-kits/; for models:
+  https://navree.com/llms.txt).
+- Agent skills, one per common task: `navree skills:install` copies the
+  skills of this Navree version into `.claude/skills/` and
+  `.agents/skills/` (or use `npx skills add NavreeHQ/navree`).
+  Start with the `navree` and `navree-workspaces` skills.

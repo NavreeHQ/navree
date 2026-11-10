@@ -1,0 +1,77 @@
+[package]
+name = "navree-logbook"
+description = "Navree Logbook: a local debugging timeline of every request, query, job, mail and event, grouped by request, with request replay."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "debugging", "timeline"]
+categories = ["development-tools::debugging"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["sqlite"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The `file` store: entries in a SQLite file of its own (`SqliteStore`; the
+## bundled SQLite library). Without it the store is memory, and
+## `logbook.store = "file"` is an error at boot.
+sqlite = ["sqlx/sqlite-bundled"]
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+bytes = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-glob = { workspace = true }
+navree-http = { workspace = true }
+navree-ui = { workspace = true }
+navree-kernel = { workspace = true }
+navree-telemetry = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in), and cover the file
+# store.
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-logbook = { path = ".", features = ["sqlite"] }
+navree-cache = { workspace = true }
+navree-crypto = { workspace = true }
+navree-events = { workspace = true }
+navree-http-client = { workspace = true }
+navree-mail = { workspace = true }
+# The tests' deals are an ORM model.
+navree-orm = { workspace = true }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

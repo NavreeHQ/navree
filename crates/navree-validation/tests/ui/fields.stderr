@@ -1,0 +1,23 @@
+error: field `nickname` has no validation rules: add `#[validate(...)]` with its rules, or `#[validate(skip)]` (or put `#[validate(skip_unmarked)]` on the type)
+ --> tests/ui/fields.rs:9:5
+  |
+9 |     nickname: String,
+  |     ^^^^^^^^
+
+error: `same_as(pasword)`: there is no field `pasword` here
+  --> tests/ui/fields.rs:14:24
+   |
+14 |     #[validate(same_as(pasword))]
+   |                        ^^^^^^^
+
+error: `#[validate]` needs its rules: `#[validate(length(max = 255))]`, or `#[validate(skip)]`
+  --> tests/ui/fields.rs:22:5
+   |
+22 |     #[validate]
+   |     ^
+
+error: `#[derive(Validate)]` works on structs and enums, not unions
+  --> tests/ui/fields.rs:27:1
+   |
+27 | union Bits {
+   | ^^^^^

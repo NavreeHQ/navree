@@ -1,0 +1,17 @@
+error: route `update` has #[can] here and on the impl block: a route checks one ability; move the impl block's #[can] to the routes that need it
+  --> tests/ui/controller/can_misuse.rs:23:5
+   |
+23 |     #[can(Update, Deal, from = "id")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected #[can(Action, Subject)] or #[can(Action, Subject, from = "id")]
+  --> tests/ui/controller/can_misuse.rs:29:5
+   |
+29 |     #[can(Update)]
+   |     ^^^^^^^^^^^^^^
+
+error: unknown #[can] key `form`: expected `from = "id"`
+  --> tests/ui/controller/can_misuse.rs:35:25
+   |
+35 |     #[can(Update, Deal, form = "id")]
+   |                         ^^^^

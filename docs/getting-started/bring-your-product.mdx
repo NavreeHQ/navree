@@ -1,0 +1,229 @@
+---
+title: "Bring your product"
+description: "Rebuild a product you already run, with its old data, as a Navree app, with an agent skill: the phases and stop points, the spec folder, the data migration, the tests, and the commands to start."
+---
+
+There are two ways into Navree from something you already have. You can bring a product: an app that runs today, with its code, its rules and years of data. Or you can bring a design: a mock-up, a design-tool export or screenshots. Each way is an [agent skill](/docs/ai/agent-skills/) that your coding agent follows from start to finish, and you decide at fixed stop points. This page is the first way. [Bring your design](/docs/getting-started/bring-your-design/) is the second.
+
+<UiChoose name="two-ways" current="Bring your product" />
+
+## Who it is for
+
+You have a product that works and that people rely on. It may be a web app in PHP, Laravel, Rails, Django, Node, .NET or Java, or a desktop or Access back office. Its rules hide in the code: some run only in the browser, options are typed into the code, and tables sort and filter on the client. Its data holds years of nulls, duplicates and free text.
+
+You can't convert a product like that directly. The `navree-reverse-engineering` skill reads it instead. Your agent writes down what the product does as specs, with evidence for every line. It plans and tests from the specs, rebuilds the product in Navree module by module, and proves that the new product matches the old one.
+
+You are the owner. You know what the product is for, and only you can answer some questions. The agent reads, writes and builds. It stops five times and waits for you.
+
+## Start
+
+<Steps>
+<Step title="Install the Navree CLI">
+
+Follow [Installation](/docs/getting-started/installation/). The CLI carries the skills of its Navree version.
+
+</Step>
+<Step title="Create a repository for the job and install the skills">
+
+The specs come first and the app comes later, so start with an empty repository. The skill's default is one repository with `specs/` now and the Navree app beside it later.
+
+```sh
+mkdir agra-rebuild
+cd agra-rebuild
+git init
+navree skills:install
+```
+
+`navree skills:install` copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read). It needs no app: it works in any directory. Pass `--path <dir>` to install into another directory. The [Agent skills](/docs/ai/agent-skills/#installing-skills) page has the other ways to install them.
+
+</Step>
+<Step title="Gather what the agent reads">
+
+- A clone of the old product's code. The agent only reads it.
+- A backup of its database. The agent restores it into a local copy and never touches the live database.
+- Any documents: manuals, help pages, old specs, tickets and screenshots.
+- Test accounts for each role, if you have them. The agent can create them on the copy.
+
+</Step>
+<Step title="Tell your agent to start">
+
+Start your agent in the repository and name the skill, the inputs and where the specs go:
+
+```text wrap
+Use the navree-reverse-engineering skill to rebuild our order management product in Navree. The old code is a read-only clone at ../old-app, and the database backup from 2026-11-02 is ../backups/orders.sql. Keep the spec folder in specs/ in this repository. Start with intake, and stop at every stop point for my answers.
+```
+
+The agent loads the skill, runs intake, and works phase by phase. Each phase writes its files before it ends, and `specs/STATUS.md` says where the job stands, so a long job survives a restart. To pick up after a break, ask the agent to read `specs/STATUS.md` and resume.
+
+</Step>
+<Step title="Connect Navigator when the app exists">
+
+The Navree app appears at the first build task, created with `navree new`. From then on, connect [Navigator](/docs/ai/navigator/) so your agent can read the new app's routes, schema and data. With Claude Code, from the app's directory:
+
+```sh
+claude mcp add navree -- navree mcp
+```
+
+The migration checks compare counts and totals in the new database with Navigator's read-only SQL tool (`query_database`), the database client, or a test. When your agent runs from the repository root instead of the app's directory, give `navree mcp` the app's directory with `--path`.
+
+</Step>
+</Steps>
+
+## The phases
+
+<Diagram name="reverse-engineering" />
+
+Each phase has a role, and each role has a written brief in the skill (`references/agents/<role>.md`). There are 21 briefs. An agent that can start subagents runs one role per subagent, with several side by side where the skill allows. An agent without subagents runs the same briefs itself, one role at a time, in phase order. Each phase writes to its own numbered folder: phase 2 to `specs/02-base/`, phase 9 to `specs/09-build/` and the app.
+
+| Phase | What happens |
+|---|---|
+| 0. Intake | Learn the product; set up a safe copy to read and run |
+| 1. Map | List everything the product has, each list from a command with its count |
+| 2. Base layer | The real schema, and what the data really holds |
+| 3. Modules | Group the map into modules, ordered by dependency |
+| 4. Specs | One spec per module and layer: CRUD, lists, screens, rules, workers, workflows, reports, integrations |
+| 5. Cross-cutting | Roles, tenancy, sign-in, audit, notifications, settings, files, search, languages, time zones |
+| 6. Data migration | Old to new, field by field, with cleaning rules |
+| 7. Reconcile | Refute every spec file; collect contradictions, gaps and questions |
+| 8. Task list and tests | Tasks in build order; test cases tied to spec rows |
+| 9. Build | The Navree app, module by module, test first |
+| 10. Verify | Every test, parity, roles, isolation and a migration rehearsal |
+
+Four rules hold in every phase:
+
+- **Evidence on every row.** Each row says where it comes from (a `file:line`, a `table.column`, a query, a captured request), how it is known (`code`, `data`, `running` or `inferred`) and how sure it is. Every `inferred` row is also a question for you.
+- **Read-only on the old product.** The agent works on a copy of the code and a copy of the database. Mail goes to a local catcher, payments to a sandbox, and outbound network is blocked.
+- **Nobody grades their own work.** One role writes each file and another role tries to prove it wrong. The builder never marks its own task verified.
+- **Keep the behavior, fix the mistakes.** The new product does what the old one does. Where the old code is wrong, the spec says so, gives the Navree form, and you approve the change.
+
+## The spec folder
+
+Every phase writes to `specs/`. Each claim points at its source, so anyone can check it.
+
+<FileTree title="specs/">{`
+STATUS.md *                  # phase, state, gate, your sign-off
+00-intake/INTAKE.md          # the product, its stacks, how to run it safely
+01-map/MAP.md                # everything the product has, with ids
+02-base/
+  SCHEMA.md                  # tables, keys, implied relations, enums
+  DATA_PROFILE.md            # nulls, duplicates, orphans, bad money and dates
+  queries/                   # every profiling query, with its output
+03-modules/MODULES.md        # modules, what each owns, build order
+04-specs/
+  invoices/
+    MODULE.md                # the module's index and open questions
+    crud.md                  # fields, rules, controls, option sources
+    lists.md                 # columns, filters, sort, search, paging
+    screens.md               # pages, actions, empty and error states
+    service.md               # business rules and calculations
+    workers.md               # jobs and schedules
+05-cross/                    # roles, tenancy, cross-cutting
+06-migration/                # MIGRATION.md, CLEANING.md
+07-reconcile/                # refutations, RECONCILE.md, QUESTIONS.md
+08-plan/                     # TASKS.md, TESTS.md
+09-build/BUILD_LOG.md        # per task: commit, tests, gate
+10-verify/                   # VERIFY.md, PARITY.md, MIGRATION_RUN.md, logs/
+evidence/                    # captured requests, screenshots, query output
+`}</FileTree>
+
+A spec row ends with the same four columns everywhere:
+
+```text
+| ... | Source                                     | Known by | Conf. | Status    |
+| ... | app/Http/InvoiceController.php:88, CAP-012 | running  | high  | confirmed |
+```
+
+A row starts as `draft`, or `question` when only you can settle it. It becomes `confirmed` when the refuter can't break it, then `planned` (tasks and tests exist), `built` (the task passed its gate) and `verified` (the verifier quoted the evidence). A row is `dropped` only with your answer in `QUESTIONS.md`.
+
+## The five stop points
+
+At each stop the agent shows you a short summary with counts and waits. It records your answer and the date in `specs/STATUS.md`.
+
+1. **After the map.** What the product is, what can't run, the counts per map section, and anything surprising. Add what the code doesn't show: manual steps, spreadsheets kept beside the product, reports people rely on.
+2. **After the modules.** The module list, what each module owns, and the build order.
+3. **After reconcile.** Every question in `QUESTIONS.md`, each with options and a recommendation. Once you answer, the specs are frozen. A later change goes through a new question.
+4. **Before the build.** The task list, the test plan, every deliberate change from the old behavior, and every parity test marked `N/A`.
+5. **Before cut-over.** `VERIFY.md`, `PARITY.md`, the last migration rehearsal, and anything still `NOT RUN`.
+
+## Old and messy data
+
+The old database never goes straight into the new schema. The data profile decides the cleaning rules and which columns may be null.
+
+- **Profile first.** The agent runs read-only queries on the copy and saves each one with its output: null rates, duplicates by the key people use, orphans, mixed formats, free text that should be a lookup, money and dates stored badly, soft-deleted and test rows.
+- **One cleaning rule per finding.** Each rule in `CLEANING.md` names its detection query, its fix and the rows it touches. Blank strings become null, phone numbers become E.164, money becomes minor units with a stated rounding, and local times are read in the old server's zone and stored as UTC. Rules that change meaning are yours to decide: merging duplicates, guessing a currency, dropping orphans.
+- **No row is lost.** Every old row is imported, merged into another with both old ids kept, or put in a rejects table with the rule and the reason. The old id of every row is kept, so a run can be traced, repeated and compared.
+- **An import that runs again.** The import is a console command per table, in the module that owns the table (`navree make:command invoices import_legacy`). It reads the copy through a named connection with a read-only user, in batches, parents before children. It skips rows it has already imported, so a second run changes nothing. A dry run prints what it would create and reject.
+- **Reconcile until it matches.** Counts per table and tenant, money per tenant and month, and counts per status must match on both sides. A difference is never close enough: a rule explains it, or the import is fixed.
+
+```toml title="config/app.toml"
+[database.connections.legacy]
+url = "mysql://reader:secret@127.0.0.1:3307/old_app_copy"
+max_connections = 2
+```
+
+The full import is rehearsed on a fresh copy until it reconciles, and timed, because the cut-over plan depends on how long it takes. The old product stays intact and read-only until you accept the new one. Data that lives in spreadsheets instead of a database goes through the [import pipeline](/docs/packages/imports-and-exports/) of `navree-sheets`.
+
+## Old mistakes, fixed on purpose
+
+The skill carries a catalog of 23 mistakes that old products make, each with how to find it and its Navree form. When a spec finds one, the row says so, and the fix becomes a deliberate change that you approve at stop 4. Some of them:
+
+- Tables that page, sort and filter in the browser become lists that do it on the server.
+- A select filled with every row of a large table becomes a search on the server that returns a page of matches.
+- Validation only in the browser, and permissions hidden in the page, become rules the server enforces.
+- Money as floating point becomes minor units; times without a zone get one.
+- Workers that do their work twice on a retry become idempotent.
+- A forgotten tenant condition becomes a workspace model that scopes every query, checked by `navree check` and an isolation suite.
+
+## From specs to tasks and tests
+
+Phase 8 turns the confirmed specs into two files. A spec row with no test can't be verified, so it can't be done.
+
+- **`TASKS.md`** lists the work in build order. One task is one reviewable change that ends green on `navree gate`: a model and its migration, a service rule and its tests, a list route, a job, an import command. Modules come in the order of `MODULES.md`. Inside a module the layers go models, access, services, routes, workers, workflows, integrations, reports, screens, then isolation. Each task names the Navree skill the builder loads for it.
+- **`TESTS.md`** holds the test cases. Every spec row in `04-specs`, `05-cross` and `06-migration` is covered by at least one test, with concrete values from the profile, never "valid data". The kinds are `acceptance`, `parity`, `role`, `tenancy`, `migration` and `edge`.
+
+A **parity test** runs the same case on the old product and the new one and compares the outcome: values, totals, statuses, rows created, mail sent. It catches rules nobody wrote down. The agent captures the old side once and keeps the files, so the old product doesn't need to run during verification. Where the old product can't run, the case is `N/A` with your acceptance, never skipped in silence.
+
+A **role matrix test** checks every role, action and record scope in `ROLES.md`, and every workspace-owned module gets an [isolation suite](/docs/testing/isolation-tests/).
+
+## Build and verify
+
+The builder works one module at a time, in dependency order, layer by layer and test first. The tests exist and fail before the code. Each task ends green on `navree gate`, which runs fmt, clippy, the tests, `navree check` and the front end's checks, and its commit goes in `BUILD_LOG.md`. Two independent modules may build in separate worktrees, each merged only after its own gate passes on top of the other.
+
+The builder creates the app at the first task with `navree new` and the [starter kit](/docs/getting-started/starter-kits/) you chose: `--kit saas` for a multi-tenant product with a web front end, or `--kit api` for the API alone.
+
+A verifier, never the builder, then runs every test case, the parity tests, the role matrix, the isolation suites and a full migration rehearsal on a fresh copy of the old data. It closes each row in `VERIFY.md` with the quoted evidence and reopens what fails.
+
+The product is done when every box holds:
+
+- Every map row is closed, or dropped with your answer.
+- Every spec row is verified and cites the test that proves it.
+- `QUESTIONS.md` has no open question.
+- Every test case passed on the final commit. Each parity difference is a deliberate change you approved, or `N/A` with your acceptance. Nothing is `NOT RUN`.
+- The role matrix covers every role, action and record scope, every workspace-owned module has a passing isolation suite, and [`navree check`](/docs/testing/conformity-checks/) reports no error.
+- A full migration rehearsal on a fresh copy reconciles, and a second run changes nothing.
+- `navree gate` passes on the final commit, and you signed stop 5 in `STATUS.md`.
+
+## How the two work together
+
+A rebuilt product needs screens. When they are [Navree UI](/docs/ui/overview/) pages, the builder's last layer in each module hands over to the `navree-design-to-ui` skill. It runs that skill's mapping, reconcile, build and verify phases for the module, after the module's routes and services pass their gate.
+
+<Diagram name="two-ways" />
+
+- The module's `screens.md` gives each page's purpose, actions, journeys and states. `crud.md` gives each field, its control and where its options come from. `lists.md` gives each table's columns, filters, sort and bulk actions. The design skill's page specs cite those rows instead of writing them again, and add only the look.
+- The look is your choice. To keep the old look, the old product's screenshots become the design: the `SHOT-*` captures become `BASE-*`. To change it, bring a new design.
+- Each skill also runs alone. [Bring your design](/docs/getting-started/bring-your-design/) covers the design path in full.
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/bring-your-design/" title="Bring your design">
+    A mock-up, an export or screenshots, turned into Navree UI pages.
+  </LinkCard>
+  <LinkCard href="/docs/ai/agent-skills/" title="Agent skills">
+    Every skill, how to install them, and how agents use them.
+  </LinkCard>
+  <LinkCard href="/docs/ai/navigator/" title="Navigator">
+    The MCP server that shows your agent the running app.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/" title="Starter kits">
+    The SaaS and API kits the rebuilt product can start from.
+  </LinkCard>
+</LinkCards>

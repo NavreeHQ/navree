@@ -1,0 +1,455 @@
+---
+title: "Transports"
+description: "Connect services over TCP, NATS, Kafka, RabbitMQ, Redis Streams or MQTT: settings, delivery guarantees, ordering, serialization and writing your own transport."
+---
+
+## Introduction
+
+<Badge feature="micro" /> The transport moves messages between services. Your handlers and your `ServiceClient` calls never name it: the transport is a setting, so a service that runs on NATS today can move to Kafka with a configuration change and a restart.
+
+Every transport carries the same thing, an **envelope**: a pattern (`deals.get`, `deal.won`), a set of headers (the message id, the request id, the trace context, credentials) and an encoded payload. What differs is how the envelope travels, what happens when a service is down, and how far each broker goes to deliver it exactly once.
+
+## Choosing a transport
+
+| Transport | Feature | Request-response | Events | Order | Dead letters | Use it for |
+|---|---|---|---|---|---|---|
+| TCP | `micro` | Direct connection | At most once | Per connection | No | Two services, no broker, lowest latency |
+| NATS | `micro-nats` | Core request-reply | At least once (JetStream) | Per subject | Yes | Most systems: one small server, fast request-reply and durable events |
+| Kafka | `micro-kafka` | Reply topics | At least once | Per key | Yes | High-volume event streams, long retention, replay |
+| RabbitMQ | `micro-rabbitmq` | Direct reply-to | At least once | Per queue | Yes | Routing-heavy systems, an existing RabbitMQ |
+| Redis Streams | `micro-redis` | Reply streams | At least once | Per stream | Yes | Apps that already run Redis |
+| MQTT | `micro-mqtt` | MQTT 5 response topics | At least once (QoS 1) | Per topic | Yes | Devices, gateways and the edge |
+
+If you have no broker yet, start with NATS. It is one small binary, request-reply is built into the protocol, JetStream makes events durable, and `navree dock up` runs it for development (see [Dock](/docs/tools/dock/)).
+
+## Configuring the transport
+
+Name the transport and where it is in the `micro` section. Each transport reads its own subsection for everything else:
+
+```toml title="config/app.toml"
+[micro]
+service = "notifications"
+transport = "nats"
+url = "nats://127.0.0.1:4222"
+
+[micro.nats]
+stream = "CRM"
+```
+
+The transport is part of the app's shape, so it stays in `config/app.toml`. What changes from one environment to the next, the broker's address and its credentials, goes in `.env`:
+
+```env title=".env"
+APP_MICRO__URL=tls://nats.internal:4222
+APP_MICRO__NATS__TOKEN=change-me
+```
+
+In code, each transport has a constructor on `Transport`, which `MicroModule::for_root` accepts directly:
+
+| Constructor | Transport |
+|---|---|
+| `Transport::tcp("127.0.0.1:4000")` | TCP, listening on the address |
+| `Transport::nats("nats://127.0.0.1:4222")` | NATS |
+| `Transport::kafka(["kafka-1:9092", "kafka-2:9092"])` | Kafka, with its bootstrap brokers |
+| `Transport::rabbitmq("amqp://guest:guest@127.0.0.1:5672/%2f")` | RabbitMQ |
+| `Transport::redis("redis://127.0.0.1:6379")` | Redis Streams |
+| `Transport::mqtt("mqtt://127.0.0.1:1883")` | MQTT 5 |
+| `Transport::memory()` | In-process, for tests (see [testing](#testing)) |
+| `Transport::custom_arc(transport)` | Your own, already in an `Arc` |
+| `Transport::custom(transport)` | [Your own](#writing-a-transport) |
+
+```rust
+use navree::micro::Transport;
+
+Navree::app().module(MicroModule::for_root(Transport::kafka(["kafka-1:9092", "kafka-2:9092"])))
+```
+
+## Delivery guarantees
+
+### Requests
+
+A request is delivered to **one** instance of the service that answers the pattern: the instances share the work. The caller waits until the reply arrives or the deadline passes. If the deadline passes first, `send` returns `MicroError::Timeout`, and the handler may or may not have run: the request may have been lost on the way, or the reply on the way back.
+
+Requests are not retried unless you ask with `.retries(n)`, and then with the same message id, so a handler with the inbox on runs once. See [retries](/docs/microservices/request-response/#retries-and-idempotency).
+
+### Events
+
+On every broker, events are delivered **at least once**:
+
+1. `emit` returns once the broker has accepted the event (or once the event is in the [outbox](/docs/microservices/events/#the-outbox), inside a unit of work).
+2. Each subscribing service receives it; one instance of that service handles it.
+3. The instance acknowledges the event only after the handler returned `Ok` and its unit of work committed.
+4. If the handler fails, or the instance dies before acknowledging, the broker delivers the event again.
+
+So an event is never lost once `emit` has returned, but a handler can see it twice: after a crash between the commit and the acknowledgment, or after a broker failover. The [inbox](/docs/microservices/events/#idempotency-and-the-inbox) makes that harmless by skipping message ids it has already handled, in the same transaction as the handler's writes.
+
+TCP, and NATS without JetStream, deliver events **at most once**: an event sent while the receiving service is down is gone. Use them for events you can afford to miss, such as cache invalidation.
+
+### Ordering
+
+Every transport keeps the order in which one producer emitted events with the same **key**. Set the key on `emit`; events without one may be handled in any order:
+
+```rust
+self.client.emit("deal.updated", &event).key(event.deal_id).await?;
+```
+
+On the consuming side, Navree handles events with the same key one after another, and events with different keys in parallel, up to `micro.concurrency`. A retried event loses its place: the events after it may be handled first. [Ordering](/docs/microservices/events/#ordering) has the details per transport.
+
+## Serialization
+
+Payloads are encoded with `micro.codec`:
+
+- `json` (the default): readable in every broker's tools, and what services written in other languages expect.
+- `msgpack`: smaller and faster to encode, with the same serde types.
+
+A payload is any type that implements `Serialize` and `DeserializeOwned`. Decoding follows serde's rules: unknown fields are ignored, and a missing field fails unless it has `#[serde(default)]`. A request whose payload doesn't decode gets a 400 reply; an event whose payload doesn't decode goes straight to the [dead letters](/docs/microservices/events/#dead-letters), because retrying it can't help.
+
+### Changing a payload
+
+Services deploy one at a time, so for a while old and new versions of a payload are both in flight:
+
+- **Adding a field** is safe when the receiver gives it a default (`#[serde(default)]`, or an `Option`).
+- **Removing or renaming a field**, or changing its type, is a new message: give it a new pattern (`deals.get.v2`), keep handling the old one until every sender has moved, then delete it.
+
+The shared contract crate from the [introduction](/docs/microservices/introduction/#a-first-service) makes the compiler check both sides of each change.
+
+### The envelope
+
+Headers travel as the broker's native headers: NATS headers, Kafka record headers, AMQP message properties, Redis stream entry fields and MQTT 5 user properties (TCP frames carry them in the envelope). A service in another language talks to a Navree service by publishing the JSON payload where the transport puts the pattern, with these headers:
+
+| Transport | Requests | Events |
+|---|---|---|
+| NATS | the subject `deals.get` | the subject `<stream>.events.deal.won` (`NAVREE.events.deal.won`) |
+| Kafka | the topic `deals.get` | the topic `deal.won` |
+| RabbitMQ | the exchange `micro.rabbitmq.exchange`, routing key `deals.get` | the same exchange, routing key `deal.won` |
+| Redis Streams | the stream `<prefix>deals.get`, headers as fields and the payload in the field `payload` | the stream `<prefix>deal.won`, the same way |
+| MQTT | the topic `<prefix>/deals/get` | the topic `<prefix>/deal/won` |
+
+
+| Header | On | Value |
+|---|---|---|
+| `navree-pattern` | every message | The pattern, e.g. `deals.get`. |
+| `navree-message-id` | every message | A UUID v7. Stays the same across retries and redeliveries. |
+| `navree-service` | every message | The sender's `micro.service`. |
+| `content-type` | every message | `application/json` or `application/msgpack`. |
+| `x-request-id` | every message | The request id, from the HTTP request or job that sent it. |
+| `traceparent`, `tracestate` | every message | W3C trace context (see [tracing](/docs/microservices/tracing/)). |
+| `navree-deadline` | requests | When the caller stops waiting, in Unix milliseconds. |
+| `authorization` | requests | The forwarded `Bearer` credentials, when there are any. |
+| `x-workspace` | every message | The current [workspace](/docs/workspaces/resolution/), when there is one. |
+| `navree-actor` | events | The id of the user whose action caused the event. |
+| `navree-status` | replies | The reply's status: `200` for a result, the error's status otherwise. |
+| `navree-key` | events | The ordering key set with `.key(..)`; Kafka also uses it as the record key. |
+| `navree-attempt` | events | The attempt, starting at 1, on transports that requeue a retried event themselves (Kafka, RabbitMQ). |
+| `navree-reply-to`, `navree-correlation-id` | requests | Where the reply goes and what pairs it with the request, on transports that route replies through the broker (Kafka, Redis Streams). |
+
+All of them are constants of `navree::micro::headers` (`headers::MESSAGE_ID`, `headers::DEADLINE`, ...).
+
+A reply's body is the handler's result, or the error in Navree's JSON shape (`{ "statusCode", "message", "error", "code" }`, plus `errors` for validation failures).
+
+`micro.max_message_bytes` (1 MiB by default) caps the encoded payload in both directions. A larger payload fails on the sending side with `MicroError::PayloadTooLarge`, before it reaches the broker. Send ids, not documents: put files in [storage](/docs/digging-deeper/storage/) and send their path.
+
+## TCP
+
+TCP connects services directly, with no broker. Each service listens on `micro.tcp.addr`, and the client finds the service of a pattern in `micro.tcp.routes`:
+
+```toml title="services/crm-api/config/app.toml"
+[micro]
+transport = "tcp"
+
+[micro.tcp]
+addr = "0.0.0.0:4000"
+
+[micro.tcp.routes]
+"deals.*" = "deals.internal:4000"
+"companies.*" = "companies.internal:4000"
+```
+
+Frames are length-prefixed envelopes over long-lived connections, with up to `pool_size` connections to each peer and many requests in flight on each. A pattern no route covers goes to `micro.url`, when it is set; a peer that doesn't handle a pattern answers "no responders" at once. `emit` sends the event to every route whose prefix matches, once, and doesn't wait for anyone to handle it: TCP has no storage, so an event for a service that is down is lost, and a failed handler is retried inside the receiving process. TCP has no dead-letter destination of its own: use `micro.events.dead_letter = "database"` or `"log"`. Use TCP for request-response between a few services that know each other, and a broker for events.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.tcp.addr` | `127.0.0.1:4000` | Where this service listens. `0.0.0.0` in containers. |
+| `micro.tcp.routes` | `{}` | Pattern prefix (`deals.*`, or a full pattern) to `host:port`. The longest matching prefix wins. |
+| `micro.tcp.pool_size` | `4` | Connections kept open to each peer. |
+| `micro.tcp.tls.cert`, `micro.tcp.tls.key` | none | This service's certificate and key: turns on TLS. |
+| `micro.tcp.tls.ca` | none | The CA that peers' certificates must chain to: turns on mutual TLS. Servers are verified against it too, and against the public web roots without it. |
+
+## NATS
+
+<Badge feature="micro-nats" /> Requests use NATS request-reply on a subject equal to the pattern, with the service's instances in one queue group named after `micro.service`, so each request goes to one instance. When no instance listens, NATS says so at once and `send` fails with `MicroError::NoResponders` instead of waiting for the deadline.
+
+Events go through **JetStream** on the subject `<stream>.events.<pattern>` (`NAVREE.events.deal.won`). `micro:setup` (or `micro.auto_setup` at boot) creates the stream `micro.nats.stream`, which stores every subject under `<stream>.`, and one durable pull consumer per subscribing service and pattern, named `<service>_<pattern>` with dots as underscores (`notifications_deal_won`). A service that is down when an event is published gets it when it comes back, for as long as the stream keeps it. A failed event is negatively acknowledged with its backoff as the delay; an `ordered` handler's consumer has one event in flight at a time. Broadcast handlers use a plain core subscription, and dead letters go to `<stream>.dead.<service>.<pattern>`, stored by the same stream.
+
+```toml
+[micro]
+transport = "nats"
+url = "nats://nats-1:4222,nats://nats-2:4222"   # several servers, comma-separated
+
+[micro.nats]
+stream = "CRM"
+replicas = 3
+max_age_hours = 168
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.nats.jetstream` | `true` | Events through JetStream (at least once). `false` uses core publish-subscribe (at most once). |
+| `micro.nats.stream` | `NAVREE` | The stream that stores events. Letters, digits, `_` and `-`. |
+| `micro.nats.replicas` | `1` | Stream replicas. Use 3 on a cluster. |
+| `micro.nats.max_age_hours` | `168` | How long the stream keeps events. |
+| `micro.nats.ack_wait_secs` | `30` | How long an unacknowledged event waits before redelivery. Raised to the handler's `#[timeout]` when that is longer. |
+| `micro.nats.credentials` | none | Not supported: `.creds` files (JWT and NKey) sign with Ed25519 outside `ring`, so setting it fails at connect. Use a token, a user and password, or TLS client certificates. |
+| `micro.nats.token` | none | A token, for servers that use token authentication. |
+| `micro.nats.tls.ca`, `.cert`, `.key` | none | TLS settings. A `tls://` URL turns TLS on with the system's roots. |
+
+User names and passwords go in the URL: `nats://deals:secret@nats.internal:4222`.
+
+## Kafka
+
+<Badge feature="micro-kafka" /> Navree talks to Kafka through a small client of its own on the Kafka wire protocol, in pure Rust. It uses Kafka's consumer group protocol from KIP-848, where the broker assigns the partitions, so it needs **Kafka 4.0 or later**. It reads record batches compressed with gzip or snappy, and writes them uncompressed.
+
+Each event pattern is a topic (`deal.won`), and each subscribing service is a consumer group named after `micro.service`. The event's key is the record key, hashed like the Java client does, so events with the same key land on the same partition and keep their order. Navree commits a partition's offset once every earlier record of it was handled, that is once each handler returned `Ok` and its unit of work committed, and releases a partition the group takes away only after the events it handed out are done. A new group starts at the end of its topics (`start_from = "latest"`) or at their beginning (`"earliest"`); after that it continues from its committed offsets, so a service that has been listening gets the events published while it was down.
+
+Publishing an event creates its topic when it is missing. Broadcast handlers read every partition of their topic from the end, without a group.
+
+A failed event doesn't block its partition: it is copied to the service's retry topic (`<service>.retry`) with its attempt count and the time it becomes due, and handled again from there; after `micro.events.max_attempts` it goes to the [dead letters](/docs/microservices/events/#dead-letters).
+
+Request-response works too: requests go to the pattern's topic and replies to the reply topic of the asking service (`<service>.replies`), which each of its instances reads. A request to a pattern whose topic doesn't exist fails at once with `MicroError::NoResponders`. Its latency is Kafka's, so prefer NATS, TCP or [gRPC](/docs/microservices/grpc/) for chatty request-response and use Kafka for events.
+
+```toml
+[micro]
+transport = "kafka"
+url = "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+
+[micro.kafka]
+partitions = 12
+replication_factor = 3
+tls = true
+sasl = { mechanism = "SCRAM-SHA-512", username = "deals", password = "..." }
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.kafka.partitions` | `6` | Partitions of the topics `micro:setup` creates. |
+| `micro.kafka.replication_factor` | `1` | Replicas of those topics. Use 3 in production. |
+| `micro.kafka.retention_hours` | `168` | How long those topics keep records. |
+| `micro.kafka.tls` | `false` | Connect with TLS, verified against the public web roots. |
+| `micro.kafka.tls_files.ca` | none | A CA certificate (PEM) to trust instead of the public roots, for a broker whose certificate a private authority signed. Setting it connects with TLS. |
+| `micro.kafka.tls_files.cert`, `.key` | none | This service's certificate chain and private key (PEM), for a broker that asks for a client certificate. |
+| `micro.kafka.sasl.mechanism` | none | `PLAIN`, `SCRAM-SHA-256` or `SCRAM-SHA-512`. |
+| `micro.kafka.sasl.username`, `.password` | none | The SASL credentials. |
+| `micro.kafka.start_from` | `latest` | Where a new consumer group starts: `latest`, or `earliest` to read the topic's whole history. |
+
+Set the password from the environment: `APP_MICRO__KAFKA__SASL__PASSWORD`.
+
+## RabbitMQ
+
+<Badge feature="micro-rabbitmq" /> Navree declares one topic exchange, `micro.rabbitmq.exchange`, and publishes every message to it with the pattern as the routing key:
+
+- **Events.** Each subscribing service gets a queue per pattern, `<service>.<pattern>`, bound to the exchange. Every service gets its own copy; the instances of one service compete for the messages in its queue.
+- **Requests.** One queue per pattern, shared by the instances of the service that answers it. Replies come back through RabbitMQ's direct reply-to.
+- **Publishing.** `emit` waits for the broker's publisher confirm, so an event is stored when `emit` returns.
+
+Retries wait in a delay queue (`<service>.<pattern>.retry`, per-message TTL) and come back to the main queue when due, carrying `navree-attempt`. A request is published as mandatory, so one that no queue is bound for comes back at once as `MicroError::NoResponders`. Broadcast handlers each get an exclusive, auto-deleted queue, and an `ordered` handler's queue has a single active consumer. With `micro.events.dead_letter = "transport"`, dead letters go to the `<exchange>.dead` topic exchange, routed by pattern.
+
+```toml
+[micro]
+transport = "rabbitmq"
+url = "amqps://deals:secret@rabbitmq.internal:5671/crm"
+
+[micro.rabbitmq]
+exchange = "crm"
+prefetch = 32
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.rabbitmq.exchange` | `navree` | The topic exchange. |
+| `micro.rabbitmq.queue_type` | `quorum` | `quorum` (replicated) or `classic`. |
+| `micro.rabbitmq.prefetch` | `32` | Unacknowledged messages one instance holds per queue. |
+| `micro.rabbitmq.tls.ca` | none | A CA for `amqps://` URLs signed by a private CA. |
+
+## Redis Streams
+
+<Badge feature="micro-redis" /> Each event pattern is a stream, `<prefix><pattern>` (`navree:deal.won`), and each subscribing service is a consumer group; each instance is a consumer in it. Navree acknowledges an entry with `XACK` once the handler's unit of work committed. Entries that an instance took but never acknowledged, because it crashed, are claimed by another instance after `claim_after_ms`, and the claim counts as a new attempt.
+
+An entry holds the headers as fields and the payload in the field `payload`. A failed event's entry gets its idle time set (`XCLAIM .. IDLE`) so that the claim happens when its backoff is over. Requests use a stream per pattern too, read by the answering service's group; replies go to a short-lived stream per instance, `<prefix>replies.<instance>`. A pattern no service has subscribed to fails at once with `MicroError::NoResponders`. Broadcast handlers read with `XREAD`, without a group, and dead letters go to the stream `<prefix>dead`. Navree needs Redis 6.2 or later (`XAUTOCLAIM`).
+
+Streams live in Redis's memory, so Navree trims them as it adds entries: each stream keeps about `max_len` entries. Size it for the longest outage you want a consumer to survive.
+
+```toml
+[micro]
+transport = "redis"
+url = "rediss://default:secret@redis.internal:6380/0"
+
+[micro.redis]
+prefix = "crm:"
+max_len = 500000
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.redis.prefix` | `navree:` | The prefix of every stream key. |
+| `micro.redis.max_len` | `100000` | About how many entries each stream keeps. |
+| `micro.redis.claim_after_ms` | `60000` | When another instance takes over an unacknowledged entry. Raised to the handler's `#[timeout]` when that is longer. |
+| `micro.redis.block_ms` | `5000` | How long one read waits for new entries. |
+
+## MQTT
+
+<Badge feature="micro-mqtt" /> MQTT needs a broker that speaks MQTT 5. A pattern becomes a topic under `micro.mqtt.prefix`, with dots turned into slashes: `deal.won` is `navree/deal/won`.
+
+- **Events** are published with QoS 1 (at least once). Each service subscribes with a shared subscription, `$share/<service>/navree/deal/won`, so one instance of each service gets each event. Sessions persist (`session_expiry_secs`), so events published while a service restarts wait for it on the broker.
+- **Requests** use MQTT 5's response topic and correlation data; replies arrive on `<prefix>/replies/<client id>`, a topic private to the instance. A request nobody subscribes to fails at once with `MicroError::NoResponders` when the broker reports "no matching subscribers" in its PUBACK.
+- **Retries.** MQTT has no negative acknowledgment, so a failed event stays unacknowledged while the instance retries it with the configured backoff before it dead-letters it; if the instance goes away first, the broker hands the event out again.
+- **Reconnecting.** On reconnect, unacknowledged publishes are sent again and lost subscriptions are restored. Dead letters go to `<prefix>/dead/<service>/<topic>`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.mqtt.prefix` | `navree` | The topic prefix. |
+| `micro.mqtt.client_id` | the instance id, `<service>-<random>` | The client id; must be unique per connection. A stable one per instance lets a restarted instance resume its session. |
+| `micro.mqtt.keep_alive_secs` | `30` | The keep-alive interval. |
+| `micro.mqtt.session_expiry_secs` | `3600` | How long the broker keeps the session (and queued events) of a disconnected instance. |
+| `micro.mqtt.username`, `.password` | none | Credentials. |
+| `micro.mqtt.tls.ca`, `.cert`, `.key` | none | TLS settings; `mqtts://` turns TLS on with the system's roots. |
+
+## Setting up the broker
+
+Brokers need streams, topics, exchanges and queues before messages flow. `micro:setup` declares everything the app's patterns need: the JetStream stream and consumers, the Kafka topics (the patterns' topics, and `<service>.retry`, `<service>.dead` and `<service>.replies`), the RabbitMQ exchange, queues and bindings, the Redis consumer groups. MQTT topics need no declaration. It only adds what is missing, so running it again is safe:
+
+```sh
+cargo run -p notifications -- micro:setup
+```
+
+```text
+nats: stream CRM exists
+nats: created consumer notifications_deal_won (deal.won)
+nats: created consumer notifications_deal_assigned (deal.assigned)
+```
+
+In debug builds `micro.auto_setup` runs the same step at boot. In production, run `micro:setup` from your deploy, next to `migrate`, with credentials allowed to change the broker's topology; the services themselves can then run with credentials that only publish and consume.
+
+## Connections and failures
+
+- **Connecting.** The app connects when the listener starts (`serve` or `micro:listen`) or on its first `send` or `emit`. Commands that don't use the transport, such as `migrate`, never connect. A connection attempt gives up after `micro.connect_timeout_ms` (5000).
+- **Reconnecting.** A dropped connection is retried with exponential backoff, from 100 ms up to 30 seconds. While it is down, `send` fails at once with `MicroError::Transport`, `emit` inside a unit of work goes to the outbox and is published once the connection is back, and the readiness check reports the service as not ready.
+- **Stopping.** On shutdown the listener stops taking new messages, waits for the ones in flight (each within its own time limit), acknowledges them, then closes the connection. Events that were taken but not finished are redelivered to another instance.
+
+## Several transports in one app
+
+A service listens on one transport, but it can send to others. Name each extra client in `micro.clients`:
+
+```toml
+[micro.clients.billing]
+transport = "tcp"
+url = "billing.internal:4000"
+request_timeout_ms = 2000
+```
+
+With `MicroModule::for_root(options)`, every client in `options.clients` is registered. With `from_config()`, the configuration is read after the modules register, so name the clients in code too:
+
+```rust
+Navree::app().module(MicroModule::from_config().client("billing"))
+```
+
+A name with no `[micro.clients.<name>]` section fails the boot. Then inject the client by name:
+
+```rust
+#[injectable]
+pub struct InvoiceService {
+    #[inject(name = "billing")]
+    billing: Arc<ServiceClient>,
+}
+```
+
+The unnamed `ServiceClient` uses the app's own transport. A named client takes the same keys as the `micro` section (`transport`, `url`, `codec`, `request_timeout_ms` and the transport's subsection) and sends only; handlers are always served from the app's own transport.
+
+## Writing a transport
+
+A transport is a type that implements `MicroTransport`. Navree gives it envelopes to send and publish, and a channel for the deliveries it receives; it handles the pipeline, the codec, retries and the inbox itself:
+
+```rust
+use std::time::Duration;
+
+use navree::BoxFuture;
+use navree::micro::{
+    Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, Subscription,
+};
+use tokio::sync::mpsc;
+
+pub struct SqsTransport {
+    // the client, queue URLs, ...
+}
+
+impl MicroTransport for SqsTransport {
+    fn name(&self) -> &'static str {
+        "sqs"
+    }
+
+    /// Sends a request and waits for its reply, until `envelope.deadline()`.
+    fn request(&self, envelope: Envelope) -> BoxFuture<'_, Result<Envelope, MicroError>> {
+        Box::pin(async move { todo!() })
+    }
+
+    /// Publishes an event; returns once the broker has stored it.
+    fn publish(&self, envelope: Envelope) -> BoxFuture<'_, Result<(), MicroError>> {
+        Box::pin(async move { todo!() })
+    }
+
+    /// Receives the subscribed patterns and hands each message over as a
+    /// `Delivery`, until Navree closes the channel (`deliveries.closed()`).
+    fn listen(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
+        Box::pin(async move { todo!() })
+    }
+}
+
+/// What Navree calls back for one received SQS message.
+struct SqsActions {
+    // the receipt handle, ...
+}
+
+impl DeliveryActions for SqsActions {
+    fn ack(self: Box<Self>) -> BoxFuture<'static, Result<(), MicroError>> {
+        Box::pin(async move { todo!() }) // delete the message
+    }
+
+    fn retry_in(self: Box<Self>, delay: Duration) -> BoxFuture<'static, Result<(), MicroError>> {
+        Box::pin(async move { todo!() }) // change its visibility timeout to `delay`
+    }
+
+    fn reply(self: Box<Self>, reply: Envelope) -> BoxFuture<'static, Result<(), MicroError>> {
+        Box::pin(async move { todo!() }) // send `reply` to the asker, then delete
+    }
+}
+```
+
+Each `Subscription` names a pattern, its kind (`PatternKind::Message` or `PatternKind::Event`), the group that shares it (`Group::Service(name)`, or `Group::Instance(id)` for [broadcast](/docs/microservices/events/#every-instance-broadcast) events), whether it is `ordered`, and its `ack_wait`. For each message it receives, the transport sends `Delivery::new(envelope, index, attempt, actions)` into the channel, where `index` is the position of the matching subscription and `actions` implements `DeliveryActions`: Navree calls `ack`, `retry_in(delay)` or `reply(envelope)` once the handler is done. The trait's other methods have defaults you override as needed: `setup` (what `micro:setup` declares), `supports_wildcards`, `is_connected` (the readiness check), `dead_letter` (the `transport` dead-letter destination) and `close`.
+
+`micro:listen`, and `MicroModule::start_listener` in a test, go on once the transport says its subscriptions are registered; an in-memory transport's app waits for it at boot. A broker that drops a message nobody is subscribed to (core NATS does) loses a request that arrives before the broker has read the subscription, so such a transport overrides `listen_subscribed`, which is `listen` plus a `Subscribed` handle, and calls `subscribed.signal()` once the broker has confirmed them (the NATS transport flushes its connection first). The same goes for anything the listener creates first: the TCP transport signals once it is bound, the Redis transport once its consumer groups exist and its broadcast readers know where they start, the RabbitMQ transport once its queues are consumed, and the MQTT transport once the broker has accepted every subscription, all asked for together against one deadline, the connect timeout. An event sent after the signal must be heard. The default signals at once and calls `listen`, which is right when the broker keeps messages for a subscriber that has not arrived yet. A boot waits for the signal for at most six times `micro.connect_timeout_ms` (30 seconds by default), and never past the app being stopped; a listen that fails is started again by the listener, and the app's readiness check is down until it has signalled.
+
+`navree::micro::conformance` holds the behavior every transport must have, as checks you run against yours: implement its `Harness` (which builds instances of a service and a client) and call `conformance::run(&harness)` from a test. Navree's own transports pass it. Install the transport with `Transport::custom`:
+
+```rust
+Navree::app().module(MicroModule::for_root(Transport::custom(SqsTransport::new(queue_url))))
+```
+
+## Testing
+
+`Transport::memory()` is a broker inside the process: requests, events, consumer groups, retries and dead letters behave as they do on a real broker, without the network, and a group that has subscribed once keeps its events while none of its instances listens. `MicroFake` wraps it with stubs and assertions, and is the usual way to test a service; see [request-response](/docs/microservices/request-response/#testing) and [events](/docs/microservices/events/#testing).
+
+To test against a real broker, run it in CI the way `navree dock up` does locally, point `APP_MICRO__URL` at it, and run `micro:setup` before the tests.
+
+<LinkCards>
+  <LinkCard href="/docs/microservices/request-response/" title="Request-response">
+    Message patterns, deadlines and errors across services.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/events/" title="Events">
+    Fan-out, retries, dead letters, the outbox and the inbox.
+  </LinkCard>
+  <LinkCard href="/docs/tools/dock/" title="Dock">
+    NATS, PostgreSQL and Redis for development, from one command.
+  </LinkCard>
+</LinkCards>

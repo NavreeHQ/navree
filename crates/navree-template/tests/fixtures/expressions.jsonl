@@ -1,0 +1,863 @@
+{"t": "{{ s }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ neg }}", "v": {"o": "-7"}, "p": {"o": "-7"}}
+{"t": "{{ f }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ big }}", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ whole }}", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ t }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ no }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ nil }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ empty }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ list }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ strs }}", "v": {"o": "[&#x27;b&#x27;, &#x27;a&#x27;, &#x27;&lt;c&gt;&#x27;, &#x27;A&#x27;]"}, "p": {"o": "['b', 'a', '<c>', 'A']"}}
+{"t": "{{ nums }}", "v": {"o": "[3, 1, 2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ map }}", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ nested }}", "v": {"o": "{&#x27;a&#x27;: {&#x27;b&#x27;: {&#x27;c&#x27;: [10, 20, {&#x27;d&#x27;: &#x27;deep&#x27;}]}}}"}, "p": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}}
+{"t": "{{ rows }}", "v": {"o": "[{&#x27;name&#x27;: &#x27;x&#x27;, &#x27;v&#x27;: 1}, {&#x27;name&#x27;: &#x27;y&#x27;, &#x27;v&#x27;: 2}]"}, "p": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}}
+{"t": "{{ pairs }}", "v": {"o": "[[&#x27;a&#x27;, 1], [&#x27;b&#x27;, 2]]"}, "p": {"o": "[['a', 1], ['b', 2]]"}}
+{"t": "{{ text }}", "v": {"o": "Hello World foo  bar"}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ uni }}", "v": {"o": "héllo wörld ñ 日本語"}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ 1 }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1.0 }}", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1.5e3 }}", "v": {"o": "1500.0"}, "p": {"o": "1500.0"}}
+{"t": "{{ 0x1f }}", "v": {"o": "31"}, "p": {"o": "31"}}
+{"t": "{{ 0b11 }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 0o17 }}", "v": {"o": "15"}, "p": {"o": "15"}}
+{"t": "{{ 1_000 }}", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ \"a\" }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ 'a' }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ \"a\" \"b\" }}", "v": {"o": "ab"}, "p": {"o": "ab"}}
+{"t": "{{ \"it's\" }}", "v": {"o": "it&#x27;s"}, "p": {"o": "it's"}}
+{"t": "{{ 'say \"hi\"' }}", "v": {"o": "say &quot;hi&quot;"}, "p": {"o": "say \"hi\""}}
+{"t": "{{ \"\\n\\t\\\\\" }}", "v": {"o": "\n\t\\"}, "p": {"o": "\n\t\\"}}
+{"t": "{{ \"\\u00e9\" }}", "v": {"o": "é"}, "p": {"o": "é"}}
+{"t": "{{ true }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ false }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ True }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ False }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ none }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ None }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ [] }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ [1, 2, 3] }}", "v": {"o": "[1, 2, 3]"}, "p": {"o": "[1, 2, 3]"}}
+{"t": "{{ [1, \"a\", none, true] }}", "v": {"o": "[1, &#x27;a&#x27;, None, True]"}, "p": {"o": "[1, 'a', None, True]"}}
+{"t": "{{ () }}", "v": {"o": "()"}, "p": {"o": "()"}}
+{"t": "{{ (1,) }}", "v": {"o": "(1,)"}, "p": {"o": "(1,)"}}
+{"t": "{{ (1, 2) }}", "v": {"o": "(1, 2)"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ {} }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {\"a\": 1} }}", "v": {"o": "{&#x27;a&#x27;: 1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ {\"b\": 1, \"a\": 2} }}", "v": {"o": "{&#x27;a&#x27;: 2, &#x27;b&#x27;: 1}"}, "p": {"o": "{'a': 2, 'b': 1}"}}
+{"t": "{{ {1: \"x\", \"1\": \"y\"} }}", "v": {"o": "{1: &#x27;x&#x27;, &#x27;1&#x27;: &#x27;y&#x27;}"}, "p": {"o": "{1: 'x', '1': 'y'}"}}
+{"t": "{{ {\"a\": [1, {\"b\": 2}]} }}", "v": {"o": "{&#x27;a&#x27;: [1, {&#x27;b&#x27;: 2}]}"}, "p": {"o": "{'a': [1, {'b': 2}]}"}}
+{"t": "{{ list[0] }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list[1] }}", "v": {"o": "two"}, "p": {"o": "two"}}
+{"t": "{{ list[-1] }}", "v": {"o": "{&#x27;k&#x27;: &#x27;v&#x27;}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ list[99] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ list[-99] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ list.0 }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list.4.1 }}", "v": {"o": "five"}, "p": {"o": "five"}}
+{"t": "{{ nested.a.b.c.2.d }}", "v": {"o": "deep"}, "p": {"o": "deep"}}
+{"t": "{{ nested.a.b.c[0] }}", "v": {"o": "10"}, "p": {"o": "10"}}
+{"t": "{{ map.a }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ map[\"a\"] }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ map.zz }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ map[\"zz\"] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ text[0] }}", "v": {"o": "H"}, "p": {"o": "H"}}
+{"t": "{{ text[-1] }}", "v": {"o": "r"}, "p": {"o": "r"}}
+{"t": "{{ text[99] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ text[1:3] }}", "v": {"o": "el"}, "p": {"o": "el"}}
+{"t": "{{ text[:5] }}", "v": {"o": "Hello"}, "p": {"o": "Hello"}}
+{"t": "{{ text[6:] }}", "v": {"o": "World foo  bar"}, "p": {"o": "World foo  bar"}}
+{"t": "{{ text[::2] }}", "v": {"o": "HloWrdfo a"}, "p": {"o": "HloWrdfo a"}}
+{"t": "{{ text[::-1] }}", "v": {"o": "rab  oof dlroW olleH"}, "p": {"o": "rab  oof dlroW olleH"}}
+{"t": "{{ text[-3:] }}", "v": {"o": "bar"}, "p": {"o": "bar"}}
+{"t": "{{ text[3:1] }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ uni[1:4] }}", "v": {"o": "éll"}, "p": {"o": "éll"}}
+{"t": "{{ uni[::-1] }}", "v": {"o": "語本日 ñ dlröw olléh"}, "p": {"o": "語本日 ñ dlröw olléh"}}
+{"t": "{{ list[1:3] }}", "v": {"o": "[&#x27;two&#x27;, None]"}, "p": {"o": "['two', None]"}}
+{"t": "{{ list[:2] }}", "v": {"o": "[1, &#x27;two&#x27;]"}, "p": {"o": "[1, 'two']"}}
+{"t": "{{ list[::2] }}", "v": {"o": "[1, None, [4, &#x27;five&#x27;]]"}, "p": {"o": "[1, None, [4, 'five']]"}}
+{"t": "{{ list[::-1] }}", "v": {"o": "[{&#x27;k&#x27;: &#x27;v&#x27;}, [4, &#x27;five&#x27;], 3.5, None, &#x27;two&#x27;, 1]"}, "p": {"o": "[{'k': 'v'}, [4, 'five'], 3.5, None, 'two', 1]"}}
+{"t": "{{ list[-2:] }}", "v": {"o": "[[4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[[4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ nums[1:] }}", "v": {"o": "[1, 2]"}, "p": {"o": "[1, 2]"}}
+{"t": "{{ (1, 2, 3)[1:] }}", "v": {"o": "(2, 3)"}, "p": {"o": "(2, 3)"}}
+{"t": "{{ (1, 2, 3)[::-1] }}", "v": {"o": "(3, 2, 1)"}, "p": {"o": "(3, 2, 1)"}}
+{"t": "{{ n[0] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ n.x }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ t.x }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ s.x }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ nil.x }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ nil[0] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ 1 + 2 }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 1 - 2 }}", "v": {"o": "-1"}, "p": {"o": "-1"}}
+{"t": "{{ 2 * 3 }}", "v": {"o": "6"}, "p": {"o": "6"}}
+{"t": "{{ 7 / 2 }}", "v": {"o": "3.5"}, "p": {"o": "3.5"}}
+{"t": "{{ 6 / 2 }}", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ 7 // 2 }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ -7 // 2 }}", "v": {"o": "-4"}, "p": {"o": "-4"}}
+{"t": "{{ 7 % 3 }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ -7 % 3 }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ 7 % -3 }}", "v": {"o": "-2"}, "p": {"o": "-2"}}
+{"t": "{{ 2 ** 10 }}", "v": {"o": "1024"}, "p": {"o": "1024"}}
+{"t": "{{ 2 ** -1 }}", "v": {"o": "0.5"}, "p": {"o": "0.5"}}
+{"t": "{{ 2.5 + 1 }}", "v": {"o": "3.5"}, "p": {"o": "3.5"}}
+{"t": "{{ 1 + 2.5 }}", "v": {"o": "3.5"}, "p": {"o": "3.5"}}
+{"t": "{{ 1.5 * 2 }}", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ 7.5 // 2 }}", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ 7.5 % 2 }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ -n }}", "v": {"o": "-42"}, "p": {"o": "-42"}}
+{"t": "{{ -f }}", "v": {"o": "-1.5"}, "p": {"o": "-1.5"}}
+{"t": "{{ - - n }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ -1 ** 2 }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ (-1) ** 2 }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1 + 2 * 3 }}", "v": {"o": "7"}, "p": {"o": "7"}}
+{"t": "{{ (1 + 2) * 3 }}", "v": {"o": "9"}, "p": {"o": "9"}}
+{"t": "{{ 2 ** 3 ** 2 }}", "v": {"o": "64"}, "p": {"o": "64"}}
+{"t": "{{ 1 / 0 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 // 0 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 % 0 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1.0 / 0 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ s + s }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b><b>&\"'/x</b>"}}
+{"t": "{{ s + 1 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 + s }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ [1] + [2] }}", "v": {"o": "[1, 2]"}, "p": {"o": "[1, 2]"}}
+{"t": "{{ list + nums }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}, 3, 1, 2]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}, 3, 1, 2]"}}
+{"t": "{{ nums + [] }}", "v": {"o": "[3, 1, 2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ (1,) + (2,) }}", "v": {"o": "(1, 2)"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ (1,) + [2] }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ \"ab\" * 3 }}", "v": {"o": "ababab"}, "p": {"o": "ababab"}}
+{"t": "{{ 3 * \"ab\" }}", "v": {"o": "ababab"}, "p": {"o": "ababab"}}
+{"t": "{{ \"ab\" * 0 }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ [1, 2] * 2 }}", "v": {"o": "[1, 2, 1, 2]"}, "p": {"o": "[1, 2, 1, 2]"}}
+{"t": "{{ 2 * [1, 2] }}", "v": {"o": "[1, 2, 1, 2]"}, "p": {"o": "[1, 2, 1, 2]"}}
+{"t": "{{ [] * 3 }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ (1,) * 2 }}", "v": {"o": "(1, 1)"}, "p": {"o": "(1, 1)"}}
+{"t": "{{ s * s }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nil + 1 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ t + 1 }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ t + t }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ big + 1 }}", "v": {"o": "12345678901234567891"}, "p": {"o": "12345678901234567891"}}
+{"t": "{{ big * big }}", "v": {"o": "152415787532388367501905199875019052100"}, "p": {"o": "152415787532388367501905199875019052100"}}
+{"t": "{{ n ~ s }}", "v": {"o": "42&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "42<b>&\"'/x</b>"}}
+{"t": "{{ s ~ n }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;42"}, "p": {"o": "<b>&\"'/x</b>42"}}
+{"t": "{{ n ~ f }}", "v": {"o": "421.5"}, "p": {"o": "421.5"}}
+{"t": "{{ nil ~ t }}", "v": {"o": "NoneTrue"}, "p": {"o": "NoneTrue"}}
+{"t": "{{ t ~ no }}", "v": {"o": "TrueFalse"}, "p": {"o": "TrueFalse"}}
+{"t": "{{ \"a\" ~ \"b\" ~ 1 }}", "v": {"o": "ab1"}, "p": {"o": "ab1"}}
+{"t": "{{ list ~ map }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ 1 == 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 == 1.0 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 == \"1\" }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 != 2 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"a\" == \"a\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"a\" == \"b\" }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ t == 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ no == 0 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ nil == nil }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ nil == 0 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ [1] == [1] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ [1] == [2] }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ [1, 2] == (1, 2) }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ (1, 2) == (1, 2) }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ {\"a\": 1} == {\"a\": 1} }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ {\"a\": 1, \"b\": 2} == {\"b\": 2, \"a\": 1} }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ map == map }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 < 2 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 2 < 1 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 <= 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 2 > 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 2 >= 3 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"a\" < \"b\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"b\" < \"a\" }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 < \"a\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"a\" < 1 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ nil < 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 < nil }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ t < 2 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ [1] < [2] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ [1, 2] < [1, 3] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ {\"a\": 1} < {\"a\": 2} }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 < 2 < 3 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 < 3 < 2 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 == 1 == 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 in [1, 2] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 3 in [1, 2] }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 not in [1, 2] }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 3 not in [1, 2] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"a\" in \"abc\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"z\" in \"abc\" }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 in \"a1b\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"a\" in map }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"zz\" in map }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"a\" not in map }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 1 in n }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 in nil }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 in t }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ \"x\" in list }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ none in list }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ [4, \"five\"] in list }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ {\"k\": \"v\"} in list }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ t and n }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ no and n }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ t or n }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ no or n }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ nil or \"d\" }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ empty or \"d\" }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ n and s }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ not t }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ not no }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ not nil }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ not empty }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ not n }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ not not n }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n if t else s }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ n if no else s }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n if t }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ n if no }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ (n if no) ~ \"x\" }}", "v": {"o": "x"}, "p": {"o": "x"}}
+{"t": "{{ \"a\" if t else \"b\" if no else \"c\" }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ \"a\" if no else \"b\" if no else \"c\" }}", "v": {"o": "c"}, "p": {"o": "c"}}
+{"t": "{{ 1 if nil else 2 }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ s|upper }}", "v": {"o": "&lt;B&gt;&amp;&quot;&#x27;&#x2f;X&lt;&#x2f;B&gt;"}, "p": {"o": "<B>&\"'/X</B>"}}
+{"t": "{{ s|lower }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s|capitalize }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ text|upper }}", "v": {"o": "HELLO WORLD FOO  BAR"}, "p": {"o": "HELLO WORLD FOO  BAR"}}
+{"t": "{{ text|lower }}", "v": {"o": "hello world foo  bar"}, "p": {"o": "hello world foo  bar"}}
+{"t": "{{ text|capitalize }}", "v": {"o": "Hello world foo  bar"}, "p": {"o": "Hello world foo  bar"}}
+{"t": "{{ uni|upper }}", "v": {"o": "HÉLLO WÖRLD Ñ 日本語"}, "p": {"o": "HÉLLO WÖRLD Ñ 日本語"}}
+{"t": "{{ uni|lower }}", "v": {"o": "héllo wörld ñ 日本語"}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ uni|capitalize }}", "v": {"o": "Héllo wörld ñ 日本語"}, "p": {"o": "Héllo wörld ñ 日本語"}}
+{"t": "{{ n|upper }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ nil|upper }}", "v": {"o": "NONE"}, "p": {"o": "NONE"}}
+{"t": "{{ t|lower }}", "v": {"o": "true"}, "p": {"o": "true"}}
+{"t": "{{ list|lower }}", "v": {"o": "[1, &#x27;two&#x27;, none, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, 'two', none, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ s|safe }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s|safe|upper }}", "v": {"o": "<B>&\"'/X</B>"}, "p": {"o": "<B>&\"'/X</B>"}}
+{"t": "{{ s|safe|lower }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s|safe|capitalize }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n|safe }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ nil|safe }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ list|safe }}", "v": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ s|e }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
+{"t": "{{ s|escape }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
+{"t": "{{ s|e|e }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
+{"t": "{{ s|safe|e }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n|e }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ nil|e }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ list|e }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}}
+{"t": "{{ map|e }}", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}}
+{"t": "{{ s|length }}", "v": {"o": "12"}, "p": {"o": "12"}}
+{"t": "{{ list|length }}", "v": {"o": "6"}, "p": {"o": "6"}}
+{"t": "{{ map|length }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ empty|length }}", "v": {"o": "0"}, "p": {"o": "0"}}
+{"t": "{{ n|length }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nil|length }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ list|count }}", "v": {"o": "6"}, "p": {"o": "6"}}
+{"t": "{{ (1, 2)|length }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ text|replace(\"o\", \"0\") }}", "v": {"o": "Hell0 W0rld f00  bar"}, "p": {"o": "Hell0 W0rld f00  bar"}}
+{"t": "{{ text|replace(\"o\", \"<0>\") }}", "v": {"o": "Hell&lt;0&gt; W&lt;0&gt;rld f&lt;0&gt;&lt;0&gt;  bar"}, "p": {"o": "Hell<0> W<0>rld f<0><0>  bar"}}
+{"t": "{{ s|replace(\"<\", \"[\") }}", "v": {"o": "[b&gt;&amp;&quot;&#x27;&#x2f;x[&#x2f;b&gt;"}, "p": {"o": "[b>&\"'/x[/b>"}}
+{"t": "{{ s|safe|replace(\"<\", \"[\") }}", "v": {"o": "[b>&\"'/x[/b>"}, "p": {"o": "[b>&\"'/x[/b>"}}
+{"t": "{{ s|replace(\"x\", \"<y>\"|safe) }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#<y>27;&#<y>2f;<y>&lt;&#<y>2f;b&gt;"}, "p": {"o": "<b>&\"'/<y></b>"}}
+{"t": "{{ s|replace(\"x\"|safe, \"<y>\") }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#&lt;y&gt;27;&#&lt;y&gt;2f;&lt;y&gt;&lt;&#&lt;y&gt;2f;b&gt;"}, "p": {"o": "<b>&\"'/<y></b>"}}
+{"t": "{{ text|replace(\"\", \"-\") }}", "v": {"o": "-H-e-l-l-o- -W-o-r-l-d- -f-o-o- - -b-a-r-"}, "p": {"o": "-H-e-l-l-o- -W-o-r-l-d- -f-o-o- - -b-a-r-"}}
+{"t": "{{ n|replace(\"4\", \"5\") }}", "v": {"o": "52"}, "p": {"o": "52"}}
+{"t": "{{ text|replace(\"o\") }}", "v": {"e": "MissingArgument|t.html|1"}, "p": {"e": "MissingArgument|t.html|1"}}
+{"t": "{{ text|trim }}", "v": {"o": "Hello World foo  bar"}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ \"  a  \"|trim }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ \"xxaxx\"|trim(\"x\") }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ s|safe|trim }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n|trim }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ list|join(\",\") }}", "v": {"o": "1,two,None,3.5,[4, &#x27;five&#x27;],{&#x27;k&#x27;: &#x27;v&#x27;}"}, "p": {"o": "1,two,None,3.5,[4, 'five'],{'k': 'v'}"}}
+{"t": "{{ list|join }}", "v": {"o": "1twoNone3.5[4, &#x27;five&#x27;]{&#x27;k&#x27;: &#x27;v&#x27;}"}, "p": {"o": "1twoNone3.5[4, 'five']{'k': 'v'}"}}
+{"t": "{{ strs|join(\", \") }}", "v": {"o": "b, a, &lt;c&gt;, A"}, "p": {"o": "b, a, <c>, A"}}
+{"t": "{{ strs|join(\", \"|safe) }}", "v": {"o": "b, a, &lt;c&gt;, A"}, "p": {"o": "b, a, <c>, A"}}
+{"t": "{{ strs|join(\"<>\") }}", "v": {"o": "b&lt;&gt;a&lt;&gt;&lt;c&gt;&lt;&gt;A"}, "p": {"o": "b<>a<><c><>A"}}
+{"t": "{{ [\"<a>\"|safe, \"<b>\"]|join(\",\") }}", "v": {"o": "<a>,&lt;b&gt;"}, "p": {"o": "<a>,<b>"}}
+{"t": "{{ [\"<a>\"|safe, \"<b>\"]|join(\"<>\") }}", "v": {"o": "<a>&lt;&gt;&lt;b&gt;"}, "p": {"o": "<a><><b>"}}
+{"t": "{{ [\"<a>\", \"<b>\"]|join(\"<>\"|safe) }}", "v": {"o": "&lt;a&gt;<>&lt;b&gt;"}, "p": {"o": "<a><><b>"}}
+{"t": "{{ nil|join(\",\") }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ n|join(\",\") }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ text|join(\"-\") }}", "v": {"o": "H-e-l-l-o- -W-o-r-l-d- -f-o-o- - -b-a-r"}, "p": {"o": "H-e-l-l-o- -W-o-r-l-d- -f-o-o- - -b-a-r"}}
+{"t": "{{ map|join(\",\") }}", "v": {"o": "a,b,z&lt;"}, "p": {"o": "a,b,z<"}}
+{"t": "{{ rows|join(\",\", \"name\") }}", "v": {"o": "x,y"}, "p": {"o": "x,y"}}
+{"t": "{{ rows|join(\",\", attribute=\"v\") }}", "v": {"o": "1,2"}, "p": {"o": "1,2"}}
+{"t": "{{ rows|join(attribute=\"name\") }}", "v": {"o": "xy"}, "p": {"o": "xy"}}
+{"t": "{{ rows|join(d=\"-\", attribute=\"name\") }}", "v": {"o": "x-y"}, "p": {"o": "x-y"}}
+{"t": "{{ rows|join(\"-\", bad=1) }}", "v": {"e": "TooManyArguments|t.html|1"}, "p": {"e": "TooManyArguments|t.html|1"}}
+{"t": "{{ text|split }}", "v": {"o": "[&#x27;Hello&#x27;, &#x27;World&#x27;, &#x27;foo&#x27;, &#x27;bar&#x27;]"}, "p": {"o": "['Hello', 'World', 'foo', 'bar']"}}
+{"t": "{{ text|split(\" \") }}", "v": {"o": "[&#x27;Hello&#x27;, &#x27;World&#x27;, &#x27;foo&#x27;, &#x27;&#x27;, &#x27;bar&#x27;]"}, "p": {"o": "['Hello', 'World', 'foo', '', 'bar']"}}
+{"t": "{{ text|split(\" \", 1) }}", "v": {"o": "[&#x27;Hello&#x27;, &#x27;World foo  bar&#x27;]"}, "p": {"o": "['Hello', 'World foo  bar']"}}
+{"t": "{{ text|split(none, 1) }}", "v": {"o": "[&#x27;Hello&#x27;, &#x27;World foo  bar&#x27;]"}, "p": {"o": "['Hello', 'World foo  bar']"}}
+{"t": "{{ text|split(\"o\") }}", "v": {"o": "[&#x27;Hell&#x27;, &#x27; W&#x27;, &#x27;rld f&#x27;, &#x27;&#x27;, &#x27;  bar&#x27;]"}, "p": {"o": "['Hell', ' W', 'rld f', '', '  bar']"}}
+{"t": "{{ \"  a  b \"|split }}", "v": {"o": "[&#x27;a&#x27;, &#x27;b&#x27;]"}, "p": {"o": "['a', 'b']"}}
+{"t": "{{ \"  a  b \"|split(none, 1) }}", "v": {"o": "[&#x27;a&#x27;, &#x27;b &#x27;]"}, "p": {"o": "['a', 'b ']"}}
+{"t": "{{ \"  a  b \"|split(none, 0) }}", "v": {"o": "[&#x27;a  b &#x27;]"}, "p": {"o": "['a  b ']"}}
+{"t": "{{ \"a b\"|split(\"\") }}", "v": {"o": "[&#x27;&#x27;, &#x27;a&#x27;, &#x27; &#x27;, &#x27;b&#x27;, &#x27;&#x27;]"}, "p": {"o": "['', 'a', ' ', 'b', '']"}}
+{"t": "{{ s|safe|split(\"/\") }}", "v": {"o": "[&#x27;&lt;b&gt;&amp;&quot;\\&#x27;&#x27;, &#x27;x&lt;&#x27;, &#x27;b&gt;&#x27;]"}, "p": {"o": "['<b>&\"\\'', 'x<', 'b>']"}}
+{"t": "{{ n|split }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ (\"1.2.3\"|split(\".\"))[-1] }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ \"a,b\"|split(\",\")|join(\"+\") }}", "v": {"o": "a+b"}, "p": {"o": "a+b"}}
+{"t": "{{ s|default(\"d\") }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ missing|default(\"d\") }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ missing|d(\"d\") }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ missing|default }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ nil|default(\"d\") }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ nil|default(\"d\", true) }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ empty|default(\"d\", true) }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ empty|default(\"d\") }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ no|default(\"d\", true) }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ 0|default(\"d\", true) }}", "v": {"o": "d"}, "p": {"o": "d"}}
+{"t": "{{ missing|default(none) }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ missing|default(1, 2, 3) }}", "v": {"e": "TooManyArguments|t.html|1"}, "p": {"e": "TooManyArguments|t.html|1"}}
+{"t": "{{ missing|default(1)|string }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 3.7|round }}", "v": {"o": "4.0"}, "p": {"o": "4.0"}}
+{"t": "{{ 3.2|round }}", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ 2.5|round }}", "v": {"o": "2.0"}, "p": {"o": "2.0"}}
+{"t": "{{ 3.5|round }}", "v": {"o": "4.0"}, "p": {"o": "4.0"}}
+{"t": "{{ -2.5|round }}", "v": {"o": "-2.0"}, "p": {"o": "-2.0"}}
+{"t": "{{ 3.14159|round(2) }}", "v": {"o": "3.14"}, "p": {"o": "3.14"}}
+{"t": "{{ 3.14159|round(precision=2) }}", "v": {"o": "3.14"}, "p": {"o": "3.14"}}
+{"t": "{{ 3|round }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 3|round(1) }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 1234|round(-2) }}", "v": {"o": "1200"}, "p": {"o": "1200"}}
+{"t": "{{ 1250|round(-2) }}", "v": {"o": "1200"}, "p": {"o": "1200"}}
+{"t": "{{ 1350|round(-2) }}", "v": {"o": "1400"}, "p": {"o": "1400"}}
+{"t": "{{ 1234.5678|round(-2) }}", "v": {"o": "1200.0"}, "p": {"o": "1200.0"}}
+{"t": "{{ 3.14159|round(2, \"ceil\") }}", "v": {"o": "3.15"}, "p": {"o": "3.15"}}
+{"t": "{{ 3.14159|round(2, \"floor\") }}", "v": {"o": "3.14"}, "p": {"o": "3.14"}}
+{"t": "{{ 3.14159|round(method=\"ceil\") }}", "v": {"o": "4.0"}, "p": {"o": "4.0"}}
+{"t": "{{ 3.14159|round(2, \"bad\") }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ s|round }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nil|round }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ t|round }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1e300|round(2) }}", "v": {"o": "1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0"}, "p": {"o": "1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0"}}
+{"t": "{{ \"42\"|int }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ \"42.9\"|int }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ \"abc\"|int }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ \"abc\"|int(7) }}", "v": {"o": "7"}, "p": {"o": "7"}}
+{"t": "{{ \"abc\"|int(default=7) }}", "v": {"o": "7"}, "p": {"o": "7"}}
+{"t": "{{ \"ff\"|int(base=16) }}", "v": {"o": "255"}, "p": {"o": "255"}}
+{"t": "{{ \"0xff\"|int(base=16) }}", "v": {"o": "255"}, "p": {"o": "255"}}
+{"t": "{{ \"0b11\"|int(base=2) }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ \"-5\"|int }}", "v": {"o": "-5"}, "p": {"o": "-5"}}
+{"t": "{{ \"+5\"|int }}", "v": {"o": "5"}, "p": {"o": "5"}}
+{"t": "{{ \"1e3\"|int }}", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ \" 5\"|int }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 42|int }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ 4.9|int }}", "v": {"o": "4"}, "p": {"o": "4"}}
+{"t": "{{ -4.9|int }}", "v": {"o": "-4"}, "p": {"o": "-4"}}
+{"t": "{{ t|int }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ no|int }}", "v": {"o": "0"}, "p": {"o": "0"}}
+{"t": "{{ nil|int }}", "v": {"o": "0"}, "p": {"o": "0"}}
+{"t": "{{ nil|int(9) }}", "v": {"o": "9"}, "p": {"o": "9"}}
+{"t": "{{ missing|int }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ list|int }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ map|int(3) }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ list|first }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list|last }}", "v": {"o": "{&#x27;k&#x27;: &#x27;v&#x27;}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ strs|first }}", "v": {"o": "b"}, "p": {"o": "b"}}
+{"t": "{{ strs|last }}", "v": {"o": "A"}, "p": {"o": "A"}}
+{"t": "{{ []|first }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ []|last }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ text|first }}", "v": {"o": "H"}, "p": {"o": "H"}}
+{"t": "{{ text|last }}", "v": {"o": "r"}, "p": {"o": "r"}}
+{"t": "{{ empty|first }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ empty|last }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ s|safe|first }}", "v": {"o": "&lt;"}, "p": {"o": "<"}}
+{"t": "{{ s|safe|last }}", "v": {"o": ">"}, "p": {"o": ">"}}
+{"t": "{{ map|first }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ map|last }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ n|first }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ n|last }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nil|first }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nums|min }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ strs|min }}", "v": {"o": "&lt;c&gt;"}, "p": {"o": "<c>"}}
+{"t": "{{ [\"b\", \"A\", \"a\"]|min }}", "v": {"o": "A"}, "p": {"o": "A"}}
+{"t": "{{ [\"b\", \"A\", \"a\"]|min(case_sensitive=true) }}", "v": {"o": "A"}, "p": {"o": "A"}}
+{"t": "{{ []|min }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ rows|min(attribute=\"v\") }}", "v": {"o": "{&#x27;name&#x27;: &#x27;x&#x27;, &#x27;v&#x27;: 1}"}, "p": {"o": "{'name': 'x', 'v': 1}"}}
+{"t": "{{ rows|min(attribute=\"name\") }}", "v": {"o": "{&#x27;name&#x27;: &#x27;x&#x27;, &#x27;v&#x27;: 1}"}, "p": {"o": "{'name': 'x', 'v': 1}"}}
+{"t": "{{ text|min }}", "v": {"o": " "}, "p": {"o": " "}}
+{"t": "{{ n|min }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ nil|min }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ map|min }}", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ nums|min(bad=1) }}", "v": {"e": "TooManyArguments|t.html|1"}, "p": {"e": "TooManyArguments|t.html|1"}}
+{"t": "{{ list|list }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ text|list }}", "v": {"o": "[&#x27;H&#x27;, &#x27;e&#x27;, &#x27;l&#x27;, &#x27;l&#x27;, &#x27;o&#x27;, &#x27; &#x27;, &#x27;W&#x27;, &#x27;o&#x27;, &#x27;r&#x27;, &#x27;l&#x27;, &#x27;d&#x27;, &#x27; &#x27;, &#x27;f&#x27;, &#x27;o&#x27;, &#x27;o&#x27;, &#x27; &#x27;, &#x27; &#x27;, &#x27;b&#x27;, &#x27;a&#x27;, &#x27;r&#x27;]"}, "p": {"o": "['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', ' ', 'f', 'o', 'o', ' ', ' ', 'b', 'a', 'r']"}}
+{"t": "{{ map|list }}", "v": {"o": "[&#x27;a&#x27;, &#x27;b&#x27;, &#x27;z&lt;&#x27;]"}, "p": {"o": "['a', 'b', 'z<']"}}
+{"t": "{{ nil|list }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ n|list }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ n|string }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ s|string }}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s|safe|string }}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ f|string }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ nil|string }}", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ t|string }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ list|string }}", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ map|string }}", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ map|items }}", "v": {"o": "[(&#x27;a&#x27;, 1), (&#x27;b&#x27;, 2), (&#x27;z&lt;&#x27;, &#x27;y&gt;&#x27;)]"}, "p": {"o": "[('a', 1), ('b', 2), ('z<', 'y>')]"}}
+{"t": "{{ map|items|list }}", "v": {"o": "[(&#x27;a&#x27;, 1), (&#x27;b&#x27;, 2), (&#x27;z&lt;&#x27;, &#x27;y&gt;&#x27;)]"}, "p": {"o": "[('a', 1), ('b', 2), ('z<', 'y>')]"}}
+{"t": "{{ {\"b\": 1, \"a\": 2}|items|list }}", "v": {"o": "[(&#x27;a&#x27;, 2), (&#x27;b&#x27;, 1)]"}, "p": {"o": "[('a', 2), ('b', 1)]"}}
+{"t": "{{ n|items }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ list|items }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ s|tojson }}", "v": {"o": "&quot;\\u003cb\\u003e\\u0026\\&quot;\\u0027/x\\u003c/b\\u003e&quot;"}, "p": {"o": "\"\\u003cb\\u003e\\u0026\\\"\\u0027/x\\u003c/b\\u003e\""}}
+{"t": "{{ n|tojson }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ f|tojson }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ nil|tojson }}", "v": {"o": "null"}, "p": {"o": "null"}}
+{"t": "{{ t|tojson }}", "v": {"o": "true"}, "p": {"o": "true"}}
+{"t": "{{ list|tojson }}", "v": {"o": "[1, &quot;two&quot;, null, 3.5, [4, &quot;five&quot;], {&quot;k&quot;: &quot;v&quot;}]"}, "p": {"o": "[1, \"two\", null, 3.5, [4, \"five\"], {\"k\": \"v\"}]"}}
+{"t": "{{ map|tojson }}", "v": {"o": "{&quot;a&quot;: 1, &quot;b&quot;: 2, &quot;z\\u003c&quot;: &quot;y\\u003e&quot;}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
+{"t": "{{ nested|tojson }}", "v": {"o": "{&quot;a&quot;: {&quot;b&quot;: {&quot;c&quot;: [10, 20, {&quot;d&quot;: &quot;deep&quot;}]}}}"}, "p": {"o": "{\"a\": {\"b\": {\"c\": [10, 20, {\"d\": \"deep\"}]}}}"}}
+{"t": "{{ rows|tojson }}", "v": {"o": "[{&quot;name&quot;: &quot;x&quot;, &quot;v&quot;: 1}, {&quot;name&quot;: &quot;y&quot;, &quot;v&quot;: 2}]"}, "p": {"o": "[{\"name\": \"x\", \"v\": 1}, {\"name\": \"y\", \"v\": 2}]"}}
+{"t": "{{ map|tojson(indent=2) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(2) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(true) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(false) }}", "v": {"o": "{&quot;a&quot;: 1, &quot;b&quot;: 2, &quot;z\\u003c&quot;: &quot;y\\u003e&quot;}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
+{"t": "{{ list|tojson(indent=4) }}", "v": {"o": "[\n    1,\n    &quot;two&quot;,\n    null,\n    3.5,\n    [\n        4,\n        &quot;five&quot;\n    ],\n    {\n        &quot;k&quot;: &quot;v&quot;\n    }\n]"}, "p": {"o": "[\n    1,\n    \"two\",\n    null,\n    3.5,\n    [\n        4,\n        \"five\"\n    ],\n    {\n        \"k\": \"v\"\n    }\n]"}}
+{"t": "{{ []|tojson(indent=2) }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ {}|tojson(2) }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {1: 2, true: 3}|tojson }}", "v": {"o": "{&quot;true&quot;: 3, &quot;1&quot;: 2}"}, "p": {"o": "{\"true\": 3, \"1\": 2}"}}
+{"t": "{{ 1.0|tojson }}", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1e20|tojson }}", "v": {"o": "1e+20"}, "p": {"o": "1e+20"}}
+{"t": "{{ 1e-7|tojson }}", "v": {"o": "1e-7"}, "p": {"o": "1e-7"}}
+{"t": "{{ 0.1|tojson }}", "v": {"o": "0.1"}, "p": {"o": "0.1"}}
+{"t": "{{ big|tojson }}", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ missing|tojson }}", "v": {"o": "null"}, "p": {"o": "null"}}
+{"t": "{{ map|tojson(bad=1) }}", "v": {"e": "TooManyArguments|t.html|1"}, "p": {"e": "TooManyArguments|t.html|1"}}
+{"t": "{{ s|urlencode }}", "v": {"o": "%3Cb%3E%26%22%27&#x2f;x%3C&#x2f;b%3E"}, "p": {"o": "%3Cb%3E%26%22%27/x%3C/b%3E"}}
+{"t": "{{ text|urlencode }}", "v": {"o": "Hello%20World%20foo%20%20bar"}, "p": {"o": "Hello%20World%20foo%20%20bar"}}
+{"t": "{{ uni|urlencode }}", "v": {"o": "h%C3%A9llo%20w%C3%B6rld%20%C3%B1%20%E6%97%A5%E6%9C%AC%E8%AA%9E"}, "p": {"o": "h%C3%A9llo%20w%C3%B6rld%20%C3%B1%20%E6%97%A5%E6%9C%AC%E8%AA%9E"}}
+{"t": "{{ n|urlencode }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ nil|urlencode }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ map|urlencode }}", "v": {"o": "a=1&amp;b=2&amp;z%3C=y%3E"}, "p": {"o": "a=1&b=2&z%3C=y%3E"}}
+{"t": "{{ {\"a b\": \"c d\", \"e\": none}|urlencode }}", "v": {"o": "a%20b=c%20d"}, "p": {"o": "a%20b=c%20d"}}
+{"t": "{{ list|urlencode }}", "v": {"o": "%5B1%2C%20%27two%27%2C%20None%2C%203.5%2C%20%5B4%2C%20%27five%27%5D%2C%20%7B%27k%27%3A%20%27v%27%7D%5D"}, "p": {"o": "%5B1%2C%20%27two%27%2C%20None%2C%203.5%2C%20%5B4%2C%20%27five%27%5D%2C%20%7B%27k%27%3A%20%27v%27%7D%5D"}}
+{"t": "{{ \"/a.b-c_d~e\"|urlencode }}", "v": {"o": "&#x2f;a.b-c_d%7Ee"}, "p": {"o": "/a.b-c_d%7Ee"}}
+{"t": "{{ n|abs }}", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ neg|abs }}", "v": {"o": "7"}, "p": {"o": "7"}}
+{"t": "{{ f|abs }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ -1.5|abs }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ s|abs }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ n|nope }}", "v": {"e": "UnknownFilter|t.html|1"}, "p": {"e": "UnknownFilter|t.html|1"}}
+{"t": "{{ missing|upper }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing|length }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|join(\",\") }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ missing|list }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|string }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing|safe }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing|e }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ missing|first }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|last }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|min }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|round }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|items }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing|trim }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing|replace(\"a\", \"b\") }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing|urlencode }}", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ s is defined }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ missing is defined }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ missing is undefined }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is undefined }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ nil is none }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is none }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is not none }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is string }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is string }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is number }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ f is number }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ t is number }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is number }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is integer }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ f is integer }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is float }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ f is float }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ t is boolean }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is boolean }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ list is sequence }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ (1,2) is sequence }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ map is sequence }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ list|list is sequence }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ range(2) is sequence }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ text is sequence }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ missing is sequence }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ list is iterable }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ map is iterable }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ text is iterable }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is iterable }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ nil is iterable }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ range(2) is iterable }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ map is mapping }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ list is mapping }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ s is safe }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ s|safe is safe }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is escaped }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is odd }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is even }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 3 is odd }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 4 is even }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 3.0 is odd }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 4.5 is even }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ t is odd }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is odd }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 10 is divisibleby 2 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 10 is divisibleby(3) }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ 10.5 is divisibleby 0.5 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is startingwith \"<b\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ s is endingwith \"b>\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is startingwith \"4\" }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ text is lower }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ text is upper }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"abc\" is lower }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"ABC\" is upper }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"\" is lower }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"1\" is upper }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is lower }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is eq 42 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is equalto 42 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is ne 42 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is lt 50 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is lessthan 50 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is le 42 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is gt 50 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is greaterthan 1 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is ge 42 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 is in [1] }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 5 is in [1] }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"a\" is in map }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 is in n }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ t is true }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ no is true }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ no is false }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ 1 is true }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is sameas 42 }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ n is sameas 42.0 }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ list is sameas list }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ list is sameas [1] }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ s is sameas s }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ nil is sameas none }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"upper\" is filter }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"nope\" is filter }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ \"defined\" is test }}", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ \"nope\" is test }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n is nope }}", "v": {"e": "UnknownTest|t.html|1"}, "p": {"e": "UnknownTest|t.html|1"}}
+{"t": "{{ range(3) }}", "v": {"o": "[0, 1, 2]"}, "p": {"o": "[0, 1, 2]"}}
+{"t": "{{ range(3)|list }}", "v": {"o": "[0, 1, 2]"}, "p": {"o": "[0, 1, 2]"}}
+{"t": "{{ range(1, 3)|list }}", "v": {"o": "[1, 2]"}, "p": {"o": "[1, 2]"}}
+{"t": "{{ range(0, 10, 3)|list }}", "v": {"o": "[0, 3, 6, 9]"}, "p": {"o": "[0, 3, 6, 9]"}}
+{"t": "{{ range(10, 0, -3)|list }}", "v": {"o": "[10, 7, 4, 1]"}, "p": {"o": "[10, 7, 4, 1]"}}
+{"t": "{{ range(3, 0)|list }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ range(0)|list }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ range(0, 1, 0) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ range(100001) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ range(1, 2, 3, 4) }}", "v": {"e": "TooManyArguments|t.html|1"}, "p": {"e": "TooManyArguments|t.html|1"}}
+{"t": "{{ range(\"a\") }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ range() }}", "v": {"e": "MissingArgument|t.html|1"}, "p": {"e": "MissingArgument|t.html|1"}}
+{"t": "{{ range(3)|length }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ range(3)|first }}", "v": {"o": "0"}, "p": {"o": "0"}}
+{"t": "{{ range(3)|last }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ range(3)[1] }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ range(3)[1:] }}", "v": {"o": "[1, 2]"}, "p": {"o": "[1, 2]"}}
+{"t": "{{ dict() }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ dict(a=1) }}", "v": {"o": "{&#x27;a&#x27;: 1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ dict(a=1, b=2) }}", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2}"}, "p": {"o": "{'a': 1, 'b': 2}"}}
+{"t": "{{ dict(map) }}", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ dict(map, a=9) }}", "v": {"o": "{&#x27;a&#x27;: 9, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{'a': 9, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ dict(nil) }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ dict(missing) }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ dict(1) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ upper(s) }}", "v": {"e": "UnknownFunction|t.html|1"}, "p": {"e": "UnknownFunction|t.html|1"}}
+{"t": "{{ nope(s) }}", "v": {"e": "UnknownFunction|t.html|1"}, "p": {"e": "UnknownFunction|t.html|1"}}
+{"t": "{{ n(1) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ s(1) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ map.a(1) }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ map.nope(1) }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ list.nope(1) }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ s.upper() }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ n.foo() }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ missing.foo() }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ nil.foo() }}", "v": {"e": "UnknownMethod|t.html|1"}, "p": {"e": "UnknownMethod|t.html|1"}}
+{"t": "{{ caller() }}", "v": {"e": "UnknownFunction|t.html|1"}, "p": {"e": "UnknownFunction|t.html|1"}}
+{"t": "{{ loop }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ loop.index }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ self }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ super() }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ [1, 2][0] }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ {\"a\": 1}.a }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ {\"a\": 1}[\"a\"] }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ \"abc\"[1] }}", "v": {"o": "b"}, "p": {"o": "b"}}
+{"t": "{{ \"abc\"|upper|lower }}", "v": {"o": "abc"}, "p": {"o": "abc"}}
+{"t": "{{ (1 + 2)|string }}", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 1 + 2|string }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ -1|abs }}", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ -1|string }}", "v": {"o": "-1"}, "p": {"o": "-1"}}
+{"t": "{{ - 1|abs + 1 }}", "v": {"o": "2"}, "p": {"o": "2"}}
+{"t": "{{ not t|string }}", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ n|string ~ \"x\" }}", "v": {"o": "42x"}, "p": {"o": "42x"}}
+{"t": "{{ n ~ \"x\"|upper }}", "v": {"o": "42X"}, "p": {"o": "42X"}}
+{"t": "{{ \"a\" \"b\"|upper }}", "v": {"o": "AB"}, "p": {"o": "AB"}}
+{"t": "{{ missing }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing.x }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing.x.y }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing[0] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing[:1] }}", "v": {"o": "[]"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing + 1 }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ 1 + missing }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
+{"t": "{{ missing ~ \"x\" }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ \"x\" ~ missing }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing == 1 }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ 1 == missing }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing != 1 }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing < 1 }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ 1 in missing }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing in [1] }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing and 1 }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing or 1 }}", "v": {"o": "1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ not missing }}", "v": {"o": "True"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ missing if t else 1 }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ 1 if missing else 2 }}", "v": {"o": "2"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ map.zz.y }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ map.zz ~ \"x\" }}", "v": {"e": "UndefinedError|t.html|1"}, "p": {"e": "UndefinedError|t.html|1"}}
+{"t": "{{ [missing] }}", "v": {"o": "[undefined]"}, "p": {"o": "[undefined]"}}
+{"t": "{{ {\"a\": missing} }}", "v": {"o": "{&#x27;a&#x27;: undefined}"}, "p": {"o": "{'a': undefined}"}}
+{"t": "{{ (missing,) }}", "v": {"o": "(undefined,)"}, "p": {"o": "(undefined,)"}}
+{"t": "{{ upper(missing) }}", "v": {"e": "UnknownFunction|t.html|1"}, "p": {"e": "UnknownFunction|t.html|1"}}
+{"t": "{{ s }}", "n": "t.txt", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s }}", "n": "t.json", "v": {"o": "\"<b>&\\\"'/x</b>\""}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s }}", "n": "t.yml", "v": {"o": "\"<b>&\\\"'/x</b>\""}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ s }}", "n": "t.xml.j2", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "<b>&\"'/x</b>"}}
+{"t": "{{ n }}", "n": "t.txt", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ n }}", "n": "t.json", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ n }}", "n": "t.yml", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ n }}", "n": "t.xml.j2", "v": {"o": "42"}, "p": {"o": "42"}}
+{"t": "{{ neg }}", "n": "t.txt", "v": {"o": "-7"}, "p": {"o": "-7"}}
+{"t": "{{ neg }}", "n": "t.json", "v": {"o": "-7"}, "p": {"o": "-7"}}
+{"t": "{{ neg }}", "n": "t.yml", "v": {"o": "-7"}, "p": {"o": "-7"}}
+{"t": "{{ neg }}", "n": "t.xml.j2", "v": {"o": "-7"}, "p": {"o": "-7"}}
+{"t": "{{ f }}", "n": "t.txt", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ f }}", "n": "t.json", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ f }}", "n": "t.yml", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ f }}", "n": "t.xml.j2", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
+{"t": "{{ big }}", "n": "t.txt", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ big }}", "n": "t.json", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ big }}", "n": "t.yml", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ big }}", "n": "t.xml.j2", "v": {"o": "12345678901234567890"}, "p": {"o": "12345678901234567890"}}
+{"t": "{{ whole }}", "n": "t.txt", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ whole }}", "n": "t.json", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ whole }}", "n": "t.yml", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ whole }}", "n": "t.xml.j2", "v": {"o": "3.0"}, "p": {"o": "3.0"}}
+{"t": "{{ t }}", "n": "t.txt", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ t }}", "n": "t.json", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ t }}", "n": "t.yml", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ t }}", "n": "t.xml.j2", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ no }}", "n": "t.txt", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ no }}", "n": "t.json", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ no }}", "n": "t.yml", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ no }}", "n": "t.xml.j2", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ nil }}", "n": "t.txt", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ nil }}", "n": "t.json", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ nil }}", "n": "t.yml", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ nil }}", "n": "t.xml.j2", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ empty }}", "n": "t.txt", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ empty }}", "n": "t.json", "v": {"o": "\"\""}, "p": {"o": ""}}
+{"t": "{{ empty }}", "n": "t.yml", "v": {"o": "\"\""}, "p": {"o": ""}}
+{"t": "{{ empty }}", "n": "t.xml.j2", "v": {"o": ""}, "p": {"o": ""}}
+{"t": "{{ list }}", "n": "t.txt", "v": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ list }}", "n": "t.json", "v": {"o": "[1,\"two\",null,3.5,[4,\"five\"],{\"k\":\"v\"}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ list }}", "n": "t.yml", "v": {"o": "[1,\"two\",null,3.5,[4,\"five\"],{\"k\":\"v\"}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ list }}", "n": "t.xml.j2", "v": {"o": "[1, &#x27;two&#x27;, None, 3.5, [4, &#x27;five&#x27;], {&#x27;k&#x27;: &#x27;v&#x27;}]"}, "p": {"o": "[1, 'two', None, 3.5, [4, 'five'], {'k': 'v'}]"}}
+{"t": "{{ strs }}", "n": "t.txt", "v": {"o": "['b', 'a', '<c>', 'A']"}, "p": {"o": "['b', 'a', '<c>', 'A']"}}
+{"t": "{{ strs }}", "n": "t.json", "v": {"o": "[\"b\",\"a\",\"<c>\",\"A\"]"}, "p": {"o": "['b', 'a', '<c>', 'A']"}}
+{"t": "{{ strs }}", "n": "t.yml", "v": {"o": "[\"b\",\"a\",\"<c>\",\"A\"]"}, "p": {"o": "['b', 'a', '<c>', 'A']"}}
+{"t": "{{ strs }}", "n": "t.xml.j2", "v": {"o": "[&#x27;b&#x27;, &#x27;a&#x27;, &#x27;&lt;c&gt;&#x27;, &#x27;A&#x27;]"}, "p": {"o": "['b', 'a', '<c>', 'A']"}}
+{"t": "{{ nums }}", "n": "t.txt", "v": {"o": "[3, 1, 2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ nums }}", "n": "t.json", "v": {"o": "[3,1,2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ nums }}", "n": "t.yml", "v": {"o": "[3,1,2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ nums }}", "n": "t.xml.j2", "v": {"o": "[3, 1, 2]"}, "p": {"o": "[3, 1, 2]"}}
+{"t": "{{ map }}", "n": "t.txt", "v": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ map }}", "n": "t.json", "v": {"o": "{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ map }}", "n": "t.yml", "v": {"o": "{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ map }}", "n": "t.xml.j2", "v": {"o": "{&#x27;a&#x27;: 1, &#x27;b&#x27;: 2, &#x27;z&lt;&#x27;: &#x27;y&gt;&#x27;}"}, "p": {"o": "{'a': 1, 'b': 2, 'z<': 'y>'}"}}
+{"t": "{{ nested }}", "n": "t.txt", "v": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}, "p": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}}
+{"t": "{{ nested }}", "n": "t.json", "v": {"o": "{\"a\":{\"b\":{\"c\":[10,20,{\"d\":\"deep\"}]}}}"}, "p": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}}
+{"t": "{{ nested }}", "n": "t.yml", "v": {"o": "{\"a\":{\"b\":{\"c\":[10,20,{\"d\":\"deep\"}]}}}"}, "p": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}}
+{"t": "{{ nested }}", "n": "t.xml.j2", "v": {"o": "{&#x27;a&#x27;: {&#x27;b&#x27;: {&#x27;c&#x27;: [10, 20, {&#x27;d&#x27;: &#x27;deep&#x27;}]}}}"}, "p": {"o": "{'a': {'b': {'c': [10, 20, {'d': 'deep'}]}}}"}}
+{"t": "{{ rows }}", "n": "t.txt", "v": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}, "p": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}}
+{"t": "{{ rows }}", "n": "t.json", "v": {"o": "[{\"name\":\"x\",\"v\":1},{\"name\":\"y\",\"v\":2}]"}, "p": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}}
+{"t": "{{ rows }}", "n": "t.yml", "v": {"o": "[{\"name\":\"x\",\"v\":1},{\"name\":\"y\",\"v\":2}]"}, "p": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}}
+{"t": "{{ rows }}", "n": "t.xml.j2", "v": {"o": "[{&#x27;name&#x27;: &#x27;x&#x27;, &#x27;v&#x27;: 1}, {&#x27;name&#x27;: &#x27;y&#x27;, &#x27;v&#x27;: 2}]"}, "p": {"o": "[{'name': 'x', 'v': 1}, {'name': 'y', 'v': 2}]"}}
+{"t": "{{ pairs }}", "n": "t.txt", "v": {"o": "[['a', 1], ['b', 2]]"}, "p": {"o": "[['a', 1], ['b', 2]]"}}
+{"t": "{{ pairs }}", "n": "t.json", "v": {"o": "[[\"a\",1],[\"b\",2]]"}, "p": {"o": "[['a', 1], ['b', 2]]"}}
+{"t": "{{ pairs }}", "n": "t.yml", "v": {"o": "[[\"a\",1],[\"b\",2]]"}, "p": {"o": "[['a', 1], ['b', 2]]"}}
+{"t": "{{ pairs }}", "n": "t.xml.j2", "v": {"o": "[[&#x27;a&#x27;, 1], [&#x27;b&#x27;, 2]]"}, "p": {"o": "[['a', 1], ['b', 2]]"}}
+{"t": "{{ text }}", "n": "t.txt", "v": {"o": "Hello World foo  bar"}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ text }}", "n": "t.json", "v": {"o": "\"Hello World foo  bar\""}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ text }}", "n": "t.yml", "v": {"o": "\"Hello World foo  bar\""}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ text }}", "n": "t.xml.j2", "v": {"o": "Hello World foo  bar"}, "p": {"o": "Hello World foo  bar"}}
+{"t": "{{ uni }}", "n": "t.txt", "v": {"o": "héllo wörld ñ 日本語"}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ uni }}", "n": "t.json", "v": {"o": "\"héllo wörld ñ 日本語\""}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ uni }}", "n": "t.yml", "v": {"o": "\"héllo wörld ñ 日本語\""}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ uni }}", "n": "t.xml.j2", "v": {"o": "héllo wörld ñ 日本語"}, "p": {"o": "héllo wörld ñ 日本語"}}
+{"t": "{{ 1 }}", "n": "t.txt", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1 }}", "n": "t.json", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1 }}", "n": "t.yml", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1 }}", "n": "t.xml.j2", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ 1.0 }}", "n": "t.txt", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1.0 }}", "n": "t.json", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1.0 }}", "n": "t.yml", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1.0 }}", "n": "t.xml.j2", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
+{"t": "{{ 1.5e3 }}", "n": "t.txt", "v": {"o": "1500.0"}, "p": {"o": "1500.0"}}
+{"t": "{{ 1.5e3 }}", "n": "t.json", "v": {"o": "1500.0"}, "p": {"o": "1500.0"}}
+{"t": "{{ 1.5e3 }}", "n": "t.yml", "v": {"o": "1500.0"}, "p": {"o": "1500.0"}}
+{"t": "{{ 1.5e3 }}", "n": "t.xml.j2", "v": {"o": "1500.0"}, "p": {"o": "1500.0"}}
+{"t": "{{ 0x1f }}", "n": "t.txt", "v": {"o": "31"}, "p": {"o": "31"}}
+{"t": "{{ 0x1f }}", "n": "t.json", "v": {"o": "31"}, "p": {"o": "31"}}
+{"t": "{{ 0x1f }}", "n": "t.yml", "v": {"o": "31"}, "p": {"o": "31"}}
+{"t": "{{ 0x1f }}", "n": "t.xml.j2", "v": {"o": "31"}, "p": {"o": "31"}}
+{"t": "{{ 0b11 }}", "n": "t.txt", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 0b11 }}", "n": "t.json", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 0b11 }}", "n": "t.yml", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 0b11 }}", "n": "t.xml.j2", "v": {"o": "3"}, "p": {"o": "3"}}
+{"t": "{{ 0o17 }}", "n": "t.txt", "v": {"o": "15"}, "p": {"o": "15"}}
+{"t": "{{ 0o17 }}", "n": "t.json", "v": {"o": "15"}, "p": {"o": "15"}}
+{"t": "{{ 0o17 }}", "n": "t.yml", "v": {"o": "15"}, "p": {"o": "15"}}
+{"t": "{{ 0o17 }}", "n": "t.xml.j2", "v": {"o": "15"}, "p": {"o": "15"}}
+{"t": "{{ 1_000 }}", "n": "t.txt", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ 1_000 }}", "n": "t.json", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ 1_000 }}", "n": "t.yml", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ 1_000 }}", "n": "t.xml.j2", "v": {"o": "1000"}, "p": {"o": "1000"}}
+{"t": "{{ \"a\" }}", "n": "t.txt", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ \"a\" }}", "n": "t.json", "v": {"o": "\"a\""}, "p": {"o": "a"}}
+{"t": "{{ \"a\" }}", "n": "t.yml", "v": {"o": "\"a\""}, "p": {"o": "a"}}
+{"t": "{{ \"a\" }}", "n": "t.xml.j2", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ 'a' }}", "n": "t.txt", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ 'a' }}", "n": "t.json", "v": {"o": "\"a\""}, "p": {"o": "a"}}
+{"t": "{{ 'a' }}", "n": "t.yml", "v": {"o": "\"a\""}, "p": {"o": "a"}}
+{"t": "{{ 'a' }}", "n": "t.xml.j2", "v": {"o": "a"}, "p": {"o": "a"}}
+{"t": "{{ \"a\" \"b\" }}", "n": "t.txt", "v": {"o": "ab"}, "p": {"o": "ab"}}
+{"t": "{{ \"a\" \"b\" }}", "n": "t.json", "v": {"o": "\"ab\""}, "p": {"o": "ab"}}
+{"t": "{{ \"a\" \"b\" }}", "n": "t.yml", "v": {"o": "\"ab\""}, "p": {"o": "ab"}}
+{"t": "{{ \"a\" \"b\" }}", "n": "t.xml.j2", "v": {"o": "ab"}, "p": {"o": "ab"}}
+{"t": "{{ \"it's\" }}", "n": "t.txt", "v": {"o": "it's"}, "p": {"o": "it's"}}
+{"t": "{{ \"it's\" }}", "n": "t.json", "v": {"o": "\"it's\""}, "p": {"o": "it's"}}
+{"t": "{{ \"it's\" }}", "n": "t.yml", "v": {"o": "\"it's\""}, "p": {"o": "it's"}}
+{"t": "{{ \"it's\" }}", "n": "t.xml.j2", "v": {"o": "it&#x27;s"}, "p": {"o": "it's"}}
+{"t": "{{ 'say \"hi\"' }}", "n": "t.txt", "v": {"o": "say \"hi\""}, "p": {"o": "say \"hi\""}}
+{"t": "{{ 'say \"hi\"' }}", "n": "t.json", "v": {"o": "\"say \\\"hi\\\"\""}, "p": {"o": "say \"hi\""}}
+{"t": "{{ 'say \"hi\"' }}", "n": "t.yml", "v": {"o": "\"say \\\"hi\\\"\""}, "p": {"o": "say \"hi\""}}
+{"t": "{{ 'say \"hi\"' }}", "n": "t.xml.j2", "v": {"o": "say &quot;hi&quot;"}, "p": {"o": "say \"hi\""}}
+{"t": "{{ \"\\n\\t\\\\\" }}", "n": "t.txt", "v": {"o": "\n\t\\"}, "p": {"o": "\n\t\\"}}
+{"t": "{{ \"\\n\\t\\\\\" }}", "n": "t.json", "v": {"o": "\"\\n\\t\\\\\""}, "p": {"o": "\n\t\\"}}
+{"t": "{{ \"\\n\\t\\\\\" }}", "n": "t.yml", "v": {"o": "\"\\n\\t\\\\\""}, "p": {"o": "\n\t\\"}}
+{"t": "{{ \"\\n\\t\\\\\" }}", "n": "t.xml.j2", "v": {"o": "\n\t\\"}, "p": {"o": "\n\t\\"}}
+{"t": "{{ \"\\u00e9\" }}", "n": "t.txt", "v": {"o": "é"}, "p": {"o": "é"}}
+{"t": "{{ \"\\u00e9\" }}", "n": "t.json", "v": {"o": "\"é\""}, "p": {"o": "é"}}
+{"t": "{{ \"\\u00e9\" }}", "n": "t.yml", "v": {"o": "\"é\""}, "p": {"o": "é"}}
+{"t": "{{ \"\\u00e9\" }}", "n": "t.xml.j2", "v": {"o": "é"}, "p": {"o": "é"}}
+{"t": "{{ true }}", "n": "t.txt", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ true }}", "n": "t.json", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ true }}", "n": "t.yml", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ true }}", "n": "t.xml.j2", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ false }}", "n": "t.txt", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ false }}", "n": "t.json", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ false }}", "n": "t.yml", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ false }}", "n": "t.xml.j2", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ True }}", "n": "t.txt", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ True }}", "n": "t.json", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ True }}", "n": "t.yml", "v": {"o": "true"}, "p": {"o": "True"}}
+{"t": "{{ True }}", "n": "t.xml.j2", "v": {"o": "True"}, "p": {"o": "True"}}
+{"t": "{{ False }}", "n": "t.txt", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ False }}", "n": "t.json", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ False }}", "n": "t.yml", "v": {"o": "false"}, "p": {"o": "False"}}
+{"t": "{{ False }}", "n": "t.xml.j2", "v": {"o": "False"}, "p": {"o": "False"}}
+{"t": "{{ none }}", "n": "t.txt", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ none }}", "n": "t.json", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ none }}", "n": "t.yml", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ none }}", "n": "t.xml.j2", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ None }}", "n": "t.txt", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ None }}", "n": "t.json", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ None }}", "n": "t.yml", "v": {"o": "null"}, "p": {"o": "None"}}
+{"t": "{{ None }}", "n": "t.xml.j2", "v": {"o": "None"}, "p": {"o": "None"}}
+{"t": "{{ [] }}", "n": "t.txt", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ [] }}", "n": "t.json", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ [] }}", "n": "t.yml", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ [] }}", "n": "t.xml.j2", "v": {"o": "[]"}, "p": {"o": "[]"}}
+{"t": "{{ [1, 2, 3] }}", "n": "t.txt", "v": {"o": "[1, 2, 3]"}, "p": {"o": "[1, 2, 3]"}}
+{"t": "{{ [1, 2, 3] }}", "n": "t.json", "v": {"o": "[1,2,3]"}, "p": {"o": "[1, 2, 3]"}}
+{"t": "{{ [1, 2, 3] }}", "n": "t.yml", "v": {"o": "[1,2,3]"}, "p": {"o": "[1, 2, 3]"}}
+{"t": "{{ [1, 2, 3] }}", "n": "t.xml.j2", "v": {"o": "[1, 2, 3]"}, "p": {"o": "[1, 2, 3]"}}
+{"t": "{{ [1, \"a\", none, true] }}", "n": "t.txt", "v": {"o": "[1, 'a', None, True]"}, "p": {"o": "[1, 'a', None, True]"}}
+{"t": "{{ [1, \"a\", none, true] }}", "n": "t.json", "v": {"o": "[1,\"a\",null,true]"}, "p": {"o": "[1, 'a', None, True]"}}
+{"t": "{{ [1, \"a\", none, true] }}", "n": "t.yml", "v": {"o": "[1,\"a\",null,true]"}, "p": {"o": "[1, 'a', None, True]"}}
+{"t": "{{ [1, \"a\", none, true] }}", "n": "t.xml.j2", "v": {"o": "[1, &#x27;a&#x27;, None, True]"}, "p": {"o": "[1, 'a', None, True]"}}
+{"t": "{{ () }}", "n": "t.txt", "v": {"o": "()"}, "p": {"o": "()"}}
+{"t": "{{ () }}", "n": "t.json", "v": {"o": "[]"}, "p": {"o": "()"}}
+{"t": "{{ () }}", "n": "t.yml", "v": {"o": "[]"}, "p": {"o": "()"}}
+{"t": "{{ () }}", "n": "t.xml.j2", "v": {"o": "()"}, "p": {"o": "()"}}
+{"t": "{{ (1,) }}", "n": "t.txt", "v": {"o": "(1,)"}, "p": {"o": "(1,)"}}
+{"t": "{{ (1,) }}", "n": "t.json", "v": {"o": "[1]"}, "p": {"o": "(1,)"}}
+{"t": "{{ (1,) }}", "n": "t.yml", "v": {"o": "[1]"}, "p": {"o": "(1,)"}}
+{"t": "{{ (1,) }}", "n": "t.xml.j2", "v": {"o": "(1,)"}, "p": {"o": "(1,)"}}
+{"t": "{{ (1, 2) }}", "n": "t.txt", "v": {"o": "(1, 2)"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ (1, 2) }}", "n": "t.json", "v": {"o": "[1,2]"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ (1, 2) }}", "n": "t.yml", "v": {"o": "[1,2]"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ (1, 2) }}", "n": "t.xml.j2", "v": {"o": "(1, 2)"}, "p": {"o": "(1, 2)"}}
+{"t": "{{ {} }}", "n": "t.txt", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {} }}", "n": "t.json", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {} }}", "n": "t.yml", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {} }}", "n": "t.xml.j2", "v": {"o": "{}"}, "p": {"o": "{}"}}
+{"t": "{{ {\"a\": 1} }}", "n": "t.txt", "v": {"o": "{'a': 1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ {\"a\": 1} }}", "n": "t.json", "v": {"o": "{\"a\":1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ {\"a\": 1} }}", "n": "t.yml", "v": {"o": "{\"a\":1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ {\"a\": 1} }}", "n": "t.xml.j2", "v": {"o": "{&#x27;a&#x27;: 1}"}, "p": {"o": "{'a': 1}"}}
+{"t": "{{ {\"b\": 1, \"a\": 2} }}", "n": "t.txt", "v": {"o": "{'a': 2, 'b': 1}"}, "p": {"o": "{'a': 2, 'b': 1}"}}
+{"t": "{{ {\"b\": 1, \"a\": 2} }}", "n": "t.json", "v": {"o": "{\"a\":2,\"b\":1}"}, "p": {"o": "{'a': 2, 'b': 1}"}}
+{"t": "{{ {\"b\": 1, \"a\": 2} }}", "n": "t.yml", "v": {"o": "{\"a\":2,\"b\":1}"}, "p": {"o": "{'a': 2, 'b': 1}"}}
+{"t": "{{ {\"b\": 1, \"a\": 2} }}", "n": "t.xml.j2", "v": {"o": "{&#x27;a&#x27;: 2, &#x27;b&#x27;: 1}"}, "p": {"o": "{'a': 2, 'b': 1}"}}
+{"t": "{{ {1: \"x\", \"1\": \"y\"} }}", "n": "t.txt", "v": {"o": "{1: 'x', '1': 'y'}"}, "p": {"o": "{1: 'x', '1': 'y'}"}}
+{"t": "{{ {1: \"x\", \"1\": \"y\"} }}", "n": "t.json", "v": {"o": "{\"1\":\"x\",\"1\":\"y\"}"}, "p": {"o": "{1: 'x', '1': 'y'}"}}
+{"t": "{{ {1: \"x\", \"1\": \"y\"} }}", "n": "t.yml", "v": {"o": "{\"1\":\"x\",\"1\":\"y\"}"}, "p": {"o": "{1: 'x', '1': 'y'}"}}
+{"t": "{{ {1: \"x\", \"1\": \"y\"} }}", "n": "t.xml.j2", "v": {"o": "{1: &#x27;x&#x27;, &#x27;1&#x27;: &#x27;y&#x27;}"}, "p": {"o": "{1: 'x', '1': 'y'}"}}
+{"t": "{{ {\"a\": [1, {\"b\": 2}]} }}", "n": "t.txt", "v": {"o": "{'a': [1, {'b': 2}]}"}, "p": {"o": "{'a': [1, {'b': 2}]}"}}
+{"t": "{{ {\"a\": [1, {\"b\": 2}]} }}", "n": "t.json", "v": {"o": "{\"a\":[1,{\"b\":2}]}"}, "p": {"o": "{'a': [1, {'b': 2}]}"}}
+{"t": "{{ {\"a\": [1, {\"b\": 2}]} }}", "n": "t.yml", "v": {"o": "{\"a\":[1,{\"b\":2}]}"}, "p": {"o": "{'a': [1, {'b': 2}]}"}}
+{"t": "{{ {\"a\": [1, {\"b\": 2}]} }}", "n": "t.xml.j2", "v": {"o": "{&#x27;a&#x27;: [1, {&#x27;b&#x27;: 2}]}"}, "p": {"o": "{'a': [1, {'b': 2}]}"}}
+{"t": "{{ list[0] }}", "n": "t.txt", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list[0] }}", "n": "t.json", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list[0] }}", "n": "t.yml", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list[0] }}", "n": "t.xml.j2", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list[1] }}", "n": "t.txt", "v": {"o": "two"}, "p": {"o": "two"}}
+{"t": "{{ list[1] }}", "n": "t.json", "v": {"o": "\"two\""}, "p": {"o": "two"}}
+{"t": "{{ list[1] }}", "n": "t.yml", "v": {"o": "\"two\""}, "p": {"o": "two"}}
+{"t": "{{ list[1] }}", "n": "t.xml.j2", "v": {"o": "two"}, "p": {"o": "two"}}
+{"t": "{{ list[-1] }}", "n": "t.txt", "v": {"o": "{'k': 'v'}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ list[-1] }}", "n": "t.json", "v": {"o": "{\"k\":\"v\"}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ list[-1] }}", "n": "t.yml", "v": {"o": "{\"k\":\"v\"}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ list[-1] }}", "n": "t.xml.j2", "v": {"o": "{&#x27;k&#x27;: &#x27;v&#x27;}"}, "p": {"o": "{'k': 'v'}"}}
+{"t": "{{ list[99] }}", "n": "t.txt", "v": {"e": "UndefinedError|t.txt|1"}, "p": {"e": "UndefinedError|t.txt|1"}}
+{"t": "{{ list[99] }}", "n": "t.json", "v": {"e": "UndefinedError|t.json|1"}, "p": {"e": "UndefinedError|t.json|1"}}
+{"t": "{{ list[99] }}", "n": "t.yml", "v": {"e": "UndefinedError|t.yml|1"}, "p": {"e": "UndefinedError|t.yml|1"}}
+{"t": "{{ list[99] }}", "n": "t.xml.j2", "v": {"e": "UndefinedError|t.xml.j2|1"}, "p": {"e": "UndefinedError|t.xml.j2|1"}}
+{"t": "{{ list[-99] }}", "n": "t.txt", "v": {"e": "UndefinedError|t.txt|1"}, "p": {"e": "UndefinedError|t.txt|1"}}
+{"t": "{{ list[-99] }}", "n": "t.json", "v": {"e": "UndefinedError|t.json|1"}, "p": {"e": "UndefinedError|t.json|1"}}
+{"t": "{{ list[-99] }}", "n": "t.yml", "v": {"e": "UndefinedError|t.yml|1"}, "p": {"e": "UndefinedError|t.yml|1"}}
+{"t": "{{ list[-99] }}", "n": "t.xml.j2", "v": {"e": "UndefinedError|t.xml.j2|1"}, "p": {"e": "UndefinedError|t.xml.j2|1"}}
+{"t": "{{ list.0 }}", "n": "t.txt", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list.0 }}", "n": "t.json", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list.0 }}", "n": "t.yml", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list.0 }}", "n": "t.xml.j2", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ list.4.1 }}", "n": "t.txt", "v": {"o": "five"}, "p": {"o": "five"}}
+{"t": "{{ list.4.1 }}", "n": "t.json", "v": {"o": "\"five\""}, "p": {"o": "five"}}
+{"t": "{{ list.4.1 }}", "n": "t.yml", "v": {"o": "\"five\""}, "p": {"o": "five"}}
+{"t": "{{ list.4.1 }}", "n": "t.xml.j2", "v": {"o": "five"}, "p": {"o": "five"}}
+{"t": "{{ nested.a.b.c.2.d }}", "n": "t.txt", "v": {"o": "deep"}, "p": {"o": "deep"}}
+{"t": "{{ nested.a.b.c.2.d }}", "n": "t.json", "v": {"o": "\"deep\""}, "p": {"o": "deep"}}
+{"t": "{{ nested.a.b.c.2.d }}", "n": "t.yml", "v": {"o": "\"deep\""}, "p": {"o": "deep"}}
+{"t": "{{ nested.a.b.c.2.d }}", "n": "t.xml.j2", "v": {"o": "deep"}, "p": {"o": "deep"}}
+{"t": "{{ nested.a.b.c[0] }}", "n": "t.txt", "v": {"o": "10"}, "p": {"o": "10"}}
+{"t": "{{ nested.a.b.c[0] }}", "n": "t.json", "v": {"o": "10"}, "p": {"o": "10"}}
+{"t": "{{ nested.a.b.c[0] }}", "n": "t.yml", "v": {"o": "10"}, "p": {"o": "10"}}
+{"t": "{{ nested.a.b.c[0] }}", "n": "t.xml.j2", "v": {"o": "10"}, "p": {"o": "10"}}
+{"t": "{{ map.a }}", "n": "t.txt", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ map.a }}", "n": "t.json", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ map.a }}", "n": "t.yml", "v": {"o": "1"}, "p": {"o": "1"}}
+{"t": "{{ map.a }}", "n": "t.xml.j2", "v": {"o": "1"}, "p": {"o": "1"}}

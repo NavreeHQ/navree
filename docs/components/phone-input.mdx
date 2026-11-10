@@ -1,0 +1,129 @@
+---
+title: "PhoneInput"
+description: "A phone number field with a searchable country list, formatting as people type, and the number read and checked on the server in the country chosen."
+---
+
+<UiPreview example="phone-input/default" />
+
+`PhoneInput` is a country picker and a number box in one control. People pick a country from a searchable list of flags and dial codes, or paste a number with its country code and the country picks itself. The number is written the way its country writes it as they type. The server reads what was typed in the chosen country, checks it against that country's numbering plan, and stores it in E.164.
+
+```rust
+use navree::ui::*;
+
+Field::new("contact-mobile", "Mobile")
+    .control(PhoneInput::new("mobile").country("IN"))
+```
+
+It posts three fields:
+
+| Field | Holds |
+|---|---|
+| `mobile` | the number as typed, `098765 43210` |
+| `mobile_country` | the country chosen, `IN` |
+| `mobile_e164` | the browser's reading of the number in E.164, `+919876543210`, once it has a possible length (with the browser module only) |
+
+With JavaScript off it is the browser's `<select>` of countries beside a `tel` input, and posts the first two. Either way the server reads the number from the first two and never trusts `mobile_e164`: that field is a hint for code that reads the post without Navree, and it can be wrong (the browser checks lengths, not every rule of a plan) or forged.
+
+## In a form
+
+A field typed [`Phone`](/docs/basics/phone-numbers/) draws as a phone input, and [`Submit`](/docs/ui/forms/) reads it back in the country posted with it:
+
+```rust
+use navree::prelude::*;
+use navree::validation::Phone;
+
+#[derive(Deserialize, Validate, Form)]
+struct NewContact {
+    /// Name
+    #[validate(length(min = 1))]
+    name: String,
+    /// Mobile
+    #[validate(skip)]
+    mobile: Phone,
+    /// Office
+    #[validate(skip)]
+    office: Option<Phone>,
+}
+
+async fn create(shell: AppShell) -> AppPage {
+    // The country a field starts on: the workspace's, the user's.
+    let form = FormView::<NewContact>::new()
+        .post("/contacts")
+        .phone_region(navree::phone::Region::parse("IN"));
+    shell.page("New contact").body(form)
+}
+
+async fn store(Submit(contact): Submit<NewContact>) -> Reply {
+    // `contact.mobile` is valid, in E.164: `+919876543210`.
+    Reply::redirect("/contacts")
+}
+```
+
+A number that isn't valid in the chosen country is a field error under the box, and the form comes back with what was typed and the country chosen. A `String` field gets the same control with `#[form(widget = phone)]`, and holds the number in E.164: a number that isn't valid, or that has an extension (E.164 has no room for one), is refused, with or without a rule on the field. A `Phone` keeps an extension; read `extension()` before you store it.
+
+An edit form shows a saved number the way its country writes it, unless that national form would read as another number (a few plans write two numbers the same way); then it shows the international form, so a form sent back unchanged saves the same number.
+
+## Typing and pasting
+
+The browser module formats as people type, with the rules of each country's numbering plan: `09876543210` becomes `098765 43210`, `+33612345678` becomes `+33 6 12 34 56 78`. Backspace after a space it added takes the digit before it. Digits of any script (`٠٥٠`, `०५०`, `０５０`) count as digits.
+
+A number pasted or typed with `+` and its country code picks its country, and a screen reader hears which: `+1 416 979 5000` chooses Canada. So does one dialled with the chosen country's international prefix, such as `00 91 ...` from France, and the box writes it with `+` (`+91 ...`), so it reads the same whatever country is chosen. A country that shares its code with others stays chosen while the number may still be its own, and changes when the number belongs elsewhere: with Canada chosen, `+1 650 253 0000` chooses the United States. Text with letters, such as an extension (`ext. 12`), is left as typed for the server to read.
+
+The numbering plans the module formats with load once, on the first focus of a phone field, from a file cached for good: 18 KB with brotli. A page that shows a phone input but where nobody touches it loads only the module, under 5 KB.
+
+## States
+
+<UiPreview example="phone-input/states" />
+
+- `.number(&n)` or `.phone(&p)` shows a saved number in its own country's format, with that country chosen.
+- `.text(t)` shows what was typed; a valid number is re-written in its country's format.
+- `.invalid(true)`, `.disabled(true)`, `.readonly()`, `.required()` and `.autofocus()` do what they say. A read-only input still posts its country.
+
+## The country list
+
+<UiPreview example="phone-input/preferred" />
+
+The list holds every country and area with a numbering plan of its own, 245 of them, by name. `.preferred(regions)` lists some first, under "Suggested". `.countries(regions)` lists only those; it limits the list, not what can be typed, so check the country on the server if it matters. Search finds a country by name (with or without accents), by its two-letter code or by its dial code.
+
+Flags are the system's flag emoji. To draw them with your own SVG set, pass a function: `.flags(|region| my_flag(region.as_str()))`. Each flag then goes into the page once, in a template the list copies from. A form drawn by `FormView` takes the same function with `.phone_flags(...)`. A small `<img>` of a flag your app serves keeps the template light, since a browser fetches only the flags in view.
+
+## Right to left
+
+<UiPreview example="phone-input/rtl" />
+
+The control mirrors in a right-to-left page: the country picker moves to the start, the list's dial codes to the end. The number itself is always written left to right, aligned to the right. Every word is in `PhoneLabels`, for other languages.
+
+## Anatomy
+
+<UiAnatomy component="phone-input" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves between the country button and the number. |
+| `Enter`, `Space`, `↓` on the country button | Opens the list, with the search box focused. |
+| A letter on the country button | Opens the list searching for it. |
+| Typing in the search box | Narrows the list; the count is announced. |
+| `↑`, `↓`, `Page Up`, `Page Down`, `Ctrl+Home`, `Ctrl+End` | Moves through the countries shown. |
+| `Enter` | Chooses the highlighted country and returns to the number. |
+| `Escape` | Closes the list and returns to the country button. |
+
+- The field's label names the number box; the country button is named "Country: India +91".
+- The list is a WAI-ARIA combobox: the search box owns a `listbox`, and the highlighted country is its active descendant.
+- A country chosen by a pasted number, and the number of countries a search finds, are announced politely.
+- Errors are tied to the number box with `aria-describedby`, and mark it `aria-invalid`.
+
+</UiA11y>
+
+## API
+
+### PhoneInput
+
+<UiProps type="PhoneInput" />
+
+### PhoneLabels
+
+<UiProps type="PhoneLabels" />

@@ -1,0 +1,5 @@
+error: this variant is `on` in responses and `Active` in requests, which one schema can't say: use one name, or write `impl ToSchema` by hand
+ --> tests/ui/to_schema/variant_two_names.rs:6:5
+  |
+6 |     #[serde(rename(serialize = "on"))]
+  |     ^

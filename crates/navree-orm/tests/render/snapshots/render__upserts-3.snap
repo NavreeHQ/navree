@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Insert\n{\n    on_conflict:\n    Some(OnConflict\n    {\n        target: vec![Ident::new(\"name\")], action: ConflictAction::Update\n        {\n            sets:\n            vec![Assignment::new(\"color\",\n            Expr::Excluded(Ident::new(\"color\")))], filter:\n            Some(col(\"tags.locked\").eq(val(false))),\n        },\n    }), ..tag()\n})"
+---
+PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT ("name") DO UPDATE SET "color" = "excluded"."color" WHERE "tags"."locked" = $3
+  values: [String("vip"), String("gold"), Bool(false)]
+MySQL: error: a condition on an upsert's update (DO UPDATE .. WHERE) is not supported on MySQL
+SQLite: INSERT INTO "tags" ("name", "color") VALUES (?, ?) ON CONFLICT ("name") DO UPDATE SET "color" = "excluded"."color" WHERE "tags"."locked" = ?
+  values: [String("vip"), String("gold"), Bool(false)]

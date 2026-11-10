@@ -1,0 +1,79 @@
+---
+title: "Field"
+description: "A control with its label, help and error, tied together with `for`, `aria-describedby` and `aria-invalid`."
+---
+
+<UiPreview example="field/help" />
+
+`Field` wraps one control with a label above it and help or an error below it. It finds the input, select or textarea inside, gives it the field's id, and ties the label, the help and the error to it, so you write the wiring once.
+
+```rust
+use navree::ui::*;
+
+Field::new("deal-title", "Deal name")
+    .help("Shown on the pipeline board.")
+    .control(Input::text("title"))
+```
+
+## When to use it
+
+Put every control of a hand-built form in a field. To draw a whole form from a struct, use [FormView](/docs/ui/forms/), which builds the fields for you.
+
+<UiChoose name="field" current="Field" />
+
+## Anatomy
+
+<UiAnatomy component="field" />
+
+## With an error
+
+`.error(message)` shows the message under the control, marks the field `data-invalid` and sets `aria-invalid` on the control. `.error_opt(option)` takes the message only when there is one.
+
+<UiPreview example="field/error" />
+
+## Required
+
+`.required()` adds a mark to the label. Put `.required()` on the control too, so the browser checks it.
+
+<UiPreview example="field/required" />
+
+## A field set
+
+`FieldSet` groups fields under one `<legend>`: an address, a date range.
+
+<UiPreview example="field/set" />
+
+## A label on its own
+
+`Label` is a `<label for>` with the field's look, for a control outside a field.
+
+<UiPreview example="field/label" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the control. |
+
+- Clicking the label focuses the control: `for` points at the control's id.
+- The help and the error are read with the control, through `aria-describedby`: `<id>-help` and `<id>-error`.
+- A field with an error sets `aria-invalid="true"` on the control, unless it already has it.
+- The required mark is hidden from assistive technology; the control's own `required` is what is announced.
+
+</UiA11y>
+
+## API
+
+### Field
+
+<UiProps type="Field" />
+
+### FieldSet
+
+<UiProps type="FieldSet" />
+
+### Label
+
+<UiProps type="Label" />

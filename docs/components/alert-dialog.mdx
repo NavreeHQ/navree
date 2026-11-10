@@ -1,0 +1,50 @@
+---
+title: "AlertDialog"
+description: "A dialog that must be answered: the `alertdialog` role, no close button, and Cancel takes focus first."
+---
+
+<UiPreview example="alert-dialog/default" />
+
+`AlertDialog` asks a question that must be answered before going on, usually before something that can't be undone. It has `role="alertdialog"`, no close button, and a click outside doesn't dismiss it. `Esc` still cancels.
+
+The preview shows it in place. Press **Delete deal** to open it for real.
+
+```rust
+use navree::ui::*;
+
+AlertDialog::new("delete-deal", "Delete Sutlej Supply renewal?", "This can't be undone.")
+    .action(Button::destructive("Delete").submit())
+```
+
+## When to use it
+
+<UiChoose name="overlay" current="AlertDialog" />
+
+## Anatomy
+
+<UiAnatomy component="alert-dialog" />
+
+## Answering it
+
+`.action(...)` takes the answer, usually a form with a destructive button, so the delete is a `POST`. `.cancel(text)` changes the Cancel button's text.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab`, `Shift+Tab` | Moves between Cancel and the action; focus stays inside. |
+| `Enter` | Presses the focused button. Cancel has focus first. |
+| `Esc` | Cancels. |
+
+- The title and the description are both required, and both are read when it opens.
+- Cancel comes first, so pressing `Enter` straight away never destroys anything.
+
+</UiA11y>
+
+## API
+
+### AlertDialog
+
+<UiProps type="AlertDialog" />

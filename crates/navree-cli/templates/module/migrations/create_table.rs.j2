@@ -1,0 +1,25 @@
+//! Creates the `{{ table }}` table.
+
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("{{ table }}", |t| {
+                t.uuid_primary();
+{% if crud %}
+                t.uuid("owner_id").nullable().index();
+{% endif %}
+                t.string("name");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("{{ table }}").await
+    }
+}

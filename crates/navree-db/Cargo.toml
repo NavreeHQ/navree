@@ -1,0 +1,79 @@
+[package]
+name = "navree-db"
+description = "Navree DatabaseModule: its own data layer on SQLx for PostgreSQL/TimescaleDB, MySQL/MariaDB and SQLite, with migrations, seeders and pagination."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "database", "sql", "postgres", "sqlite"]
+categories = ["database"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["mysql", "postgres", "sqlite"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## SQLite (the bundled library, 168k lines of C): the one place that
+## compiles it. Off by default, so a PostgreSQL or MySQL build compiles no
+## SQLite; crates whose tests run on SQLite turn it on in their
+## dev-dependencies, and a SQLite URL without it fails with "enable the
+## `sqlite` feature of navree-db".
+sqlite = ["sqlx/sqlite-bundled"]
+## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs),
+## with pgvector's `vector` values (`Value::Vector`).
+postgres = ["sqlx/postgres"]
+## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
+mysql = ["sqlx/mysql"]
+
+[dependencies]
+base64 = { workspace = true }
+chrono = { workspace = true }
+# Rows read one by one (`Executor::fetch`).
+futures-util = { workspace = true }
+http = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# The OpenAPI schema of `CursorPage` (`ToSchema`).
+navree-openapi = { workspace = true }
+navree-schema = { workspace = true }
+navree-telemetry = { workspace = true }
+# Exact decimals (`Value::Decimal`).
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The driver: pools, connections, transactions and statements run on SQLx
+# directly (TLS with rustls and ring). The drivers are this crate's
+# `sqlite`, `postgres` and `mysql` features.
+sqlx = { workspace = true, features = ["chrono", "json", "rust_decimal", "tls-rustls", "uuid"] }
+sqlx-core = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+# The unit-of-work layer is a Tower layer of its own.
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { path = ".", features = ["sqlite"] }
+http-body-util = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Against a real MySQL server: `NAVREE_TEST_MYSQL_URL` (see tests/mysql/main.rs).
+[[test]]
+name = "mysql"
+path = "tests/mysql/main.rs"
+required-features = ["mysql"]

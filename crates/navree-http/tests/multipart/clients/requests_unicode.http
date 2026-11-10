@@ -1,0 +1,24 @@
+multipart/form-data; boundary=204077394950bcf32c8da721e3ebb607
+--204077394950bcf32c8da721e3ebb607
+Content-Disposition: form-data; name="a"
+
+1
+--204077394950bcf32c8da721e3ebb607
+Content-Disposition: form-data; name="b"
+
+two
+lines
+--204077394950bcf32c8da721e3ebb607
+Content-Disposition: form-data; name="e"
+
+
+--204077394950bcf32c8da721e3ebb607
+Content-Disposition: form-data; name="f"; filename="résumé 日本語.txt"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+--204077394950bcf32c8da721e3ebb607--

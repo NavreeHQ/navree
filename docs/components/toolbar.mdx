@@ -1,0 +1,87 @@
+---
+title: "Toolbar"
+description: "A row of tools with one tab stop and the arrow keys. What does not fit moves into a More menu, and a toggle that moved still posts. With no script the tools wrap and every one works."
+---
+
+<UiPreview example="toolbar/default" />
+
+`Toolbar` groups tools that are used together: text formatting, the actions on a record. The server writes them as a labelled group. With no script the tools wrap onto another line and each one works. The `toolbar` module makes it a toolbar in the sense of WAI-ARIA: the whole bar is one tab stop, the arrow keys move along it, and when the bar is too narrow, the tools at its end move into a **More** menu, made of the shipped [DropdownMenu](/docs/components/dropdown-menu/).
+
+```rust
+use navree::ui::*;
+
+Toolbar::new("format", "Text formatting")
+    .item(ToolbarItem::icon_toggle("bold", icons::LETTER_B, "Bold"))
+    .item(ToolbarItem::icon_toggle("italic", icons::ITALIC, "Italic").pressed(true))
+    .item(ToolbarItem::separator())
+    .item(ToolbarItem::button("Copy").icon(icons::COPY))
+    .item(ToolbarItem::link("Help", "/help"))
+```
+
+`Toolbar::new(id, label)` takes an id, which names the overflow menu and must be unique on the page, and the name a screen reader reads for the bar.
+
+## The tools
+
+| Constructor | Is |
+|---|---|
+| `ToolbarItem::button(label)`, `icon_button(icon, label)` | A button. `.on_click(commands)` runs [commands](/docs/ui/commands-and-ops/) in the browser; `.opens_dialog(id)` opens a dialog. |
+| `ToolbarItem::link(label, href)` | A link. `.current(true)` marks the page the person is on. |
+| `ToolbarItem::post(label, href)` | A button that posts through the page's post form, with the session's token. It works with no script. |
+| `ToolbarItem::toggle(name, label)`, `icon_toggle(name, icon, label)` | A button that is on or off, on a checkbox: it posts `name` when it is on. `.pressed(true)` starts it on. |
+| `ToolbarItem::radios(name, label)` with `.option(value, label)` | A set of buttons of which one is on, on radios, posting `name`. `.value(v)` says which. |
+| `ToolbarItem::menu(label, menu)` | A menu button: any [DropdownMenu](/docs/components/dropdown-menu/). |
+| `ToolbarItem::separator()` | A line between tools. |
+| `ToolbarItem::group(label, items)` | Tools in a group with a name, which move into the menu together. |
+
+`.disabled(true)` disables a tool, and `.keep()` keeps it in the bar however narrow it gets.
+
+<UiPreview example="toolbar/groups" />
+
+## When there is not enough room
+
+Once the module has run, the bar is one line. From the last tool back, those that may move are hidden until the rest fit, a **More** button shows at the end, and its menu holds the hidden tools. A tool marked `.keep()` stays; separators at the ends go with what they divided.
+
+<UiPreview example="toolbar/overflow" />
+
+Every tool that can move already has a twin entry in the menu, written by the server and hidden. The module only shows the twins of the tools it hides, so the menu is the shipped DropdownMenu with its keys and its placement, and a morph can't leave the two out of step. A twin of a button runs the same command, link or post. A menu button's twin is a submenu with its entries. A twin of a toggle or of a choice has no name, and hands its click to the real tool, which stays in the page and posts as it always did. Widen the bar and the tools come back.
+
+If the tool that has focus is the one that moves, focus goes to the More button.
+
+A vertical bar (`.vertical()`) doesn't give up tools: it has no overflow menu.
+
+<UiPreview example="toolbar/vertical" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Enters the bar on the tool last used and leaves in one more press. |
+| `Right`, `Left` (`Down`, `Up` in a vertical bar) | Move to the next or previous tool. Going past the last goes round to the first; `.no_loop()` stops there. |
+| `Home`, `End` | Go to the first or last tool. |
+| `Space`, `Enter` | Press the tool: a toggle toggles, a radio is chosen. |
+| `Down` on a menu button | Opens its menu, whose keys are the menu's own. |
+
+- The bar is a `toolbar` with a label, and `aria-orientation` when it is vertical. The roles come from the script: with none, it is a labelled group.
+- Disabled tools and separators are skipped.
+- A radio in the bar is moved to by the arrows and chosen by Space; the arrows don't choose it.
+- The bar suits three tools or more, and no text field belongs in it: a field needs the arrow keys for itself.
+- A twin in the menu is a menu item, a checkbox item or a radio item.
+- In right-to-left pages the arrow that goes on is Left.
+
+</UiA11y>
+
+## API
+
+### Toolbar
+
+<UiProps type="Toolbar" />
+
+### ToolbarItem
+
+<UiProps type="ToolbarItem" />
+
+### ToolbarLabels
+
+<UiProps type="ToolbarLabels" />

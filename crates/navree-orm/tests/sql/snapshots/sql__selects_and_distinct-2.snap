@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Company::query().select([Company::COUNTRY]).distinct())"
+---
+PostgreSQL: SELECT DISTINCT "companies"."country" FROM "companies"
+MySQL: SELECT DISTINCT `companies`.`country` FROM `companies`
+SQLite: SELECT DISTINCT "companies"."country" FROM "companies"

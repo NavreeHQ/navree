@@ -1,0 +1,74 @@
+---
+source: crates/navree-cli/tests/make_ui.rs
+expression: files.to_string()
+---
+==> tables/deals.rs <==
+//! The deals table of the deals module: sort, filter, search and pages
+//! in the URL, all from one definition.
+
+use chrono::{DateTime, Utc};
+use navree::ui::{DataTable, Empty, TablePage, TableQuery, TableRow, icons};
+use uuid::Uuid;
+
+/// A row of the table. Each column says what a reader can do with it; the
+/// server runs the search, the filters, the sort and the pages.
+#[derive(Clone, TableRow)]
+#[table(sort = "-created_at", per = 25, per_pages(25, 50, 100))]
+pub struct DealRow {
+    /// Not a column: it keys the row and fills the links.
+    #[col(skip)]
+    pub id: Uuid,
+    /// Name
+    #[col(sortable, search, sticky, filter = text, link = "/deals/{id}")]
+    pub name: String,
+    /// Created
+    #[col(sortable, filter = date)]
+    pub created_at: DateTime<Utc>,
+    // More columns to copy:
+    //
+    // A badge in a tone chosen by `fn stage_tone(stage: &String) -> BadgeVariant`,
+    // with a filter that offers the choices in `STAGES`, a list of
+    // `(value, label)` pairs:
+    // #[col(filter = multi, options = STAGES, badge = stage_tone)]
+    // pub stage: String,
+    //
+    // An amount in its smallest unit, right-aligned, with a range filter:
+    // #[col(sortable, numeric, filter = range, label = "Value (₹)")]
+    // pub amount: navree::ui::form::Money,
+}
+
+// Read a page of rows from your model and draw it. With a model `Deal` that
+// converts into `DealRow`, the handler is:
+//
+// pub async fn index(shell: AppShell, uow: Uow, query: TableQuery<DealRow>) -> Result<AppPage> {
+//     let page = query
+//         .load_as(Deal::query(), &uow, |record| {
+//             DealRow::from(record.into_inner())
+//         })
+//         .await?;
+//     Ok(shell
+//         .page("Deals")
+//         .crumb("Home", "/")
+//         .body(deals_table(&query, &page)))
+// }
+
+/// The table, drawn from `page`. Add `.export(url)`, `.bulk(url, actions)` or
+/// `.row_actions(fn)` here.
+pub fn deals_table<'a>(
+    query: &'a TableQuery<DealRow>,
+    page: &'a TablePage<DealRow>,
+) -> DataTable<'a, DealRow> {
+    DataTable::new("deals", query, page)
+        .caption("Deals")
+        .sticky_header()
+        .empty(
+            Empty::new("No deals yet")
+                .icon(icons::INBOX)
+                .description("Deals you add show here."),
+        )
+}
+
+==> tables/mod.rs <==
+//! Data tables of the deals module.
+
+pub mod deals;

@@ -1,0 +1,63 @@
+# harbor: postgres on {{ server.name }}
+{% include "provision/prelude.sh" %}
+cd /
+if ! harbor_installed postgresql-{{ postgres.version }}; then
+	harbor_apt install postgresql-common ca-certificates curl
+	install -d -m 0755 /usr/share/postgresql-common/pgdg
+	curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+	echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+	apt-get update -q
+	harbor_apt install postgresql-{{ postgres.version }}
+fi
+conf=/etc/postgresql/{{ postgres.version }}/main
+restart=0
+reload=0
+harbor_file "$conf/conf.d/harbor.conf" 0644 postgres:postgres <<'HARBOR_EOF'
+{{ files.postgres }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && restart=1
+# The block between the harbor markers admits the app's other servers.
+hba="$(mktemp)"
+awk '/^# harbor:start/ {skip = 1} !skip {print} /^# harbor:end/ {skip = 0}' "$conf/pg_hba.conf" > "$hba"
+cat >> "$hba" <<'HARBOR_EOF'
+{{ files.pg_hba }}HARBOR_EOF
+harbor_file "$conf/pg_hba.conf" 0640 postgres:postgres < "$hba"
+rm -f "$hba"
+[ "$HARBOR_CHANGED" = 1 ] && reload=1
+systemctl enable --now postgresql > /dev/null 2>&1
+if [ "$restart" = 1 ]; then
+	systemctl restart postgresql
+elif [ "$reload" = 1 ]; then
+	systemctl reload postgresql
+fi
+for _ in $(seq 1 30); do
+	sudo -u postgres pg_isready -q && break
+	sleep 1
+done
+sudo -u postgres psql -v ON_ERROR_STOP=1 -q <<'HARBOR_SQL'
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ database }}') THEN
+		CREATE ROLE {{ database }} LOGIN PASSWORD '{{ postgres.password }}';
+	ELSE
+		ALTER ROLE {{ database }} WITH LOGIN PASSWORD '{{ postgres.password }}';
+	END IF;
+END
+$$;
+SELECT 'CREATE DATABASE {{ database }} OWNER {{ database }}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ database }}')\gexec
+HARBOR_SQL
+# Daily backups.
+install -d -m 2750 -o postgres -g {{ user }} {{ backup_dir }}
+timer=0
+harbor_file /usr/local/bin/{{ app }}-backup 0755 root:root <<'HARBOR_EOF'
+{{ files.backup_script }}HARBOR_EOF
+harbor_file /etc/systemd/system/{{ app }}-backup.service 0644 root:root <<'HARBOR_EOF'
+{{ files.backup_service }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && timer=1
+harbor_file /etc/systemd/system/{{ app }}-backup.timer 0644 root:root <<'HARBOR_EOF'
+{{ files.backup_timer }}HARBOR_EOF
+[ "$HARBOR_CHANGED" = 1 ] && timer=1
+if [ "$timer" = 1 ]; then
+	systemctl daemon-reload
+fi
+systemctl enable --now {{ app }}-backup.timer > /dev/null 2>&1

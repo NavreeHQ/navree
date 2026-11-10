@@ -1,0 +1,83 @@
+---
+title: "CodeBlock"
+description: "Code in a box, with its colours already in the markup. The language picks the colours, and no script runs in the browser to draw them."
+---
+
+<UiPreview example="code-block/default" />
+
+`CodeBlock` shows code that a person reads or copies.
+
+```rust
+use navree::ui::*;
+
+CodeBlock::new("rust", "let total = orders.len();")
+```
+
+The first argument is the language, and the second is the code. The code is escaped like any text, so `</pre>` inside it stays inside it.
+
+## When to use it
+
+Use it for a command, a snippet or a sample of what an API returns. For text that mixes words and code, use [Markdown](/docs/components/markdown/): a fenced block in it draws as a `CodeBlock`.
+
+## Anatomy
+
+<UiAnatomy component="code-block" />
+
+## Languages
+
+The colours come from a small reader for each language, written to mark comments, strings, numbers, keywords, types, calls and attributes. A language the readers do not know draws as plain code, and still scrolls and copies.
+
+<UiPreview example="code-block/languages" />
+
+| Name | Also accepted |
+|---|---|
+| `rust` | `rs` |
+| `ts` | `typescript`, `tsx`, `js`, `javascript`, `jsx` |
+| `json` | `jsonc` |
+| `toml` | |
+| `yaml` | `yml` |
+| `sh` | `bash`, `zsh`, `shell`, `console` |
+| `sql` | `postgres`, `mysql`, `sqlite` |
+| `html` | `xml`, `svg`, `jinja` |
+| `css` | `scss` |
+| `diff` | `patch` |
+| `http` | |
+| `python` | `py` |
+| `go` | |
+| `env` | `dotenv` |
+
+The readers are forgiving, not strict: text they do not understand stays plain. Code over 64 KB is not coloured.
+
+## A copy button
+
+`.copy_button()` adds a button that copies the code. It needs the core runtime, so a page that uses it loads that script. A block longer than 16 KB has no button.
+
+<UiPreview example="code-block/copy" />
+
+## Colours and themes
+
+Every colour is a token, so a theme reaches it, and the pairs are checked against every built-in theme for contrast. Comments are italic as well as quiet, so colour is never the only sign.
+
+## What the page loads
+
+A page with a code block links one small stylesheet and loads no script.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to the code when it scrolls sideways or down, and to the copy button. |
+| Arrow keys | Scroll the focused code. |
+
+- The code is the real `pre` and `code` elements, left to right even in a right-to-left page.
+- The copy button has a name ("Copy code") that you can translate with `MarkdownLabels`.
+
+</UiA11y>
+
+## API
+
+### CodeBlock
+
+<UiProps type="CodeBlock" />

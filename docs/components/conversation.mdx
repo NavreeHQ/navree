@@ -1,0 +1,69 @@
+---
+title: "Conversation"
+description: "The messages of a conversation with an assistant, oldest first, loading earlier ones as the reader scrolls up and merging an answer as it is written."
+---
+
+<UiPreview example="conversation/default" />
+
+`Conversation` holds a chat with an assistant. It lists the messages oldest first, starts at the newest, fetches earlier ones when the reader scrolls up, and merges what changed from a live stream, so an answer grows in place while what the reader is typing stays as it is. It is a [LazyList](/docs/components/lazy-list/) with the rules of a chat built in.
+
+```rust
+use navree::ui::genui::*;
+use serde_json::json;
+
+let labels = ChatLabels::default();
+Conversation::new("kitchen-help", "/assistant/7/items").items([
+    ChatMessage::user("m1", "0001", "How did UPI payments do this week?").into_item(&labels),
+    ToolCallCard::new("t1", "0002", "Looked up payments by method")
+        .state(ToolState::Done)
+        .arguments(json!({ "from": "2026-11-02", "to": "2026-11-08" }))
+        .into_item(&labels),
+    ChatMessage::assistant(
+        "m2",
+        "0003",
+        "UPI took **62%** of the week's ₹4,86,250, ahead of cards at 21%.",
+    )
+    .into_item(&labels),
+    chat_notice("n1", "0004", "You refunded order KK-1042"),
+])
+```
+
+The parts live in `navree::ui::genui`. For the whole assistant (the routes, the runs, the stored messages and the signed buttons) see [Generative UI](/docs/ai/generative-ui/); this page is about drawing the conversation.
+
+## Items
+
+Each message is an item of the list. `ChatMessage::into_item(&labels)`, `ToolCallCard::into_item(&labels)` and `SurfaceFrame::into_item(cursor)` make them, and `chat_notice` and `approval_notice` make a plain line, such as "You refunded order KK-1042" or "Waiting for your answer: Refund an order". An item has a key, which names it in the list, and a cursor, which places it: the cursors sort oldest first, and the conversation's source answers with the items before or after one.
+
+`.items(..)` takes the newest items, oldest first. `.since(revision)` says which revision they are at, and `.live(..)` merges what changed whenever the stream speaks. A message being written is listed under a key of its own and its words grow where they are; when it is done it comes back under its own key.
+
+## Earlier messages
+
+A long conversation shows its newest messages and a link at the top. With JavaScript the list fetches the earlier ones as the reader scrolls up, and keeps at most 400 items in the page: items far off screen at the other end are dropped and fetched again when the reader scrolls back. `.earlier(page)` names the page that lists them for a reader without JavaScript.
+
+## Before the first message
+
+`.empty(..)` draws something until there is a first message: a line that says what to ask.
+
+<UiPreview example="conversation/empty" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The conversation is a section with a heading that only a screen reader shows ("Conversation", level 2), so the headings inside an answer and the title of a component sit one level under it.
+- New messages are announced politely, once they stop coming: one message with its own words, several as "3 new messages". An answer being written is never announced; it is listed under a key of its own, and when it is done it is announced once. A conversation does not use a `log` role, because that would read out every few words of an answer that grows.
+- What the reader wrote, a tool's card and a plain line are never announced.
+- With JavaScript, a composer sends on Enter and writes a new line on Shift+Enter, and a reader who is at the end of the conversation stays there while an answer grows. A reader who scrolled up is left where they are.
+- Without JavaScript every part is a plain list, link or form.
+
+</UiA11y>
+
+## API
+
+### Conversation
+
+<UiProps type="Conversation" />
+
+### ChatLabels
+
+<UiProps type="ChatLabels" />

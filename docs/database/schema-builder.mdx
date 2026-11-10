@@ -1,0 +1,182 @@
+---
+title: "Schema builder"
+description: "Describe tables in Rust and get the right SQL for PostgreSQL, MySQL and SQLite: create, alter, rename and drop tables, and preview the SQL."
+---
+
+The schema builder (`navree::schema`) describes tables in Rust and writes the SQL each database needs: PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite. Where MariaDB differs from MySQL, it writes MariaDB's own SQL, and the builder's suite runs against MariaDB 11.4 and 10.6 in CI ([what has been run](/docs/database/mysql/#what-has-been-run)). [Migrations](/docs/database/migrations/) use it through the `Schema` they receive; anywhere else, build one on the database with `Schema::new(&db)`. A `Db`, a pool (`db.pool()`), a transaction (`db.begin()`) and a unit of work are all connections a schema runs on (each implements `SchemaConnection`), and their statements are timed and logged like every other.
+
+```rust
+use navree::schema::prelude::*;
+
+schema
+    .create("companies", |t| {
+        t.uuid_primary();
+        t.string("name").unique();
+        t.string("domain").nullable();
+        t.foreign_uuid("owner_id")
+            .nullable()
+            .constrained_on("users", "id")
+            .null_on_delete();
+        t.timestamps_tz();
+        t.soft_deletes_tz();
+    })
+    .await?;
+```
+
+`create` takes a closure that describes the table on a `Blueprint` (`t`); `table` alters one the same way. Before any SQL runs, the blueprint is checked: duplicate columns, two primary keys, a decimal scale larger than its precision, a modifier that doesn't apply to its column's type, a type the database doesn't have. Each mistake fails with a message saying how to fix it, so a migration never half-runs on a typo. Then every statement runs in order on the schema's connection, inside a migration its transaction.
+
+`navree::schema::prelude` brings `Schema`, `SchemaResult`, `Blueprint`, `raw`, `ReferentialAction` and the TimescaleDB types (`Hypertable`, `Compression`, `ContinuousAggregate`, `RefreshPolicy`, `KeyStrategy`).
+
+## Tables
+
+| Method | Does |
+|---|---|
+| `schema.create(table, \|t\| ..)` | Creates a table. |
+| `schema.table(table, \|t\| ..)` | Alters a table: adds, changes, renames and drops columns, indexes and foreign keys. |
+| `schema.rename(from, to)` | Renames a table. |
+| `schema.drop(table)`, `schema.drop_if_exists(table)` | Drops a table. |
+| `schema.drop_columns(table, columns)` | Drops columns. |
+| `schema.create_hypertable(table, time_column, \|t\| ..)` | Creates a [time-series table](/docs/database/timescaledb/). |
+| `schema.statement(sql)` | Runs raw SQL, recorded like the builder's own statements. |
+
+The [columns](/docs/database/columns/) and [indexes and foreign keys](/docs/database/indexes-and-foreign-keys/) pages list what goes in the closure. Inside `create`, these set options of the table itself:
+
+| Blueprint method | Does |
+|---|---|
+| `t.if_not_exists()` | `CREATE TABLE IF NOT EXISTS`. |
+| `t.temporary()` | A temporary table. |
+| `t.comment("...")` | A table comment (PostgreSQL and MySQL). |
+| `t.engine("InnoDB")`, `t.innodb()` | The storage engine (MySQL). |
+| `t.charset("utf8mb4")`, `t.collation("utf8mb4_bin")` | The default character set and collation (MySQL). |
+
+MySQL tables get `DEFAULT CHARACTER SET utf8mb4` unless the configuration says otherwise ([below](#configuration)).
+
+## Altering tables
+
+```rust
+schema
+    .table("deals", |t| {
+        t.string("stage").default("lead").index();        // add
+        t.text("notes").nullable().after("title");        // add, placed (MySQL)
+        t.decimal("amount", 14, 2).change();              // change
+        t.rename_column("value", "amount_cents");
+        t.drop_column(["legacy", "imported_at"]);
+        t.drop_index(["stage", "created_at"]);
+        t.drop_unique("deals_code_unique");
+        t.drop_foreign(["company_id"]);
+        t.rename_index("deals_title_index", "deals_by_title");
+    })
+    .await?;
+```
+
+In `table`, every call is a command, run in the order you wrote them: `t.string("slug")` followed by `t.unique(["slug"])` adds the column, then the index. [Changing columns](/docs/database/columns/#changing-columns) and [dropping indexes](/docs/database/indexes-and-foreign-keys/#dropping-and-renaming) have the details. `t.drop_table()`, `t.drop_table_if_exists()` and `t.rename(to)` act on the table itself.
+
+### SQLite
+
+SQLite's `ALTER TABLE` adds, renames and drops plain columns. For everything else (changing a column, adding or dropping a primary key or a foreign key, adding a column it can't add in place, dropping one that a key, a constraint or an index uses), the builder **rebuilds** the table, as SQLite documents: it reads the table as it is, creates the new one as `__temp__<table>`, copies the rows, drops the old table, renames the new one, and recreates the indexes and triggers. Collations, checks, generated columns, partial indexes and `AUTOINCREMENT` survive. Several changes in one `table` call share one rebuild.
+
+Dropping the old table must not run the `ON DELETE` actions of the tables that reference it, so the migrator runs SQLite migrations on a connection of their own with foreign keys off, and checks them (`PRAGMA foreign_key_check`) before each commit. Outside a migration, rebuilding a table other tables reference, on a connection with foreign keys on, fails with that explanation instead of deleting rows by cascade. Adding a `NOT NULL` column without a default to a table that has rows fails with how to fix it.
+
+## Reading the schema
+
+A schema reads the database's catalogs:
+
+| Method | Returns |
+|---|---|
+| `has_table(table)`, `has_view(view)` | Whether it exists. |
+| `has_column(table, column)`, `has_columns(table, [..])` | Whether the table has them. |
+| `tables()`, `table_listing()` | The tables of the current schema: name, schema, size, comment, engine, collation (or only the names). |
+| `views()` | The views. |
+| `columns(table)`, `column_listing(table)` | The columns: type, collation, nullable, default, auto-increment, comment, generation (or only the names). |
+| `column_type(table, column, full)` | One column's type name, or its full definition. |
+| `indexes(table)`, `index_listing(table)` | The indexes: columns, method, uniqueness. |
+| `has_index(table, name_or_columns, kind)` | Whether an index exists, by name or by columns. |
+| `foreign_keys(table)`, `has_foreign_key(table, ..)` | The foreign keys, with their columns and actions. |
+
+```rust
+if !schema.has_column("deals", "currency").await? {
+    schema.table("deals", |t| { t.char("currency", 3).default("INR"); }).await?;
+}
+
+schema
+    .when_table_doesnt_have_column("deals", "currency", |t| {
+        t.char("currency", 3).default("INR");
+    })
+    .await?;
+```
+
+`when_table_has_column` and `when_table_doesnt_have_column` alter a table only when it has (or lacks) a column. On TimescaleDB, `is_hypertable(table)` and `time_dimension(table)` read how a table is partitioned.
+
+### Emptying a database
+
+`drop_all_tables()`, `drop_all_views()` and `drop_all_types()` (PostgreSQL) empty a database, as `migrate:fresh` does. `disable_foreign_key_constraints()` and `enable_foreign_key_constraints()` switch foreign-key checks off and on for the connection (on PostgreSQL, `disable` defers them to the end of the transaction), and `ensure_extension(name)` creates a PostgreSQL extension when it is missing.
+
+## Previews
+
+`Schema::offline(target)` records the SQL for a database without connecting to one, for tests and for checking what a migration writes for another database:
+
+```rust
+use navree::schema::{Schema, Target};
+
+let schema = Schema::offline(Target::postgres(17));
+schema
+    .create("deals", |t| {
+        t.id();
+        t.string("title");
+        t.timestamps_tz();
+    })
+    .await?;
+assert_eq!(
+    schema.statements(),
+    ["CREATE TABLE \"deals\" (\"id\" BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, \
+      \"title\" VARCHAR(255) NOT NULL, \"created_at\" TIMESTAMP WITH TIME ZONE NULL, \
+      \"updated_at\" TIMESTAMP WITH TIME ZONE NULL)"]
+);
+```
+
+Targets name the database and its version, which the builder checks features against: `Target::postgres(17).with_timescaledb((2, 17))`, `Target::mysql((8, 4))`, `Target::mariadb((11, 4))`, `Target::sqlite((3, 46))`. Virtual generated columns need PostgreSQL 18, `NULLS NOT DISTINCT` PostgreSQL 15, `RENAME COLUMN` MySQL 8.0.3 or MariaDB 10.5.2, expression defaults MySQL 8.0.13, and vector columns MySQL 9 or MariaDB 11.7: an older target fails with that requirement instead of failing SQL. A connected schema detects its target from the server once (version, installed and available extensions).
+
+An offline schema can't plan what needs the live table: a SQLite rebuild, or converting a table into a hypertable, fails with "needs a database connection". `Schema::new(conn).pretending()` reads the real database and records what it would change instead of changing it, which is what `migrate --pretend` does. Both kinds give the statements with `schema.statements()` and what the database couldn't do as asked with `schema.notices()`.
+
+## Configuration
+
+The `schema` section configures the builder, and every migration's schema:
+
+```toml title="config/app.toml"
+[schema]
+default_string_length = 255   # `string` columns without `.length(n)`
+default_time_precision = 6    # fractional seconds of time columns
+morph_key = "int"             # int, uuid or ulid: the id column of `morphs`
+timescaledb = "auto"          # auto, require or off
+create_extensions = true      # may run CREATE EXTENSION timescaledb
+hypertable_keys = "extend"    # extend or reject primary keys missing the time column
+mysql_charset = "utf8mb4"     # MySQL tables' default character set
+# mysql_collation = "utf8mb4_0900_ai_ci"
+# mysql_engine = "InnoDB"
+dump_path = "database/schema" # where `schema:dump` writes
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `default_string_length` | `255` | The length of `string` columns without `.length(n)`. |
+| `default_time_precision` | `6` | The fractional-second digits of time columns without `.precision(p)`. Unset, each database's default applies (whole seconds on MySQL). |
+| `morph_key` | `int` | The `_id` column type of `morphs("subject")`: `int`, `uuid` or `ulid`. |
+| `timescaledb` | `auto` | `auto` uses TimescaleDB when the database has it and falls back to regular tables with a notice; `require` makes that fallback an error on PostgreSQL; `off` never uses it. |
+| `create_extensions` | `true` | Lets the builder run `CREATE EXTENSION IF NOT EXISTS timescaledb` when the extension is available but not installed. |
+| `hypertable_keys` | `extend` | A hypertable's primary key that lacks the time column is widened (`extend`) or refused (`reject`). |
+| `mysql_charset`, `mysql_collation`, `mysql_engine` | `utf8mb4`, the server's, the server's | MySQL table defaults. |
+| `dump_path` | `database/schema` | Where `schema:dump` writes and `migrate` looks for the dump. |
+
+Like every section, these come from the environment too: `APP_SCHEMA__TIMESCALEDB=require` in production makes a migration stop on a server without TimescaleDB rather than create regular tables.
+
+<LinkCards>
+  <LinkCard href="/docs/database/columns/" title="Columns">
+    Every column type, per database, and the modifiers.
+  </LinkCard>
+  <LinkCard href="/docs/database/indexes-and-foreign-keys/" title="Indexes and foreign keys">
+    Indexes, constraints, actions and names.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Time-series tables, compression, retention and continuous aggregates.
+  </LinkCard>
+</LinkCards>

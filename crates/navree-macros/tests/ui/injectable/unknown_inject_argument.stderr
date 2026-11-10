@@ -1,0 +1,5 @@
+error: unknown #[inject] argument `optional`: expected `name = "..."` or `default`
+ --> tests/ui/injectable/unknown_inject_argument.rs:9:14
+  |
+9 |     #[inject(optional)]
+  |              ^^^^^^^^

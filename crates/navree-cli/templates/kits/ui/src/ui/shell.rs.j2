@@ -1,0 +1,111 @@
+//! The shell: the sidebar, the top bar and the user menu every page sits in.
+
+use std::borrow::Cow;
+
+use http::request::Parts;
+use navree::contracts::Impersonator;
+use navree::http::AppError;
+use navree::http::extract::FromRequestParts;
+use navree::prelude::Scoped;
+use navree::session::Session;
+use navree::ui::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu, icons};
+use navree::workspace::{CurrentWorkspace, WorkspaceSwitcher};
+use uuid::Uuid;
+
+use super::auth::CurrentAccount;
+
+/// The app's one shell. `UiAppModule` registers it; a page draws itself in it
+/// by taking the [`Desk`] extractor, which fills in who is signed in and which
+/// workspace they are in.
+///
+/// Add a link by adding a `NavItem` to a group; give every top-level item an
+/// icon, since the folded sidebar shows only that.
+pub fn shell() -> Shell {
+    Shell::new("{{ title }}")
+        .context("Customer desk")
+        .group(NavGroup::plain().item(NavItem::new("Home", "/").icon(icons::HOUSE)))
+        .group(
+            NavGroup::new("Sales").item(NavItem::new("Customers", "/customers").icon(icons::USERS)),
+        )
+        .user(
+            UserMenu::new("Account", "Signed in")
+                .link("Profile", "/profile")
+                .action("Sign out", "/sign-out"),
+        )
+}
+
+/// The request's shell, account and workspace: what a page takes to draw
+/// itself.
+///
+/// The sidebar shows the workspace's name under the app's, the user menu
+/// shows the signed-in person (with "Stop impersonating" while an
+/// administrator acts as them), and every page gets the workspace switcher
+/// beside its heading. A guest is answered 401, which the error pages turn
+/// into the way to the sign-in page and back.
+pub struct Desk {
+    shell: AppShell,
+    account: CurrentAccount,
+    workspace: CurrentWorkspace,
+    switcher: WorkspaceSwitcher,
+    csrf: String,
+}
+
+impl Desk {
+    /// A page titled `title`, with the workspace switcher beside its heading.
+    pub fn page(&self, title: impl Into<Cow<'static, str>>) -> AppPage {
+        self.shell.page(title).actions(self.switcher.clone())
+    }
+
+    /// The workspace the request is in.
+    pub fn workspace(&self) -> Uuid {
+        self.workspace.id()
+    }
+
+    /// The signed-in account.
+    pub fn account(&self) -> &CurrentAccount {
+        &self.account
+    }
+
+    /// The token a plain form posts back (`FormView::csrf`), so the form also
+    /// works with JavaScript off. The page's script sends it as a header by
+    /// itself.
+    pub fn csrf(&self) -> String {
+        self.csrf.clone()
+    }
+}
+
+impl FromRequestParts for Desk {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, AppError> {
+        let account = CurrentAccount::from_request_parts(parts).await?;
+        let workspace = CurrentWorkspace::from_request_parts(parts).await?;
+        let switcher = WorkspaceSwitcher::from_request_parts(parts).await?;
+        let Scoped(base) = Scoped::<Shell>::from_request_parts(parts).await?;
+        let csrf = parts
+            .extensions
+            .get::<Session>()
+            .map(Session::csrf_token)
+            .unwrap_or_default();
+        let mut menu = UserMenu::new(account.name.clone(), account.email.clone())
+            .link("Profile", "/profile")
+            .link("Two-factor authentication", "/account/two-factor");
+        if parts.extensions.get::<Impersonator>().is_some() {
+            menu = menu.action("Stop impersonating", "/impersonate/stop");
+        }
+        let shell = Shell::clone(&base)
+            .context(workspace.name.clone())
+            .user(menu.action("Sign out", "/sign-out"));
+        let here = parts
+            .uri
+            .path_and_query()
+            .map_or_else(|| parts.uri.path().to_owned(), |found| found.as_str().to_owned());
+        Ok(Desk {
+            shell: shell.for_request(here, &parts.headers),
+            account,
+            workspace,
+            switcher,
+            csrf,
+        })
+    }
+}

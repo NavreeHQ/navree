@@ -1,0 +1,49 @@
+[package]
+name = "navree-crypto"
+description = "Navree CryptoModule: AES-256-GCM encryption with key rotation, Argon2id hashing, token and JOSE helpers, TOTP and a QR code encoder."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "encryption", "jwt", "totp", "argon2"]
+categories = ["cryptography"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+aes-gcm = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+# `sns`: message timestamps and certificate ages; `sigv4`: the signing time.
+chrono = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-kernel = { workspace = true }
+rand = { workspace = true }
+# `jose`: Ed25519, ECDSA and RSA signatures (already in the tree through
+# rustls).
+ring = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+# `sns`: the host and path of SNS certificate and confirmation URLs.
+url = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+rqrr = { workspace = true }
+tokio = { workspace = true }

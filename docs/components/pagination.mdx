@@ -1,0 +1,50 @@
+---
+title: "Pagination"
+description: "Links between the pages of a list: previous, next, the first and last pages and the ones near the current."
+---
+
+<UiPreview example="pagination/default" />
+
+`Pagination::new(page, pages, href)` draws links to the previous and next pages, the first and the last, and the pages next to the current one, with ellipses between. `href` gives each page's URL. Only the pages shown are ever computed, however many there are.
+
+```rust
+use navree::ui::*;
+
+Pagination::new(5, 12, |page| format!("/deals?page={page}"))
+```
+
+## When to use it
+
+Use it under a list that you page by hand. A [DataTable](/docs/ui/data-table/) draws its own, with the page size and the total.
+
+<UiChoose name="wayfinding" current="Pagination" />
+
+## Anatomy
+
+<UiAnatomy component="pagination" />
+
+## First, middle and last
+
+The page is held between 1 and the last page. On the first page, Previous is disabled; on the last, Next.
+
+<UiPreview example="pagination/edges" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves between the page links. |
+| `Enter` | Follows one. |
+
+- The `<nav>` is labelled "Pagination". Each link is named "Page 5", and the current one has `aria-current="page"`.
+- A disabled Previous or Next has `aria-disabled="true"` and no `href`, so it can't be followed.
+
+</UiA11y>
+
+## API
+
+### Pagination
+
+<UiProps type="Pagination" />

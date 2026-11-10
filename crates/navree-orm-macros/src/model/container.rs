@@ -1,0 +1,304 @@
+//! The container attributes: `#[model(table = "...", timestamps, ...)]` on
+//! the struct.
+
+use proc_macro2::Span;
+use syn::meta::ParseNestedMeta;
+use syn::punctuated::Punctuated;
+use syn::{Attribute, LitBool, LitInt, LitStr, Token};
+
+use super::attributes;
+use crate::errors::{Errors, key_name, suggestion};
+use crate::model::lifecycle::{self, Lifecycle};
+
+/// How the key gets its value (navree-orm's `KeyKind`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyType {
+    Increments,
+    UuidV7,
+    UuidV4,
+    Ulid,
+    ObjectId,
+    Manual,
+}
+
+impl KeyType {
+    fn parse(text: &LitStr) -> syn::Result<Self> {
+        match text.value().as_str() {
+            "int" | "integer" | "increments" => Ok(KeyType::Increments),
+            "uuid" | "uuid_v7" => Ok(KeyType::UuidV7),
+            "uuid_v4" => Ok(KeyType::UuidV4),
+            "ulid" => Ok(KeyType::Ulid),
+            "object_id" => Ok(KeyType::ObjectId),
+            "manual" => Ok(KeyType::Manual),
+            other => Err(syn::Error::new(
+                text.span(),
+                format!(
+                    "unknown key type `{other}`: use \"int\" (the database assigns it), \"uuid\" (UUID v7), \"uuid_v4\", \"ulid\", \"object_id\" (MongoDB) or \"manual\" (the application sets it)"
+                ),
+            )),
+        }
+    }
+}
+
+/// The timestamp columns.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Timestamps {
+    /// Whether `timestamps` was given at all.
+    pub(crate) on: bool,
+    pub(crate) created_at: Option<String>,
+    pub(crate) updated_at: Option<String>,
+    pub(crate) span: Option<Span>,
+}
+
+/// Everything `#[model(...)]` on the struct says.
+#[derive(Default)]
+pub(crate) struct Container {
+    pub(crate) table: Option<LitStr>,
+    pub(crate) primary_key: Option<LitStr>,
+    pub(crate) key_type: Option<KeyType>,
+    pub(crate) timestamps: Timestamps,
+    pub(crate) soft_deletes: Option<(String, Span)>,
+    /// `observers(..)`, `dispatches(..)`, `broadcasts`, `prunable`, ...
+    pub(crate) lifecycle: Lifecycle,
+    pub(crate) connection: Option<LitStr>,
+    pub(crate) driver: Option<LitStr>,
+    pub(crate) per_page: Option<LitInt>,
+    pub(crate) global_scopes: Vec<syn::Expr>,
+    /// `touches`, `morph_name`, `with`, `with_count`, `pivot`.
+    pub(crate) relations: super::relations::RelationAttrs,
+    /// The attribute layer's keys.
+    pub(crate) attributes: attributes::ContainerAttrs,
+    /// `factory = DealFactory`: the model's factory.
+    pub(crate) factory: Option<syn::Path>,
+    /// `route_key = "slug"`: the column route model binding looks records
+    /// up by.
+    pub(crate) route_key: Option<LitStr>,
+    /// `workspace` or `workspace = "team_id"`: the column holding the
+    /// workspace of a workspace-scoped model.
+    pub(crate) workspace: Option<(String, Span)>,
+    /// `subject` or `subject = "Deal"`: the model is a navree-access
+    /// subject (`None` inside: the model's name).
+    pub(crate) subject: Option<Option<LitStr>>,
+    /// `permission_prefix = "deals"`: the subject's permission prefix.
+    pub(crate) permission_prefix: Option<LitStr>,
+    /// `policy = DealPolicy`: the rules attached to the subject.
+    pub(crate) policy: Option<syn::Path>,
+}
+
+/// The keys `#[model(...)]` takes on a struct (the attribute layer's come
+/// from [`attributes::CONTAINER_KEYS`]).
+const KEYS: &[&str] = &[
+    "table",
+    "collection",
+    "primary_key",
+    "key_type",
+    "timestamps",
+    "soft_deletes",
+    "connection",
+    "driver",
+    "per_page",
+    "global_scopes",
+    "touches",
+    "morph_name",
+    "with",
+    "with_count",
+    "pivot",
+    "factory",
+    "route_key",
+    "workspace",
+    "subject",
+    "permission_prefix",
+    "policy",
+];
+
+/// The document driver whose key field is `_id`.
+pub(crate) const MONGODB: &str = "mongodb";
+
+/// Parses the `#[model(...)]` attributes of the struct.
+pub(crate) fn parse(attrs: &[Attribute], errors: &mut Errors) -> Container {
+    let mut container = Container::default();
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("model")) {
+        errors.keep(attr.parse_nested_meta(|meta| parse_key(&mut container, &meta)));
+    }
+    container
+}
+
+fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Result<()> {
+    let path = &meta.path;
+    if path.is_ident("table") || path.is_ident("collection") {
+        let name = non_empty(meta.value()?.parse()?)?;
+        if container.table.is_some() {
+            return Err(syn::Error::new(
+                name.span(),
+                "the table is already named: give `table` or `collection` (its document-store name) once",
+            ));
+        }
+        container.table = Some(name);
+    } else if path.is_ident("driver") {
+        let driver: LitStr = non_empty(meta.value()?.parse()?)?;
+        let name = driver.value();
+        if !name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return Err(syn::Error::new(
+                driver.span(),
+                format!(
+                    "`{name}` is not a driver name: use the document driver's lowercase name, e.g. \"{MONGODB}\""
+                ),
+            ));
+        }
+        container.driver = Some(driver);
+    } else if path.is_ident("primary_key") {
+        container.primary_key = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("key_type") {
+        container.key_type = Some(KeyType::parse(&meta.value()?.parse()?)?);
+    } else if path.is_ident("timestamps") {
+        container.timestamps = Timestamps {
+            on: true,
+            created_at: Some("created_at".to_owned()),
+            updated_at: Some("updated_at".to_owned()),
+            span: Some(
+                path.get_ident()
+                    .map_or_else(Span::call_site, syn::Ident::span),
+            ),
+        };
+        if meta.input.peek(syn::token::Paren) {
+            meta.parse_nested_meta(|inner| parse_timestamp(&mut container.timestamps, &inner))?;
+        }
+    } else if path.is_ident("soft_deletes") {
+        let span = path
+            .get_ident()
+            .map_or_else(Span::call_site, syn::Ident::span);
+        let column = if meta.input.peek(Token![=]) {
+            non_empty(meta.value()?.parse()?)?.value()
+        } else {
+            "deleted_at".to_owned()
+        };
+        container.soft_deletes = Some((column, span));
+    } else if lifecycle::parse_key(&mut container.lifecycle, meta)? {
+        // An observer, dispatch, broadcast or pruning attribute.
+    } else if path.is_ident("connection") {
+        container.connection = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("per_page") {
+        let per_page: LitInt = meta.value()?.parse()?;
+        let value: u64 = per_page.base10_parse()?;
+        if value == 0 {
+            return Err(syn::Error::new(
+                per_page.span(),
+                "per_page must be at least 1",
+            ));
+        }
+        container.per_page = Some(per_page);
+    } else if path.is_ident("global_scopes") {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        let scopes = Punctuated::<syn::Expr, Token![,]>::parse_terminated(&content)?;
+        container.global_scopes.extend(scopes);
+    } else if super::relations::parse_key(&mut container.relations, meta)? {
+        // A relation attribute.
+    } else if attributes::parse_container_key(&mut container.attributes, meta)? {
+        // An attribute-layer key.
+    } else if path.is_ident("factory") {
+        let value = meta.value()?;
+        let factory = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the factory must be the path of a type implementing `ModelFactory`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.factory = Some(factory);
+    } else if path.is_ident("route_key") {
+        container.route_key = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("workspace") {
+        let span = path
+            .get_ident()
+            .map_or_else(Span::call_site, syn::Ident::span);
+        let column = if meta.input.peek(Token![=]) {
+            non_empty(meta.value()?.parse()?)?.value()
+        } else {
+            "workspace_id".to_owned()
+        };
+        container.workspace = Some((column, span));
+    } else if path.is_ident("subject") {
+        container.subject = Some(if meta.input.peek(Token![=]) {
+            Some(non_empty(meta.value()?.parse()?)?)
+        } else {
+            None
+        });
+    } else if path.is_ident("permission_prefix") {
+        container.permission_prefix = Some(non_empty(meta.value()?.parse()?)?);
+    } else if path.is_ident("policy") {
+        let value = meta.value()?;
+        let policy = if value.peek(LitStr) {
+            let text: LitStr = value.parse()?;
+            text.parse::<syn::Path>().map_err(|_| {
+                syn::Error::new(
+                    text.span(),
+                    "the policy must be the path of a type implementing `Policy`",
+                )
+            })?
+        } else {
+            value.parse()?
+        };
+        container.policy = Some(policy);
+    } else {
+        let key = key_name(path);
+        let known: Vec<&str> = KEYS
+            .iter()
+            .chain(lifecycle::KEYS)
+            .chain(attributes::CONTAINER_KEYS)
+            .copied()
+            .collect();
+        let hint = suggestion(&key, &known)
+            .map(|known| format!(" (did you mean `{known}`?)"))
+            .unwrap_or_default();
+        return Err(meta.error(format!(
+            "unknown model attribute `{key}`{hint}; expected one of: {}",
+            known.join(", ")
+        )));
+    }
+    Ok(())
+}
+
+/// `created_at = "created_on"` or `updated_at = false` inside
+/// `timestamps(...)`.
+fn parse_timestamp(timestamps: &mut Timestamps, meta: &ParseNestedMeta<'_>) -> syn::Result<()> {
+    let slot = if meta.path.is_ident("created_at") {
+        &mut timestamps.created_at
+    } else if meta.path.is_ident("updated_at") {
+        &mut timestamps.updated_at
+    } else {
+        return Err(meta.error(format!(
+            "unknown timestamps option `{}`; expected `created_at` or `updated_at` (a column name, or false to turn it off)",
+            key_name(&meta.path)
+        )));
+    };
+    let value = meta.value()?;
+    if value.peek(LitBool) {
+        let flag: LitBool = value.parse()?;
+        if flag.value {
+            return Err(syn::Error::new(
+                flag.span(),
+                "name the column (\"...\") or turn it off with false",
+            ));
+        }
+        *slot = None;
+    } else {
+        *slot = Some(non_empty(value.parse()?)?.value());
+    }
+    Ok(())
+}
+
+fn non_empty(text: LitStr) -> syn::Result<LitStr> {
+    if text.value().trim().is_empty() {
+        Err(syn::Error::new(text.span(), "this name cannot be empty"))
+    } else {
+        Ok(text)
+    }
+}

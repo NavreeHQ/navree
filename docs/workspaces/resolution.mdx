@@ -1,0 +1,269 @@
+---
+title: "Resolving the workspace"
+description: "Find the current workspace from a header, a subdomain, a path prefix, a token claim, the workspace's own domain or the browser's session, and check that the user belongs to it."
+---
+
+Every workspace request names its workspace somewhere: in a header, in the host name, in the URL, inside the access token or, for pages in a browser, in the session. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
+
+<Diagram name="workspace-resolution" />
+
+## The resolvers
+
+A resolver finds an identifier: the workspace's slug (`agra`) or its id (a UUID). An identifier that parses as a UUID is looked up by id, anything else by slug.
+
+| Resolver | Reads | Example |
+|---|---|---|
+| `header` | The header named by `workspace.header` (default `X-Workspace`), trimmed | `X-Workspace: agra` |
+| `path` | The path segment after `workspace.path_prefix` (default `/w`) | `/api/w/agra/deals` |
+| `subdomain` | The first label of the host under `workspace.base_domain` | `agra.app.example.com` |
+| `claim` | The claim `workspace.claim` (default `workspace`) of the request's bearer JWT | `{"sub": "...", "workspace": "agra"}` |
+| `domain` | The workspace's own verified domain ([custom domains](/docs/packages/custom-domains/)) | `crm.agra-corp.com` |
+| `session` | The workspace the signed-in user switched to in this browser, kept in their session | `POST /workspace/switch` with `workspace=agra` |
+
+### Header
+
+The header suits API clients and single-page apps that keep the current workspace in client state. An empty value counts as no value.
+
+```http
+GET /api/v1/deals HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+X-Workspace: agra
+```
+
+### Path prefix
+
+With `path_prefix = "/w"`, the segment after the first `w` segment of the path is the identifier. Mount the routes that use it under the prefix, with a path parameter in its place:
+
+```rust title="src/deals/controller.rs"
+#[controller("/w/{workspace}/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    #[get("/")]
+    #[permissions("deals.read")]
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        // GET /api/v1/w/agra/deals
+        // ...
+    }
+}
+```
+
+A prefix can have several segments (`/teams/t`). The resolver takes the first match in the path.
+
+### Subdomain
+
+Set `workspace.base_domain` to the domain your workspaces live under. The resolver takes the single label in front of it from the `Host` header (or the request URI's authority), ignoring the port and case:
+
+| `base_domain` | Host | Identifier |
+|---|---|---|
+| `app.example.com` | `agra.app.example.com` | `agra` |
+| `app.example.com` | `ACME.app.example.com:8443` | `agra` |
+| `app.example.com` | `app.example.com` | none |
+| `app.example.com` | `eu.agra.app.example.com` | none (two labels) |
+| `localhost:3000` | `agra.localhost:3000` | `agra` |
+
+Without `base_domain` the subdomain resolver finds nothing, which is why it can sit in the default list. Behind a reverse proxy, make sure the proxy passes the original `Host` header through.
+
+### Token claim
+
+The claim resolver reads a claim from the payload of the request's `Authorization: Bearer` JWT. It only runs for an authenticated request: the authentication layer has already verified the token's signature (a token that fails verification never produces a signed-in user), so the resolver reads the payload without verifying it again. A string claim is used as is, a number as its decimal form.
+
+Navree's own access tokens carry a fixed set of claims (`sub`, `iat`, `exp`, `iss`, `aud`, `jti`, `typ`), with no workspace claim. Use this resolver with tokens issued by an identity provider or a custom authentication strategy that adds one. Whatever the resolver finds, the membership check still applies, so a claim can only select a workspace the user belongs to.
+
+### Custom domain
+
+<Badge feature="domains" /> A workspace can bring its own domain: `crm.agra-corp.com` instead of `agra.app.example.com`. [Custom domains](/docs/packages/custom-domains/) (`DomainsModule`) verify the domain through DNS; with `domain` in the list, a request to a verified domain names that domain's workspace. Put it first, so a domain always names its own workspace:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["domain", "header"]
+```
+
+`DomainsModule` looks the request's host up (cached for `domains.cache_secs`) and marks the request with a `DomainWorkspace { workspace_id, host }`, which the resolver reads. A host that is not a verified domain, such as your app's own, falls through to the next resolver. Without `DomainsModule` the resolver finds nothing. Custom domains name workspaces only: `domain` in `workspace.organizations.resolvers` or `workspace.partitions.resolvers` fails the boot.
+
+### Session
+
+<Badge feature="session" /> Server-rendered pages follow plain links and post plain forms, so they can't send a header on every request. The `session` resolver reads the workspace the signed-in user last switched to in this browser instead. It is kept in their [session](/docs/basics/sessions-and-csrf/), so it needs `SessionModule` and the `session` feature of the `navree` facade (in `full`):
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["session", "header"]
+switch_path = "/workspace/switch"  # the default
+```
+
+The browser switches with `POST /workspace/switch` (no API prefix; `workspace.switch_path` moves it). The body is a form with `workspace` (a slug or an id) and an optional `next`, as the [workspace switcher](/docs/workspaces/introduction/#workspaces-in-navree-ui-pages) posts it, or JSON `{"workspace": "agra"}`. Like every state-changing request on a session, it needs the CSRF token (`_csrf` in the form, or `X-XSRF-TOKEN`).
+
+- The route checks that the user may enter the workspace, exactly as a request into it would: a member, an organization grant, or a guest of a demo workspace when `workspace.demo.guest_role` is set. Otherwise it answers 403 `not_a_member` (or 404 `workspace_not_found`) and stores nothing, so a user can never switch into a workspace that isn't theirs.
+- On success it stores the choice for this user under the session key `workspace.current` (`{"id", "user"}`), gives the session a new id and CSRF token, and writes `workspace.switched` to the [audit log](/docs/security/audit-log/) with the workspace it came from and the one it went to.
+- When the workspace changed, it ends the user's [real-time subscriptions](/docs/digging-deeper/broadcasting/) and live streams, so every open page reconnects in the new workspace instead of hearing the old one's updates.
+- A form gets a `303 See Other` to `next` when `next` is a path on this site, and to `/` otherwise, so the route can't send anyone to another site. JSON gets `200` with the workspace's `id`, `slug` and `name`.
+
+Every request checks the choice again. A choice made by another user who signed in on the same browser is ignored. A choice the user may no longer enter, because they left the workspace or it was deleted, is forgotten and the next resolver answers: the page never gets stuck on a 403. A header, path or claim that names a workspace the user isn't in is still a 403. Without the `session` feature, or outside `SessionModule`, the resolver finds nothing. The `session` resolver names workspaces only: in `workspace.organizations.resolvers` or `workspace.partitions.resolvers` it fails the boot.
+
+## Order
+
+`workspace.resolvers` lists the resolvers to try, in order. The first one that finds an identifier wins, and the rest are not consulted:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["subdomain", "header"]
+base_domain = "app.example.com"
+```
+
+The default is `["header", "path", "subdomain", "claim"]`. An app of server-rendered pages puts `session` first: `["session", "header"]`. From the environment, use a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. A list with an unknown resolver or the same resolver twice fails the boot.
+
+### Pinned credentials
+
+A credential can belong to one workspace, such as a token of an [OAuth client](/docs/packages/oauth-server/) created with `--workspace`. Its authentication strategy puts a `PinnedWorkspace(id)` in the request extensions. A pinned request that names no workspace resolves to the pinned one, and a request that names another one, through a resolver or a route's path parameter, gets a 403 `This token is limited to another workspace.` The membership check still applies. A custom strategy can pin its credentials the same way: `parts.extensions.insert(PinnedWorkspace(workspace_id))`.
+
+## `CurrentWorkspace`
+
+Take `CurrentWorkspace` in a handler to get the resolved workspace and the user's membership. It dereferences to the workspace row, so `ws.name` and `ws.slug` work directly:
+
+```rust
+async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "workspace": ws.name,
+        "role": ws.role().as_str(),
+    }))
+}
+```
+
+| Method | Returns |
+|---|---|
+| `id()` | The workspace id |
+| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `organization_id`, `timezone`, `country`, `kind`, `created_at`, `updated_at`) |
+| `member()` | The user's `Member` row (for an organization grant, built from the organization membership) |
+| `user_id()` | The signed-in user's id |
+| `role()` | Their `WorkspaceRole` |
+| `granted_by()` | `GrantedBy::Membership`, or `GrantedBy::Organization { organization_id, role }` |
+| `permissions()` | Their role's permission strings, sorted |
+| `ability()`, `access()` | Their abilities inside this workspace, as navree-access's `Ability` and `PrincipalAccess` |
+| `can(action, subject)` | A type-level ability check |
+| `has_permission(permission)` | Whether they hold `deals.export` (as `#[permissions]` checks it) |
+| `authorize(permission)` | `Ok(())`, or a 403 |
+| `scope(query)` | A `Builder<M>` limited to this workspace's rows (row isolation): `ws.scope(Deal::query())` |
+| `isolation()` | The configured `Isolation` |
+| `resolver()` | The resolver that found the workspace (`ResolverKind::Domain` for a custom domain, `ResolverKind::Session` for the browser's choice; `None` when a path parameter did) |
+
+The workspace is resolved once per request: the guard, `CurrentWorkspace`, `WorkspaceUow` and later extractors share the result.
+
+## The `InWorkspace` guard
+
+Route checks (`#[roles]`, `#[permissions]`, `#[can]`) run before extractors. To evaluate them against the member's role in the workspace, resolve the workspace in a guard first:
+
+```rust
+#[controller("/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    // every route: resolved, membership checked, workspace-scoped abilities
+}
+```
+
+- `InWorkspace::guard()` uses the configured resolvers.
+- `InWorkspace::from_path("workspace")` reads the route's own path parameter instead, whatever the configuration says. The built-in `/api/workspaces/{workspace}/...` routes use it.
+
+A route without the guard can still take `CurrentWorkspace`, but its route-level checks see the user's global roles and permissions, not their workspace role. Put the guard on every route that declares access checks and works inside a workspace.
+
+## Errors
+
+The guard and the extractor answer in Navree's JSON error shape:
+
+| Situation | Status | `message` |
+|---|---|---|
+| No signed-in user | 401 | `Unauthorized` |
+| No resolver found a workspace | 400 | `The request names no workspace.` |
+| No workspace with that slug or id | 404 | `Workspace not found.` |
+| The user is not a member, and no organization grant reaches the workspace | 403 | `You are not a member of this workspace.` |
+| A pinned credential names another workspace | 403 | `This token is limited to another workspace.` |
+
+```json title="400 Bad Request"
+{ "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request", "code": "workspace_required" }
+```
+
+## Organizations and partitions
+
+The levels around a workspace resolve the same way, each with its own settings:
+
+| Level | Extractor and guard | Default resolvers | Settings |
+|---|---|---|---|
+| [Organization](/docs/workspaces/organizations/#the-current-organization) | `CurrentOrganization`, `InOrganization::guard()` | `X-Organization`, `/o/{slug}`, subdomain, claim `organization` | `workspace.organizations.*` |
+| [Partition](/docs/workspaces/partitions/#the-partitions-of-a-request) | `CurrentPartition`, `PartitionScope` | `X-Partition`, claim `partition` (path `/p/{slug}` when listed) | `workspace.partitions.*` |
+
+With organizations on, the membership check accepts an organization grant: a member of the workspace's organization whose grant reaches the workspace enters it with the workspace role their organization role gives. A membership of the workspace wins over the grant, and `granted_by()` says which one applied.
+
+## Jobs and commands
+
+Outside HTTP there is no request to resolve. Load the workspace with the `Workspaces` service and scope a unit of work to it with `enter`:
+
+```rust
+use navree::db::Db;
+use navree::prelude::*;
+use navree::workspace::Workspaces;
+
+pub async fn nightly(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let (workspaces, db) = (ctx.get::<Workspaces>().await?, ctx.get::<Db>().await?);
+    for workspace in workspaces.all().await? {
+        let uow = db.uow(None, None).await;
+        workspaces.enter(&uow, workspace.id).await?;
+        // ... queries in `uow` see only this workspace's rows
+        uow.commit().await?;
+    }
+    Ok(())
+}
+```
+
+`enter` applies what a workspace request applies to its transaction (see [data isolation](/docs/workspaces/isolation/)). `workspaces.resolve("agra")` finds one workspace by slug or id.
+
+## Testing
+
+Send the header, the host or the bearer token with the test client:
+
+```rust
+let client = app.acting_as(principal(anu));
+
+client
+    .get("/api/v1/deals")
+    .header("X-Workspace", "agra")
+    .send()
+    .await
+    .assert_status(200);
+
+client
+    .get("/api/v1/deals")
+    .header("host", "agra.app.test") // with workspace.base_domain = "app.test"
+    .send()
+    .await
+    .assert_status(200);
+
+client
+    .get("/api/v1/deals")
+    .header("X-Workspace", "ilaichi")
+    .send()
+    .await
+    .assert_error(404, "Workspace not found.");
+```
+
+With the `session` resolver, switch first, as a browser would. The client keeps the session cookie between requests:
+
+```rust
+let client = app.acting_as(principal(anu));
+client.csrf_cookie().await;
+client
+    .post("/workspace/switch")
+    .xsrf()
+    .form(&[("workspace", "agra"), ("next", "/deals")])
+    .send()
+    .await
+    .assert_status(303);
+
+client.get("/api/v1/deals").send().await.assert_status(200); // inside agra
+```
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/members-and-roles/" title="Members and roles">
+    What the resolved membership allows.
+  </LinkCard>
+  <LinkCard href="/docs/basics/access-control/" title="Access control">
+    Route access declarations and guards.
+  </LinkCard>
+</LinkCards>

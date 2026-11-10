@@ -1,0 +1,373 @@
+---
+title: "Organizations"
+description: "Group workspaces under an organization whose members reach all or some of them with one role, read across them, and ask to join."
+---
+
+Some customers are bigger than one workspace. A company runs a workspace per country, a partner manages workspaces for its clients, a group admin needs one dashboard over every team. An organization is an optional level above workspaces for them: it groups workspaces, and its members get a role there that also lets them into all or some of its workspaces, without a membership in each one.
+
+Organizations are off by default and change nothing until you turn them on. Workspaces keep working on their own, and a workspace belongs to at most one organization.
+
+## Turning them on
+
+<Badge feature="workspace" /> Organizations are part of `WorkspaceModule`. Turn them on in the `workspace` section:
+
+```toml title="config/app.toml"
+[workspace.organizations]
+enabled = true
+resolvers = ["header", "path", "subdomain", "claim"]  # tried in order
+header = "X-Organization"
+# base_domain = "partners.example.com"   # agra.partners.example.com names `agra`
+path_prefix = "/o"                       # /api/o/agra/... names `agra`
+claim = "organization"                   # a claim of the bearer JWT
+
+[workspace.organizations.roles.admin]
+permissions = ["reports.read"]
+```
+
+From the environment: `APP_WORKSPACE__ORGANIZATIONS__ENABLED=true`, `APP_WORKSPACE__ORGANIZATIONS__RESOLVERS=subdomain,header`. While `enabled` is `false`, the organization routes aren't mounted, workspace resolution ignores organizations, and the services answer a 500 that names the setting (`workspace.organizations.enabled is false: turn it on to use this` in the log).
+
+The `workspace` migration set creates the organization tables whether the feature is on or not, so turning it on later needs no migration:
+
+| Table | Columns |
+|---|---|
+| `organizations` | `id`, `name`, `slug` (unique), `owner_id`, `country`, `timezone`, `created_at`, `updated_at` |
+| `organization_members` | `id`, `organization_id` (cascades on delete), `user_id`, `role`, `scope` (`all` or `only`), `created_at`, `updated_at`; one row per organization and user |
+| `organization_grants` | `id`, `organization_id`, `member_id` (cascades), `workspace_id` (cascades), `created_at`: the workspaces of an `only` member |
+| `access_requests` | `id`, `organization_id` (cascades), `workspace_id`, `user_id`, `message`, `status`, `role`, `decided_by`, `decided_at`, `reason`, `created_at`, `updated_at` |
+
+It also adds `workspaces.organization_id`, the organization a workspace is attached to.
+
+## Creating organizations
+
+The `Organizations` service creates organizations and attaches workspaces to them. As with the workspace services, writes take the unit of work to run in, record their changes in it for the audit trail and emit their events once it commits:
+
+```rust
+use navree::workspace::{NewOrganization, Organizations};
+
+let agra = organizations
+    .create(
+        &uow,
+        user_id,
+        NewOrganization::named("Agra Group").country("gb").timezone("Europe/London"),
+    )
+    .await?;
+assert_eq!(agra.slug, "agra-group");
+assert_eq!(agra.country.as_deref(), Some("GB"));
+
+organizations.attach(&uow, agra.id, uk_workspace.id).await?;
+organizations.attach(&uow, agra.id, de_workspace.id).await?;
+```
+
+The creator becomes the owner, with the `owner` role and every workspace. Slugs follow the workspace rules (`Agra Group` becomes `agra-group`, then `agra-group-2`; or set one with `.slug("agra")`). `country` is an ISO 3166-1 alpha-2 code, stored in upper case; `timezone` is an IANA name such as `Europe/London`, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`). An unknown zone or country is a 400 on that field. The organization's zone is the zone of its workspaces that have none of their own: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
+
+| Method | Does |
+|---|---|
+| `create(&uow, owner, NewOrganization)` | Creates the organization; the owner joins with `owner` |
+| `update(&uow, id, OrganizationChanges)`, `rename(&uow, id, name)` | Changes the name, country or time zone; `Some(None)` clears `country` or `timezone` |
+| `attach(&uow, id, workspace)` | Attaches a workspace; attaching it again does nothing; 409 `The workspace belongs to another organization.` |
+| `detach(&uow, id, workspace)` | Detaches it and drops the grants that named it; the workspace and its members stay; 404 when it isn't attached |
+| `transfer_ownership(&uow, id, to)` | `to` (a member, else a 400 on `user_id`) becomes the owner with every workspace; the previous owner becomes an `admin` |
+| `delete(&uow, id)` | Deletes the organization with its members, grants and access requests; its workspaces are detached and kept |
+| `find(id)`, `find_by_slug(slug)`, `resolve(slug_or_id)` | Looks one up; `resolve` is a 404 when there is none |
+| `for_user(user)` | The user's organizations, each an `OrgMembership { organization, role, workspaces }` |
+| `workspaces(id)`, `visible_workspaces(id, user)` | The attached workspaces, and the ones `user` reaches |
+| `membership(id, user)`, `all()` | One membership; every organization |
+| `enter(&uow, id)` | Scopes a job's unit of work to the organization (see [reading across workspaces](#reading-across-workspaces)) |
+
+## Organization roles
+
+Each member has one `OrgRole`. It gives permissions inside the organization and maps to the workspace role the member has in the workspaces they reach:
+
+| Role | Built-in permissions | Workspace role it gives |
+|---|---|---|
+| `owner` | `all.*` | `owner` |
+| `admin` | `organization.read`, `organization.update`, `organization.attach`, `organization.detach`, `organization.members.*`, `organization.access_requests.*` | `admin` |
+| `member` | `organization.read`, `organization.members.read` | `member` |
+| `viewer` | `organization.read`, `organization.members.read` | `viewer` |
+
+Add permissions to a role, change the workspace role it gives, or define your own role under `workspace.organizations.roles`:
+
+```toml title="config/app.toml"
+[workspace.roles.auditor]                     # a workspace role
+permissions = ["workspace.read", "deals.read"]
+
+[workspace.organizations.roles.member]
+permissions = ["reports.read"]
+workspace_role = "viewer"                      # organization members only read in workspaces
+
+[workspace.organizations.roles.partner]       # an app-defined organization role
+permissions = ["organization.read", "reports.read"]
+workspace_role = "auditor"
+```
+
+`workspace_role` defaults to the workspace role of the same name, which must exist: a role named `partner` without `workspace_role` needs a `workspace.roles.partner`. A name that is neither fails the boot. The permissions use the module's subjects:
+
+| Subject | Prefix | Permissions the routes check |
+|---|---|---|
+| `Organization` | `organization` | `organization.update`, `organization.delete`, `organization.transfer`, `organization.attach`, `organization.detach` |
+| `OrganizationMember` | `organization.members` | `organization.members.read`, `.create`, `.update`, `.delete` |
+| `AccessRequest` | `organization.access_requests` | `organization.access_requests.read`, `.update` |
+
+## Members and the workspaces they reach
+
+`OrgMembers` adds members with a role and a `WorkspaceSelector`: `All` of the organization's workspaces, including ones attached later, or `Only` the listed ones:
+
+```rust
+use navree::workspace::{OrgMembers, OrgRole, WorkspaceSelector};
+
+// Gauri runs every workspace of the organization.
+org_members.add(&uow, agra.id, gauri, OrgRole::Admin, WorkspaceSelector::All).await?;
+// Laksh works in the UK workspace only.
+org_members
+    .add(&uow, agra.id, laksh, OrgRole::Member, WorkspaceSelector::only([uk_workspace.id]))
+    .await?;
+// Add, or change a member's role and workspaces.
+org_members
+    .grant(&uow, agra.id, laksh, OrgRole::Viewer, WorkspaceSelector::All)
+    .await?;
+```
+
+| Method | Errors |
+|---|---|
+| `add(&uow, org, user, role, workspaces)` | 409 when the user is a member already; 400 on `role` for `owner` or an unknown role; 400 on `workspaces` for a workspace outside the organization |
+| `update(&uow, org, user, role, workspaces)` | `None` keeps a value; 404 when they are not a member; 409 when it would demote or limit the owner |
+| `grant(&uow, org, user, role, workspaces)` | `add` for a new member, `update` for an existing one |
+| `remove(&uow, org, user)` | 404 when they are not a member; 409 for the owner |
+| `list(org)`, `find(org, user)`, `selector(org, user)` | |
+
+`list` returns each member with their workspaces and, when the [user directory](/docs/workspaces/members-and-roles/#names-and-emails-of-members) knows them, their name and email. The owner (`organizations.owner_id`) always has the `owner` role and every workspace: removing, demoting or limiting them is a 409, `The organization owner can't be removed, demoted or limited; transfer ownership first.`
+
+In JSON a selector is `"all"` or an array of workspace ids, in the routes and in events.
+
+## Entering workspaces through the organization
+
+With organizations on, [workspace resolution](/docs/workspaces/resolution/) admits a user who is a member of the workspace, or a member of its organization whose selector includes it. An organization member enters with the workspace role their organization role gives, so behind `InWorkspace` the route's `#[roles]`, `#[permissions]` and `#[can]` checks see that role, and nothing in your workspace routes changes.
+
+A membership of the workspace wins over the organization grant. `CurrentWorkspace::granted_by()` tells the two apart:
+
+```rust
+use navree::workspace::GrantedBy;
+
+match ws.granted_by() {
+    GrantedBy::Membership => { /* a row of workspace_members */ }
+    GrantedBy::Organization { organization_id, role } => {
+        // entered as `role` of `organization_id`; ws.role() is the mapped workspace role
+    }
+}
+```
+
+`Workspaces::for_user` and `GET /api/workspaces` list the workspaces a user reaches through organizations next to their own, and `Workspaces::role_of(workspace, user)` returns the role and how it was granted. A user who enters through an organization has no `workspace_members` row: `ws.member()` carries their organization membership's id and dates with the mapped role, and the workspace's member list doesn't show them.
+
+## The current organization
+
+Organization-level routes (a dashboard over every workspace, the organization's settings) take a `CurrentOrganization`. It resolves the organization from the request, loads it and checks that the signed-in user is a member:
+
+| Resolver | Reads | Example |
+|---|---|---|
+| `header` | `workspace.organizations.header` (default `X-Organization`) | `X-Organization: agra-group` |
+| `path` | The segment after `workspace.organizations.path_prefix` (default `/o`) | `/api/o/agra-group/reports` |
+| `subdomain` | The label in front of `workspace.organizations.base_domain` | `agra-group.partners.example.com` |
+| `claim` | The claim `workspace.organizations.claim` (default `organization`) of the bearer JWT | `{"organization": "agra-group"}` |
+
+They work as the [workspace resolvers](/docs/workspaces/resolution/#the-resolvers) do, with their own settings, so a request can name a workspace and an organization at once. Put the `InOrganization` guard on the controller so the route's checks run against the organization role:
+
+```rust title="src/reports/controller.rs"
+use navree::prelude::*;
+
+use crate::deals::model::Deal;
+
+#[injectable]
+pub struct ReportsController;
+
+#[controller("/reports", version = "1")]
+#[guard(InOrganization::guard())]
+impl ReportsController {
+    #[get("/deals")]
+    #[permissions("reports.read")]
+    async fn deals(&self, org: CurrentOrganization, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        // Every deal of the workspaces this member reaches.
+        Ok(OrgRepo::<Deal>::query(org.workspace_ids()).paginate(&uow, page).await?)
+    }
+}
+```
+
+`InOrganization::from_path("organization")` reads a route's path parameter instead; the built-in `/api/organizations/{organization}/...` routes use it.
+
+| Method | Returns |
+|---|---|
+| `id()`, `organization()` | The organization (it also dereferences to the row: `org.slug`) |
+| `member()`, `role()` | The user's `OrgMember` row and `OrgRole` |
+| `workspaces()` | Their `WorkspaceSelector` |
+| `workspace_ids()` | The ids of the attached workspaces they reach, by name, read once per request |
+| `reaches(workspace)` | Whether they reach that workspace |
+| `permissions()`, `has_permission(p)`, `authorize(p)` | The role's permissions; `authorize` is `Ok(())` or a 403 |
+| `ability()`, `access()`, `can(action, subject)` | Their abilities in the organization |
+| `scope(query)` | A `Builder<M>` limited to the rows of `workspace_ids()`: `org.scope(Deal::query())` |
+| `resolver()` | The resolver that found it (`None` for a path parameter) |
+
+| Situation | Status | `message` |
+|---|---|---|
+| No signed-in user | 401 | `Unauthorized` |
+| No resolver found an organization | 400 | `The request names no organization.` |
+| No organization with that slug or id | 404 | `Organization not found.` |
+| The user is not a member | 403 | `You are not a member of this organization.` |
+| A credential [pinned to a workspace](/docs/workspaces/resolution/#pinned-credentials) | 403 | `This token is limited to a workspace.` |
+
+Inside an organization request, navree-access builds the abilities from your abilities function with the organization role: `ctx.user.roles` holds the organization role, `ctx.permissions` its permissions, `ctx.team_id` is `None` and `ctx.organization_id` is `Some(organization id)`. Inside a workspace request, `ctx.organization_id` is the workspace's organization, if it has one.
+
+## Reading across workspaces
+
+`OrgRepo<M>` reads a [workspace-scoped](/docs/workspaces/isolation/#scoping-queries) model across several workspaces: every query filters the workspace column by the ids you pass, usually `org.workspace_ids()`. An empty list matches nothing.
+
+| `OrgRepo::<M>::` | Does |
+|---|---|
+| `query(workspaces)` | `M::query()` limited to the rows of those workspaces, a `Builder<M>` |
+| `scope(workspaces, query)` | Adds the filter to any `Builder<M>` |
+| `find(&uow, workspaces, id)`, `find_or_fail` | One record, if it belongs to one of them; else `None`, or `OrmError::ModelNotFound` (a 404 from a handler) |
+
+`OrgRepo` only reads. Writes go to one workspace at a time, through `WorkspaceRepo` inside a workspace request. It reads row isolation's shared tables; schema and database isolation keep each workspace's rows apart physically.
+
+On PostgreSQL, an organization request sets `navree.organization` for its transaction. A row-level security policy built with `RlsPolicy::new("deals").organizations()` lets it read the rows of every workspace attached to the organization, and still writes only with `navree.workspace` set (see [data isolation](/docs/workspaces/isolation/#organizations-and-partitions)). The policy sees the whole organization; `OrgRepo` with `workspace_ids()` narrows a member limited to `Only` some workspaces. Jobs scope a unit of work with `organizations.enter(&uow, id)`.
+
+## Access requests
+
+A user who isn't a member can ask to join, for the whole organization or one of its workspaces. Admins (`organization.access_requests.*`) approve, which makes them a member, or decline:
+
+```rust
+use navree::workspace::{AccessRequests, Approval, NewAccessRequest, OrgRole};
+
+let request = access_requests
+    .request(
+        &uow,
+        agra.id,
+        ken,
+        NewAccessRequest { workspace_id: Some(uk_workspace.id), message: Some("I run the UK team".into()) },
+    )
+    .await?;
+
+// Ken joins as a member of the workspace he asked for.
+let approved = access_requests
+    .approve(&uow, agra.id, request.id, Some(gauri), Approval::default())
+    .await?;
+assert_eq!(approved.member.user_id, ken);
+```
+
+- A user has at most one pending request per organization: a second one is a 409, `An access request is already pending.`, and so is a request from a member.
+- `Approval { role, workspaces }` defaults to `member`, reaching the workspace the request named, or every workspace when it named none.
+- `decline(&uow, org, id, decided_by, reason)` records an optional reason (up to 1,000 characters, as the message).
+- Deciding a decided request is a 409; an unknown one a 404.
+- `pending(org)` lists the pending requests with the users' names and emails; `for_user(user)` lists a user's requests.
+
+The module tells no one by itself. Listen to `AccessRequested` to notify the admins.
+
+## The routes
+
+With `workspace.routes` and `workspace.organizations.enabled` on, the module mounts these routes under the API prefix. `{organization}` is a slug or an id, and every route needs a signed-in user:
+
+| Route | Permission | Answer |
+|---|---|---|
+| `GET /api/organizations` | | The caller's organizations, each with their role and workspaces |
+| `POST /api/organizations` `{name, slug?, country?, timezone?}` | | 201; the caller becomes the owner |
+| `GET /api/organizations/{organization}` | (member) | The organization |
+| `PATCH /api/organizations/{organization}` `{name?, country?, timezone?}` | `organization.update` | The organization; `null` clears `country` or `timezone` |
+| `DELETE /api/organizations/{organization}` | `organization.delete` | 204 |
+| `POST /api/organizations/{organization}/transfer` `{user_id}` | `organization.transfer` | The organization |
+| `POST /api/organizations/{organization}/leave` | (member) | 204; 409 for the owner |
+| `GET`, `POST /api/organizations/{organization}/members` | `organization.members.read`, `.create` | `POST` takes `{user_id, role?, workspaces?}` |
+| `PATCH`, `DELETE /api/organizations/{organization}/members/{user}` | `organization.members.update`, `.delete` | `PATCH` takes `{role?, workspaces?}` |
+| `GET /api/organizations/{organization}/workspaces` | `organization.read` | The workspaces the caller reaches, with their role in each |
+| `POST /api/organizations/{organization}/workspaces` `{workspace}` | `organization.attach`, and owning the workspace | The workspace |
+| `DELETE /api/organizations/{organization}/workspaces/{workspace}` | `organization.detach` | 204 |
+| `GET /api/organizations/{organization}/access-requests` | `organization.access_requests.read` | The pending requests |
+| `POST /api/organizations/{organization}/access-requests` `{workspace_id?, message?}` | (signed in) | 201, the request |
+| `POST .../access-requests/{request}/approve` `{role?, workspaces?}` | `organization.access_requests.update` | `{request, member}` |
+| `POST .../access-requests/{request}/decline` `{reason?}` | `organization.access_requests.update` | The request |
+
+An admin limited to some workspaces grants only workspaces they reach and changes only members whose workspaces they reach: anything else is a 403, `You can only grant workspaces you reach.` (code `workspace_grant_forbidden`). Attaching a workspace takes its owner: an organization admin can't pull in a workspace that isn't theirs (a 403, `not_the_workspace_owner`). An organization comes back as:
+
+```json
+{
+  "__type": "Organization",
+  "id": "0199f3c2-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
+  "name": "Agra Group",
+  "slug": "agra-group",
+  "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "country": "GB",
+  "timezone": "Europe/London",
+  "role": "admin",
+  "workspaces": "all",
+  "created_at": "2026-10-26T09:00:00Z",
+  "updated_at": "2026-10-26T09:00:00Z"
+}
+```
+
+Workspaces in every response carry `organization_id` (`null` for a standalone workspace). The routes are in the OpenAPI document under the `Organizations` tag.
+
+## Events
+
+Each event is emitted once its unit of work commits. They live in `navree::workspace::events`:
+
+| Event | Name | Payload |
+|---|---|---|
+| `OrganizationCreated` | `organization.created` | `organization_id`, `name`, `slug`, `owner_id` |
+| `OrganizationDeleted` | `organization.deleted` | `organization_id`, `slug`, `detached` (workspace ids) |
+| `OrganizationOwnershipTransferred` | `organization.ownership_transferred` | `organization_id`, `from`, `to` |
+| `WorkspaceAttached` | `organization.workspace_attached` | `organization_id`, `workspace_id` |
+| `WorkspaceDetached` | `organization.workspace_detached` | `organization_id`, `workspace_id` |
+| `OrgMemberAdded` | `organization.member_added` | `organization_id`, `user_id`, `role`, `workspaces` |
+| `OrgMemberChanged` | `organization.member_changed` | `organization_id`, `user_id`, `from`, `to`, `workspaces` |
+| `OrgMemberRemoved` | `organization.member_removed` | `organization_id`, `user_id`, `role` |
+| `AccessRequested` | `organization.access_requested` | `organization_id`, `request_id`, `user_id`, `workspace_id` |
+| `AccessRequestApproved` | `organization.access_request_approved` | `organization_id`, `request_id`, `user_id`, `role`, `decided_by` |
+| `AccessRequestDeclined` | `organization.access_request_declined` | `organization_id`, `request_id`, `user_id`, `decided_by` |
+
+## Testing
+
+Turn the feature on in the test app's configuration, then check that each member sees what their grant allows:
+
+```rust
+let app = TestApp::builder()
+    .temp_database()
+    .config("workspace.organizations.enabled", true)
+    // ... modules
+    .build()
+    .await;
+
+let admin = app.acting_as(principal(anu));
+admin.post("/api/organizations").json(&json!({ "name": "Agra" })).send().await.assert_status(201);
+admin
+    .post("/api/organizations/agra/workspaces")
+    .json(&json!({ "workspace": "agra-uk" }))
+    .send()
+    .await
+    .assert_status(200);
+admin
+    .post("/api/organizations/agra/members")
+    .json(&json!({ "user_id": laksh, "role": "member", "workspaces": [uk.id] }))
+    .send()
+    .await
+    .assert_status(201);
+
+let member = app.acting_as(principal(laksh));
+member
+    .get("/api/v1/deals")
+    .header("X-Workspace", "agra-uk") // reached through the organization
+    .send()
+    .await
+    .assert_status(200);
+member
+    .get("/api/v1/deals")
+    .header("X-Workspace", "agra-de") // not in Laksh's selector
+    .send()
+    .await
+    .assert_error(403, "You are not a member of this workspace.");
+```
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/partitions/" title="Partitions">
+    Named slices of a workspace's data, and who sees each.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
+    Row-level security with organizations and partitions.
+  </LinkCard>
+</LinkCards>

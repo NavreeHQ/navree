@@ -1,0 +1,452 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", "apps/system-app", "apps/theme-demo", "apps/ui-docs", "apps/ui-proof", "apps/ui-table-proof", "apps/agent-demo", "xtask"]
+# The benchmark apps (Navree's and other Rust frameworks') are separate projects,
+# and so is the fuzzing workspace (it needs a nightly toolchain).
+exclude = ["bench", "fuzz"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/NavreeHQ/navree"
+homepage = "https://navree.com"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.dependencies]
+# ---------------------------------------------------------------------------
+# Navree crates (paths; members use `{ workspace = true }`)
+# ---------------------------------------------------------------------------
+navree = { path = "crates/navree", version = "=1.0.0" }
+navree-kernel = { path = "crates/navree-kernel", version = "=1.0.0" }
+navree-openapi = { path = "crates/navree-openapi", version = "=1.0.0" }
+navree-bounded = { path = "crates/navree-bounded", version = "=1.0.0" }
+navree-glob = { path = "crates/navree-glob", version = "=1.0.0" }
+navree-markdown = { path = "crates/navree-markdown", version = "=1.0.0" }
+navree-phone = { path = "crates/navree-phone", version = "=1.0.0" }
+navree-contracts = { path = "crates/navree-contracts", version = "=1.0.0" }
+navree-telemetry = { path = "crates/navree-telemetry", version = "=1.0.0" }
+navree-macros = { path = "crates/navree-macros", version = "=1.0.0" }
+navree-config = { path = "crates/navree-config", version = "=1.0.0" }
+navree-log = { path = "crates/navree-log", version = "=1.0.0" }
+navree-crypto = { path = "crates/navree-crypto", version = "=1.0.0" }
+navree-http = { path = "crates/navree-http", version = "=1.0.0" }
+navree-events = { path = "crates/navree-events", version = "=1.0.0" }
+navree-view = { path = "crates/navree-view", version = "=1.0.0" }
+navree-template = { path = "crates/navree-template", version = "=1.0.0" }
+navree-cache = { path = "crates/navree-cache", version = "=1.0.0" }
+navree-http-client = { path = "crates/navree-http-client", version = "=1.0.0" }
+navree-db = { path = "crates/navree-db", version = "=1.0.0" }
+navree-testing = { path = "crates/navree-testing", version = "=1.0.0" }
+navree-observe = { path = "crates/navree-observe", version = "=1.0.0" }
+navree-api = { path = "crates/navree-api", version = "=1.0.0" }
+navree-mail = { path = "crates/navree-mail", version = "=1.0.0" }
+navree-realtime = { path = "crates/navree-realtime", version = "=1.0.0" }
+navree-storage = { path = "crates/navree-storage", version = "=1.0.0" }
+navree-session = { path = "crates/navree-session", version = "=1.0.0" }
+navree-validation = { path = "crates/navree-validation", version = "=1.0.0" }
+navree-validation-macros = { path = "crates/navree-validation-macros", version = "=1.0.0" }
+navree-ui-macros = { path = "crates/navree-ui-macros", version = "=1.0.0" }
+navree-queue = { path = "crates/navree-queue", version = "=1.0.0" }
+navree-audit = { path = "crates/navree-audit", version = "=1.0.0" }
+navree-access = { path = "crates/navree-access", version = "=1.0.0" }
+navree-schedule = { path = "crates/navree-schedule", version = "=1.0.0" }
+navree-notify = { path = "crates/navree-notify", version = "=1.0.0" }
+navree-auth = { path = "crates/navree-auth", version = "=1.0.0" }
+navree-workspace = { path = "crates/navree-workspace", version = "=1.0.0" }
+navree-dock = { path = "crates/navree-dock", version = "=1.0.0" }
+navree-social = { path = "crates/navree-social", version = "=1.0.0" }
+navree-webhooks = { path = "crates/navree-webhooks", version = "=1.0.0" }
+navree-integrations = { path = "crates/navree-integrations", version = "=1.0.0" }
+navree-oauth = { path = "crates/navree-oauth", version = "=1.0.0" }
+navree-flags = { path = "crates/navree-flags", version = "=1.0.0" }
+navree-settings = { path = "crates/navree-settings", version = "=1.0.0" }
+navree-search = { path = "crates/navree-search", version = "=1.0.0" }
+navree-graphql = { path = "crates/navree-graphql", version = "=1.0.0" }
+navree-billing = { path = "crates/navree-billing", version = "=1.0.0" }
+navree-grpc = { path = "crates/navree-grpc", version = "=1.0.0" }
+navree-ui = { path = "crates/navree-ui", version = "=1.0.0" }
+navree-mcp = { path = "crates/navree-mcp", version = "=1.0.0" }
+navree-ai = { path = "crates/navree-ai", version = "=1.0.0" }
+navree-lighthouse = { path = "crates/navree-lighthouse", version = "=1.0.0" }
+navree-redis = { path = "crates/navree-redis", version = "=1.0.0" }
+navree-logbook = { path = "crates/navree-logbook", version = "=1.0.0" }
+navree-micro = { path = "crates/navree-micro", version = "=1.0.0" }
+navree-fleet = { path = "crates/navree-fleet", version = "=1.0.0" }
+navree-helm = { path = "crates/navree-helm", version = "=1.0.0" }
+navree-harbor = { path = "crates/navree-harbor", version = "=1.0.0" }
+navree-schema = { path = "crates/navree-schema", version = "=1.0.0" }
+navree-orm = { path = "crates/navree-orm", version = "=1.0.0" }
+navree-orm-macros = { path = "crates/navree-orm-macros", version = "=1.0.0" }
+navree-mongo = { path = "crates/navree-mongo", version = "=1.0.0" }
+navree-navigator = { path = "crates/navree-navigator", version = "=1.0.0" }
+navree-i18n = { path = "crates/navree-i18n", version = "=1.0.0" }
+navree-pdf = { path = "crates/navree-pdf", version = "=1.0.0" }
+navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "=1.0.0" }
+navree-browser = { path = "crates/navree-browser", version = "=1.0.0" }
+navree-time = { path = "crates/navree-time", version = "=1.0.0" }
+navree-sso = { path = "crates/navree-sso", version = "=1.0.0" }
+navree-documents = { path = "crates/navree-documents", version = "=1.0.0", default-features = false }
+navree-sheets = { path = "crates/navree-sheets", version = "=1.0.0" }
+navree-workflows = { path = "crates/navree-workflows", version = "=1.0.0" }
+navree-media = { path = "crates/navree-media", version = "=1.0.0" }
+navree-directory = { path = "crates/navree-directory", version = "=1.0.0" }
+navree-domains = { path = "crates/navree-domains", version = "=1.0.0" }
+
+# ---------------------------------------------------------------------------
+# Runtime, async and HTTP (Tokio family)
+# ---------------------------------------------------------------------------
+tokio = { version = "1.54.1", features = ["full"] }
+tokio-util = { version = "0.7.20", features = ["rt", "io"] }
+tokio-stream = { version = "0.1.19", features = ["sync"] }
+futures = "0.3.34"
+futures-util = "0.3.34"
+pin-project-lite = "0.2.17"
+bytes = "1.12.1"
+http = "1.5.0"
+http-body-util = "0.1.5"
+hyper = "1.12.0"
+# The header lines of a multipart form's parts (navree-http): hyper's own
+# header parser.
+httparse = "1.10.1"
+tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
+cookie = { version = "0.18.2", features = ["percent-encode"] }
+percent-encoding = "2.3.2"
+url = "2.5.8"
+mime = "0.3.17"
+mime_guess = "2.0.5"
+memchr = "2.8.3"
+infer = "0.22.0"
+# TLS: rustls with the ring provider only (no aws-lc, no OpenSSL).
+rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std", "tls12"] }
+reqwest = { version = "0.13.5", default-features = false, features = [
+    "charset",
+    "form",
+    "http2",
+    "json",
+    "query",
+    "rustls-no-provider",
+    "stream",
+] }
+# gRPC (navree-grpc): tonic on hyper and h2, TLS with rustls and ring, no
+# system `protoc` (protox compiles .proto files in pure Rust).
+tonic = { version = "0.14.6", default-features = false, features = [
+    "channel",
+    "codegen",
+    "tls-native-roots",
+    "tls-ring",
+] }
+tonic-prost = "0.14.6"
+tonic-web = "0.14.6"
+tonic-health = { version = "0.14.6", default-features = false }
+tonic-reflection = { version = "0.14.6", default-features = false, features = ["server"] }
+tonic-types = "0.14.6"
+tonic-prost-build = { version = "0.14.6", default-features = false }
+prost = "0.14.4"
+prost-types = "0.14.4"
+prost-reflect = { version = "0.16.5", features = ["serde"] }
+protox = "0.10.0"
+http-body = "1.0.1"
+hyper-util = { version = "0.1.21", features = ["http1", "http2", "server", "server-auto", "server-graceful", "service", "tokio"] }
+# TLS streams for navree-micro's TCP transport (rustls on ring, see above),
+# and the public roots it trusts when no CA is configured.
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["logging", "ring", "tls12"] }
+webpki-roots = "1.0.11"
+# navree-micro's brokers, each behind a feature of its own: pure-Rust
+# clients, TLS through rustls on ring. (Redis is the shared `redis` entry
+# below; navree-micro adds its `tls-rustls-webpki-roots` feature.)
+# async-nats without `nkeys`: it pulls in ed25519-dalek, which the crypto
+# policy forbids (crates/navree/tests/dependency_graph.rs).
+async-nats = { version = "0.51.0", default-features = false, features = ["ring", "jetstream", "server_2_10", "server_2_11"] }
+lapin = { version = "4.12.3", default-features = false, features = ["rustls--ring", "rustls-native-certs", "default-runtime"] }
+rumqttc = { version = "0.25.1", default-features = false }
+# Kafka's wire protocol, for navree-micro's Kafka client (gzip and snappy
+# batches; lz4 and zstd need C libraries).
+kafka-protocol = { version = "0.18.0", default-features = false, features = ["client", "broker", "gzip", "snappy"] }
+ipnet = "2.12.2"
+tokio-tungstenite = "0.30.0"
+# Redis (navree-redis): Tokio, a reconnecting connection manager, Lua
+# scripts, and TLS for rediss:// with rustls (ring, through the workspace's
+# rustls features; never aws-lc).
+redis = { version = "1.8.0", default-features = false, features = [
+    "connection-manager",
+    "script",
+    "streams",
+    "tokio-comp",
+    "tokio-rustls-comp",
+] }
+# MongoDB (navree-mongo): the official driver on Tokio, TLS through rustls
+# with ring (never aws-lc or OpenSSL), SRV lookups for mongodb+srv:// URLs,
+# and BSON 3 with its chrono, uuid and Extended JSON conversions.
+mongodb = { version = "3.9.1", default-features = false, features = [
+    "bson-3",
+    "compat-3-3-0",
+    "dns-resolver",
+    "rustls-tls",
+] }
+bson = { version = "3.1.0", features = ["chrono-0_4", "serde", "serde_json-1", "uuid-1"] }
+# LDAP and Active Directory (navree-directory's pull connector): a pure-Rust
+# client on Tokio, TLS through rustls with ring (never native-tls or aws-lc).
+ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
+# BER encoding for the LDAP fixture server of navree-directory's tests (the
+# encoder ldap3 itself uses).
+lber = "0.5.1"
+
+# ---------------------------------------------------------------------------
+# Serialization, errors, ids, time
+# ---------------------------------------------------------------------------
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+stacker = "0.1.25"
+# MessagePack payloads (navree-micro's `msgpack` codec).
+rmp-serde = "1.3.1"
+serde_urlencoded = "0.7.1"
+# Raw query/form pair parsing, so navree-validation can report serde paths.
+form_urlencoded = "1.2.2"
+serde_path_to_error = "0.1.20"
+toml = "1.1.8"
+# Edits dock.toml in place, keeping its comments and layout (navree-dock).
+toml_edit = "0.25.17"
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+# Exact decimals: navree-db's `Value::Decimal` and navree-orm's `Decimal` fields.
+rust_decimal = { version = "1.43.0", default-features = false, features = ["serde", "std"] }
+# The IANA time zone database compiled in (navree-time): no build script,
+# no system tzdata.
+chrono-tz = "0.10.4"
+base64 = "0.23.1"
+hex = "0.4.3"
+# XML for single sign-on (navree-sso): SAML messages and metadata, read into
+# its own tree for exclusive canonicalization and signature checks.
+quick-xml = "0.42.0"
+# Insertion-ordered maps: navree-orm's `key_by`, `group_by` and keyed plucks.
+indexmap = { version = "2.14.2", features = ["serde"] }
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
+# `log` records into tracing (navree-log installs the bridge with its subscriber).
+tracing-log = { version = "0.2.0", default-features = false, features = ["log-tracer", "std"] }
+metrics = "0.24.6"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+# OTLP export of spans (navree-observe's optional `otel` feature): gRPC on
+# tonic with rustls + ring, HTTP/protobuf on reqwest. Never `tls-aws-lc`.
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = [
+    "grpc-tonic",
+    "http-proto",
+    "reqwest-client",
+    "tls-ring",
+    "tls-webpki-roots",
+    "trace",
+] }
+# Test receivers for the OTLP export (dev-dependencies only): the protobuf
+# messages, decoded by in-process OTLP/HTTP and OTLP/gRPC receivers on navree-http
+# (with `prost`, declared with the gRPC dependencies above).
+opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
+
+# ---------------------------------------------------------------------------
+# Database (navree-db runs on SQLx 0.9; no driver here: navree-db's sqlite, postgres and mysql features turn them on; rustls+ring for TLS)
+# ---------------------------------------------------------------------------
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio"] }
+# The transaction manager trait navree-db's transactions drive (SQLx does
+# not re-export it).
+sqlx-core = { version = "0.9.0", default-features = false }
+# Navigator's read-only query guard: parses a statement before it is sent.
+sqlparser = { version = "0.63.0", features = ["visitor"] }
+
+# ---------------------------------------------------------------------------
+# Security and crypto (RustCrypto 2026 wave: argon2 0.6, hmac 0.13, sha2 0.11)
+# ---------------------------------------------------------------------------
+aes-gcm = "0.11.1"
+argon2 = "0.6.0"
+hmac = "0.13.0"
+sha2 = "0.11.1"
+# HMAC-SHA1 for incoming webhook sources that still sign with SHA-1.
+sha1 = "0.11.0"
+subtle = "2.6.1"
+# Asymmetric signatures: navree_crypto::jose (Ed25519, ECDSA P-256/P-384, RSA
+# verification and signing). Already in the tree through rustls. The crypto
+# policy keeps `rsa`, `p256`, `p384` and `ed25519-dalek` out of the tree; the
+# dependency-graph test enforces it.
+ring = "0.17.14"
+rand = "0.10.3"
+# Wipes secrets (TOTP secrets in navree-crypto) when they are dropped.
+zeroize = "1.9.1"
+# Dev only: an independent QR decoder that checks every code navree_crypto::qr
+# encodes (no image-crate features).
+rqrr = { version = "0.11.0", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Module capabilities
+# ---------------------------------------------------------------------------
+# International input (navree-validation): HTML sanitizing (feature `html`),
+# general categories for names in any script, BCP 47 locales (icu_locale_core
+# is already in the tree via url). Phone numbers are navree-phone's.
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
+icu_locale_core = { version = "2.4.0", features = ["alloc"] }
+lettre = { version = "0.11.23", default-features = false, features = [
+    "builder",
+    "hostname",
+    "pool",
+    "ring",
+    "smtp-transport",
+    "tokio1",
+    "tokio1-rustls",
+    "tracing",
+    "webpki-roots",
+] }
+# Mail rendering (navree-mail): CSS inlined into `style` attributes and a
+# plain-text body from the HTML, on the html5ever already in the tree (no
+# remote stylesheets, no CLI).
+css-inline = { version = "0.23.0", default-features = false }
+html2text = { version = "0.17.4", default-features = false }
+# DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
+# DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
+hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
+# Tenant custom domains (navree-domains): certificates from an ACME CA such
+# as Let's Encrypt, on ring and rcgen (never aws-lc), without hyper-rustls
+# (orders go through reqwest); certificate dates are read with x509-parser,
+# already in the tree through ldap3.
+instant-acme = { version = "0.8.5", default-features = false, features = ["rcgen", "ring"] }
+x509-parser = { version = "0.18.1", default-features = false }
+# navree-bounded's tables: the raw hash table, so keys live once, in the slab.
+hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
+dashmap = "6.2.1"
+object_store = { version = "0.14.2", default-features = false }
+csv = "1.4.0"
+# Chrome for Testing archives (`navree browser:install`), and the packages of
+# DOCX files in navree-documents: deflate through flate2 on zlib-rs, pure
+# Rust; no bzip2, lzma or zstd (C).
+zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Spreadsheets (navree-sheets): XLSX writing (pure Rust; never the `zlib`
+# feature, which builds C), and encoding detection for uploaded CSV files
+# (encoding_rs decodes, chardetng guesses). XLSX, XLSB, ODS and XLS are read
+# by navree-sheets itself, with zip, quick-xml and encoding_rs.
+rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["chrono", "constant_memory"] }
+encoding_rs = "0.8.42"
+chardetng = "1.0.0"
+# Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
+tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
+# The resident memory of the current process (navree-fleet workers recycle
+# themselves above `max_memory_mb`): libc on Unix, windows-sys on Windows.
+memory-stats = "1.2.0"
+# Signals to a process group with the system call itself (navree-browser
+# stops a front end and every process it started), never a `kill` program.
+rustix = { version = "1.1.5", default-features = false, features = ["process", "std"] }
+# GraphQL (navree-graphql): no default features (no handlebars, no
+# multipart temp files); the `chrono` and `uuid` scalars. No `dataloader`
+# feature: navree-graphql has its own per-operation dataloader (the feature
+# pulls in lru 0.16, whose `LruCache::pop` is not panic-safe,
+# RUSTSEC-2026-0253; async-graphql still requires lru 0.16).
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "uuid"] }
+# Line diffs for `graphql:schema --check` (the version insta already uses).
+similar = "3.2.1"
+async-trait = "0.1.92"
+# Media (navree-media), all pure Rust: image codecs without AVIF (rav1e and
+# dav1d need NASM or C), SIMD resizing, SVG rendering on tiny-skia, PDF text
+# through navree-pdf, DOCX through quick-xml (its row is under navree-sso) and
+# HTML text through html5ever's tokenizer (also the parser of
+# navree-validation's HTML sanitizer).
+image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
+fast_image_resize = { version = "6.1.0", features = ["image"] }
+resvg = { version = "0.49.0", default-features = false, features = ["raster-images", "system-fonts", "text"] }
+html5ever = "0.40.1"
+# Helm: Markdown fields (rendered without raw HTML) and field patterns.
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
+regex = "1.13.1"
+# Documents (navree-documents): the native PDF engine (krilla writes the
+# PDF with subset fonts; harfrust shapes, skrifa reads fonts, unicode-bidi
+# orders, icu_segmenter breaks lines; no `simple-text`, so no rustybuzz),
+# DOCX writing and reading (zip and quick-xml, above). PDF reading, editing
+# (merge, stamp, overlay) and text extraction are navree-pdf's. Pure Rust.
+krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
+harfrust = "0.15.0"
+skrifa = "0.49.0"
+unicode-bidi = "0.3.18"
+icu_segmenter = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+# PDF reading and writing (navree-pdf): the filters (flate2, already in the
+# tree, and LZW through weezl, which gif uses) and, for files encrypted
+# without a password to open them, RustCrypto's RC4, AES-CBC, MD5 and SHA-2.
+weezl = "0.1.12"
+rc4 = "0.2.0"
+aes = "0.9.3"
+cbc = "0.2.1"
+md-5 = "0.11.0"
+
+# Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
+# formatting with compiled data (pure Rust; Gregorian dates only).
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+unic-langid = "0.9.6"
+intl-memoizer = "0.5.3"
+icu_decimal = "2.4.0"
+icu_datetime = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+icu_calendar = { version = "2.4.0", default-features = false }
+# `sync`: formatters are Send + Sync, so bundles can share them.
+icu_provider = { version = "2.4.0", default-features = false, features = ["sync"] }
+fixed_decimal = "0.7.3"
+
+# ---------------------------------------------------------------------------
+# Tooling: proc macros and CLI
+# ---------------------------------------------------------------------------
+syn = { version = "3.0.9", features = ["extra-traits", "full", "visit-mut"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
+proc-macro-crate = "3.5.0"
+clap = { version = "4.6.7", features = ["derive"] }
+notify = "8.2.1"
+notify-debouncer-mini = "0.7.0"
+heck = "0.5.0"
+# Harbor (navree-harbor): release archives and secrets typed without echo
+# (toml_edit, above, edits harbor.toml in place).
+tar = { version = "0.4.46", default-features = false }
+flate2 = "1.1.10"
+# Rendered pages in navree-ui: pure Rust, no C.
+brotli = { version = "9.1.1", default-features = false, features = ["std"] }
+rpassword = "7.5.4"
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+tempfile = "3.27.0"
+trybuild = "1.0.122"
+insta = { version = "1.49.0", features = ["json"] }
+# Certificates and signing requests on ring: navree-domains' ACME orders
+# (through instant-acme), and the test certificates of navree-micro's TCP
+# TLS and navree-directory's LDAPS tests.
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
+proptest = "1.12.0"
+# HTTP mock servers for provider integrations (navree-social, navree-billing)
+# and the search engines' REST clients (navree-search).
+wiremock = "0.6.5"
+# The request-pipeline micro-benchmarks (`crates/navree/benches/pipeline.rs`):
+# no plots, no rayon; Tokio for the async routines.
+criterion = { version = "0.8.2", default-features = false, features = ["async_tokio", "cargo_bench_support"] }
+
+# Keep debug info small: less memory, faster links (several builds at once).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Argon2id is unbearably slow unoptimised; tests hash passwords.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+[profile.test]
+debug = "line-tables-only"

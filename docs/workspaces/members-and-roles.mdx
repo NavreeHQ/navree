@@ -1,0 +1,318 @@
+---
+title: "Members and roles"
+description: "Add members, assign roles, define your own roles and check workspace-scoped permissions with navree-access."
+---
+
+A member is a user in a workspace, with one role there. The same user can be the owner of one workspace and a viewer in another. Roles carry permission strings, and inside a workspace request [access control](/docs/security/authorization/) evaluates them for the member's role in that workspace.
+
+## Built-in roles
+
+Four roles exist in every app:
+
+| Role | Built-in permissions | Meant for |
+|---|---|---|
+| `owner` | `all.*` | Everything in the workspace, including deleting and transferring it |
+| `admin` | `workspace.read`, `workspace.update`, `workspace.members.*`, `workspace.invitations.*` | Running the workspace and its people |
+| `member` | `workspace.read`, `workspace.members.read` | Regular work, as you grant it |
+| `viewer` | `workspace.read`, `workspace.members.read` | Read-only access, as you grant it, and [read-only in Helm](/docs/tools/helm/#workspaces) |
+
+`member` and `viewer` start the same: the difference is what you give each of them. In Rust a role is a `WorkspaceRole` (`Owner`, `Admin`, `Member`, `Viewer` or `Custom(String)`), stored by name in `workspace_members.role`.
+
+## Permissions for your data
+
+Add permissions to a role under `workspace.roles.<role>`. They join the role's built-in ones:
+
+```toml title="config/app.toml"
+[workspace.roles.admin]
+permissions = ["deals.*", "companies.*", "reports.read"]
+
+[workspace.roles.member]
+permissions = ["deals.*", "companies.read"]
+
+[workspace.roles.viewer]
+permissions = ["deals.read", "companies.read"]
+```
+
+A permission is `<prefix>.<action>`, as everywhere in navree-access: `deals.update` lets the member update `Deal` records when `deals` is the permission prefix of the `Deal` subject, and `*` stands for every action. From the environment, a role's list is a comma-separated string: `APP_WORKSPACE__ROLES__MEMBER__PERMISSIONS=deals.*,companies.read`.
+
+The module's own subjects use the prefixes below, which the built-in routes check:
+
+| Subject | Prefix | Permissions the routes check |
+|---|---|---|
+| `Workspace` | `workspace` | `workspace.update`, `workspace.delete`, `workspace.transfer` |
+| `WorkspaceMember` | `workspace.members` | `workspace.members.read`, `.create`, `.update`, `.delete` |
+| `WorkspaceInvitation` | `workspace.invitations` | `workspace.invitations.read`, `.create`, `.delete` |
+| `WorkspacePartition` | `workspace.partitions` | `workspace.partitions.read`, `.create`, `.update`, `.delete` ([partitions](/docs/workspaces/partitions/) on) |
+
+With partitions on, `admin` also gets `workspace.partitions.*`, and `member` and `viewer` get `workspace.partitions.read`.
+
+## Your own roles
+
+Any other name under `workspace.roles` defines a role:
+
+```toml title="config/app.toml"
+[workspace.roles.billing]
+permissions = ["workspace.read", "invoices.*"]
+```
+
+Role names are 1 to 64 lower-case letters, digits, `_`, `-` and `.`, starting with a letter or digit. Assigning a role that is neither built in nor configured is a 400: `role must be one of the following values: admin, billing, member, owner, viewer`.
+
+## How workspace roles reach access control
+
+Inside a workspace request, navree-access builds the member's abilities from your abilities function as it does for every request, with a context that describes the member in that workspace:
+
+| `AbilityCtx` field | Inside a workspace |
+|---|---|
+| `user` | The signed-in user, whose `roles` holds one entry: their workspace role |
+| `permissions` | The role's permissions (built-in plus `workspace.roles`) |
+| `team_id` | `Some(workspace id)` |
+| `organization_id` | The workspace's [organization](/docs/workspaces/organizations/), if it is attached to one |
+| `permission_subjects` | Every registered subject's prefix |
+
+So `ctx.grant_permissions(rules)` grants the role's permissions, `ctx.has_role("admin")` asks about the workspace role, and `ctx.team_id` tells a rule which workspace it is in:
+
+```rust title="src/abilities.rs"
+use navree::prelude::*;
+
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    if ctx.team_id.is_some() {
+        // Anyone in the workspace edits the deals they own; `deals.*`
+        // (granted to admins in config) covers the rest.
+        rules.can(UPDATE, "Deal").when(field("owner_id").eq(user.id));
+    }
+}
+```
+
+Two things carry over from the user's global access: a member who holds the app's super-admin role (`AccessOptions::super_admin_role`) keeps `can manage all`, and a token's abilities still narrow what the request may do. Global roles and permissions are not mixed in: inside a workspace, the workspace role decides. Membership comes first in every case, so a super-admin who isn't a member of the workspace still gets a 403.
+
+The [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) hands these abilities to navree-access before the route's checks run. Behind it:
+
+- `#[roles("admin")]` asks for the workspace role `admin`;
+- `#[permissions("deals.export")]` asks whether the role holds `deals.export`;
+- `#[can(Update, Deal, from = "id")]` loads the deal and checks it against the member's rules;
+- the `Abilities`, `CurrentAccess` and `Accessible<M, A>` extractors return the workspace abilities.
+
+navree-access's `GET /api/me/abilities` route has no guard, so it returns the user's global rules. To send the workspace rules to the browser, add a route behind the guard:
+
+```rust
+#[get("/abilities")]
+#[authenticated]
+async fn abilities(&self, Abilities(ability): Abilities) -> Json<serde_json::Value> {
+    Json(ability.to_casl_json())
+}
+```
+
+```rust title="src/deals/controller.rs"
+#[controller("/deals", version = "1")]
+#[guard(InWorkspace::guard())]
+impl DealsController {
+    #[patch("/{id}")]
+    #[can(Update, Deal, from = "id")]
+    async fn update(
+        &self,
+        ws: CurrentWorkspace,
+        uow: Uow,
+        deal: Authorized<Deal, Update>,
+        Json(input): Json<DealChanges>,
+    ) -> Result<Json<Deal>> {
+        let mut record = deal.into_inner(); // the Record<Deal>
+        if let Some(title) = input.title {
+            record.title = title;
+        }
+        WorkspaceRepo::<Deal>::update(&uow, ws.id(), &mut record).await?;
+        Ok(Json(record.into_inner()))
+    }
+}
+```
+
+A `can(.., from = "id")` check on a model registered with `m.workspace_scoped::<Deal>()` first confirms that the record belongs to the current workspace, so a deal of another workspace is a 404 even for an owner (see [data isolation](/docs/workspaces/isolation/#records-checked-by-route)).
+
+### Checks in the handler
+
+`CurrentWorkspace` answers the same questions in code:
+
+```rust
+ws.authorize("deals.export")?;            // 403 unless the role holds it
+if ws.can("approve", "Deal") { /* ... */ }
+if ws.role() == &WorkspaceRole::Owner { /* ... */ }
+```
+
+### Checks outside a request
+
+Code that runs outside a workspace request, such as a channel authorizer or a service deciding who may see a record, asks `navree::contracts::permitted` instead:
+
+```rust
+use navree::contracts::permitted;
+
+if permitted(&ctx, &principal, "operations.view", Some(workspace_id)).await? {
+    // show it
+}
+```
+
+`WorkspaceModule` answers with the user's role in that workspace, evaluated as behind the guard (a non-member is refused), and `AccessModule` answers with their global roles and permissions; either one granting it is enough. With no workspace given, only the global answer counts. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) use this to decide who sees them.
+
+A module that works in workspaces of its own accord asks `navree::access::WorkspaceGate` (a `dyn` provider of `WorkspaceModule`) whether a user may work in one, and enters it through the gate, so that the isolation strategy applies. It also reports what the workspace takes from them (`writes`, a `WorkspaceWrites`): whether it is a read-only demo, whether their role writes by default (`owner`, `admin` and `member` do, `viewer` and roles of your own don't), and the permissions `workspace.roles` sets for it, which decide for the models they name. [Helm](/docs/tools/helm/#workspaces) does this for a workspace a request names. An app without `WorkspaceModule` has no gate, and a module must refuse rather than trust what a request names.
+
+## Roles through an organization
+
+With [organizations](/docs/workspaces/organizations/) on, a user can also enter a workspace as a member of the organization it is attached to. Their organization role maps to a workspace role, and that role is what the workspace sees:
+
+| Organization role | Workspace role (default) |
+|---|---|
+| `owner` | `owner` |
+| `admin` | `admin` |
+| `member` | `member` |
+| `viewer` | `viewer` |
+| An app-defined role | The one its `workspace_role` setting names, else the workspace role of the same name |
+
+```toml title="config/app.toml"
+[workspace.organizations.roles.member]
+workspace_role = "viewer"   # organization members read in their workspaces
+```
+
+Everything on this page then applies to the mapped role: the abilities context's `user.roles` holds it, route checks evaluate it and `ws.role()` returns it. A membership of the workspace wins over the organization's role, so an organization viewer who is also an `admin` member of one workspace is an admin there. `ws.granted_by()` tells you which applied, and organization members don't appear in the workspace's member list.
+
+## Managing members
+
+The `Members` service changes memberships inside a unit of work:
+
+```rust
+use navree::workspace::{Members, WorkspaceRole};
+
+members.add(&uow, workspace_id, user_id, WorkspaceRole::Member).await?;
+members.change_role(&uow, workspace_id, user_id, WorkspaceRole::Admin).await?;
+members.remove(&uow, workspace_id, user_id).await?;
+let everyone = members.list(workspace_id).await?; // Vec<MemberInfo>
+```
+
+| Method | Errors |
+|---|---|
+| `add(&uow, workspace, user, role)` | 409 when the user is a member already; 400 on `role` for an unknown role |
+| `change_role(&uow, workspace, user, role)` | 404 when they are not a member; 409 when they are the owner and `role` isn't `owner` |
+| `remove(&uow, workspace, user)` | 404 when they are not a member; 409 for the owner |
+| `list(workspace)`, `find(workspace, user)` | |
+
+`list` returns each `Member` with the user's `id`, `name` and `email` when the [user directory](#names-and-emails-of-members) knows them.
+
+### The owner
+
+Every workspace has exactly one owner, `workspaces.owner_id`, who always has the `owner` role. Removing or demoting them is a 409, `The workspace owner can't be removed or demoted; transfer ownership first.`, so a workspace never loses its last owner. Other members can hold the `owner` role too and be removed like anyone else.
+
+Ownership moves to another member with `transfer_ownership`. The new owner gets the `owner` role and the previous owner becomes an `admin`:
+
+```rust
+let workspace = workspaces.transfer_ownership(&uow, workspace_id, new_owner_id).await?;
+```
+
+A user who isn't a member is a 400 on `user_id`.
+
+## The member routes
+
+| Route | Permission | Answer |
+|---|---|---|
+| `GET /api/workspaces/{workspace}/members` | `workspace.members.read` | `{"data": [member, ...]}` |
+| `POST /api/workspaces/{workspace}/members` `{user_id, role?}` | `workspace.members.create` | 201, the member (`role` defaults to `member`) |
+| `PATCH /api/workspaces/{workspace}/members/{user}` `{role}` | `workspace.members.update` | The member |
+| `DELETE /api/workspaces/{workspace}/members/{user}` | `workspace.members.delete` | 204 |
+| `POST /api/workspaces/{workspace}/leave` | (member) | 204; 409 for the owner |
+| `POST /api/workspaces/{workspace}/transfer` `{user_id}` | `workspace.transfer` | The workspace |
+
+Granting the `owner` role, or changing or removing a member who has it, also takes the `owner` role: an admin who tries gets a 403, `Only an owner can grant or change the owner role.` A member comes back as:
+
+```json
+{
+  "__type": "WorkspaceMember",
+  "id": "0199f3c2-9a1b-7c2d-8e3f-4a5b6c7d8e9f",
+  "workspace_id": "0199f3c2-8f4e-7c1a-9d2b-5a6e7f8091ab",
+  "user_id": "0199f3c2-2b3c-7d4e-8f50-6a7b8c9d0e1f",
+  "role": "admin",
+  "user": { "id": "0199f3c2-2b3c-7d4e-8f50-6a7b8c9d0e1f", "name": "Gauri", "email": "gauri@example.com" },
+  "created_at": "2026-10-26T09:00:00Z",
+  "updated_at": "2026-10-26T09:00:00Z"
+}
+```
+
+## Names and emails of members
+
+Member lists and invitation checks look users up through a `UserDirectory`. The default reads the table named by `workspace.users_table` (`users`, navree-auth's table) through its `id`, `name` and `email` columns, and knows no one when the table doesn't exist or the setting is empty. When users live elsewhere, register your own:
+
+```rust title="src/directory.rs"
+use navree::prelude::*;
+use navree::workspace::{UserDirectory, UserSummary};
+use navree::{BoxError, BoxFuture};
+use uuid::Uuid;
+
+/// Users live in another service.
+pub struct RemoteUsers;
+
+impl UserDirectory for RemoteUsers {
+    fn users<'a>(&'a self, ids: &'a [Uuid]) -> BoxFuture<'a, Result<Vec<UserSummary>, BoxError>> {
+        Box::pin(async move {
+            // ... fetch the users from the identity service
+            Ok(Vec::new())
+        })
+    }
+
+    fn user_by_email<'a>(
+        &'a self,
+        _email: &'a str,
+    ) -> BoxFuture<'a, Result<Option<UserSummary>, BoxError>> {
+        Box::pin(async { Ok(None) })
+    }
+}
+
+pub fn with_remote_users(app: AppBuilder) -> AppBuilder {
+    app.override_value::<dyn UserDirectory>(Arc::new(RemoteUsers))
+}
+```
+
+## Events
+
+| Event | When |
+|---|---|
+| `MemberAdded` (`workspace.member_added`) | A user joins: added, by invitation, or as the creator |
+| `MemberRoleChanged` (`workspace.member_role_changed`) | A role changes (`from`, `to`) |
+| `MemberRemoved` (`workspace.member_removed`) | A user leaves or is removed |
+| `OwnershipTransferred` (`workspace.ownership_transferred`) | The owner changes (`from`, `to`) |
+
+Each is emitted once the unit of work commits. See [events](/docs/digging-deeper/events/) for listeners.
+
+## Testing
+
+Give each user a role, then check what each role may do:
+
+```rust
+let client = app.acting_as(principal(gauri));
+
+client
+    .post("/api/v1/deals")
+    .header("X-Workspace", "agra") // gauri is a member here
+    .json(&json!({ "title": "Big one", "amount_cents": 500_000 }))
+    .send()
+    .await
+    .assert_status(201);
+
+client
+    .post("/api/v1/deals")
+    .header("X-Workspace", "gulati") // and a viewer here
+    .json(&json!({ "title": "Nope", "amount_cents": 1 }))
+    .send()
+    .await
+    .assert_error(403, None);
+```
+
+<LinkCards>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Abilities, rules, record checks and SQL filters.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/invitations/" title="Invitations">
+    Bring people in by email.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Organization roles that reach many workspaces.
+  </LinkCard>
+</LinkCards>

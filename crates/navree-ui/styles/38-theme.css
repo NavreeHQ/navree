@@ -1,0 +1,38 @@
+/*
+ * navree-ui's stylesheet: the theme menu and the theme builder. The values,
+ * the 4px and 6px corners and the app rules are Navree's own.
+ */
+/* A part of a page drawn in another theme: its text and face are the theme's, not inherited. */
+:where([data-theme][data-mode]){color:var(--fg-1);font-family:var(--font-sans)}
+/* What only works with no script: the menu's Apply, the builder's Preview. */
+html[data-ui-js] [data-theme-apply]{display:none}
+[data-slot=theme-card-input],[data-slot=theme-mode-input],[data-slot=theme-choice-input]{position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
+[data-slot=theme-sr]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* Swatches: a token painted in the theme the swatch stands in. */
+[data-slot=theme-swatches]{display:inline-flex;flex:none;gap:3px;padding:3px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-0)}
+[data-slot=theme-swatch]{display:block;width:.75rem;height:.75rem;border-radius:2px;background:var(--token-bg)}
+[data-slot=theme-swatches] [data-token=ink-1]{box-shadow:inset 0 0 0 1px var(--line-2)}
+
+/* The theme menu */
+[data-slot=popover-content][data-variant=theme-menu]{width:min(22rem,calc(100vw - 1rem));max-width:none;padding:.75rem}
+[data-slot=theme-menu-form]{display:flex;flex-direction:column;gap:.75rem}
+[data-slot=theme-cards],[data-slot=theme-modes]{display:flex;flex-direction:column;gap:.125rem}
+[data-slot=theme-menu-legend]{margin-bottom:.25rem;color:var(--fg-3);font-size:12px;font-weight:500}
+[data-slot=theme-card]{position:relative;display:flex;align-items:center;gap:.625rem;padding:.375rem .5rem;border:1px solid transparent;border-radius:var(--radius);cursor:pointer;
+  &:hover{background:var(--ink-2)}
+  &:has(:checked){background:var(--ink-3);border-color:var(--line-2)}
+  &:has(:focus-visible){outline:2px solid var(--ring);outline-offset:-1px}
+  & > [data-slot=icon]{margin-inline-start:auto;color:var(--fg);visibility:hidden}
+  &:has(:checked) > [data-slot=icon]{visibility:visible}
+}
+[data-slot=theme-card-text]{display:flex;flex:1;flex-direction:column;min-width:0;line-height:1.3}
+[data-slot=theme-card-name]{color:var(--fg);font-weight:500}
+[data-slot=theme-card-description]{color:var(--fg-3);font-size:12px}
+[data-slot=theme-mode-group]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:2px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-0)}
+[data-slot=theme-mode]{position:relative;display:flex;align-items:center;justify-content:center;gap:.375rem;height:1.75rem;border-radius:2px;color:var(--fg-2);font-size:13px;font-weight:500;cursor:pointer;
+  & [data-slot=icon]{width:14px;height:14px}
+  &:hover{color:var(--fg)}
+  &:has(:checked){background:var(--ink-3);color:var(--fg)}
+  &:has(:focus-visible){outline:2px solid var(--ring);outline-offset:-2px}
+}

@@ -1,0 +1,88 @@
+[package]
+name = "navree-integrations"
+description = "Navree IntegrationsModule: workspace connections to third-party APIs with admin consent, encrypted credentials, token refresh and typed clients."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "integrations", "oauth", "microsoft-365"]
+categories = ["api-bindings"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["mail", "notify"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+# The database drivers of the gated server tests (`tests/integrations/servers.rs`).
+test-postgres = ["navree-db/postgres"]
+test-mysql = ["navree-db/mysql"]
+## Connections as the tokens of navree-notify's Slack and Teams bot routes
+## (`IntegrationTokens`, registered as `dyn ConnectionTokens`).
+notify = ["dep:navree-notify"]
+## Microsoft 365 and Gmail mailboxes of connections watched for new mail
+## (`MailboxWatches`, the `/api/mail/inbound/graph` and `/gmail` routes,
+## `integrations:mailboxes`), each message received through navree-mail's
+## inbound pipeline.
+mail = ["dep:navree-mail", "navree-mail/inbound"]
+
+[dependencies]
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+# Token locks and the used-state memory (in-process without CacheModule).
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# Encrypted credentials, sealed states, and `jose`: service-account JWTs
+# (RS256) signed on ring.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+# Feature `mail`: watched mailboxes hand their messages to navree-mail's `Inbound`.
+navree-mail = { workspace = true, optional = true }
+# Feature `notify`: `IntegrationTokens` is navree-notify's `dyn ConnectionTokens`.
+navree-notify = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
+# `integration_connections` is a navree-orm model.
+navree-orm = { workspace = true }
+# `integrations:check` on the scheduler.
+navree-schedule = { workspace = true }
+# Connections belong to the request's workspace or organization.
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-access = { workspace = true }
+navree-api = { workspace = true }
+# The `notify` and `mail` features' tests (`tests/integrations/notify.rs`,
+# `tests/integrations/mailboxes.rs`).
+navree-integrations = { path = ".", features = ["notify", "mail"] }
+navree-testing = { workspace = true }
+# MailModule needs ViewModule (`tests/integrations/mailboxes.rs`).
+navree-view = { workspace = true }
+# The mock providers verify service-account JWTs with `ring` directly, apart
+# from the code under test.
+ring = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = { workspace = true }

@@ -1,0 +1,81 @@
+# navree-domains' suite with a real ACME server: Pebble, Let's Encrypt's
+# test CA, issues certificates to the real ACME client (account, order,
+# HTTP-01 challenge, finalization, chain download). Pebble runs with
+# PEBBLE_VA_ALWAYS_VALID=1, so it does not fetch the challenge answers
+# (the test's domains don't resolve to the runner); the answers' route is
+# covered by the crate's other tests.
+name: Domains
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-domains/**"
+      - "crates/navree-workspace/**"
+      - "crates/navree-http/**"
+      - "crates/navree-db/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-crypto/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/domains.yml"
+  pull_request:
+    paths:
+      - "crates/navree-domains/**"
+      - "crates/navree-workspace/**"
+      - "crates/navree-http/**"
+      - "crates/navree-db/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-crypto/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/domains.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navree-domains:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+      NAVREE_TEST_PEBBLE_URL: https://localhost:14000/dir
+      NAVREE_TEST_PEBBLE_CA: ${{ github.workspace }}/pebble.minica.pem
+      # Fail instead of skipping when Pebble is missing.
+      NAVREE_TEST_REQUIRE_SERVICES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start Pebble
+        run: |
+          docker run --detach --name pebble --publish 14000:14000 \
+            --env PEBBLE_VA_ALWAYS_VALID=1 \
+            --env PEBBLE_VA_NOSLEEP=1 \
+            --env PEBBLE_WFE_NONCEREJECT=0 \
+            ghcr.io/letsencrypt/pebble:latest
+          # The root of Pebble's own HTTPS certificate (for localhost).
+          curl --fail --silent --show-error --location \
+            --output pebble.minica.pem \
+            https://raw.githubusercontent.com/letsencrypt/pebble/main/test/certs/pebble.minica.pem
+          for attempt in $(seq 1 30); do
+            if curl --silent --cacert pebble.minica.pem https://localhost:14000/dir > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Pebble did not start" >&2
+          docker logs pebble >&2
+          exit 1
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Test navree-domains
+        run: cargo test -p navree-domains

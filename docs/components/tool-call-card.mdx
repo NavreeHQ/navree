@@ -1,0 +1,68 @@
+---
+title: "ToolCallCard and Reasoning"
+description: "A tool the assistant called, with whether it ran and its arguments folded as text, and what the assistant thought before it answered."
+---
+
+<UiPreview example="tool-call-card/default" />
+
+`ToolCallCard` shows that the assistant used a tool: the tool's name in words the reader knows, whether it is running, done or failed, and the arguments it was called with, folded. It is an item of a [Conversation](/docs/components/conversation/).
+
+```rust
+use navree::ui::genui::*;
+use serde_json::json;
+
+let labels = ChatLabels::default();
+ToolCallCard::new("t2", "0002", "Looked up payments by method")
+    .state(ToolState::Done)
+    .arguments(json!({ "from": "2026-11-02", "to": "2026-11-08", "city": "Ludhiana" }))
+    .into_item(&labels)
+```
+
+The first two arguments are the card's key and its cursor, as for a [ChatMessage](/docs/components/chat-message/). The label is yours: say what happened ("Looked up payments by method"), not the name of the function.
+
+## States
+
+`ToolState::Running` shows "Working" and a turning mark, `ToolState::Done` a check and "Done", and `ToolState::Failed` a cross and "Failed". The state is a word as well as a mark. The words are in `ChatLabels`.
+
+## Arguments
+
+`.arguments(..)` takes a JSON value and shows its names and values as text, folded under "Details". A model chose these values, so they are never read as markup: a string is shown as it is, a number as a number, yes or no for a boolean, and anything else as compact JSON. A value is cut at 300 characters, and a card lists 20 arguments at most, with "and 3 more" for the rest.
+
+## Reasoning
+
+`Reasoning` shows what the assistant thought before it answered, folded. It is not an item of its own: put it below a message with [ChatMessage::with](/docs/components/chat-message/#reasoning-and-sources). The text is untrusted Markdown, drawn in the muted ink with headings from level 4.
+
+```rust
+use navree::ui::genui::*;
+
+Reasoning::new("The question is about **last week**, so I need the orders from Monday to Sunday.")
+    .open(true)
+```
+
+`.open(true)` draws it open, and `.label(..)` replaces the title ("Thinking").
+
+<UiPreview example="tool-call-card/reasoning" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A tool's card is never announced: the conversation announces answers, not every step that led to them.
+- The arguments and the reasoning are folded with a real disclosure control, so the keyboard opens and closes them and a screen reader says whether they are open.
+- The state is spoken in words ("Working", "Done", "Failed"), never by colour alone.
+
+</UiA11y>
+
+## API
+
+### ToolCallCard
+
+<UiProps type="ToolCallCard" />
+
+### ToolState
+
+<UiProps type="ToolState" />
+
+### Reasoning
+
+<UiProps type="Reasoning" />

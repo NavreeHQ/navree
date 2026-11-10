@@ -1,0 +1,9 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 308
+expression: "render(\"off\", &schema, Ok(()))"
+---
+-- off
+CREATE TABLE "metrics" ("at" TIMESTAMP WITH TIME ZONE NOT NULL);
+CREATE INDEX "metrics_at_index" ON "metrics" ("at" DESC);
+-- notice: TimescaleDB is turned off (`schema.timescaledb = "off"`): `metrics` is a regular table with an index on `at`; its retention (30 days) policy is skipped

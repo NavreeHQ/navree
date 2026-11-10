@@ -1,0 +1,466 @@
+---
+title: "Requests and extractors"
+description: "Reading paths, query strings, JSON and other bodies, headers, the request id, the client IP behind proxies, the current user and body limits."
+---
+
+## Introduction
+
+A handler doesn't receive a request object. It declares what it needs as arguments, and an *extractor* builds each one from the request: `Path(id)` from the path, `Query(filter)` from the query string, `Json(input)` from the body, `CurrentUser(user)` from the authenticated principal. navree-http has the common extractors (`navree::http::{Path, Query, Json, Form, Extension}` and the rest of `navree::http::extract`), and Navree's packages add extractors for the things they manage, such as the current user, the unit of work and validated input.
+
+```rust title="src/modules/deals/notes_controller.rs"
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Deserialize)]
+pub struct CreateNote {
+    pub body: String,
+}
+
+#[derive(Serialize)]
+pub struct NoteView {
+    pub id: u32,
+    pub deal_id: Uuid,
+    pub body: String,
+}
+
+#[controller("/deals", version = "1")]
+#[authenticated]
+impl NotesController {
+    /// `POST /api/v1/deals/{id}/notes` with a JSON body.
+    #[post("/{id}/notes")]
+    async fn store(
+        &self,
+        Path(deal_id): Path<Uuid>,
+        Json(input): Json<CreateNote>,
+    ) -> Created<NoteView> {
+        let note = NoteView { id: 1, deal_id, body: input.body };
+        Created(format!("/api/v1/deals/{deal_id}/notes/1"), note)
+    }
+}
+```
+
+When an extractor fails, the handler doesn't run: the request ends with the extractor's error, rendered in the [error format](/docs/basics/errors/).
+
+## Path parameters
+
+`Path<T>` reads the parameters of the route's path (`{id}`, `{*rest}`) into a value, a tuple or a struct. A value that doesn't parse is a 400. [Routing](/docs/basics/routing/#path-parameters) covers the path syntax.
+
+## Query strings
+
+`Query<T>` deserializes the query string into `T` with serde:
+
+```rust
+#[derive(Deserialize)]
+pub struct DealFilter {
+    pub stage: Option<String>,
+    pub owner_id: Option<Uuid>,
+    #[serde(default)]
+    pub search: String,
+}
+
+/// `GET /api/v1/deals?stage=won&search=agra`
+#[get("/")]
+async fn index(&self, Query(filter): Query<DealFilter>) -> String {
+    format!("{:?} {:?} {}", filter.stage, filter.owner_id, filter.search)
+}
+```
+
+Missing fields must be `Option`s or have a serde default. A value of the wrong type is a 400:
+
+```json wrap
+{
+  "statusCode": 400,
+  "message": "Failed to deserialize query string: owner_id: UUID parsing failed: invalid character: found `n` at 0",
+  "error": "Bad Request",
+  "code": "bad_request"
+}
+```
+
+`Query<T>` suits parameters of your own. A list with filters, a sort order, a search box and pages reads them with `List<R>` instead, so every list takes the same query string (`filter[stage]=won&search=agra&page=2`): see [list queries](/docs/basics/list-queries/).
+
+## JSON bodies
+
+`Json<T>` reads a JSON body into any `T: Deserialize`. It's navree-http's `Json`, in the prelude, and the same type serializes JSON responses. The request must say `Content-Type: application/json` (or a `+json` type such as `application/merge-patch+json`, parameters allowed), in a single header:
+
+| Problem | Status | Message |
+|---|---|---|
+| No `Content-Type: application/json` | 415 | ``Expected request with `Content-Type: application/json` `` |
+| Not JSON | 400 | `Failed to parse the request body as JSON: EOF while parsing an object at line 1 column 1` |
+| JSON of the wrong shape | 400 | ``Failed to deserialize the JSON body into the target type: missing field `title` at line 1 column 13`` |
+
+A wrongly shaped body is a 400, like every other input error, and the message names the field (``title: invalid type: integer `1`, expected a string``). A body with anything but whitespace after the JSON value is not JSON.
+
+To check the values (lengths, formats, ranges, uniqueness) and answer with a message per field, wrap the extractor: `Valid(Json(input)): Valid<Json<CreateNote>>`. See [validation](/docs/basics/validation/).
+
+### Other bodies
+
+| Extractor | Reads |
+|---|---|
+| `String` | The body as UTF-8 text |
+| `navree::http::body::Bytes` | The raw body |
+| `navree::http::Form<T>` | An `application/x-www-form-urlencoded` body (for `GET` and `HEAD`, the query string) |
+| `navree::http::extract::Multipart` | A `multipart/form-data` body, part by part ([multipart forms](#multipart-forms)); [file storage](/docs/digging-deeper/storage/) has helpers for uploads |
+| `navree::http::extract::Request` | The whole request |
+
+```rust
+use navree::http::body::Bytes;
+
+#[post("/{id}/attachments")]
+async fn attach(&self, Path(deal_id): Path<Uuid>, body: Bytes) -> String {
+    format!("{} bytes for {deal_id}", body.len())
+}
+```
+
+`String` and `Bytes` read the body within the route's limit (413 past it, see [body limits](#body-limits)); a `String` that isn't UTF-8 is a 400.
+
+An extractor that reads the body must be the handler's **last** argument: there is only one body. Putting it anywhere else is a compile error (the handler doesn't implement `Handler`).
+
+## Headers
+
+`HeaderMap` gives every header. It comes from the `http` crate, which your app adds to its dependencies (`http = "1"`), like `StatusCode` and `Method`:
+
+```rust
+use http::HeaderMap;
+
+#[get("/agent")]
+async fn agent(&self, headers: HeaderMap) -> String {
+    headers
+        .get("user-agent")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown")
+        .to_owned()
+}
+```
+
+`Method`, `Uri`, `Version` and `http::Extensions` are extractors too: each gives a copy of that part of the request.
+
+For one header you need often, write a small extractor (see [writing your own](#writing-your-own-extractor)).
+
+## The request id
+
+Every request has an id, which ties the request log, every log line written during the request, audit entries and the response together. The pipeline keeps an incoming `X-Request-Id` when it's 1 to 64 letters, digits, `-` or `_`, and generates one otherwise (a UUID v7 as 32 hex digits). The response carries it in `X-Request-Id`, error responses included.
+
+A handler reads it with the `Extension` extractor:
+
+```rust
+use navree::contracts::RequestId;
+use navree::http::Extension;
+
+#[get("/trace")]
+async fn trace(&self, Extension(request_id): Extension<RequestId>) -> String {
+    format!("request {request_id}")
+}
+```
+
+## The client IP and trusted proxies
+
+`ClientIp` (from `navree::http`) is the address of the client making the request:
+
+```rust
+use navree::http::ClientIp;
+
+#[get("/where")]
+async fn whereabouts(&self, ClientIp(ip): ClientIp) -> String {
+    format!("you are {ip}")
+}
+```
+
+The pipeline computes it once per request and uses it everywhere: the per-IP rate limit, route throttles for guests, the request log and audit entries. It's `0.0.0.0` when the request didn't arrive over a socket.
+
+Behind a reverse proxy, a load balancer or a backend-for-frontend, every request arrives from the proxy's address. The real client is in the `X-Forwarded-For` (or `X-Real-IP`) header the proxy adds, but anyone can send that header, so Navree only believes it from proxies you list:
+
+```toml title="config/app.toml"
+[http]
+trusted_proxies = ["127.0.0.1", "::1", "10.0.0.0/8"]
+```
+
+- A request from a listed proxy: the client is the first address in `X-Forwarded-For`, reading from the right, that isn't itself a listed proxy (the left-most when all are). An entry may carry a port (`203.0.113.7:51234`, `[2001:db8::7]:443`); an entry that isn't an address stops the reading, so nothing a client wrote to the left of it is believed (the proxy's own address stands when nothing readable is left). Without that header, `X-Real-IP`; without either, the proxy's own address.
+- A request from any other peer: its own address. The headers are ignored, so a client that reaches the app directly can't choose its address.
+
+Entries are IP addresses or CIDR blocks, IPv4 or IPv6 (an IPv4-mapped IPv6 address counts as IPv4). An entry that isn't one fails the boot. From the environment, the list is comma-separated: `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`.
+
+`http.trust_proxy = true` believes the headers from **every** peer, taking the right-most `X-Forwarded-For` entry. Use it only when nothing can reach the app except through a proxy that sets the header; prefer `trusted_proxies`, which replaces it when both are set. Both are off by default.
+
+<Callout type="note" title="The CRM trusts its BFF">
+
+crm-web's server (its BFF) calls the API from the same machine for every browser. The CRM's `config/app.toml` sets `http.trusted_proxies` to `127.0.0.1` and `::1`, so the API believes an `X-Forwarded-For` the BFF sends. The BFF only sends one when `NAVREE_TRUSTED_PROXY_HOPS` (the number of reverse proxies in front of it) is above 0. With the default, 0, it sends none, and every web user shares the BFF's per-IP limit. Set `trusted_proxies` to the BFF's real address when it runs elsewhere.
+
+</Callout>
+
+## The current user
+
+Two extractors give you the signed-in user. Both answer guests with a 401, so they double as a check, but the route's [access declaration](/docs/basics/access-control/) is what keeps guests out.
+
+| Extractor | From | Gives |
+|---|---|---|
+| `CurrentPrincipal` | `navree::http` | The `Principal`: the user's id and how they authenticated. No database access |
+| `CurrentUser` | `navree::auth`, in the prelude | The user's database record (`navree::auth::User`), loaded once per request; also a 401 when the user no longer exists |
+
+```rust
+use navree::http::CurrentPrincipal;
+
+#[get("/whoami")]
+async fn whoami(&self, CurrentPrincipal(principal): CurrentPrincipal) -> String {
+    principal.user_id.to_string()
+}
+
+#[get("/profile")]
+async fn profile(&self, CurrentUser(user): CurrentUser) -> String {
+    user.email.clone()
+}
+```
+
+Use `CurrentPrincipal` when the id is enough, and `CurrentUser` when you need the user's fields. For the user's roles and abilities, see the extractors on the [authorization](/docs/security/authorization/) page (`Abilities`, `Authorized`, `Accessible`, `CurrentAccess`).
+
+### Client metadata
+
+navree-auth's `ClientMeta` (`navree::auth::ClientMeta`) bundles what you record about a client, for example with a token or in an audit entry: `ip` (`None` when unknown), `user_agent` and `request_id`, all `Option<String>`.
+
+```rust
+use navree::auth::ClientMeta;
+
+#[get("/")]
+#[authenticated]
+async fn show(&self, CurrentUser(user): CurrentUser, meta: ClientMeta) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "email": user.email,
+        "ip": meta.ip,
+        "user_agent": meta.user_agent,
+        "request_id": meta.request_id,
+    }))
+}
+```
+
+## Navree's other extractors
+
+| Extractor | Gives | Covered in |
+|---|---|---|
+| `Uow` | The request's unit of work | [The unit of work](/docs/database/unit-of-work/) |
+| `PageQuery` | `page` and `per_page` from the query string | [Pagination](/docs/database/pagination/) |
+| `Valid<Json<T>>`, `Valid<Query<T>>`, `Valid<Form<T>>`, `ValidAsync<..>` | Validated input | [Validation](/docs/basics/validation/) |
+| `Scoped<T>` | A request-scoped provider | [Providers](/docs/architecture/providers/#request-scoped-providers) |
+| `Authorized<E, A>`, `Accessible<E, A>`, `Abilities`, `CurrentAccess` | The authorized record, a list filter, the user's abilities | [Authorization](/docs/security/authorization/) |
+| `Session` | The session, with navree-session | [Sessions and CSRF](/docs/basics/sessions-and-csrf/) |
+
+## Optional and fallible extractors
+
+Wrap an extractor in `Option` when its input may be missing. `Option<Json<T>>` is `None` for a request without a `Content-Type` header (another content type is still a 415), `Option<Path<T>>` is `None` on a route without path parameters, and `Option<Extension<T>>` is `None` when the pipeline put no `T` in the request. A value that is there but invalid still fails with the extractor's own error.
+
+Wrap an extractor in `Result<T, T::Rejection>` to decide what a failure does. A rejection becomes an `AppError` with `?` or `to_app_error()` and keeps its status:
+
+```rust
+use navree::http::extract::rejection::JsonRejection;
+
+#[post("/")]
+async fn store(&self, body: Result<Json<CreateNote>, JsonRejection>) -> Result<String> {
+    let Json(input) = match body {
+        Ok(json) => json,
+        Err(JsonRejection::ContentType) => return Err(AppError::bad_request("Send the note as JSON.")),
+        Err(other) => return Err(other.to_app_error()),
+    };
+    Ok(input.body)
+}
+```
+
+## Body limits
+
+A request body may be at most `http.body_limit_bytes`, 2 MiB by default. The limit is checked twice:
+
+- **Before the handler:** a `Content-Length` over the limit is refused with a 413, and the handler never runs: `"The request body must not exceed 2097152 bytes."`. The 413 goes out at once, with `Connection: close`, and on HTTP/1 the close lingers: the server reads what the client is still sending, so a client that sends its whole body before it reads gets the 413 instead of a reset connection. Any answer that doesn't wait for its body (a 401, a 404, a handler that doesn't read it) works the same way, and when the rest of the body is within the route's limit the server reads it after the answer and the connection takes the next request. Until the client has been let in (signed in, under its throttle, past the route's guards and access check), that is at most `http.body_limit_bytes`, however much the route takes. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
+- **While reading:** a body sent without a length (chunked) is cut off once it passes the limit, and the extractor answers 413: `"Failed to buffer the request body: length limit exceeded"`.
+
+A body must also keep moving. A client that stalls for `http.server.body_read_timeout_ms` (20 seconds), or averages less than `http.server.body_min_bytes_per_sec` (256), gets a 408, `"Failed to buffer the request body: it arrived too slowly"`, and the connection closes (on HTTP/2, only the stream ends). Only time spent waiting on the client counts, so a slow handler costs it nothing. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
+
+```toml title="config/app.toml"
+[http]
+body_limit_bytes = 2097152
+```
+
+A route that needs a different limit, larger for an import or smaller for a webhook, sets its own with `.body_limit(bytes)` on a hand-written `RouteDef`. The route attributes have no body-limit attribute, so such a route goes in a [hand-written controller](/docs/basics/routing/#writing-controllers-by-hand). File uploads have their own size and type rules on top; see [file storage](/docs/digging-deeper/storage/).
+
+## Multipart forms
+
+`Multipart` reads a `multipart/form-data` body one part at a time, and reads nothing until you ask for a part. Like any body extractor it's the handler's last argument:
+
+```rust
+use navree::http::extract::Multipart;
+
+#[post("/")]
+async fn store(&self, mut form: Multipart) -> Result<String> {
+    let mut bytes = 0;
+    while let Some(mut field) = form.next_field().await? {
+        let name = field.name().unwrap_or_default().to_owned();
+        while let Some(chunk) = field.chunk().await? {
+            bytes += chunk.len();
+        }
+        tracing::debug!(name, "read a part");
+    }
+    Ok(format!("{bytes} bytes"))
+}
+```
+
+`field.bytes()` and `field.text()` read a whole value, `name`, `file_name`, `content_type` and `headers` describe the part, and a part you don't read is skipped. A value reaches you as it arrives: Navree's parser never holds a file whole, only the few bytes at the end of a chunk that may be the start of the next delimiter. A form is often read before anyone is signed in, so everything a client can make the parser hold has a limit:
+
+| Limit | Default | Past it |
+|---|---|---|
+| The route's body limit | `http.body_limit_bytes` or `.body_limit(bytes)` | 413 `"Request payload is too large"`, with or without a `Content-Length` |
+| `http.multipart.max_parts` | 1,000 | 413, counting parts you skip |
+| `http.multipart.max_field_bytes` | 1 MiB | 413, for a part without a file name; `field.text()` keeps to it for every part |
+| `http.multipart.max_file_bytes` | None: the body limit | 413, for a part with a file name |
+| `http.multipart.max_header_bytes` | 16 KiB | 413, for the headers of one part, or for what comes before the first delimiter |
+
+A form must also keep the [pace of a body](#body-limits): a stall or a drip is a 408, at any point of the form. A missing boundary, a boundary over RFC 2046's 70 characters, or two boundaries or `Content-Type` headers are a 400 before anything is read, and so is a form that's malformed or stops before its closing delimiter. A failure is final: calling `next_field` again gives the same error, so a form cut short never looks like a shorter form. Propagate the errors with `?` and they keep their status.
+
+The limits are options, and a handler can set its own, for a form with a large text value:
+
+```rust
+use navree::http::MultipartLimits;
+
+let limits = MultipartLimits { max_field_bytes: 8 * 1024 * 1024, ..form.limits() };
+let mut form = form.with_limits(limits);
+```
+
+`name` and `file_name` come from the part's `Content-Disposition`, read parameter by parameter (RFC 7578): quoted or not, with parameter names in any case, and never from inside another parameter's value. The disposition type must be `form-data` (in any case), as RFC 7578 has it: `form-data name="a"; name="b"` and `attachment; name="a"` are a 400. A `filename*` (RFC 8187, in UTF-8 or ISO-8859-1) given alone is the file name when it decodes. Given with a `filename`, the two must be the same name once decoded, and a form where they differ or the `filename*` doesn't decode is a 400: a reader that prefers `filename*` and one that doesn't would take two different files. A `filename` that isn't UTF-8 is a 400, since a part without a file name reads as a field and the file would go unseen. A part with two `Content-Disposition` or two `Content-Type` headers, or that gives `name`, `filename` or `filename*` twice, is a 400: a proxy or filter in front of the app may have read the other one. For the same reason the parser refuses what two readers could take differently, with a 400, rather than guess: a head with a bare line feed or anything after its header lines, something that isn't a parameter where one should be (`name="a" junk; filename="b"`), a quote that doesn't close, and a backslash before a quote where another reader would close the string there (`name="a\\"; filename="b"`).
+
+That last rule refuses a name that really ends in a backslash. A client that sends a file or field name ending in `\` (`dir\`) writes `filename="dir\"`, which a reader that doesn't unescape closes at the second quote and a reader that does keeps open, so the whole form is a 400 with a message naming `Content-Disposition`. Python's `requests`, curl and Node's `FormData` all write it that way; a name with a backslash in the middle (`C:\dir\a.txt`) is read as sent. Have the client strip a trailing backslash, or rename the field, if such names matter to you. A first delimiter counts only at the start of the body or of a line, as RFC 2046 has it: `junk--boundary` is preamble.
+
+Names and file names are what the client sent. `field.file_name()` may hold a path, `..` or anything else: Navree doesn't read it as a path, and you shouldn't either. [`store_upload`](/docs/digging-deeper/storage/#file-uploads) keeps only its last component and stores the file under a random name. A file name is the client's own claim, so `max_file_bytes` is no way of keeping text small: that's what `max_field_bytes` and `field.text()` are for.
+
+```toml title="config/app.toml"
+[http.multipart]
+max_parts = 1000
+max_field_bytes = 1048576
+max_header_bytes = 16384
+```
+
+## WebSockets
+
+`navree::http::ws::WebSocketUpgrade` is the extractor for a WebSocket. Return what `on_upgrade` gives you, and your function runs with the socket once the client has its answer:
+
+```rust
+use http::Method;
+use navree::http::RouteDef;
+use navree::http::ws::{Message, WebSocket, WebSocketUpgrade};
+
+fn socket_route() -> RouteDef {
+    RouteDef::on(Method::GET, "/live", |upgrade: WebSocketUpgrade| async move {
+        upgrade.on_upgrade(echo)
+    })
+    .authenticated()
+}
+
+async fn echo(mut socket: WebSocket) {
+    while let Some(Ok(message)) = socket.recv().await {
+        if matches!(message, Message::Text(_)) && socket.send(message).await.is_err() {
+            return;
+        }
+    }
+}
+```
+
+The extractor checks the handshake before your handler runs: an HTTP/1.1 `GET` with `Connection: upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and one `Sec-WebSocket-Key` that's the base64 of 16 bytes. Anything else is a 4xx in the error format, and a wrong version answers with the version that would work. Over HTTP/2 a WebSocket is a `CONNECT` with `:protocol` `websocket`, so a route that takes both declares both methods.
+
+- **Sizes.** A client's frame and message are limited to 1 MiB each. A longer one ends the connection from its header, before the payload is buffered, and `socket.recv()` gives an error whose `is_too_large()` is true. Set your own with `upgrade.max_frame_size(bytes)` and `upgrade.max_message_size(bytes)`.
+- **Subprotocols.** `upgrade.protocols(["v2", "v1"])` picks the first of your list that the client offered. `upgrade.requested_protocols()` lists what it offered.
+- **Origins.** A browser sends cookies with an upgrade from any page, and CORS doesn't apply to one. A handler that trusts a cookie checks `upgrade.origin_allowed(&allowed)`: true with no `Origin` (not a browser), for a listed origin, and for the server's own. [Broadcasting](/docs/digging-deeper/broadcasting/) does this for you.
+- **Time.** A quiet socket stays open unless you set [`http.server.upgraded_idle_timeout_ms`](/docs/getting-started/deployment/#connection-limits).
+
+## Writing your own extractor
+
+An extractor is a type that implements `navree::http::extract::FromRequestParts` (or `FromRequest`, for one that reads the body). Use `AppError` as the rejection, so failures render in the error format:
+
+```rust
+use http::request::Parts;
+use navree::http::extract::FromRequestParts;
+use navree::prelude::*;
+
+/// The `X-Tenant` header, required.
+pub struct Tenant(pub String);
+
+impl FromRequestParts for Tenant {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        parts
+            .headers
+            .get("x-tenant")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| !value.is_empty())
+            .map(|value| Tenant(value.to_owned()))
+            .ok_or_else(|| AppError::bad_request("The X-Tenant header is required."))
+    }
+}
+```
+
+An extractor that needs a service resolves it through the `AppContext` the pipeline puts in every request:
+
+```rust
+/// The app's settings, resolved from the container.
+pub struct Settings(pub Arc<AppSettings>);
+
+impl FromRequestParts for Settings {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let ctx = parts
+            .extensions
+            .get::<AppContext>()
+            .cloned()
+            .ok_or_else(|| AppError::internal("Settings used outside the navree pipeline"))?;
+        let settings = ctx.get::<AppSettings>().await.map_err(AppError::internal)?;
+        Ok(Settings(settings))
+    }
+}
+
+#[get("/")]
+#[public]
+async fn show(&self, Tenant(tenant): Tenant, Settings(settings): Settings) -> String {
+    format!("{tenant} pays in {}", settings.currency)
+}
+```
+
+Request extensions are also where you find the `RequestId`, the `ClientIp`, the `AuthState`, the route's metadata (as `Arc<RouteMeta>`) and its decoded path parameters (as `PathParams`), if your extractor needs them. A request without `X-Tenant` gets:
+
+```json
+{ "statusCode": 400, "message": "The X-Tenant header is required.", "error": "Bad Request", "code": "bad_request" }
+```
+
+## Testing requests
+
+`TestRequest` builds requests for the in-process `TestClient`:
+
+```rust
+use navree::testing::{TestApp, principal};
+use serde_json::json;
+
+#[tokio::test]
+async fn notes_are_created() {
+    let app = TestApp::builder().module(NotesModule).build().await;
+    let deal = Uuid::now_v7();
+
+    app.acting_as(principal(Uuid::now_v7()))
+        .post(&format!("/api/v1/deals/{deal}/notes"))
+        .json(&json!({ "body": "Call back on Monday" }))
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("body", json!("Call back on Monday"));
+
+    app.shutdown().await.unwrap();
+}
+```
+
+Besides `json`, a request has `query`, `form`, `body`, `header` and `bearer`. Requests come from `127.0.0.1` and send `Accept: application/json`. See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    `Valid<Json<T>>` and field-level error messages.
+  </LinkCard>
+  <LinkCard href="/docs/basics/responses/" title="Responses and API resources">
+    What handlers return.
+  </LinkCard>
+  <LinkCard href="/docs/basics/routing/" title="Routing and controllers">
+    Routes, paths and parameters.
+  </LinkCard>
+</LinkCards>

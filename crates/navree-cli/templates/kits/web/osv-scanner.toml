@@ -1,0 +1,4 @@
+# Findings in this app's pnpm-lock.yaml that have no release its tools can
+# use. OSV-Scanner reads this file for the lockfile in the same folder only.
+# Reviewed 2026-11-01; each entry expires so it gets looked at again.
+# There are none at present.

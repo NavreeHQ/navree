@@ -1,0 +1,372 @@
+---
+title: "Events"
+description: "Publish events with `ServiceClient::emit` and handle them with `#[event_pattern]`: fan-out across services, retries, dead letters, ordering, the transactional outbox and the inbox."
+---
+
+## Introduction
+
+<Badge feature="micro" /> An event says that something happened: a deal was won, a contact was assigned, a company was renamed. The service that publishes it doesn't know who cares and doesn't wait. Every service that subscribes gets its own copy, and within each service one instance handles it.
+
+When the deals service marks a deal won, it emits `deal.won`. The notifications service mails the owner; the activities service adds "Deal won" to the timeline. The deals service depends on neither, the two consumers don't know about each other, and if the notifications service is down for a deploy, its copy waits in the broker until it comes back.
+
+Events between services use the same event types as Navree's [in-process events](/docs/digging-deeper/events/): a serializable struct with a `NAME`. The name is the pattern the event travels under.
+
+## Publishing events
+
+### With emit
+
+Inject `ServiceClient` and call `emit` with the pattern and the event:
+
+```rust title="services/deals/src/service.rs"
+use crm_contracts::deals::{DealView, DealWon, MoveDeal, Stage};
+use crm_core::Deal;
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealService {
+    client: Arc<ServiceClient>,
+}
+
+impl DealService {
+    pub async fn move_to(
+        &self,
+        uow: &Uow,
+        me: Uuid,
+        deal: Deal,
+        input: MoveDeal,
+    ) -> Result<DealView> {
+        let was_won = deal.stage == crm_core::Stage::Won;
+        let moved = self.write_move(uow, deal, &input).await?;
+
+        if input.stage == Stage::Won && !was_won {
+            let won = DealWon {
+                deal_id: moved.id,
+                title: moved.title.clone(),
+                owner_id: moved.owner_id,
+                amount_cents: moved.amount_cents,
+                currency: moved.currency.clone(),
+                won_by: me,
+            };
+            self.client.emit("deal.won", &won).key(won.deal_id).await?;
+        }
+        Ok(moved)
+    }
+}
+```
+
+`emit` returns once the event is safe: stored by the broker, or, inside a unit of work, written to the [outbox](#the-outbox) in the same transaction as the deal. `.key(..)` sets the event's ordering key (see [ordering](#ordering)); `.header(name, value)` adds a header.
+
+An event carries the request id, the trace context and the actor: the id of the user whose action caused it, from the current unit of work. It never carries the user's token. An event can wait in a stream for days, and a stored token is a stolen token.
+
+### Forwarding in-process events
+
+If your service already emits the event on its in-process bus, forward it instead of emitting twice. `m.forward_event::<E>()` publishes every `E` emitted on the app's `EventBus` under `E::NAME`:
+
+```rust title="services/deals/src/lib.rs"
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<DealsHandlers>()
+            .forward_event_keyed::<DealWon>(|event| event.deal_id)
+            .forward_event::<DealAssigned>();
+    }
+}
+```
+
+Now the service's code keeps calling `events.emit(DealWon { .. })`: its own listeners run as before, and the event also leaves the process. Forwarding runs as a sync listener inside `emit`, so a forwarded event joins the emitting task's unit of work and goes through the outbox like `client.emit`. `forward_event_keyed` takes a function that returns the ordering key.
+
+This is how a module becomes a service without touching its business code: the modules that used to listen in-process now handle the forwarded event in another binary.
+
+## Handling events
+
+An event handler is a `#[event_pattern("...")]` method in a `#[message_handlers]` impl block. It takes the same extractors as a message handler and returns `Result<()>`:
+
+```rust title="services/notifications/src/handlers.rs"
+use crm_contracts::deals::{DealAssigned, DealWon};
+use navree::prelude::*;
+
+use crate::alerts::AlertService;
+
+#[injectable]
+pub struct DealAlerts {
+    alerts: Arc<AlertService>,
+}
+
+#[message_handlers]
+impl DealAlerts {
+    /// Tells the owner their deal was won, in the app and by mail.
+    #[event_pattern("deal.won")]
+    async fn deal_won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> {
+        self.alerts.deal_won(&uow, &event).await
+    }
+
+    /// Tells the new owner a deal was assigned to them.
+    #[event_pattern("deal.assigned")]
+    async fn deal_assigned(&self, uow: Uow, Payload(event): Payload<DealAssigned>) -> Result<()> {
+        self.alerts.deal_assigned(&uow, &event).await
+    }
+}
+```
+
+Register the struct like any handlers, with `m.message_handlers::<DealAlerts>()`. The activities service handles the same event in its own way:
+
+```rust title="services/activities/src/handlers.rs"
+#[message_handlers]
+impl TimelineHandlers {
+    #[event_pattern("deal.won")]
+    async fn deal_won(&self, uow: Uow, Payload(event): Payload<DealWon>) -> Result<()> {
+        self.timeline.record_won(&uow, &event).await
+    }
+}
+```
+
+One app has one handler per event pattern; a second fails the boot, naming both. Do several things from that handler, or split them into services of their own.
+
+### Access and the actor
+
+Event handlers take no access attribute. An event is a fact that already happened: the access check ran where the change was made, when the deals service allowed the user to move the deal. Writing `#[authenticated]` or `#[can(..)]` on an `#[event_pattern]` is a compile error that says so.
+
+The user who caused the event is still known. `MessageContext::actor()` returns their id, and the handler's unit of work has them as its actor, so audit rows the notifications service writes name the rep who won the deal, not a system account:
+
+```rust
+use navree::micro::MessageContext;
+
+#[event_pattern("deal.won")]
+async fn deal_won(&self, uow: Uow, msg: MessageContext, Payload(event): Payload<DealWon>) -> Result<()> {
+    debug_assert_eq!(msg.actor(), Some(event.won_by));
+    // ...
+}
+```
+
+Guards and validation work as on message handlers. A guard that refuses, or a payload that fails `Valid<Payload<T>>`, sends the event straight to the [dead letters](#dead-letters): retrying the same event can't change the answer.
+
+### Wildcards
+
+An event pattern may end in a wildcard: `*` matches one segment, `>` one or more. `#[event_pattern("deal.*")]` gets `deal.won`, `deal.lost` and `deal.assigned`. Decode the payload as `serde_json::Value`, or match on `MessageContext::pattern()`:
+
+```rust
+#[event_pattern("deal.*")]
+async fn any_deal_event(&self, msg: MessageContext, Payload(event): Payload<serde_json::Value>) -> Result<()> {
+    self.stats.count(msg.pattern(), &event).await
+}
+```
+
+NATS, RabbitMQ, MQTT and the memory transport support wildcards. Kafka and Redis Streams need full names: on those, a wildcard fails the boot with a message that names the pattern and the transport.
+
+## Fan-out and consumer groups
+
+Each service subscribes to an event as a group named after `micro.service`:
+
+| Service | Instances | Who handles each `deal.won` |
+|---|---|---|
+| `notifications` | 3 | one of the three |
+| `activities` | 2 | one of the two |
+| `deals` (the publisher) | 4 | nobody: it doesn't subscribe |
+
+Adding a service that cares about `deal.won` changes nothing in the others. Adding instances of a service shares its events among more processes.
+
+The group is the subscription, so `micro.service` is part of where a service's events wait. Renaming a service starts a new, empty subscription: on most transports, events published while nobody had subscribed under the new name are not delivered to it. Rename during a quiet period, or set `micro.kafka.start_from = "earliest"` for the first start under the new name on Kafka.
+
+### Every instance (broadcast)
+
+Some events matter to every running instance rather than to one: clearing a cache, pushing a change to the WebSocket clients connected to each instance. Mark the handler `broadcast`:
+
+```rust
+#[event_pattern("company.renamed", broadcast)]
+async fn company_renamed(&self, Payload(event): Payload<CompanyRenamed>) -> Result<()> {
+    self.cache.forget(&format!("company:{}", event.company_id)).await?;
+    Ok(())
+}
+```
+
+A broadcast handler gets a subscription per instance that lives as long as the instance. It is delivered at most once, isn't retried and isn't dead-lettered: an instance that is down misses the event, and that's fine, because it starts with an empty cache anyway.
+
+`m.receive_event::<E>()` is a shorthand for a broadcast handler that emits `E` on the instance's own `EventBus`. Use it when in-process listeners, [broadcasting](/docs/digging-deeper/broadcasting/) or [GraphQL subscriptions](/docs/microservices/graphql/#subscriptions) on every instance need events published anywhere:
+
+```rust
+m.receive_event::<DealUpdated>();
+```
+
+## Retries and backoff
+
+The broker delivers an event until a handler acknowledges it, and Navree acknowledges only after the handler returned `Ok` and its unit of work committed. When the handler fails (an error, a panic, or its time limit), the unit of work rolls back and the event comes back after a delay:
+
+```toml title="config/app.toml"
+[micro.events]
+max_attempts = 5
+backoff = { type = "exponential", base_secs = 1, max_secs = 300 }
+timeout_secs = 120
+dead_letter = "database"
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `micro.events.max_attempts` | `5` | Attempts before the event is dead-lettered. |
+| `micro.events.backoff` | exponential, 1 s doubling to 300 s | The delay before each retry: `{ type = "exponential", base_secs, max_secs }` or `{ type = "fixed", secs }`, the same `Backoff` jobs use. |
+| `micro.events.timeout_secs` | `120` | The time limit of one attempt. `#[timeout("30s")]` on a handler overrides it. |
+| `micro.events.dead_letter` | `database` with `DatabaseModule`, else `transport` | Where exhausted events go: `database`, `transport` or `log`. |
+
+A handler can raise its own attempts: `#[event_pattern("deal.won", max_attempts = 10)]`. `MessageContext::attempt()` is the attempt number, starting at 1, for handlers that act differently on a late attempt.
+
+Not everything is retried. An event whose payload doesn't decode or fails validation, or that a guard refuses, goes to the dead letters at once.
+
+## Dead letters
+
+An event that used up its attempts is a **dead letter**. Where it goes depends on `micro.events.dead_letter`:
+
+- `database`: a row in `micro_dead_letters` in the service's database, with the pattern, the payload, the headers, the attempts and the last error. The commands below manage them.
+- `transport`: the broker's dead-letter destination (`<stream>.dead.<service>.<pattern>` on NATS, `<service>.dead` on Kafka, the `<exchange>.dead` exchange on RabbitMQ, `<prefix>dead` on Redis, `<prefix>/dead/<service>/<topic>` on MQTT), for tools that watch the broker. Each carries the event's headers, plus `navree-error` and `navree-attempts`. TCP has none: use `database` or `log` there.
+- `log`: an `error` line on target `navree::micro` with the pattern, the message id and the error, and the event is dropped.
+
+```sh
+cargo run -p notifications -- micro:failed                                       # list them
+cargo run -p notifications -- micro:retry 0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23   # retry one
+cargo run -p notifications -- micro:retry all                                    # retry all
+cargo run -p notifications -- micro:flush                                        # delete all
+```
+
+```text wrap
+0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  deal.won  attempts=5  2026-10-26 08:14:02  smtp refused the message
+```
+
+`micro:retry` hands the event back to this service's handler in the process that runs the command, not to every subscriber, with its attempts starting over; an event that fails again is a new dead letter. The same operations are on the `DeadLetters` service, for an admin screen: `list()`, `find(id)`, `retry(id)` (`true` when the event was handled), `retry_all()` (how many were handled and how many failed again) and `flush()`. Each `DeadLetter` has the `id`, `service`, `pattern`, `handler_pattern` (the pattern of the handler that failed, such as `deal.*`), `message_id`, `headers`, `payload`, `attempts`, the last `error` and `failed_at`; `decode::<T>()` returns the payload as a `T`, or `None` when it doesn't decode.
+
+## Idempotency and the inbox
+
+At-least-once delivery means a handler can see an event twice: after a crash between its commit and the acknowledgment, after a broker failover, after `micro:retry` of an event that had in fact succeeded. Navree's inbox makes that harmless for handlers that write through a unit of work.
+
+With `micro.inbox` on (the default with `DatabaseModule`), every event handler (broadcast ones aside) gets its message id written to `micro_inbox` in the message's unit of work, once the handler returned `Ok`. When the same message id arrives again, Navree finds it there and acknowledges the event without running the handler. The handler's writes and the inbox row commit together, so the check is exact: either both happened or neither did.
+
+Side effects outside your database need one more step. Mail sent and APIs called from inside a handler happen even if the transaction then rolls back, and again on a redelivery. Make them follow the commit instead:
+
+- send mail with `Mailer::queue` and notifications with `Notifier::send`, which join the unit of work;
+- dispatch a [job](/docs/digging-deeper/queues/) for an API call, which is queued only if the handler commits;
+- register an [after-commit hook](/docs/database/unit-of-work/#after-commit-hooks).
+
+That is what the notifications service's `AlertService` does: it writes the in-app notification and queues the mail through the handler's unit of work, so each `deal.won` notifies the owner exactly once.
+
+Inbox rows are kept for `micro.inbox_retention_hours` (72), and the outbox relay prunes older ones every hour. Keep the retention longer than your broker keeps undelivered events. Without `DatabaseModule` (or with `micro.inbox = false`) nothing is deduplicated: make the handler idempotent by itself, with an upsert, `INSERT ... ON CONFLICT DO NOTHING`, or a check before acting.
+
+## Ordering
+
+Events with the same key keep the order in which they were emitted, from emission to handling:
+
+- **Publishing.** Events emitted in one unit of work are published in the order of the `emit` calls, outbox included.
+- **Kafka.** A key always lands on the same partition, and a partition is read by one instance of a service, so order per key holds across all its instances.
+- **The other transports.** Within one instance, Navree handles events with the same key one after another, and events with different keys in parallel. Across instances, two events with the same key can be handled at the same time. Mark the handler `ordered`, `#[event_pattern("deal.updated", ordered)]`, to handle its events one at a time, whatever their key. On NATS (one unacknowledged event per consumer), RabbitMQ (a single active consumer per queue) and the memory transport, that holds across the service's instances: one event at a time for the whole service. On Redis Streams, MQTT and TCP it holds within each instance. Either way it trades throughput for order.
+
+A retry moves an event behind the ones that came after it. When order matters more than progress, `ordered` handlers hold the events behind a failing one until it succeeds or is dead-lettered. Design handlers so they cope with order changes where you can, for example by comparing an `updated_at` or a version number before overwriting.
+
+## The outbox
+
+Writing to your database and publishing to a broker are two systems, and a process can die between them. Without care, you get a deal marked won with no `deal.won` published, or a `deal.won` published for a change that then rolled back.
+
+With `micro.outbox` on (the default with `DatabaseModule`), `emit` inside a unit of work doesn't publish. It writes the event to `micro_outbox` in the same transaction:
+
+1. The handler or request commits: the deal and the outbox row are stored together, or neither is.
+2. Right after the commit, the outbox relay publishes the row and deletes it.
+3. If the process dies between the two, a relay in any instance finds the row on its next sweep (every `micro.outbox_poll_ms`, 1000 by default) and publishes it. On PostgreSQL and MySQL, relays claim rows with `FOR UPDATE SKIP LOCKED`, so several instances never publish the same row at once.
+
+So a committed change always publishes its events, and a rolled-back one never does. In the crash window an event can be published twice, which the inbox on the receiving side absorbs.
+
+Outside a unit of work, in a command or a job without a transaction, `emit` publishes at once. To publish at once inside one, for an event that must go out even if the transaction rolls back (an audit signal, a failed-login alert), use `.immediately()`:
+
+```rust
+self.client.emit("security.login_failed", &alert).immediately().await?;
+```
+
+## Testing
+
+`MicroFake` records every event the app emits, and delivers events into the app's handlers.
+
+### Asserting on emitted events
+
+```rust title="services/deals/tests/won.rs"
+use crm_contracts::deals::{DealWon, MoveDeal, Stage};
+use navree::micro::MicroFake;
+use navree::prelude::*;
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn winning_a_deal_emits_deal_won_once() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(MicroModule::for_root(micro.transport()))
+        .module(DealsModule)
+        .build()
+        .await;
+    let (rep, deal_id) = seed_rep_with_deal(&app).await;
+    let win = MoveDeal { id: deal_id, stage: Stage::Won, position: None, lost_reason: None };
+
+    micro.client()
+        .acting_as(principal(rep))
+        .request("deals.move", &win)
+        .await
+        .assert_status(200);
+
+    micro.assert_emitted("deal.won", |event: &DealWon| event.deal_id == deal_id && event.won_by == rep);
+    micro.assert_emitted_times("deal.won", 1);
+    app.shutdown().await.unwrap();
+}
+```
+
+Events emitted in a unit of work are recorded when it commits, as the outbox would publish them, and not at all when it rolls back: a test that sends an invalid move can `assert_nothing_emitted()`. `micro.emitted::<T>(pattern)` returns the decoded events of a pattern.
+
+### Delivering events to handlers
+
+`micro.client().emit(..)` delivers an event to the app's handler through the whole pipeline and returns once it is handled or dead-lettered. Retries run without waiting for the backoff:
+
+```rust title="services/notifications/tests/deal_won.rs"
+#[tokio::test]
+async fn a_won_deal_notifies_its_owner_once() {
+    let micro = MicroFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(MicroModule::for_root(micro.transport()))
+        .module(AlertsModule)
+        .build()
+        .await;
+    let won = sample_deal_won();
+
+    micro.client().emit("deal.won", &won).await.unwrap();
+    micro.client().emit("deal.won", &won).redelivered().await.unwrap();
+
+    assert_eq!(notifications_of(&app, won.owner_id).await.len(), 1);
+    assert!(micro.dead_letters().is_empty());
+    app.shutdown().await.unwrap();
+}
+```
+
+`.redelivered()` sends the same message id again, as a broker does after a crash, so the test proves the inbox works. To test the failure path, make the handler fail (a stubbed service with `Reply::error`, an unreachable mail transport) and assert on `micro.dead_letters()`: each entry has the pattern, the payload, the attempts and the last error.
+
+## Reference
+
+| `#[event_pattern]` option | Effect |
+|---|---|
+| `"deal.won"` | The pattern (required). May end in `*` or `>` on transports with wildcards. |
+| `max_attempts = 10` | Attempts before dead-lettering, instead of `micro.events.max_attempts`. |
+| `ordered` | One instance at a time consumes the pattern. |
+| `broadcast` | Every instance gets every event; at most once; no retries. |
+| `concurrency = 4` | At most this many of these events at once in one process. |
+
+| `ModuleBuilder` method | Effect |
+|---|---|
+| `m.message_handlers::<T>()` | Registers the message and event handlers of `T`. |
+| `m.forward_event::<E>()` | Publishes every in-process `E` under `E::NAME`. |
+| `m.forward_event_keyed::<E>(f)` | The same, with `f(&event)` as the ordering key. |
+| `m.receive_event::<E>()` | Emits every `E` published anywhere on this instance's bus (a broadcast handler). |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/events/" title="In-process events">
+    The event bus, listeners and queued listeners inside one app.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/transports/" title="Transports">
+    What each broker guarantees, and how to set it up.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/event-driven/" title="Event-driven architecture">
+    Designing a system around events.
+  </LinkCard>
+</LinkCards>

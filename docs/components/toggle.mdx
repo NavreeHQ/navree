@@ -1,0 +1,53 @@
+---
+title: "Toggle"
+description: "A two-state button that is a checkbox underneath: it posts with its form and keeps its state with no script."
+---
+
+<UiPreview example="toggle/default" />
+
+`Toggle` looks like a button and behaves like a checkbox. It is a `<label>` around an `<input type="checkbox">`, so it posts as `name` with its form, keeps its state with JavaScript off and has the keyboard of a checkbox.
+
+```rust
+use navree::ui::*;
+
+Toggle::new("starred", "Starred").icon(icons::STAR).pressed(true)
+```
+
+## When to use it
+
+Use a toggle for one on and off choice that sits with other buttons, such as starring or flagging a record. For a setting in a form, a [Switch](/docs/components/switch/) reads more clearly.
+
+<UiChoose name="on-off" current="Toggle" />
+
+## Anatomy
+
+<UiAnatomy component="toggle" />
+
+## States
+
+<UiPreview example="toggle/states" />
+
+## Sizes
+
+<UiPreview example="toggle/sizes" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the toggle. |
+| `Space` | Turns it on or off. |
+
+- Assistive technology announces it as a checkbox, checked or not checked, named by its text.
+- The checkbox is the browser's, so the state survives a reload and a form post with no script.
+- A toggle with only an icon still needs text for its name.
+
+</UiA11y>
+
+## API
+
+### Toggle
+
+<UiProps type="Toggle" />

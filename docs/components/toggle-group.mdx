@@ -1,0 +1,113 @@
+---
+title: "ToggleGroup"
+description: "A row of buttons that are on or off together: radios for one choice, checkboxes for many, so the group posts with its form and works with no script."
+---
+
+<UiPreview example="toggle-group/default" />
+
+`ToggleGroup` looks like a row of buttons and behaves like the form controls under it. A `single` group is radios in a `radiogroup`: one item is on, and it posts as `name`. A `multiple` group is checkboxes in a `group`: each item that is on posts as `name`. The state, the form field and the arrow keys of a radio are the browser's, so it works with JavaScript off. The `menus` module gives a group of checkboxes one tab stop with the arrow keys, and lets a click turn the chosen radio off if you ask for it.
+
+```rust
+use navree::ui::*;
+
+ToggleGroup::single("view", "Show deals as")
+    .variant(ToggleVariant::Outline)
+    .joined()
+    .item(ToggleItem::new("list", "List").icon(icons::LIST))
+    .item(ToggleItem::new("board", "Board"))
+    .value("board")
+```
+
+`single` and `multiple` take the field's name and a label for the group, which assistive technology reads before the first item. `value` and `values` say which items start on.
+
+## When to use it
+
+Use a toggle group for a few related choices that read as buttons: how to show a list, a range of days, the days of a working week. For one on and off choice, use a [Switch](/docs/components/switch/) or a [Toggle](/docs/components/toggle/); for a list to pick from, a [RadioGroup](/docs/components/radio-group/) or a [NativeSelect](/docs/components/native-select/); to move between views of a page, [Tabs](/docs/components/tabs/).
+
+<UiChoose name="switch-view" current="ToggleGroup" />
+
+## Anatomy
+
+<UiAnatomy component="toggle-group" />
+
+## One choice, several choices
+
+A single group keeps one item on. A multiple group turns each on and off on its own.
+
+<UiPreview example="toggle-group/multiple" />
+
+## Looks
+
+`ToggleVariant::Outline` draws a line round each item, `.joined()` closes the gaps between them, and `.size(Size::Sm)` shrinks them.
+
+<UiPreview example="toggle-group/looks" />
+
+## Icons
+
+An item can have an icon before its text, or an icon and no text with `ToggleItem::icon_only(value, icon, label)`, whose label is required. `.deselectable()` lets a click on the chosen item of a single group turn it off, which needs the script: with none, a radio stays on once chosen.
+
+<UiPreview example="toggle-group/icons" />
+
+## Vertical
+
+<UiPreview example="toggle-group/vertical" />
+
+## States
+
+An item can be disabled, and so can the whole group.
+
+<UiPreview example="toggle-group/states" />
+
+## In a form
+
+The items are real inputs, so a group in a form posts with it. In a GET form with a `data-ui-target`, a change filters the region, as a [table's](/docs/ui/data-table/) filters do. `.on_change(commands)` runs [commands](/docs/ui/commands-and-ops/) when the choice changes.
+
+```rust
+use navree::ui::*;
+
+el("form")
+    .attr("method", "get")
+    .attr("action", "/deals")
+    .attr("data-ui-target", "deals")
+    .children((
+        ToggleGroup::single("range", "Range")
+            .item(ToggleItem::new("7", "7 days"))
+            .item(ToggleItem::new("30", "30 days"))
+            .value("30"),
+        Button::outline("Apply").submit(),
+    ))
+```
+
+The Apply button is for JavaScript off; with it, the group filters the region as the choice changes.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the group: to the chosen item of a single group, to the first item of a multiple one. One stop in all. |
+| `Left`, `Right` (`Up`, `Down` when vertical) | Move between items. In a single group they also choose, as radios do; in a multiple group they only move. |
+| `Home`, `End` | Move to the first or last item. |
+| `Space` | Turns the item with focus on or off. |
+| `Enter` | Does the same in a multiple group. |
+
+- A single group has `role="radiogroup"` and each item is a radio; a multiple group has `role="group"` and each item is a checkbox. A screen reader says "checked" for what is on, where a toggle button would say "pressed". That is the cost of working with no script and posting with the form.
+- The group's label names it. Disabled items are skipped.
+- With JavaScript off every checkbox of a multiple group is a tab stop.
+
+</UiA11y>
+
+## API
+
+### ToggleGroup
+
+<UiProps type="ToggleGroup" />
+
+### ToggleItem
+
+<UiProps type="ToggleItem" />
+
+### ToggleVariant
+
+<UiProps type="ToggleVariant" />

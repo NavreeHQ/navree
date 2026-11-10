@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/lifecycle.rs
+expression: "per_dialect(|dialect| render_delete(&deletes[1], dialect))"
+---
+PostgreSQL: DELETE FROM "deals" WHERE "deals"."id" IN (SELECT "navree_keys"."id" FROM (SELECT "deals"."id" FROM "deals" WHERE "deals"."deleted_at" IS NOT NULL ORDER BY "deals"."created_at" DESC LIMIT $1) AS "navree_keys")
+  values: [U64(10)]
+MySQL: DELETE FROM `deals` WHERE `deals`.`id` IN (SELECT `navree_keys`.`id` FROM (SELECT `deals`.`id` FROM `deals` WHERE `deals`.`deleted_at` IS NOT NULL ORDER BY `deals`.`created_at` DESC LIMIT ?) AS `navree_keys`)
+  values: [U64(10)]
+SQLite: DELETE FROM "deals" WHERE "deals"."id" IN (SELECT "navree_keys"."id" FROM (SELECT "deals"."id" FROM "deals" WHERE "deals"."deleted_at" IS NOT NULL ORDER BY "deals"."created_at" DESC LIMIT ?) AS "navree_keys")
+  values: [U64(10)]

@@ -1,0 +1,49 @@
+---
+title: "Textarea"
+description: "A multi-line input for notes and messages that grows with its text where the browser can."
+---
+
+<UiPreview example="textarea/default" />
+
+`Textarea` draws a `<textarea>` that posts as `name`. It grows with its text in browsers that size a field to its content.
+
+```rust
+use navree::ui::*;
+
+Textarea::new("notes").rows(4).placeholder("What was agreed")
+```
+
+## When to use it
+
+Use a textarea for text of more than one line: notes, a message, a description.
+
+<UiChoose name="text" current="Textarea" />
+
+## Anatomy
+
+<UiAnatomy component="textarea" />
+
+## States
+
+<UiPreview example="textarea/states" />
+
+A value that starts with a line break keeps it: the HTML parser drops the first newline after `<textarea>`, so the toolkit writes a second one.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the textarea. |
+| `Enter` | Starts a new line; it doesn't submit the form. |
+
+- Give it a label with a [Field](/docs/components/field/).
+
+</UiA11y>
+
+## API
+
+### Textarea
+
+<UiProps type="Textarea" />

@@ -1,0 +1,24 @@
+multipart/form-data; boundary=----formdata-undici-032530672315
+------formdata-undici-032530672315
+Content-Disposition: form-data; name="a"
+
+1
+------formdata-undici-032530672315
+Content-Disposition: form-data; name="b"
+
+two
+lines
+------formdata-undici-032530672315
+Content-Disposition: form-data; name="e"
+
+
+------formdata-undici-032530672315
+Content-Disposition: form-data; name="f"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+------formdata-undici-032530672315--

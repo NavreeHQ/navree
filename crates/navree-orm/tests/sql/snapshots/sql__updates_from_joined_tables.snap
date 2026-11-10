@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\nrender_update_from(&query.table, &sets, &query.joins, &query.wheres, d))"
+---
+PostgreSQL: UPDATE "deals" SET "stage" = $1 FROM "companies" AS "c" WHERE "c"."id" = "deals"."company_id" AND "c"."active" = $2
+  values: [String("lost"), Bool(false)]
+MySQL: UPDATE `deals`, `companies` AS `c` SET `deals`.`stage` = ? WHERE `c`.`id` = `deals`.`company_id` AND `c`.`active` = ?
+  values: [String("lost"), Bool(false)]
+SQLite: UPDATE "deals" SET "stage" = ? FROM "companies" AS "c" WHERE "c"."id" = "deals"."company_id" AND "c"."active" = ?
+  values: [String("lost"), Bool(false)]

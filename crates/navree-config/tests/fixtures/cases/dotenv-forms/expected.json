@@ -1,0 +1,23 @@
+{
+  "base": "https://example.test",
+  "commented": "value",
+  "double": "double quoted # not a comment",
+  "duplicate": "second",
+  "empty": "",
+  "escapes": "tab\there\nnewline \"quoted\" back\\slash dollar$",
+  "expanded": "https://example.test/path",
+  "exported": "yes",
+  "hash": "not#a-comment",
+  "missing_expansion": "before--after",
+  "multi": "line one\nline two",
+  "nested": {
+    "key": {
+      "name": "nested"
+    }
+  },
+  "plain": "value",
+  "single": "single $literal \\n quoted",
+  "spaced": "trimmed value",
+  "url": "postgres://user:pass@db:5432/app?sslmode=require",
+  "windows_path": "C:\\Users\\navree"
+}

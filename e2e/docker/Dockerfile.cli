@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+# The `navree` command line tool, built once for the UI run's
+# terminal captures (e2e/tools/cli-captures.sh). The image keeps the
+# repository's source next to the binary: Navigator is pointed at an app in it.
+#
+#   docker build -f e2e/docker/Dockerfile.cli -t navree-cli:local .
+ARG RUST_IMAGE=lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-bookworm
+FROM ${RUST_IMAGE}
+ARG CARGO_BUILD_JOBS=4
+ENV CARGO_TERM_COLOR=never CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,id=navree-e2e-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=navree-e2e-cargo-git,target=/usr/local/cargo/git \
+    cargo build --release --locked -p navree-cli \
+ && cp target/release/navree /usr/local/bin/navree \
+ && strip /usr/local/bin/navree

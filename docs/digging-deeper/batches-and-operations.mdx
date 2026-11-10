@@ -1,0 +1,520 @@
+---
+title: "Batches and operations"
+description: "Run many jobs as one batch with `then`, `catch` and `finally` callbacks, and let users follow, cancel and recover long work as an operation with progress and an SSE stream."
+---
+
+## Introduction
+
+<Badge feature="queue" /> Some work is too big for one job and too slow for a request: importing 50,000 contacts, exporting a year of deals, re-sending a campaign. Two tools in `QueueModule` handle it:
+
+- A **batch** is a group of [queued jobs](/docs/digging-deeper/queues/) that run as one unit of work. It counts how many have finished and failed, stops the rest when one fails, and runs a `then`, `catch` or `finally` job when it is done.
+- An **operation** is what your users see of that work: a row with an owner, a status, progress, a result or an error. Its job (or batch) moves it along, the user follows it with `GET /api/operations/{id}`, an SSE stream or a private channel, and can cancel it. A watchdog finishes or restarts operations whose worker died.
+
+Both live in the database, next to the jobs: the `queue` migration set creates `job_batches` and `operations`. Operations always need `DatabaseModule`, even with the memory queue driver. Batches need the database or memory driver; operations also run on the [Redis driver](/docs/digging-deeper/queues/#the-redis-driver).
+
+## Batches
+
+### Dispatching a batch
+
+Build a `Batch` with a name, add its jobs and callbacks, and dispatch it:
+
+```rust title="src/modules/contacts/services/import.rs"
+use navree::queue::{Batch, Queue, QueueError};
+
+pub async fn import(queue: &Queue, uow: &Uow, import_id: Uuid, emails: Vec<String>) -> Result<(), QueueError> {
+    let chunks = emails.chunks(500).map(|rows| ImportChunk {
+        import_id,
+        rows: rows.to_vec(),
+    });
+    let batch = Batch::new("contacts.import")
+        .add(chunks)
+        .then(NotifyImportDone { import_id })
+        .catch(ReportImportFailure { import_id })
+        .finally(CleanUpImport { import_id })
+        .dispatch_in(queue, uow)
+        .await?;
+    tracing::info!(batch_id = %batch.id, jobs = batch.total_jobs, "import queued");
+    Ok(())
+}
+```
+
+- `add` takes any iterator of one job type; `push` adds a single job. Call them as often as you like to mix job types.
+- `dispatch_in(&queue, &uow)` stores the batch and its jobs in the unit of work: nothing is queued if it rolls back, and workers see the jobs after the commit. `dispatch(&queue)` joins the current unit of work the same way a plain `queue.dispatch` does, and stores at once outside one. The same methods exist on the queue: `queue.dispatch_batch(batch)` and `queue.dispatch_batch_in(&uow, batch)`.
+- Every job type in the batch, callbacks included, must be registered with `m.job::<J>()`. If one isn't, dispatching fails with `QueueError::UnknownJob` and nothing is queued.
+- Jobs in a batch are never [unique](/docs/digging-deeper/queues/#unique-jobs): `unique_for_secs` is ignored, so every job counts.
+
+The jobs are ordinary jobs. Each one runs on its own queue with its own options, and any number of workers run them side by side.
+
+### Callbacks
+
+A batch finishes when each of its jobs has succeeded, failed (used its attempts) or been skipped. Its callbacks are jobs too, queued when they become due:
+
+| Callback | Queued when |
+|---|---|
+| `then` | the batch finishes with no failed job and without being cancelled |
+| `catch` | the first job fails (at once, while the others may still run) |
+| `finally` | the batch finishes, whatever happened |
+
+A batch with no jobs finishes as it is dispatched: its `then` and `finally` are queued with it. Give a callback the ids it needs (`import_id` above) and look the rest up when it runs.
+
+Each job goes to the queue its type names (`JobOptions::queue`). `.on_queue("imports")` puts every job of the batch, and its callbacks, on one queue instead, the jobs added before the call and after it, so a large batch can run on workers of its own.
+
+### Failures and cancellation
+
+By default the first failed job **cancels** the batch: the jobs that haven't started yet are skipped instead of run. Jobs that are already running keep going until they next report progress (see [stopping a cancelled job](#stopping-a-cancelled-job)). `finally` still runs; `then` doesn't.
+
+When the jobs don't depend on each other, keep going after a failure:
+
+```rust
+Batch::new("campaign.send")
+    .add(recipients.into_iter().map(|id| SendCampaign { campaign_id, recipient_id: id }))
+    .allow_failures()
+    .finally(CloseCampaign { campaign_id })
+```
+
+With `allow_failures`, every job runs; `catch` still runs on the first failure, and `then` still only when no job failed.
+
+Cancel a batch yourself with its id:
+
+```rust
+let batch = queue.cancel_batch(&batch_id).await?; // Option<JobBatch>
+```
+
+A finished batch stays as it is. A skipped or cancelled job counts as finished, not as failed, and doesn't move to the failed jobs. `WorkStats` counts these jobs in `cancelled`, and their log line has `outcome = "cancelled"`.
+
+### Following a batch
+
+`queue.find_batch(&id)` returns the batch as it is now, as a `JobBatch`:
+
+| Field or method | Meaning |
+|---|---|
+| `id`, `name` | The batch id (a UUID v7 string) and the name given to `Batch::new`. |
+| `total_jobs`, `pending_jobs`, `failed_jobs` | Its jobs: in all, not finished yet, failed. |
+| `failed_job_ids` | The failed jobs' ids, as `queue:failed` lists them. |
+| `processed_jobs()` | Jobs that finished: succeeded, failed or skipped. |
+| `progress()` | `processed_jobs()` as a whole percentage (100 for an empty batch). |
+| `finished()`, `cancelled()`, `has_failures()` | Whether every job finished, whether it was cancelled, whether a job failed. |
+| `allow_failures`, `operation_id` | Its settings. |
+| `created_at`, `cancelled_at`, `finished_at` | When it was dispatched, cancelled and finished. |
+
+`queue.batches(20)` lists the most recent batches, newest first, and `queue:batches` prints them:
+
+```sh
+cargo run -- queue:batches --limit 5
+```
+
+```text wrap
+0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  contacts.import  64/100 jobs (64%)  0 failed  running  2026-10-27T09:12:44+00:00
+```
+
+When the last job and every callback of a batch have finished, a `batch finished` line is logged at target `navree::job` with `batch_id`, `name`, `total_jobs`, `failed_jobs` and `cancelled`.
+
+## Reporting progress from a job
+
+A job reports how far it got with `ctx.progress(done, total, note)`:
+
+```rust title="src/modules/contacts/jobs/import_chunk.rs"
+use navree::contracts::{BoxError, Job, JobContext, JobOptions};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ImportChunk {
+    pub import_id: Uuid,
+    pub rows: Vec<String>,
+}
+
+impl Job for ImportChunk {
+    const NAME: &'static str = "contacts.import_chunk";
+
+    /// A bad row fails the same way twice: no retries.
+    fn options() -> JobOptions {
+        JobOptions {
+            max_attempts: 1,
+            ..JobOptions::default()
+        }
+    }
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let total = self.rows.len() as u64;
+        for (done, email) in self.rows.iter().enumerate() {
+            if email.is_empty() {
+                return Err("a row has no email".into());
+            }
+            // ... insert the contact
+            ctx.progress(done as u64 + 1, total, format!("Imported {email}"))
+                .await?;
+        }
+        Ok(())
+    }
+}
+```
+
+- When the job is an [operation's](#operations) work, the report becomes the operation's progress, and the user sees it. In a batch, the operation counts the batch's finished jobs, and the job's report only updates its note.
+- Reports are written at most once every `queue.operations.progress_interval_ms` (500 ms) per job, so calling it for every row is fine. A report with `done == total` is always written.
+- Failing to record progress is never an error: it is logged, and the job carries on. In an app without `QueueModule` the call does nothing.
+
+### Stopping a cancelled job
+
+`progress` returns `Err(JobCancelled)` once the job's batch or operation has been cancelled. With `?`, the job stops at its next report. A worker that gets `JobCancelled` back from a job finishes it as cancelled: it isn't retried and isn't a failure.
+
+Between steps that don't report progress, ask directly:
+
+```rust
+ctx.check_cancelled().await?;       // Err(JobCancelled) once cancelled
+if ctx.is_cancelled().await {
+    // clean up, then stop
+}
+```
+
+## Operations
+
+### Starting an operation
+
+Inject `Arc<Operations>`, start an operation in the request's unit of work, dispatch its work, and answer at once. This handler starts an import:
+
+```rust title="src/modules/contacts/controller.rs" {21-30,39}
+use navree::http::CurrentPrincipal;
+use navree::queue::{Batch, OperationRecord};
+
+#[injectable]
+pub struct ImportController {
+    operations: Arc<Operations>,
+}
+
+#[controller("/contacts/imports", version = "1")]
+impl ImportController {
+    #[post("/")]
+    #[authenticated]
+    async fn store(
+        &self,
+        uow: Uow,
+        CurrentPrincipal(me): CurrentPrincipal,
+        Json(input): Json<ImportInput>,
+    ) -> Result<Json<OperationRecord>> {
+        let import_id = Uuid::now_v7();
+        let total = input.emails.len() as u64;
+        let op = self
+            .operations
+            .start(
+                &uow,
+                Operation::new("contacts.import")
+                    .owner(me.user_id)
+                    .total(total)
+                    .note("Waiting for a worker"),
+            )
+            .await?;
+        let chunks = input.emails.chunks(500).map(|rows| ImportChunk {
+            import_id,
+            rows: rows.to_vec(),
+        });
+        let batch = Batch::new("contacts.import")
+            .add(chunks)
+            .then(FinishImport { operation: op.id, rows: total })
+            .catch(ReportImportFailure { import_id });
+        self.operations.dispatch_batch(&uow, &op, batch).await?;
+        Ok(Json(op))
+    }
+}
+```
+
+`Operation::new(kind)` describes it:
+
+| Method | Meaning |
+|---|---|
+| `Operation::new("contacts.import")` | Its kind, for people and front ends to tell operations apart. |
+| `.owner(user_id)` | The user who started it. They can always see and cancel it. |
+| `.workspace(workspace_id)` | The [workspace](/docs/workspaces/introduction/) it belongs to, for [access](#who-may-see-an-operation). |
+| `.total(n)` | The units of work, when you know them up front. |
+| `.note("...")` | The first progress note. |
+| `.idempotent()` | Its job can safely run again from the start, so the [watchdog](#the-watchdog) restarts it instead of failing it. |
+
+`start` stores the operation as `pending` and returns it. Then queue its work, in the same unit of work, in one of two ways:
+
+- `operations.dispatch(&uow, &op, job)` queues one job. The job's progress reports become the operation's, and the operation finishes when the job does.
+- `operations.dispatch_batch(&uow, &op, batch)` dispatches a batch. The operation's progress counts the batch's finished jobs (its total becomes the number of jobs), and it finishes once the batch and all its callbacks have run.
+
+The response is the operation, with its `id` for the client to follow. The `Operation` and `Operations` names come with the prelude.
+
+### What moves an operation along
+
+| Status | When |
+|---|---|
+| `pending` | Started, its work not begun yet. |
+| `running` | A worker started its job, or a job reported progress. |
+| `succeeded` | Its job succeeded, or its batch finished without a failed job. |
+| `failed` | Its job used its attempts ("The operation failed."), its batch had a failed job ("1 of 4 jobs failed.") or a failed callback, or the watchdog found it stalled. |
+| `cancelled` | It was cancelled, or its batch was cancelled with no failed job. |
+
+A finished operation never changes again, so the first finish wins. Your jobs can finish it themselves through `Operations`:
+
+```rust title="src/modules/contacts/jobs/finish_import.rs"
+impl Job for FinishImport {
+    const NAME: &'static str = "contacts.import_finished";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let operations = ctx.app.get::<Operations>().await?;
+        operations
+            .complete(self.operation, json!({ "imported": self.rows }))
+            .await?;
+        Ok(())
+    }
+}
+```
+
+- `complete(id, result)` finishes it as `succeeded` with a JSON `result`: a download URL, counts, whatever the front end shows. A job that calls `complete` and then succeeds keeps that result.
+- `fail(id, message)` finishes it as `failed` with a message for people.
+- `progress(id, done, total, note)` records progress from code outside a job, and `heartbeat(id)` tells the watchdog that work running outside the queue is still alive.
+
+While a job of an operation runs, its worker renews the operation's `heartbeat_at` every `queue.operations.heartbeat_secs` (30 s).
+
+### Following an operation
+
+Every change of an operation reaches the client three ways.
+
+**The routes.** `QueueModule` mounts these under `{http.api_prefix}` (default `/api`), tagged `Operations` in the [OpenAPI document](/docs/digging-deeper/openapi/). Every route needs a signed-in user.
+
+| Route | Answer |
+|---|---|
+| `GET /api/operations?limit=20` | `{"data": [...]}`: the signed-in user's own operations, newest first (`limit` 1 to 100). |
+| `GET /api/operations/{id}` | The operation. |
+| `GET /api/operations/{id}/events` | A server-sent event stream of the operation. |
+| `DELETE /api/operations/{id}` | [Cancels](#cancelling-an-operation) it and returns it. |
+
+An operation looks like this:
+
+```json title="200 OK"
+{
+  "id": "0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa",
+  "kind": "contacts.import",
+  "status": "running",
+  "progress": { "done": 2, "total": 4, "percent": 50, "note": "Imported gauri@example.test" },
+  "result": null,
+  "error": null,
+  "owner_id": "0199c1d3-88a0-7f41-b0d2-5e7a9c3b1f04",
+  "workspace_id": null,
+  "batch_id": "0199c1d4-0b60-7d2a-8f11-0c9e5a7b3d21",
+  "created_at": "2026-10-27T09:12:44.120Z",
+  "started_at": "2026-10-27T09:12:45.003Z",
+  "heartbeat_at": "2026-10-27T09:12:47.415Z",
+  "finished_at": null,
+  "updated_at": "2026-10-27T09:12:47.415Z"
+}
+```
+
+The routes mount when `queue.operations.routes` is true (the default) and the app has `DatabaseModule` and an authenticator (`AuthModule`, or `TestApp`'s in tests). Turn them off to serve operations from your own routes with the `Operations` methods.
+
+**The SSE stream.** `GET /api/operations/{id}/events` answers `text/event-stream`: an `operation` event with the operation now, then one after every change. The event's `id` is the operation's version. The stream ends after the event with the finished state, so a client reads it to the end and has the result.
+
+```sh
+curl -N -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/operations/0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa/events
+```
+
+```text wrap
+event: operation
+id: 4
+data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"running","progress":{"done":2,"total":4,"percent":50,"note":"Imported gauri@example.test"},...}
+
+event: operation
+id: 7
+data: {"id":"0199c1d4-0b52-7c1e-9a63-41d1f2e0c7aa","kind":"contacts.import","status":"succeeded","progress":{"done":4,"total":4,"percent":100,"note":"Imported arun@example.test"},"result":{"imported":4},...}
+```
+
+Changes made in the same process arrive at once. Changes made by workers in other processes are picked up by re-reading the operation every `queue.operations.stream_poll_ms` (1000 ms). An idle stream sends a keep-alive comment every 15 seconds. The browser's `EventSource` can't send an `Authorization` header, so read the stream with `fetch` when you authenticate with bearer tokens, or let a backend-for-frontend add the header.
+
+**The private channel.** With [broadcasting](/docs/digging-deeper/broadcasting/) set up (an app with a `dyn Broadcaster`, such as `RealtimeModule`), every change is also broadcast as `operation.updated` on the private channel `private-operations.{id}`, with the operation as its data. The module authorizes the channel for the users who may see the operation. A change made in a unit of work is broadcast after it commits.
+
+```ts title="web/import-progress.ts"
+const channel = pusher.subscribe(`private-operations.${operation.id}`);
+channel.bind("operation.updated", (op: Operation) => {
+  progressBar.value = op.progress.percent;
+  if (op.status === "succeeded") showResult(op.result);
+});
+```
+
+`OperationRecord::channel()` gives the channel name in Rust.
+
+### In a Navree UI page
+
+With the `ui` and `queue` features on together, `navree::queue::ui::OperationProgress` is a [region](/docs/ui/regions/) that follows an operation: a progress bar with the operation's note, and, when it finishes, a link to the result or the error. It polls every 2 seconds (`.poll(duration)` changes that), and `.live()` also hears the change on the app's live hub, so it needs `RealtimeModule`; without one it only polls. The region stops asking once the operation has finished.
+
+```rust
+let op = operations.start(&uow, Operation::new("deals.export").owner(user)).await?;
+operations.dispatch(&uow, &op, ExportDeals { operation: op.id }).await?;
+
+// On the page:
+OperationProgress::new(op.id).live()
+
+// In the job, when it is done:
+operations.complete(op.id, json!({ "url": "/exports/deals.csv" })).await?;
+```
+
+The link comes from the `url` of the operation's `result` (`.result_key("path")` reads another key), and only an address on your own site becomes a link. `QueueModule` serves the fragment at `GET /operations/{id}/progress` when the routes above are on, with the same rules as the JSON route: the owner and holders of `operations.view` see it, and everyone else gets a 404. It draws English words; for other words, mount a route of your own that answers with `OperationProgress::new(id).labels(words).record(record)`, where `words` is an `OperationLabels`.
+
+### Who may see an operation
+
+An operation is visible to:
+
+- its **owner**;
+- users who hold the **`operations.view`** permission, app-wide or in the operation's workspace.
+
+Everyone else gets a 404, as for an operation that doesn't exist, and the private channel refuses them. Cancelling needs the owner or **`operations.cancel`** the same way; a user who can see the operation but not cancel it gets a 403.
+
+Navree asks every module that answers permission questions through `navree::contracts::permitted`:
+
+- [`AccessModule`](/docs/security/authorization/) answers with the user's app-wide roles and permissions, checked the way a route's `permissions` declaration checks them: `operations.view`, `operations.*` and the super-admin role grant it, in every workspace.
+- [`WorkspaceModule`](/docs/workspaces/members-and-roles/) answers with the user's role in the operation's workspace. The `owner` role has every permission; give other roles the permission in configuration:
+
+```toml title="config/app.toml"
+[workspace.roles.admin]
+permissions = ["operations.view", "operations.cancel"]
+```
+
+To use other permission names, set `queue.operations.view_permission` and `cancel_permission`. In your own code, `operations.can_view(&principal, &op)` and `can_cancel` answer the same questions.
+
+### Cancelling an operation
+
+`DELETE /api/operations/{id}`, or `operations.cancel(id)` in code, cancels an operation that hasn't finished:
+
+- it becomes `cancelled` at once;
+- its batch is cancelled, and its jobs that haven't started are skipped;
+- a running job stops at its next `ctx.progress` (or `check_cancelled`), which returns `JobCancelled`.
+
+Cancelling is cooperative: a job that never reports progress runs to the end, though the operation stays cancelled. Cancelling a finished operation over HTTP answers `409 Conflict`, "The operation has already finished.", with the code `operation_finished`.
+
+### The watchdog
+
+A worker can die mid-job: a deploy, a crash, `kill -9`. The queue takes the job over once its reservation expires, but some work isn't in the queue any more, and an operation would then stay `running` forever. The watchdog, `operations.sweep()`, looks at every pending or running operation with no sign of life (heartbeat, start or creation) for `queue.operations.stale_after_secs` (300 s):
+
+1. A job of it is still in the queue: the queue owns the work, so it is left alone.
+2. Its batch has finished: the operation finishes the way the batch did.
+3. It is `idempotent` and was started with `operations.dispatch`: its job is dispatched again, at most `queue.operations.max_redispatches` (3) times. Its note reads "Restarted after it stopped responding".
+4. Otherwise it fails with "The operation stopped responding.".
+
+Each step first claims the operation on its row, so sweeps that overlap (two servers, or a manual run during the scheduled one) restart or fail an operation once, and a heartbeat that arrives during the sweep keeps it alive.
+
+**Scheduling it.** In an app with [`ScheduleModule`](/docs/digging-deeper/scheduling/), `QueueModule` schedules the watchdog for you: task `queue.watchdog`, every minute, without overlapping. `schedule:list` shows it, and `queue.operations.watchdog = false` turns it off. Without `ScheduleModule`, run the command every minute from system cron:
+
+```sh
+cargo run -- queue:watchdog
+```
+
+```text
+Operations: 1 failed, 0 restarted, 0 finished with their batch.
+```
+
+### Pruning
+
+Finished batches and operations stay in their tables until you delete them. `queue:prune` deletes the batches whose jobs and callbacks all finished, and the operations that finished, more than `--hours` ago (default 168, one week):
+
+```sh
+cargo run -- queue:prune --hours 72
+```
+
+Schedule it daily with `s.command("queue:prune", &[]).daily_at("04:00")`. In code: `queue.prune_batches(older_than)` and `operations.prune(older_than)`.
+
+## Configuration
+
+Operations read the `queue.operations` section. Every key has a default:
+
+```toml title="config/app.toml"
+[queue.operations]
+routes = true                        # GET/DELETE /api/operations/{id}, the SSE stream
+watchdog = true                      # schedule the watchdog every minute (with ScheduleModule)
+heartbeat_secs = 30                  # how often a running job's operation shows it is alive
+stale_after_secs = 300               # no heartbeat for this long: the watchdog steps in
+max_redispatches = 3                 # restarts of an idempotent operation's job
+progress_interval_ms = 500           # ctx.progress writes at most this often per job
+stream_poll_ms = 1000                # how often an SSE stream re-reads the operation
+view_permission = "operations.view"  # see other users' operations
+cancel_permission = "operations.cancel"
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `routes` | `true` | Mounts the `/api/operations` routes (they also need `DatabaseModule` and an authenticator). |
+| `watchdog` | `true` | Schedules task `queue.watchdog` every minute in apps with `ScheduleModule`. |
+| `heartbeat_secs` | `30` | How often a worker renews a running operation's heartbeat. At least 1. |
+| `stale_after_secs` | `300` | When a pending or running operation counts as stalled. More than `heartbeat_secs`. |
+| `max_redispatches` | `3` | How often the watchdog restarts an idempotent operation's job before failing it. |
+| `progress_interval_ms` | `500` | How often `ctx.progress` writes, per job. |
+| `stream_poll_ms` | `1000` | How often an SSE stream re-reads its operation. At least 1. |
+| `view_permission` | `operations.view` | The permission that shows other users' operations. Not empty. |
+| `cancel_permission` | `operations.cancel` | The permission that cancels them. Not empty. |
+
+As environment variables, nest with double underscores: `APP_QUEUE__OPERATIONS__ROUTES=false`, `APP_QUEUE__OPERATIONS__STALE_AFTER_SECS=600`. An invalid value fails the boot.
+
+## Tables
+
+The `queue` migration set adds two tables and three columns of `jobs`. Times are Unix milliseconds.
+
+| Table | Columns |
+|---|---|
+| `job_batches` | `id`, `name`, `total_jobs`, `pending_jobs`, `failed_jobs`, `failed_job_ids`, `callbacks`, `callbacks_pending`, `callbacks_failed`, `allow_failures`, `operation_id`, `created_at`, `cancelled_at`, `finished_at` |
+| `operations` | `id`, `kind`, `status`, `owner_id`, `workspace_id`, `progress_done`, `progress_total`, `progress_note`, `result`, `error`, `batch_id`, `job`, `idempotent`, `redispatches`, `version`, `created_at`, `started_at`, `heartbeat_at`, `finished_at`, `updated_at` |
+| `jobs` (added) | `batch_id`, `batch_callback`, `operation_id` |
+
+A batch's counters change in the same transaction that finishes each of its jobs, so a batch finishes, and its callbacks are queued, exactly once however many workers run its jobs.
+
+## Testing
+
+### Faking batches
+
+[`QueueFake`](/docs/digging-deeper/queues/#faking-the-queue) records batches apart from single jobs: a batch's jobs are not in `dispatched()`. The example boots the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)).
+
+```rust title="tests/import.rs"
+#[tokio::test]
+async fn an_import_is_queued_as_one_batch() {
+    let fake = QueueFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(QueueModule::from_config())
+        .module(ContactsModule)
+        .override_value(Arc::new(fake.queue()))
+        .build()
+        .await;
+
+    app.acting_as(principal(Uuid::now_v7()))
+        .post("/api/v1/contacts/imports")
+        .json(&json!({ "emails": ["anu@example.test", "gauri@example.test", "arun@example.test"] }))
+        .send()
+        .await
+        .assert_status(200);
+
+    fake.assert_batched(|batch| batch.name() == "contacts.import");
+    let batch = &fake.batches()[0];
+    assert_eq!(batch.jobs_of::<ImportChunk>().len(), 1);
+    assert_eq!(batch.then_of::<FinishImport>().unwrap().rows, 3);
+    fake.assert_nothing_dispatched();
+}
+```
+
+- `batches()` returns each `RecordedBatch`: `batch` (the `JobBatch` as a driver stores it at dispatch), `jobs`, `then`, `catch` and `finally`. `jobs_of::<J>()`, `then_of::<J>()`, `catch_of::<J>()` and `finally_of::<J>()` decode them.
+- `assert_batched(pred)` and `assert_nothing_batched()` assert on them; `clear()` forgets batches too.
+- A batch dispatched with `dispatch_in` is recorded when its unit of work commits, and not at all if it rolls back. `find_batch`, `batches` and `cancel_batch` work on the recorded batches.
+- The operation itself is stored as usual, since operations live in the database.
+
+### Running batches and operations
+
+To test what the work does, keep a real queue and run it with `run_pending`: batch jobs, then their callbacks, run in order, and the operation finishes. Read it back with `Operations::find`, or through the routes:
+
+```rust
+app.get::<Queue>().await.run_pending().await.unwrap();
+
+let op = app.get::<Operations>().await.find(id).await.unwrap().unwrap();
+assert_eq!(op.status, OperationStatus::Succeeded);
+assert_eq!(op.result, Some(json!({ "imported": 3 })));
+```
+
+To test the watchdog, give the app a `FixedClock`, move it past `stale_after_secs` and call `operations.sweep()`, which returns a `SweepReport` (`failed`, `redispatched`, `finished`).
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
+    Jobs, workers, retries and failed jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/broadcasting/" title="Broadcasting">
+    Private channels and the realtime server.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/scheduling/" title="Task scheduling">
+    Where the watchdog runs every minute.
+  </LinkCard>
+</LinkCards>

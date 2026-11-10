@@ -1,0 +1,5 @@
+error: duplicate `providers` key
+ --> tests/ui/module/duplicate_key.rs:9:30
+  |
+9 | #[module(providers = [Repo], providers = [Cache])]
+  |                              ^^^^^^^^^

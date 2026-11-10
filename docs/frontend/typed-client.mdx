@@ -1,0 +1,397 @@
+---
+title: "The typed client"
+description: "`@navree/client`: a client typed from your API's OpenAPI document, with Navree's error codes, list queries, pages, query keys and operations."
+---
+
+`@navree/client` calls a Navree API with types generated from the API's own OpenAPI document, so a renamed field or a removed route is a compile error in the front end. It is a typed fetch client with Navree's conventions built in: the error shape and its `code`, the workspace header, request ids, list queries and the page shapes. The fetch core under it is Navree's own, [described below](#the-fetch-core), and the package has no runtime dependencies.
+
+## Generating the schema
+
+`navree openapi:client` exports the app's document and writes `schema.d.ts` from it. The generator is part of the `navree` binary: it runs no other program and needs no network.
+
+```text title="What schema.d.ts declares"
+export interface paths { ... }        // each path, with its methods, parameters, body and responses
+export interface webhooks { ... }
+export interface components { ... }   // schemas, responses, parameters, requestBodies, headers, pathItems
+export type $defs = ...
+export interface operations { ... }   // the operations that have an operationId
+```
+
+Run it from the app:
+
+```sh
+navree openapi:client                         # web/src/lib/api/openapi.json and schema.d.ts
+navree openapi:client --out web/app/lib/api   # a Nuxt app
+navree openapi:client --input openapi.json    # from a document you already have
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--out DIR` | `web/src/lib/api` | Where `openapi.json` and `schema.d.ts` go, relative to the app (to the current directory with `--input`). |
+| `--input FILE` | none | Generate from this document instead of running `openapi:export`. It is JSON, relative to the current directory, and no app is needed, so a front end's `gen:api` script can call it. |
+
+The command runs `cargo run --quiet -- openapi:export <out>/openapi.json`, then writes `<out>/schema.d.ts`. Commit both files and run the command again after changing routes or types; a CI step that runs it and fails on a diff keeps the front end and the API in step.
+
+The generator reads OpenAPI 3.0 and 3.1 documents in one JSON file, with every `$ref` pointing inside it. It writes `$ref`, `allOf`, `oneOf`, `anyOf`, `nullable` and 3.1 type lists, enums, `const`, tuples, `additionalProperties`, `readOnly` (as `readonly`), discriminators and descriptions (as JSDoc). It refuses a document that is not OpenAPI 3, has a `$ref` that leads nowhere, outside the file or to a part of the document the file does not declare (only `paths`, `webhooks`, `components` and `$defs` are), or uses an `operationId` twice, and it says which. A reference to something it cannot follow is a warning on standard error, and the schema is written without it.
+
+It works within limits: the document is at most 64 MiB and nests at most 128 levels deep, a reference may lead through at most 64 other references, and the TypeScript written for one document is bounded (about 32 MiB, counting what each schema is read with, such as the names above it and the `required` names that `allOf` members carry), so a document cannot ask for more than that.
+
+## Creating the client
+
+```ts title="web/src/lib/api/client.ts"
+import { createNavreeClient } from "@navree/client";
+import type { paths } from "./schema";
+
+export const api = createNavreeClient<paths>();
+```
+
+```ts
+import { unwrap } from "@navree/client";
+import { api } from "@/lib/api/client";
+
+const deal = await unwrap(api.GET("/api/v1/deals/{id}", { params: { path: { id } } }));
+const created = await unwrap(api.POST("/api/v1/deals", { body: { title: "Agra renewal", amount_cents: 120_000 } }));
+```
+
+`GET`, `POST`, `PUT`, `PATCH` and `DELETE` take the path as the document writes it; the path parameters, query and body are typed from it, and so is the data. `unwrap` returns the data or throws a [`NavreeError`](#errors).
+
+### Cookie mode and bearer mode
+
+With no `token`, the client is in **cookie mode**: requests go to the page's own origin with `credentials: "same-origin"` and no `Authorization` header. That is the mode for a browser behind a [backend-for-frontend](/docs/frontend/auth-and-bff/), which holds the tokens in httpOnly cookies.
+
+With a `token`, the client is in **bearer mode**: it sends `Authorization: Bearer <token>` and omits cookies. Use it on servers, in scripts and in apps that hold the token themselves:
+
+```ts
+const api = createNavreeClient<paths>({
+  baseUrl: "https://api.example.com",
+  token: () => session.accessToken, // asked before every request; null sends none
+});
+```
+
+### Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `baseUrl` | `""` | Where the API (or the BFF) is. Empty means the page's own origin. |
+| `token` | none | A token, or a function returning one (sync or async). Turns on bearer mode. |
+| `credentials` | `same-origin` in cookie mode, `omit` in bearer mode | Fetch credentials. |
+| `workspace` | none | The current workspace, or a function returning it; sent as `workspaceHeader`. |
+| `workspaceHeader` | `X-Workspace` | The API's `workspace.header`. |
+| `requestId` | `true` | `X-Request-Id` on every request: `true` makes a UUID, a function makes your own, `false` sends none. |
+| `headers` | `{}` | Headers for every request; a request's own headers win. |
+| `fetch` | `globalThis.fetch` | The fetch to use (tests, server runtimes). |
+| `onUnauthorized(response, request)` | none | Called on every 401: send the browser to sign-in. |
+| `onForbidden(error, request)` | none | Called on every 403 with the parsed `NavreeError`: a toast. |
+
+Every request id is logged by the API with the request, and comes back on errors as `error.requestId`, so a support ticket can quote it.
+
+### Requests that aren't JSON
+
+`api.raw(path, init)` sends a plain request with the same headers and hooks, for CSV exports, event streams and channel authorization:
+
+```ts
+const response = await api.raw("/api/v1/contacts/export?filter[status]=customer", { headers: { Accept: "text/csv" } });
+const csv = await response.text();
+```
+
+### List endpoints
+
+Until an endpoint's OpenAPI entry describes its list query, give the client the query type with `WithQuery`:
+
+```ts title="web/src/lib/api/client.ts"
+import { createNavreeClient, type ListQuery, type WithQuery } from "@navree/client";
+import type { paths as Generated } from "./schema";
+
+export type paths = WithQuery<Generated, {
+  "/api/v1/deals": ListQuery;
+  "/api/v1/contacts": ListQuery & { status?: "lead" | "customer" };
+}>;
+
+export const api = createNavreeClient<paths>();
+```
+
+### The fetch core
+
+`createNavreeClient` is a thin layer on `createClient`, which `@navree/client/fetch` exports for code that wants the typed calls without Navree's conventions:
+
+```ts
+import { createClient } from "@navree/client/fetch";
+import type { paths } from "./schema";
+
+const api = createClient<paths>({ baseUrl: "https://api.example.com" });
+const { data, error, response } = await api.GET("/api/v1/deals/{id}", { params: { path: { id } } });
+```
+
+A call resolves to `{ data, response }` for a success and `{ error, response }` for an error status, and rejects only when the request itself fails (no connection, an abort, a hook that throws). `data` is typed from the success status of the route in the document and `error` from its error statuses (4xx, 5xx, ranges and `default`); the path, query and header parameters and the body are typed from the operation. A parameter or a body the operation requires makes the options argument required. `readOnly` properties can't be sent and `writeOnly` ones never come back.
+
+| Part of a call | What it does |
+|---|---|
+| `params.path` | Fills `{name}` in the path, percent-encoded, object keys too. `{.name}` (label), `{;name}` (matrix) and a trailing `*` (explode) follow the OpenAPI path styles. A value that would make `.` or `..` a whole segment of the path, and an empty first segment that would start the URL with `//` (a host), are refused with an error before anything is sent. An empty value elsewhere leaves an empty segment (`/v1/{a}/{b}` with `a: ""` is `/v1//x`), which is sent as it is: some servers and proxies collapse `//`, so check a value that may be empty. |
+| `params.query` | Written as the OpenAPI styles say: arrays as `a=1&a=2` and objects as `o[k]=v` by default; `undefined`, `null` and empty lists are left out. Parameter names and object keys are always percent-encoded (brackets around a key stay), values too unless `allowReserved` is set. `querySerializer` takes a function, or `{ array, object, allowReserved }`. |
+| `params.header` | Merged over the client's `headers` and the call's `headers`; `null` removes a header. |
+| `body` | JSON with `Content-Type: application/json`; a form when the `Content-Type` header is `application/x-www-form-urlencoded`; `FormData` as it is, so the runtime sets the multipart boundary. `bodySerializer` writes it another way. |
+| `parseAs` | How a success is read: `json` (default), `text`, `blob`, `arrayBuffer` or `stream`. A 204, a `HEAD` and a body of length 0 have no `data`. An error body is parsed as JSON when it is JSON and kept as text otherwise. |
+| `signal` and the other `RequestInit` options | Sent with the request; an abort rejects the call. |
+| `baseUrl`, `fetch`, `pathSerializer` | The client's, replaced for one call. |
+| `middleware` | Hooks for this call, after the client's. |
+
+`request(method, path, options)` takes the method as an argument, and `OPTIONS`, `HEAD` and `TRACE` are there too.
+
+Middleware sees every request of a client (`api.use(...)`, `api.eject(...)`) or of one call:
+
+```ts
+api.use({
+  onRequest({ request }) {
+    request.headers.set("X-Trace", traceId());
+  },
+  onResponse({ response }) {
+    if (response.status === 503) return new Response(null, { status: 502 });
+  },
+  onError({ error }) {
+    return new Error(`request failed: ${String(error)}`);
+  },
+});
+```
+
+`onRequest` may return a new `Request`, or a `Response` to answer without calling fetch; `onResponse` may return a new `Response`; `onError` may return a `Response` (the failure is handled) or an `Error` (a different failure). Request hooks run in the order they were added and response and error hooks in reverse, with the client's before the call's. Each hook gets `request`, the `schemaPath` as the document writes it, the `params`, the `options` in force and an `id` shared by the hooks of one request.
+
+## Errors
+
+Every error from a Navree API has the same body, and `NavreeError` carries all of it:
+
+```json title="409 Conflict"
+{
+  "statusCode": 409,
+  "message": "The invoice has already been sent.",
+  "error": "Conflict",
+  "code": "invoice_already_sent"
+}
+```
+
+| Member | Value |
+|---|---|
+| `status` | The HTTP status; `0` when the request got no answer. |
+| `code` | The body's `code`, or the status's default (`not_found`, `unauthenticated`, `validation_failed` for a 400 with field errors, `network_error` for no answer). |
+| `message` | The body's `message`; the messages of a validation error joined with `; `. |
+| `messages` | `message` as a list. |
+| `errors` | Field errors of a validation failure (`{field: [message]}`), empty otherwise. |
+| `fieldError(field)` | The first message for `field`. |
+| `isValidation` | A 400 with field errors or a list of messages. |
+| `is(...codes)` | True when `code` is one of `codes`. |
+| `requestId` | The response's `X-Request-Id`. |
+| `body` | The body as sent, with `code` filled in. |
+
+```ts
+import { errorMessage, isNavreeError } from "@navree/client";
+
+try {
+  await unwrap(api.POST("/api/v1/invoices/{id}/send", { params: { path: { id } } }));
+} catch (error) {
+  if (isNavreeError(error) && error.is("invoice_already_sent")) return showSentBadge();
+  toast.error(errorMessage(error));
+}
+```
+
+`errorMessage(error, fallback?)` is a sentence for a toast, in English: the API's own message when it says something specific, else a sentence for the status ("That record no longer exists." for a 404, "Too many attempts. Wait a minute and try again." for a 429, "Can't reach the server. Check your connection." with no answer). For other languages, translate the code instead: see [localization](/docs/frontend/localization/). The codes the framework sends are listed on the [errors page](/docs/basics/errors/).
+
+## List queries
+
+Every Navree list speaks one query-string grammar: filters, sort, search and paging. A Navree server reads it with the `List<Resource>` extractor and a `ListSpec`, the allow-list of the fields a resource lets a client filter, sort and search by. A request outside that list gets a 400 that names the parameter, and `Builder::list` applies a valid query to the database query. [List queries](/docs/basics/list-queries/) covers the server side. Navree UI tables and Helm read and write the same names, so a link to one list is a link a client, a table and an admin screen all understand. This page is the JavaScript side: building a list query, writing it to a URL and reading it back.
+
+```text
+filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=agra&page=2&per_page=25
+```
+
+### The grammar
+
+| Parameter | Means |
+|---|---|
+| `filter[field]=value` | The field equals the value. The same as `filter[field][eq]=value`. |
+| `filter[field][operator]=value` | The field compared with an operator (see below). |
+| `sort=-created_at,name` | The fields to sort by, in order; a leading `-` sorts descending. At most four fields. A repeated `sort` adds fields. |
+| `search=agra` | The text to search for. |
+| `page=2&per_page=25` | Numbered pages. |
+| `cursor=eyJpZCI6NDJ9&limit=50` | Cursor pages: the page after a position, `limit` rows long. |
+| `before=eyJpZCI6NDJ9` | The page before a position, for lists that page both ways (Navree UI tables). |
+
+| Operator | Means | Value |
+|---|---|---|
+| `eq` (or none) | equals | one value |
+| `ne` | does not equal | one value |
+| `gt`, `gte`, `lt`, `lte` | greater than, at least, less than, at most | one value |
+| `in`, `not_in` | is one of, is none of | a comma list; the key may repeat |
+| `contains` | contains this text, ignoring case | text |
+| `starts_with` | starts with this text, ignoring case | text |
+| `null` | is NULL (`true` or `1`), is not NULL (`false` or `0`) | `true`, `false`, `1` or `0` |
+
+- A field name starts with a letter or `_`, then letters, digits, `_` and `.`, up to 64 characters. Operator names are exact and lower case.
+- A value that is empty or only spaces is left out. Search text is trimmed.
+- Other parameters (`owner_id=3`, `range=30d`) are not the list query's. A handler reads them itself.
+- Mixing numbered paging (`page`, `per_page`) with cursor paging (`cursor`, `before`, `limit`) is a problem.
+- A repeated `in` or `not_in` adds its values. Any other operator keeps its first value and reports the repeat.
+- The limits: 64 filters, 200 values in an `in`, 256 bytes in a value or in the search, 1,024 bytes in a cursor, 4 sort fields, page 10,000,000, page size 10,000, 1,000 parameters and 16 KiB of query. A resource's `ListSpec` sets a smaller page size (15 by default, 100 at most).
+
+### The canonical form
+
+Both the JavaScript and the Rust side write a list query the same way: the filters grouped by field, in the order each field first appears (an equal filter is written plain, without `[eq]`), then `sort`, `search`, `page`, `per_page`, `cursor`, `before` and `limit`. The encoding is `URLSearchParams`' (a space is `+`, `[` is `%5B`, `,` is `%2C`). The same query is the same string everywhere, so it works as a cache key and as a link.
+
+### Building a query
+
+`listQuery()` builds one; every call returns a new builder:
+
+```ts
+import { listQuery } from "@navree/client";
+
+const query = listQuery()
+  .where("stage", "won")
+  .where("created_at", "gte", "2026-10-01")
+  .whereIn("owner_id", ["u1", "u2"])
+  .sort("-amount_cents", "title")
+  .search("agra")
+  .page(2)
+  .perPage(25);
+
+await unwrap(api.GET("/api/v1/deals", { params: { query: query.toQuery() } }));
+```
+
+```text
+filter[stage]=won&filter[created_at][gte]=2026-10-01&filter[owner_id][in]=u1,u2&sort=-amount_cents,title&search=agra&page=2&per_page=25
+```
+
+| Builder call | Query string |
+|---|---|
+| `where("stage", "won")` | `filter[stage]=won` |
+| `where("amount_cents", "gte", 1000)` | `filter[amount_cents][gte]=1000` (several operators on one field add up) |
+| `whereIn("stage", ["lead", "won"])` or `where("stage", ["lead", "won"])` | `filter[stage][in]=lead,won` |
+| `where("owner_id", "null", true)` | `filter[owner_id][null]=true` |
+| `without("stage")` | removes the filter |
+| `sort("-created_at", "name")` | `sort=-created_at,name` (`-` sorts descending) |
+| `search("agra")` | `search=agra` |
+| `page(2)`, `perPage(25)` | `page=2&per_page=25` (drops `cursor`, `before` and `limit`) |
+| `cursor("eyJpZCI6NDJ9")`, `limit(50)` | `cursor=eyJpZCI6NDJ9&limit=50` (drops `page` and `per_page`) |
+| `before("eyJpZCI6NDJ9")` | `before=eyJpZCI6NDJ9` (drops `page`, `per_page` and `cursor`) |
+
+Dates are sent as ISO 8601, booleans and numbers as text, and lists joined with commas. Blank values and empty lists are left out when the query is written. `cursor(...)` and `before(...)` replace each other, because a page lies either after a position or before it.
+
+### Reading a query
+
+`checkListQuery(input)` reads a query string (with or without `?`), a `URLSearchParams` or a Next.js `searchParams` object. It keeps everything that is right and reports the rest, so an old or edited link still shows a page:
+
+```ts
+import { checkListQuery } from "@navree/client";
+
+const { query, problems } = checkListQuery("?filter[stage]=won&filter[hot][regex]=1&page=0&owner_id=3");
+// query:    { filter: { stage: "won" } }
+// problems: [
+//   { param: "filter[hot][regex]", message: "`regex` is not an operator; use one of: eq, ne, gt, ..." },
+//   { param: "page", message: "page must be at least 1" },
+// ]
+```
+
+Each problem names its parameter as written, the same names a Navree server gives in its 400. `parseListQuery(input)` is `checkListQuery(input).query`.
+
+A `ListQuery` is data. A field's filter is a value (equal), a list (`in`) or an object of operators:
+
+```ts
+{ filter: { stage: "won", amount: { gte: "100", lte: "900" }, owner_id: { null: true } }, sort: ["-amount"], limit: 20 }
+```
+
+Reading `filter[stage][eq]=won` gives `stage: "won"`, the same as `filter[stage]=won`. A field called `constructor` or `__proto__` is an ordinary field, not a way into the object's prototype.
+
+| Function | What it does |
+|---|---|
+| `serializeListQuery(query)` | Writes `URLSearchParams` in the canonical form. |
+| `checkListQuery(input)`, `parseListQuery(input)` | Read a query, with or without its problems. |
+| `setFilter(query, field, value)` | Sets one filter (or removes it with `undefined`) and goes back to the first page. |
+| `firstPage(query)` | Drops `page`, `cursor` and `before`; the page size stays. |
+| `withPage(query, n)` | Moves to numbered page `n` (page 1 is left out) and drops `cursor`, `before` and `limit`. |
+| `withDefaults(query, defaults)` | The query over its defaults, without mixing numbered and cursor paging. |
+| `toggleSort(sort, field)` | Cycles a column through ascending, descending and off (at most four fields). |
+| `isListParam(name)` | Whether a URL parameter is the list query's. |
+
+The client's query serializer writes a `ListQuery` object in this format, so `params: { query }` takes a list query directly.
+
+## Pages
+
+List endpoints answer offset pages or cursor pages:
+
+```json
+{"data": [...], "meta": {"current_page": 2, "per_page": 25, "total": 60, "last_page": 3}}
+{"data": [...], "next_cursor": "eyJpZCI6NDJ9", "prev_cursor": "eyJpZCI6MTd9"}
+```
+
+A cursor page's `next_cursor` and `prev_cursor` go back as `?cursor=` for the page after and the page before; `null` means there is none (a Navree cursor says which way it goes). Every Rust cursor page is the same `CursorPage`, so every endpoint sends both keys; a page that only goes forward sends `"prev_cursor": null`.
+
+| Helper | Returns |
+|---|---|
+| `isPage(value)`, `isCursorPage(value)` | Which shape a value has. |
+| `hasNextPage(page)`, `hasPreviousPage(page)` | Whether a page follows, or comes before. |
+| `nextPageQuery(page, query)`, `previousPageQuery(page, query)` | The query of that page (the page number, or `cursor` set to `next_cursor` or `prev_cursor`, the other paging parameters dropped), or `undefined` when there is none. |
+| `pageRange(meta)` | `{from, to}`: the rows the page shows, counting from 1 (`26`–`50`). |
+| `facetCounts(meta, field)` | `[{value, count, label?}]` from `meta.facets`, whether the API sends a map of counts or a list. |
+| `pages(fetchPage, query)` | An async iterator over every page, by page number or by cursor. |
+| `collectAll(fetchPage, query, {maxPages})` | Every row of every page. |
+
+```ts
+import { collectAll } from "@navree/client";
+
+const everyone = await collectAll((query) => unwrap(api.GET("/api/v1/users", { params: { query } })), { per_page: 100 });
+```
+
+## Query keys
+
+`queryKeys(resource)` gives one family of [TanStack Query](https://tanstack.com/query) keys per resource, nested so one invalidation reaches every list and record:
+
+```ts
+import { queryKeys } from "@navree/client";
+
+export const deals = queryKeys("deals", { board: (owner?: string) => ["board", owner ?? "all"] as const });
+
+useQuery({ queryKey: deals.list(query), queryFn: () => unwrap(api.GET("/api/v1/deals", { params: { query } })) });
+useQuery({ queryKey: deals.detail(id), queryFn: () => unwrap(api.GET("/api/v1/deals/{id}", { params: { path: { id } } })) });
+queryClient.invalidateQueries({ queryKey: deals.all }); // ["deals"]: lists, records and the board
+```
+
+| Key | Value |
+|---|---|
+| `deals.all` | `["deals"]` |
+| `deals.lists()` | `["deals", "list"]` |
+| `deals.list(query)` | `["deals", "list", query]` |
+| `deals.details()` | `["deals", "detail"]` |
+| `deals.detail(id)` | `["deals", "detail", "42"]` |
+| `deals.board("u1")` | `["deals", "board", "u1"]` |
+
+## Operations
+
+Long work a user starts (an import, an export, a bulk change) is an operation the user follows: the queue module serves it at `GET /api/operations/{id}`, `DELETE /api/operations/{id}` and `GET /api/operations/{id}/events`. `followOperation` reads its server-sent event stream with `fetch`, so it works through the BFF and with bearer tokens, and returns the finished operation:
+
+```ts
+import { cancelOperation, followOperation } from "@navree/client";
+
+const { operation_id } = await unwrap(api.POST("/api/v1/contacts/import", { body: form }));
+const finished = await followOperation<{ imported: number }>(operation_id, {
+  fetch: api.raw,
+  onUpdate: (op) => (progress.value = op.progress?.percent ?? 0),
+});
+if (finished.status === "succeeded") toast(`Imported ${finished.result?.imported} contacts`);
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `fetch` | `fetch` on the page's origin | Sends the requests (`api.raw` adds the client's headers). |
+| `basePath` | `/api/operations` | Where the routes are mounted. |
+| `onUpdate(operation)` | none | Called on every change, the first state included. |
+| `signal` | none | Stops following; the promise rejects with the abort reason. |
+| `retries` | `5` | Reconnects in a row without a new event before giving up with `stream_closed`. |
+| `retryDelayMs` | `1000` | Reconnect `n` waits `n × retryDelayMs`. |
+
+A dropped stream is resumed with `Last-Event-ID`. A 404 (an operation the user may not see) throws a `NavreeError` at once. `cancelOperation(id)` sends `DELETE` and returns the cancelled operation, `getOperation(id)` loads it, and `isFinished(op)` is true for `succeeded`, `failed` and `cancelled`. `readEventStream(body)` is the event-stream parser underneath, for your own streams.
+
+## Abilities and real time
+
+Two entry points need a library of their own, so they are separate imports:
+
+- `@navree/client/abilities` (needs `@casl/ability`): `createAbility(rules)` builds a CASL ability that checks API records by their `__type`, and `fetchAbilities({fetch})` loads the rules from `GET /api/me/abilities`.
+- `@navree/client/realtime` (needs `pusher-js`): `connectRealtime({server, authorize})` connects to the API's [Pusher-protocol server](/docs/digging-deeper/broadcasting/). `listen(channel, event, callback)` returns a function that stops listening, and a channel is left when its last listener stops. A bare channel name is private (`crm.deals` is `private-crm.deals`), `publicChannel("status")` is public, and `presence-` names stay as they are. `createMemoryRealtime()` is the same interface without a socket, for tests and mock modes: `emit(channel, event, data)` plays the server.
+
+The [Next.js](/docs/frontend/nextjs/) and [Nuxt](/docs/frontend/nuxt/) packages wrap both in providers and hooks.

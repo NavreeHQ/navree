@@ -1,0 +1,47 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 346
+expression: sql
+---
+-- timescaledb
+CREATE MATERIALIZED VIEW "events_daily" WITH (timescaledb.continuous) AS SELECT time_bucket(INTERVAL '1 day', "occurred_at") AS "bucket", "workspace_id", count(*) AS "total", sum(amount) AS "amount" FROM "events" WHERE kind <> 'noise' GROUP BY time_bucket(INTERVAL '1 day', "occurred_at"), "workspace_id" WITH NO DATA;
+SELECT add_continuous_aggregate_policy('events_daily', start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 hour', schedule_interval => INTERVAL '1 hour');
+CREATE MATERIALIZED VIEW "events_monthly" WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS SELECT time_bucket(INTERVAL '1 month', "occurred_at") AS "month", count(*) AS "total" FROM "events" GROUP BY time_bucket(INTERVAL '1 month', "occurred_at") WITH NO DATA;
+CREATE MATERIALIZED VIEW "events_hourly" WITH (timescaledb.continuous) AS SELECT time_bucket(INTERVAL '15 minutes', "occurred_at") AS "slot", max(amount) AS "peak" FROM "events" GROUP BY time_bucket(INTERVAL '15 minutes', "occurred_at") WITH NO DATA;
+DROP MATERIALIZED VIEW IF EXISTS "events_hourly";
+
+-- postgres
+CREATE VIEW "events_daily" AS SELECT date_bin(INTERVAL '1 day', "occurred_at", '2000-01-03 00:00:00+00') AS "bucket", "workspace_id", count(*) AS "total", sum(amount) AS "amount" FROM "events" WHERE kind <> 'noise' GROUP BY date_bin(INTERVAL '1 day', "occurred_at", '2000-01-03 00:00:00+00'), "workspace_id";
+CREATE VIEW "events_monthly" AS SELECT date_trunc('month', "occurred_at") AS "month", count(*) AS "total" FROM "events" GROUP BY date_trunc('month', "occurred_at");
+CREATE VIEW "events_hourly" AS SELECT date_bin(INTERVAL '15 minutes', "occurred_at", '2000-01-03 00:00:00+00') AS "slot", max(amount) AS "peak" FROM "events" GROUP BY date_bin(INTERVAL '15 minutes', "occurred_at", '2000-01-03 00:00:00+00');
+DROP VIEW IF EXISTS "events_hourly";
+-- notice: TimescaleDB is not installed in this PostgreSQL database: continuous aggregate `events_daily` is a plain view, computed when read
+-- notice: TimescaleDB is not installed in this PostgreSQL database: continuous aggregate `events_monthly` is a plain view, computed when read
+-- notice: TimescaleDB is not installed in this PostgreSQL database: continuous aggregate `events_hourly` is a plain view, computed when read
+
+-- mysql
+CREATE VIEW `events_daily` AS SELECT FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 86400) * 86400 + 946857600) AS `bucket`, `workspace_id`, count(*) AS `total`, sum(amount) AS `amount` FROM `events` WHERE kind <> 'noise' GROUP BY FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 86400) * 86400 + 946857600), `workspace_id`;
+CREATE VIEW `events_monthly` AS SELECT CAST(DATE_FORMAT(`occurred_at`, '%Y-%m-01') AS DATETIME) AS `month`, count(*) AS `total` FROM `events` GROUP BY CAST(DATE_FORMAT(`occurred_at`, '%Y-%m-01') AS DATETIME);
+CREATE VIEW `events_hourly` AS SELECT FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 900) * 900 + 946857600) AS `slot`, max(amount) AS `peak` FROM `events` GROUP BY FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 900) * 900 + 946857600);
+DROP VIEW IF EXISTS `events_hourly`;
+-- notice: MySQL does not support TimescaleDB: continuous aggregate `events_daily` is a plain view, computed when read
+-- notice: MySQL does not support TimescaleDB: continuous aggregate `events_monthly` is a plain view, computed when read
+-- notice: MySQL does not support TimescaleDB: continuous aggregate `events_hourly` is a plain view, computed when read
+
+-- mariadb
+CREATE VIEW `events_daily` AS SELECT FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 86400) * 86400 + 946857600) AS `bucket`, `workspace_id`, count(*) AS `total`, sum(amount) AS `amount` FROM `events` WHERE kind <> 'noise' GROUP BY FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 86400) * 86400 + 946857600), `workspace_id`;
+CREATE VIEW `events_monthly` AS SELECT CAST(DATE_FORMAT(`occurred_at`, '%Y-%m-01') AS DATETIME) AS `month`, count(*) AS `total` FROM `events` GROUP BY CAST(DATE_FORMAT(`occurred_at`, '%Y-%m-01') AS DATETIME);
+CREATE VIEW `events_hourly` AS SELECT FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 900) * 900 + 946857600) AS `slot`, max(amount) AS `peak` FROM `events` GROUP BY FROM_UNIXTIME(FLOOR((UNIX_TIMESTAMP(`occurred_at`) - 946857600) / 900) * 900 + 946857600);
+DROP VIEW IF EXISTS `events_hourly`;
+-- notice: MariaDB does not support TimescaleDB: continuous aggregate `events_daily` is a plain view, computed when read
+-- notice: MariaDB does not support TimescaleDB: continuous aggregate `events_monthly` is a plain view, computed when read
+-- notice: MariaDB does not support TimescaleDB: continuous aggregate `events_hourly` is a plain view, computed when read
+
+-- sqlite
+CREATE VIEW "events_daily" AS SELECT datetime(((CAST(strftime('%s', "occurred_at") AS INTEGER) - 946857600) / 86400) * 86400 + 946857600, 'unixepoch') AS "bucket", "workspace_id", count(*) AS "total", sum(amount) AS "amount" FROM "events" WHERE kind <> 'noise' GROUP BY datetime(((CAST(strftime('%s', "occurred_at") AS INTEGER) - 946857600) / 86400) * 86400 + 946857600, 'unixepoch'), "workspace_id";
+CREATE VIEW "events_monthly" AS SELECT strftime('%Y-%m-01 00:00:00', "occurred_at") AS "month", count(*) AS "total" FROM "events" GROUP BY strftime('%Y-%m-01 00:00:00', "occurred_at");
+CREATE VIEW "events_hourly" AS SELECT datetime(((CAST(strftime('%s', "occurred_at") AS INTEGER) - 946857600) / 900) * 900 + 946857600, 'unixepoch') AS "slot", max(amount) AS "peak" FROM "events" GROUP BY datetime(((CAST(strftime('%s', "occurred_at") AS INTEGER) - 946857600) / 900) * 900 + 946857600, 'unixepoch');
+DROP VIEW IF EXISTS "events_hourly";
+-- notice: SQLite does not support TimescaleDB: continuous aggregate `events_daily` is a plain view, computed when read
+-- notice: SQLite does not support TimescaleDB: continuous aggregate `events_monthly` is a plain view, computed when read
+-- notice: SQLite does not support TimescaleDB: continuous aggregate `events_hourly` is a plain view, computed when read

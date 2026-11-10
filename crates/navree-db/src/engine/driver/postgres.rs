@@ -1,0 +1,414 @@
+//! PostgreSQL (and TimescaleDB): binding values, reading columns, and the
+//! options every pooled connection starts with.
+
+use sqlx::postgres::{PgArguments, PgConnectOptions, PgPoolOptions, PgRow, PgSslMode, PgValueRef};
+use sqlx::{ConnectOptions, Decode, Postgres, Row as _, TypeInfo, ValueRef};
+
+use super::Keyed;
+use crate::engine::{Backend, DbError, Kind, Value};
+use crate::{DbOptions, PostgresOptions};
+
+/// The text PostgreSQL prepares for `sql` and its values as PostgreSQL
+/// binds them: NULLs typed by their kind, unsigned integers in the next
+/// wider signed type (PostgreSQL has none; a `u64` beyond `i64` as
+/// `NUMERIC`), `i8` as `SMALLINT`.
+///
+/// A prepared statement's parameters keep the types of its first run, so
+/// the text names the types the values bind (`... WHERE amount > $1 /*
+/// params: INT8 */`): a run with values of other types is another
+/// statement ([`Keyed`](super::Keyed)).
+pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, PgArguments), DbError> {
+    let mut keyed = Keyed::new(sql, values.len());
+    for value in values {
+        bind(&mut keyed, value).map_err(|error| {
+            DbError::invalid(format!(
+                "cannot bind {} on PostgreSQL: {error}",
+                value.kind()
+            ))
+        })?;
+    }
+    Ok(keyed.finish())
+}
+
+fn bind(args: &mut Keyed<'_, PgArguments>, value: &Value) -> Result<(), sqlx::error::BoxDynError> {
+    match value {
+        Value::Null(kind) => bind_null(args, *kind),
+        Value::Bool(v) => args.add(*v),
+        Value::I8(v) => args.add(i16::from(*v)),
+        Value::I16(v) => args.add(*v),
+        Value::I32(v) => args.add(*v),
+        Value::I64(v) => args.add(*v),
+        Value::U8(v) => args.add(i16::from(*v)),
+        Value::U16(v) => args.add(i32::from(*v)),
+        Value::U32(v) => args.add(i64::from(*v)),
+        Value::U64(v) => match i64::try_from(*v) {
+            Ok(v) => args.add(v),
+            Err(_) => args.add(rust_decimal::Decimal::from(*v)),
+        },
+        Value::F32(v) => args.add(*v),
+        Value::F64(v) => args.add(*v),
+        Value::Decimal(v) => args.add(*v),
+        Value::String(v) => args.add(v.as_str()),
+        Value::Bytes(v) => args.add(v.as_slice()),
+        Value::Json(v) => args.add(v),
+        Value::Uuid(v) => args.add(*v),
+        Value::Date(v) => args.add(*v),
+        Value::Time(v) => args.add(*v),
+        Value::DateTime(v) => args.add(*v),
+        Value::Timestamp(v) => args.add(*v),
+        Value::TimestampTz(v) => args.add(*v),
+        // The text; the statement casts it to its type.
+        Value::Enum { value, .. } => args.add(value.as_str()),
+        Value::Vector(v) => args.add(PgVector(Some(v))),
+    }
+}
+
+/// A pgvector `vector` parameter (binary form: dimensions, an unused word,
+/// then big-endian `f32`s); `None` binds a NULL `vector`.
+struct PgVector<'a>(Option<&'a [f32]>);
+
+impl sqlx::Type<Postgres> for PgVector<'_> {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("vector")
+    }
+}
+
+impl sqlx::Encode<'_, Postgres> for PgVector<'_> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        let Some(items) = self.0 else {
+            return Ok(sqlx::encode::IsNull::Yes);
+        };
+        buf.extend_from_slice(&vector_binary(items)?);
+        Ok(sqlx::encode::IsNull::No)
+    }
+}
+
+/// pgvector's binary form of a `vector`: the dimensions (`u16`), an unused
+/// `u16`, then each component as a big-endian `f32`.
+fn vector_binary(items: &[f32]) -> Result<Vec<u8>, sqlx::error::BoxDynError> {
+    let mut bytes = Vec::with_capacity(4 + items.len() * 4);
+    bytes.extend_from_slice(&u16::try_from(items.len())?.to_be_bytes());
+    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    for item in items {
+        bytes.extend_from_slice(&item.to_be_bytes());
+    }
+    Ok(bytes)
+}
+
+/// The components of a `vector` in pgvector's binary form.
+fn parse_vector(bytes: &[u8]) -> Result<Vec<f32>, sqlx::error::BoxDynError> {
+    let dims = usize::from(u16::from_be_bytes(
+        bytes.get(0..2).ok_or("a vector too short")?.try_into()?,
+    ));
+    let mut items = Vec::with_capacity(dims);
+    for i in 0..dims {
+        let at = 4 + i * 4;
+        let float = f32::from_be_bytes(
+            bytes
+                .get(at..at + 4)
+                .ok_or("a vector too short")?
+                .try_into()?,
+        );
+        items.push(float);
+    }
+    Ok(items)
+}
+
+fn bind_null(
+    args: &mut Keyed<'_, PgArguments>,
+    kind: Kind,
+) -> Result<(), sqlx::error::BoxDynError> {
+    match kind {
+        Kind::Bool => args.add(None::<bool>),
+        Kind::I8 | Kind::I16 | Kind::U8 => args.add(None::<i16>),
+        Kind::I32 | Kind::U16 => args.add(None::<i32>),
+        Kind::I64 | Kind::U32 | Kind::U64 => args.add(None::<i64>),
+        Kind::F32 => args.add(None::<f32>),
+        Kind::F64 => args.add(None::<f64>),
+        Kind::Decimal => args.add(None::<rust_decimal::Decimal>),
+        Kind::String => args.add(None::<String>),
+        Kind::Bytes => args.add(None::<Vec<u8>>),
+        Kind::Json => args.add(None::<serde_json::Value>),
+        Kind::Uuid => args.add(None::<uuid::Uuid>),
+        Kind::Date => args.add(None::<chrono::NaiveDate>),
+        Kind::Time => args.add(None::<chrono::NaiveTime>),
+        Kind::DateTime => args.add(None::<chrono::NaiveDateTime>),
+        Kind::Timestamp => args.add(None::<chrono::DateTime<chrono::Utc>>),
+        Kind::TimestampTz => args.add(None::<chrono::DateTime<chrono::FixedOffset>>),
+        Kind::Enum => args.add(None::<String>),
+        Kind::Vector => args.add(PgVector(None)),
+    }
+}
+
+/// Column `index` of `row` as a [`Value`], read by the column's type.
+pub(crate) fn value(row: &PgRow, index: usize) -> Result<Value, DbError> {
+    let raw = row
+        .try_get_raw(index)
+        .map_err(|error| DbError::from_sqlx(error, Some(Backend::Postgres)))?;
+    let type_name = raw.type_info().name().to_owned();
+    if raw.is_null() {
+        return Ok(Value::Null(kind_of(&type_name)));
+    }
+    decode(raw, &type_name).map_err(|error| {
+        let column = row.columns().get(index).map_or("?", sqlx::Column::name);
+        DbError::new(
+            crate::ErrorKind::Decode,
+            format!("cannot read column `{column}` ({type_name}): {error}"),
+        )
+    })
+}
+
+fn decode(raw: PgValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error::BoxDynError> {
+    fn d<'r, T: Decode<'r, Postgres>>(raw: PgValueRef<'r>) -> Result<T, sqlx::error::BoxDynError> {
+        T::decode(raw)
+    }
+    fn json_array<'r, T>(raw: PgValueRef<'r>) -> Result<Value, sqlx::error::BoxDynError>
+    where
+        Vec<T>: Decode<'r, Postgres>,
+        T: Into<Value>,
+    {
+        let items: Vec<T> = Vec::<T>::decode(raw)?;
+        Ok(Value::Json(serde_json::Value::Array(
+            items
+                .into_iter()
+                .map(|item| item.into().to_json())
+                .collect(),
+        )))
+    }
+    Ok(match type_name {
+        "BOOL" => Value::Bool(d(raw)?),
+        "\"CHAR\"" => Value::I8(d(raw)?),
+        "INT2" => Value::I16(d(raw)?),
+        "INT4" => Value::I32(d(raw)?),
+        "INT8" => Value::I64(d(raw)?),
+        "OID" => Value::U32(d::<sqlx::postgres::types::Oid>(raw)?.0),
+        "FLOAT4" => Value::F32(d(raw)?),
+        "FLOAT8" => Value::F64(d(raw)?),
+        "NUMERIC" => Value::Decimal(d(raw)?),
+        "TEXT" | "VARCHAR" | "CHAR" | "NAME" | "UNKNOWN" | "CITEXT" | "citext" => {
+            Value::String(d(raw)?)
+        }
+        "BYTEA" => Value::Bytes(d(raw)?),
+        "JSON" | "JSONB" => Value::Json(d(raw)?),
+        "UUID" => Value::Uuid(d(raw)?),
+        "DATE" => Value::Date(d(raw)?),
+        "TIME" => Value::Time(d(raw)?),
+        "TIMESTAMP" => Value::DateTime(d(raw)?),
+        "TIMESTAMPTZ" => Value::Timestamp(d(raw)?),
+        "VOID" => Value::Null(Kind::String),
+        "BOOL[]" => json_array::<bool>(raw)?,
+        "INT2[]" => json_array::<i16>(raw)?,
+        "INT4[]" => json_array::<i32>(raw)?,
+        "INT8[]" => json_array::<i64>(raw)?,
+        "FLOAT4[]" => json_array::<f32>(raw)?,
+        "FLOAT8[]" => json_array::<f64>(raw)?,
+        "NUMERIC[]" => json_array::<rust_decimal::Decimal>(raw)?,
+        "TEXT[]" | "VARCHAR[]" | "NAME[]" | "CHAR[]" => json_array::<String>(raw)?,
+        "UUID[]" => json_array::<uuid::Uuid>(raw)?,
+        "JSON[]" | "JSONB[]" => json_array::<serde_json::Value>(raw)?,
+        "TIMESTAMPTZ[]" => json_array::<chrono::DateTime<chrono::Utc>>(raw)?,
+        "vector" | "VECTOR" => vector(raw)?,
+        // Enums, domains over text and other types whose binary form is
+        // their text.
+        _ => Value::String(
+            d(raw).map_err(|_| format!("a column of type {type_name} cannot be read"))?,
+        ),
+    })
+}
+
+/// A pgvector `vector` (binary form: dimensions, an unused word, then
+/// big-endian `f32`s).
+fn vector(raw: PgValueRef<'_>) -> Result<Value, sqlx::error::BoxDynError> {
+    Ok(Value::Vector(parse_vector(raw.as_bytes()?)?))
+}
+
+/// The kind of a column of PostgreSQL type `type_name` (for its NULLs).
+fn kind_of(type_name: &str) -> Kind {
+    match type_name {
+        "BOOL" => Kind::Bool,
+        "\"CHAR\"" => Kind::I8,
+        "INT2" => Kind::I16,
+        "INT4" => Kind::I32,
+        "INT8" => Kind::I64,
+        "OID" => Kind::U32,
+        "FLOAT4" => Kind::F32,
+        "FLOAT8" => Kind::F64,
+        "NUMERIC" => Kind::Decimal,
+        "BYTEA" => Kind::Bytes,
+        "JSON" | "JSONB" => Kind::Json,
+        "UUID" => Kind::Uuid,
+        "DATE" => Kind::Date,
+        "TIME" => Kind::Time,
+        "TIMESTAMP" => Kind::DateTime,
+        "TIMESTAMPTZ" => Kind::Timestamp,
+        "vector" | "VECTOR" => Kind::Vector,
+        name if name.ends_with("[]") => Kind::Json,
+        _ => Kind::String,
+    }
+}
+
+/// The connection options of `url` with `database.postgres`: session
+/// settings, the application name and TLS.
+pub(crate) fn connect_options(
+    url: &str,
+    postgres: &PostgresOptions,
+) -> Result<PgConnectOptions, DbError> {
+    let mut options: PgConnectOptions = url.parse().map_err(|error| {
+        DbError::from_sqlx(error, Some(Backend::Postgres)).with_kind(crate::ErrorKind::Connect)
+    })?;
+    let settings = postgres.settings();
+    if !settings.is_empty() {
+        options = options.options(settings.iter().map(|(name, value)| (*name, value.as_str())));
+    }
+    if let Some(application) = &postgres.application_name {
+        options = options.application_name(application);
+    }
+    if let Some(mode) = &postgres.ssl_mode {
+        let mode = mode.parse::<PgSslMode>().map_err(|error| {
+            DbError::new(
+                crate::ErrorKind::Connect,
+                format!("postgres.ssl_mode: {error}"),
+            )
+        })?;
+        options = options.ssl_mode(mode);
+    }
+    Ok(options.disable_statement_logging())
+}
+
+/// The pool settings of PostgreSQL connections: the time zone is set once
+/// connected (the driver starts every session with `TimeZone=UTC`, which
+/// wins over the connection options).
+pub(crate) fn pool_options(options: &DbOptions) -> PgPoolOptions {
+    let pool = super::pool_options::<Postgres>(options);
+    match &options.postgres.timezone {
+        Some(timezone) => {
+            let sql = format!("SET TIME ZONE '{timezone}'");
+            pool.after_connect(move |conn, _| {
+                let sql = sql.clone();
+                Box::pin(async move {
+                    sqlx::Executor::execute(conn, sqlx::AssertSqlSafe(sql))
+                        .await
+                        .map(drop)
+                })
+            })
+        }
+        None => pool,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The text of `sql` prepared with `values`.
+    fn keyed(sql: &str, values: Vec<Value>) -> String {
+        statement(sql, &values).unwrap().0
+    }
+
+    #[test]
+    fn statements_are_keyed_by_the_types_their_values_bind() {
+        use chrono::{NaiveDate, TimeZone, Utc};
+
+        // Nothing bound: the SQL as written.
+        assert_eq!(keyed("SELECT 1;", vec![]), "SELECT 1;");
+        // The comment goes before a trailing `;` and whitespace.
+        assert_eq!(
+            keyed("SELECT $1, $2 ;\n", vec![1_i64.into(), "a".into()]),
+            "SELECT $1, $2 /* params: INT8, TEXT */ ;\n"
+        );
+        let date = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
+        let at = date.and_hms_opt(1, 2, 3).unwrap();
+        let every = vec![
+            Value::Bool(true),
+            Value::I8(1),
+            Value::I16(1),
+            Value::I32(1),
+            Value::I64(1),
+            Value::U8(1),
+            Value::U16(1),
+            Value::U32(1),
+            Value::U64(1),
+            Value::U64(u64::MAX),
+            Value::F32(1.0),
+            Value::F64(1.0),
+            Value::Decimal(rust_decimal::Decimal::ONE),
+            Value::String("a".into()),
+            Value::Bytes(vec![1]),
+            Value::Json(serde_json::json!(1)),
+            Value::Uuid(uuid::Uuid::nil()),
+            Value::Date(date),
+            Value::Time(at.time()),
+            Value::DateTime(at),
+            Value::Timestamp(Utc.from_utc_datetime(&at)),
+            Value::TimestampTz(Utc.from_utc_datetime(&at).fixed_offset()),
+            Value::Enum {
+                type_name: "mood".into(),
+                value: "happy".into(),
+            },
+            Value::Vector(vec![1.0]),
+        ];
+        assert_eq!(
+            keyed("SELECT", every),
+            "SELECT /* params: BOOL, INT2, INT2, INT4, INT8, INT2, INT4, INT8, INT8, NUMERIC, \
+             FLOAT4, FLOAT8, NUMERIC, TEXT, BYTEA, JSONB, UUID, DATE, TIME, TIMESTAMP, \
+             TIMESTAMPTZ, TIMESTAMPTZ, TEXT, vector */"
+        );
+        // A NULL binds its kind's type.
+        let nulls = [
+            Kind::Bool,
+            Kind::I8,
+            Kind::I32,
+            Kind::U32,
+            Kind::F32,
+            Kind::Decimal,
+            Kind::String,
+            Kind::Bytes,
+            Kind::Json,
+            Kind::Uuid,
+            Kind::Date,
+            Kind::Time,
+            Kind::DateTime,
+            Kind::Timestamp,
+            Kind::TimestampTz,
+            Kind::Enum,
+            Kind::Vector,
+        ];
+        assert_eq!(
+            keyed("SELECT", nulls.into_iter().map(Value::Null).collect()),
+            "SELECT /* params: BOOL, INT2, INT4, INT8, FLOAT4, NUMERIC, TEXT, BYTEA, JSONB, \
+             UUID, DATE, TIME, TIMESTAMP, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, vector */"
+        );
+        // Values of another type: another text; of the same types: the same.
+        let sql = "SELECT id FROM t WHERE n > $1";
+        assert_ne!(
+            keyed(sql, vec![1_i64.into()]),
+            keyed(sql, vec![1.5_f64.into()])
+        );
+        assert_ne!(
+            keyed(sql, vec![Value::Null(Kind::I64)]),
+            keyed(sql, vec![1.5_f64.into()])
+        );
+        assert_eq!(
+            keyed(sql, vec![Value::Null(Kind::I64)]),
+            keyed(sql, vec![7_i64.into()])
+        );
+    }
+
+    #[test]
+    fn vectors_cross_in_pgvector_s_binary_form() {
+        let items = [0.5_f32, -1.0, 2.25];
+        let bytes = vector_binary(&items).unwrap();
+        assert_eq!(&bytes[..4], &[0, 3, 0, 0]);
+        assert_eq!(&bytes[4..8], &0.5_f32.to_be_bytes());
+        assert_eq!(parse_vector(&bytes).unwrap(), items);
+        assert_eq!(
+            parse_vector(&vector_binary(&[]).unwrap()).unwrap(),
+            [] as [f32; 0]
+        );
+        assert!(parse_vector(&bytes[..6]).is_err());
+        assert!(vector_binary(&vec![0.0; 70_000]).is_err());
+    }
+}

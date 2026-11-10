@@ -1,0 +1,139 @@
+---
+title: "Timeline"
+description: "Events down a rail, grouped by day, each with a time, a coloured dot, a title and the facts under it."
+---
+
+<UiPreview example="timeline/default" />
+
+`Timeline` shows what happened to one thing, in order: an order that was placed, paid, packed and shipped; a release that was reviewed, merged and deployed. Each event has a time, a dot in a colour, a title, an optional line of detail and small facts under it. Give each event a time in unix seconds and the timeline does the rest: it groups events by day, prints the clock time, and works out how long each event came after the one before.
+
+```rust
+use navree::ui::*;
+
+Timeline::new("order", "Order 4821 for Harleen Kaur")
+    .time_zone("Asia/Kolkata", 19_800)
+    .event(TimelineEvent::new("Payment accepted").at(1_793_592_668).tone(Tone::Success))
+    .event(
+        TimelineEvent::new("Packed")
+            .at(1_793_594_468)
+            .tone(Tone::Info)
+            .meta(Meta::icon(icons::PACKAGE, "2 boxes")),
+    )
+```
+
+It is plain HTML: a list, `<time>` elements and no script. It works with JavaScript off.
+
+## When to use it
+
+<UiChoose name="happened" current="Timeline" />
+
+## Anatomy
+
+<UiAnatomy component="timeline" />
+
+## Days, times and gaps
+
+The first argument to `Timeline::new` is an id: the day headings and the hidden-items notice build their own ids from it. The second is the name a screen reader reads for the whole group.
+
+`.time_zone(name, offset_seconds)` sets the zone the clock times and the day boundaries use, and writes "Times in Asia/Kolkata (GMT+05:30)" above the events. The toolkit formats the date and time itself, in English, from the unix seconds and the offset, so it adds no date library to your build. Without a zone the times are in UTC and no note is written. With the `time` feature, `.zone(&zone)` takes a navree-time `CurrentZone` instead: the zone's name and its offset from UTC now.
+
+Each event after the first gets a **gap chip**, which says how long it came after the event before it in time:
+
+| Seconds between | Chip |
+|---|---|
+| 0 | `under 1 s` |
+| 45 | `+45 s` |
+| 60 | `+1 min` |
+| 90 | `+1 min 30 s` |
+| 7,500 | `+2 h 5 min` |
+| 90,000 | `+1 d 1 h` |
+
+A chip never shows a minus, even when the times you give are out of order. If your list runs from newest to oldest, add `.newest_first()` and each gap is measured to the event below. To write a chip yourself, use `.gap("+2 min after the reminder")`; to leave one out, `.no_gap()`.
+
+Events keep the order you give them. Sort them in your query.
+
+## Tones
+
+A tone colours the dot. The five built-in tones are `Neutral`, `Info`, `Success`, `Warning` and `Danger`. `Tone::named("violet")` picks one of the colours the stylesheet also ships: `violet`, `cyan` and `rose`.
+
+<UiPreview example="timeline/tones" />
+
+Your own colours belong in your own stylesheet. Name one and give it a colour:
+
+```css
+[data-tone=brand] { --tone: #7c5cff; }
+```
+
+```rust
+TimelineEvent::new("Gift wrapped").tone(Tone::named("brand"))
+```
+
+A name that is not lowercase letters, digits and hyphens, at most 32 long, is read as neutral, so a name that came from a request can't write anything odd into the page.
+
+## Where an event stands
+
+`.current()` marks the step happening now: a ring for a dot, and `aria-current="step"` on the event. `.upcoming()` is a step that has not happened: an empty ring, and a screen reader hears "Upcoming:" before it. `.muted()` is an event set aside, such as work a machine did: a dashed ring and quieter text. `.icon(icons::GIT_MERGE)` replaces the dot with a larger round indicator holding the glyph.
+
+<UiPreview example="timeline/states" />
+
+## Facts under an event
+
+`Meta` is one small fact: an icon or a flag, then text. Add as many as you like with `.meta(...)`. They wrap on a narrow screen.
+
+<UiPreview example="timeline/meta" />
+
+`Meta::icon(icon, text)` takes an icon. `Meta::flag(node, text)` takes **any node** in front of the text: a flag from an icon set, a small SVG you drew, or a character. The start slot is hidden from assistive technology, because what it shows is in the text beside it. `.ltr()` reads the text left to right on a right-to-left page, for a tracking number, an email address or an IP address.
+
+## Events set aside
+
+Mark an event `.filtered()` and it stays in the page but out of sight. The timeline then shows a notice, "2 items were hidden. Show them", with a checkbox that shows them in place. It needs no script and no request. When the runtime is present, a close button dismisses the notice.
+
+<UiPreview example="timeline/hidden" />
+
+Use it for what most readers don't need, such as the checks a build bot runs, and let one tick bring it back.
+
+## Empty and loading
+
+With no events the timeline says "No events yet"; pass your own with `.empty(Empty::new(...))`. `.loading()` shows placeholder lines and marks the timeline busy.
+
+<UiPreview example="timeline/empty" />
+
+## Times written by hand
+
+An event with no unix time can carry text instead: `.time_text("Mon")`. Group such events under a heading you write with `.day("Last week", events)`. Add a full-width item with no dot with `.block(...)`, and a dashed note after the events with `.note(...)`.
+
+<UiPreview example="timeline/text" />
+
+## Words
+
+The words the timeline prints (the zone note, the empty message, the gap units, "Upcoming", the notice) are in `DisplayLabels`. English is the default; pass your own with `.labels(...)`. `{zone}` and `{n}` are filled in.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A timeline is a group named by the label you give it. Each day is a group named by its heading, and the events in it are an ordered list, so a screen reader reads the count and the order.
+- The time is a `<time>` element with a machine-readable `datetime`. It is read before the title.
+- The dot, the icon indicator and the connecting line are hidden from assistive technology. Colour does not carry the meaning alone: write what happened in the title ("Payment declined", not "Failed" in red).
+- The hidden-items checkbox is a real checkbox with the notice as its description. It is reached by Tab and toggled with Space. Its focus ring shows.
+- Long titles, details and meta text wrap, and a right-to-left title keeps its own direction.
+
+</UiA11y>
+
+## API
+
+### Timeline
+
+<UiProps type="Timeline" />
+
+### TimelineEvent
+
+<UiProps type="TimelineEvent" />
+
+### TimelineState
+
+<UiProps type="TimelineState" />
+
+### Meta
+
+<UiProps type="Meta" />

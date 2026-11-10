@@ -1,0 +1,88 @@
+[package]
+name = "navree-lighthouse"
+description = "Navree LighthouseModule: application monitoring inside your app, with exceptions grouped into issues, traces, alerts and a dashboard."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "monitoring", "apm", "errors"]
+categories = ["development-tools::debugging", "development-tools::profiling"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["mcp"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## MCP tools, a resource and a prompt on the app's MCP server (navree-mcp),
+## so agents read and resolve issues. The facade turns it on when both its
+## `lighthouse` and `mcp` features are on.
+mcp = ["dep:navree-mcp", "dep:navree-validation"]
+## PostgreSQL integration tests (`tests/postgres.rs`, with
+## NAVREE_TEST_POSTGRES_URL): several processes recording into one database.
+## Also the test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres`).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+# `SIGN_OUT_PATH` (the `session` feature) is where the dashboard's menu signs out.
+navree-auth = { workspace = true, features = ["session"] }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-mail = { workspace = true }
+navree-mcp = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
+# The Lighthouse tables are models (issues, occurrences, samples, aggregates, alerts).
+navree-orm = { workspace = true }
+navree-schedule = { workspace = true }
+# The browser's session: the dashboard's forms carry its CSRF token.
+navree-session = { workspace = true }
+navree-telemetry = { workspace = true }
+# The dashboard is drawn with Navree UI.
+navree-ui = { workspace = true }
+# The MCP tools' arguments derive `Validate` (feature `mcp`).
+navree-validation = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests sign browsers in on the session and draw the sign-in pages.
+navree-auth = { workspace = true, features = ["session", "ui"] }
+# The browser suite drives the dashboard in Chrome.
+navree-browser = { workspace = true }
+# The MCP tests speak to the server with `McpTestClient`.
+navree-mcp = { workspace = true, features = ["testing"] }
+navree-crypto = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+# Tests of the alert mails boot MailModule, which needs ViewModule.
+navree-view = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

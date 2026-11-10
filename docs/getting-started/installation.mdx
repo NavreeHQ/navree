@@ -1,0 +1,225 @@
+---
+title: "Installation"
+description: "Install Rust and the `navree` CLI, create an app with `navree new`, and run it with `navree dev`."
+---
+
+Navree is a Rust framework, so you need a Rust toolchain and the `navree` command-line tool. The CLI creates applications, generates code and runs the development loop. Your application is an ordinary Cargo package that depends on the `navree` crate.
+
+## Requirements
+
+These are the same everywhere:
+
+| What | Version | Why |
+|---|---|---|
+| Rust | 1.95 or newer | Navree uses edition 2024. Install it with [rustup](https://rustup.rs). |
+| `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
+| Node.js and a package manager | Node.js 22 or newer | Only for a Next.js front end (`navree new --ui next`, or the `saas` [starter kit](/docs/getting-started/starter-kits/)). Its `@navree/*` packages come from npm. |
+
+The rest depends on your system:
+
+<Tabs>
+<Tab label="Linux and macOS">
+
+| What | Why |
+|---|---|
+| A C compiler (`gcc` or `clang`) | Rust links with it. The `navree` tool and any build with the `sqlite` feature also compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). On Debian and Ubuntu, `sudo apt install build-essential` installs one; on macOS, `xcode-select --install`. |
+| Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
+
+The `navree` binary goes to `~/.cargo/bin`. The commands in these docs are written for your shell as they stand.
+
+</Tab>
+<Tab label="Windows">
+
+| What | Why |
+|---|---|
+| The MSVC build tools | Rust links with them: the Visual Studio Build Tools with the "Desktop development with C++" workload (rustup offers to install them). The `navree` tool and any build with the `sqlite` feature also compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). |
+| Docker Desktop (it includes Compose v2), or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Start Docker Desktop first. Not needed for an app made with `--database sqlite`. |
+| Git Bash or WSL | The commands in these docs use a POSIX shell. In PowerShell, adapt the quoting of `curl` commands and the `~` paths. |
+
+The `navree` binary goes to `%USERPROFILE%\.cargo\bin` as `navree.exe`, and a release build of your app is `target\release\<package>.exe`. `navree new` refuses a name that is a Windows device name, such as `nul` or `con`.
+
+</Tab>
+</Tabs>
+
+You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need to install a database server either: new apps use [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and Dock runs it in a container. `navree new --database sqlite` makes an app that needs nothing at all (see [Database: getting started](/docs/database/getting-started/)).
+
+## Installing the CLI
+
+```sh
+cargo install navree-cli
+```
+
+Cargo builds the `navree` binary from [crates.io](https://crates.io/crates/navree-cli) and puts it in `~/.cargo/bin`. Each release also has prebuilt binaries for Linux, macOS and Windows on its [GitHub release page](https://github.com/NavreeHQ/navree/releases), with checksums.
+
+To work on Navree itself, or to build an unreleased commit, install from a clone instead:
+
+```sh
+git clone https://github.com/NavreeHQ/navree
+cargo install --path navree/crates/navree-cli
+```
+
+Check that it works:
+
+```sh
+navree --version
+```
+
+```text
+navree 1.0.0
+```
+
+### Where new apps get Navree from
+
+The CLI doesn't depend on the framework; it writes the dependency into your app's `Cargo.toml`. `navree new` picks it like this:
+
+1. With `--navree-path <path>`, the Navree checkout at that path (the repository, or its `crates/navree` directory).
+2. Otherwise, the checkout the CLI was built from, when it still exists. After `cargo install --path`, that is your clone.
+3. Otherwise, the published crate at the CLI's own version: `navree = "1.0.0"`. This is the case after `cargo install navree-cli`, and the one an app you keep should use.
+
+A Next.js front end takes the `@navree/*` packages from npm the same way, as version ranges; with a checkout, it links them from the checkout instead (see [Front end](/docs/frontend/introduction/#working-on-navree-itself)).
+
+### Adding Navree to an existing project
+
+To use Navree in a Cargo package you already have:
+
+```sh
+cargo add navree
+```
+
+This adds the crate with every module, since the `full` feature is on by default. No database driver is on by default, so turn on the one you use with `--features`: `postgres` (TimescaleDB and PostgreSQL), `mysql` ([MySQL and MariaDB](/docs/database/mysql/)) or `sqlite` (a file, nothing to install; it also compiles the bundled SQLite library):
+
+```sh
+cargo add navree --features postgres
+```
+
+serde's derive macros name their own crate, so add `serde` too (the ORM's `#[derive(Model)]` and the validation derive `#[derive(Validate)]` come with `navree`); a new app's `Cargo.toml` shows the versions and features.
+
+## Creating an application
+
+`navree new` creates an app in a new directory:
+
+```sh
+navree new blog
+```
+
+```text
+Created blog in /home/you/code/blog
+
+Next steps:
+  cd blog
+  navree dock up             # TimescaleDB on 127.0.0.1:5432
+  navree dev                 # http://127.0.0.1:8080
+
+Sign in at http://127.0.0.1:8080/sign-in as harpreet.singh@example.com with the password demo-password-2026.
+The account exists in development only.
+
+Initialized a Git repository (nothing committed yet).
+```
+
+The name must start with a lower-case letter and use lower-case letters and digits separated by single `-` or `_`; Rust keywords and names such as `std`, `test` and `navree` are refused. The directory must not exist, or must be empty. `navree new` doesn't run Cargo. It runs `git init` (nothing is committed) unless the directory is inside a repository already or Git isn't installed, and for an app that ships a `harbor.toml` (the starter kits) it writes the secrets key `harbor.key` and keeps it out of Git.
+
+The app is complete and working: a root module with every common platform module configured, JWT authentication at `/api/auth/*`, roles and abilities, an example `users` module, OpenAPI docs and tests, and screens drawn on the server with [Navree UI](/docs/ui/overview/) (sign-in, workspaces and a customers example; `--ui none` leaves them out). [Directory structure](/docs/getting-started/directory-structure/) walks through every file.
+
+### Options
+
+| Option | Default | What it does |
+|---|---|---|
+| `--kit <saas\|api\|micro>` | none | Creates the app from a [starter kit](/docs/getting-started/starter-kits/): a SaaS app with a Next.js front end, an API or a microservice. |
+| `--ui <next\|navree\|none>` | `navree` | The front end. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`: sign-in, workspaces, a customers table and forms, and a home page with live figures, with no `web/` folder and no Node ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `next` creates a Next.js front end in `web/` instead; its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never sees them. `none` is the API alone. With a kit, only `saas` takes `next` (its front end is Next.js already); `api` and `micro` have no front end, and `navree` goes with no kit. |
+| `--database <db>` | `timescaledb` | The database: `timescaledb` (PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, run by `navree dock up` too), `mysql` ([MySQL or MariaDB](/docs/database/mysql/) on a server of yours) or `sqlite` (a file in `storage/`, nothing to install). It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only the driver you chose is compiled into the app) and, for the first two, `dock.toml`. Tests of every app run on SQLite files, so `navree new` also turns `sqlite` on in the app's `[dev-dependencies]`. The kits run on `timescaledb` or `postgres`. |
+| `--navree-path <path>` | the published crate | Depends on the Navree checkout at `<path>` instead: the repository or its `crates/navree`. |
+
+```sh
+navree new blog --ui next --navree-path ~/code/navree
+navree new shop --ui none
+```
+
+### Starting from a kit
+
+A [starter kit](/docs/getting-started/starter-kits/) gives you a production-ready app instead of a blank one. The `saas` kit comes with a Next.js and shadcn/ui front end, sign-in, workspaces, billing, settings and an admin panel; `api` is API-only; `micro` is a microservice:
+
+```sh
+navree new agra --kit saas
+```
+
+## Local services with Dock
+
+A new app runs on TimescaleDB, and its `dock.toml` tells [Dock](/docs/tools/dock/) to run it in a container (Docker or Podman). Start it before anything that boots the app, `navree dev` included:
+
+```sh
+cd blog
+navree dock up
+```
+
+When your app also uses Redis, Meilisearch, Mailpit, MinIO or NATS, `navree dock:add <service>` adds the service to `dock.toml`, and the same command starts them all. `navree dev` and the app commands the CLI runs get their settings, the database URL included.
+
+## Running the application
+
+`navree new` has already put an application key in the app's `.env`. It encrypts data and signs tokens; without it, every restart invalidates the access tokens already issued. Keep it out of Git (`.gitignore` already lists `.env`), and use another key on each server: `navree key:generate` prints one, and `navree key:generate --write` fills an empty `APP_KEY` in `.env` ([the application key](/docs/getting-started/configuration/#the-application-key)).
+
+```env title=".env"
+APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
+```
+
+With the database running, start the development server. The first run compiles the framework, which takes a few minutes; later builds are incremental.
+
+```sh
+navree dev
+```
+
+`navree dev` builds the app, starts its `serve` command and watches the code. When a file in `src/`, `config/`, `migrations/` or `crates/` changes, or `Cargo.toml`, `.env` or `build.rs` does, it rebuilds and restarts the server. If a build fails, the previous build keeps serving. With a `web/` front end it also runs `npm run dev` there (or `pnpm` or `yarn`, chosen by the lockfile or the `packageManager` field of `web/package.json`).
+
+The API listens on `http://127.0.0.1:8080`. Open `http://127.0.0.1:8080/api/docs` for the generated API reference, or check the health endpoint:
+
+```sh
+curl http://127.0.0.1:8080/health/live
+```
+
+```json
+{"status":"up"}
+```
+
+### Dev server options
+
+| Option | Default | What it does |
+|---|---|---|
+| `--debounce-ms <ms>` | `300` | How long files must be quiet before a rebuild. |
+| `--no-web` | off | Doesn't start the front end's dev server. |
+| `-- <args>` | none | Arguments for the app's `serve` command, such as `-- --addr 0.0.0.0:8080`. |
+
+<Callout type="note" title="Two limits of `navree dev`">
+
+The listening socket isn't kept open across restarts, so requests fail for the moment the server restarts. If `navree dev` itself is killed forcibly, the server it started keeps running; stop it by hand.
+
+</Callout>
+
+## Running the app's own commands
+
+The CLI has a few commands of its own: `new`, `make:*`, `dev`, `check`, `gate`, `dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`, `deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`, `browser:install` and `openapi:client`. Every other command belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
+
+```sh
+navree migrate
+cargo run --quiet -- migrate
+```
+
+`navree list` prints every command your app has. Don't use `navree help` for that: it prints the CLI's own help. Your app's commands are covered in [Console commands and the CLI](/docs/digging-deeper/cli/).
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
+    Build a small CRUD API with authentication, access rules and tests.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/starter-kits/" title="Starter kits">
+    Production-ready SaaS, API and microservice apps from one command.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    `.env`, `config/app.toml` and `APP_*` variables.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/directory-structure/" title="Directory structure">
+    What every generated file is for.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Release builds, processes and reverse proxies.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,104 @@
+---
+title: "Sparkline"
+description: "A small line with no axes, beside a figure: the shape of a series at a glance, named and summarized for screen readers, with its values in a table."
+---
+
+<UiPreview example="sparkline/default" />
+
+`Sparkline` is a small line with no axes, drawn beside a figure to show how it has moved. It is a picture, not a chart to read: the figure says where things stand, and the line says where they have been. It ships no script.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Stat::new("Orders", "4,120")
+    .trend("+12% on last week", true)
+    .chart(
+        Sparkline::new("Orders, last 12 hours", [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24])
+            .area()
+            .tone(Tone::Info),
+    )
+```
+
+`Stat::chart(...)` puts a small chart under the figure. A sparkline can sit anywhere else a figure does, such as a table row.
+
+## When to use it
+
+Use a sparkline when the trend matters less than the number. If the reader needs to read values, use a [line chart](/docs/components/line-chart/). For one figure with no history, use a [Stat](/docs/components/stat/).
+
+<UiChoose name="chart" current="Sparkline" />
+
+## Anatomy
+
+<UiAnatomy component="sparkline" />
+
+## Scale
+
+A sparkline scales to its own values, from the lowest to the highest. It shows the shape of a series, not its size, so two sparklines of different series can't be compared by height. Say what it shows in its title, and put the figures beside it. The last value ends in a dot.
+
+`.height(px)` sets the height (16 to 120, and 32 by default). The width is that of what holds it, so put it in a [Stat](/docs/components/stat/), a card or a table column.
+
+`.area()` adds a wash under the line. `.tone(Tone)` colors the line by what it means, and without one the line takes the first categorical color. The color is never the only sign: say the direction in the figure's text, such as "+12%".
+
+## In a table
+
+A sparkline in a table cell fills the free width of its column.
+
+<UiPreview example="sparkline/table" />
+
+`.cell()` draws the sparkline for a table cell: the picture alone in a small box, named by its summary, with no figure, no heading and no table behind it, so fifty rows hold fifty small pictures and no nested tables. A reader hears the summary (first, last, highest and lowest value); the full values are the page's own table. It keeps at most 16 points and is 24 pixels high unless `.height(px)` says otherwise.
+
+To get the series of every row on a page in one query and not one per row, `Report::measure_rows` counts a metric in each period for each of a list of keys, such as the ids of the rows on the page (at most 500):
+
+```rust
+use navree::orm::Value;
+use navree::ui::charts::{Metric, Sparkline};
+
+let ids = [Value::I64(7), Value::I64(9)];
+let rows = report
+    .measure_rows(Deal::query(), "created_at", "account_id", &ids, Metric::Count, &db)
+    .await?;
+let cells: Vec<Sparkline> = rows
+    .into_iter()
+    .map(|series| Sparkline::new("Deals created", series).cell())
+    .collect();
+```
+
+## Values, names and gaps
+
+`Sparkline::new(title, values)` takes integers and floats of any width and an `Option` of either. A `None`, NaN or infinite value is a gap, and the line breaks there. `.names(["14:00", "15:00"])` says what each value is called in the table. Without names the values are counted from 1. `.format(NumberFormat)` writes the values in the summary and the table, and `.locale(tag)` does so for a language, as on a [line chart](/docs/components/line-chart/#formats-and-languages).
+
+A sparkline draws at most 120 points. A longer series is reduced with the same largest-triangle-three-buckets as a [line](/docs/components/line-chart/#long-series), which keeps its peaks and dips. The summary is written from every value.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), at the height of a line of text.
+
+<UiPreview example="sparkline/states" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A sparkline is not a tab stop and has no tooltip, so a row of figures with a sparkline each adds nothing to the tab order.
+- It is an image named by its title ("Orders, last 12 hours, chart") and described by its summary: the first and the last value, the highest and the lowest, and where each falls.
+- Its values are in a table that only a screen reader reads. A gap is read as "No value".
+- The title is not shown, since the figure beside the line names it. Write it so it makes sense alone.
+- Give each sparkline on a page its own `.id(...)`: the names inside the chart are built from it.
+
+</UiA11y>
+
+A sparkline adds no script and no stylesheet to a page: the toolkit's own stylesheet draws it. A sparkline that is loading, failed or empty loads the `charts` module and its stylesheet, as a [line chart](/docs/components/line-chart/#loading-failed-and-empty) does.
+
+## Data rules
+
+- Values are finite numbers. `None`, NaN and infinity are gaps.
+- A series with one value is one dot, since a line needs two. The summary names the value.
+- At most 120 points are drawn. The summary is written from every value, and the table lists the points drawn.
+- A series with no value is empty.
+
+## API
+
+### Sparkline
+
+<UiProps type="Sparkline" />

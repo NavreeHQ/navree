@@ -1,0 +1,67 @@
+error: an accessor reads the model: `fn mutating(&self) -> T`
+  --> tests/ui/model_attributes_accessors.rs:19:17
+   |
+19 |     fn mutating(&mut self) -> String {
+   |                 ^
+
+error: an accessor reads the model: `fn with_argument(&self) -> T`, with no other parameters
+  --> tests/ui/model_attributes_accessors.rs:24:29
+   |
+24 |     fn with_argument(&self, prefix: &str) -> String {
+   |                             ^^^^^^
+
+error: an accessor reads the model: `fn later(&self) -> T`, computed from its fields, so it cannot be async
+  --> tests/ui/model_attributes_accessors.rs:29:5
+   |
+29 |     async fn later(&self) -> String {
+   |     ^^^^^
+
+error: an accessor reads the model: `fn nothing(&self) -> T`: it returns the value serialized records append
+  --> tests/ui/model_attributes_accessors.rs:34:8
+   |
+34 |     fn nothing(&self) {}
+   |        ^^^^^^^
+
+error: unknown accessor option `rename`; expected `name` (its key in serialized records) or `schema` (the OpenAPI type of its value)
+  --> tests/ui/model_attributes_accessors.rs:36:16
+   |
+36 |     #[accessor(rename = "x")]
+   |                ^^^^^^
+
+error: two accessors are named `first`
+  --> tests/ui/model_attributes_accessors.rs:46:23
+   |
+46 |     #[accessor(name = "first")]
+   |                       ^^^^^^^
+
+error: the first one
+  --> tests/ui/model_attributes_accessors.rs:42:8
+   |
+42 |     fn first(&self) -> u8 {
+   |        ^^^^^
+
+error: #[accessors] found no #[accessor] method in this impl block
+  --> tests/ui/model_attributes_accessors.rs:58:6
+   |
+58 | impl Empty {
+   |      ^^^^^
+
+error: the setter of field `key` would be `set_key`, which records already have: rename the field (with #[model(column = "key")] to keep the column)
+  --> tests/ui/model_attributes_accessors.rs:68:5
+   |
+68 |     key: String,
+   |     ^^^
+
+error: #[accessor] marks a method of an #[accessors] impl block: put #[accessors] on the block
+  --> tests/ui/model_attributes_accessors.rs:78:5
+   |
+78 |     #[navree_orm::accessor]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `navree_orm::accessor` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0080]: evaluation panicked: WithoutAccessor appends `full_name` (#[model(appends(full_name))]), but it has no accessor named `full_name`: mark `fn full_name(&self) -> T` with #[accessor] in an #[accessors] impl block of WithoutAccessor
+ --> tests/ui/model_attributes_accessors.rs:5:17
+  |
+5 | #[model(appends(full_name))]
+  |                 ^^^^^^^^^ evaluation of `_` failed here

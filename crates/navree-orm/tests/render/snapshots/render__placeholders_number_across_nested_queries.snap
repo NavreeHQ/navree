@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: query(body)
+---
+PostgreSQL: WITH "c" AS (SELECT "id" FROM "t" WHERE "n" = $1) SELECT "id", $2 + $3 AS "sum" FROM "c" WHERE "id" IN (SELECT "id" FROM "t" WHERE "n" = $4) AND EXISTS (SELECT "id" FROM "t" WHERE "n" = $5) UNION (SELECT "id" FROM "t" WHERE "n" = $6 LIMIT $7) LIMIT $8
+  values: [I64(1), I64(2), I64(3), I64(4), I64(5), I64(6), U64(7), U64(8)]
+MySQL: WITH `c` AS (SELECT `id` FROM `t` WHERE `n` = ?) SELECT `id`, ? + ? AS `sum` FROM `c` WHERE `id` IN (SELECT `id` FROM `t` WHERE `n` = ?) AND EXISTS (SELECT `id` FROM `t` WHERE `n` = ?) UNION (SELECT `id` FROM `t` WHERE `n` = ? LIMIT ?) LIMIT ?
+  values: [I64(1), I64(2), I64(3), I64(4), I64(5), I64(6), U64(7), U64(8)]
+SQLite: WITH "c" AS (SELECT "id" FROM "t" WHERE "n" = ?) SELECT "id", ? + ? AS "sum" FROM "c" WHERE "id" IN (SELECT "id" FROM "t" WHERE "n" = ?) AND EXISTS (SELECT "id" FROM "t" WHERE "n" = ?) UNION SELECT * FROM (SELECT "id" FROM "t" WHERE "n" = ? LIMIT ?) AS "navree_union_1" LIMIT ?
+  values: [I64(1), I64(2), I64(3), I64(4), I64(5), I64(6), U64(7), U64(8)]

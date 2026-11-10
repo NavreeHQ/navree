@@ -1,0 +1,114 @@
+//! The root module: every module the app uses, each configured once.
+
+use navree::access::{AccessModule, AccessOptions};
+use navree::api::ApiModule;
+use navree::auth::{AuthModule, AuthPages};
+use navree::cache::CacheModule;
+use navree::config::{ConfigModule, ConfigSources};
+use navree::crypto::CryptoModule;
+use navree::db::DatabaseModule;
+use navree::events::EventsModule;
+use navree::http::HttpModule;
+use navree::kernel::{AppBuilder, Module, ModuleBuilder, Navree};
+use navree::lighthouse::LighthouseModule;
+use navree::log::LoggerModule;
+use navree::logbook::LogbookModule;
+use navree::mail::MailModule;
+use navree::observe::ObserveModule;
+use navree::orm::OrmModule;
+use navree::queue::QueueModule;
+use navree::schedule::{ModuleBuilderScheduleExt, ScheduleModule};
+{% if ui_navree %}
+use navree::i18n::I18nModule;
+use navree::realtime::RealtimeModule;
+{% endif %}
+use navree::session::SessionModule;
+use navree::ui::UiModule;
+use navree::validation::ValidationModule;
+use navree::view::ViewModule;
+use navree::workspace::WorkspaceModule;
+
+{% if ui_navree %}
+use crate::{abilities, modules, ui};
+{% else %}
+use crate::{abilities, modules};
+{% endif %}
+
+/// The app, configured from `sources`. Each `from_config()` module reads its
+/// section (`http`, `database`, `mail`, ...) at boot.
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        // Platform
+        .module(ConfigModule::for_root(sources))
+        .module(LoggerModule::from_config())
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(CacheModule::from_config())
+        .module(EventsModule::for_root())
+        .module(ViewModule::from_config())
+        // Pages are drawn on the server with Navree UI, and a browser that signs in
+        // gets a server-side session: the tools' dashboards (Lighthouse, Logbook)
+        // sign in on it too.
+        .module(UiModule::from_config())
+        .module(SessionModule::from_config())
+{% if ui_navree %}
+        // The live hub tells open pages what changed.
+        .module(RealtimeModule::from_config())
+        // Pages in the reader's language (`[i18n]`): the toolkit's own words,
+        // money and dates ship in Indian English and Hindi.
+        .module(I18nModule::from_config())
+{% endif %}
+        .module(MailModule::from_config())
+        .module(QueueModule::from_config())
+        // The scheduler (`navree schedule:work` runs it) and the ORM (the
+        // `[orm]` options, strict outside production, and `model:prune`,
+        // which `Housekeeping` runs daily).
+        .module(ScheduleModule::for_root())
+        .module(OrmModule::from_config())
+        .module(Housekeeping)
+        .module(ValidationModule::from_config())
+        // Identity and access: JWT bearer tokens (`/api/auth/*`), roles,
+        // permissions and abilities (`GET /api/me/abilities`).
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions {
+            abilities: abilities::define,
+            super_admin_role: Some("admin".to_owned()),
+        }))
+        // The sign-in, two-factor, forgotten password and sign-out pages.
+        .module(AuthPages::new().app_name("{{ title }}"))
+        // Workspaces, members and roles (`/api/workspaces/*`). A request is in a
+        // workspace when it names one: the `X-Workspace` header, or, for a
+        // browser, the workspace it last switched to.
+        .module(WorkspaceModule::from_config())
+        // OpenAPI (`/api/openapi.json`, `/api/docs`), health and metrics.
+        .module(ApiModule::from_config())
+        .module(ObserveModule::from_config())
+        // Monitoring: issues, traces and alerts, the dashboard at `/_lighthouse`.
+        .module(LighthouseModule::from_config())
+        // Logbook: the debugging timeline at `/_logbook` (development only;
+        // off in release builds).
+        .module(LogbookModule::from_config())
+        // Feature modules (`navree make:module` adds new ones above the marker).
+{% if ui_navree %}
+        // The shell, then the example feature built on it.
+        .module(ui::UiAppModule)
+        .module(modules::customers::CustomersModule)
+{% endif %}
+        .module(modules::users::UsersModule)
+    // navree:modules
+}
+
+/// Daily housekeeping on the scheduler: prune the models marked
+/// `#[model(prunable)]` or `#[model(mass_prunable)]` (`navree model:prune`).
+struct Housekeeping;
+
+impl Module for Housekeeping {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.schedule(|s| {
+            s.command("model:prune", &[])
+                .daily_at("03:00")
+                .without_overlapping();
+        });
+    }
+}

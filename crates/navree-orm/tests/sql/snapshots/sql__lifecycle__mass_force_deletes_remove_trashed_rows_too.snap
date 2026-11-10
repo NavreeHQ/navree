@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/lifecycle.rs
+expression: "per_dialect(|dialect| render_delete(&deletes[0], dialect))"
+---
+PostgreSQL: DELETE FROM "deals" WHERE "deals"."amount_cents" < $1
+  values: [I64(100)]
+MySQL: DELETE FROM `deals` WHERE `deals`.`amount_cents` < ?
+  values: [I64(100)]
+SQLite: DELETE FROM "deals" WHERE "deals"."amount_cents" < ?
+  values: [I64(100)]

@@ -1,0 +1,22 @@
+//! What each user may do: ability rules, checked by `#[can]` routes and
+//! `Accessible` list filters, and served to the front end at
+//! `GET /api/me/abilities`.
+
+use navree::access::{AbilityCtx, READ, Rules, field};
+
+/// The rules of one user (or guest), rebuilt when their roles change.
+///
+/// The permissions of the user's roles come first (`posts.update` becomes
+/// `can update Post`; grant them with `navree access:grant <role> <permission>`).
+/// Add conditional rules below; later rules win. The `admin` role passes
+/// every check (`super_admin_role` in `app.rs`).
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    // Module policies (`navree make:policy` adds them above the marker).
+    // navree:policies
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    // Signed-in users may read their own account.
+    rules.can(READ, "User").when(field("id").eq(user.id));
+}

@@ -1,0 +1,82 @@
+[package]
+name = "navree-grpc"
+description = "Navree GrpcModule: tonic services in modules with dependency injection, guards and access rules; gRPC-Web, Connect, health and reflection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "grpc", "tonic", "connect"]
+categories = ["network-programming", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["testing"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## `navree_grpc::testing::TestChannel`: tonic clients on a `TestApp`, in-process. The facade
+## turns it on with its own `testing` feature.
+testing = ["dep:navree-testing"]
+
+[dependencies]
+base64 = { workspace = true }
+bytes = { workspace = true }
+dashmap = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+metrics = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+pin-project-lite = { workspace = true }
+prost = { workspace = true }
+prost-reflect = { workspace = true }
+prost-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+tonic-prost = { workspace = true }
+tonic-reflection = { workspace = true }
+tonic-types = { workspace = true }
+tonic-web = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The crate's own tests drive its services through `TestChannel`.
+navree-grpc = { path = ".", features = ["testing"] }
+navree-access = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-events = { workspace = true }
+navree-mail = { workspace = true }
+navree-observe = { workspace = true }
+# The tests' `deals` table is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
+navree-testing = { workspace = true }
+navree-view = { workspace = true }
+navree-workspace = { workspace = true }
+protox = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tonic-prost-build = { workspace = true }
+trybuild = { workspace = true }

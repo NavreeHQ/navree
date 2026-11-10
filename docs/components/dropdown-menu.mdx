@@ -1,0 +1,126 @@
+---
+title: "DropdownMenu"
+description: "A button that opens a menu of links, actions, posts, choices and submenus, with the keys of a menu button."
+---
+
+<UiPreview example="dropdown-menu/default" />
+
+`DropdownMenu` draws a button and the menu it opens. The menu is the browser's `popover`, so light dismiss, `Esc` and the top layer are its own, and the `overlay` module places it beside its button and flips it when there is no room. The `menus` module makes it a menu: the arrow keys, typeahead, submenus and closing after a choice. Without the script it still opens, and its links and posts still work.
+
+The preview shows the menu open in place. Press **Actions** to open it for real.
+
+```rust
+use navree::ui::*;
+
+DropdownMenu::new("deal-menu", "Actions")
+    .item(MenuItem::link("Edit", "/deals/42/edit"))
+    .item(MenuItem::action("Duplicate").on_click(Cmd::toast(ToastTone::Success, "Duplicated.")))
+    .separator()
+    .item(MenuItem::post("Delete", "/deals/42/delete").destructive())
+```
+
+## Items
+
+A `MenuItem` is one of three:
+
+- `MenuItem::link(label, href)` goes to a page, on this site or another.
+- `MenuItem::action(label)` runs [commands](/docs/ui/commands-and-ops/) with `.on_click(...)`, or opens a dialog with `.opens_dialog(id)`.
+- `MenuItem::post(label, href)` posts, and the answer is [ops](/docs/ui/commands-and-ops/) as with any form. It works with JavaScript off. The item is a submit button that belongs to the page's one post form (`form="ui-post"`), which the shell and `View` draw once, hidden, carrying the session's token. So the menu can stand inside a form of your own, such as one around its checkbox items, and the item posts on its own: it never submits the form around it, and no form is nested in another. A page built by hand with `View` gives it the token with `.csrf(token)`. The form is `novalidate`, so a field elsewhere that names it and isn't valid can't hold a post back. The runtime sends that form's own token and nothing else: a field elsewhere in the page that names `ui-post` with `form` joins no post, and two items pressed one after the other both post, while a double press on one item posts once.
+
+An item can have an icon (`.icon`, `.icon_end`), a shortcut hint (`.shortcut("Ctrl+D")`, which draws the hint and binds nothing), `.destructive()` and `.disabled(true)`. A disabled item can be reached with the arrow keys, as the menu pattern asks, but does nothing.
+
+## Groups, labels and separators
+
+`.separator()` draws a line. `MenuGroup::new("Share")` puts items under a heading and names them for assistive technology. `.header(node)` puts something above the items that is not one: a name and an address.
+
+<UiPreview example="dropdown-menu/groups" />
+
+## Checkboxes and radios
+
+A `MenuCheckbox` and a `MenuRadios` are real inputs, so they post with a form around the menu and fire `change`. The menu closes when one is chosen. `.keep_open()` on the item, the checkbox, the radios or the whole menu leaves it open.
+
+<UiPreview example="dropdown-menu/choices" />
+
+## Submenus
+
+`MenuSub::new("Move to")` is an item that opens a menu of its own. `Right`, `Enter` or `Space` opens it with focus on its first item; `Left` or `Esc` closes one level and returns to its item. With a pointer it opens when the pointer rests on it, stays open while the pointer crosses to it, and closes when the pointer rests on another item.
+
+<UiPreview example="dropdown-menu/submenu" />
+
+## Destructive and disabled
+
+<UiPreview example="dropdown-menu/destructive" />
+
+## A row's menu
+
+`DropdownMenu::icon(id, icon, label)` opens from an icon button, which needs its label. In the last column of a table, `.align(PopupAlign::End)` lines the menu up with the end of its button.
+
+<UiPreview example="dropdown-menu/row" />
+
+## Placement
+
+`.side(Side::Top)` and `.align(PopupAlign::End)` choose where the menu opens. It flips to the roomier side when there is no room, stays 8 px inside the window's edges, scrolls inside when it is taller than the window, and is placed again when the window is resized or scrolled while it is open.
+
+## When to use it
+
+Use a menu for actions and choices that belong to one button, and that a reader picks from by name. For a few controls such as a quick edit or a filter, use a [Popover](/docs/components/popover/); for text, a [Tooltip](/docs/components/tooltip/); for a task that should hold focus, a [Dialog](/docs/components/dialog/). A menu is not for going between pages of the app: use the [sidebar](/docs/ui/app-shell/).
+
+<UiChoose name="menu" current="DropdownMenu" />
+
+## Anatomy
+
+<UiAnatomy component="dropdown-menu" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space`, `Down` on the button | Open the menu with focus on the first item. |
+| `Up` on the button | Opens it with focus on the last item. |
+| `Down`, `Up` | Move to the next or previous item, and round at the ends. |
+| `Home`, `End` | Move to the first or last item. |
+| `Enter`, `Space` | Do the item, and close the menu. |
+| `Right` (`Left` in a right-to-left page) | Opens the submenu of the item. `Left` closes one level. |
+| A letter or letters | Move to the next item that starts with them. The same letter again goes on to the next one. |
+| `Esc` | Closes the menu, or the submenu that is open, and returns focus. |
+| `Tab` | Closes the menu and moves on from its button. |
+
+- The popup has `role="menu"`, named by its button. Items are `menuitem`, `menuitemcheckbox` (checked) or `menuitemradio` (checked), in a `group` named by its heading when they have one.
+- The button has `aria-haspopup="menu"` and `aria-expanded`.
+- Opened with a pointer, focus goes to the menu itself, so the arrows then start at the first or last item.
+- Focus returns to the button, or to the item that opened a submenu, however the menu closes.
+- Disabled items have `aria-disabled` and stay in the arrow order.
+
+</UiA11y>
+
+## API
+
+### DropdownMenu
+
+<UiProps type="DropdownMenu" />
+
+### MenuItem
+
+<UiProps type="MenuItem" />
+
+### MenuCheckbox
+
+<UiProps type="MenuCheckbox" />
+
+### MenuRadios
+
+<UiProps type="MenuRadios" />
+
+### MenuGroup
+
+A group holds the same entries as the menu: `item`, `separator`, `checkbox`, `radios`, `group` and `submenu`.
+
+<UiProps type="MenuGroup" />
+
+### MenuSub
+
+A submenu holds the same entries as the menu.
+
+<UiProps type="MenuSub" />

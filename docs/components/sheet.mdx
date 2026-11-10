@@ -1,0 +1,115 @@
+---
+title: "Sheet"
+description: "A dialog that slides in from an edge of the screen, for longer panels beside the page."
+---
+
+<UiPreview example="build-anything/store-drawer" />
+
+`Sheet` is a [Dialog](/docs/components/dialog/) pinned to an edge: the right by default, or the left, top or bottom. It has everything a dialog has: the focus trap, `Esc`, focus return and no script.
+
+The preview is the main job of a sheet, taken from the [store example app](/docs/example-app/store-tour/#an-order-in-a-drawer): an order opened over its table of orders, with the table still in view behind it. The sheet is `SheetWidth::Xl`, 60% of the screen, so an order and its lines fit beside the list the reader came from:
+
+```rust title="apps/store-demo/src/views/order.rs"
+let order = &view.order;
+Sheet::new(DRAWER, format!("Order {}", order.number))
+    .width(SheetWidth::Xl)
+    .description(format!(
+        "{} for {} in {}",
+        units(order.items),
+        order.customer,
+        place_of(&order.city, &order.state, &order.country)
+    ))
+    .body((order_detail(view, 3, today, true, parts), dialogs(view)))
+```
+
+A click on the order number asks the server for the drawer, and the answer draws it and opens it with `Op::Open`; with JavaScript off the same detail is a page of its own. Its history and the customer's other orders are [regions](/docs/ui/regions/) that load after it opens.
+
+## A small sheet
+
+A sheet is also the right size for filters or settings. The preview shows the sheet in place. Press **Filters** to open it for real.
+
+<UiPreview example="sheet/default" />
+
+```rust
+use navree::ui::*;
+
+Sheet::new("filters", "Filters")
+    .side(SheetSide::Right)
+    .body(Switch::new("hot").label("Hot deals only"))
+    .footer(Button::primary("Apply"))
+```
+
+## When to use it
+
+Use a sheet for a panel with more in it than a dialog holds: filters, a record's details, settings.
+
+<UiChoose name="overlay" current="Sheet" />
+
+## Anatomy
+
+<UiAnatomy component="sheet" />
+
+## Sides
+
+Each button below opens a real sheet from its side.
+
+<UiPreview example="sheet/sides" />
+
+## Widths
+
+A sheet on the left or right is 24 rem wide. `.width(SheetWidth::Lg)` makes it 40 rem, for a record's details: cards side by side, tabs, a timeline. `.width(SheetWidth::Xl)` makes it 60% of the screen and never less than `Lg`, for a record with a table in it, such as an order and its lines, while the page behind stays in view. On a screen narrower than a width plus 3 rem, the sheet is the screen less 3 rem.
+
+```rust
+let ticket = Sheet::new("ticket", "Ticket 2041")
+    .width(SheetWidth::Lg)
+    .body(details);
+
+let order = Sheet::new("order", "Order 4821")
+    .width(SheetWidth::Xl)
+    .body(order_and_lines);
+```
+
+## Backdrop
+
+A sheet dims the page behind it well back, so the sheet is all a reader looks at. When the sheet is a record read beside the list it came from, such as a deal opened from its table, `.backdrop(SheetBackdrop::Light)` dims the page only a little, so its rows stay readable. The sheet is modal either way: the page behind is inert and the focus stays in the sheet.
+
+```rust
+let deal = Sheet::new("deal", "Sutlej Supply renewal")
+    .width(SheetWidth::Lg)
+    .backdrop(SheetBackdrop::Light)
+    .body(details);
+```
+
+The [app shell's whole page](/docs/ui/app-shell/#a-whole-page) opens a deal this way over its table.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab`, `Shift+Tab` | Moves between the sheet's controls; focus stays inside. |
+| `Esc` | Closes it. |
+
+- The title names the sheet, as for a dialog.
+- A side sheet is 24 rem wide, 40 rem with `SheetWidth::Lg`, or 60% of the screen with `SheetWidth::Xl`, and never more than the screen less 3 rem.
+
+</UiA11y>
+
+## API
+
+### Sheet
+
+<UiProps type="Sheet" />
+
+### SheetSide
+
+<UiProps type="SheetSide" />
+
+### SheetWidth
+
+<UiProps type="SheetWidth" />
+
+### SheetBackdrop
+
+<UiProps type="SheetBackdrop" />

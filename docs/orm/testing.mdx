@@ -1,0 +1,165 @@
+---
+title: "Testing"
+description: "Database assertions, counting queries, `#[navree::test]` with a database per test, real PostgreSQL and MySQL servers and seeding test apps."
+---
+
+Tests of code that uses models need two things: a database of their own, so tests run in parallel without seeing each other's rows, and a way to say what the database should hold afterwards. The ORM's testing helpers live in `navree::orm::testing`, with the test databases under the `testing` feature (on in `full`).
+
+```rust title="src/modules/deals/tests/mod.rs"
+use navree::orm::testing::database::TestDb;
+use navree::orm::testing::*;
+
+#[navree::test(template = DATABASE)]
+async fn winning_a_deal(db: TestDb) -> Result<(), BoxError> {
+    let deal = Deal::factory().state(DealFactory::won).create_one(db.db()).await?;
+
+    assert_database_has(db.db(), Deal::table_name(), [Deal::STAGE.set(Stage::Won)]).await;
+    assert_database_count(db.db(), "companies", 1).await;
+    assert_model_exists(db.db(), &deal).await;
+    Ok(())
+}
+```
+
+For tests that boot the whole app and send requests, `TestApp` gives each test a database too: see [database tests](/docs/testing/database-tests/). The assertions on this page work there as well, on the app's `Db` (`app.get::<Db>().await`).
+
+## Database assertions
+
+The assertions are `async` and panic with a report when they fail: what was expected, and the rows that came closest.
+
+| Assertion | Passes when |
+|---|---|
+| `assert_database_has(exec, table, conditions)` | a row matches every condition |
+| `assert_database_missing(exec, table, conditions)` | no row matches |
+| `assert_database_count(exec, table, n)` | the table has `n` rows |
+| `assert_database_empty(exec, table)` | the table has none |
+| `assert_model_exists(exec, &record)`, `assert_model_missing(exec, &record)` | the record's row exists (or doesn't), ignoring soft deletes |
+| `assert_soft_deleted(exec, &record)`, `assert_not_soft_deleted(exec, &record)` | the record's row is (or isn't) trashed |
+| `assert_soft_deleted_in(exec, table, conditions)`, `assert_not_soft_deleted_in(..)` | the same, for rows found by conditions |
+
+Conditions are pairs (`[("title", "Renewal")]`), typed assignments (`[Deal::STAGE.set(Stage::Won)]`, encoded with the column's casts, so a string enum compares with `'won'`), or a `Filter` the database evaluates (`Deal::AMOUNT_CENTS.gt(100_000)`). Values compare as the column stores them: numbers by value whatever their width, booleans stored as integers, date-times by instant, JSON by structure (`json_value(..)` builds a JSON condition).
+
+```rust
+assert_database_has(db.db(), "deals", [("title", "Renewal")]).await;
+assert_database_missing(db.db(), "deals", [("title", "Gone")]).await;
+
+let mut deal = deal;
+deal.delete(db.db()).await?;
+assert_soft_deleted(db.db(), &deal).await;
+```
+
+## Counting queries
+
+A test can pin how many statements a piece of code runs, which catches N+1 queries before production does:
+
+```rust
+expect_query_count(2, async {
+    Deal::query().with("company").get(db.db()).await.unwrap(); // the deals and their companies
+})
+.await;
+
+let (deals, statements) = count_queries(Deal::query().get(db.db())).await;
+```
+
+Statements count at the executors, while the future's task runs them. With the [strict modes](/docs/orm/getting-started/#configuration) on, as they are in tests by default, lazy loading inside a loop already fails; a query count also catches extra queries of other kinds.
+
+## A database per test
+
+`#[navree::test]` runs an `async fn` test on a runtime of its own (no `#[tokio::test]` needed) and, when it takes a `TestDb`, gives it a database of its own:
+
+```rust
+#[navree::test(template = DATABASE)]                      // a copy of the template, on SQLite
+async fn wins_deals(db: TestDb) { /* .. */ }
+
+#[navree::test(template = DATABASE, database = "postgres")] // skipped without a server
+async fn on_postgres(db: TestDb) -> Result<(), BoxError> { /* .. */ Ok(()) }
+
+#[navree::test(database = "memory")]                      // an empty in-memory SQLite database
+async fn in_memory(db: TestDb) { /* .. */ }
+
+#[navree::test]                                           // no database
+async fn plain() { /* .. */ }
+```
+
+`database` is `"sqlite"` (the default), `"memory"`, `"postgres"` or `"mysql"`. The `sqlite` and `memory` databases need the `sqlite` Cargo feature (`navree-db`'s, or `navree`'s) in your `[dev-dependencies]`; `postgres` and `mysql` need their own feature. A test may return a `Result`. `db.db()` is the `Db` to pass to models; `db.url()` the URL, for booting an app on the same database.
+
+### Templates
+
+Building the schema for every test is slow, so build it once: a `Template` runs its build function the first time a test asks for a copy, and every test then gets a copy of the result, schema and reference rows included.
+
+```rust
+use navree::orm::testing::database::Template;
+use navree::schema::Schema;
+
+/// The schema, built once per test binary; every test gets a copy.
+static DATABASE: Template = Template::new("crm", |template| {
+    Box::pin(async move {
+        let schema = Schema::new(template.db());
+        schema
+            .create("companies", |t| {
+                t.uuid_primary();
+                t.string("name");
+                t.string("domain").nullable();
+                t.timestamps_tz();
+            })
+            .await?;
+        schema
+            .create("deals", |t| {
+                t.uuid_primary();
+                t.foreign_uuid("company_id").constrained();
+                t.string("title");
+                t.big_integer("amount_cents");
+                t.string("stage");
+                t.timestamp_tz("closed_at").nullable();
+                t.timestamps_tz();
+                t.soft_deletes_tz();
+            })
+            .await?;
+        Ok(())
+    })
+});
+```
+
+The build function can also boot your app on `template.url()` with `database.migrate_on_boot`, to run your real migrations once. A copy is a copied file on SQLite, `CREATE DATABASE .. TEMPLATE` on PostgreSQL, and a new database with the template's tables and rows on MySQL. `DATABASE.sqlite()`, `.postgres()` and `.mysql()` hand out copies outside the attribute.
+
+### Real servers
+
+Tests on PostgreSQL (with TimescaleDB) and MySQL read the server from `NAVREE_TEST_POSTGRES_URL` and `NAVREE_TEST_MYSQL_URL` (`NAVREE_TEST_MONGODB_URL` for MongoDB), or from `target/test-databases.env` when the variables are unset. A test whose server isn't configured returns early with a notice, so the same suite runs on a laptop without servers and in CI with them. The test binary needs navree-db's driver for the server: the facade's `postgres` or `mysql` feature.
+
+Each test works in a database of its own, named `navree_test_..`, dropped when its `TestDb` is dropped, also when the test panics; databases a crashed run left behind are dropped by a later template build once they are six hours old.
+
+### Other strategies
+
+For suites that share one database:
+
+- `db.transaction(|uow| async move { .. })` runs the test in a unit of work and rolls it back afterwards. Its change observers and after-commit hooks still run, as on a commit. Requests a test sends commit units of work of their own, so give HTTP tests a copy instead.
+- `db.truncate(&["navree_migrations"])` empties every table but the ones named, resetting key counters.
+- `LazyTestDb` creates the database the first time a test uses it, so tests that never touch it don't pay for it.
+
+`TestDb::sqlite()`, `TestDb::memory()`, `TestDb::postgres()` and `TestDb::mysql()` give an empty database without a template. For an app booted with `TestApp`, `memory_database()` uses an in-memory SQLite database.
+
+## Seeding test apps
+
+`TestAppExt` runs seeders on a booted `TestApp`:
+
+```rust
+use navree::orm::testing::TestAppExt;
+
+app.seed::<DemoSeeder>().await?;   // one seeder, registered or not
+app.seed_all().await?;             // what `db:seed` runs
+```
+
+## Model events in tests
+
+To check which model events fired without running their listeners, put a `ModelEventFake` in the test app: see [events and observers](/docs/orm/events-and-observers/#testing).
+
+<LinkCards>
+  <LinkCard href="/docs/orm/factories/" title="Factories">
+    Building the records your tests need.
+  </LinkCard>
+  <LinkCard href="/docs/testing/database-tests/" title="Database tests">
+    `TestApp` and its database.
+  </LinkCard>
+  <LinkCard href="/docs/tools/dock/" title="Dock">
+    TimescaleDB and the other services on your machine.
+  </LinkCard>
+</LinkCards>

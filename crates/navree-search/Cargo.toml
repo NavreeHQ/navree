@@ -1,0 +1,78 @@
+[package]
+name = "navree-search"
+description = "Navree SearchModule: full-text and vector search over models, on the database, Meilisearch, Typesense, Tantivy or memory."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "search", "full-text", "vector"]
+categories = ["database"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["ai", "tantivy"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The embedded Tantivy engine (`search.engine = "tantivy"`).
+tantivy = ["dep:tantivy"]
+## PostgreSQL for the tests: the `postgres` engine and `pgvector` suites, with
+## `NAVREE_TEST_POSTGRES_URL` set. An app turns on its database driver
+## through navree-db (the facade's `postgres`).
+test-postgres = ["navree-db/postgres", "navree-orm/test-postgres", "navree-workspace/test-postgres"]
+## MySQL for the tests: the HTTP, Tantivy and memory engines on a MySQL app
+## database, with `NAVREE_TEST_DATABASE=mysql`.
+test-mysql = ["navree-db/mysql", "navree-orm/test-mysql", "navree-workspace/test-mysql"]
+## Entry points for the fuzz targets in `fuzz/` (`navree_search::fuzzing`). Not
+## part of the API.
+fuzzing = []
+## Vector search on navree-ai: its `Embeddings` when the app registers no
+## provider, and its `VectorStore` with `search.vectors.store = "ai"`.
+ai = ["dep:navree-ai"]
+
+[dependencies]
+chrono = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-ai = { workspace = true, optional = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+# Searchable records are navree-orm models; access rules on results go
+# through its `access` feature.
+navree-orm = { workspace = true, features = ["access"] }
+navree-queue = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tantivy = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+# The tests of vector search on navree-ai always run.
+navree-search = { path = ".", features = ["ai"] }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }

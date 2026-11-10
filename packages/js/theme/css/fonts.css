@@ -1,0 +1,24 @@
+/*
+ * @navree/theme/fonts.css: navree.com's three faces, self-hosted from the
+ * @fontsource packages (no runtime requests to a font service). Every subset
+ * ships with its unicode-range, so a browser downloads only what a page uses.
+ *
+ * - Mona Sans (SIL OFL), the display face: page titles and big figures, set
+ *   semi-expanded (`wdth` 112) through `font-display`;
+ * - Geist (SIL OFL), the UI and body sans;
+ * - Monaspace Neon (SIL OFL), for code, ids and keys.
+ *
+ * Next.js apps can load the same files with next/font/local instead (see the
+ * theming docs); they then set the three variables on <html> themselves.
+ */
+@import "@fontsource-variable/mona-sans/standard.css";
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/geist/wght-italic.css";
+@import "@fontsource/monaspace-neon/400.css";
+@import "@fontsource/monaspace-neon/600.css";
+
+:root {
+  --font-mona: "Mona Sans Variable";
+  --font-geist: "Geist Variable";
+  --font-monaspace: "Monaspace Neon";
+}

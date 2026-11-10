@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/attributes.rs
+expression: statements
+---
+PostgreSQL: INSERT INTO "ledgers" ("embedding") VALUES ($1)
+  values: [Vector([0.5, -1.0, 2.25])]
+MySQL: INSERT INTO `ledgers` (`embedding`) VALUES (?)
+  values: [Bytes([0, 0, 0, 63, 0, 0, 128, 191, 0, 0, 16, 64])]
+SQLite: INSERT INTO "ledgers" ("embedding") VALUES (?)
+  values: [Bytes([0, 0, 0, 63, 0, 0, 128, 191, 0, 0, 16, 64])]

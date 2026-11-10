@@ -1,0 +1,5 @@
+error: #[inject(default)] cannot be combined with `name`: a defaulted field is not resolved
+ --> tests/ui/injectable/name_and_default.rs:5:26
+  |
+5 |     #[inject(name = "x", default)]
+  |                          ^^^^^^^

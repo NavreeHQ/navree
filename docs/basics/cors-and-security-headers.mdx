@@ -1,0 +1,170 @@
+---
+title: "CORS and security headers"
+description: "Allow browser front ends on other origins with exact-origin CORS, and the security headers Navree sends on every response."
+---
+
+Browsers block a page from reading responses from another origin unless the server allows it with CORS headers. Navree's CORS support is off until you list the origins of your front ends, and then allows exactly those, with credentials. Separately, every response carries a set of security headers that tell browsers not to sniff content types, frame the response or leak the referrer.
+
+Both are part of `HttpModule` and configured in the `http` section. Navree implements the CORS protocol itself, after the Fetch standard, in `CorsLayer`.
+
+## CORS
+
+### Allowing origins
+
+List the exact origins (scheme, host and port) of the front ends that call your API from the browser:
+
+```toml title="config/app.toml"
+[http.cors]
+allowed_origins = ["http://localhost:3000", "https://app.example.com"]
+```
+
+```env title=".env"
+APP_HTTP__CORS__ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com
+```
+
+With the list empty, the default, Navree sends no CORS headers at all and browsers refuse cross-origin calls. Each entry must be an origin starting with `http://` or `https://`; `*` and malformed entries fail the boot:
+
+```text
+http.cors.allowed_origins must list exact origins; `*` is not allowed
+```
+
+### What Navree answers
+
+For an allowed origin, a preflight request gets:
+
+```http wrap
+HTTP/1.1 200 OK
+access-control-allow-origin: https://app.example.com
+access-control-allow-credentials: true
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-headers: accept,accept-language,authorization,content-type,if-match,if-none-match,traceparent,tracestate,x-csrf-token,x-request-id,x-requested-with,x-socket-id,x-xsrf-token
+access-control-max-age: 600
+vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers
+```
+
+and every actual response, errors included, gets:
+
+```http
+access-control-allow-origin: https://app.example.com
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location,retry-after,content-disposition,x-navree-demo
+vary: Origin
+```
+
+- **Origins** are matched exactly. The response names the caller's origin, never `*`.
+- **Credentials** (cookies, `Authorization`) are allowed, so `fetch(url, { credentials: "include" })` works.
+- **Methods**: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS`.
+- **Request headers**: the thirteen listed above, explicitly, since browsers don't accept a wildcard together with credentials. They cover bearer tokens, JSON bodies, conditional requests, tracing, request ids, the CSRF headers and the Pusher socket id.
+- **Exposed headers**: `X-Request-Id`, `ETag`, `Location`, `Retry-After`, `Content-Disposition` and `X-Navree-Demo` (set on responses about a [demo workspace](/docs/workspaces/demo-workspaces/)) are readable from JavaScript.
+- **Preflight caching**: browsers may reuse a preflight answer for 600 seconds.
+
+The protocol, exactly:
+
+- **A preflight** is an `OPTIONS` request with both an `Origin` and an `Access-Control-Request-Method` header. Navree answers it with an empty `200` and never calls your handlers or the layers inside CORS. An `OPTIONS` request without `Access-Control-Request-Method`, or without `Origin`, is an ordinary request: it reaches the router, which answers `405` for a route that doesn't handle `OPTIONS`.
+- **An origin that isn't listed** gets no CORS headers at all, only `Vary`. Its preflight is answered with that empty `200`, which makes the browser refuse the real request; any other request still reaches your handler (see the warning below). A request with two `Origin` headers counts as an unlisted origin.
+- **Origins are compared as written**, byte for byte: `https://app.example.com` doesn't allow `https://app.example.com:8443`, `http://app.example.com` or `HTTPS://APP.EXAMPLE.COM`. The one allowed origin is echoed back, never `*`, with or without credentials.
+- **`Vary`**: every response varies with `Origin`, whether or not the request had one, so a cache never serves one origin's answer to another. A preflight response also varies with `Access-Control-Request-Method` and `Access-Control-Request-Headers`. A `Vary` your handler set is kept.
+- **Methods and headers** are the fixed lists above, sent on every preflight for an allowed origin. Navree doesn't judge the requested method or headers; the browser compares them with the lists.
+
+Error responses from every layer carry the CORS headers too, including panics, timeouts, 429s and maintenance-mode 503s, so a front end can always read the error body. Preflight requests are answered before the rate limiter and don't count against it.
+
+### Options
+
+| Key | Default | What it does |
+|---|---|---|
+| `http.cors.allowed_origins` | `[]` (CORS off) | the exact origins allowed |
+| `http.cors.allow_credentials` | `true` | send `Access-Control-Allow-Credentials: true` |
+| `http.cors.max_age_secs` | `600` | how long browsers may cache a preflight answer |
+
+The allowed methods, request headers and exposed headers are fixed: there are no keys to change them.
+
+gRPC-Web and Connect calls from browsers use the same layer and the same three options, with `POST` and `OPTIONS` as the methods and the gRPC-Web and Connect headers added to the request and exposed headers; see [gRPC](/docs/microservices/grpc/).
+
+<Callout type="warning" title="CORS is not access control">
+
+A request from an origin that isn't listed still reaches your handler; the browser only refuses to show the response to the page. Non-browser clients ignore CORS entirely. Protect routes with [access control](/docs/basics/access-control/), and cookie-authenticated routes with [CSRF protection](/docs/basics/sessions-and-csrf/).
+
+</Callout>
+
+### When you don't need CORS
+
+If your front end calls the API through its own server, as the CRM's Next.js backend-for-frontend does, the browser never makes a cross-origin call and you can leave the list empty. The CRM lists `http://localhost:3000` anyway, for tools and direct calls during development.
+
+## Security headers
+
+Navree adds these headers to every response that a route or a layer inside the timeout produces, error responses included:
+
+| Header | Value | Effect |
+|---|---|---|
+| `X-Content-Type-Options` | `nosniff` | browsers trust the `Content-Type` instead of guessing |
+| `X-Frame-Options` | `DENY` | the response can't be shown in a frame (clickjacking) |
+| `Referrer-Policy` | `no-referrer` | links from your responses don't leak their URL |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | browsers use HTTPS for your domain and its subdomains for a year |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'; base-uri 'none'` | a response opened in the browser can't load scripts, styles or anything else |
+
+Three answers are made outside the layer that adds them: a CORS preflight, the 500 for a panic and the 503 for a timeout. They carry none of these headers, except that the two errors still have `X-Content-Type-Options: nosniff`.
+
+The content security policy is strict because an API answers with JSON, not pages. Browsers ignore `Strict-Transport-Security` on plain HTTP, so it does no harm in development; once your domain is served over HTTPS with this header, browsers refuse plain HTTP to it and its subdomains for a year.
+
+### Changing a header for one response
+
+Navree only adds a header when the response doesn't have it yet, so a value you set yourself wins. A route that serves HTML can send its own policy:
+
+```rust title="src/pages/controller.rs"
+use http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use navree::http::response::{IntoResponse, Response};
+
+#[get("/status")]
+#[public]
+async fn status_page(&self) -> Response {
+    (
+        [
+            (CONTENT_TYPE, "text/html; charset=utf-8"),
+            (CONTENT_SECURITY_POLICY, "default-src 'self'"),
+        ],
+        "<!doctype html><title>Status</title><p>All systems normal.</p>",
+    )
+        .into_response()
+}
+```
+
+The [OpenAPI docs page](/docs/digging-deeper/openapi/) at `/api/docs` does exactly this: it sends a policy that lets its own stylesheet and script load.
+
+### Turning them off
+
+```toml title="config/app.toml"
+[http]
+security_headers = false
+```
+
+This removes all five headers from every response, which makes sense when a proxy in front of the app sets them. There's no key to change a single default for every response; to do that, turn them off and have your proxy send your own set. Error responses keep `X-Content-Type-Options: nosniff` either way.
+
+## Testing
+
+The test client sends `Origin` set to the first allowed origin on every request, so the CORS headers are there in tests. Check them, or the security headers, with `header`:
+
+```rust title="tests/cors.rs"
+let response = app
+    .client()
+    .get("/api/v1/companies")
+    .header("origin", "https://app.example.com")
+    .send()
+    .await;
+assert_eq!(
+    response.header("access-control-allow-origin"),
+    Some("https://app.example.com")
+);
+assert_eq!(response.header("x-frame-options"), Some("DENY"));
+```
+
+<LinkCards>
+  <LinkCard href="/docs/basics/sessions-and-csrf/" title="Sessions and CSRF">
+    Cookie sessions for single-page apps, and CSRF protection.
+  </LinkCard>
+  <LinkCard href="/docs/basics/middleware/" title="Middleware">
+    Where CORS and the security headers sit in the pipeline.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    HTTPS, proxies and headers in production.
+  </LinkCard>
+</LinkCards>

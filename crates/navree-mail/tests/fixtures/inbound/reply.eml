@@ -1,0 +1,25 @@
+Return-Path: <ada@example.com>
+Delivered-To: reply+abc@in.acme.test
+Received: from mail.example.com (mail.example.com [203.0.113.7])
+	by mx.acme.test with ESMTPS id 4F2a; Tue, 27 Oct 2026 09:14:02 +0000
+Message-ID: <CAF2reply-0001@mail.example.com>
+In-Reply-To: <ticket-42@acme.test>
+References: <ticket-41@acme.test>
+ <ticket-42@acme.test>
+Date: Tue, 27 Oct 2026 10:14:00 +0100
+From: Ada Lovelace <ada@example.com>
+To: Acme Support <reply+abc@in.acme.test>
+Cc: grace@example.com
+Reply-To: Ada at home <ada@home.example>
+Subject: Re: [#42] Printer on fire
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+X-Ticket-Client: Navree Mail Test
+X-Ticket-Client: Second Value
+
+Thanks, the fire is out now.
+
+On Mon, 26 Oct 2026 at 18:02, Acme Support <support@acme.test> wrote:
+> We are sending someone over.
+> Please stay away from the printer.

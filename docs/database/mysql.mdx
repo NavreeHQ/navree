@@ -1,0 +1,122 @@
+---
+title: "MySQL and MariaDB"
+description: "Connect to MySQL 8.4 or to MariaDB 11.4 or 10.6: the feature, the URL, TLS, SQL mode, how Navree behaves, types and collations, and what has run."
+---
+
+[Getting started](/docs/database/getting-started/) covers what every database shares (the `database` section, the module, queries and errors). This page covers MySQL and MariaDB.
+
+## Turning it on
+
+<Badge feature="mysql" /> Turn on the `mysql` feature of the facade. It adds SQLx's MySQL driver to `navree-db` (and turns on `db`). MariaDB speaks MySQL's protocol, so the same driver connects to both:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["mysql"] }
+```
+
+Then point `database.url` at the server. `mariadb://` works the same as `mysql://`:
+
+```sh
+export APP_DATABASE__URL=mysql://crm:secret@db.internal:3306/crm
+```
+
+Without the feature, the app fails to boot with "cannot connect to mysql://crm:***@db.internal:3306/crm: ... (enable the `mysql` feature of navree-db)". Navree's suites run on MySQL 8.4, MariaDB 11.4 and MariaDB 10.6; earlier MySQL 8.0 releases are expected to work but are not tested.
+
+MariaDB 11.4 and 10.6 are supported and tested in CI, beside MySQL 8.4. Navree reads `mariadb://` URLs, opens MariaDB connections with the MySQL driver and writes MariaDB's own SQL for UUID, vector and spatial columns. MariaDB 10.6 is the oldest version tested, and the first with `SKIP LOCKED`.
+
+## Connections
+
+Every connection the pool opens starts its session with:
+
+- the time zone `+00:00`, so `TIMESTAMP` columns store and read UTC;
+- the `utf8mb4` character set, with the server's default collation for it;
+- `PIPES_AS_CONCAT` and `NO_ENGINE_SUBSTITUTION` added to the SQL mode;
+- strict SQL mode and, when you set one, an isolation level, from [`database.mysql`](#sql-mode-and-isolation-level).
+
+The URL also takes the driver's parameters:
+
+| Parameter | What it does |
+|---|---|
+| `ssl-mode` | `DISABLED`, `PREFERRED` (the default: TLS when the server offers it), `REQUIRED`, `VERIFY_CA` or `VERIFY_IDENTITY` (`VERIFY_CA` checks the server's certificate; `VERIFY_IDENTITY` also checks its host name) |
+| `ssl-ca`, `ssl-cert`, `ssl-key` | The CA certificate file to verify the server with; a client certificate and its key |
+| `socket` | Connects through the Unix socket at this path instead of TCP |
+| `charset`, `collation` | The connection's character set (default `utf8mb4`) and collation (default: the server's for that character set) |
+| `timezone` | The session time zone (default `+00:00`). Keep UTC: Navree stores and reads times as UTC. |
+| `statement-cache-capacity` | How many prepared statements each connection keeps (default 100) |
+
+For example, `mysql://crm:secret@db.internal:3306/crm?ssl-mode=VERIFY_IDENTITY&ssl-ca=/etc/ssl/db-ca.pem`.
+
+## TLS and sign-in
+
+MySQL 8 generates a certificate when it first starts, so with the default `ssl-mode=PREFERRED` connections use TLS out of the box.
+
+MySQL 8's default account type, `caching_sha2_password`, sends the account's password itself the first time the account signs in after the server starts; later sign-ins use a hash the server caches. Over TLS that needs nothing more. Without TLS (`ssl-mode=DISABLED`, or a server that offers none), MySQL wants the password encrypted with the server's RSA key, and Navree leaves that exchange out: it needs the `rsa` crate, which Navree's crypto policy keeps out of the dependency tree. Such a connection fails with "... RSA auth backend disabled ... (this caching_sha2_password account needs TLS: use `ssl-mode=PREFERRED`, the default, or `REQUIRED` against a server that offers TLS)". Accounts that use `mysql_native_password`, MariaDB's default, sign in without TLS.
+
+## SQL mode and isolation level
+
+The `database.mysql` section shapes the session of every connection. Every key is optional:
+
+```toml title="config/app.toml"
+[database.mysql]
+strict = true
+# modes = ["STRICT_ALL_TABLES", "NO_ENGINE_SUBSTITUTION"]
+# isolation_level = "read_committed"
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `strict` | `true` | Adds `ONLY_FULL_GROUP_BY`, `STRICT_TRANS_TABLES`, `NO_ZERO_IN_DATE`, `NO_ZERO_DATE` and `ERROR_FOR_DIVISION_BY_ZERO` to the server's SQL mode. A value too long or out of range for its column, or a zero date, is then an error instead of being cut or replaced, and a query that selects a column it neither groups by nor aggregates is refused, as on PostgreSQL. `false` removes `STRICT_TRANS_TABLES` and `STRICT_ALL_TABLES` from the session instead, whatever the server's default. |
+| `modes` | unset | The session's exact SQL mode, replacing the server's, `strict`'s and SQLx's: a list, or a comma-separated string from the environment (`APP_DATABASE__MYSQL__MODES=STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION`). `[]` clears the SQL mode. An entry that isn't a mode name (letters, digits and underscores) stops the boot. |
+| `isolation_level` | unset | `read_uncommitted`, `read_committed`, `repeatable_read` or `serializable`, in any case, with spaces or hyphens if you like (`"READ COMMITTED"`). Unset keeps the server's level, `REPEATABLE READ` unless it's configured otherwise. |
+
+`read_committed` is worth knowing about. Under MySQL's default `REPEATABLE READ`, InnoDB locks the gaps between index records as well as the records, so concurrent inserts into the same range can deadlock; `READ COMMITTED` locks only the records, and every statement sees the latest commits, as on PostgreSQL.
+
+## How Navree behaves on MySQL
+
+- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) The UUIDs that models write are 16 bytes on MySQL, in `BINARY(16)` columns ([below](#types-and-collations)), so a trigger that records who changed a row converts the text:
+
+  ```sql
+  CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW
+  SET NEW.updated_by = UNHEX(REPLACE(@navree_actor, '-', ''));
+  ```
+
+  Session variables belong to the connection, not to the transaction, and the connection goes back to the pool. Navree therefore clears them right before `COMMIT` or `ROLLBACK`, and rolls the unit of work back if it can't. Outside a unit of work they're `NULL`.
+- MySQL has no row-level security, so with [workspaces](/docs/workspaces/isolation/) isolation is query scoping alone: `WorkspaceRepo` filters every query by the workspace, and nothing in the database stops a query that leaves the filter out.
+- `Uow::lock_for_update()` is true, so queries that call `lock_for_update()` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
+- A deadlock (error 1213) makes MySQL roll back the whole transaction at once. Whatever the unit of work runs after that commits on its own, and its rollback can't undo it, so let the error end the request (`?` does, with a 500) instead of carrying on.
+- MySQL commits every DDL statement on its own, so migrations run outside a transaction unless they ask for one. See [transactions](/docs/database/migrations/#transactions). `navree_migrations.applied_at` is a `DATETIME` holding UTC.
+- `migrate:fresh` drops every base table of the current database in one `DROP TABLE`, on one connection with `FOREIGN_KEY_CHECKS = 0`, and turns the checks back on before the connection returns to the pool.
+- A duplicate key (error 1062) and foreign key failures (1451, 1452 and their relatives) answer 409, as on every database ([database errors](/docs/database/getting-started/#database-errors)).
+- The case-insensitive [search helpers](/docs/database/getting-started/#searching-text) ignore case under any collation and never ignore accents.
+- Under `REPEATABLE READ`, a paginated query on a unit of work's transaction reads its `COUNT(*)` and its page from the transaction's single snapshot, so the total matches the page.
+
+## Types and collations
+
+The [schema builder](/docs/database/columns/#column-types) writes MySQL's types for you, and a few of them behave differently:
+
+- Models write a `Uuid` as its 16 bytes, which belong in a `BINARY(16)` column. The schema builder's `uuid_primary()`, `uuid` and `foreign_uuid` columns are `BINARY(16)` there ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)). A UUID v7 sorts by creation time, so [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) pages in creation order. In raw SQL, bind a `Uuid` value: a UUID string such as `'0199a7a0-…'` doesn't match a binary column (`UNHEX(REPLACE(?, '-', ''))` converts one).
+- `timestamp_tz` columns (and `timestamps_tz()`) are `TIMESTAMP(6)`. They store UTC, but the type ends on 2038-01-19. `date_time_tz` columns are `DATETIME(6)`, which has no such limit, and `DateTime<Utc>` fields read and write both as UTC.
+- Time columns keep microseconds, the schema builder's `default_time_precision`. A column declared without a precision (`.default_precision()`) keeps whole seconds, and MySQL rounds a longer fraction instead of storing it.
+- Comparisons and unique indexes follow each column's collation. MySQL 8's default for `utf8mb4`, `utf8mb4_0900_ai_ci`, ignores case and accents: `WHERE name = 'equipe'` finds "Équipe", and a unique index refuses "Equipe" next to "Équipe". Give columns that must compare exactly a binary collation such as `utf8mb4_bin`.
+
+## What has been run
+
+navree-db's MySQL test suite runs against MySQL 8.4: connections and their session settings, TLS sign-in, the unit of work and triggers reading its variables, model writes and row locks, offset and cursor pagination, the search helpers, migrations, rollbacks and `migrate:fresh`, constraint errors through HTTP, and the health check. To run it against your own server, give it a URL whose user may create databases (each test works in a database of its own):
+
+```sh
+NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-db --features mysql --test mysql
+```
+
+The ORM's real-server suite runs on MySQL 8.4 as well ([PostgreSQL page](/docs/database/postgresql/#what-has-been-run)), on tables whose UUID columns are `BINARY(16)`.
+
+The other modules' suites (auth, queue, audit, workspaces and the rest) run on MySQL 8.4 too, in the scheduled CI job ([PostgreSQL page](/docs/database/postgresql/#what-has-been-run)):
+
+```sh
+NAVREE_TEST_DATABASE=mysql NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-auth --features test-mysql
+```
+
+The MySQL suites of navree-db, the ORM and the schema builder also run against MariaDB 11.4 and 10.6, in the CI step "Test on MariaDB 11.4 and 10.6", and they pass. The same step runs the suites of the crates that own tables again on each MariaDB version. MariaDB connects through the same code as MySQL. To run the suites against your own MariaDB server, give `NAVREE_TEST_MYSQL_URL` a `mariadb://` URL:
+
+```sh
+NAVREE_TEST_MYSQL_URL=mariadb://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-db --features mysql --test mysql
+```

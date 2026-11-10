@@ -1,0 +1,81 @@
+[package]
+name = "navree-validation"
+description = "Navree ValidationModule: #[derive(Validate)] rules, Valid<T> extractors, field-level messages and international input."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "validation", "forms", "input"]
+categories = ["web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["html", "phone", "time"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## `Phone`: E.164 phone numbers (navree-phone, on libphonenumber's numbering
+## plans) and `rules::phone`.
+phone = ["dep:navree-phone"]
+## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (parsed with
+## html5ever, URLs read with url).
+html = ["dep:html5ever", "dep:memchr", "dep:url"]
+## `Validate` for navree-time's `Zone`, `LocalDay` and `DayRange`
+## (`Valid<Query<DayRange>>`).
+time = ["dep:navree-time"]
+## Entry points for the fuzz targets in `fuzz/` (`navree_validation::fuzzing`).
+## Not part of the API.
+fuzzing = ["html"]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+test-postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+html5ever = { workspace = true, optional = true }
+http = { workspace = true }
+icu_locale_core = { workspace = true }
+memchr = { workspace = true, optional = true }
+navree-config = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-phone = { workspace = true, optional = true }
+navree-time = { workspace = true, optional = true }
+navree-validation-macros = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+serde_urlencoded = { workspace = true }
+# `pattern("...")` rules.
+regex = { workspace = true }
+thiserror = { workspace = true }
+# A long body is read on the blocking pool (`spawn_blocking`).
+tokio = { workspace = true }
+unicode-properties = { workspace = true }
+url = { workspace = true, optional = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+futures-util = { workspace = true }
+navree-testing = { workspace = true }
+# Its own `time` feature, for the tests of `DayRange`.
+navree-validation = { path = ".", features = ["time"] }
+# The parsers' property tests (`email`, `url`).
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+# The derive's compile errors (tests/ui).
+trybuild = { workspace = true }
+# An independent URL parser the `url` rule is checked against.
+url = { workspace = true }

@@ -1,0 +1,86 @@
+[package]
+name = "navree-ai"
+description = "Navree AiModule: text, structured output and streaming from many model providers, with failover, budgets, agents with tools and embeddings."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "ai", "llm", "agents", "rag"]
+categories = ["api-bindings", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["ui"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL driver for navree-db, for the pgvector store and conversation
+## memory on PostgreSQL.
+test-postgres = ["navree-db/postgres"]
+## MySQL driver for navree-db, for conversation memory on MySQL (the test
+## suite runs on it with `NAVREE_TEST_DATABASE=mysql`).
+test-mysql = ["navree-db/mysql"]
+## An assistant on Navree UI pages (`navree_ai::ui`): its conversation drawn and
+## streamed into a page through the live hub, components a model may choose from a
+## closed catalogue, their buttons' signed actions, approvals the page draws, the
+## page's context and the conversation's working state.
+ui = ["dep:navree-ui", "dep:navree-realtime", "dep:navree-session"]
+
+[dependencies]
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+infer = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# Bedrock requests are signed with its SigV4 signer.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-openapi = { workspace = true }
+navree-storage = { workspace = true }
+navree-telemetry = { workspace = true }
+# The assistant's pages, its live nudges and the session's token (feature `ui`).
+navree-realtime = { workspace = true, optional = true }
+navree-session = { workspace = true, optional = true }
+navree-ui = { workspace = true, optional = true }
+navree-validation = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+# Its own `ui` feature, for the tests of the assistant on a page.
+navree-ai = { path = ".", features = ["ui"] }
+http-body-util = { workspace = true }
+# The tests' notes are an ORM model and a navree-access subject.
+navree-orm = { workspace = true, features = ["access"] }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+trybuild = { workspace = true }
+wiremock = { workspace = true }

@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "format!(\"{pipeline:#}\")"
+---
+db.deals.aggregate([
+  {"$match": {"stage": "won", "deleted_at": null}},
+  {"$project": {"_id": 1, "title": 1, "company_id": 1, "amount": 1, "price": 1, "stage": 1, "meta": 1, "tags": 1, "closes_on": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1}},
+  {"$lookup": {"from": "companies", "localField": "company_id", "foreignField": "_id", "as": "company"}},
+  {"$set": {"company_name": {"$first": "$company.name"}}}
+])

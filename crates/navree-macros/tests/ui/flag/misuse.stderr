@@ -1,0 +1,50 @@
+error: a flag is a unit struct, without fields: `struct WithFields;`
+ --> tests/ui/flag/misuse.rs:5:23
+  |
+5 |   pub struct WithFields {
+  |  _______________________^
+6 | |     on: bool,
+7 | | }
+  | |_^
+
+error: #[flag] goes on a unit struct: `pub struct NewPipeline;`
+  --> tests/ui/flag/misuse.rs:10:5
+   |
+10 | pub enum NotAStruct {
+   |     ^^^^
+
+error: a flag is a unit struct, without fields: `struct Generic;`
+  --> tests/ui/flag/misuse.rs:15:22
+   |
+15 | pub struct Generic<T>(std::marker::PhantomData<T>);
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a flag cannot be generic: its name is one stored key
+  --> tests/ui/flag/misuse.rs:15:19
+   |
+15 | pub struct Generic<T>(std::marker::PhantomData<T>);
+   |                   ^^^
+
+error: unknown #[flag] key `label`: expected `name = ".."`, `default = true` or `expose`
+  --> tests/ui/flag/misuse.rs:17:8
+   |
+17 | #[flag(label = "board")]
+   |        ^^^^^
+
+error: invalid flag name `New Board`: use 1 to 100 lower-case letters, digits, `-`, `_` and `.`, starting with a letter or a digit (`new-pipeline`)
+  --> tests/ui/flag/misuse.rs:20:15
+   |
+20 | #[flag(name = "New Board")]
+   |               ^^^^^^^^^^^
+
+error: expected boolean literal
+  --> tests/ui/flag/misuse.rs:23:18
+   |
+23 | #[flag(default = "yes")]
+   |                  ^^^^^
+
+error: duplicate `expose` key
+  --> tests/ui/flag/misuse.rs:26:16
+   |
+26 | #[flag(expose, expose)]
+   |                ^^^^^^

@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_json_contains(\"tags\",\n[\"vip\",\n\"renewal\"]).where_json_contains(\"meta\",\nserde_json::json!({\n    \"source\": \"web\", \"flags\": { \"hot\": true }\n})).where_json_length(\"tags\", Operator::Gte,\n2).where_(col(\"meta\").op(\"?\", \"labels\")))"
+---
+db.deals.find({"tags": {"$all": ["vip", "renewal"]}, "meta.flags.hot": true, "meta.source": "web", "$expr": {"$gte": [{"$cond": [{"$isArray": "$tags"}, {"$size": "$tags"}, null]}, 2]}, "meta.labels": {"$exists": true}})

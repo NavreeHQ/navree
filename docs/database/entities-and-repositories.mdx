@@ -1,0 +1,362 @@
+---
+title: "Models and records"
+description: "How a table maps to a `#[derive(Model)]` struct, and what a write records: UUID v7 keys, relations, change events, soft deletes and raw statements."
+---
+
+A table is a Rust struct with `#[derive(Model)]`. Reading it gives you `Record<M>` values, and writing a record through the request's [unit of work](/docs/database/unit-of-work/) records a change event for the [audit log](/docs/security/audit-log/). This page is the database-side view of that: how tables map to models, what a write records, and how to drop to SQL when a model is the wrong tool. The [ORM section](/docs/orm/getting-started/) is the full reference for the query builder, relationships, casts and events.
+
+| You write | Navree does |
+|---|---|
+| A struct with `#[derive(Model)]` ([models](/docs/orm/models/)) | Maps it to a table, with one typed column constant per field |
+| `Deal::create(&uow, ..)`, `record.save(&uow)`, `record.delete(&uow)` | Writes in the unit of work's transaction and records a change event |
+| `#[model(timestamps)]` and a `Uuid` key | Fills in `created_at`, `updated_at` and a UUID v7 key |
+| `#[model(soft_deletes)]` ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)) | Hides deleted rows from every query and sets `deleted_at` on delete |
+| `Deal::query().with("company")` ([eager loading](/docs/orm/eager-loading/)) | Loads each relation for a whole page in one query |
+| `query.paginate(&uow, page)` ([pagination](/docs/orm/pagination-and-streaming/)) | Reads a page and its total as `{ data, meta }` |
+
+## Defining a model
+
+Here is a deal. The struct is the source of truth: there is no schema file, and the [migration](/docs/database/migrations/) that creates the table is written beside it.
+
+```rust title="src/modules/deals/models/deal.rs"
+use chrono::{DateTime, Utc};
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// A deal.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps)]
+pub struct Deal {
+    /// A UUID v7, generated when the deal is created.
+    pub id: Uuid,
+    pub title: String,
+    /// The value in cents.
+    pub amount_cents: i64,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,
+    pub company_id: Uuid,
+    pub owner_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// The pipeline stage, stored and sent as a lower-case string.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Stage {
+    #[default]
+    Lead,
+    Proposal,
+    Won,
+    Lost,
+}
+```
+
+Three things to know when you define models in a Navree app:
+
+- **`Serialize` on the model.** A change event records old and new values as JSON, which is built from the model's serde form. It also lets a handler return a record as JSON directly.
+- **`Default`.** `Deal::create(&uow, Deal { title: .., ..Default::default() })` leaves the key and timestamps to the ORM.
+- **Timestamps are filled in.** With `timestamps`, `created_at` and `updated_at` are set from the app's `dyn Clock`, which tests can [fix](/docs/testing/fakes/#the-clock).
+
+To start a new model, `navree make:model deals Deal --migration` writes the struct and the migration that creates its table. A module registers its models with `m.model::<Deal>()`.
+
+### UUID v7 primary keys
+
+Navree apps use UUID v7 keys that the app generates: the field is `pub id: Uuid`, and the ORM fills it with `Uuid::now_v7()` when you create a record with a nil key. A version 7 UUID starts with a timestamp, so:
+
+- ids sort by creation time, which keeps inserts at the end of the primary key index and makes "newest first" a key order;
+- [cursor pagination](/docs/database/pagination/#cursor-pagination) can page by the key;
+- the app knows the id before the row exists, and ids don't reveal how many records there are.
+
+Generating them needs the `v7` feature of the `uuid` crate. Integer keys work too (`pub id: i64`, assigned by the database); cursor pagination works with either. [Primary keys](/docs/orm/models/#primary-keys) lists every key type.
+
+## Relations
+
+A model declares its relations in a `#[relations]` block, with typed foreign keys, so a key on the wrong model doesn't compile:
+
+```rust title="src/modules/deals/models/deal.rs"
+#[relations]
+impl Deal {
+    /// The company the deal is with.
+    pub fn company(&self) -> BelongsTo<Deal, Company> {
+        self.belongs_to(Deal::COMPANY_ID)
+    }
+}
+```
+
+```rust title="src/modules/companies/models/company.rs"
+#[relations]
+impl Company {
+    /// The company's deals.
+    pub fn deals(&self) -> HasMany<Company, Deal> {
+        self.has_many(Deal::COMPANY_ID)
+    }
+}
+```
+
+[Relationships](/docs/orm/relationships/) covers every kind: one to one, many to many with pivot models, through and polymorphic relations. A relation can point at a model of another crate; navree-auth's `User` is a model like any other.
+
+### Eager loading
+
+Load related records for a whole page at once rather than querying inside a loop over it. `with` loads a relation for every record of a query in one more query (`WHERE id IN (..)`), and the results come back attached to their parents:
+
+```rust
+let deals = Deal::query()
+    .with("company")
+    .order_by_desc(Deal::CREATED_AT)
+    .get(&uow)
+    .await?;
+```
+
+[Eager loading](/docs/orm/eager-loading/) covers nested paths, constrained loads, counts and how to make lazy loading an error.
+
+When a response embeds only a few fields of a related record, such as `"company": {"id", "name"}`, keep the embed in a small struct and build it from the relation the query loaded. The CRM loads `company`, `contact` and `owner` with `with_all`, one query each for a whole page, and reads them with `loaded`:
+
+```rust title="src/models/embeds.rs"
+use navree::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+/// A company as embedded in a deal.
+#[derive(Clone, Debug, Serialize)]
+pub struct CompanyRef {
+    pub id: Uuid,
+    pub name: String,
+}
+
+impl CompanyRef {
+    /// The embed of company `id` from a record's loaded relation
+    /// (`deal.loaded(Deal::company)`); an empty name if it is missing.
+    pub fn loaded(company: Option<&Option<Record<Company>>>, id: Uuid) -> Self {
+        company
+            .and_then(Option::as_ref)
+            .map_or_else(
+                || CompanyRef { id, name: String::new() },
+                |company| CompanyRef { id: company.id, name: company.name.clone() },
+            )
+    }
+}
+```
+
+A list endpoint loads the relations with the page (`Deal::query().with_all(["company", "contact", "owner"])`) and builds each item with `CompanyRef::loaded(deal.loaded(Deal::company), deal.company_id)`. The relation's own scopes apply: the CRM's `company` relation calls `with_trashed()`, so a deal keeps naming a company that was soft-deleted.
+
+## Writing records
+
+Every write takes an executor, and in a request that is the `&Uow`. The write runs in the unit of work's transaction, so it commits with the response (or rolls back with it), and it records a change event.
+
+### Creating records
+
+`create` inserts a model and returns its record, with the key and timestamps filled in:
+
+```rust title="src/modules/deals/service.rs"
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct DealService;
+
+impl DealService {
+    /// Creates a deal owned by `owner_id`.
+    pub async fn create(
+        &self,
+        uow: &Uow,
+        owner_id: Uuid,
+        input: CreateDeal,
+    ) -> navree::orm::Result<Record<Deal>> {
+        Deal::create(
+            uow,
+            Deal {
+                title: input.title,
+                amount_cents: input.amount_cents,
+                stage: Stage::Lead,
+                company_id: input.company_id,
+                owner_id,
+                ..Default::default()
+            },
+        )
+        .await
+    }
+}
+```
+
+The controller passes the request's unit of work and answers 201:
+
+```rust title="src/modules/deals/controller.rs"
+use navree::http::CurrentPrincipal;
+
+#[post("/")]
+#[authenticated]
+async fn store(
+    &self,
+    uow: Uow,
+    CurrentPrincipal(me): CurrentPrincipal,
+    Valid(Json(input)): Valid<Json<CreateDeal>>,
+) -> Result<Created<Record<Deal>>> {
+    let deal = self.deals.create(&uow, me.user_id, input).await?;
+    Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+}
+```
+
+If the insert breaks a unique or foreign key constraint, the handler's `?` turns the error into a 409 ([database errors](/docs/database/getting-started/#database-errors)).
+
+### Updating records
+
+Load the record, change its fields and save it:
+
+```rust title="src/modules/deals/service.rs"
+/// Changes the fields `input` sends (a PATCH: a field left out stays as it is).
+pub async fn update(
+    &self,
+    uow: &Uow,
+    id: Uuid,
+    input: UpdateDeal,
+) -> navree::orm::Result<Record<Deal>> {
+    let mut deal = Deal::find_or_fail(uow, id).await?;
+    if let Some(title) = input.title {
+        deal.title = title;
+    }
+    if let Some(amount_cents) = input.amount_cents {
+        deal.amount_cents = amount_cents;
+    }
+    if let Some(stage) = input.stage {
+        deal.stage = stage;
+    }
+    deal.save(uow).await?;
+    Ok(deal)
+}
+```
+
+A record remembers the values it was read with, so `save` writes only the columns that changed, sets `updated_at`, and records an `updated` event with only those columns. A record with no change writes nothing and records no event. For the update above, moving a deal from `lead` to `won` records:
+
+```json
+{
+  "entity": "deals",
+  "id": "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e",
+  "op": "updated",
+  "old": { "stage": "lead", "updated_at": "2026-10-26T10:00:00Z" },
+  "new": { "stage": "won", "updated_at": "2026-10-26T10:01:00Z" }
+}
+```
+
+`deal.update(uow, |d| d.stage = Stage::Won)` changes and saves in one call. `save` also inserts a record you built with `Record::new(..)`, so one method serves both. [Models](/docs/orm/models/#updating-records) covers dirty tracking, counters, reloading and finding or creating.
+
+### Deleting records
+
+```rust
+let mut deal = Deal::find_or_fail(uow, id).await?;
+deal.delete(uow).await?;
+```
+
+`delete` records a `deleted` event with the whole old record. On a model with soft deletes it sets `deleted_at` instead ([below](#soft-deletes)).
+
+### Change events
+
+Each write through a unit of work adds a `ChangeEvent` to it:
+
+| Field | What it holds |
+|---|---|
+| `entity` | The table name, e.g. `deals`. |
+| `id` | The primary key as a string; composite keys are joined with `,`. |
+| `op` | `ChangeOp::Created`, `Updated` or `Deleted` (`created`, `updated`, `deleted` in JSON). |
+| `old` | The whole record for deletes, the changed fields for updates, `None` for creates. |
+| `new` | The whole record for creates, the changed fields for updates, `None` for deletes. |
+
+`uow.changes()` returns the events recorded so far. When the unit of work commits, every registered change observer sees them, inside the transaction. `AuditModule` is one: it writes an audit row per event (`deal.created`, `deal.updated`, `deal.deleted`, with subject type `Deal`), so a rolled-back change leaves no audit row. [The unit of work](/docs/database/unit-of-work/#change-events-and-observers) shows how to write an observer of your own, and the ORM's [events](/docs/orm/events-and-observers/) are the other side: listeners that react to a model being saved.
+
+## Mass writes and raw statements
+
+Create, save and delete one record at a time for the changes your users make: those are the changes an audit trail should show. For everything else, use the tool that fits:
+
+- **Reads.** Lists, filters, joins, counts and aggregates are model queries.
+- **Bulk writes and bookkeeping.** A query's `update`, `delete` and `increment` change many rows in one statement and record no events ([mass updates](/docs/orm/query-builder/#updating-and-deleting-many-records)). The CRM renumbers the positions of the deals in a pipeline column this way: bookkeeping that shouldn't fill the audit log.
+- **Statements the builder doesn't cover.** A `Statement` runs on any executor, `&uow` included ([raw statements](/docs/database/getting-started/#raw-sql)).
+
+When a mass or raw write should still be audited, record its event with `uow.record_change`:
+
+```rust
+use navree::db::{ChangeEvent, ChangeOp, DbError, Executor, Statement};
+use serde_json::json;
+
+/// Marks a deal won with a single UPDATE, and records the change.
+pub async fn mark_won(uow: &Uow, deal: &Deal) -> Result<(), DbError> {
+    uow.execute(&Statement::portable(
+        "UPDATE deals SET stage = ? WHERE id = ?",
+        ["won".into(), deal.id.into()],
+    ))
+    .await?;
+    uow.record_change(ChangeEvent {
+        entity: "deals".to_owned(),
+        id: deal.id.to_string(),
+        op: ChangeOp::Updated,
+        old: Some(json!({ "stage": deal.stage })),
+        new: Some(json!({ "stage": Stage::Won })),
+    });
+    Ok(())
+}
+```
+
+Whichever you use, write through the unit of work (`&uow`), not through the pool. A write through the pool escapes the request's rollback, and on SQLite, once the unit of work has begun its transaction, it waits for the write lock that transaction holds and fails after 5 seconds.
+
+## Soft deletes
+
+A model soft-deletes with `#[model(soft_deletes)]` and a nullable `deleted_at` field. Its queries leave deleted records out, `delete` sets `deleted_at`, and `restore` and `force_delete` undo or finish it ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)). The table needs the column, which the schema builder adds with `t.soft_deletes_tz()` (a nullable `deleted_at` `TIMESTAMP WITH TIME ZONE`).
+
+```rust title="src/modules/companies/service.rs"
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct CompanyService;
+
+impl CompanyService {
+    /// One page of the companies that are not deleted.
+    pub async fn list(&self, uow: &Uow, page: PageQuery) -> navree::orm::Result<Page<Record<Company>>> {
+        Company::query()
+            .order_by(Company::NAME)
+            .order_by(Company::ID)
+            .paginate(uow, page)
+            .await
+    }
+
+    /// The company with `id`; a 404 when it is soft-deleted.
+    pub async fn find(&self, uow: &Uow, id: Uuid) -> navree::orm::Result<Record<Company>> {
+        Company::find_or_fail(uow, id).await
+    }
+
+    /// Soft-deletes the company; a 404 when it already is.
+    pub async fn delete(&self, uow: &Uow, id: Uuid) -> navree::orm::Result<()> {
+        let mut company = Company::find_or_fail(uow, id).await?;
+        company.delete(uow).await?;
+        Ok(())
+    }
+}
+```
+
+The scope does the filtering, so there is nothing to remember in each query. A few places still call for a decision:
+
+- **Audit.** A soft delete records a `deleted` event with the whole old record, like any delete, and `restore` an `updated` one.
+- **Validation.** The ORM's `exists` rule queries a model and leaves its deleted records out, `unique` counts them since a unique index still covers their rows ([validation rules](/docs/orm/workspaces-and-access/#validation-rules)). navree-validation's column-only `AsyncRule::exists` knows nothing of `deleted_at`, so check references to soft-deleted tables in the service or use the ORM's rules.
+- **Relations.** A relation reads the related model's scopes, so soft-deleted records stay out of eager loads; `with_trashed` brings them back.
+
+## Testing
+
+Assert on change events by writing through a unit of work in a test and reading `uow.changes()`, and on the database by querying it after a request. [Database tests](/docs/testing/database-tests/) shows both.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/getting-started/" title="The ORM">
+    Models, the query builder, relationships and records.
+  </LinkCard>
+  <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
+    Transactions, after-commit hooks, row locks and change observers.
+  </LinkCard>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Creating the tables your models map to.
+  </LinkCard>
+  <LinkCard href="/docs/database/pagination/" title="Pagination">
+    `Page` and cursor pages over UUID v7 keys.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    What happens to the change events writes record.
+  </LinkCard>
+</LinkCards>

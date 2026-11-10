@@ -1,0 +1,19 @@
+From: =?iso-8859-1?Q?J=FCrgen?= <j@x.test>, "Lovelace, Ada" <a@x.test>
+To: Team: b@y.test, c@z.test;
+References: <r1@x> <r2@x>
+Date: Tue, 27 Oct 2026 09:14:00 +0100 (CET)
+Content-Type: multipart/related; boundary="r"
+
+--r
+Content-Type: text/html; charset=windows-1252
+Content-Transfer-Encoding: quoted-printable
+
+<p>Gr=FC=DFe&nbsp;<img src=3D"cid:i"></p>=
+
+--r
+Content-Type: image/gif; name*0*=utf-8''a%C3; name*1*=%A4.gif
+Content-ID: <i>
+Content-Transfer-Encoding: base64
+
+R0lGODlh
+--r--

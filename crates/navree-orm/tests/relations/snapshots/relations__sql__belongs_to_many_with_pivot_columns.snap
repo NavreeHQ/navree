@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "per_dialect(|dialect|\n{\n    deal().tags().where_pivot(\"role\", \"=\",\n    \"owner\").order_by_pivot_desc(\"created_at\").to_sql(dialect)\n})"
+---
+PostgreSQL: SELECT "tags"."id", "tags"."name", "tags"."updated_at", "deal_tag"."deal_id" AS "pivot_deal_id", "deal_tag"."tag_id" AS "pivot_tag_id", "deal_tag"."role" AS "pivot_role", "deal_tag"."created_at" AS "pivot_created_at", "deal_tag"."updated_at" AS "pivot_updated_at" FROM "tags" INNER JOIN "deal_tag" ON "tags"."id" = "deal_tag"."tag_id" WHERE "deal_tag"."deal_id" = $1 AND "deal_tag"."role" = $2 ORDER BY "deal_tag"."created_at" DESC
+  values: [I64(7), String("owner")]
+MySQL: SELECT `tags`.`id`, `tags`.`name`, `tags`.`updated_at`, `deal_tag`.`deal_id` AS `pivot_deal_id`, `deal_tag`.`tag_id` AS `pivot_tag_id`, `deal_tag`.`role` AS `pivot_role`, `deal_tag`.`created_at` AS `pivot_created_at`, `deal_tag`.`updated_at` AS `pivot_updated_at` FROM `tags` INNER JOIN `deal_tag` ON `tags`.`id` = `deal_tag`.`tag_id` WHERE `deal_tag`.`deal_id` = ? AND `deal_tag`.`role` = ? ORDER BY `deal_tag`.`created_at` DESC
+  values: [I64(7), String("owner")]
+SQLite: SELECT "tags"."id", "tags"."name", "tags"."updated_at", "deal_tag"."deal_id" AS "pivot_deal_id", "deal_tag"."tag_id" AS "pivot_tag_id", "deal_tag"."role" AS "pivot_role", "deal_tag"."created_at" AS "pivot_created_at", "deal_tag"."updated_at" AS "pivot_updated_at" FROM "tags" INNER JOIN "deal_tag" ON "tags"."id" = "deal_tag"."tag_id" WHERE "deal_tag"."deal_id" = ? AND "deal_tag"."role" = ? ORDER BY "deal_tag"."created_at" DESC
+  values: [I64(7), String("owner")]

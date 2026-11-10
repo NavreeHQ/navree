@@ -1,0 +1,23 @@
+# An OpenTelemetry Collector that accepts traces over OTLP and writes each
+# export it receives to a file, one line of OTLP JSON per export, where the
+# observe suite reads it back.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  file:
+    path: /out/traces.json
+    flush_interval: 500ms
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file, debug]

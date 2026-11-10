@@ -1,0 +1,138 @@
+---
+title: "Slider"
+description: "One value or a range chosen along a track. It is a native range input, so it posts with its form, answers the keys of a slider with no script, and the server checks the posted value against the same grid the browser draws."
+---
+
+<UiPreview example="slider/default" />
+
+`Slider` chooses a number along a track. Underneath it is the browser's own `<input type="range">`, or two of them for a range, so it has the role of a slider, the keys of a slider, a field that posts with its form, and it works with JavaScript off. The `slider` module adds what a bare range input lacks: the filled part of the track, ticks and labels under it, the value written beside it, a larger step, a gap between the two thumbs of a range, and a click on the track of a range.
+
+```rust
+use navree::ui::*;
+
+Slider::new("volume")
+    .label("Volume")
+    .max(100)
+    .step(5)
+    .value(40)
+    .suffix("%")
+```
+
+`Slider::new(name)` posts its value as `name`. The minimum is 0 and the maximum 100 until you say otherwise, and the step is 1. `.label(text)` names the slider for assistive technology when no visible label does; with a visible label, give the thumb's `id` and use a `Field`, or point at the label with `.labelled_by(id)`.
+
+## When to use it
+
+Use a slider for a number where the rough place on a scale matters more than the exact digits: a volume, a cap, a weight. For an exact amount, an [Input](/docs/components/input/) of type number is better, and for a choice between a few named things, a [ToggleGroup](/docs/components/toggle-group/) or a [RadioGroup](/docs/components/radio-group/).
+
+## Anatomy
+
+<UiAnatomy component="slider" />
+
+## A range
+
+`Slider::range(name)` has two thumbs and posts `{name}_min` and `{name}_max`. The lower thumb can't go past the upper one, and `.min_gap(steps)` keeps them that many steps apart. A click on the track moves the nearer thumb.
+
+<UiPreview example="slider/range" />
+
+## Steps, marks and names
+
+`.step(n)` sets the step. Decimal steps are exact: a step of 0.1 lands on 0.3, not 0.30000000000000004, because the numbers are read from text and held as whole counts of billionths, not as floats. `.min(..)` and `.max(..)` take integers or decimals; a value off the grid, or outside it, is moved to the nearest one the grid holds.
+
+<UiPreview example="slider/decimals" />
+
+`.ticks_every(steps)` draws a tick at every nth step, no more than 101 of them. `.mark(value, label)` draws a mark with a label under it.
+
+<UiPreview example="slider/marks" />
+
+`.names([...])` gives steps names. A name is what assistive technology hears for that step (`aria-valuetext`), it is written in place of the number, and with up to twelve names each is drawn under its step.
+
+<UiPreview example="slider/names" />
+
+`.prefix("$")` and `.suffix("%")` frame the number in the value text, and `.big_step(n)` sets what Page Up, Page Down and Shift with the arrows move by (a tenth of the track by default).
+
+## States
+
+<UiPreview example="slider/states" />
+
+A disabled slider posts nothing. `.readonly()` shows the value and keeps it still but still posts it: the thumb is disabled and the value goes in hidden fields. `.invalid(true)` colours the track and the thumb for a bad value.
+
+## Right to left
+
+A slider follows the page's direction: the least is at the right, the fill and the marks run from the right, and the arrow keys move the thumb the way it looks, Left towards more. The browsers differ on this in right-to-left pages, so the module does the sideways arrows itself.
+
+<UiPreview example="slider/rtl" />
+
+## The server holds a post to the grid
+
+A browser sends what it is told to, and anything else can send anything. `SliderSpec` is the grid of a slider (minimum, maximum, step, gap) and checks text against it:
+
+```rust
+use navree::ui::*;
+
+let grid = SliderSpec::new(0, 100).step(5);
+match grid.read(&pairs, "volume") {
+    Ok(value) => { /* a number on the grid */ }
+    Err(error) => { /* SliderError: Missing, Duplicate, NotANumber, TooLow, TooHigh, OffStep */ }
+}
+```
+
+`check` reads one text, `read` finds the field in a form's pairs (the same field twice is an error, not a choice), and `read_range` and `check_range` read a range's two values and hold them to their order and their gap. The text is read the way a browser writes a number: a slider that takes any value (`any_step()`) posts what a drag lands on, a long fraction such as `0.5033333333333333`, and a very small step is posted with an exponent (`1e-7`). The server reads both, and rounds to 9 decimals (half away from zero), so `0.30000000000000004` is `0.3` on a grid of tenths. Nothing else is a number: `0x10`, `NaN`, `Infinity`, spaces and thousands separators are refused, and no number has more than 20 digits before the point, a text over 128 bytes, or an exponent past 400. `grid.message(error, &labels)` writes the error in words.
+
+<UiPreview example="slider/check" />
+
+### In a derived form
+
+A field of a `#[derive(Form)]` struct becomes a slider with `widget = slider`. Its grid is the function named by `slider = path`, or, without one, the field's `range` rule in steps of 1 (0 to 100 when there is no rule). The form draws the slider, and when it reads the post it holds the number to the same grid, so a value off the grid comes back as an error on the slider, with the number it had.
+
+```rust
+fn volume_grid() -> SliderSpec {
+    SliderSpec::new(0, 100).step(5)
+}
+
+#[derive(Deserialize, Validate, Form)]
+struct Settings {
+    /// Volume
+    #[validate(range(min = 0, max = 100))]
+    #[form(widget = slider, slider = volume_grid)]
+    volume: i64,
+}
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Right`, `Up` | Move one step towards more. (In a right-to-left page `Left` is towards more.) |
+| `Left`, `Down` | Move one step towards less. |
+| `Home`, `End` | Go to the least or the most. |
+| `Page Up`, `Page Down` | Move by the larger step. |
+| `Shift` with an arrow | Moves by the larger step. |
+| Any arrow, on a slider that takes any value | Moves by a hundredth of the track, and Shift or Page by a tenth, the same in every browser. |
+
+- Each thumb is a slider with its own value. In a range they are named "minimum" and "maximum" after the slider's label, and keep their order in the tab sequence whatever their values.
+- `aria-valuetext` is written when the value has a prefix, a suffix or a name.
+- The thumbs are 24 px tall, so they are large enough to press.
+- The value beside the slider is an `<output>` for the thumb or thumbs. It is written from the number, with the decimals of the step (the shortest text, up to nine places, for a slider that takes any value), and never as an exponent.
+- `SliderLabels { decimal_point: ",".into(), .. }` writes what the person reads with a comma, in the value, the value text and the messages. What is posted always has a point.
+
+</UiA11y>
+
+## API
+
+### Slider
+
+<UiProps type="Slider" />
+
+### SliderSpec
+
+<UiProps type="SliderSpec" />
+
+### SliderError
+
+<UiProps type="SliderError" />
+
+### SliderLabels
+
+<UiProps type="SliderLabels" />

@@ -1,0 +1,92 @@
+{
+  "api": {
+    "title": "Agra cloud API",
+    "undocumented": [
+      "/admin*"
+    ]
+  },
+  "app": {
+    "url": "http://localhost:8080"
+  },
+  "auth": {
+    "registration": "false",
+    "two_factor": {
+      "issuer": "Agra cloud"
+    }
+  },
+  "billing": {
+    "plans": {
+      "pro": {
+        "name": "Pro",
+        "prices": {
+          "monthly": "price_pro_monthly",
+          "yearly": "price_pro_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      },
+      "starter": {
+        "name": "Starter",
+        "prices": {
+          "monthly": "price_starter_monthly",
+          "yearly": "price_starter_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      }
+    },
+    "provider": "fake"
+  },
+  "database": {
+    "max_connections": "20",
+    "migrate_on_boot": true,
+    "url": "postgres://navree:navree@127.0.0.1:5432/agra_cloud"
+  },
+  "helm": {
+    "title": "Agra cloud admin"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api"
+  },
+  "key": "base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=",
+  "log": {
+    "level": "debug"
+  },
+  "mail": {
+    "from": "Agra cloud <hello@agra-cloud.test>",
+    "transport": "smtp://127.0.0.1:1025"
+  },
+  "queue": {
+    "driver": "redis"
+  },
+  "realtime": {
+    "key": "agra-cloud",
+    "relay_url": "auto"
+  },
+  "social": {
+    "redirect_base": "http://localhost:3000/auth/callback"
+  },
+  "workspace": {
+    "resolvers": "header,subdomain",
+    "roles": {
+      "admin": {
+        "permissions": [
+          "projects.*",
+          "billing.manage"
+        ]
+      },
+      "member": {
+        "permissions": [
+          "projects.read",
+          "projects.create"
+        ]
+      },
+      "viewer": {
+        "permissions": [
+          "projects.read"
+        ]
+      }
+    }
+  }
+}

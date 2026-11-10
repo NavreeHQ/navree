@@ -1,0 +1,53 @@
+/*
+ * navree-ui's stylesheet: the context menu's region, the menu bar and the navigation menu. A
+ * context menu's popup and a menu bar's menus are drawn by the dropdown menu's rules in the
+ * toolkit's own stylesheet. Written for Navree; structure and slot names follow shadcn/ui
+ * (MIT, Copyright (c) 2023 shadcn), the values, the 4px and 6px corners and the app rules
+ * are Navree's own. See THIRD_PARTY.md.
+ */
+/* Context menu: the region that opens it. A touch screen's own callout would cover the menu. */
+[data-slot=context-menu]{-webkit-touch-callout:none;
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:var(--radius)}
+}
+
+/* Menu bar */
+[data-slot=menubar]{display:flex;flex-wrap:wrap;align-items:center;gap:.125rem;width:fit-content;max-width:100%;padding:.1875rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1)}
+[data-slot=menubar-item]{display:contents}
+[data-slot=menubar-trigger]{display:inline-flex;align-items:center;height:1.75rem;padding:0 .625rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-1);font:inherit;font-size:14px;font-weight:500;line-height:1;text-decoration:none;white-space:nowrap;cursor:pointer;user-select:none;
+  &:hover,&[aria-expanded=true]{background:var(--ink-3);color:var(--fg)}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+  &[aria-disabled=true]{opacity:.5;cursor:default;pointer-events:none}
+}
+
+/* Navigation menu */
+[data-slot=navigation-menu]{max-width:100%}
+[data-slot=navigation-menu-list]{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;margin:0;padding:0;list-style:none}
+[data-slot=navigation-menu-trigger]{display:inline-flex;align-items:center;gap:.25rem;height:2.25rem;padding:0 .75rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-1);font:inherit;font-size:14px;font-weight:500;line-height:1;text-decoration:none;white-space:nowrap;cursor:pointer;
+  &:hover,&[aria-expanded=true]{background:var(--ink-2);color:var(--fg)}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+  &[data-active],&[aria-current=page]{color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
+  & > [data-slot=icon]{flex:none;width:14px;height:14px;color:var(--fg-3);transition:rotate .15s}
+  &[aria-expanded=true] > [data-slot=icon]{rotate:180deg}
+}
+/* The panel is a popover that the overlay module places under its button. */
+[data-slot=navigation-menu-content]{position:fixed;inset:auto;margin:0;padding:.5rem;width:max-content;min-width:14rem;max-width:min(26rem,calc(100vw - 1rem));max-height:calc(100dvh - 1rem);overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
+  &:popover-open{animation:ui-in .1s ease-out}
+  &:not([style]){margin:auto;inset:0;height:fit-content}
+}
+[data-slot=navigation-menu-featured]{margin-bottom:.5rem;padding:.75rem;border-radius:var(--radius);background:var(--ink-2)}
+[data-slot=navigation-menu-links]{display:grid;gap:.125rem;margin:0;padding:0;list-style:none}
+[data-slot=navigation-menu-link]{display:flex;flex-direction:column;gap:.125rem;padding:.5rem .625rem;border-radius:var(--radius);color:var(--fg-1);text-decoration:none;
+  &:hover,&:focus-visible{background:var(--ink-2);color:var(--fg)}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+  &[aria-current=page] > [data-slot=navigation-menu-link-title]{color:var(--accent-text)}
+}
+[data-slot=navigation-menu-link-title]{font-size:14px;font-weight:500;line-height:1.25}
+[data-slot=navigation-menu-link-description]{color:var(--fg-3);font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+/* On a phone the items stack, and each button takes the width. */
+@media (max-width:40rem){
+  [data-slot=navigation-menu-list]{flex-direction:column;align-items:stretch}
+  [data-slot=navigation-menu-trigger]{width:100%;justify-content:space-between}
+}
+@media (forced-colors:active){
+  [data-slot=menubar-trigger]:hover,[data-slot=menubar-trigger][aria-expanded=true],[data-slot=navigation-menu-link]:hover,[data-slot=navigation-menu-link]:focus-visible{forced-color-adjust:none;background:Highlight;color:HighlightText}
+}

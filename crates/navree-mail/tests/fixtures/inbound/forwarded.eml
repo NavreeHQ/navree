@@ -1,0 +1,28 @@
+Message-ID: <fwd-0003@acme.test>
+Date: Tue, 27 Oct 2026 12:30:00 +0000
+From: Jaya Clarke <jaya@acme.test>
+To: phish@in.acme.test
+Subject: Fwd: Your mailbox is full
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fwd"
+
+--fwd
+Content-Type: text/plain; charset=utf-8
+
+This looks suspicious.
+
+--fwd
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="Your mailbox is full.eml"
+
+Message-ID: <evil-1@bad.example>
+Date: Mon, 26 Oct 2026 08:00:00 +0000
+From: IT Desk <helpdesk@bad.example>
+To: jaya@acme.test
+Subject: Your mailbox is full
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<p>Click <a href="https://bad.example/login">here</a> to keep your mail.</p>
+
+--fwd--

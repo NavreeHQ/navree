@@ -1,0 +1,51 @@
+# Navree's input validation is its own: `#[derive(Validate)]` comes from
+# navree-validation-macros, the rules and the parsers behind `email` and
+# `url` from navree-validation. No source file, template and no manifest
+# may use the garde crate again, anywhere.
+#
+# Three rules: one for Rust source (a `use`, a path such as
+# `garde::Validate`, a `#[garde(..)]` attribute), one for the CLI's Rust
+# templates (`*.rs.j2`, which Semgrep doesn't parse as Rust) and one for a
+# Cargo.toml dependency (manifests and their templates). Comments and
+# string contents that merely mention the name are not matched.
+rules:
+  - id: navree-no-garde
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      Navree does not use garde: derive navree-validation's `Validate`
+      (`navree::validation::Validate`) and write the rules as
+      `#[validate(...)]`.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bgarde(?:_derive)?\s*(?:::|;)|#\[\s*garde\s*[(\]])'
+
+  - id: navree-no-garde-in-templates
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Navree's templates do not use garde: derive `navree::validation::Validate`
+      and write the rules as `#[validate(...)]`. See .semgrep/no-garde.yml.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    paths:
+      include:
+        - "**/*.rs.j2"
+    pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bgarde(?:_derive)?\s*(?:::|;)|#\[\s*garde\s*[(\]])'
+
+  - id: navree-no-garde-dependency
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Navree does not depend on garde or garde_derive: validation is
+      navree-validation's `#[derive(Validate)]`. See .semgrep/no-garde.yml.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    paths:
+      include:
+        - "**/Cargo.toml"
+        - "**/Cargo.toml.j2"
+    pattern-regex: '(?m)^\s*(?:garde(?:[_-]derive)?\s*(?:=|\.)|\[(?:[\w.-]*\.)?garde(?:[_-]derive)?\])'

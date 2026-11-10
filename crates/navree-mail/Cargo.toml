@@ -1,0 +1,111 @@
+[package]
+name = "navree-mail"
+description = "Navree MailModule: mailables rendered from templates, SMTP and provider API transports, a delivery log, suppressions and inbound mail."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "email", "smtp", "mail"]
+categories = ["email"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["inbound"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## Inbound mail: received messages parsed by Navree's MIME reader, the
+## provider sources (SES through SNS and S3, Mailgun routes, Postmark
+## inbound, raw MIME), mailboxes read over IMAP and POP3, mailboxes routed by
+## address, signed reply tokens and the raw `.eml` stored on a navree-storage
+## disk.
+inbound = [
+    "dep:encoding_rs",
+    "dep:html5ever",
+    "dep:memchr",
+    "dep:navree-storage",
+    "dep:regex",
+    "dep:rustls",
+    "dep:tokio-rustls",
+    "dep:webpki-roots",
+]
+## navree-db's PostgreSQL driver (the delivery tables on PostgreSQL and
+## TimescaleDB; the `servers` tests with `NAVREE_TEST_POSTGRES_URL`).
+test-postgres = ["navree-db/postgres"]
+## navree-db's MySQL driver (the `servers` tests with `NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+css-inline = { workspace = true }
+# Feature `inbound`: the charsets of received mail.
+encoding_rs = { workspace = true, optional = true }
+hex = { workspace = true }
+hickory-resolver = { workspace = true }
+html2text = { workspace = true }
+# Feature `inbound`: the text of received mail that has only HTML.
+html5ever = { workspace = true, optional = true }
+http = { workspace = true }
+lettre = { workspace = true }
+# Feature `inbound`: line scanning in received mail.
+memchr = { workspace = true, optional = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+# Feature `inbound`: raw `.eml` files on a disk, SES messages read from S3.
+navree-storage = { workspace = true, optional = true }
+navree-telemetry = { workspace = true }
+navree-view = { workspace = true }
+percent-encoding = { workspace = true }
+# Feature `inbound`: mailbox address patterns.
+regex = { workspace = true, optional = true }
+# Feature `inbound`: TLS to the IMAP and POP3 servers `Inbound::poll` reads.
+rustls = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+# Feature `inbound`: the TLS of `Inbound::poll`.
+tokio-rustls = { workspace = true, optional = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+# Feature `inbound`: the public authorities `Inbound::poll` trusts.
+webpki-roots = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+# The server scenarios catch a failing scenario to drop its database.
+futures-util = { workspace = true }
+base64 = { workspace = true }
+# The inbound tests run with the feature on.
+navree-mail = { path = ".", features = ["inbound"] }
+hex = { workspace = true }
+navree-testing = { workspace = true }
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+wiremock = { workspace = true }
+# The fake IMAP and POP3 servers of the poller tests speak TLS with a
+# certificate made here.
+rcgen = { workspace = true }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }

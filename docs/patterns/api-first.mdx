@@ -1,0 +1,421 @@
+---
+title: "API-first"
+description: "Treat the API as the product: versioned routes, validated DTOs, one JSON error shape, pagination and an OpenAPI 3.1 document generated from your code."
+---
+
+## Introduction
+
+An API-first backend treats its HTTP API as the product. A web app, mobile apps, partners, other services and AI agents all build against the same contract, so the contract has to be explicit, stable and documented before anyone writes a client.
+
+Navree is built for this. The code is the single source of the contract:
+
+- **Routes** declare their path, version and access rules in one place.
+- **Inputs** are typed structs with validation rules, rejected with field-level errors before your handler runs.
+- **Outputs** are typed resources, separate from your database rows.
+- **Errors** share one JSON shape, from a missing route to a panic.
+- **The document**: an OpenAPI 3.1 document is generated from all of the above at boot, served with a docs UI and exported for typed clients.
+
+There is no spec file to keep in sync by hand. Change a DTO and the document, the validation and the generated client types change with it.
+
+<Diagram name="api-first" />
+
+The CRM API in `crm/api` is built this way, and `crm/web` is a client generated from its document. The examples on this page come from the deals API.
+
+## The workflow
+
+<Steps>
+<Step title="Model the resources and inputs">
+
+Write the response types (`DealResource`) and the request bodies (`CreateDeal`, `UpdateDeal`) first. They are the contract; everything else serves them.
+
+</Step>
+<Step title="Write the controller">
+
+Declare each route with its version, its access rule and an `#[api(...)]` description that names the request and response types.
+
+</Step>
+<Step title="Review the document">
+
+Open `/api/docs` and read the API the way a client will. Review changes to the document like changes to code.
+
+</Step>
+<Step title="Export it and generate clients">
+
+`openapi:export` writes the document to a file; client generators turn it into typed code.
+
+</Step>
+<Step title="Lock it with tests">
+
+Contract tests assert the routes, the schema names and the error responses, so a change that breaks clients fails CI.
+
+</Step>
+</Steps>
+
+## Resources: what clients receive
+
+A resource is the shape a client sees. Keep it separate from the model: the table can gain a column, rename one or split in two without the API noticing. The CRM's deal resource adds the computed `probability` and embeds the company, contact and owner, so a client draws a deal card from one response:
+
+```rust title="crates/crm-deals/src/resource.rs"
+/// A deal as the API returns it: the row plus `probability` (from the
+/// stage) and the `company`, `contact` and `owner` embeds.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[schema(as = Deal)]
+pub struct DealResource {
+    /// Always `"Deal"` (the CASL subject type).
+    #[serde(rename = "__type")]
+    #[schema(example = "Deal")]
+    pub resource_type: &'static str,
+    pub id: Uuid,
+    pub title: String,
+    /// The value in the currency's minor unit (cents).
+    pub amount_cents: i64,
+    /// The ISO 4217 currency code.
+    pub currency: String,
+    pub stage: Stage,
+    /// The chance of winning, in percent (from the stage).
+    pub probability: u8,
+    pub company_id: Uuid,
+    pub company: CompanyRef,
+    pub owner_id: Uuid,
+    pub owner: OwnerRef,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    // ... position, expected_close_date, closed_at, lost_reason, contact
+}
+```
+
+A few conventions keep resources predictable across an API:
+
+- **`__type` names the subject type** (`"Deal"`), so a front end can check permissions on plain JSON objects with the rules from `GET /api/me/abilities`. `navree::api` has `ApiResource` and `resource_json` for resources that don't declare the field themselves.
+- **`#[schema(as = Deal)]` sets the public schema name.** The Rust type can be `DealResource` while clients see `Deal`.
+- **Money is an integer in minor units with a currency code**, never a float.
+- **Ids are UUID v7 strings** and timestamps are RFC 3339 in UTC.
+- **Embeds are loaded in batches** (`Deal::query().with_all(DealResource::EMBEDS)` runs one query per relation for the whole page), so a page of 100 deals costs a handful of queries, not 300.
+
+See [Responses and API resources](/docs/basics/responses/).
+
+## Inputs: validated DTOs
+
+Every request body is a struct with its rules beside its fields. The handler takes it through `Valid<Json<T>>`, so invalid input never reaches your code:
+
+```rust title="crates/crm-deals/src/dto.rs"
+/// The body of `POST /api/v1/deals`.
+#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+#[schema(as = DealInput)]
+pub struct CreateDeal {
+    /// The title.
+    #[validate(required, custom(not_blank), length(max = 255))]
+    #[schema(value_type = String, required = true)]
+    pub title: Option<String>,
+    /// The company (must exist).
+    #[validate(required)]
+    #[schema(value_type = String, format = Uuid, required = true)]
+    pub company_id: Option<Uuid>,
+    /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
+    #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[schema(value_type = i64, required = true, minimum = 0, maximum = 1_000_000_000_000_000_i64)]
+    pub amount_cents: Option<i64>,
+    /// The ISO 4217 code (default `INR`; stored upper-case).
+    #[validate(custom(currency_code))]
+    pub currency: Option<String>,
+    /// The stage (default `lead`).
+    #[validate(skip)]
+    pub stage: Option<Stage>,
+    // ... contact_id, lost_reason, expected_close_date, owner_id
+}
+```
+
+Required fields are `Option`s with the `required` rule rather than plain fields. A missing plain field stops deserialization at the first one; with `required`, a client that sends `{}` learns about every missing field in one round trip:
+
+```json title="400 Bad Request"
+{
+  "statusCode": 400,
+  "message": [
+    "amount_cents should not be empty",
+    "company_id should not be empty",
+    "title should not be empty"
+  ],
+  "error": "Bad Request",
+  "code": "validation_failed",
+  "errors": {
+    "amount_cents": ["amount_cents should not be empty"],
+    "company_id": ["company_id should not be empty"],
+    "title": ["title should not be empty"]
+  }
+}
+```
+
+`#[schema(required = true)]` keeps the document honest: the field is required on the wire even though it is an `Option` in Rust. Rules that need the database (a unique email, a company that exists) run with `ValidAsync`, or in the service, and report through the same `errors` map. See [Validation](/docs/basics/validation/).
+
+## One error shape
+
+Every error a Navree app sends has the same JSON body: a 404 from a missing route, a 400 from validation, a 403 from an access rule, a 429 from the rate limiter, a 500 from a panic.
+
+```json title="404 Not Found"
+{
+  "statusCode": 404,
+  "message": "Not Found",
+  "error": "Not Found",
+  "code": "not_found"
+}
+```
+
+| Member | Always | Holds |
+|---|---|---|
+| `statusCode` | Yes | The HTTP status. |
+| `message` | Yes | The detail, or, for validation errors, every field message as a list. |
+| `error` | Yes | The status's reason phrase. |
+| `code` | Yes (unless `http.errors.code` is `false`) | A stable machine-readable code in lower snake case (`not_found`, `validation_failed`) that a client maps to its own text. |
+| `errors` | Validation only | Field paths mapped to their messages. |
+
+The request id travels in the `X-Request-Id` header, never in the body, and internal details go to the log, never to the client. Input errors are always 400, never 422.
+
+One shape means one piece of client code handles every failure. The CRM's front end maps `errors` straight onto form fields:
+
+```ts title="crm/web/src/lib/api/form-errors.ts"
+export function applyFieldErrors<T extends FieldValues>(
+  error: unknown,
+  setError: UseFormSetError<T>,
+  knownFields?: readonly string[],
+): boolean {
+  if (!isApiError(error) || !error.isValidation) return false;
+  const entries = Object.entries(error.fieldErrors);
+  const unknown: string[] = [];
+  for (const [field, messages] of entries) {
+    const message = messages[0] ?? "Invalid value.";
+    if (knownFields && !knownFields.includes(field)) {
+      unknown.push(message);
+      continue;
+    }
+    setError(field as FieldPath<T>, { type: "server", message });
+  }
+  // ... messages for fields the form doesn't show go to `root.server`
+  return true;
+}
+```
+
+In handlers, return `AppError` (`AppError::bad_request`, `AppError::forbidden().with_detail(..)`) or let `?` convert database errors: a missing record is a 404, a unique or foreign-key violation a 409. See [Errors](/docs/basics/errors/).
+
+## Versioning
+
+`#[controller("/deals", version = "1")]` mounts the controller's routes under `/api/v1/deals`. The version is part of the path, visible in logs, metrics and the document.
+
+Change an existing version only in ways old clients don't notice:
+
+- add a route;
+- add a field to a response;
+- add an optional field to a request.
+
+Anything else is breaking: removing or renaming a field, changing a type or a default, making an optional field required, changing what a status code means. Ship it as a new version, next to the old one. To serve two versions, write two controllers over the same service. Here a new crate adds a version 2 of the deal route, built on the CRM's deals module:
+
+```rust title="crates/crm-deals-v2/src/lib.rs"
+use crm_core::{Deal, Stage};
+use crm_deals::{DealResource, DealService, DealsModule};
+use navree::prelude::*;
+use serde::Serialize;
+use navree::openapi::ToSchema;
+use uuid::Uuid;
+
+/// A deal as version 2 returns it: the amount is one object.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = DealV2)]
+pub struct DealV2Resource {
+    #[serde(rename = "__type")]
+    pub resource_type: &'static str,
+    pub id: Uuid,
+    pub title: String,
+    pub amount: Money,
+    pub stage: Stage,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Money {
+    pub cents: i64,
+    pub currency: String,
+}
+
+impl From<DealResource> for DealV2Resource {
+    fn from(deal: DealResource) -> Self {
+        DealV2Resource {
+            resource_type: "Deal",
+            id: deal.id,
+            title: deal.title,
+            amount: Money {
+                cents: deal.amount_cents,
+                currency: deal.currency,
+            },
+            stage: deal.stage,
+        }
+    }
+}
+
+#[injectable]
+pub struct DealsV2Controller {
+    deals: Arc<DealService>,
+}
+
+#[controller("/deals", version = "2")]
+impl DealsV2Controller {
+    /// `GET /api/v2/deals/{id}`
+    #[get("/{id}")]
+    #[can(Read, Deal, from = "id")]
+    #[api(
+        summary = "Show a deal",
+        tag = "Deals",
+        response = DealV2Resource,
+        responses(401, 403, 404)
+    )]
+    async fn show(&self, uow: Uow, deal: Authorized<Deal, Read>) -> Result<Json<DealV2Resource>> {
+        let deal = self.deals.show(&uow, deal.into_inner()).await?;
+        Ok(Json(deal.into()))
+    }
+}
+
+#[module(imports = [DealsModule], controllers = [DealsV2Controller])]
+pub struct DealsV2Module;
+```
+
+The business rules stay in `DealService`, which both versions call; version 2 only changes the shape. Access rules apply to both, because they are declared on the routes. Add `.module(DealsV2Module)` to the app and the document lists `/api/v2/deals/{id}` beside the version 1 routes.
+
+Retire a version when nobody calls it. Every request is counted in `http_requests_total`, labeled with the route template, so `/api/v1/deals/{id}` traffic is visible on your metrics dashboard ([Health checks and metrics](/docs/digging-deeper/health-and-metrics/)). When it reaches zero, delete the old controller.
+
+## Pagination
+
+Every list is paginated, so a client never downloads a whole table. Take `List<R>`, the [list query](/docs/basics/list-queries/) of a resource, and return `Page<T>`:
+
+```rust title="crates/crm-deals/src/controller.rs"
+#[get("/")]
+#[can(Read, Deal)]
+#[api(summary = "List deals", tag = "Deals", response = DealPage, responses(400, 401, 403))]
+async fn index(
+    &self,
+    uow: Uow,
+    scope: Accessible<Deal, Read>,
+    list: List<DealList>,
+) -> Result<Page<DealResource>> {
+    self.deals.list(&uow, scope, &list).await
+}
+```
+
+`GET /api/v1/deals?filter[stage]=proposal&page=2&per_page=20` answers with the page and where it is:
+
+```json
+{
+  "data": [{ "__type": "Deal", "id": "01a17759-52cc-74b3-a249-4997d27378d6", "title": "Agra renewal" }],
+  "meta": { "current_page": 2, "per_page": 20, "total": 21, "last_page": 2 }
+}
+```
+
+- `page` starts at 1; `per_page` defaults to 15, and a size above the list's maximum (100 unless its `ListSpec` says otherwise) is a 400. Anything that isn't a positive integer is a 400 too.
+- `Accessible<Deal, Read>` turns the caller's access rules into SQL, so a page only contains rows the caller may read and `total` counts only those.
+- Filters, sort and search are part of the same query, declared once in the list's `ListSpec` (`DealList`): `filter[stage]`, `filter[owner_id]`, `filter[company_id]`, `sort` and `search`. A filter the spec doesn't list is a 400 that names it.
+- For feeds and infinite scroll, cursor pagination (`CursorRequest` and the query's `cursor_paginate`) returns `next_cursor` instead of page numbers and never shifts when rows are added.
+
+`Page<T>` is generic, so give each list a named schema for the document. The CRM's `DealPage` has the same `data` and `meta` members, and the route says `response = DealPage`. See [Pagination](/docs/database/pagination/).
+
+## The OpenAPI document
+
+Add `ApiModule` and the app serves its contract:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(HttpModule::from_config())
+    .module(ApiModule::from_config()) // GET /api/openapi.json and /api/docs
+```
+
+| Route | Serves |
+|---|---|
+| `GET /api/openapi.json` | The OpenAPI 3.1 document. |
+| `GET /api/docs` | An interactive docs UI reading it. |
+
+Both routes are on in development and off when the environment is `production`. To publish them in production too, set `api.openapi_json` and `api.docs_ui` to `true`; `openapi:export` writes the document in every environment, so clients can still be generated from CI.
+
+The document is built at boot from every route: its path with prefix and version, its path parameters, its security (bearer token or session cookie), the `401` and `403` responses its access rule implies, and what `#[api(...)]` adds: `summary`, `description`, `tag`, `request`, `response`, `status` and the error statuses in `responses(...)`. Error statuses reference one `HttpError` schema, the error shape above. Name the API in the `api` section:
+
+```toml title="config/app.toml"
+[api]
+title = "Navree CRM API"
+version = "1.0.0"
+servers = ["https://crm.example.com"]
+```
+
+See [OpenAPI](/docs/digging-deeper/openapi/) for every key and schema option.
+
+## Typed clients
+
+Export the document and generate a client from it. The CRM's front end uses `navree openapi:client` and the [typed fetch core](/docs/frontend/typed-client/#the-fetch-core) of `@navree/client`:
+
+```sh
+cd crm/api
+cargo run -p crm-api -- openapi:export ../web/openapi.json
+
+cd ../web
+pnpm gen:api   # navree openapi:client --input ./openapi.json --out src/lib/api
+```
+
+The front end then gets the path, the parameters and the body types checked by the TypeScript compiler. A renamed field in `DealResource` becomes a type error in the component that reads it, before anyone opens a browser. `src/lib/api/types.ts` gives the generated schemas the names the app imports, so a renamed schema only changes that one file:
+
+```ts title="crm/web/src/lib/api/types.ts"
+import type { components, paths as GeneratedPaths } from "./schema";
+
+type Schemas = components["schemas"];
+
+export type ApiErrorBody = Schemas["HttpError"];
+export type User = Schemas["User"];
+export type TokenPair = Schemas["TokenPair"];
+```
+
+The document is standard OpenAPI 3.1, so any generator works the same way: Swift and Kotlin for mobile apps, Python or Go for partners. Commit the exported file next to the client that builds from it.
+
+## Contract tests
+
+Three kinds of tests keep the contract from drifting.
+
+**The document names what clients import.** Each CRM feature crate fetches the document and asserts its routes, tags and schema names, because `crm/web` imports those names:
+
+```rust title="crates/crm-deals/tests/deals/openapi.rs"
+let deals = &paths["/api/v1/deals"];
+assert_eq!(response_schema(&deals["get"], "200"), reference("DealPage"));
+assert_eq!(request_schema(&deals["post"]), reference("DealInput"));
+assert_eq!(response_schema(&deals["post"], "201"), reference("Deal"));
+let moved = &paths["/api/v1/deals/{id}/move"]["post"];
+assert_eq!(request_schema(moved), reference("DealMoveInput"));
+assert_eq!(response_schema(moved, "200"), reference("Deal"));
+```
+
+**The committed document matches the code.** Export in CI and fail when the file changes, so every contract change shows up in review as a diff of `openapi.json`:
+
+```sh
+cargo run -p crm-api -- openapi:export ../web/openapi.json
+git diff --exit-code ../web/openapi.json
+```
+
+**Behavior matches the document.** HTTP tests assert the statuses and the error shape the document promises. `assert_validation_error` checks for a 400 with messages for a field, and `assert_error` checks the status, the content type, the members of the error body and the `X-Request-Id` header:
+
+```rust title="crates/crm-deals/tests/deals/crud.rs"
+rep.post("/api/v1/deals")
+    .json(&json!({}))
+    .send()
+    .await
+    .assert_validation_error("title")
+    .assert_validation_error("company_id")
+    .assert_validation_error("amount_cents");
+```
+
+See [HTTP tests](/docs/testing/http-tests/).
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/openapi/" title="OpenAPI">
+    `#[api]`, schemas, exporting and the docs UI.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    `#[derive(Validate)]` rules and validated extractors, with field-level messages.
+  </LinkCard>
+  <LinkCard href="/docs/basics/errors/" title="Errors">
+    The error shape, `AppError` and mapping your own errors.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    A web front end on top of the API, with no token in the browser.
+  </LinkCard>
+</LinkCards>

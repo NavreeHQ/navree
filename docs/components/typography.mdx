@@ -1,0 +1,62 @@
+---
+title: "Heading and Text"
+description: "Headings whose level is the document's, and paragraphs in four looks: body, muted, lead and code."
+---
+
+<UiPreview example="typography/thumb" />
+
+`Heading` writes `<h1>` to `<h6>`; its look follows its level. `Text` writes a paragraph, or a `<span>` with `.inline()`. The body text is 14 px Geist; secondary text is 13 px.
+
+```rust
+use navree::ui::*;
+
+Stack::gap(1).children((
+    Heading::h3("Quarterly review"),
+    Text::muted("Pipeline, wins and losses."),
+))
+```
+
+## When to use it
+
+<UiChoose name="text_style" current="Heading" />
+
+## Headings
+
+Pick the level from the page's outline, not from the size you want. In the [app shell](/docs/ui/app-shell/) the page title is the `<h1>`.
+
+<UiPreview example="typography/headings" />
+
+`Heading::h5` and `Heading::h6` are for the small headings inside a card or a panel. They link the parts stylesheet, which sizes them.
+
+```rust
+Heading::h5("Billing address")
+```
+
+## Text
+
+<UiPreview example="typography/text" />
+
+`Text::code` writes `<code>` in the system monospace font, which costs no download.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Headings in order let screen reader users move through a page by its outline.
+- Every text and background pair of the tokens reaches a 4.5:1 contrast; a test in the toolkit checks it.
+
+</UiA11y>
+
+## API
+
+### Heading
+
+<UiProps type="Heading" />
+
+### Text
+
+<UiProps type="Text" />
+
+### TextVariant
+
+<UiProps type="TextVariant" />

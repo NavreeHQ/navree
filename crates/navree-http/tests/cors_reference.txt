@@ -1,0 +1,1500 @@
+no origins, credentials on / simple, first origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, second origin / POST
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, second origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, null origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, origin in another case / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, origin with a trailing slash / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / simple, two origin headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, allowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, allowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, second origin, no request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, second origin, no request headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, odd request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, odd request headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, unlisted method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, unlisted method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, disallowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, disallowed origin and odd headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / options, allowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / options, allowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / options, disallowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / options, no origin, no request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / options, no origin, no request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / options, request method but no origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / options, request method but no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / preflight, two origin headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials on / preflight, two origin headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials on / request method header on a GET / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, first origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, second origin / POST
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, second origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, null origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, origin in another case / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, origin with a trailing slash / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / simple, two origin headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, allowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, allowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, second origin, no request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, second origin, no request headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, odd request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, odd request headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, unlisted method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, unlisted method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, disallowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, disallowed origin and odd headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / options, allowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / options, allowed origin, missing request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / options, disallowed origin, missing request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / options, no origin, no request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / options, no origin, no request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / options, request method but no origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / options, request method but no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / preflight, two origin headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+no origins, credentials off / preflight, two origin headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+no origins, credentials off / request method header on a GET / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, first origin / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, second origin / POST
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, second origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, null origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, origin in another case / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, origin with a trailing slash / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / simple, two origin headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, allowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, allowed origin / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, second origin, no request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, second origin, no request headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, odd request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, odd request headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, unlisted method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, unlisted method / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, disallowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, disallowed origin and odd headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / options, allowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / options, allowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / options, disallowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / options, no origin, no request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / options, no origin, no request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / options, request method but no origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / options, request method but no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / preflight, two origin headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials on / preflight, two origin headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials on / request method header on a GET / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, first origin / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, second origin / POST
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, second origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, null origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, origin in another case / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, origin with a trailing slash / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / simple, two origin headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, allowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, allowed origin / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, second origin, no request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, second origin, no request headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, odd request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, odd request headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, unlisted method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, unlisted method / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, disallowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, disallowed origin and odd headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / options, allowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / options, allowed origin, missing request method / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / options, disallowed origin, missing request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / options, no origin, no request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / options, no origin, no request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / options, request method but no origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / options, request method but no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / preflight, two origin headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+one origin, credentials off / preflight, two origin headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+one origin, credentials off / request method header on a GET / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, first origin / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, second origin / POST
+access-control-allow-credentials: true
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, second origin / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, null origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, origin in another case / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, origin with a trailing slash / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / simple, two origin headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, allowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, allowed origin / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, second origin, no request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://admin.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, second origin, no request headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, odd request headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, odd request headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, unlisted method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, unlisted method / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, disallowed origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, disallowed origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, disallowed origin and odd headers / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / options, allowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / options, allowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / options, disallowed origin, missing request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / options, no origin, no request method / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / options, no origin, no request method / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / options, request method but no origin / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / options, request method but no origin / GET
+access-control-allow-credentials: true
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / preflight, two origin headers / OPTIONS
+access-control-allow-credentials: true
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials on / preflight, two origin headers / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials on / request method header on a GET / GET
+access-control-allow-credentials: true
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, first origin / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, second origin / POST
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, second origin / GET
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, null origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, origin in another case / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, origin with a trailing slash / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / simple, two origin headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, allowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, allowed origin / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, second origin, no request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://admin.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, second origin, no request headers / GET
+access-control-allow-origin: https://admin.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, odd request headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, odd request headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, unlisted method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, unlisted method / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, disallowed origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, disallowed origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, disallowed origin and odd headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, disallowed origin and odd headers / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / options, allowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / options, allowed origin, missing request method / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / options, disallowed origin, missing request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / options, disallowed origin, missing request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / options, no origin, no request method / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / options, no origin, no request method / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / options, request method but no origin / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / options, request method but no origin / GET
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / preflight, two origin headers / OPTIONS
+access-control-allow-headers: accept,authorization,content-type,x-xsrf-token
+access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+access-control-allow-origin: https://app.example.com
+access-control-max-age: 600
+status: 200
+vary: origin, access-control-request-method, access-control-request-headers
+
+two origins, credentials off / preflight, two origin headers / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+
+two origins, credentials off / request method header on a GET / GET
+access-control-allow-origin: https://app.example.com
+access-control-expose-headers: x-request-id,etag,location
+status: 204
+vary: accept-encoding
+vary: origin, access-control-request-method, access-control-request-headers
+x-inner: 1
+

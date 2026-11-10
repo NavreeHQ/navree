@@ -1,0 +1,62 @@
+---
+title: "FactCard and FactGrid"
+description: "A small label, a value and the details under it, in a card, with a grid that fits them to the screen."
+---
+
+<UiPreview example="fact-card/default" />
+
+`FactCard` shows one fact about something: what it is called, what it is, and the lines that explain it. A ticket's status, a customer's plan, a shipment's progress. `FactGrid` sets cards side by side.
+
+```rust
+use navree::ui::*;
+
+FactGrid::new().cards([
+    FactCard::new("Customer", "Haveli Home Goods")
+        .icon(icons::BUILDING_COMPLEX)
+        .tone(Tone::Info)
+        .detail("Business plan")
+        .detail("14 users"),
+    FactCard::new("Assigned to", "Manpreet Gill")
+        .icon(icons::USER_ROUND)
+        .detail("Billing team"),
+])
+```
+
+## When to use it
+
+<UiChoose name="happened" current="FactCard" />
+
+## Anatomy
+
+<UiAnatomy component="fact-card" />
+
+## One card
+
+The label is small and uppercase. The value is large and may be any node: text, a [Badge](/docs/components/badge/), a link. `.detail(...)` adds a line under the value, and you can call it again for more lines. `.icon(...)` adds an icon in a square tile, and `.tone(...)` colours it.
+
+<UiPreview example="fact-card/single" />
+
+## A grid
+
+`FactGrid` fits as many cards in a row as the width allows, at least 14 rem each, and shows one on a phone. A lone card keeps the width of one column. `.cols(4)` fixes the number from 768 px wide. Narrower than that it is one column either way.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Each card is a description list: the label is the term, and the value and details are its descriptions. A screen reader reads "Customer, Haveli Home Goods, Business plan since March 2024".
+- The icon is hidden from assistive technology.
+- A card is not interactive. Put a link in the value or a detail when it should lead somewhere.
+- Long values and details wrap between words, and a word breaks only when it is wider than the card. Each sits in a `<bdi>`, so right-to-left text keeps its direction.
+
+</UiA11y>
+
+## API
+
+### FactCard
+
+<UiProps type="FactCard" />
+
+### FactGrid
+
+<UiProps type="FactGrid" />

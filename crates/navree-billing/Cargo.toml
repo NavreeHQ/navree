@@ -1,0 +1,69 @@
+[package]
+name = "navree-billing"
+description = "Navree BillingModule: subscriptions, trials, seats, metered usage and invoices for users or workspaces, with Stripe or Paddle."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "billing", "stripe", "paddle", "saas"]
+categories = ["api-bindings", "web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+bytes = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
+# The billing tables are models (customers, subscriptions, items, usage, events).
+navree-orm = { workspace = true, features = ["access"] }
+navree-schedule = { workspace = true }
+# Stripe and Paddle webhook signatures are checked by its verifiers.
+navree-webhooks = { workspace = true }
+navree-workspace = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+form_urlencoded = { workspace = true }
+hmac = { workspace = true }
+navree-crypto = { workspace = true }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }

@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_(Deal::STAGE.eq(Stage::Won)).where_(Deal::AMOUNT_CENTS.gte(10_000)).where_(Deal::AMOUNT_CENTS.lt(90_000_i64)).where_(Deal::TITLE.ne(\"Draft\")).where_(Deal::CLOSED_AT.gt(at())).where_(Deal::AMOUNT_CENTS.op(\"<>\",\n7)))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."amount_cents" >= $2 AND "deals"."amount_cents" < $3 AND "deals"."title" <> $4 AND "deals"."closed_at" > $5 AND "deals"."amount_cents" <> $6 AND "deals"."deleted_at" IS NULL
+  values: [String("won"), I64(10000), I64(90000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`amount_cents` >= ? AND `deals`.`amount_cents` < ? AND `deals`.`title` <> ? AND `deals`.`closed_at` > ? AND `deals`.`amount_cents` <> ? AND `deals`.`deleted_at` IS NULL
+  values: [String("won"), I64(10000), I64(90000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."stage" = ? AND "deals"."amount_cents" >= ? AND "deals"."amount_cents" < ? AND "deals"."title" <> ? AND "deals"."closed_at" > ? AND "deals"."amount_cents" <> ? AND "deals"."deleted_at" IS NULL
+  values: [String("won"), I64(10000), I64(90000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]

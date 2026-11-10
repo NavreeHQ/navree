@@ -1,0 +1,15 @@
+{% extends "mail/demo/layout.html" %}
+{% block title %}Invoice {{ number }}{% endblock %}
+{% block content %}
+<h1>Invoice {{ number }}</h1>
+<p>Hello {{ name }}, here is your invoice for this period. Payment is due by {{ due }}.</p>
+<table>
+<tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr>
+{% for item in items %}
+<tr><td>{{ item.description }}</td><td class="num">{{ item.quantity }}</td><td class="num">{{ item.amount_cents|money(currency) }}</td></tr>
+{% endfor %}
+<tr class="total"><td>Total</td><td class="num"></td><td class="num">{{ total_cents|money(currency) }}</td></tr>
+</table>
+<p><a class="button" href="https://system.test/billing/invoices/{{ number }}">View and pay</a></p>
+<p class="muted">Questions about this invoice? Reply to this message and the billing team will help.</p>
+{% endblock %}

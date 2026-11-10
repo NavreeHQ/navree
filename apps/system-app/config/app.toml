@@ -1,0 +1,204 @@
+# Navree system app: settings for every environment.
+#
+# Hosts, ports and secrets are not here: `.env` (local runs, see
+# `.env.example`) or `APP_*` environment variables (the e2e tests, see
+# `e2e/docker/system.env`) set them. `.env` only fills keys this file
+# leaves out; `APP_*` variables override any key.
+
+[app]
+name = "Navree System"
+# The release Lighthouse shows and tags every record with.
+version = "1.0.0"
+
+[http]
+addr = "0.0.0.0:8080"
+api_prefix = "/api"
+# The load profiles send every request from the k6 container's address:
+# the per-IP limit is raised far above what a run sends.
+per_ip_rate_limit = 10000000
+
+[database]
+migrate_on_boot = false
+
+[mail]
+from = "Navree System <system@navree.test>"
+# Queued mail (`Mailer::queue`) runs on its own queue.
+queue = "mail"
+
+# The app calls itself (the demo upstream, `web` from the other processes), the
+# mail catcher and the search engine through the HTTP client; the client
+# refuses private addresses unless they are listed here.
+[http_client.ssrf]
+allow_hosts = ["127.0.0.1", "web", "mailpit", "meilisearch"]
+
+# Webhook endpoints may point at this app's own demo routes over plain HTTP.
+[webhooks]
+require_https = false
+
+[queue]
+driver = "redis"
+queues = ["default", "search", "mail", "notifications", "exports"]
+workers = 8
+
+[cache]
+store = "redis"
+
+[log]
+level = "info"
+format = "json"
+
+[auth]
+registration = true
+
+[auth.two_factor]
+issuer = "Navree System"
+
+[workspace]
+# The X-Workspace header (a workspace id or slug) names the request's
+# workspace; the load profiles send it.
+resolvers = ["header"]
+
+[workspace.roles.admin]
+permissions = ["projects.*", "tasks.*", "reports.*", "billing.manage"]
+
+[workspace.roles.member]
+permissions = [
+    "projects.read",
+    "projects.create",
+    "projects.update",
+    "projects.delete",
+    "tasks.*",
+    "reports.*",
+]
+
+[workspace.roles.viewer]
+permissions = ["projects.read", "tasks.read", "reports.read"]
+
+[search]
+engine = "meilisearch"
+prefix = "system_"
+queue = "search"
+sync = "queued"
+
+[storage]
+default = "s3"
+
+[storage.disks.s3]
+driver = "s3"
+bucket = "system"
+region = "us-east-1"
+
+[storage.disks.local]
+driver = "local"
+root = "storage/app"
+
+[billing]
+# The fake provider: checkout completes in the app, no account needed.
+provider = "fake"
+
+[billing.plans.starter]
+name = "Starter"
+prices = { monthly = "price_starter_monthly", yearly = "price_starter_yearly" }
+trial_days = 14
+seats = true
+
+[billing.plans.pro]
+name = "Pro"
+prices = { monthly = "price_pro_monthly", yearly = "price_pro_yearly" }
+trial_days = 14
+seats = true
+
+[social]
+redirect_base = "http://localhost:47080/auth/callback"
+
+[realtime]
+key = "system"
+app_id = "system"
+# Several processes (web, worker, scheduler) share broadcasts through Redis.
+backplane = "redis"
+
+[api]
+title = "Navree System API"
+undocumented = ["/admin*", "/_lighthouse*", "/_logbook*", "/_fleet*"]
+
+[helm]
+title = "Navree System admin"
+
+[ai]
+# Every request is answered by AiFake: no provider, no key, no network.
+fake = true
+default = "smart"
+
+[ai.models.smart]
+provider = "anthropic"
+model = "claude-opus-5-5"
+
+[mcp]
+name = "navree-system"
+title = "Navree System"
+instructions = "Tools for the Navree system app: projects, tasks and reports in workspaces."
+auth = "bearer"
+
+[micro]
+service = "system"
+transport = "nats"
+# url: APP_MICRO__URL (the compose network's NATS).
+
+[micro.nats]
+stream = "SYSTEM"
+
+[i18n]
+default_locale = "en"
+locales = ["en", "fr"]
+
+[oauth]
+consent_url = "http://localhost:47080/oauth/consent"
+device_url = "http://localhost:47080/oauth/device"
+
+[demo]
+# Where the demo routes call (`/api/demo/outgoing/*`): the app itself, the
+# mail catcher and the search engine, by their names in the compose network.
+# The web process calls itself on localhost; the worker and the scheduler
+# reach it as `web`, which is where alerts and seeded webhook endpoints post.
+stub_base_url = "http://127.0.0.1:8080"
+sink_base_url = "http://web:8080"
+mail_info_url = "http://mailpit:8025/api/v1/info"
+search_health_url = "http://meilisearch:7700/health"
+refused_url = "http://127.0.0.1:9/ledger/entries"
+unresolvable_url = "http://ledger.system.invalid/api/entries"
+call_timeout_ms = 3000
+
+[lighthouse.alerts]
+# At most one alert per issue and kind in this window, and a spike when an
+# issue occurs 20 times within 2 minutes.
+cooldown_minutes = 2
+spike = { occurrences = 20, minutes = 2 }
+
+[lighthouse.alerts.email]
+to = ["oncall@system.test"]
+on = ["new_issue", "regression", "spike", "failed_job"]
+
+[lighthouse.alerts.webhook]
+url = "http://web:8080/api/demo/sink/alerts"
+secret = "system-lighthouse-alert-webhook-secret" # gitleaks:allow
+on = ["new_issue", "regression", "spike"]
+
+[lighthouse.alerts.slack]
+webhook_url = "http://web:8080/api/demo/sink/slack"
+on = ["new_issue", "regression", "spike", "failed_job"]
+
+[logbook]
+# Off unless the run asks for it (APP_LOGBOOK__ENABLED=true): Logbook
+# records every request's bodies, which is development tooling, not
+# something to measure under load.
+enabled = false
+
+# The worker process type runs Fleet's master (`system-app fleet`): it
+# supervises `fleet:work` children per queue, and `/_fleet` shows them.
+[fleet.supervisors.default]
+queues = ["default", "search", "mail", "notifications", "exports"]
+balance = "auto"
+min_processes = 1
+max_processes = 8
+max_jobs = 10000
+max_memory_mb = 512

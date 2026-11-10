@@ -1,0 +1,11 @@
+error: route `list` has the same method and path as route `index`: GET /deals
+  --> tests/ui/controller/duplicate_routes.rs:14:11
+   |
+14 |     #[get("")]
+   |           ^^
+
+error: route `show_again` has the same method and path as route `show`: GET /deals/{id}
+  --> tests/ui/controller/duplicate_routes.rs:29:11
+   |
+29 |     #[get("/{deal}")]
+   |           ^^^^^^^^^

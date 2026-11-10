@@ -1,0 +1,175 @@
+---
+title: "Contributing"
+description: "How the Navree repository is laid out, the crate-layer rule and the test that enforces it, running the tests, code style, and contributing to these docs."
+---
+
+Navree is developed in the open at [github.com/NavreeHQ/navree](https://github.com/NavreeHQ/navree). Bug reports, fixes, documentation and new drivers are all welcome. This page explains how the repository is organised, the one architectural rule every change must respect, how to run the checks a change must pass, and how to work on these docs. The repository's [`CONTRIBUTING.md`](https://github.com/NavreeHQ/navree/blob/main/CONTRIBUTING.md) has the short version.
+
+## The repository
+
+The framework is one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the crates, the CLI and its starter kits, the agent skills, these docs, the JavaScript packages and the tests. The reference CRM, the app skeleton and the benchmarks are repositories of their own, on the published crates and packages; [Directory structure](/docs/getting-started/directory-structure/#the-navree-repositories) lists them.
+
+| Path | What |
+|---|---|
+| `crates/navree` | The facade: re-exports every module crate and the macros, and holds the full-stack and dependency-graph tests |
+| `crates/navree-*` | One crate per module, plus the kernel, the contracts, the macros and the CLI |
+| `docs/` | These docs: one MDX file per page, `manifest.ts` for the order, and `ui-data/`, the Navree UI reference data |
+| `packages/js` | The npm packages `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt` and `@navree/theme`, a pnpm workspace |
+| `skills/` | The agent skills, one directory per skill, each with a `SKILL.md` |
+| `apps/system-app` | One Navree application that wires every package and tool, built into an image and run under load by the system tests in `e2e/` |
+| `apps/ui-docs` | Writes the Navree UI docs data (`docs/ui-data/`) from the toolkit: `cargo run -p ui-docs` |
+| `apps/ui-proof`, `apps/ui-table-proof` | Proof pages and tests for Navree UI: a form, a 1,000-row table, a dashboard, every component in its states, and the data table against real databases |
+| `apps/store-demo`, `apps/board-demo`, `apps/inbox-demo`, `apps/agent-demo`, `apps/theme-demo` | Example apps on Navree UI that feed the UI docs and its browser tests |
+| `e2e/` | The system tests: a Docker Compose stack, k6 load scenarios, HTTP checks and the browser suites for Navree UI |
+| `fuzz/` | Fuzz targets for every parser of untrusted input |
+
+The root `Cargo.toml` is a workspace of `crates/*`, `xtask` and the apps above. The fuzz targets in `fuzz/` are a separate Cargo project and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-navree-repositories) shows the tree.
+
+## Setting up
+
+You need:
+
+- Rust 1.95 or newer (edition 2024). On Windows, the MSVC build tools, because SQLite is compiled from source (the workspace's tests run on it; a PostgreSQL or MySQL build of an app compiles none).
+- Optional: [sccache](https://github.com/mozilla/sccache), to share compiled dependencies between target directories. The repository doesn't set a compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper = "sccache"` under `[build]` in a Cargo config outside the repository, such as `~/.cargo/config.toml`.
+- For `packages/js` and the Navree UI browser suites in `e2e/ui`: Node.js 22 or newer and pnpm 11.
+
+You don't need OpenSSL, CMake, NASM or a database server. TLS is rustls with the `ring` provider, and tests use SQLite.
+
+```sh
+git clone https://github.com/NavreeHQ/navree
+cd navree
+cargo test --workspace
+```
+
+## The crate hierarchy
+
+Navree's crates form layers, from the kernel (L0) through the framework's modules and the ecosystem's packages (L6 and L7) to the facade and the CLI (L8), with applications on top (L9 and up). **A crate may depend only on crates in lower layers, and only along the edges the hierarchy table allows.** The rule covers dev-dependencies too.
+
+Modules often need something from a module beside them: the auth module wants to write to the audit log, a queue worker wants to broadcast. Those needs go through traits in `navree-contracts` (L1), such as `AuditSink`, `Broadcaster`, `Principal` and the job traits. The module that provides the feature registers an implementation, and the module that needs it resolves the trait from the container. No module depends sideways on another.
+
+`crates/navree/tests/dependency_graph.rs` enforces this on every `cargo test`:
+
+- `workspace_dependency_edges_follow_the_hierarchy` reads `cargo metadata` and checks every `navree*` dependency edge (normal, dev and build) against the `HIERARCHY` table.
+- `hierarchy_table_lists_exactly_the_workspace_crates` fails when a crate is missing from the table, or the table names a crate that doesn't exist.
+- `hierarchy_table_never_points_up_and_has_no_cycles` checks the table itself.
+- `lockfile_has_no_aws_lc_openssl_native_tls_or_cmake` keeps native TLS libraries and CMake out of `Cargo.lock`, and `lockfile_follows_the_crypto_policy` keeps `rsa`, `p256`, `p384` and `ed25519-dalek` out of it.
+- `no_other_data_layer_is_in_the_graph` keeps any other data-layer package out of `Cargo.lock` and out of the workspace's manifests: the data layer is navree-db, navree-orm and navree-schema.
+- `a_build_without_sqlite_has_no_libsqlite3_sys` and `the_sqlite_feature_builds_sqlite_and_no_other_driver` check that SQLite comes only from the `sqlite` feature.
+
+There are three exceptions, all for dev-dependencies: a crate's tests may use any crate in a lower layer (so a crate in L4 can boot modules from L2 and L3 with `navree-testing`), a crate's tests may depend on the crate itself to turn on its own features, and `navree-macros` may dev-depend on the runtime crates, to expand its macros against them.
+
+**Adding a crate?** Give it a row in `HIERARCHY` first, with its layer and allowed dependencies. [The crate hierarchy](/docs/architecture/crate-hierarchy/) shows every layer and edge.
+
+Framework crates implement `Module`, `Injectable` and `Controller` by hand instead of using `navree-macros`, which sits at L0 with no runtime dependencies. Apps and the facade's tests use the macros.
+
+## Running the tests
+
+From the repository root:
+
+```sh
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+`cargo test --workspace` runs every crate's unit and integration tests, the tests that check these docs against the code, and the dependency-graph test. Every test that touches a database gets its own temporary SQLite file.
+
+While you work on one crate, test only that crate:
+
+```sh
+cargo test -p navree-validation
+```
+
+When several builds run at once (you, an editor, a second checkout), give each its own target directory (and, if you use it, let sccache share the compiled dependencies). Cargo locks a target directory, so builds sharing one wait for each other:
+
+```sh
+CARGO_TARGET_DIR=target/builds/http cargo test -p navree-http
+```
+
+Keep `CARGO_BUILD_JOBS` moderate when memory is tight.
+
+### Tests that need extra steps
+
+- **Generated apps.** `navree-cli`'s `generated_app` test creates an app with `navree new`, runs every generator in it, then builds, tests and lints the result against the workspace's `navree`. It builds the whole framework in a fresh project, so it is ignored by default. Run it after changing the CLI's templates:
+
+  ```sh
+  CARGO_TARGET_DIR=target/builds/cli cargo test -p navree-cli --test generated_app -- --ignored
+  ```
+
+- **Snapshots.** `navree-cli` and `navree-access` use [insta](https://insta.rs) snapshots, and `navree-macros` checks its compile errors with [trybuild](https://docs.rs/trybuild). Don't edit `.snap` or `.stderr` files by hand: re-run the tests with `INSTA_UPDATE=always` or `TRYBUILD=overwrite`, then review the diff.
+
+- **The npm packages.** In `packages/js`:
+
+  ```sh
+  pnpm install --frozen-lockfile
+  pnpm build
+  pnpm test
+  ```
+
+  `pnpm smoke` builds a small Next.js app and a small Nuxt app on the packages and checks the running servers.
+
+- **The system tests.** `e2e/` builds `apps/system-app` into an image and runs it with its databases in Docker Compose, under k6 load and with HTTP checks. Its README says how to start each suite.
+
+### Dependency, security and fuzz checks
+
+CI runs these on pull requests, and you can run them first:
+
+```sh
+cargo install --locked cargo-deny cargo-vet   # once
+cargo deny check                              # advisories, licenses, bans, sources (deny.toml)
+cargo vet                                     # every crate audited or exempted (supply-chain/)
+scripts/sast.sh all                           # Semgrep with Navree's rules in .semgrep/, and Gitleaks (needs Docker)
+fuzz/docker.sh list                           # the fuzz targets (needs Docker)
+```
+
+A new or updated dependency needs `cargo deny check` and `cargo vet` to pass; `supply-chain/README.md` says how to review or exempt a crate. Every parser of untrusted input has a libFuzzer target in `fuzz/`; a new parser gets one. [CONTRIBUTING.md](https://github.com/NavreeHQ/navree/blob/main/CONTRIBUTING.md) in the repository has the details of each gate, and `SECURITY.md` says how to report a vulnerability.
+
+## Code style
+
+- **rustfmt.** Format with `cargo fmt --all`. `rustfmt.toml` sets edition 2024 and nothing else.
+- **clippy with warnings as errors.** `cargo clippy --workspace --all-targets -- -D warnings` must pass. That includes the workspace lints: `unsafe_code` is forbidden, and `missing_docs` warns, so every public item needs a doc comment.
+- **One place for versions.** External dependency versions live only in the root `[workspace.dependencies]`; crates use `dep = { workspace = true }`.
+- **No native TLS.** Use rustls with the `ring` provider. The dependency-graph test fails if aws-lc, OpenSSL, native-tls or CMake reach `Cargo.lock`.
+- **No secrets in messages.** Configuration and validation errors name the key that is wrong, never its value, and logs redact secret-looking fields. Keep it that way.
+- **Tests with the change.** Crates keep their integration tests under `tests/`. A fix comes with a test that fails without it.
+
+Commit messages name a type and an area, then say what the change does, such as `docs(basics): explain the list-query format` or `fix(validation): report the first limit`.
+
+## Proposing a change
+
+Open an issue first for anything large, such as a new module or a change to a public API, so the design can be discussed before you write it. For a fix, open a pull request against `main` with the tests, clippy and rustfmt passing. Say in the description what changed and why, and link the issue if there is one.
+
+If you run into a limitation or a surprise, an issue describing it is a contribution too.
+
+## Contributing to the docs
+
+These docs are MDX files in this repository, under `docs/<section>/<page>.mdx`. `docs/manifest.ts` sets the order of sections and pages. Every page on navree.com has an "Edit this page" link that opens its file on GitHub, and a change to a page is an ordinary pull request: the code and its docs change together.
+
+Read `docs/AUTHORING.md` before you write. It covers the front-matter, the components (callouts, tabs, code groups, steps, file trees, badges, link cards and diagrams), how to write code blocks, and the voice. The rules that matter most:
+
+- **Write from the code.** Every type, function, attribute, config key and command a page mentions must exist. Check it in the crate's source and tests.
+- **Show real code.** A non-trivial Rust snippet must compile. Check it in a scratch crate that depends on `crates/navree` by path, or quote it from a test.
+- **Say what Navree does, in its own terms.** Describe the feature and its behaviour, limits included, without measuring it against other frameworks.
+- **Mark pages for packages still in development.** Their front-matter has `status: "planned"`; the page documents the package's design as it will ship.
+
+Many pages have a test that reads them, such as `crates/navree-billing/tests/docs_surface.rs`: it fails when a page names something that was renamed or removed. Run the tests of the crate whose page you changed:
+
+```sh
+cargo test -p navree-billing --test docs_surface
+```
+
+The site is built from the `docs/` folder by the maintainers, and the build fails on a page that is missing from the manifest, has no title or description, isn't valid MDX, or links to a page that does not exist. The pull request's checks run what can run in this repository.
+
+## Where to next
+
+<LinkCards>
+  <LinkCard href="/docs/architecture/crate-hierarchy/" title="The crate hierarchy">
+    Every layer and the edges between crates that the dependency test allows.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/directory-structure/#the-navree-repositories" title="The Navree repositories">
+    The tree of the repository, folder by folder.
+  </LinkCard>
+  <LinkCard href="/docs/testing/getting-started/" title="Testing">
+    Write the tests that come with your change.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_(Deal::TAGS.contained_by([\"vip\", \"q1\",\n\"q2\"])).where_(col(\"meta\").has_key(\"owner\")).where_(Deal::TAGS.overlaps(\"vip\")))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE CAST("deals"."tags" AS JSONB) <@ $1 AND COALESCE(CAST("meta" AS JSONB) ? $2, FALSE) AND EXISTS (SELECT 1 FROM jsonb_array_elements($3) AS "navree_candidate" WHERE CAST("deals"."tags" AS JSONB) @> jsonb_build_array("navree_candidate"."value")) AND "deals"."deleted_at" IS NULL
+  values: [Json(Array [String("vip"), String("q1"), String("q2")]), String("owner"), Json(Array [String("vip")])]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE json_contains(CAST(? AS JSON), `deals`.`tags`) AND IFNULL(json_contains_path(`meta`, 'one', '$."owner"'), 0) AND json_overlaps(`deals`.`tags`, CAST(? AS JSON)) AND `deals`.`deleted_at` IS NULL
+  values: [String("[\"vip\",\"q1\",\"q2\"]"), String("[\"vip\"]")]
+SQLite: error: a JSON contained-by check is not supported on SQLite

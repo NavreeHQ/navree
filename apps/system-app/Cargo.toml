@@ -1,0 +1,51 @@
+[package]
+name = "system-app"
+description = "Navree system app: one application wiring the framework's packages and tools, run in Docker under load by the e2e tests."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "system-app"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[features]
+## The SQLite driver, for a scratch database (`APP_DATABASE__URL=sqlite://...`);
+## the system app runs on PostgreSQL, which compiles no SQLite.
+sqlite = ["navree/sqlite"]
+
+[dependencies]
+async-graphql = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+# Every package the system app shows: the `full` set plus the opt-in
+# packages, the PostgreSQL driver and NATS for micro.
+navree = { workspace = true, features = [
+    "full",
+    "postgres",
+    "ai",
+    "billing",
+    "documents",
+    "flags",
+    "graphql",
+    "grpc",
+    "i18n",
+    "media",
+    "mcp",
+    "micro-nats",
+    "oauth",
+    "redis",
+    "search",
+    "social",
+] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

@@ -1,0 +1,8 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "rows(table(\"readings\").select_expr(Expr::time_bucket_from(\"1 day\",\ncol(\"taken_at\"), Expr::val(at())),\n\"day\").select_first(\"celsius\", \"taken_at\", \"opening\").group_by([\"day\"]))"
+---
+PostgreSQL: SELECT time_bucket(CAST($1 AS INTERVAL), "taken_at", $2) AS "day", first("celsius", "taken_at") AS "opening" FROM "readings" GROUP BY "day"
+  values: [String("1 day"), Timestamp(2026-10-27T08:30:00Z)]
+MySQL: error: first(value, time) (a TimescaleDB aggregate) is not supported on MySQL
+SQLite: error: first(value, time) (a TimescaleDB aggregate) is not supported on SQLite

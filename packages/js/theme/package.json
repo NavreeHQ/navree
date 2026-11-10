@@ -1,0 +1,94 @@
+{
+  "name": "@navree/theme",
+  "version": "1.0.0",
+  "description": "The Navree theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, every built-in theme in light and dark, self-hosted fonts, and the tokens as data.",
+  "license": "MIT OR Apache-2.0",
+  "author": "Amritpal Singh",
+  "homepage": "https://navree.com/docs/frontend/theming/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavreeHQ/navree.git",
+    "directory": "packages/js/theme"
+  },
+  "bugs": {
+    "url": "https://github.com/NavreeHQ/navree/issues"
+  },
+  "keywords": [
+    "navree",
+    "tailwindcss",
+    "theme",
+    "shadcn",
+    "design-tokens"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist",
+    "src",
+    "css",
+    "registry",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "!src/**/*.test.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./theme.css": {
+      "style": "./css/theme.css",
+      "default": "./css/theme.css"
+    },
+    "./themes.css": {
+      "style": "./css/themes.css",
+      "default": "./css/themes.css"
+    },
+    "./tokens.css": {
+      "style": "./css/tokens.css",
+      "default": "./css/tokens.css"
+    },
+    "./fonts.css": {
+      "style": "./css/fonts.css",
+      "default": "./css/fonts.css"
+    },
+    "./registry/navree.json": "./registry/navree.json",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "style": "./css/theme.css",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "generate": "node scripts/generate-themes.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/mona-sans": "^5.3.0",
+    "@fontsource/monaspace-neon": "^5.3.0"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "tailwindcss": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@tailwindcss/node": "4.3.3",
+    "@types/node": "^24.19.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

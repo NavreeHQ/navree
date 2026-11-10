@@ -1,0 +1,146 @@
+---
+title: "Regions and live updates"
+description: "A named part of a page that updates by itself: fetched after paint, polled, fed new rows, or refetched when an op says so."
+---
+
+<UiPreview example="regions/lazy" />
+
+A `Region` is a named part of a page with its own source. It can load after the page paints, poll while the page is visible, take only what's new as a feed, or be refetched when an action's reply invalidates it. Each answer morphs in, keeping focus and what was typed. A region loads the `core` runtime.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Revenue by month")
+    .body(Region::new("revenue").src("/fragments/revenue").lazy())
+```
+
+The preview above is the region before it loads: two skeleton lines, and `aria-busy` on the region. In an app, the runtime fetches the source as soon as the page has painted.
+
+## When to use it
+
+<UiChoose name="update" current="Region" />
+
+## The source
+
+`.src(url)` is where the content comes from: a page that holds an element with the region's id, or a fragment, which is a page with no script of its own. A source that answers a page with the runtime but without that id, or a redirect, means the reader is somewhere else, as when a session has ended: the reader goes there.
+
+## Lazy
+
+`.lazy()` fetches the region after paint and shows skeleton lines until then. Use it for the slow parts of a dashboard, so the rest of the page is quick.
+
+## Polling
+
+`.poll(every)` refetches the region this often while the page is visible. Its first content can be drawn with the page, with `.children`.
+
+<UiPreview example="regions/poll" />
+
+```rust
+Region::new("activity")
+    .src("/fragments/activity")
+    .poll(Duration::from_secs(5))
+    .children(activity())
+```
+
+## A feed
+
+`.feed(into, after, empty)` asks the source only for what is newer than a cursor, and adds it at the start of the element `into`, which must be inside the region. `after` is the cursor to start from; the runtime sends the current cursor to the source as the `after` query parameter. The source answers the new rows as HTML (nothing when there are none) and the newest cursor in the `X-UI-Cursor` header. `empty` is the id of an element to remove when the first row arrives, such as a "nothing yet" message, or `None`. A [Table](/docs/components/table/) with `.body_id(id)` takes a feed's rows.
+
+## Live from a stream
+
+`.live_on(live)` refetches the region whenever its server-sent event stream says one of its names. With a feed (`.feed(...)`), the region asks only for the rows that are new. The stream is usually the app's [live hub](/docs/ui/live-hub/): your code nudges a topic (`live.nudge([Topic::workspace(id, "deals")])`), and every page showing it hears, scoped to the reader, from a request, a queue worker or another server.
+
+```rust
+let stream = LiveStream::topics(["deals"]);
+
+Region::new("deals")
+    .src("/fragments/deals")
+    .live_on(stream.on("deals"))
+```
+
+`.live_from(url)` follows any other stream on this site, and `.live_event(name)` picks its named events.
+
+An event is a nudge. Its payload is **never read**: nothing a stream says can put markup, a URL or a command in the page. The region fetches its own source, which is what your server meant to show. Send any data you like on the wire, or none.
+
+The stream's behaviour is the same for every region and every [DataTable](/docs/ui/data-table/) on the page:
+
+- **One connection per stream.** Regions that name the same stream share one connection.
+- **Named events.** A region listens for its names (`stream.on("deals")`, or `.live_event("deals")` on another stream) instead of the unnamed events, so one stream can feed several regions, each its own. A region can listen for several (`stream.on("deal.42").event("clock")`). `open` and `error` can't be names: a browser reports the connection opening or failing under those, so a stream's own events of those names are ignored.
+- **Hidden pages hold nothing.** When the tab is hidden the connection closes. When it shows again the connection opens first, and once it is open each region fetches once to catch up, so nothing falls between the two. A stream that says nothing at all, or is down when the tab shows, is caught up anyway after 2.5 s, without waiting for it.
+- **Reconnecting.** A connection that fails or ends is tried again after 1 s, then 2 s, 4 s and so on up to 30 s, each with a little random delay so many pages don't return at once. **Only that timer reopens it**: a poll, a keystroke or a swap elsewhere on the page doesn't. A stream that says something and ends is tried on the same schedule, not at once. After it reconnects, each region fetches once, since events may have been lost. On the [live hub](/docs/ui/live-hub/#coming-back-after-a-dropped-connection) the page sends the last id it heard instead, the hub says again only what was missed, and a region that missed nothing fetches nothing. A connection that held for five seconds forgets its failures. A `retry:` line in the stream is not read: the browser keeps it to itself, and this schedule is the same in every browser.
+- **Drawn while it was changing.** A region drawn with the page fetches nothing when its stream first opens: it shows what the server drew. What happens between the draw and the moment the stream opens is not heard, so a part drawn while what it shows is still changing (an answer being written, an export under way) says so with `stream.on("export.7").catch_up()`. It fetches once when its stream opens, or at once when it joins a stream that is already open. The [assistant](/docs/ai/generative-ui/) draws a conversation this way while its answer is being written.
+- **A stream that says stop.** A stream that answers `204`, `401` or `403` is not tried again: the runtime asks once what a failed stream answers, and the dot says "Not live". That question gives up after 10 s if the stream answers nothing. Any other failure keeps the schedule above. A stream ended this way is tried again when the session changes (the reader signs in without leaving the page).
+- **One fetch at a time.** A region has one fetch of its own in flight. Events that come within 300 ms of the first one cost one fetch. Events that come while that fetch is out cost **one more** after it lands, however many there were, so a busy stream with a slow answer keeps the region current instead of starving it. A fetch is given up on after 15 s, so a server that never answers does not freeze the region: the next event fetches again.
+- **On this site only.** A stream address on another site is ignored.
+- **The reader's session.** A navigation that changes the session (the XSRF cookie the page can read) closes the stream and opens it again, so it is never the old reader's. A stream is reopened for a changed session at most once every five seconds, so a server that sets a new token on every answer makes one connection in five seconds, not a loop.
+- **Taken out of the page.** When the last region on a stream leaves the page, however it left, the connection closes.
+- **State.** The region carries `data-live` as `connecting`, `on`, `retry`, `paused` or `closed`. [ActivityFeed](/docs/components/activity-feed/) reads it for its live dot.
+
+<UiPreview example="regions/live" />
+
+With the [live hub](/docs/ui/live-hub/) there is nothing to write on the server but the nudge. Your own stream can be any endpoint that answers with `text/event-stream`. With `navree::http`:
+
+```rust
+use std::convert::Infallible;
+use std::time::Duration;
+
+use futures_util::stream::{self, Stream, StreamExt};
+use navree::http::response::sse::{Event, KeepAlive, Sse};
+
+// `changes` is a tokio broadcast channel your code sends on when a deal changes.
+async fn events() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = changes.subscribe();
+    let nudges = stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.ok().map(|_| {
+            (Ok(Event::default().event("deals").data("changed")), rx)
+        })
+    });
+    // A first comment goes out at once, so every browser sees the stream open.
+    let ready = stream::once(async { Ok(Event::default().comment("ready")) });
+    Sse::new(ready.chain(nudges)).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+}
+```
+
+Send a comment first. Firefox reports a stream as open only when the first bytes arrive, not when the headers do, so without it a quiet stream stays "connecting" there. The keep-alive comment keeps proxies from closing a quiet stream. Each open stream costs the server one connection, one task and about 30 KB of memory (measured on a release build with 1,000 streams open), and no per-tab state. A stream counts against the server's connection limits: `http.server.max_connections` (10,000 by default) and `max_connections_per_ip` (256 by default). Behind a reverse proxy every reader shares the proxy's address, so raise the per-address limit to the number of readers you expect.
+
+### A feed that grows
+
+`.feed_limit(n)` keeps only the newest `n` rows (200 unless you say, and `0` means 200 too: a feed with no limit is not offered; 5,000 at most), so a page left open for days doesn't grow without end. The row the reader is in is never taken out. A row whose `id` the page already has, anywhere in it, is skipped, and so is one repeated inside a single answer, so a cursor that repeats a row doesn't show it twice and a row can't take another region's name. A row that carries inside it an `id` the page already has is left out too. Only elements are added, so whitespace and comments in an answer don't pile up. An answer that lands after the reader changed the period is dropped. `.announce_new("{n} new items", "1 new item")` has assistive technology told once the rows stop coming, with the total (or after five seconds of steady arrivals).
+
+## Refetched by an action
+
+An action's reply can name regions to refetch with an `invalidate` op, so a change in one place updates another without the handler drawing both. See [Commands and ops](/docs/ui/commands-and-ops/).
+
+A fetch that was on its way when a form posted may be answered with what the region showed before the post. Such an answer is not drawn, and the region is fetched again: a poll that set off before a save never puts back what the save changed, even after the reply has drawn the page again. The same holds for a write in another tab of the site, for a page shown again from the back-forward cache, for a feed's rows and for a live list's changes.
+
+## When a fetch fails
+
+When your app answers a region's fetch with an error (a 401, 403, 404, 410, 429, 500 or 503), the runtime shows the state the server drew where the region was, keeps the card around it, and says what happened once. The Try again button fetches the region again. A region that polls stops asking after a 401, 403, 404 or 410, and starts again when the page that holds it is shown again. After a 429, 500, 503 or any other failure it waits longer each time (twice as long, up to five minutes) or as long as `Retry-After` says, and says what happened once, not on every poll. A feed and a table that refreshes itself follow the same rules. See [Errors and states](/docs/ui/errors-and-states/#a-region-that-gets-an-error).
+
+When the fetch fails in a way the server did not draw (the connection failed, the request ran out of time, a proxy answered in its own words), the region keeps what it had and `.when_failed(state)` shows a state beside it. `.when_offline()` is that with "You're offline" and a Try again button, shown only when the browser could not reach the server at all: a request that ran out of time, or an answer that was an error but not a state, is not being offline, so use `.when_failed(state)` with your own words for those.
+
+```rust
+Region::new("revenue")
+    .src("/fragments/revenue")
+    .lazy()
+    .when_offline()
+```
+
+## Live tables
+
+A [DataTable](/docs/ui/data-table/) has its own `.live(every)`, `.live_on(live)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks (the [live hub](/docs/ui/live-hub/), or any other), keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook. It shares the stream handling described above.
+
+## Working examples
+
+The previews above are replays. Three apps in the repository run these patterns against a server, and each has a page on this site:
+
+- [The store](/showcase/store/): the dashboard's figures are a region that follows the `stats` topic, the orders table refetches on `orders`, and the inventory on `inventory`.
+- [The inbox](/showcase/inbox/): the open conversation's heading and customer panel are regions on their own topics, and the thread is a [LazyList](/docs/components/lazy-list/) that takes only the messages that are new.
+- [The board](/showcase/board/): the whole board is one region that refetches when anyone moves a card, so other people's moves slide in.
+
+All three use the [live hub](/docs/ui/live-hub/). [The Navree UI example apps](/docs/example-app/ui-apps/) says how to run them.
+
+## API
+
+### Region
+
+<UiProps type="Region" />

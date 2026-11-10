@@ -1,0 +1,124 @@
+// What the dates suites share: the proof app's address, axe, the light theme's values,
+// the cases both readers are held to, and a browser per describe.
+
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { after, before, describe } from "node:test";
+import * as playwright from "playwright";
+import { launch } from "./launch.mjs";
+import { LIGHT } from "./light.mjs";
+
+export const BASE = process.env.DATES_URL || "http://127.0.0.1:8290";
+const require = createRequire(import.meta.url);
+const axeSource = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
+export const cases = JSON.parse(await readFile(new URL("../../../../crates/navree-ui/tests/fixtures/dates-parse.json", import.meta.url), "utf8"));
+
+// The page in light, from the tokens.
+export { LIGHT };
+
+/**
+ * The light values, set before the page's first paint and winning over the stylesheet. Put on a
+ * page that is already drawn, a browser may keep some elements on their old colours.
+ */
+export const lightFromTheStart = (context) =>
+  context.addInitScript((css) => {
+    const style = document.createElement("style");
+    style.textContent = css;
+    const add = () => {
+      const host = document.head || document.documentElement;
+      if (host) host.append(style);
+      return !!host;
+    };
+    // Some browsers run this before the document has an element: wait for the first.
+    if (!add()) {
+      const watch = new MutationObserver(() => add() && watch.disconnect());
+      watch.observe(document, { childList: true, subtree: true });
+    }
+  }, LIGHT.replaceAll(";", " !important;").replace(/}$/, " !important}"));
+
+/** Runs axe. Violations come back as short lines. */
+export async function axe(page) {
+  await page.evaluate(axeSource);
+  return page.evaluate(async () => {
+    const out = await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] });
+    return out.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")}`);
+  });
+}
+
+export const browsers = (process.env.DATES_BROWSERS || "chromium firefox").split(" ");
+
+/** One `describe` per browser, with `open`, which ends by asserting nothing was reported. */
+export function inBrowsers(body) {
+  for (const browserName of browsers) {
+    describe(browserName, () => {
+      let browser;
+      before(async () => {
+        browser = await launch(playwright[browserName]);
+      });
+      after(() => browser?.close());
+
+      async function open(path, options = {}) {
+        const context = await browser.newContext({
+          viewport: options.viewport || { width: 1440, height: 900 },
+          javaScriptEnabled: options.js !== false,
+          bypassCSP: !!options.light,
+          reducedMotion: "reduce",
+          locale: options.locale,
+        });
+        if (options.light) await lightFromTheStart(context);
+        const page = await context.newPage();
+        if (options.asIfScriptingOff) await asIfScriptingOff(page);
+        const problems = [];
+        page.on("console", (message) => {
+          if (browserName === "webkit" && /Refused to apply a stylesheet/.test(message.text())) return;
+          if (message.type() === "error" && !/Failed to load resource/.test(message.text())) problems.push(message.text());
+        });
+        page.on("pageerror", (error) => problems.push(String(error)));
+        await page.goto(BASE + path);
+        if (options.light) assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()), "#0b7a3e", "the light values are in force");
+        return {
+          page,
+          context,
+          problems,
+          close: async () => {
+            await context.close();
+            assert.deepEqual(problems, [], "nothing in the console, no script error, no policy report");
+          },
+        };
+      }
+      body({ open, browserName });
+    });
+  }
+}
+
+/**
+ * Makes a page, loaded with its scripts blocked, look as it does with JavaScript off: the
+ * stylesheet's `scripting` queries are turned the way a browser with no scripting would take
+ * them. Axe needs scripting to run, so this is how the JavaScript-off page is checked by it.
+ */
+export async function asIfScriptingOff(page) {
+  await page.route("**/*.js", (route) => route.abort());
+  // Every toolkit sheet the page links: a module's own styles answer to scripting too.
+  await page.route("**/_navree/ui/*.css", async (route) => {
+    const response = await route.fetch();
+    const text = (await response.text()).replaceAll("(scripting:none)", "all").replaceAll("(scripting:enabled)", "not all");
+    await route.fulfill({ response, body: text });
+  });
+}
+
+/** Every `input` and `change` the page's own listeners would hear. */
+export const record = (page) =>
+  page.evaluate(() => {
+    window.__events = [];
+    for (const type of ["input", "change"]) {
+      document.addEventListener(type, (e) => window.__events.push(`${type}:${e.target.name || e.target.id || e.target.tagName}`));
+    }
+  });
+export const events = (page) => page.evaluate(() => window.__events);
+export const field = (page, name) => page.locator(`[name="${name}"]`).first();
+export const val = (page, name) => field(page, name).inputValue();
+export const day = (page, root, iso) => page.locator(`${root} button[data-date="${iso}"]`);
+export const isOpen = (page, id) => page.locator(`#${id}`).evaluate((e) => e.matches(":popover-open"));
+export const focusedDate = (page) => page.evaluate(() => document.activeElement?.getAttribute("data-date"));
+export const label = (page, root) => page.locator(`${root} [data-ui-label]`).innerText();

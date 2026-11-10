@@ -1,0 +1,125 @@
+---
+title: "Markdown"
+description: "Text written in Markdown, drawn on the server as HTML that can hold nothing the text did not say: no raw HTML, checked links, no pictures from text you do not control, and code with its colours already in it."
+---
+
+<UiPreview example="markdown/default" />
+
+`Markdown` draws text written in Markdown. Use it for a reply from a model, a comment, a note, a description: any text that a person or a program wrote, not your page.
+
+```rust
+use navree::ui::*;
+
+Markdown::new(reply_text)
+```
+
+It reads CommonMark, with tables, strikethrough and task lists, and builds the same tree every component builds. Text is written through the one path that escapes it, so the text of a document can never become markup.
+
+## What it keeps out
+
+Text from a model or a visitor is not yours. `Markdown::new` treats it that way, and the rules do not depend on the text being polite.
+
+- **No raw HTML.** An HTML tag or block in the text is shown as the characters it is. A `<script>` in an answer is a line of text.
+
+<UiPreview example="markdown/raw-html" />
+
+- **Links are checked.** A link may go to `http`, `https`, `mailto`, `tel`, a path on your site, a query or a fragment. Any other link, such as `javascript:` or `data:`, keeps its words and loses the link.
+- **A link to another site shows where it goes.** It carries `rel="noopener noreferrer nofollow"`, a small arrow, and the host after the words, so `[your bank](https://other.example/login)` cannot hide that it leaves for `other.example`. A user name in the address (`https://bank.example@other.example`) shows the host the browser goes to, `other.example`.
+
+<UiPreview example="markdown/links" />
+
+- **No pictures.** A picture in text from a model is a way to send what the page knows to another site, as part of its address. `Markdown::new` never draws one. It shows the picture's description instead.
+
+<UiPreview example="markdown/images" />
+
+- **Nothing grows without a bound.** The text is cut at 256 KB and a line says so. Lists and quotes stop nesting at 24 levels. A code block past 64 KB is not coloured.
+
+## Text you wrote yourself
+
+`Markdown::trusted` is for text your own authors wrote, such as a help page kept in a database. It draws pictures from your own site (`![Store](/media/store.png)`), and a link to another site gets `rel="noopener noreferrer"` without the host. A picture from another site is still not drawn: the page's content security policy would not load it.
+
+```rust
+Markdown::trusted(page.body)
+```
+
+Raw HTML is still text, and a link is still checked. Trusted means "I know who wrote this", not "do not check it".
+
+## Headings
+
+`#` becomes an `h1`. A message inside a page that already has its own `h1` and `h2` should start lower. `.heading_level(3)` makes `#` an `h3` and `##` an `h4`, and no heading goes past `h6`.
+
+<UiPreview example="markdown/headings" />
+
+## Tables
+
+A table draws in a box of its own that scrolls sideways when it is wider than the page, and the box takes the keyboard focus so a person can scroll it with the arrow keys. Columns follow the alignment the text asks for, at the start, centre or end of the cell.
+
+<UiPreview example="markdown/table" />
+
+## Code
+
+A fenced block draws as a [CodeBlock](/docs/components/code-block/): the language names the colours, and the colours are already in the markup, so no script runs to colour it.
+
+<UiPreview example="markdown/code" />
+
+`.copy_code()` adds a copy button to each block. It needs the core runtime, so a page that uses it loads that script. Blocks longer than 16 KB have no button.
+
+## Links in a new tab
+
+`.links_in_new_tab()` opens links to other sites in a new tab. Assistive technology hears "(opens in a new tab)" after the words.
+
+## Right to left
+
+Text follows the direction of the page. Lists, quotes and table cells use the start and end of the line, not left and right. Code stays left to right.
+
+<UiPreview example="markdown/rtl" />
+
+## Translating the words
+
+`MarkdownLabels` holds every word Markdown writes: the note for a link that opens a new tab, where a picture would be, the name of a table, the names of task items, the copy button and the line after cut text.
+
+```rust
+Markdown::new(text).labels(MarkdownLabels {
+    copy_code: "ਕੋਡ ਕਾਪੀ ਕਰੋ".into(),
+    ..MarkdownLabels::default()
+})
+```
+
+## Outside a page
+
+`.to_fragment_html()` gives the HTML with no element around it, for an e-mail or an API reply. `.to_html()` gives it with the element a page uses.
+
+## What the page loads
+
+A page with Markdown links one small stylesheet and loads no script. The copy button is the one exception.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to each link, to a table that scrolls, and to a code block that scrolls. |
+| Arrow keys | Scroll a focused table or code block. |
+
+- Headings, lists, quotes, tables and links are the real elements, so a screen reader announces them as it does anywhere.
+- A table that scrolls is a labelled group, so its name is read when it takes the focus.
+- A task list item is a checkbox with a name ("Done" or "Not done"). It cannot be changed: Markdown shows the list, it does not edit it.
+- Where a picture would be, the picture's description stays as text.
+- Colours of code are not the only sign: comments are italic. The colours meet the contrast ratio of every theme.
+
+</UiA11y>
+
+## API
+
+### Markdown
+
+<UiProps type="Markdown" />
+
+### MarkdownTrust
+
+<UiProps type="MarkdownTrust" />
+
+### MarkdownLabels
+
+<UiProps type="MarkdownLabels" />

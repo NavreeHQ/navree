@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().where_full_text_with([Deal::TITLE], \"fat & (rat | cat)\",\nFullText::raw()))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE to_tsvector('english', "deals"."title") @@ to_tsquery('english', $1) AND "deals"."deleted_at" IS NULL
+  values: [String("fat & (rat | cat)")]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE (MATCH (`deals`.`title`) AGAINST (? IN BOOLEAN MODE)) AND `deals`.`deleted_at` IS NULL
+  values: [String("fat & (rat | cat)")]
+SQLite: error: a full-text condition (query an FTS5 table with where_raw instead) is not supported on SQLite

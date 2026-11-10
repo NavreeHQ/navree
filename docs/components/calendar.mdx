@@ -1,0 +1,116 @@
+---
+title: "Calendar"
+description: "A month grid to choose days from: one day, several, or a range, with limits, week numbers, other languages and the keyboard of an ARIA date grid."
+---
+
+<UiPreview example="calendar/default" />
+
+`Calendar` draws a month as a table of buttons. The server draws the first month. The browser draws every other month as a person moves, with no request. A choice is written into a hidden field as an ISO date, such as `2026-11-12`, and the server checks every date that comes back.
+
+```rust
+use navree::ui::dates::*;
+use navree::ui::*;
+
+Calendar::new("due")
+    .name("due")
+    .today(today)
+    .selected(due)
+    .with_today()
+```
+
+A day is a year, a month and a day. It never passes through a time zone, in the browser or on the server, so a day can't move by one. `.today(date)` says what today is: the day in the zone the page counts its days in. Without it, today is the day in UTC.
+
+## When to use it
+
+Use a Calendar to show days or to choose them in place: a booking page, a schedule, a window on a report. To choose one day in a form, use a [DatePicker](/docs/components/date-picker/). For a window with presets, use a [DateRangePicker](/docs/components/date-range-picker/).
+
+<UiChoose name="date-time" current="Calendar" />
+
+With JavaScript off, a calendar shows the month the server drew, and nothing can be chosen. A DatePicker keeps working with no script, because a native date field takes its place.
+
+## Anatomy
+
+<UiAnatomy component="calendar" />
+
+## Several days
+
+`.mode(CalendarMode::Multiple)` lets a person choose any number of days. They post as one field, joined by commas. `.max_count(n)` stops at `n`.
+
+<UiPreview example="calendar/multiple" />
+
+## A range
+
+`.mode(CalendarMode::Range)` takes two clicks: the first starts the range and the second ends it, in either order. Two clicks on one day make a range of one day. Nothing posts while a range is half picked, so a form can't send half a window. `.min_days(n)` and `.max_days(n)` limit its length, and the days that would break a limit look off while it is half picked.
+
+<UiPreview example="calendar/range" />
+
+`.range_names("from", "to")` names the two fields. The range is both days included.
+
+## Days that can't be chosen
+
+A `DateRules` says which days are off: `min` and `max`, weekdays, a list of days, a run of days, and a function. The same rules draw the calendar and check every date the server receives, so the page and the server can't disagree.
+
+<UiPreview example="calendar/limits" />
+
+- A day that is off stays in the grid and in the keyboard's path, so the arrow keys keep their shape. It can't be chosen, and it says so to assistive technology.
+- The function is asked for about three years around the month the calendar opens on, and navigation stops at the edges of that window. The server asks it again for every date that is posted, so a day outside the window is still checked.
+- The browser is sent the days that are off as runs of days: at most 1,000 runs. The server's check has no such limit.
+
+## Week numbers and week starts
+
+`.week_numbers()` shows the ISO-8601 week number of each row: the week that holds the row's Thursday. `.fixed_weeks()` draws six rows in every month, so the calendar keeps its height. The week starts where the language puts it: Sunday in the United States and Japan, Monday in most of Europe, Saturday in Egypt. `.week_start(Weekday::Mon)` overrides it.
+
+<UiPreview example="calendar/weeks" />
+
+## A date of birth
+
+`.caption(CaptionLayout::Dropdowns)` draws lists of months and years in the heading. A date of birth takes three moves, not hundreds of clicks on an arrow. The year list runs between the limits, or a hundred years either side of the month shown.
+
+<UiPreview example="calendar/dropdowns" />
+
+## Languages
+
+`.locale(DateLocale::of("de"))` names the months and weekdays, orders the week, and sets the direction. Nineteen locales are built in; see [Dates and times](/docs/ui/dates/) for the list and for how to add another.
+
+<UiPreview example="calendar/locales" />
+
+## States
+
+`.read_only()` draws a calendar to look at: no buttons and no tab stops. `.disabled(true)` turns it off, and its fields post nothing.
+
+<UiPreview example="calendar/states" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the grid at one day, and out of it at once. |
+| `←`, `→` | The day before and after. In a right-to-left language they follow the reading direction. |
+| `↑`, `↓` | The same day in the week before and after. |
+| `Home`, `End` | The first and last day of the week. |
+| `Page Up`, `Page Down` | The same day in the month before and after, or the last day of a shorter month. |
+| `Shift+Page Up`, `Shift+Page Down` | The same day in the year before and after. |
+| `Enter`, `Space` | Chooses the day. |
+
+- The grid has `role="grid"`. Each weekday heading carries its full name, and each day is named with its weekday and month, such as "Tuesday, November 3, 2026".
+- The month heading is a live region, so a screen reader says the new month after a move.
+- Today carries `aria-current="date"`, a chosen day `aria-selected="true"`, and a day that is off `aria-disabled="true"`.
+- Days of the next and previous month that fill a row are drawn dimmer and are hidden from assistive technology. `.hide_outside_days()` leaves them out.
+
+</UiA11y>
+
+## API
+
+### Calendar
+
+<UiProps type="Calendar" />
+
+### CalendarMode
+
+<UiProps type="CalendarMode" />
+
+### CaptionLayout
+
+<UiProps type="CaptionLayout" />

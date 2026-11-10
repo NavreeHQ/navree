@@ -1,0 +1,56 @@
+[package]
+name = "navree-session"
+description = "Navree SessionModule: encrypted session cookies, memory and database stores, CSRF protection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "session", "csrf", "cookies"]
+categories = ["web-programming", "authentication"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+test-postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+chrono = { workspace = true }
+cookie = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+memchr = { workspace = true }
+mime = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-glob = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+futures-util = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }

@@ -1,0 +1,96 @@
+//! The business logic of the {{ module_words }} module.
+
+{% if crud %}
+use navree::access::{Accessible, Read};
+use navree::db::{Page, PageQuery, Uow};
+use navree::injectable;
+use navree::orm::access::AccessibleQuery as _;
+use navree::orm::{Model as _, OrmError, Record};
+
+use super::dto::{Create{{ entity_pascal }}, Update{{ entity_pascal }}};
+use super::entity::{{ entity_pascal }};
+
+/// Lists, creates, updates and deletes {{ module_words }}.
+///
+/// Writes go through the model's records inside the caller's unit of work:
+/// they commit with the request (or roll back with it) and record change
+/// events for the audit log and change observers.
+#[injectable]
+pub struct {{ entity_pascal }}Service;
+
+impl {{ entity_pascal }}Service {
+    /// One page of the {{ module_words }} `scope` lets the user read, newest first.
+    pub async fn list(
+        &self,
+        uow: &Uow,
+        scope: Accessible<{{ entity_pascal }}, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Record<{{ entity_pascal }}>>, OrmError> {
+        scope
+            .query()
+            .order_by_desc({{ entity_pascal }}::CREATED_AT)
+            .order_by_desc({{ entity_pascal }}::ID)
+            .paginate(uow, page)
+            .await
+    }
+
+    /// Creates {{ a_entity }} owned by the acting user. The ORM generates the
+    /// id (a UUID v7) and sets the timestamps.
+    pub async fn create(&self, uow: &Uow, input: Create{{ entity_pascal }}) -> Result<Record<{{ entity_pascal }}>, OrmError> {
+        {{ entity_pascal }}::create(
+            uow,
+            {{ entity_pascal }} {
+                owner_id: uow.actor(),
+                name: input.name,
+                ..{{ entity_pascal }}::default()
+            },
+        )
+        .await
+    }
+
+    /// Applies the fields present in `input`.
+    pub async fn update(
+        &self,
+        uow: &Uow,
+        mut {{ entity_var }}: Record<{{ entity_pascal }}>,
+        input: Update{{ entity_pascal }},
+    ) -> Result<Record<{{ entity_pascal }}>, OrmError> {
+        if let Some(name) = input.name {
+            {{ entity_var }}.name = name;
+        }
+        // Writes only the changed columns, sets `updated_at` and records the
+        // change.
+        {{ entity_var }}.save(uow).await?;
+        Ok({{ entity_var }})
+    }
+
+    /// Deletes `{{ entity_var }}`.
+    pub async fn delete(&self, uow: &Uow, mut {{ entity_var }}: Record<{{ entity_pascal }}>) -> Result<(), OrmError> {
+        {{ entity_var }}.delete(uow).await?;
+        Ok(())
+    }
+}
+{% else %}
+use navree::db::Uow;
+use navree::injectable;
+use navree::orm::{Model as _, OrmError, Record};
+
+use super::entity::{{ entity_pascal }};
+
+/// Reads and writes {{ module_words }}. Take the caller's `Uow` so the work
+/// joins its transaction.
+#[injectable]
+pub struct {{ entity_pascal }}Service;
+
+impl {{ entity_pascal }}Service {
+    /// Every {{ entity_words }}, newest first.
+    pub async fn all(&self, uow: &Uow) -> Result<Vec<Record<{{ entity_pascal }}>>, OrmError> {
+        Ok({{ entity_pascal }}::query()
+            .order_by_desc({{ entity_pascal }}::CREATED_AT)
+            .order_by_desc({{ entity_pascal }}::ID)
+            .get(uow)
+            .await?
+            .into_vec())
+    }
+}
+{% endif %}

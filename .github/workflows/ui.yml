@@ -1,0 +1,105 @@
+name: UI toolkit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "crates/navree-ui/**"
+      - "crates/navree-ui-macros/**"
+      - "apps/ui-proof/**"
+      - "apps/store-demo/**"
+      - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
+      - "apps/ui-docs/**"
+      - "docs/ui-data/**"
+      - "e2e/ui/**"
+      - ".github/workflows/ui.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  assets:
+    name: Committed assets are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: crates/navree-ui/runtime
+      - run: node build.mjs --check
+        working-directory: crates/navree-ui/runtime
+      # The icons and flags, fetched from the pinned releases (each refused unless its
+      # checksum matches icons.lock.json) and written again: fails on any difference.
+      - run: node icons.mjs --check
+        working-directory: crates/navree-ui/runtime
+
+  docs:
+    name: The website's UI docs are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      # Every example rendered again, the props tables read again from the
+      # source: fails when docs/ui-data differs. Rerun with
+      # `cargo run -p ui-docs`.
+      - run: cargo run -p ui-docs -- --check
+
+  budgets:
+    name: Speed budgets, release build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo test --release -p navree-ui
+
+  browsers:
+    name: Morph, proof pages, conformance and hostile input
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release -p ui-proof --features logbook
+      - run: cp target/release/ui-proof target/release/ui-proof-dev
+      - run: cargo build --release -p ui-proof
+      - run: cargo build --release -p store-demo
+      - run: cargo build --release -p inbox-demo
+      - run: cargo build --release -p board-demo
+      - run: cargo build --release -p ui-table-proof
+      - run: npm ci
+        working-directory: e2e/ui
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: e2e/ui
+      - name: Run the suites against the proof app
+        run: |
+          target/release/ui-proof serve &
+          UI_PROOF_LOGBOOK=1 PORT=8092 target/release/ui-proof-dev serve &
+          # The store seeds 200,000 orders when it starts, which takes a while.
+          STORE_SIMULATOR=off STORE_TEST_HOOKS=1 target/release/store-demo &
+          INBOX_SCALE=2000 INBOX_SIMULATOR=off INBOX_TICK=off INBOX_TEST_HOOKS=1 target/release/inbox-demo &
+          BOARD_SIMULATOR=off BOARD_TEST_HOOKS=1 BOARD_DATABASE_URL="sqlite://target/board-demo.db?mode=rwc" target/release/board-demo &
+          # The data table suites need the table proof and its million rows. The board holds
+          # 8097, their default port, so the proof serves on 8098.
+          export DT_DATABASE_URL="sqlite://target/ui-table-proof.db?mode=rwc"
+          target/release/ui-table-proof seed 1000000
+          PORT=8098 target/release/ui-table-proof serve &
+          until curl -sf http://127.0.0.1:8090/plain >/dev/null; do sleep 0.2; done
+          until curl -sf http://127.0.0.1:8092/plain >/dev/null; do sleep 0.2; done
+          timeout 300 bash -c 'until curl -sf http://127.0.0.1:8095/ >/dev/null; do sleep 0.5; done'
+          until curl -sf http://127.0.0.1:8096/inbox >/dev/null; do sleep 0.2; done
+          until curl -sf http://127.0.0.1:8097/ >/dev/null; do sleep 0.2; done
+          until curl -sf http://127.0.0.1:8098/deals >/dev/null; do sleep 0.2; done
+          # The dates suites run against the proof app's /dates pages.
+          cd e2e/ui && UI_LOGBOOK_URL=http://127.0.0.1:8092 UI_TABLE_URL=http://127.0.0.1:8098 DATES_URL=http://127.0.0.1:8090 STORE_BROWSERS=chromium,firefox,webkit npm test

@@ -1,0 +1,55 @@
+---
+title: "ApprovalCard"
+description: "A tool call waiting for the reader's answer, drawn by the page in a place of its own: what the assistant asks to do, the arguments it chose as text, and Approve and Reject."
+---
+
+<UiPreview example="approval-card/default" />
+
+Some tools change things: refunding an order, sending a mail, deleting a record. When the assistant asks to call one, nothing happens until the reader says yes. `ApprovalCard` is the question. It shows the tool's label, the arguments the assistant chose, and two forms: Approve, and Reject with an optional reason.
+
+```rust
+use navree::ui::genui::*;
+use serde_json::json;
+
+ApprovalCard::new(
+    "call_1042",
+    "Refund an order",
+    json!({ "order": "KK-1042", "amount": "₹1,250", "reason": "Wrong item delivered" }),
+)
+.routes("/assistant/7/approve", "/assistant/7/reject")
+.csrf("session-csrf-token")
+```
+
+The first argument is the call's id, which both forms post back as `call_id`. The second is the label, in words the reader knows. `.routes(approve, reject)` names where the two forms post, and both stay on your site.
+
+## Where to draw it
+
+The page draws an approval card, in a place of its own beside the conversation, and never inside the conversation or inside a component the assistant chose. A [SurfaceFrame](/docs/components/surface-frame/) takes out any element a conversation's parts drew, so a component cannot stand in for the card, and the arguments are text, so a model cannot make them look like a button.
+
+Put the card in a [Region](/docs/ui/regions/) that follows the conversation's stream, so it appears when a call is waiting and goes when it is answered. In the conversation itself, [`approval_notice`](/docs/components/conversation/#items) leaves a line: "Waiting for your answer: Refund an order", then "Approved" or "Rejected", with the reader's reason.
+
+## What the reader sees
+
+The title is "The assistant asks to" and the label, a line says nothing happens until the reader answers, and a badge says it is waiting. The arguments are a list of names and values as text. A value is cut at 300 characters and 20 arguments are listed, with "and 3 more" for the rest. Approve is the main button; Reject is an outline button next to a text area for the reason.
+
+Approving runs the call under the reader's own access, as the reader. See [Generative UI](/docs/ai/generative-ui/) for what the server checks before it does.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The card is a labelled region ("The assistant asks to: Refund an order"), so a screen reader user can find it and jump to it.
+- Approve and Reject are real submit buttons in real forms, so they work with no script and a keyboard reaches both. Reject's reason is a labelled text area ("Why not? (optional)").
+- The arguments are text in a description list, read in order.
+
+</UiA11y>
+
+## API
+
+### ApprovalCard
+
+<UiProps type="ApprovalCard" />
+
+### ApprovalState
+
+<UiProps type="ApprovalState" />

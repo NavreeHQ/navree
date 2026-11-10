@@ -1,0 +1,626 @@
+---
+title: "Notification channels"
+description: "Send notifications over Slack, Teams, SMS, WhatsApp and web push: drivers, VAPID keys, the delivery log, STOP opt-outs, provider callbacks and test fakes."
+---
+
+## Introduction
+
+<Badge feature="notify" /> [Notifications](/docs/digging-deeper/notifications/) reach users inside the app and by mail. Some messages belong where people already are: the team's Slack channel, a chat with your Teams bot, a text message, WhatsApp, a push notification on their phone. Five more channels take the same notification there:
+
+| Channel | Renders with | Goes to | Sent through |
+|---|---|---|---|
+| `Channel::Slack` | `to_slack` → `SlackMessage` | `route_slack`, or the message's own route | An incoming webhook, or `chat.postMessage` with a bot token |
+| `Channel::MicrosoftTeams` | `to_teams` → `TeamsMessage` | `route_teams`, or the message's own route | An incoming webhook, or a proactive message from your bot (Bot Framework) |
+| `Channel::Sms` | `to_sms` → `SmsMessage` | `route_sms`, read as E.164 | Twilio, Vonage or Amazon SNS |
+| `Channel::WhatsApp` | `to_whatsapp` → `WhatsAppMessage` | `route_whatsapp`, read as E.164 | Twilio or the WhatsApp Cloud API |
+| `Channel::WebPush` | `to_web_push` → `WebPushMessage` | Every push subscription of the notifiable | The browsers' push services, encrypted and signed with your VAPID key |
+
+Every delivery over these channels is a row in `notification_deliveries`. Status callbacks from the providers move it to delivered, read or failed, a reply of STOP opts the number out, and each channel has a fake for tests.
+
+## Routing a notifiable
+
+A notifiable says where each channel reaches it. Every `route_*` method of these channels has a default of `None`, which skips the channel for that recipient, so implement the ones you use (`route_mail` is required, and returns `None` to skip the mail):
+
+```rust title="src/modules/people/employee.rs"
+use navree::notify::{Notifiable, TeamsRoute, USER_NOTIFIABLE_TYPE};
+use uuid::Uuid;
+
+/// An employee as the recipient of notifications.
+#[derive(Clone, Debug)]
+pub struct Employee {
+    pub id: Uuid,
+    pub email: String,
+    /// Any format; read as E.164 in `notify.sms.default_region`.
+    pub mobile: Option<String>,
+    /// Saved when the Teams bot was installed for them.
+    pub teams: Option<TeamsConversation>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TeamsConversation {
+    pub service_url: String,
+    pub conversation_id: String,
+}
+
+impl Notifiable for Employee {
+    fn notifiable_type(&self) -> &'static str {
+        USER_NOTIFIABLE_TYPE
+    }
+
+    fn notifiable_id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn route_mail(&self) -> Option<String> {
+        Some(self.email.clone())
+    }
+
+    fn route_sms(&self) -> Option<String> {
+        self.mobile.clone()
+    }
+
+    fn route_whatsapp(&self) -> Option<String> {
+        self.mobile.clone()
+    }
+
+    fn route_teams(&self) -> Option<TeamsRoute> {
+        let teams = self.teams.as_ref()?;
+        Some(TeamsRoute::conversation(
+            teams.service_url.clone(),
+            teams.conversation_id.clone(),
+        ))
+    }
+}
+```
+
+| Method | Returns | Used by |
+|---|---|---|
+| `route_slack` | `Option<SlackRoute>` | `Channel::Slack` |
+| `route_teams` | `Option<TeamsRoute>` | `Channel::MicrosoftTeams` |
+| `route_sms` | `Option<String>`: a phone number in any format | `Channel::Sms` |
+| `route_whatsapp` | `Option<String>`: a phone number in any format | `Channel::WhatsApp` |
+
+Web push has no route method: it sends to the push subscriptions the notifiable saved (see [web push](#web-push)).
+
+## Rendering for each channel
+
+A notification renders itself for each channel its `via` lists, as it does for mail and the database. This one goes to the app's notification list, the employee's Teams chat, their phone and their browsers:
+
+```rust title="src/modules/training/notifications.rs"
+use navree::notify::{
+    Channel, Notifiable, Notification, SmsMessage, TeamsMessage, Urgency, WebPushMessage,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+/// A training module is due today.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TrainingDue {
+    pub module: String,
+    pub url: String,
+}
+
+impl Notification for TrainingDue {
+    const TYPE: &'static str = "training.due";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![
+            Channel::Database,
+            Channel::MicrosoftTeams,
+            Channel::Sms,
+            Channel::WebPush,
+        ]
+    }
+
+    fn to_database(&self, _notifiable: &dyn Notifiable) -> Option<Value> {
+        Some(json!({ "title": "Training due", "message": self.module, "url": self.url }))
+    }
+
+    fn to_teams(&self, _notifiable: &dyn Notifiable) -> Option<TeamsMessage> {
+        Some(
+            TeamsMessage::new(format!("**{}** is due today.", self.module))
+                .summary("Training due")
+                .card(json!({
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": [{ "type": "TextBlock", "text": self.module, "weight": "Bolder", "wrap": true }],
+                    "actions": [{ "type": "Action.OpenUrl", "title": "Start", "url": self.url }]
+                })),
+        )
+    }
+
+    fn to_sms(&self, _notifiable: &dyn Notifiable) -> Option<SmsMessage> {
+        Some(SmsMessage::new(format!(
+            "{} is due today: {}. Reply STOP to opt out.",
+            self.module, self.url
+        )))
+    }
+
+    fn to_web_push(&self, _notifiable: &dyn Notifiable) -> Option<WebPushMessage> {
+        Some(
+            WebPushMessage::new("Training due")
+                .body(&self.module)
+                .url(&self.url)
+                .tag("training")
+                .urgency(Urgency::High),
+        )
+    }
+}
+```
+
+| Method | Returns | Default |
+|---|---|---|
+| `to_slack` | `Option<SlackMessage>` | `None`: no Slack message |
+| `to_teams` | `Option<TeamsMessage>` | `None` |
+| `to_sms` | `Option<SmsMessage>` | `None` |
+| `to_whatsapp` | `Option<WhatsAppMessage>` | `None` |
+| `to_web_push` | `Option<WebPushMessage>` | `None` |
+
+Send it as any notification, with `notifier.send(&employee, TrainingDue { .. })`. A message that names its own recipient (`SlackMessage::to`, `TeamsMessage::to`, `SmsMessage::to`, `WhatsAppMessage::to`) goes there instead of to the notifiable's route, so a notification can post to a team channel whoever it was sent to:
+
+```rust
+fn to_slack(&self, _notifiable: &dyn Notifiable) -> Option<SlackMessage> {
+    Some(
+        SlackMessage::new(format!("Deployed {}", self.version))
+            .blocks(json!([{
+                "type": "section",
+                "text": { "type": "mrkdwn", "text": format!("*Deployed* `{}`", self.version) }
+            }]))
+            .to(SlackRoute::channel("C0123456789")),
+    )
+}
+```
+
+The new channels go out like mail and broadcasts: after the request's transaction commits, or as one `notify.send` job each with `notify.queue` on (see [queueing](/docs/digging-deeper/notifications/#queueing-notifications)). The job carries the rendered message, so a worker sends exactly what the request rendered. For web push, the subscriptions are read when the job runs.
+
+## Configuration
+
+Each channel reads its own table of the `notify` section. A channel with nothing configured still works where it needs nothing (Slack and Teams webhooks); the others fail with `NotifyError::Unavailable` until they have a driver.
+
+```toml title="config/app.toml"
+[notify]
+deliveries = true                 # record each delivery in notification_deliveries
+
+[notify.slack]
+bot_token = ""                    # APP_NOTIFY__SLACK__BOT_TOKEN (xoxb-...)
+
+[notify.teams]
+app_id = "6f3c1f0e-2a4b-4c5d-8e9f-0a1b2c3d4e5f"   # the Azure Bot's app id
+app_password = ""                 # APP_NOTIFY__TEAMS__APP_PASSWORD
+tenant = "botframework.com"       # or your tenant id for a single-tenant bot
+
+[notify.sms]
+driver = "twilio"                 # twilio | vonage | sns | log
+from = "+15550001111"             # a number, a sender id, or a Twilio messaging service MG...
+default_region = "US"             # numbers written without a country code
+status_callback = "https://api.acme.test/api/webhooks/notify/twilio"
+
+[notify.whatsapp]
+driver = "meta"                   # twilio | meta | log
+from = "+15550001111"             # Twilio only
+
+[notify.web_push]
+public_key = "BGp8...Q"           # from `notify:vapid`
+private_key = ""                  # APP_NOTIFY__WEB_PUSH__PRIVATE_KEY
+subject = "mailto:ops@acme.test"
+ttl_secs = 86400
+
+[notify.twilio]
+account_sid = "AC0123456789abcdef0123456789abcdef"
+auth_token = ""                   # APP_NOTIFY__TWILIO__AUTH_TOKEN
+
+[notify.meta]
+phone_number_id = "105589345678901"
+access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `notify.deliveries` | `true` | Record every delivery over the five channels in `notification_deliveries` (needs `DatabaseModule`). |
+| `notify.slack.bot_token` | empty | The bot token of [channel routes](#slack) without a connection. |
+| `notify.slack.endpoint` | `https://slack.com/api` | The Web API's base URL. |
+| `notify.teams.app_id` | none | The Microsoft app id of your Azure Bot, for [conversation routes](#microsoft-teams) without a connection. |
+| `notify.teams.app_password` | empty | Its client secret. Required with `app_id`. |
+| `notify.teams.tenant` | `botframework.com` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot, your tenant id for a single-tenant one. |
+| `notify.teams.token_url` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | The token endpoint. |
+| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`. Without one, the SMS channel is unavailable. |
+| `notify.sms.from` | none | The default sender. |
+| `notify.sms.default_region` | none | The ISO 3166-1 country numbers without a country code are read in. Without it, such numbers are invalid. |
+| `notify.sms.status_callback` | none | The URL the provider reports statuses to: Twilio's `StatusCallback`, Vonage's `webhook_url`. |
+| `notify.whatsapp.driver` | none | `twilio`, `meta` or `log`. |
+| `notify.whatsapp.from` | none | The sender's number (Twilio). |
+| `notify.whatsapp.status_callback` | none | Twilio's `StatusCallback` for WhatsApp. |
+| `notify.web_push.public_key` | none | The VAPID public key (base64url). Web push is on when it is set. |
+| `notify.web_push.private_key` | empty | The VAPID private key. Required with `public_key`. |
+| `notify.web_push.subject` | empty | A `mailto:` or `https:` contact push services can reach you at. Required with `public_key`. |
+| `notify.web_push.ttl_secs` | `86400` | How long a push service keeps a message for an offline device. |
+| `notify.twilio.account_sid` | empty | The account SID, for `twilio` drivers. |
+| `notify.twilio.auth_token` | empty | The auth token, or the secret of `api_key`. |
+| `notify.twilio.api_key` | none | An API key SID (`SK...`) to authenticate with instead of the account SID. |
+| `notify.vonage.api_key`, `api_secret` | empty | Vonage credentials, for `sms.driver = "vonage"`. |
+| `notify.sns.region`, `access_key_id`, `secret_access_key`, `session_token` | empty | AWS credentials, for `sms.driver = "sns"`. |
+| `notify.sns.sms_type` | `Transactional` | `Transactional` or `Promotional`. |
+| `notify.meta.phone_number_id`, `access_token` | empty | WhatsApp Cloud API credentials, for `whatsapp.driver = "meta"`. |
+| `notify.meta.api_version` | `v21.0` | The Graph API version. |
+
+The `slack`, `twilio`, `vonage`, `sns` and `meta` tables also take an `endpoint`, the API's base URL, for a regional endpoint or a local mock server in tests. A driver configured without its credentials fails the boot with the keys it needs (`notify.sms.driver \`twilio\` needs notify.twilio.account_sid and notify.twilio.auth_token`). Tokens, secrets and keys are read from the configuration and never serialized, logged or shown in errors; keep them in environment variables.
+
+## Slack
+
+A `SlackRoute` is an incoming webhook or a channel:
+
+```rust
+use navree::notify::SlackRoute;
+
+SlackRoute::webhook("https://hooks.slack.com/services/T000/B000/XXXX"); // a channel's webhook
+SlackRoute::channel("C0123456789");                                    // with notify.slack.bot_token
+SlackRoute::channel("C0123456789").connection(install_id);              // with a connection's bot token
+```
+
+A webhook route is posted the message's JSON. A channel route calls `chat.postMessage` with the channel (or a user id, for a direct message), authenticated with `notify.slack.bot_token`, or with the bot token of an [integrations connection](#connections-from-integrations) when the route names one: each customer workspace that installed your Slack app posts with its own token.
+
+| `SlackMessage` | |
+|---|---|
+| `SlackMessage::new(text)` | The text: shown in notifications, and the fallback of `blocks` |
+| `.blocks(json!([...]))` | Block Kit blocks |
+| `.thread(ts)` | A reply in the thread of message `ts` (channel routes) |
+| `.to(route)` | Where it goes instead of `route_slack` |
+| `unfurl_links` | Whether Slack unfurls the text's links |
+
+Slack's answer is the message's `ts` for a channel route, recorded as the delivery's provider id; a webhook returns no id. A refusal is a `ChannelError::Refused` with Slack's code (`channel_not_found`, `no_service`, `invalid_payload`).
+
+## Microsoft Teams
+
+A `TeamsRoute` is an incoming webhook or a conversation with your bot:
+
+```rust
+use navree::notify::TeamsRoute;
+
+// A channel's workflow: "Post to a channel when a webhook request is received".
+TeamsRoute::webhook("https://prod-12.westeurope.logic.azure.com/workflows/.../invoke?sig=...");
+// A personal chat, group chat or channel the bot is in.
+TeamsRoute::conversation("https://smba.trafficmanager.net/emea/", "a:1Xyz...");
+TeamsRoute::conversation(service_url, conversation_id).connection(tenant_bot_id);
+```
+
+A webhook receives the message as an Adaptive Card: the message's `card`, or one holding its text. A conversation receives a proactive message from your bot, `POST {serviceUrl}/v3/conversations/{id}/activities`, with the text, the summary and the card attached. Save the service URL and conversation id when the bot is installed for someone (its `conversationUpdate` activity), and return them from `route_teams`.
+
+The bot authenticates with a Bot Framework token for `notify.teams.app_id` (client credentials, cached until a minute before it expires), or with an [integrations connection](#connections-from-integrations)'s token when the route names one, for a bot registered in each customer's tenant.
+
+| `TeamsMessage` | |
+|---|---|
+| `TeamsMessage::new(text)` | The text (Teams renders a subset of Markdown) |
+| `.card(json!({ "type": "AdaptiveCard", .. }))` | An Adaptive Card |
+| `.summary(text)` | The activity feed summary (conversations) |
+| `.to(route)` | Where it goes instead of `route_teams` |
+
+A conversation's answer is the new activity's id. A refusal carries the Bot Framework's code, such as `BotNotInConversationRoster` when the bot was removed from the conversation.
+
+## SMS
+
+Pick a driver with `notify.sms.driver`:
+
+| Driver | Sends with | Message id | Status callbacks |
+|---|---|---|---|
+| `twilio` | The Messages API, `POST /2010-04-01/Accounts/{sid}/Messages.json`; a `from` starting with `MG` is a messaging service | `SM...` | Yes, to `status_callback` |
+| `vonage` | The Messages API, `POST /v1/messages` (channel `sms`) | `message_uuid` | Yes, to `status_callback` |
+| `sns` | Amazon SNS `Publish` to a phone number, SigV4 signed; a `from` with a `+` is the origination number, otherwise the sender id | `MessageId` | No: SNS reports to CloudWatch Logs |
+| `log` | Nothing: writes each message to the log (`navree::notify`, the text at `DEBUG` under `navree::notify::body`) | `log-1`, `log-2`... | No |
+
+Numbers are read as E.164 with navree-validation's [`Phone`](/docs/basics/validation/), in `notify.sms.default_region` when they have no country code: `(415) 555-0100` with `default_region = "US"` is `+14155550100`. A number that isn't valid fails the channel with `NotifyError::InvalidRecipient`, and its delivery is recorded as failed.
+
+| `SmsMessage` | |
+|---|---|
+| `SmsMessage::new(body)` | The text |
+| `.from(sender)` | The sender instead of `notify.sms.from` |
+| `.to(number)` | The recipient instead of `route_sms` |
+
+### Opt-outs
+
+Text messages must stop when the recipient asks. The SMS and WhatsApp channels keep an opt-out list per channel, `notification_opt_outs`, and skip a number on it: its delivery is recorded as `opted_out`, and `send` succeeds.
+
+A number is opted out when:
+
+- it replies with an opt-out keyword: `STOP`, `STOPALL`, `UNSUBSCRIBE`, `CANCEL`, `END`, `QUIT`, `OPTOUT` or `REVOKE`, matched on the whole message, ignoring case and trailing punctuation (Twilio's own `OptOutType` wins when it sends one);
+- the provider refuses it as opted out: Twilio's error `21610`, the WhatsApp Cloud API's `131050`, also when it arrives in a status callback;
+- your code opts it out.
+
+`START`, `YES`, `UNSTOP` and `OPTIN` opt it back in. Replies reach the app through the [provider callbacks](#provider-callbacks). In code, inject `Arc<OptOuts>`:
+
+```rust
+use navree::notify::{Channel, OptOutSource, OptOuts};
+
+// A user turned texts off in their settings.
+opt_outs
+    .opt_out(Channel::Sms, "(415) 555-0100", OptOutSource::Manual)
+    .await?;
+opt_outs.is_opted_out(Channel::Sms, "+14155550100").await?; // true
+opt_outs.opt_in(Channel::Sms, "+14155550100").await?;        // and back on
+let all = opt_outs.list(Channel::Sms).await?;                // newest first
+```
+
+Numbers are normalized the same way as for sending, so every format of one number is one entry. Inside a request handler, these writes join the request's transaction.
+
+## WhatsApp
+
+Pick a driver with `notify.whatsapp.driver`: `twilio` (the Messages API with `whatsapp:` addresses, sharing `notify.twilio`'s credentials with SMS), `meta` (the WhatsApp Cloud API, `POST /{api_version}/{phone_number_id}/messages`) or `log`.
+
+WhatsApp takes free text only inside the 24-hour window after the recipient last wrote to you. Outside it, send an approved template:
+
+```rust
+fn to_whatsapp(&self, _notifiable: &dyn Notifiable) -> Option<WhatsAppMessage> {
+    Some(WhatsAppMessage::template(
+        WhatsAppTemplate::new("order_shipped", "en_US").parameter(&self.order),
+    ))
+}
+```
+
+| | `twilio` | `meta` |
+|---|---|---|
+| `WhatsAppMessage::text(body)` | `Body` | A `text` message |
+| `WhatsAppTemplate::new(name, language)` | `name` is the Content SID (`HX...`); `ContentSid` | A `template` message with `name` and `language.code` |
+| `.parameter(value)` | `ContentVariables`: `{"1": .., "2": ..}` | The body component's parameters, in order |
+| Message id | `SM...` | `wamid...` |
+
+## Web push
+
+Web push shows a notification on the user's device, through the push service of their browser (Firebase Cloud Messaging for Chrome, Mozilla's for Firefox, Apple's for Safari). Each message is encrypted for one subscription (RFC 8291, `aes128gcm`) and signed with your VAPID key (RFC 8292, ES256 on `ring` through `navree_crypto`), so only that browser can read it and push services know it comes from you.
+
+<Steps>
+<Step title="Generate a VAPID key pair">
+
+```sh
+navree notify:vapid
+```
+
+```text
+[notify.web_push]
+public_key = "BGp8...Q"
+private_key = "q1dX...4"
+subject = "mailto:you@example.com"
+
+# or as environment variables:
+# APP_NOTIFY__WEB_PUSH__PUBLIC_KEY=BGp8...Q
+# APP_NOTIFY__WEB_PUSH__PRIVATE_KEY=q1dX...4
+```
+
+Set `subject` to a `mailto:` or `https:` contact for your app. Keep the private key secret. A new pair invalidates every subscription, so generate it once per app.
+
+</Step>
+<Step title="Subscribe in the browser">
+
+The signed-in user's browser fetches the public key from `GET /api/notifications/push-key`, subscribes, and saves the subscription. With the [typed client](/docs/frontend/typed-client/):
+
+```ts title="web/src/lib/push.ts"
+import { unwrap } from "@navree/client";
+import { api } from "@/lib/api/client";
+
+export async function enablePush() {
+  const { public_key } = await unwrap(api.GET("/api/notifications/push-key"));
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: public_key,
+  });
+  await unwrap(api.POST("/api/notifications/push-subscriptions", { body: subscription.toJSON() }));
+}
+```
+
+</Step>
+<Step title="Show the notification in the service worker">
+
+```js title="public/sw.js"
+self.addEventListener("push", (event) => {
+  const { title, body, icon, url, tag, data } = event.data.json();
+  event.waitUntil(self.registration.showNotification(title, { body, icon, tag, data: { url, ...data } }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow(event.notification.data.url ?? "/"));
+});
+```
+
+</Step>
+</Steps>
+
+The routes are part of the [notification routes](/docs/digging-deeper/notifications/#the-http-routes) (`notify.routes`), for the signed-in user:
+
+| Route | Result |
+|---|---|
+| `GET /api/notifications/push-key` | `{"public_key": "BGp8...Q"}`. Mounted when `notify.web_push.public_key` is set. |
+| `POST /api/notifications/push-subscriptions` | 201 with the saved subscription (`id`, `endpoint`, `user_agent`, `created_at`, `last_used_at`; never its keys). The body is `subscription.toJSON()`. |
+| `DELETE /api/notifications/push-subscriptions` | 204. The body is `{"endpoint": "..."}`; 404 when it isn't one of yours. |
+
+A subscription needs an `https` endpoint (`http` only on `localhost`), a P-256 `p256dh` key and an `auth` secret of at least 16 bytes; otherwise the answer is a 400 naming the field. Saving an endpoint that is already saved moves it to the signed-in user, with the new keys: a browser profile belongs to whoever signed in on it last. In code, `PushSubscriptions` has `subscribe`, `unsubscribe`, `of(notifiable_type, notifiable_id)` and `delete`.
+
+The channel sends to every subscription of the notifiable when the notification goes out. A push service that answers `404` or `410` has dropped the subscription, so it is deleted, and the notification still succeeds. With `notify.deliveries` on, a retried `notify.send` job skips the subscriptions an earlier attempt reached, so a failure at one push service doesn't push twice to the others. Push endpoints come from browsers, so the driver calls them with the default [SSRF policy](/docs/digging-deeper/http-client/): an endpoint at an internal address is refused.
+
+| `WebPushMessage` | |
+|---|---|
+| `WebPushMessage::new(title)` | The title |
+| `.body(text)`, `.icon(url)`, `.url(url)`, `.tag(tag)`, `.data(json)` | The rest of what the service worker receives |
+| `.ttl_secs(secs)` | How long an offline device's push service keeps it, instead of `notify.web_push.ttl_secs` |
+| `.urgency(Urgency::High)` | `VeryLow`, `Low`, `Normal` or `High` (the `Urgency` header) |
+| `.topic(name)` | A newer message with the same topic replaces an undelivered one |
+
+The service worker receives `payload()`: a JSON object with `title` and each of `body`, `icon`, `url`, `tag` and `data` that is set. One push message holds at most 3993 bytes of it.
+
+## The delivery log
+
+With `notify.deliveries` on and `DatabaseModule` in the app, every attempt over the five channels is a row of `notification_deliveries`, the navree-orm model `NotificationDelivery`:
+
+| Column | |
+|---|---|
+| `id` | A UUID v7 |
+| `notification_id`, `notification_type` | The notification (`send`'s return value) and its `TYPE` |
+| `notifiable_type`, `notifiable_id` | The recipient |
+| `channel` | `slack`, `teams`, `sms`, `whatsapp` or `web_push` |
+| `provider` | The driver: `slack`, `teams`, `twilio`, `vonage`, `sns`, `meta`, `web_push`, `log` or `fake` |
+| `recipient` | The E.164 number, the Slack channel, the Teams conversation, the push subscription id, or `webhook:<host>` for a webhook (its URL is a secret) |
+| `provider_message_id` | The provider's id of the message, which status callbacks name |
+| `status` | `sent`, `delivered`, `read`, `failed` or `opted_out` |
+| `error` | Why it failed |
+| `created_at`, `updated_at` | When it was first attempted, and when its status last changed |
+
+A retried `notify.send` job updates its row instead of adding one. Status callbacks only move a delivery forward, because providers send them out of order: `sent` becomes anything, `delivered` becomes `read`, and `read`, `failed` and `opted_out` are final.
+
+Inject `Arc<DeliveryLog>` to read it: `for_notification(id)` lists a notification's deliveries and `find_by_message(provider, id)` finds one by its provider id. For anything else, query the model:
+
+```rust
+use navree::notify::NotificationDelivery;
+use navree::orm::Model as _;
+
+let failed = NotificationDelivery::query()
+    .where_(NotificationDelivery::CHANNEL.eq("sms"))
+    .where_(NotificationDelivery::STATUS.eq("failed"))
+    .latest_by(NotificationDelivery::CREATED_AT)
+    .get(&db)
+    .await?;
+```
+
+## Provider callbacks
+
+Twilio, Vonage and the WhatsApp Cloud API report what happened to each message, and forward the replies people send: a status callback moves its delivery forward, a STOP opts the number out. With the `webhooks` feature on too (both are in `full`), [`WebhooksModule`](/docs/packages/webhooks/) receives them for you, verified like any [incoming webhook](/docs/packages/webhooks/#verifying-incoming-webhooks). It mounts one public route for each of these sources you configure, as long as `NotifyModule` is in the app:
+
+| Route | Source | Configure | Point at it |
+|---|---|---|---|
+| `POST /api/webhooks/notify/twilio` | `Twilio` | `webhooks.incoming.twilio.secret`: the auth token | `notify.sms.status_callback` and `notify.whatsapp.status_callback`, and the number's "A message comes in" webhook |
+| `POST /api/webhooks/notify/vonage` | `Vonage` | `webhooks.incoming.vonage.secret`: the signature secret (signed webhooks on) | `notify.sms.status_callback`, and the application's inbound URL |
+| `GET` and `POST /api/webhooks/notify/meta` | `Meta` | `webhooks.incoming.meta.secret`: the app secret; `verify_token` | The Meta app's WhatsApp webhook, subscribed to `messages` |
+
+```toml title="config/app.toml"
+[webhooks.incoming.twilio]
+secret = ""             # APP_WEBHOOKS__INCOMING__TWILIO__SECRET: the auth token
+
+[webhooks.incoming.vonage]
+secret = ""             # APP_WEBHOOKS__INCOMING__VONAGE__SECRET: the signature secret
+
+[webhooks.incoming.meta]
+secret = ""             # APP_WEBHOOKS__INCOMING__META__SECRET: the app secret
+verify_token = ""       # APP_WEBHOOKS__INCOMING__META__VERIFY_TOKEN
+```
+
+The Twilio route answers with an empty TwiML `<Response/>`, so a reply sends nothing back; the others answer 200. A request that fails verification is a 400 and changes nothing. Meta's `GET ?hub.mode=subscribe` handshake is answered with the challenge when its `hub.verify_token` matches. Twilio signs the URL it called, so behind a proxy set `webhooks.incoming.twilio.url` to the callback route's public URL, or let the proxy pass `X-Forwarded-Proto` and `X-Forwarded-Host`; the source's `url` is one URL, so a Twilio route of your own on the same source needs the forwarded headers.
+
+To receive them on a route of your own, verify with the source and hand the body to the log. `ChannelCallback::from_twilio`, `from_vonage` and `from_meta` read the providers' payloads, and `DeliveryLog::ingest` applies them:
+
+```rust title="src/modules/sms/hooks.rs"
+use navree::notify::{ChannelCallback, DeliveryLog};
+use navree::prelude::*;
+use navree::webhooks::{Twilio, VerifiedWebhook};
+
+#[injectable]
+pub struct SmsHooks {
+    log: Arc<DeliveryLog>,
+}
+
+#[controller("/hooks/sms")]
+impl SmsHooks {
+    /// `POST /api/hooks/sms`: Twilio statuses and replies.
+    #[post("/")]
+    #[public]
+    async fn twilio(&self, hook: VerifiedWebhook<Twilio>) -> Result<NoContent> {
+        self.log
+            .ingest(ChannelCallback::from_twilio(hook.body()))
+            .await?;
+        Ok(NoContent)
+    }
+}
+```
+
+`ingest` returns `Ingested { updated, opted_out, opted_in }`. A status for a message id the log doesn't know is ignored.
+
+## Connections from integrations
+
+A Slack or Teams route can name a connection of [Integrations](/docs/packages/integrations/): `SlackRoute::channel("C0123").connection(id)`, `TeamsRoute::conversation(url, conversation).connection(id)`. The driver then sends with that connection's current access token, refreshed when it is due: a workspace's Slack install posts with its own bot token, and a bot registered in a customer's Microsoft tenant sends with an app-only token of a `microsoft` connection whose scope set asks for `https://api.botframework.com/.default`.
+
+`IntegrationsModule` provides the tokens (`dyn ConnectionTokens`) when the `integrations` and `notify` features are both on; both are in `full`. To keep tokens elsewhere, register your own `Arc<dyn ConnectionTokens>`. A route that names a connection in an app without one fails with a `ChannelError::Config` that says so.
+
+## Testing
+
+Each channel has a fake that records what it is asked to send: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake` and `WebPushFake`. Install it in place of the driver with `override_value::<dyn SmsDriver>(fake.driver())`, and so on. The SMS and WhatsApp fakes also play the provider: `deliver`, `fail` (and `read` for WhatsApp) report a status for the last message to a number, and `reply` sends the app a message from one, through the same `DeliveryLog::ingest` the real callbacks use.
+
+```rust title="tests/training.rs"
+use navree::notify::{
+    Channel, Notifier, OptOuts, SmsDriver, SmsFake, TeamsDriver, TeamsFake, WebPushDriver,
+    WebPushFake,
+};
+use navree::prelude::*;
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn due_training_is_texted_and_stop_opts_out() {
+    let sms = SmsFake::new();
+    let app = TestApp::builder()
+        .temp_database()
+        .config("notify.routes", false)
+        .config("notify.sms.default_region", "US")
+        .module(DatabaseModule::from_config())
+        .module(NotifyModule::from_config())
+        .override_value::<dyn SmsDriver>(sms.driver())
+        .override_value::<dyn TeamsDriver>(TeamsFake::new().driver())
+        .override_value::<dyn WebPushDriver>(WebPushFake::new().driver())
+        .build()
+        .await;
+    let notifier = app.get::<Notifier>().await;
+    let priya = employee();
+    let due = TrainingDue {
+        module: "Phishing basics".into(),
+        url: "https://learn.acme.test/m/42".into(),
+    };
+
+    notifier.send(&priya, due.clone()).await.unwrap();
+    let texts = sms.sent_to("+14155550100");
+    assert!(texts[0].body.starts_with("Phishing basics is due today"));
+
+    // The provider reports it delivered; Priya replies STOP.
+    sms.deliver(app.ctx(), "+14155550100").await.unwrap();
+    sms.reply(app.ctx(), "+14155550100", "STOP").await.unwrap();
+
+    notifier.send(&priya, due).await.unwrap();
+    assert_eq!(sms.sent().len(), 1, "no more texts after STOP");
+    let opt_outs = app.get::<OptOuts>().await;
+    assert!(
+        opt_outs
+            .is_opted_out(Channel::Sms, "+14155550100")
+            .await
+            .unwrap()
+    );
+}
+```
+
+| Fake | Records | Can also |
+|---|---|---|
+| `SlackFake`, `TeamsFake` | `sent()`: each route and message, with the id it gave | `refuse(reason)`, `accept()` |
+| `SmsFake`, `WhatsAppFake` | `sent()`, `sent_to(number)` | `refuse`, `opt_out_at_provider(number)`, `deliver`, `fail`, `reply`; `read` for WhatsApp |
+| `WebPushFake` | `sent()`, `sent_to(endpoint)` | `refuse`, `expire(endpoint)`: the endpoint answers as gone |
+
+Every fake has `assert_sent(|sent| ..)` and `assert_nothing_sent()`, and records deliveries as provider `fake`. `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)). To test a real driver against a local mock server, give its table an `endpoint`: the HTTP client's SSRF policy allows a configured endpoint's host.
+
+## Errors
+
+A driver that does not send fails its channel with `NotifyError::Channel { channel, source }`, and the delivery is recorded as failed; the other channels still deliver. `source` is a `ChannelError`:
+
+| `ChannelError` | When |
+|---|---|
+| `Refused { provider, status, code, message }` | The provider refused the message: its status, its error code (`21211`, `channel_not_found`, `131030`) and its message. |
+| `Unreachable { provider, source }` | The provider could not be reached, or the URL was refused by the SSRF policy. |
+| `OptedOut { provider }` | The recipient opted out at the provider. The notifier records the opt-out and treats it as handled, not as an error. |
+| `InvalidRecipient(reason)` | A push subscription's keys are malformed, or a Teams service URL is not an http(s) URL. |
+| `Gone` | The push subscription expired. The notifier deletes it and treats it as handled. |
+| `Config(reason)` | The driver lacks what this message needs: a bot route without a token, a message without a sender. |
+
+`NotifyError::InvalidRecipient` is a number that isn't valid E.164, and `NotifyError::Unavailable` a channel without a driver, such as SMS without `notify.sms.driver`. Messages never contain message bodies, tokens or webhook URLs.
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">
+    Notifiables, the database, mail and broadcast channels, queueing.
+  </LinkCard>
+  <LinkCard href="/docs/packages/webhooks/" title="Webhooks">
+    Verified incoming webhooks, and the sources behind the provider callbacks.
+  </LinkCard>
+  <LinkCard href="/docs/packages/integrations/" title="Integrations">
+    Connections whose tokens bot routes send with.
+  </LinkCard>
+</LinkCards>

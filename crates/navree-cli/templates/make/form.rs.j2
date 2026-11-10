@@ -1,0 +1,84 @@
+//! The {{ words }} form of the {{ module_words }} module: one struct is the form, its rules,
+//! its errors and its input.
+//!
+//! Edit the fields, then serve `page` on a `GET` route and `store` on a `POST`
+//! route (`navree make:page` writes a controller to call them from).
+
+use navree::http::Response;
+use navree::http::response::IntoResponse;
+use navree::ui::form::{FormView, Money, Rejected};
+use navree::ui::{AppPage, AppShell, Card, Form, Options, Reply, Submit, ToastTone, Validate};
+use serde::Deserialize;
+
+/// A choice of one value: a select, because the enum derives `Options`. A
+/// variant's label is its name in words, or `#[option(label = "...")]`.
+#[derive(Clone, Copy, Debug, Deserialize, Options)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Qualified,
+    Proposal,
+    #[option(label = "Won (100%)")]
+    Won,
+}
+
+/// What the form reads. Doc comments are the labels, field types pick the
+/// widgets, `#[validate]` rules run in the browser and again on the server, and
+/// `#[form(...)]` tunes how a field is drawn.
+#[derive(Debug, Deserialize, Validate, Form)]
+pub struct {{ type_name }} {
+    /// Name
+    #[validate(length(min = 1, max = 255))]
+    #[form(placeholder = "Sutlej Supply renewal", wide, error = "Give it a name.")]
+    pub name: String,
+    /// Value
+    #[validate(skip)]
+    #[form(placeholder = "1,25,000", help = "In rupees.")]
+    pub amount: Money,
+    /// Stage
+    #[validate(skip)]
+    pub stage: Stage,
+    /// Expected close
+    #[validate(skip)]
+    pub closes_on: Option<chrono::NaiveDate>,
+    // More fields to copy:
+    //
+    // /// Email
+    // #[validate(email)]
+    // #[form(widget = email, placeholder = "gurpreet@example.com")]
+    // pub email: String,
+    // /// Seats
+    // #[validate(range(min = 1, max = 500))]
+    // pub seats: u32,
+    // /// Hot deal
+    // #[validate(skip)]
+    // pub hot: bool,
+}
+
+/// The page around the form, empty or sent back with errors.
+fn page_with(shell: &AppShell, form: FormView<{{ type_name }}>) -> AppPage {
+    let form = form.post("/{{ route }}").submit("Save").cancel("Cancel", "/");
+    shell
+        .page("{{ title }}")
+        .crumb("Home", "/")
+        .body(Card::new().body(form))
+}
+
+/// `GET /{{ route }}`: the empty form.
+pub fn page(shell: &AppShell) -> AppPage {
+    page_with(shell, FormView::new())
+}
+
+/// `POST /{{ route }}`: the valid form, or the page again with each message
+/// under its field. Saving is yours to add; this only says it was saved.
+pub fn store(
+    shell: &AppShell,
+    submit: Result<Submit<{{ type_name }}>, Rejected<{{ type_name }}>>,
+) -> Response {
+    match submit {
+        Ok(Submit(input)) => Reply::redirect("/")
+            .toast(ToastTone::Success, format!("{} saved", input.name))
+            .into_response(),
+        Err(rejected) => rejected.respond(|form| page_with(shell, form)),
+    }
+}

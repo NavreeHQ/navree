@@ -1,0 +1,705 @@
+---
+title: "Inbound mail"
+description: "Receive mail from SES, Mailgun, Postmark, raw MIME, Microsoft 365 or Gmail: parse each message, route it to a handler by address, sign reply addresses and keep the raw .eml."
+---
+
+## Introduction
+
+<Badge feature="mail-inbound" /> Sending mail is half of the conversation. People answer a ticket notification, reply to an announcement, forward a suspicious message to a reporting address, or write to a support inbox. Inbound mail turns each of those messages into a typed value your code can act on:
+
+| Part | What it does |
+|---|---|
+| [Mailboxes](#mailboxes) | `m.mailbox("reply+{token}@in.acme.test", handler)` routes a message to a handler by the address it was sent to. |
+| [The message](#the-message) | `InboundMail`: headers, addresses, the text and HTML bodies, attachments and forwarded messages, decoded from any charset, with the raw bytes kept. |
+| [Reply tokens](#reply-tokens) | Signed reply addresses, so an answer finds its ticket and nobody can forge one for another. |
+| [Raw messages on a disk](#raw-messages-on-a-disk) | Every message kept as an `.eml` file on a [storage](/docs/digging-deeper/storage/) disk, once. |
+| [Sources](#sources) | Routes for Amazon SES (SNS and S3 actions), Mailgun routes, Postmark inbound streams and raw MIME from your own server. |
+| [Microsoft 365 and Gmail mailboxes](#microsoft-365-and-gmail-mailboxes) | A customer's own mailboxes, watched through their [integration](/docs/packages/integrations/) connection. |
+| [The event](#the-event) | `InboundMailReceived` for every message, for listeners that don't own a mailbox. |
+
+Every source hands its message to the same pipeline, so a mailbox handler doesn't know or care which provider delivered it.
+
+## Installation
+
+Turn on the `mail-inbound` feature of the `navree` facade. It is part of the default `full` feature, and turns on `mail` and `storage`. Messages are read by Navree's own MIME reader, in pure Rust, with limits for mail from strangers ([Size limits](#size-limits)).
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1", features = ["mail-inbound"] }
+```
+
+Inbound mail is part of `MailModule`, which the app already has to send mail. Add the modules the parts you use need:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CryptoModule::from_config())    // reply tokens are signed with a key derived from APP_KEY
+    .module(HttpModule::from_config())
+    .module(EventsModule::for_root())       // InboundMailReceived
+    .module(StorageModule::from_config())   // raw .eml files, SES's S3 action
+    .module(ViewModule::from_config())
+    .module(MailModule::from_config())      // section `mail`, `mail.inbound`
+    .module(TicketsModule)                  // registers a mailbox
+    .run()
+```
+
+Only `MailModule` (and the `ViewModule` it always needs) is required. Without `EventsModule` no event is emitted; without an application key reply tokens fail with `InboundError::MissingKey`; `mail.inbound.disk` and `mail.inbound.ses.disk` need `StorageModule`, and the boot fails without it.
+
+Inbound mail adds no table. Messages live where your handlers put them, and the raw bytes on a disk when you ask for that.
+
+## Mailboxes
+
+A mailbox is an address pattern and a handler. Register one from any module's `register`, without importing anything but the extension trait (the prelude brings it):
+
+```rust title="src/modules/support/mod.rs"
+use navree::mail::{InboundMail, MailboxContext};
+use navree::prelude::*;
+
+#[module(register = Self::wire)]
+pub struct SupportModule;
+
+impl SupportModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.mailbox("support@acme.test", |mail: InboundMail, ctx: MailboxContext| async move {
+            let inbox = ctx.get::<SupportInbox>().await?;
+            inbox.open_conversation(&mail).await?;
+            Ok(())
+        });
+    }
+}
+```
+
+A handler is any closure that takes the `InboundMail` and a `MailboxContext` and returns a future of `Result<(), BoxError>`. The context gives the app (`ctx.get::<T>()`, `ctx.app()`), so a closure can reach any provider.
+
+### Patterns
+
+| Pattern | Matches |
+|---|---|
+| `support@acme.test` | That address. Letters compare without case. |
+| `reply+{token}@in.acme.test` | `reply+` followed by one or more characters, captured as `token`, at `in.acme.test`. |
+| `{user}@{tenant}.in.acme.test` | Any address on a subdomain, with both parts captured. |
+| `*@in.acme.test` | Any address at `in.acme.test`. `*` matches any run of characters except `@`. |
+| `*` | Every address: a catch-all. |
+
+A `{name}` capture never crosses the `@`. Read captures with `ctx.param("token")`. An invalid pattern (no `@`, an unclosed `{`, a name used twice) fails the boot, naming the module and the pattern.
+
+Mailboxes are tried most specific first: exact addresses, then patterns with captures, then patterns with `*`, each group in registration order. For each mailbox, the message's recipients are tried in the order of `mail.recipients()`.
+
+When the source reports envelope recipients, those are the recipients, and only those: the envelope is what the mail server accepted the message for, it includes `Bcc` and forwarding addresses the headers never show, and the sender can't write it. SES, Mailgun, Postmark, the Microsoft 365 and Gmail watchers report one, and so does the raw route when it is given `X-Envelope-To`. A Postmark payload without `OriginalRecipient` has none: its `ToFull`, `CcFull` and `BccFull` are the message's own headers, so they are not read as one. A message accepted for `anyone@in.acme.test` with `To: approvals@in.acme.test` goes to `*@in.acme.test`, or to no mailbox at all, never to `approvals@in.acme.test`.
+
+Only when there is no envelope are the headers used, in this order:
+
+1. `Delivered-To` and `X-Original-To`;
+2. `To`, then `Cc`.
+
+Every one of those is what the sender wrote, so without an envelope anyone can reach any mailbox by writing its address. Give the raw route the envelope, and keep a mailbox that matters behind a [reply token](#reply-tokens) or a check of its own.
+
+The first mailbox that matches one of them takes the message. It is handled once, by one mailbox.
+
+### Handlers with dependencies
+
+A mailbox that needs services is an `#[injectable]` type that implements `MailboxHandler`. Register it with `mailbox_with`, which also registers it as a provider of the module:
+
+```rust title="src/modules/tickets/mailbox.rs"
+use navree::mail::inbound::Verdict;
+use navree::mail::{InboundMail, MailboxContext, MailboxHandler};
+use navree::prelude::*;
+use navree::BoxFuture;
+
+#[injectable]
+pub struct TicketReplies {
+    tickets: Arc<Tickets>,
+}
+
+impl MailboxHandler for TicketReplies {
+    fn handle(&self, mail: InboundMail, ctx: MailboxContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            if mail.is_auto_reply() {
+                return Ok(()); // an out-of-office answer adds nothing to the ticket
+            }
+            let ticket = ctx.verified_uuid("token")?;
+            let Some(text) = mail.reply_text().filter(|text| !text.is_empty()) else {
+                return Err(ctx.reject("the reply is empty"));
+            };
+            // The token says which ticket. The address is what the sender
+            // claims, until the provider's verdict vouches for it.
+            let from = mail
+                .from
+                .as_ref()
+                .filter(|_| mail.verdicts.dmarc == Some(Verdict::Pass))
+                .map(|from| from.email.as_str());
+            self.tickets.add_reply(ticket, from, &text, mail.message_id.as_deref()).await?;
+            Ok(())
+        })
+    }
+}
+
+#[module(providers = [Tickets], register = Self::wire)]
+pub struct TicketsModule;
+
+impl TicketsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.mailbox_with::<TicketReplies>("reply+{token}@in.acme.test");
+    }
+}
+```
+
+The handler is resolved from its module, with that module's visibility, in a request scope of its own for each message.
+
+### What becomes of a message
+
+| The handler returns | Status | The source answers | The provider |
+|---|---|---|---|
+| `Ok(())` | `handled` | 200 | is done. |
+| `Err(ctx.reject("reason"))`, or a bad reply token from `ctx.verified(..)?` | `rejected` | 200 | is done: sending again would fail again. |
+| Any other error | none | 500 | delivers the message again later. |
+| (no mailbox matched) | `unrouted` | 200 | is done. |
+
+Because a failure makes the provider retry, a handler may see the same message twice. Make handlers idempotent: `mail.message_id` and `mail.fingerprint` (the SHA-256 of the raw bytes) identify a message, and a unique index on either in your table turns a second delivery into a no-op.
+
+`MailboxContext` has:
+
+| Method | Returns |
+|---|---|
+| `pattern()` | The mailbox pattern that matched. |
+| `address()` | The recipient that matched it, in lower case. |
+| `param(name)` | A `{name}` capture. |
+| `verified(name)`, `verified_uuid(name)` | The value sealed in the [reply token](#reply-tokens) captured as `{name}`. A bad or expired token is an error that rejects the message when returned with `?`. |
+| `tokens()` | The app's `ReplyTokens`. |
+| `get::<T>()`, `app()` | Providers of the app. |
+| `reject(reason)` | An error that rejects the message for good. |
+
+## The message
+
+`InboundMail` is a parsed message. Encoded words in headers (`=?UTF-8?B?...?=`), RFC 2231 parameters (`filename*=utf-8''...`), quoted-printable and base64 bodies and legacy charsets (ISO-8859-1, Windows-1252, ISO-2022-JP, UTF-7 and the rest) are decoded to UTF-8.
+
+The text and HTML bodies are the parts a mail client would show: the text and HTML versions of a `multipart/alternative`, the inline text of a `multipart/mixed`, the first part of a `multipart/related` (the images it refers to are attachments). When a header field appears twice, the last one counts, except `From`: see [What to trust](#what-to-trust).
+
+| Field | Holds |
+|---|---|
+| `id` | This receipt's id (a UUID v7). |
+| `source` | Who delivered it: `ses`, `mailgun`, `postmark`, `raw`, `graph`, `gmail`, or `test`. |
+| `provider_id` | The provider's id for the message (SES's `messageId`, Postmark's `MessageID`, the Graph or Gmail message id). |
+| `envelope` | `sender` and `recipients` of the SMTP envelope, only where the provider reports them: see [What each source reports](#what-each-source-reports). |
+| `verdicts` | The provider's `spam`, `virus`, `spf`, `dkim` and `dmarc` verdicts. Amazon SES reports them; the other sources report none: see [Verdicts](#verdicts). |
+| `message_id`, `in_reply_to`, `references` | Message ids without angle brackets. |
+| `from`, `reply_to`, `to`, `cc` | `Address { name, email }` values; groups are flattened. `from` is what the sender claims, and `None` when the head can be read two ways: see [What to trust](#what-to-trust). |
+| `subject`, `date` | The decoded subject, on one line, and the date in UTC. |
+| `text`, `html` | The plain-text body (converted from the HTML when the message has no text part) and the HTML body. |
+| `headers` | Every header in order: `Header { name, value }`, unfolded but not decoded, control characters and all. |
+| `attachments` | Files, inline parts and forwarded messages. |
+| `size`, `fingerprint` | The raw size in bytes and its SHA-256 in hex. |
+| `stored` | Where the raw message is kept (`StoredMail { disk, path }`), once it is. |
+| `received_at` | When it arrived. |
+
+And these methods:
+
+```rust
+let tool = mail.header("X-Mailer");                     // the first one, any case
+let hops = mail.header_all("Received");                 // all of them, in order
+let recipients = mail.recipients();                     // the envelope, or without one the headers
+let raw: &bytes::Bytes = mail.raw();                    // the bytes as received
+
+if mail.is_auto_reply() {
+    // Auto-Submitted, X-Autoreply, X-Autorespond, X-Auto-Response-Suppress,
+    // Precedence: bulk/junk/list/auto_reply, or a delivery report.
+}
+let reply = mail.reply_text();                          // the text above the quoted message
+```
+
+`is_auto_reply()` matters whenever your app answers mail: replying to an out-of-office message that replies to yours is how mail loops start. `reply_text()` keeps the text above `On ... wrote:`, `-----Original Message-----`, a `From:` block or the first `>` quote, which is what a ticket wants from a reply.
+
+### Attachments and forwarded messages
+
+Each `Attachment` has a `filename`, a lower-case `content_type`, a `content_id` (without angle brackets, for inline images an HTML body references as `cid:...`), `inline`, and the decoded `content` as `Bytes`. A text attachment (`text/csv`, `text/calendar`) is decoded from its charset to UTF-8; a file sent without a transfer encoding shares the raw message's buffer, without a copy.
+
+A message forwarded as an attachment (`message/rfc822`, what "Forward as attachment" and most "Report phishing" buttons send) is an attachment too. `is_message()` tells it apart and `as_mail()` parses it, headers and all:
+
+```rust title="src/modules/security/reported.rs"
+use navree::mail::{InboundMail, MailboxContext};
+use navree::prelude::*;
+
+pub async fn reported_phish(mail: InboundMail, ctx: MailboxContext) -> Result<(), BoxError> {
+    let analyzer = ctx.get::<PhishAnalyzer>().await?;
+    let reporter = mail.from.as_ref().map(|from| from.email.clone()).unwrap_or_default();
+    let mut found = false;
+    for attachment in mail.attachments.iter().filter(|a| a.is_message()) {
+        let original = attachment.as_mail()?;
+        analyzer.analyze(&reporter, &original).await?;
+        found = true;
+    }
+    if !found {
+        return Err(ctx.reject("forward the suspicious message as an attachment"));
+    }
+    Ok(())
+}
+```
+
+Register it like any closure: `m.mailbox("phish@in.acme.test", reported_phish)`.
+
+### Verdicts
+
+Amazon SES reports all five verdicts of its receipt rule, in the `receipt` of its notification. Each is a `Verdict`: `Pass`, `Fail`, `Gray`, `ProcessingFailed` or `Disabled`. For `spam` and `virus`, `Fail` means the provider flagged the message; `verdicts.is_flagged()` is true when either did.
+
+Mailgun and Postmark report no verdict, and every field of `verdicts` is `None` for their messages and for raw MIME. Both keep their spam and authentication results in the message's headers (Mailgun's `X-Mailgun-Sflag`, `X-Mailgun-Spf` and `X-Mailgun-Dkim-Check-Result` in `message-headers`, Postmark's `X-Spam-Status` and `X-Spam-Score` in `Headers`), where the sender can write a header of the same name, and their documentation does not say how to tell their header from the sender's. A verdict is only read from a field the sender can't write, so a sender can't give its own message a `Pass`. `mail.header("X-Spam-Status")` still returns whatever the message holds, as the sender wrote it or the provider added it, and you can't tell which.
+
+### What to trust
+
+A message is written by its sender, so treat everything in it as a stranger's input.
+
+**`from` is a claim.** The sender writes it. What vouches for it is the provider's verdict, so read `verdicts` before an address decides anything: `mail.verdicts.dmarc == Some(Verdict::Pass)` says the provider checked the domain of the `From` it read. A source that reports no verdict (Mailgun, Postmark, raw MIME) leaves you with a [reply token](#reply-tokens), which only your app can make, or a check of your own on the raw message.
+
+**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees. A `From` is an address (`ceo@acme.test`) or an optional display name and an address in angle brackets (`Anu <ceo@acme.test>`), with comments between them, and nothing else. Two `From` fields, a group (`team: a@x.test;`), a list, a separator or bracket without its pair (`a@x.test:b@y.test`, `b@y.test>`), an unclosed quote or comment, a quoted string beside an address (`"x"ceo@acme.test`), a second pair of brackets or a route, a blank or comment inside the brackets, an address with an empty label (`ceo@acme.test.`), one spelled in an encoded word, a display name with an unquoted `@`, `[`, `]` or `\` in it (`ceo@acme.test <a@evil.test>`), a comment with a quote, separator, bracket, escape or line break in it, and a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR) all give `None`. The fields stay in `mail.headers`. A display name is never checked by anyone: `"ceo@acme.test" <a@evil.test>` is the address `a@evil.test` with that name.
+
+**Decoded values hold no control characters.** In `subject` and display names each one becomes a space; in addresses, attachment file names and content ids, and message ids, each one is removed. So `=?utf-8?Q?Hi=0D=0ABcc:_x?=` can't start a new line in a log. `mail.headers`, `mail.header(..)`, `text` and `html` keep what the message holds: a header's line breaks are unfolded, and anything else in it stays. Don't copy those into a header or a log line without cleaning them.
+
+**A file name is not a path.** `filename` can be `../../etc/passwd.pdf`. Don't join it to a directory: keep its last component, or store under a name of your own, as [`store_upload`](/docs/digging-deeper/storage/) does.
+
+## Reply tokens
+
+Notifications that people answer need a reply address that leads back to the right record. `ReplyTokens` seals a value (a ticket id, `announcement:42`) into a token that only your app can make:
+
+```rust title="src/modules/tickets/notifications.rs"
+use navree::mail::{Mailer, Message, ReplyTokens};
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct TicketMail {
+    mailer: Arc<Mailer>,
+    tokens: Arc<ReplyTokens>,
+}
+
+impl TicketMail {
+    pub async fn agent_replied(&self, ticket: Uuid, to: &str, text: &str) -> Result<(), BoxError> {
+        let reply_to = self.tokens.address_for("reply+{token}@in.acme.test", ticket)?;
+        let message = Message::new()
+            .to(to)
+            .reply_to(reply_to)
+            .subject("Re: your support request")
+            .text(text);
+        self.mailer.send_message(message).await?;
+        Ok(())
+    }
+}
+```
+
+The person's answer arrives at `reply+mfrgg2lt...@in.acme.test`, and the [mailbox above](#handlers-with-dependencies) reads the ticket back with `ctx.verified_uuid("token")`.
+
+- A token is the value, the day it was issued and an 80-bit HMAC-SHA-256 tag, in lower-case base32, so mail servers that change an address's case don't break it. The key is derived from the application key: rotating `APP_KEY` retires the old reply addresses.
+- A UUID takes 47 characters, which leaves room for a prefix within the 64 characters an address allows before the `@`. Text values take more; `address` and `address_for` fail with `InboundError::AddressTooLong` past 64.
+- `sign(value)` / `verify(token)` work with text, `sign_uuid(id)` / `verify_uuid(token)` with UUIDs. A forged or damaged token is `InboundError::InvalidToken`.
+- `tokens.scoped("announcements")` gives tokens under a key of their own: a token signed for tickets doesn't verify as an announcement's, even for the same value.
+- Tokens don't expire unless `mail.inbound.reply_token_ttl_days` is set; an older token is `InboundError::ExpiredToken`.
+
+## Raw messages on a disk
+
+Set `mail.inbound.disk` to keep every message's raw bytes as an `.eml` file, for audits, for an analyzer that runs later, or to show a message exactly as it arrived:
+
+```toml title="config/app.toml"
+[mail.inbound]
+disk = "mail"       # a disk from storage.disks
+path = "inbound"    # inbound/2026/10/27/<sha-256>.eml
+```
+
+The file is written before the mailbox runs, so a message whose handler fails is still kept. Its name is the message's SHA-256, so a message the provider delivers twice is stored once. The location is `mail.stored` in the handler, `received.stored` in the answer and `stored` in the [event](#the-event); `Inbound::read(&stored)` reads it back as an `InboundMail`. Use any driver: a local folder in development, an [S3 disk](/docs/digging-deeper/storage/) in production.
+
+## Size limits
+
+`mail.inbound.max_size` (default 25 MiB) is the largest raw message accepted. A larger one is refused before it is parsed: `InboundError::TooLarge`, a 413 with code `mail_too_large`. The source routes accept request bodies up to twice the limit, since providers that post JSON or forms encode the message in base64.
+
+A message is also refused while it is read, as `InboundError::Unparseable` (a 400), when it has more than `mail.inbound.max_parts` parts (default 1,000, the message and every multipart counting), nests multiparts more than `mail.inbound.max_depth` deep (default 32), has more than `mail.inbound.max_headers` header fields (default 1,000), or lists more than `mail.inbound.max_addresses` addresses in one address field (`From`, `To`, `Cc`, `Reply-To`) or ids in `References` (default 1,000). A few bytes of MIME can declare a part, a header field or an address that would cost far more to hold, so these limits bound the memory a message takes, not just its size. Everything else the reader does is linear in the message: it reads each level of nesting once, and every buffer it fills is sized by bytes it has read.
+
+```toml title="config/app.toml"
+[mail.inbound]
+max_size = 26214400   # bytes
+max_parts = 1000
+max_depth = 32
+max_headers = 1000
+max_addresses = 1000
+```
+
+`Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, with these limits, so a large or deeply nested message doesn't hold one of the app's async threads while it is read. A parser that panics on a message is `InboundError::Unparseable` (a 400), not a failed request. `InboundMail::parse`, `Incoming::parse` and `Attachment::as_mail` are plain functions that parse on the thread that calls them, with the default limits; in async code, call them from `tokio::task::spawn_blocking` when the bytes come from outside.
+
+## Sources
+
+Each source is a public route under `/api/mail/inbound`, checked with its own secret and mounted only when that secret is set. Put the secrets in `.env`: `APP_MAIL__INBOUND__POSTMARK__TOKEN=...`.
+
+```toml title="config/app.toml"
+[mail.inbound]
+max_size = 26214400
+
+[mail.inbound.ses]
+token = "..."            # SNS subscribes https://api.acme.test/api/mail/inbound/ses?token=...
+topic_arns = ["arn:aws:sns:eu-west-1:123456789012:inbound-mail"]   # required with token
+disk = "ses-mail"        # the S3 disk the receipt rule writes to
+
+[mail.inbound.mailgun]
+signing_key = "..."      # default: mail.webhooks.mailgun.signing_key
+
+[mail.inbound.postmark]
+token = "..."            # https://postmark:TOKEN@api.acme.test/api/mail/inbound/postmark
+
+[mail.inbound.raw]
+token = "..."            # Authorization: Bearer TOKEN
+```
+
+| Route | Source | Checked with |
+|---|---|---|
+| `POST /api/mail/inbound/ses?token=..` | An SNS topic that SES receipt rules notify | The SNS message signature, the topic (one of `topic_arns`), the message's age, and the token. |
+| `POST /api/mail/inbound/mailgun`, `/api/mail/inbound/mailgun/mime` | A Mailgun route's `forward()` | The HMAC-SHA256 of `timestamp` and `token`, at most 15 minutes old. |
+| `POST /api/mail/inbound/postmark` | A Postmark inbound stream | The token as the basic-auth password, or a `token` query parameter. |
+| `POST /api/mail/inbound/raw` | Raw MIME from your own server or script | `Authorization: Bearer <token>`, or a `token` query parameter. |
+
+Each answers 200 with what became of the message:
+
+```json
+{"id": "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23", "status": "handled", "mailbox": "reply+{token}@in.acme.test", "address": "reply+mfrgg2lt...@in.acme.test", "reason": null, "stored": {"disk": "mail", "path": "inbound/2026/10/27/9f86d0...eml"}}
+```
+
+A secret that doesn't match is a 401 with code `invalid_signature`, a payload the provider doesn't send a 400 `invalid_inbound_mail`, a message over the limit a 413 `mail_too_large`, and a failing mailbox a 500.
+
+A provider posts every message from a handful of addresses, so its requests count against the [per-IP rate limit](/docs/basics/rate-limiting/#the-per-ip-limit) (`http.per_ip_rate_limit`, 600 requests a minute by default). Over it, the route answers 429 and the provider delivers the message again later; raise the limit if your volume needs more.
+
+### What each source reports
+
+What is the provider's own report, and what is the message's, which the sender wrote:
+
+| Source | Envelope sender | Envelope recipients | Verdicts | The request is checked with |
+|---|---|---|---|---|
+| Amazon SES | the notification's `mail.source` | the receipt rule's `recipients` | all five, from `receipt` | the SNS signature, the topic, the age and the URL token |
+| Mailgun | `sender` (`MAIL FROM`) | `recipient` | none | the HMAC of `timestamp` and `token` |
+| Postmark | none | `OriginalRecipient` | none | the token |
+| Raw MIME | `X-Envelope-From` | `X-Envelope-To` | none | the token |
+| Microsoft 365, Gmail | none | the watched mailbox | none | the `clientState` or the token |
+
+The Mailgun form's fields are found by their exact lower-case names (`recipient`, `sender`, `from`, `subject`, `body-plain`, `body-html`, `body-mime`, `message-headers`, `content-id-map` and the three signature fields): a field in another case is a header the sender wrote, which Mailgun may post under its own name, and is never the envelope. A form that writes one of those names twice is refused (a 400, or a 401 when it is a signature field). The provider's id for a Mailgun message is the message's own `Message-Id`.
+
+None of this has run against a live Mailgun or Postmark account: it follows the providers' documentation and their sample payloads. Before relying on it, send a real message through each route you use and check `envelope`, `verdicts` and `provider_id` in the handler.
+
+### Amazon SES
+
+Verify your receiving domain in SES and point its MX record at SES, then create a receipt rule for the addresses you receive (`in.acme.test`, or single addresses). Give the rule one of two actions:
+
+- **An SNS action** publishes the whole message in the notification. It is the simplest, for messages up to 150 KB.
+- **An S3 action with an SNS topic** stores the message in a bucket and notifies the topic with its key. It works for any size. Configure an [S3 disk](/docs/digging-deeper/storage/) on that bucket and name it in `mail.inbound.ses.disk`: the message is read from the disk, and since the bucket already keeps it, `stored` points at the object instead of a second copy.
+
+Subscribe `https://api.acme.test/api/mail/inbound/ses?token=...` to the topic over HTTPS, with raw message delivery off. The route confirms the subscription by fetching its `SubscribeURL` (only `https://sns.<region>.amazonaws.com`; with `confirm_subscriptions = false` it logs the URL for you to open). The envelope recipients are the receipt rule's recipients, and the five verdicts come from the rule.
+
+The route receives a message only when Amazon SNS signed it. It checks, before the mail is read:
+
+1. the topic: `TopicArn` must be one of `topic_arns`. The list is required, because SNS signs every topic's messages with the same keys;
+2. the signing certificate's URL: HTTPS on `sns.<region>.amazonaws.com` (or `.amazonaws.com.cn`), a `.pem` file, no query;
+3. the age: `Timestamp` within `tolerance_secs` of now (3600 by default, the longest SNS retries a delivery);
+4. the signature, version 1 (SHA-1) or 2 (SHA-256), with the key of that certificate, which the route fetches once and keeps for a day;
+5. the `token` in the subscription URL, on top of the signature.
+
+A message that fails a check is a 401 `invalid_signature` and no mailbox sees it. When the certificate can't be fetched, the route answers 503 and SNS delivers the message again. These are the checks of the `AwsSns` [incoming webhook](/docs/packages/webhooks/#senders-that-sign-with-their-own-keys) source.
+
+To receive the topic on a route of your own instead, take it as a [verified webhook](/docs/packages/webhooks/#verifying-incoming-webhooks) and hand the notification to `Inbound::receive_ses`:
+
+```rust title="src/modules/mail/ses_inbound.rs"
+use navree::mail::Inbound;
+use navree::prelude::*;
+use navree::webhooks::{AwsSns, SnsMessage, VerifiedWebhook};
+
+#[injectable]
+pub struct SesInboundController {
+    inbound: Arc<Inbound>,
+}
+
+#[controller("/mail/ses-inbound")]
+impl SesInboundController {
+    /// `POST /api/mail/ses-inbound`: received mail from SES, through a verified SNS topic.
+    #[post("/")]
+    #[public]
+    async fn receive(&self, uow: Uow, hook: VerifiedWebhook<AwsSns>) -> Result<NoContent> {
+        if !hook.mark_processed(&uow).await? {
+            return Ok(NoContent);
+        }
+        let message: SnsMessage = hook.json()?;
+        let notification: serde_json::Value = message
+            .message_json()
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        self.inbound.receive_ses(&notification).await?;
+        Ok(NoContent)
+    }
+}
+```
+
+### Mailgun
+
+Create a route whose action forwards to `https://api.acme.test/api/mail/inbound/mailgun/mime`:
+
+```text
+match_recipient(".*@in.acme.test")
+forward("https://api.acme.test/api/mail/inbound/mailgun/mime")
+```
+
+A URL ending in `mime` makes Mailgun post the whole message as `body-mime`, which reaches your mailbox byte for byte. `/api/mail/inbound/mailgun` accepts Mailgun's parsed fields as well: the message is rebuilt from `message-headers`, the bodies and the attachment files (inline ones by `content-id-map`). The envelope recipient is the form's `recipient` and the envelope sender its `sender`; no verdict is read ([Verdicts](#verdicts)).
+
+### Postmark
+
+Set the inbound stream's webhook URL to `https://postmark:TOKEN@api.acme.test/api/mail/inbound/postmark` and turn on **Include raw email content in JSON payload**: the message then arrives as it was sent. Without it, the message is rebuilt from Postmark's fields (`FromFull`, `ToFull`, `CcFull`, the headers, `TextBody`, `HtmlBody` and the attachments), which keeps everything but the original MIME structure. The envelope recipient is `OriginalRecipient`; Postmark reports no envelope sender and no verdict ([Verdicts](#verdicts)), and `FromFull` and `ToFull` are the message's own headers.
+
+### Raw MIME
+
+Any mail server can hand a message to the raw route. With Postfix, a pipe transport for your inbound domain posts each message:
+
+```sh title="/usr/local/bin/navree-inbound"
+#!/bin/sh
+# master.cf: navree unix - n n - - pipe flags=Rq user=nobody argv=/usr/local/bin/navree-inbound ${sender} ${recipient}
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $NAVREE_INBOUND_TOKEN" \
+  -H "Content-Type: message/rfc822" \
+  -H "X-Envelope-From: $1" \
+  -H "X-Envelope-To: $2" \
+  --data-binary @- \
+  https://api.acme.test/api/mail/inbound/raw || exit 75
+```
+
+`X-Envelope-From` and `X-Envelope-To` (comma-separated) give the envelope; without them, mailboxes match the message's own headers, which the sender wrote, so set them. When the route doesn't answer 2xx, `curl --fail` fails and the script exits with 75 (`EX_TEMPFAIL`), so Postfix keeps the message and tries again.
+
+### IMAP and POP3 mailboxes
+
+Mail that waits in a mailbox, with no provider's webhook in front of it, is read with `Inbound::poll`. It connects, logs in, hands every waiting message to the same pipeline (`source` is `imap` or `pop3`) and then flags it read or deletes it.
+
+```rust
+use navree::mail::{Inbound, MailboxPoller, PollAfter};
+
+let poller = MailboxPoller::imap("imap.acme.test")
+    .login("support@acme.test", password)
+    .folder("INBOX")
+    .after(PollAfter::MarkSeen);
+
+let report = inbound.poll(&poller).await?;
+println!("{} received, {} refused, {} failed", report.received.len(), report.refused.len(), report.failed.len());
+```
+
+- **Security.** TLS from the first byte is the default (ports 993 and 995). `.security(PollSecurity::StartTls)` upgrades a plain connection before the login (143 and 110) and refuses to log in if the server does not offer it. `PollSecurity::None` is for a server on the same machine and for tests. A server with a private certificate is trusted with `.root_certificate(pem)`; its name is still checked.
+- **What happens to a message.** IMAP reads the messages that are unseen and not deleted. `PollAfter::MarkSeen` flags them `\Seen`; `PollAfter::Delete` flags them `\Deleted` and expunges the folder. POP3 has no flags, so it deletes.
+- **When a message fails.** If a mailbox handler fails, the message stays where it is, is listed in `report.failed`, and the next poll tries it again. A message that can never be received (over `mail.inbound.max_size`, or not a message) is in `report.refused` and is never deleted: IMAP flags it `\Seen`, POP3 leaves it.
+- **How often.** Call it from a scheduled job. `.max_messages(n)` (default 100) bounds one poll; `report.left` counts what waits. Run one poll of a mailbox at a time.
+- **Which address.** The messages count as delivered to the login when it is an address, or to `.recipient(address)`; mailboxes match that address as they match a provider's envelope recipient.
+
+A failed connection, a refused login or a broken protocol is `InboundError::Mailbox { host, reason }`; the reason never holds the password.
+
+### Your own sources
+
+`Inbound::receive` is the pipeline every route above calls. Hand it an `Incoming` from anywhere: a queue consumer, an IMAP poller, a test.
+
+```rust
+use navree::mail::{Inbound, Incoming};
+
+let received = inbound
+    .receive(
+        Incoming::new("imap", raw_bytes)
+            .provider_id(uid.to_string())
+            .recipient("support@acme.test"),
+    )
+    .await?;
+```
+
+`Incoming` holds the raw message, the source's name, the provider id, the `envelope`, the `verdicts` and, when the raw message is already kept somewhere, `stored`. `Incoming::from_postmark(&json)` reads a Postmark payload; `Inbound::receive_ses(&notification)` reads an SES notification.
+
+## Microsoft 365 and Gmail mailboxes
+
+<Badge feature="integrations" /> Some mail never passes through your own domain: the messages in a customer's own mailboxes, such as a shared `security@` mailbox in their Microsoft 365 tenant or a support address in their Google Workspace. With the `integrations` feature on as well, `MailboxWatches` watches those mailboxes through the customer's [integration connection](/docs/packages/integrations/) and hands each new message to the same pipeline (`source` is `graph` or `gmail`).
+
+The connection needs read access to mail: Graph's `Mail.Read` application permission for a Microsoft 365 tenant, or the `https://www.googleapis.com/auth/gmail.readonly` scope for Google Workspace (a service account with domain-wide delegation reads every mailbox of its domain). Give mail reading [a scope set of its own](/docs/packages/integrations/#scope-sets), so a tenant can grant it apart from everything else.
+
+```toml title="config/app.toml"
+[integrations.mailboxes]
+graph_notification_url = "https://api.acme.test/api/mail/inbound/graph"
+gmail_topic = "projects/acme-prod/topics/gmail-inbound"
+gmail_token = "..."           # the Pub/Sub push endpoint: .../api/mail/inbound/gmail?token=...
+renew_before_hours = 24
+```
+
+Start watching from a settings route, once the customer has connected:
+
+```rust title="src/modules/security/mailboxes.rs"
+use navree::integrations::{MailboxWatch, MailboxWatches};
+use navree::prelude::*;
+use uuid::Uuid;
+
+#[injectable]
+pub struct ReportedMailboxes {
+    watches: Arc<MailboxWatches>,
+}
+
+impl ReportedMailboxes {
+    pub async fn watch(&self, connection: Uuid, mailbox: &str) -> Result<MailboxWatch, BoxError> {
+        Ok(self.watches.watch(connection, mailbox).await?)
+    }
+}
+```
+
+- **Microsoft 365.** `watch` creates a Graph subscription on the mailbox's inbox for new messages, with your `graph_notification_url` and a `clientState` derived from the application key. Graph checks the URL first: `POST /api/mail/inbound/graph?validationToken=...` echoes the token. Each notification then names a message, which is read as MIME from `/users/{mailbox}/messages/{id}/$value`. A notification whose `clientState` doesn't match is ignored. Lifecycle notifications are handled too: `reauthorizationRequired` renews the subscription, `missed` catches up, `subscriptionRemoved` marks the watch failing.
+- **Gmail.** Create the Pub/Sub topic, grant `gmail-api-push@system.gserviceaccount.com` permission to publish to it, and add a push subscription to `https://api.acme.test/api/mail/inbound/gmail?token=...`. `watch` calls `users.watch` on the mailbox's `INBOX` and keeps the history id it returns. Each push reads the mailbox's history since that cursor, fetches every added message in `format=raw`, and moves the cursor. When Gmail no longer knows the cursor, the watch restarts from the push's history id.
+
+Watches are rows of `integration_mailbox_watches` (the model `MailboxWatch`): the connection, the provider, the `mailbox`, the Graph `subscription_id` or the Gmail `cursor`, the `status` (`active` or `failing`) with `last_error`, `expires_at` and `last_received_at`. The migration is part of the `integrations` set.
+
+| Method | What it does |
+|---|---|
+| `watch(connection, mailbox)` | Starts watching, or renews the watch the mailbox already has. |
+| `renew(id)`, `renew_due()` | Extends the subscription or the Gmail watch; `renew_due` renews those expiring within `renew_before_hours`, and failing ones. |
+| `sync(id)` | Reads what arrived since the cursor (Gmail) or the last message (Microsoft 365, a day at most), after an outage. |
+| `unwatch(id)` | Deletes the subscription or stops the Gmail watch, then the row. |
+| `all()`, `of_connection(id)`, `find(id)` | Read the watches. |
+| `graph_notifications(&json)`, `gmail_push(&json)` | What the routes run, for your own verified routes. |
+
+Graph subscriptions on mail last a few days and Gmail watches a week, so they must be renewed. `integrations:mailboxes --renew` runs every hour on the [scheduler](/docs/digging-deeper/scheduling/). `integrations:mailboxes` lists the watches, and `integrations:mailboxes --sync <id>` catches one up.
+
+The Gmail route trusts the token in its URL. To check Pub/Sub's OIDC token as well, receive the push with a [`GooglePubSub` verified webhook](/docs/packages/webhooks/) and call `gmail_push` yourself.
+
+## The event
+
+Once a message is handled, rejected or found no mailbox, `InboundMailReceived` (`mail.inbound.received`) is emitted with `EventsModule` in the app. It describes the message without carrying it: `id`, `source`, `provider_id`, `message_id`, `from`, `recipients`, `subject`, `size`, `attachments` (a count), `fingerprint`, `status`, `mailbox`, `address`, `stored` and `received_at`. A queued listener reads the message back from the disk:
+
+```rust title="src/modules/archive/listeners.rs"
+use navree::events::Listener;
+use navree::mail::Inbound;
+use navree::mail::events::InboundMailReceived;
+use navree::prelude::*;
+use navree::BoxFuture;
+
+#[injectable]
+pub struct IndexInboundMail {
+    inbound: Arc<Inbound>,
+    archive: Arc<MailArchive>,
+}
+
+impl Listener<InboundMailReceived> for IndexInboundMail {
+    fn handle<'a>(&'a self, event: &'a InboundMailReceived, _ctx: &'a AppContext) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let Some(stored) = &event.stored else {
+                return Ok(()); // mail.inbound.disk is not set
+            };
+            let mail = self.inbound.read(stored).await?;
+            self.archive.index(event.id, &mail).await?;
+            Ok(())
+        })
+    }
+
+    fn queued(&self) -> bool {
+        true
+    }
+}
+```
+
+Register it with `m.listen::<InboundMailReceived, IndexInboundMail>()`. A message whose handler fails is not announced; it is announced when the provider's retry succeeds.
+
+## Testing
+
+`Incoming::compose()` builds a message field by field, and `MailFake::receive` plays the provider: it runs the message through the app's pipeline, as a source route would.
+
+```rust title="tests/tickets.rs"
+use navree::mail::inbound::InboundStatus;
+use navree::mail::{Incoming, MailFake, ReplyTokens};
+use navree::testing::TestApp;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn a_reply_lands_on_its_ticket() {
+    let fake = MailFake::new();
+    let app = TestApp::builder()
+        .config("app.key", navree::crypto::generate_key())
+        .module(CryptoModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(TicketsModule)
+        .build()
+        .await;
+    let ticket = Uuid::now_v7();
+    let reply_to = app
+        .get::<ReplyTokens>()
+        .await
+        .address_for("reply+{token}@in.acme.test", ticket)
+        .unwrap();
+
+    let received = fake
+        .receive(
+            app.ctx(),
+            Incoming::compose()
+                .from("Anu Lakhotia <anu@example.com>")
+                .to(reply_to)
+                .subject("Re: your support request")
+                .text("Thanks, that fixed it.\n\nOn Monday, Agra Support wrote:\n> Try turning it off and on.")
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(received.status, InboundStatus::Handled);
+    let replies = app.get::<Tickets>().await.replies(ticket).await;
+    assert_eq!(replies, vec!["Thanks, that fixed it."]);
+}
+```
+
+- `Incoming::compose()` has `from`, `to`, `cc`, `reply_to`, `envelope_to` (the envelope, which then replaces `to` and `cc` for routing), `subject`, `text`, `html`, `message_id`, `in_reply_to`, `reference`, `date`, `header`, `attach`, `inline`, `forward` (a whole message as an attachment), `provider_id`, `verdicts` and `source`; `build()` gives the `Incoming` and `to_bytes()` the MIME. Non-ASCII names and subjects are encoded as the real thing would be.
+- Real messages work as well: save a provider's `.eml` under `tests/fixtures/` and receive `Incoming::new("raw", std::fs::read(path)?)`.
+- `fake.received()` lists what became of every message the fake delivered; `Inbound::mailbox_for(&mail)` tells which mailbox would take a message without running it.
+- The source routes take the same payloads in tests as in production: post a fixture with the test client and the configured secret.
+- For watched mailboxes, `Integrations::fake()` stubs Graph and Gmail: `fake.api().on(Method::GET, "https://graph.microsoft.com/v1.0/users/*/messages/*/$value", FakeResponse::new(200).body(mime))`.
+
+## Errors
+
+`InboundError` names what went wrong without quoting message bodies or secrets:
+
+| Variant | When | In a route |
+|---|---|---|
+| `TooLarge` | The message is over `mail.inbound.max_size`. | 413 `mail_too_large` |
+| `Unparseable` | The bytes hold no message headers, or the message is over `max_parts`, `max_depth`, `max_headers` or `max_addresses`. | 400 `invalid_inbound_mail` |
+| `Malformed` | A provider's payload isn't what that provider sends. | 400 `invalid_inbound_mail` |
+| `InvalidToken`, `ExpiredToken` | A reply token is forged, damaged or too old. | 400 `invalid_reply_token` |
+| `AddressTooLong` | A reply address would pass 64 characters before the `@`. | 500 |
+| `MissingKey` | Reply tokens need an application key. | 500 |
+| `Rejected` | A mailbox rejected the message (`ctx.reject`). | (not an error for the source) |
+| `InvalidPattern` | A mailbox pattern doesn't parse. | boot error |
+| `Config` | A disk isn't configured, or an S3 action arrives without `mail.inbound.ses.disk`. | 500 |
+| `Storage` | Writing or reading the raw message failed. | 500 |
+| `Handler` | A mailbox's handler failed; the provider retries. | 500 |
+
+Watched mailboxes add `IntegrationsError::MailboxWatchNotFound` (404 `mailbox_watch_not_found`), and wrap pipeline errors in `IntegrationsError::Inbound`.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mail.inbound.max_size` | `26214400` | The largest message accepted, in bytes. |
+| `mail.inbound.max_parts` | `1000` | The most parts a message may have, multiparts and the message included. |
+| `mail.inbound.max_depth` | `32` | The most multiparts a message may nest in one another. |
+| `mail.inbound.max_headers` | `1000` | The most fields a message's header may have. |
+| `mail.inbound.max_addresses` | `1000` | The most addresses one address field may list, and the most ids `References` may. |
+| `mail.inbound.disk` | none | The disk that keeps raw messages. |
+| `mail.inbound.path` | `inbound` | The folder on that disk. |
+| `mail.inbound.reply_token_ttl_days` | `0` | Reply tokens older than this are refused; 0 never expires them. |
+| `mail.inbound.ses.token` | none | The SES route's secret, checked on top of the SNS signature; the route is mounted when set. |
+| `mail.inbound.ses.topic_arns` | `[]` | The SNS topics accepted. Required with `token`. |
+| `mail.inbound.ses.disk` | none | The S3 disk of the receipt rule's bucket. |
+| `mail.inbound.ses.tolerance_secs` | `3600` | How far a message's `Timestamp` may be from now, in seconds. |
+| `mail.inbound.ses.confirm_subscriptions` | `true` | Fetch SNS `SubscribeURL`s. |
+| `mail.inbound.mailgun.signing_key` | `mail.webhooks.mailgun.signing_key` | Mailgun's HTTP webhook signing key. |
+| `mail.inbound.postmark.token` | none | The Postmark route's basic-auth password. |
+| `mail.inbound.raw.token` | none | The raw route's bearer token. |
+| `integrations.mailboxes.graph_notification_url` | none | Where Graph sends notifications; mounts `/api/mail/inbound/graph`. |
+| `integrations.mailboxes.gmail_topic` | none | The Pub/Sub topic of Gmail watches. |
+| `integrations.mailboxes.gmail_token` | none | The Gmail push route's secret; mounts `/api/mail/inbound/gmail`. |
+| `integrations.mailboxes.renew_before_hours` | `24` | Renew watches expiring sooner than this. |
+
+| Command | What it does |
+|---|---|
+| `integrations:mailboxes [--renew] [--sync <id>]` | Lists watched mailboxes, renews the due ones (hourly on the scheduler), or catches one up. |
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
+    Mailables, templates, transports and queued mail.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/mail-delivery/" title="Mail delivery">
+    Email APIs, tenant transports, the delivery log and provider events.
+  </LinkCard>
+  <LinkCard href="/docs/packages/integrations/" title="Integrations">
+    The connections that watched mailboxes read through.
+  </LinkCard>
+</LinkCards>

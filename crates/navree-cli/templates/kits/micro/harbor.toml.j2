@@ -1,0 +1,27 @@
+# Servers and deploys with Harbor (https://navree.com/docs/tools/harbor/).
+#
+#   navree harbor:secrets set APP_KEY --generate
+#   navree harbor:secrets set APP_AUTH__JWT__SECRET   # the same in every service
+#   navree harbor:provision        # prepares the servers below
+#   navree deploy                  # builds, uploads, migrates, health-checks, switches
+#
+# Replace the domain and the server's address with yours. The service
+# listens to the broker; over HTTP it serves only health checks and metrics.
+app = "{{ package }}"
+domain = "{{ package }}.internal.example.com"
+
+[deploy]
+health_check = "/health/ready"
+
+[processes]
+# The HTTP server (health and metrics) and the message listener, together.
+web = { command = "serve" }
+
+[servers.svc-1]
+host = "203.0.113.20"
+roles = ["web", "postgres"]
+
+[env]
+APP_LOG__LEVEL = "info"
+# Your NATS server.
+APP_MICRO__URL = "nats://10.0.0.5:4222"

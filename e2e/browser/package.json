@@ -1,0 +1,9 @@
+{
+  "name": "navree-system-browser",
+  "private": true,
+  "type": "module",
+  "description": "Screenshots of the system app's UI tools at desktop and phone widths (run in the Playwright image by e2e/run.sh).",
+  "dependencies": {
+    "playwright": "1.56.0"
+  }
+}

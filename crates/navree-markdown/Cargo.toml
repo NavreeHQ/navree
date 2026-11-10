@@ -1,0 +1,22 @@
+[package]
+name = "navree-markdown"
+description = "Navree's Markdown reader: CommonMark read into events with no raw HTML, no script link and no unbounded document."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "markdown", "commonmark", "sanitize"]
+categories = ["parser-implementations", "text-processing"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+pulldown-cmark = { workspace = true }

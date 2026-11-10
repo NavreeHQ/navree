@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Deal::query().join(\"companies\", Deal::COMPANY_ID, \"=\",\nCompany::ID).left_join(\"users as owner\", \"owner.id\", \"=\",\n\"deals.owner_id\").right_join_on(\"regions\", |j|\nj.on(\"regions.id\", \"=\",\n\"companies.region_id\").or_on(\"regions.code\", \"=\",\n\"companies.code\")).cross_join(\"currencies\").where_(Company::COUNTRY.eq(\"US\")))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" INNER JOIN "companies" ON "deals"."company_id" = "companies"."id" LEFT JOIN "users" AS "owner" ON "owner"."id" = "deals"."owner_id" RIGHT JOIN "regions" ON "regions"."id" = "companies"."region_id" OR "regions"."code" = "companies"."code" CROSS JOIN "currencies" WHERE "companies"."country" = $1 AND "deals"."deleted_at" IS NULL
+  values: [String("US")]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` INNER JOIN `companies` ON `deals`.`company_id` = `companies`.`id` LEFT JOIN `users` AS `owner` ON `owner`.`id` = `deals`.`owner_id` RIGHT JOIN `regions` ON `regions`.`id` = `companies`.`region_id` OR `regions`.`code` = `companies`.`code` CROSS JOIN `currencies` WHERE `companies`.`country` = ? AND `deals`.`deleted_at` IS NULL
+  values: [String("US")]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" INNER JOIN "companies" ON "deals"."company_id" = "companies"."id" LEFT JOIN "users" AS "owner" ON "owner"."id" = "deals"."owner_id" RIGHT JOIN "regions" ON "regions"."id" = "companies"."region_id" OR "regions"."code" = "companies"."code" CROSS JOIN "currencies" WHERE "companies"."country" = ? AND "deals"."deleted_at" IS NULL
+  values: [String("US")]

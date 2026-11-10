@@ -1,0 +1,78 @@
+/*
+ * The frame around a preview on navree.com: the padding, the centring and the
+ * gallery's cells. Everything a component looks like comes from navree-ui.css,
+ * loaded before this file; this file only places it.
+ */
+html{height:100%}
+body[data-preview]{box-sizing:border-box;min-height:100%;margin:0;padding:24px;display:flex;flex-direction:column;justify-content:center}
+body[data-preview=fill]{padding:0;display:block}
+/* From the top: a frame taller than what it shows keeps its room below, where a list opens. */
+body[data-preview=start]{justify-content:flex-start}
+[data-preview-stage]{width:100%;min-width:0}
+body[data-preview=center] [data-preview-stage]{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px}
+
+/* A dialog, sheet or popover drawn in place, as it looks when open. Opening it
+   for real still works: these rules stop applying once it is open. */
+body[data-preview-show] [data-preview-stage]{flex-direction:column}
+[data-preview-show] :is([data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]):not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:32rem;height:auto;max-height:none;border-width:1px;border-radius:var(--radius-lg)}
+[data-preview-show] [data-slot=alert-dialog]:not([open]){max-width:26rem}
+[data-preview-show] [data-slot=sheet]:not([open]){max-width:24rem}
+[data-preview-show] [data-slot=sheet][data-width=lg]:not([open]){max-width:40rem}
+[data-preview-show] [data-slot=sheet][data-width=xl]:not([open]){max-width:60rem}
+
+/* A drawer or dialog drawn open over its page, at its own place, with the scrim
+   behind it: what the page looks like after a click. CSS only, so the page behind
+   is drawn and nothing takes the focus or scrolls the site around the frame. */
+body[data-preview-open]:has([data-preview-open] > dialog:not([open]))::after{content:"";position:fixed;inset:0;z-index:40;background:var(--scrim,rgb(1 3 2/.72))}
+/* The scrim of a sheet asked for a light backdrop, as navree-ui draws its ::backdrop. */
+body[data-preview-open]:has([data-preview-open] > dialog[data-backdrop=light]:not([open]))::after{background:color-mix(in srgb,var(--scrim,rgb(1 3 2/.72)) 55%,transparent)}
+body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;flex-direction:column;z-index:50}
+[data-preview-show] [data-slot=select-popup]:not(:popover-open){display:flex;flex-direction:column;position:relative;inset:auto;margin:6px 0 0;width:100%;max-width:none;height:auto}
+[data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
+[data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content],[data-slot=navigation-menu-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
+[data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
+/* The room of a picture drawn in place while the real one is open: nothing under the pointer moves. */
+[data-preview-kept]{flex:none;max-width:100%;visibility:hidden}
+/* What a link or form would do in an app, said in place of doing it: over anything open. */
+[data-preview-note]{position:fixed;inset:auto 8px 8px;width:fit-content;max-width:min(32rem,calc(100% - 16px));height:auto;margin:0 auto;padding:.5rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font:12px/1.5 var(--font-sans);text-align:start;overflow-wrap:anywhere;box-shadow:0 8px 24px rgb(0 0 0/.35)}
+[data-preview-note] code{color:var(--fg-1);font:11.5px/1.5 var(--font-mono)}
+/* A toaster drawn in place, with its toasts staying: a preview is a picture, not a page that fades them. */
+[data-preview] [data-slot=toaster]{position:static;translate:none;width:100%;max-width:24rem}
+[data-preview] [data-slot=toast]{animation:none}
+
+/* Galleries: one captioned cell per variant or state. */
+[data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}
+[data-preview-gallery=narrow]{--cell:140px}
+[data-preview-gallery=wide]{--cell:100%}
+[data-preview-gallery=icon]{--cell:112px;gap:8px}
+@media (min-width:481px){[data-preview-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-preview-cols="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}[data-preview-cols="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}[data-preview-cols="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}}
+[data-preview-cell]{margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg)}
+[data-preview-cell-body]{flex:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:40px}
+[data-preview-gallery=wide] [data-preview-cell-body]{display:block}
+[data-preview-cell] figcaption{color:var(--fg-3);font:12px/1.4 var(--font-mono);text-align:center;overflow-wrap:anywhere}
+[data-preview-gallery=wide] figcaption{text-align:start}
+[data-preview-gallery=icon] [data-preview-cell]{gap:8px;padding:16px 8px 10px}
+[data-preview-gallery=icon] [data-preview-cell-body] [data-slot=icon]{width:20px;height:20px;color:var(--fg-1)}
+@media (max-width:480px){[data-preview-gallery=medium]{--cell:140px}[data-preview-cell]{padding:12px}}
+
+/* A searchable gallery: the search box stays at the top, the cells below it
+   are laid out and painted only when they scroll near. */
+body[data-preview=fill] [data-preview-stage]:has([data-preview-search]){padding:0 16px 24px}
+[data-preview-search]{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 -16px 12px;padding:12px 16px;background:var(--ink-0);border-bottom:1px solid var(--line)}
+[data-preview-search-box]{position:relative;flex:1 1 16rem;max-width:26rem}
+[data-preview-search-box] > [data-slot=icon]{position:absolute;inset-inline-start:.625rem;top:50%;transform:translateY(-50%);color:var(--fg-3);pointer-events:none}
+[data-preview-search-box] [data-slot=input]{width:100%;max-width:none;padding-inline-start:2rem}
+[data-preview-count]{margin:0;color:var(--fg-3);font:12px/1.4 var(--font-mono)}
+[data-preview-empty]{margin:24px 0;color:var(--fg-3);text-align:center}
+[data-preview-empty][hidden],[data-preview-cell][hidden]{display:none}
+[data-preview-cell][data-terms]{content-visibility:auto;contain-intrinsic-size:auto 84px}
+[data-preview-gallery=flag]{--cell:150px;gap:8px}
+[data-preview-gallery=flag] [data-preview-cell]{gap:8px;padding:14px 8px 10px;contain-intrinsic-size:auto 112px}
+[data-preview-gallery=flag] [data-preview-cell-body]{min-height:32px}
+[data-preview-gallery=flag] figcaption{display:flex;flex-direction:column;gap:2px}
+[data-preview-gallery=flag] figcaption small{color:var(--fg-3);font:11px/1.3 var(--font-sans);overflow-wrap:anywhere}
+
+/* A row a replayed feed adds: it eases in where a stream would put it. */
+@keyframes preview-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+[data-preview-new]{animation:preview-arrive .3s ease-out}
+@media (prefers-reduced-motion:reduce){[data-preview-new]{animation:none}}

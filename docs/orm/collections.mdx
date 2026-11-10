@@ -1,0 +1,90 @@
+---
+title: "Collections"
+description: "`Collection<M>`: the records a query returns, with methods by key and column, relation loading for every record, and serialization as an array."
+---
+
+Queries that return several records return a `Collection<M>`. A collection is a list of records in the query's order: it dereferences to a slice of `Record<M>`, so everything a slice does works on it, and it adds methods that know about keys, columns and relations.
+
+```rust
+let deals: Collection<Deal> = Deal::query().where_(Deal::STAGE.ne(Stage::Lost)).get(&db).await?;
+
+println!("{} deals", deals.len());
+let first: Option<&Record<Deal>> = deals.first();
+for deal in &deals {
+    println!("{}", deal.title);
+}
+let total: i64 = deals.iter().map(|deal| deal.amount_cents).sum();
+```
+
+A collection iterates by reference (`&deals`) or by value (`deals.into_iter()`), and is built from records: `Collection::from(vec![..])`, `.collect()`, `push` and `Extend` work. `into_vec()` returns the records and `into_models()` the models without their bookkeeping.
+
+## Keys and columns
+
+| Method | Returns |
+|---|---|
+| `model_keys()` | The keys, in order: `Vec<Uuid>` for UUID keys. |
+| `find(key)`, `find_mut(key)` | The record with this key. |
+| `contains(key)` | Whether a record has this key. |
+| `pluck(Deal::TITLE)` | The values of a column, typed, casts included. |
+| `map(f)` | `f` of every record, as a `Vec`. |
+
+```rust
+let titles: Vec<String> = deals.pluck(Deal::TITLE)?;
+let keys: Vec<Uuid> = deals.model_keys();
+let labels: Vec<String> = deals.map(|deal| format!("{} ({})", deal.title, deal.amount_cents));
+```
+
+## Filtering, grouping and sorting
+
+These take the collection and return a new one, without querying:
+
+```rust
+let by_stage = deals.clone().group_by(|deal| deal.stage);        // IndexMap<Stage, Collection<Deal>>
+let by_id = deals.clone().key_by(|deal| deal.id);                // IndexMap<Uuid, Record<Deal>>
+let (won, open) = deals.clone().partition(|deal| deal.stage == Stage::Won);
+let big = deals.clone().filter(|deal| deal.amount_cents >= 100_000);
+let sorted = deals.clone().sort_by_key(|deal| std::cmp::Reverse(deal.amount_cents));
+```
+
+| Method | Keeps |
+|---|---|
+| `filter(f)`, `partition(f)` | The records `f` accepts (and the others). |
+| `group_by(f)`, `key_by(f)` | The records by a key, in an `IndexMap` that keeps the order of first appearance. `key_by` keeps one record per key, the last. |
+| `only(keys)`, `except(keys)` | The records with (or without) these keys. |
+| `diff(&other)`, `intersect(&other)` | The records whose key is not (or is also) in `other`. |
+| `unique()` | The first record of each key. |
+| `sort_by(f)`, `sort_by_key(f)`, `reverse()` | The records, reordered (stable). |
+| `sole()` | The only record, or `ModelNotFound` / `MultipleRecordsFound`. |
+
+To filter or sort in the database instead, which reads less, put the condition in the query.
+
+## Back to the database
+
+`to_query()` is a query of exactly these records (by key), for a mass update or delete:
+
+```rust
+deals.to_query().update(&uow, [Deal::STAGE.set(Stage::Lost)]).await?;
+```
+
+`fresh(&db)` rereads the records as they are now, in the collection's order, leaving out the ones that are gone (without global scopes, so a record trashed since then still comes back).
+
+A collection loads relations and aggregates for all its records at once: `load`, `load_missing`, `load_count`, `load_sum` and the rest ([loading after the fact](/docs/orm/eager-loading/#loading-after-the-fact)).
+
+```rust
+let mut deals = Deal::query().get(&db).await?;
+deals.load(&db, "company").await?;
+deals.load_count(&db, ["activities"]).await?;
+```
+
+## Serialization
+
+A collection serializes as a JSON array of its records, each with its extras and loaded relations, so a handler returns `Json(deals)` as it is. Visibility changes apply to every record: `deals.make_hidden(["amount_cents"])`, `make_visible`, `append([..])`, `set_hidden`, `set_visible` and `without_appends()` ([serialization](/docs/orm/serialization/#per-record-changes)). For a paged response, [paginate](/docs/orm/pagination-and-streaming/) the query instead.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/eager-loading/" title="Eager loading">
+    Relations and counts for every record of a collection.
+  </LinkCard>
+  <LinkCard href="/docs/orm/pagination-and-streaming/" title="Pagination and streaming">
+    Pages for responses; chunks and streams for large results.
+  </LinkCard>
+</LinkCards>

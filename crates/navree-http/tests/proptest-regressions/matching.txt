@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c34c6d0ed6e30b7f60ac3c17bab94007053f1a0fd76e4752ac919b93927fc41a # shrinks to routes = [[Param, CatchAll]], path = "//zz"
+cc 7f1f300148c6c8558120a6a1846401407d93c68f64abdd57986d8fb6e80666b2 # shrinks to segs = [Param, Param], path = "//a"
+cc a700d28901399c5481aec756784e0530957e8832193b694956993ab0881a8d5a # shrinks to routes = [[CatchAll], [Static("b"), Param, Param, Param]], path = "/b/a//a"

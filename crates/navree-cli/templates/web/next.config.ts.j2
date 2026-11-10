@@ -1,0 +1,60 @@
+{% if navree_js_dir %}
+import { createRequire } from "node:module";
+import path from "node:path";
+{% endif %}
+import type { NextConfig } from "next";
+{% if navree_js_dir %}
+
+/** The deepest directory that contains both `a` and `b`. */
+function commonDirectory(a: string, b: string): string {
+  const same = (x: string, y: string) => (process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y);
+  const left = path.resolve(a).split(path.sep);
+  const right = path.resolve(b).split(path.sep);
+  let length = 0;
+  while (length < left.length && length < right.length && same(left[length], right[length])) length++;
+  return path.resolve(left.slice(0, length).join(path.sep) + path.sep);
+}
+
+/**
+ * Where the linked Navree packages really are (`packages/js` of a checkout): the place `node_modules`
+ * links `@navree/next` to. A job that checked Navree out somewhere else and pointed the links at it
+ * needs no change here. Falls back to the checkout this app was made from.
+ */
+function linkedPackages(): string {
+  try {
+    const require = createRequire(path.join(process.cwd(), "package.json"));
+    return path.dirname(path.dirname(require.resolve("@navree/next/package.json")));
+  } catch {
+    return "{{ navree_js_dir }}";
+  }
+}
+
+/**
+ * The Navree packages (`@navree/next`, `@navree/client`, `@navree/bff`) are linked from a checkout of
+ * Navree, which is outside this directory. Next reads files outside the app only below its root, so
+ * the root is the directory that holds both the app and the checkout's `packages/js`, and the
+ * packages are compiled with the app. See README.md, "The Navree packages".
+ */
+const root = commonDirectory(process.cwd(), linkedPackages());
+{% endif %}
+
+/**
+ * The browser only talks to this Next.js server. The route handler under `app/api` is a
+ * backend-for-frontend (`@navree/next`, created in `lib/navree.ts`): it keeps the Navree JWTs in
+ * httpOnly cookies and forwards requests to `NAVREE_API_URL` with `Authorization: Bearer`.
+ */
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+{% if navree_js_dir %}
+  turbopack: {
+    root,
+    // The linked packages import `next/headers` and the like, and their own node_modules holds a
+    // second copy of Next, which has no request scope. They get this app's copy.
+    resolveAlias: { next: "./node_modules/next", "next/*": "./node_modules/next/*" },
+  },
+  outputFileTracingRoot: root,
+  transpilePackages: ["@navree/next", "@navree/client", "@navree/bff"],
+{% endif %}
+};
+
+export default nextConfig;

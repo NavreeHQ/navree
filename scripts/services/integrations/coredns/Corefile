@@ -1,0 +1,6 @@
+# CoreDNS answering for the zone acme.test only; any other name is refused.
+acme.test:1053 {
+    file /etc/coredns/acme.test.zone
+    errors
+    log
+}

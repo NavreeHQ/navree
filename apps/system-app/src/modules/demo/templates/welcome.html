@@ -1,0 +1,14 @@
+{% extends "mail/demo/layout.html" %}
+{% block title %}Welcome to Navree System{% endblock %}
+{% block content %}
+<h1>Welcome, {{ name }}</h1>
+<p>Your account is ready, and you have been added to <strong>{{ workspace }}</strong>. Projects, tasks and reports for your team are one click away.</p>
+<p>Three things to try first:</p>
+<table>
+<tr><td>1. Open the board and move a task to "doing".</td></tr>
+<tr><td>2. Create your first project, or join an existing one.</td></tr>
+<tr><td>3. Turn on notifications so you hear when a task is handed to you.</td></tr>
+</table>
+<p><a class="button" href="{{ start_url }}">Get started</a></p>
+<p class="muted">If you did not expect this message, you can ignore it.</p>
+{% endblock %}

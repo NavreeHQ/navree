@@ -1,0 +1,63 @@
+---
+title: "SurfaceFrame"
+description: "Where a component the assistant chose is drawn: set apart and named, with its buttons drawn by the toolkit and everything that could act taken out of what the component drew."
+---
+
+<UiPreview example="surface-frame/default" />
+
+An assistant can answer with a component of yours as well as with words: a chart of payments, a card for an order. It chooses from a closed [catalogue](/docs/ai/generative-ui/) you wrote, and your code draws the component from the reader's own data. `SurfaceFrame` is the place that component is drawn in, as an item of the [Conversation](/docs/components/conversation/).
+
+```rust
+use navree::ui::genui::*;
+use navree::ui::*;
+
+let body = Stack::gap(3).children((
+    Progress::new(62, 100, "UPI").show_value(),
+    Progress::new(21, 100, "Cards").show_value(),
+    Progress::new(17, 100, "Cash on delivery").show_value(),
+));
+SurfaceFrame::new("s1", "Payments by method", body.into()).into_item("0001")
+```
+
+The frame is a card with the component's title and a line that says the assistant chose it ("Shown by the assistant from your data"). It is a labelled region, and its title is a level-3 heading, one level under the conversation's.
+
+## What is taken out
+
+A component's code is yours, but the frame treats what it drew as something that must not be able to act or to pass for the page. Before the body is shown, the frame removes:
+
+- forms, buttons, fields, text areas, selects, dialogs, templates, fieldsets and menus, with what is inside them;
+- commands, hotkeys, live sources, fetches and invoker commands: only a chart's own behaviour stays;
+- any element that a conversation's parts drew, such as an approval card or a composer, so a component cannot stand in for one;
+- raw markup, which cannot be read to check it.
+
+It also puts every `id` in the body, and every reference to one (`for`, `aria-labelledby`, `href="#..."`), under the frame's own prefix, so nothing in the body can be mistaken for a part of the page or point at one. The body is read to a fixed depth (48 levels) and a fixed number of elements (4,000); past them the rest is left out.
+
+## Buttons
+
+A component's buttons are not drawn by the component. A component declares the actions it may offer, you register them, and `.button(..)` draws one below the body, posting to a URL your server signed for this reader, this conversation, this component and this action. A destructive action opens a question the page draws, and with no script the server asks it. See [Buttons that act](/docs/ai/generative-ui/#buttons-that-act).
+
+## When the component is gone
+
+`SurfaceFrame::unavailable(id)` takes the place of a component the reader may no longer see, because their access changed since it was drawn. `SurfaceFrame::failed(id)` takes the place of one that could not be drawn. Both show a line and nothing of the component.
+
+<UiPreview example="surface-frame/gone" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A frame that arrives is announced once, with "The assistant showed" and its title. The unavailable and failed frames announce their line.
+- The frame is a labelled region, so a screen reader user can find where the assistant's component starts and ends.
+- What the component drew keeps the keyboard behaviour of its own parts, such as a chart's table, minus anything that was taken out.
+
+</UiA11y>
+
+## API
+
+### SurfaceFrame
+
+<UiProps type="SurfaceFrame" />
+
+### FrameLabels
+
+<UiProps type="FrameLabels" />

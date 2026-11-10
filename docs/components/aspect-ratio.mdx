@@ -1,0 +1,68 @@
+---
+title: "AspectRatio"
+description: "Content held to a shape as its width changes, from a closed set of four ratios."
+---
+
+<UiPreview example="aspect-ratio/default" />
+
+`AspectRatio` holds its content to a shape: a video, a map, a picture. The ratios are a closed set, because the content security policy allows no `style` attribute to set any other.
+
+```rust
+use navree::ui::*;
+
+AspectRatio::new(Ratio::Video, Empty::new("No recording yet"))
+```
+
+## When to use it
+
+<UiChoose name="divider" current="AspectRatio" />
+
+## In a page
+
+A recording keeps its 16:9 shape as the column narrows. Before the recording exists, the box holds an empty state of the same shape:
+
+```rust
+Stack::gap(3).children((
+    AspectRatio::new(Ratio::Video, Empty::new("No recording yet")),
+    Text::muted("The recording appears here after the call."),
+))
+```
+
+The same box holds a map or a picture. Pick the ratio from the closed set in the table below.
+
+## Anatomy
+
+<UiAnatomy component="aspect-ratio" />
+
+## Ratios
+
+<UiPreview example="aspect-ratio/ratios" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- It is a box with a shape and no role: its content is read as it is.
+
+</UiA11y>
+
+## API
+
+### AspectRatio
+
+<UiProps type="AspectRatio" />
+
+### Ratio
+
+<UiProps type="Ratio" />
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/components/empty/" title="Empty">
+    What a box says when there is nothing in it.
+  </LinkCard>
+  <LinkCard href="/docs/components/carousel/" title="Carousel">
+    Several pictures in one box.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\nrender_update_from(&left.table, &sets, &left.joins, &left.wheres, d))"
+---
+PostgreSQL: error: invalid query: update_from takes inner and cross joins only, not a Left join (`companies`)
+MySQL: error: invalid query: update_from takes inner and cross joins only, not a Left join (`companies`)
+SQLite: error: invalid query: update_from takes inner and cross joins only, not a Left join (`companies`)

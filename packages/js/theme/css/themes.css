@@ -1,0 +1,211 @@
+/*
+ * @navree/theme/themes.css: every built-in theme, in light and dark.
+ * Generated from navree-ui's theme table by scripts/generate-themes.mjs: do not edit by hand.
+ *
+ *   @import "@navree/theme/theme.css";
+ *   @import "@navree/theme/themes.css";
+ *
+ * Choose with attributes on <html> (or on any element, for a part of a page):
+ *
+ *   data-theme="navree | neutral | ocean | violet | sunset | rose | contrast"
+ *   data-mode="light | dark | system"
+ *
+ * `applyAppearance` in @navree/theme sets both, and keeps the `dark` class that shadcn's
+ * `dark:` classes read in step. Without the attributes the page stays on theme.css: the Navree
+ * dark theme. Each colour is `light-dark(light, dark)`, so the mode is only `color-scheme`.
+ */
+
+[data-mode="dark"] {
+  color-scheme: dark;
+}
+
+[data-mode="light"] {
+  color-scheme: light;
+}
+
+[data-mode="system"] {
+  color-scheme: light dark;
+}
+
+/* The Navree theme: the page's colours where a theme or a mode is set, and where Navree is asked for. */
+:where(:root[data-theme], :root[data-mode], [data-theme="navree"]) {
+  --color-ink-0: light-dark(#ffffff, #040605);
+  --color-ink-1: light-dark(#f7f8f7, #0a0e0c);
+  --color-ink-2: light-dark(#eff1f0, #111714);
+  --color-ink-3: light-dark(#e5e8e6, #16201b);
+  --color-line: light-dark(#dfe3e0, #1c2420);
+  --color-line-2: light-dark(#c8cecb, #2a3530);
+  --color-fg: light-dark(#0a0e0c, #e9efeb);
+  --color-fg-1: light-dark(#1c2420, #cfd8d3);
+  --color-fg-2: light-dark(#3f4a44, #a9b5ae);
+  --color-fg-3: light-dark(#55615b, #8a968f);
+  --color-accent: light-dark(#0b7a3e, #3dff8f);
+  --color-accent-ink: light-dark(#ffffff, #03130a);
+  --color-amber: light-dark(#7e5200, #ffbf5e);
+  --color-danger: light-dark(#9e2119, #ff6b6b);
+  --color-bar: light-dark(#8a968f, #5b6862);
+}
+
+/* Neutral: Plain greys, with a white or black accent. */
+[data-theme="neutral"] {
+  --color-ink-0: light-dark(#ffffff, #050505);
+  --color-ink-1: light-dark(#f8f8f8, #0d0d0d);
+  --color-ink-2: light-dark(#f0f0f0, #151515);
+  --color-ink-3: light-dark(#e7e7e7, #1d1d1d);
+  --color-line: light-dark(#e2e2e2, #222222);
+  --color-line-2: light-dark(#cccccc, #323232);
+  --color-fg: light-dark(#0d0d0d, #ededed);
+  --color-fg-1: light-dark(#222222, #d5d5d5);
+  --color-fg-2: light-dark(#474747, #b1b1b1);
+  --color-fg-3: light-dark(#5e5e5e, #929292);
+  --color-accent: light-dark(#1a1a1a, #ebebeb);
+  --color-accent-ink: light-dark(#ffffff, #161616);
+  --color-bar: light-dark(#929292, #646464);
+}
+
+/* Ocean: Slate greys and a blue accent. */
+[data-theme="ocean"] {
+  --color-ink-0: light-dark(#ffffff, #040609);
+  --color-ink-1: light-dark(#f3f8ff, #0a0d12);
+  --color-ink-2: light-dark(#ecf1f8, #12161a);
+  --color-ink-3: light-dark(#e2e8ef, #181e26);
+  --color-line: light-dark(#dde2e9, #1d2228);
+  --color-line-2: light-dark(#c8cdd4, #2c333b);
+  --color-fg: light-dark(#0a0d12, #e8eef5);
+  --color-fg-1: light-dark(#1d2228, #d0d6dd);
+  --color-fg-2: light-dark(#414850, #abb2bc);
+  --color-fg-3: light-dark(#575e68, #8c939d);
+  --color-accent: light-dark(#1f55d6, #5aa2ff);
+  --color-accent-ink: light-dark(#ffffff, #021630);
+  --color-bar: light-dark(#8c939d, #5e656f);
+}
+
+/* Violet: Cool greys and a violet accent. */
+[data-theme="violet"] {
+  --color-ink-0: light-dark(#ffffff, #050507);
+  --color-ink-1: light-dark(#f7f7fb, #0d0c10);
+  --color-ink-2: light-dark(#f0f0f4, #15151a);
+  --color-ink-3: light-dark(#e7e7ea, #1d1d22);
+  --color-line: light-dark(#e1e1e6, #212127);
+  --color-line-2: light-dark(#ccccd1, #313137);
+  --color-fg: light-dark(#0d0c10, #ededf3);
+  --color-fg-1: light-dark(#212127, #d5d5dc);
+  --color-fg-2: light-dark(#46464c, #b1b1b8);
+  --color-fg-3: light-dark(#5d5d63, #929299);
+  --color-accent: light-dark(#6a2fd6, #ac8fff);
+  --color-accent-ink: light-dark(#ffffff, #180f2e);
+  --color-bar: light-dark(#929299, #64646a);
+}
+
+/* Sunset: Warm greys and an orange accent. */
+[data-theme="sunset"] {
+  --color-ink-0: light-dark(#ffffff, #070504);
+  --color-ink-1: light-dark(#faf7f4, #0f0c0a);
+  --color-ink-2: light-dark(#f3f0ed, #191411);
+  --color-ink-3: light-dark(#eae6e4, #211c19);
+  --color-line: light-dark(#e5e1de, #26211d);
+  --color-line-2: light-dark(#d0cbc7, #36312d);
+  --color-fg: light-dark(#0f0c0a, #f2ece8);
+  --color-fg-1: light-dark(#26211d, #dbd4cf);
+  --color-fg-2: light-dark(#4b4642, #b7b0ab);
+  --color-fg-3: light-dark(#625c58, #97918d);
+  --color-accent: light-dark(#b8460e, #ff9a4d);
+  --color-accent-ink: light-dark(#ffffff, #270f00);
+  --color-bar: light-dark(#97918d, #69635f);
+}
+
+/* Rose: Neutral greys and a rose accent. */
+[data-theme="rose"] {
+  --color-ink-0: light-dark(#ffffff, #050505);
+  --color-ink-1: light-dark(#f8f8f8, #0d0d0d);
+  --color-ink-2: light-dark(#f0f0f0, #151515);
+  --color-ink-3: light-dark(#e7e7e7, #1d1d1d);
+  --color-line: light-dark(#e2e2e2, #222222);
+  --color-line-2: light-dark(#cccccc, #323232);
+  --color-fg: light-dark(#0d0d0d, #ededed);
+  --color-fg-1: light-dark(#222222, #d5d5d5);
+  --color-fg-2: light-dark(#474747, #b1b1b1);
+  --color-fg-3: light-dark(#5e5e5e, #929292);
+  --color-accent: light-dark(#c0234a, #ff7a93);
+  --color-accent-ink: light-dark(#ffffff, #2b0710);
+  --color-bar: light-dark(#929292, #646464);
+}
+
+/* High contrast: Text at 7:1 or more, strong borders and a bright accent. */
+[data-theme="contrast"] {
+  --color-ink-0: light-dark(#ffffff, #000000);
+  --color-ink-1: light-dark(#ffffff, #0a0a0a);
+  --color-ink-2: light-dark(#f2f2f2, #121212);
+  --color-ink-3: light-dark(#e8e8e8, #1c1c1c);
+  --color-line: light-dark(#767676, #6e6e6e);
+  --color-line-2: light-dark(#5e5e5e, #8c8c8c);
+  --color-fg: light-dark(#000000, #ffffff);
+  --color-fg-1: light-dark(#0d0d0d, #fcfcfc);
+  --color-fg-2: light-dark(#262626, #e0e0e0);
+  --color-fg-3: light-dark(#3d3d3d, #c8c8c8);
+  --color-accent: light-dark(#0a3fd0, #ffe066);
+  --color-accent-ink: light-dark(#ffffff, #1c1600);
+  --color-amber: light-dark(#593800, #ffc266);
+  --color-danger: light-dark(#6c130e, #ffbfbe);
+  --color-bar: light-dark(#5e5e5e, #a8a8a8);
+}
+
+/*
+ * The shadcn names again where a theme or a mode is set: a variable that reads another is worked out
+ * where it is declared, so a part of a page with its own theme needs its own copy.
+ */
+:where([data-theme], [data-mode]) {
+  --background: var(--color-ink-0);
+  --foreground: var(--color-fg);
+  --card: var(--color-ink-1);
+  --card-foreground: var(--color-fg);
+  --popover: var(--color-ink-1);
+  --popover-foreground: var(--color-fg);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-ink);
+  --secondary: var(--color-ink-2);
+  --secondary-foreground: var(--color-fg);
+  --muted: var(--color-ink-2);
+  --muted-foreground: var(--color-fg-2);
+  --destructive: var(--color-danger);
+  --warning: var(--color-amber);
+  --success: var(--color-accent);
+  --border: var(--color-line);
+  --input: var(--color-line-2);
+  --ring: var(--color-accent);
+  --sidebar: var(--color-ink-1);
+  --sidebar-foreground: var(--color-fg-2);
+  --sidebar-primary: var(--color-fg);
+  --sidebar-primary-foreground: var(--color-ink-0);
+  --sidebar-accent: var(--color-ink-2);
+  --sidebar-accent-foreground: var(--color-fg);
+  --sidebar-border: var(--color-line);
+  --sidebar-ring: var(--color-accent);
+  --chart-5: var(--color-accent);
+  --shadow-glow-sm: 0 0 10px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --shadow-glow: 0 0 18px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  --shadow-glow-lg: 0 0 60px -12px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+:where(:root[data-theme], :root[data-mode]) ::selection {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+/* Light surfaces: the pickers' icons stay dark, and a floating surface needs a lighter shadow. */
+[data-mode="light"] input::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+[data-mode="light"] {
+  --shadow-float: 0 30px 80px -20px rgb(10 14 12 / 0.25), 0 0 0 1px rgb(10 14 12 / 0.06);
+}
+
+@media (prefers-color-scheme: light) {
+  [data-mode="system"] input::-webkit-calendar-picker-indicator {
+    filter: none;
+  }
+
+  [data-mode="system"] {
+    --shadow-float: 0 30px 80px -20px rgb(10 14 12 / 0.25), 0 0 0 1px rgb(10 14 12 / 0.06);
+  }
+}

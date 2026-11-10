@@ -1,0 +1,66 @@
+error[E0277]: `Deal` has relations, so it must implement `Default`
+  --> tests/ui/relations_types.rs:17:6
+   |
+17 | impl Deal {
+   |      ^^^^ the trait `Default` is not implemented for `Deal`
+   |
+   = note: relation definitions are read from a default instance: add `#[derive(Default)]` (or implement `Default`) for `Deal`
+   = note: required for `Deal` to implement `navree_orm::relations::derive_support::ModelWithRelations`
+note: required by a bound in `navree_orm::relations::derive_support::template`
+  --> src/relations/mod.rs
+   |
+   |     pub fn template<M: ModelWithRelations>() -> M {
+   |                        ^^^^^^^^^^^^^^^^^^ required by this bound in `template`
+help: consider annotating `Deal` with `#[derive(Default)]`
+   |
+11 + #[derive(Default)]
+12 | struct Deal {
+   |
+
+error[E0277]: `std::string::String` is not a relation of `Company`
+  --> tests/ui/relations_types.rs:26:21
+   |
+26 |     fn label(&self) -> String {
+   |                     ^ a relation method returns a relation
+   |
+   = help: the trait `Relation<Company>` is not implemented for `std::string::String`
+   = note: relation methods return a relation built from `self`: `self.belongs_to(..)` (`BelongsTo<Company, R>`), `self.has_many(..)` (`HasMany<Company, R>`), `self.belongs_to_many(..)`, `self.morph_to(..)`, ...
+   = help: the following other types implement trait `Relation<P>`:
+             navree_orm::prelude::BelongsTo<P, R>
+             navree_orm::prelude::BelongsToMany<P, R, X>
+             navree_orm::prelude::HasMany<P, R>
+             navree_orm::prelude::HasManyThrough<P, R>
+             navree_orm::prelude::HasOne<P, R>
+             navree_orm::prelude::HasOneThrough<P, R>
+             navree_orm::prelude::MorphTo<P>
+note: required by a bound in `navree_orm::relations::derive_support::named`
+  --> src/relations/mod.rs
+   |
+   |     pub fn named<P: Model, R: Relation<P>>(mut relation: R, name: &'static str) -> R {
+   |                               ^^^^^^^^^^^ required by this bound in `named`
+
+error[E0277]: `std::string::String` is not a relation of `Company`
+  --> tests/ui/relations_types.rs:24:1
+   |
+24 | #[navree_orm::relations]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | `std::string::String` doesn't satisfy the trait bound
+   | a relation method returns a relation
+   |
+   = help: the trait `Relation<Company>` is not implemented for `std::string::String`
+   = note: relation methods return a relation built from `self`: `self.belongs_to(..)` (`BelongsTo<Company, R>`), `self.has_many(..)` (`HasMany<Company, R>`), `self.belongs_to_many(..)`, `self.morph_to(..)`, ...
+   = help: the following other types implement trait `Relation<P>`:
+             navree_orm::prelude::BelongsTo<P, R>
+             navree_orm::prelude::BelongsToMany<P, R, X>
+             navree_orm::prelude::HasMany<P, R>
+             navree_orm::prelude::HasManyThrough<P, R>
+             navree_orm::prelude::HasOne<P, R>
+             navree_orm::prelude::HasOneThrough<P, R>
+             navree_orm::prelude::MorphTo<P>
+note: required by a bound in `navree_orm::relations::derive_support::erased`
+  --> src/relations/mod.rs
+   |
+   |     pub fn erased<P: Model, R: Relation<P>>(relation: R) -> DynRelation<P> {
+   |                                ^^^^^^^^^^^ required by this bound in `erased`
+   = note: this error originates in the attribute macro `navree_orm::relations` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -1,0 +1,239 @@
+//! [`Choice`]: one thing a list offers, and the entries a list is made of.
+
+use crate::components::{Flag, OptionItem};
+use crate::icons::Icon;
+use crate::node::{Element, Node, el};
+
+/// One choice in a [`Select`](super::Select), [`Combobox`](super::Combobox) or
+/// [`MultiSelect`](super::MultiSelect).
+///
+/// ```
+/// use navree_ui::Choice;
+///
+/// let choice = Choice::new("42", "Harleen Kaur").description("Engineer").keywords(["backend"]);
+/// # let _ = choice;
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct Choice {
+    pub(crate) value: String,
+    pub(crate) label: String,
+    pub(crate) selected_label: Option<String>,
+    pub(crate) description: Option<String>,
+    pub(crate) icon: Option<Icon>,
+    pub(crate) lead: Option<Node>,
+    pub(crate) avatar: Option<String>,
+    pub(crate) keywords: Vec<String>,
+    pub(crate) disabled: bool,
+    pub(crate) href: Option<String>,
+}
+
+impl Choice {
+    /// A choice that posts `value` and shows `label`.
+    pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            label: label.into(),
+            selected_label: None,
+            description: None,
+            icon: None,
+            lead: None,
+            avatar: None,
+            keywords: Vec::new(),
+            disabled: false,
+            href: None,
+        }
+    }
+
+    /// A line under the label, in the list only.
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// An icon before the label, in the list and in the control.
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Any small node before the label, in the list and in the control: a flag, a coloured
+    /// dot, a logo. It is hidden from assistive technology, so what it shows must be in the
+    /// label. The page links the parts stylesheet for it. A reply that a remote list sends
+    /// is checked down to the elements a list is drawn with, so a node that is only
+    /// shapes in a `svg` survives it and anything else does not.
+    pub fn lead(mut self, node: impl Into<Node>) -> Self {
+        self.lead = Some(node.into());
+        self
+    }
+
+    /// A country's flag before the label, in the list and in the control. The flag is
+    /// hidden from assistive technology: the label should be the country's name.
+    ///
+    /// ```
+    /// use navree_ui::{Choice, Select, flags, render};
+    ///
+    /// let country = Select::new("country")
+    ///     .choice(Choice::new("IN", "India").flag(flags::IN))
+    ///     .choice(Choice::new("NP", "Nepal").flag(flags::NP));
+    /// let html = render(&country.into());
+    /// assert!(html.contains(r#"data-slot="flag""#));
+    /// ```
+    pub fn flag(self, code: crate::flags::CountryCode) -> Self {
+        self.lead(Flag::new(code).decorative())
+    }
+
+    /// A small picture before the label: a URL on this site (the content security policy
+    /// allows no other).
+    pub fn avatar(mut self, src: impl Into<String>) -> Self {
+        self.avatar = Some(src.into());
+        self
+    }
+
+    /// Words that find this choice though the label doesn't hold them.
+    pub fn keywords<S: Into<String>>(mut self, words: impl IntoIterator<Item = S>) -> Self {
+        self.keywords = words.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// What the control shows once this is chosen, when that is shorter than the label.
+    pub fn selected_label(mut self, label: impl Into<String>) -> Self {
+        self.selected_label = Some(label.into());
+        self
+    }
+
+    /// Makes the choice a link to a page on this site. For the results a command
+    /// palette's server source answers.
+    pub fn link(mut self, href: impl Into<String>) -> Self {
+        self.href = Some(href.into());
+        self
+    }
+
+    /// Shows the choice but refuses it.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// The value that is posted.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// Whether every one of `values` is the value of one of `choices` that isn't
+    /// disabled: the check of a handler for a fixed list, since nothing a browser
+    /// sends is known to be one of the options it was given. An empty value is no
+    /// choice and passes; whether one is needed is the field's own rule. For a list
+    /// that comes from the database, see `OptionSource::all_pickable`.
+    ///
+    /// ```
+    /// use navree_ui::Choice;
+    ///
+    /// let stages = [Choice::new("lead", "Lead"), Choice::new("won", "Won").disabled(true)];
+    /// assert!(Choice::all_among(["lead"], &stages));
+    /// assert!(!Choice::all_among(["lead", "forged"], &stages));
+    /// assert!(!Choice::all_among(["won"], &stages), "a disabled one is not pickable");
+    /// ```
+    pub fn all_among<V: AsRef<str>>(
+        values: impl IntoIterator<Item = V>,
+        choices: &[Choice],
+    ) -> bool {
+        values.into_iter().all(|value| {
+            let value = value.as_ref();
+            value.is_empty()
+                || choices
+                    .iter()
+                    .any(|choice| !choice.disabled && choice.value == value)
+        })
+    }
+
+    /// The label that is shown.
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// What the control shows when this is chosen.
+    pub(crate) fn shown(&self) -> &str {
+        self.selected_label.as_deref().unwrap_or(&self.label)
+    }
+
+    /// Whether the list draws more than the label.
+    pub(crate) fn is_rich(&self) -> bool {
+        self.description.is_some()
+            || self.icon.is_some()
+            || self.lead.is_some()
+            || self.avatar.is_some()
+    }
+
+    /// The node before the label, in the one slot the runtime copies into the control
+    /// when this choice is chosen. Its styles are the select's own, so a list a server
+    /// sends draws it as well.
+    pub(crate) fn lead_slot(&self) -> Option<Element> {
+        self.lead.clone().map(|node| {
+            el("span")
+                .slot("icon")
+                .flag("data-lead", true)
+                .attr("aria-hidden", "true")
+                .child(node)
+        })
+    }
+
+    /// The words the runtime searches, besides the label.
+    pub(crate) fn keyword_text(&self) -> Option<String> {
+        (!self.keywords.is_empty()).then(|| self.keywords.join(" "))
+    }
+}
+
+impl<V: Into<String>, L: Into<String>> From<(V, L)> for Choice {
+    fn from((value, label): (V, L)) -> Self {
+        Self::new(value, label)
+    }
+}
+
+impl From<OptionItem> for Choice {
+    fn from(item: OptionItem) -> Self {
+        Self::new(item.value, item.label)
+    }
+}
+
+/// One entry of a list: a choice, a labelled group, or a divider.
+// Nearly every entry is a choice: boxing it would cost an allocation for each.
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug)]
+pub(crate) enum Entry {
+    Choice(Choice),
+    Group { label: String, choices: Vec<Choice> },
+    Separator,
+}
+
+/// A list's entries, in order.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Entries(pub(crate) Vec<Entry>);
+
+impl Entries {
+    pub(crate) fn choice(&mut self, choice: Choice) {
+        self.0.push(Entry::Choice(choice));
+    }
+
+    pub(crate) fn group(&mut self, label: String, choices: Vec<Choice>) {
+        self.0.push(Entry::Group { label, choices });
+    }
+
+    pub(crate) fn separator(&mut self) {
+        self.0.push(Entry::Separator);
+    }
+
+    /// Every choice, groups opened.
+    pub(crate) fn choices(&self) -> impl Iterator<Item = &Choice> {
+        self.0.iter().flat_map(|entry| match entry {
+            Entry::Choice(choice) => std::slice::from_ref(choice).iter(),
+            Entry::Group { choices, .. } => choices.iter(),
+            Entry::Separator => [].iter(),
+        })
+    }
+
+    /// The choice that posts `value`.
+    pub(crate) fn find(&self, value: &str) -> Option<&Choice> {
+        self.choices().find(|choice| choice.value == value)
+    }
+}

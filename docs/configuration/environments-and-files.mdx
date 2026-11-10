@@ -1,0 +1,130 @@
+---
+title: "Environments and files"
+description: "Keep a file per environment and a file per section, see where each value came from, check the result, and keep credentials out of files."
+---
+
+An app's configuration is one tree, built at boot from several places. This page covers the files you can split it into, how the app finds the one for its environment, the commands that show and check the result, and how credentials stay out of the files you commit. For the basics (`.env`, `config/app.toml` and `APP_*` variables), see [Configuration](/docs/getting-started/configuration/); for every key a module reads, see the [reference](/docs/configuration/reference/).
+
+## What is read, in order
+
+`ConfigSources::defaults()` reads these, and a later one wins over an earlier one. Tables merge key by key, so a later source only replaces the keys it sets.
+
+1. `config/app.toml`
+2. `config/<section>.toml`, one file per section, in name order
+3. `config/env/<env>.toml`, the file of the environment the app runs in
+4. `.env`
+5. the process's `APP_*` environment variables
+
+A missing file is skipped.
+
+## A file per section
+
+A file `config/<section>.toml` holds the keys of that section, without the `[section]` header. The name of the file is the key of the section, and a dotted name nests:
+
+```toml title="config/mail.toml"
+from = "Agra <hello@agra.example>"
+transport = "smtp://127.0.0.1:1025"
+
+[render]
+inline_css = true
+```
+
+This file sets `mail.from`, `mail.transport` and `mail.render.inline_css`. `config/database.mongodb.toml` holds the keys of `[database.mongodb]`. Files ending in `.json` work the same way. `config/app.toml` is the only file that is not a section: it holds the whole tree.
+
+Split a file out when different people own different parts: the billing plans, the workspace roles and the mail settings of a large app need not share one file. Set each key in one place. A key set in both `config/app.toml` and a section file is reported (the section file wins), as is a key set in both `.env` and a file.
+
+To start a section's file from its defaults, run `navree config:publish mail`. It writes `config/mail.toml` with every key commented out beside its default and its description, and says which environment variable sets each credential. It never replaces a file that exists unless you pass `--force`, and `--stdout` prints the text instead.
+
+## A file per environment
+
+`config/env/<env>.toml` is a whole tree laid over the files above it, so it is the place for what differs in `production`, `staging` or `testing`:
+
+```toml title="config/env/production.toml"
+[log]
+format = "json"
+
+[http]
+addr = "127.0.0.1:8080"
+```
+
+The app picks its environment from the first of these that names one: the real `APP_ENV` variable, `APP_ENV` in `.env`, then `env` under `[app]` in `config/app.toml`. With none of them the environment is `local`. An overlay is meant to replace what `config/app.toml` says, so the app does not warn about a key it sets again. `.env` and the `APP_*` variables still win over it.
+
+The environment name also decides how modules behave. `production` and `staging` behave alike: `migrate` and `db:seed` ask for `--force`, the API reference and the OpenAPI document are off, the ORM's strict modes are off, and error pages hide their details.
+
+## See the result
+
+Two commands read the configuration without starting the app: they open no database connection and start no server. Run them from the app's directory.
+
+| Command | What it does |
+|---|---|
+| `navree config:show [section] [--defaults] [--origin] [--json]` | Prints the effective configuration with credentials masked. `--origin` adds where each value came from, `--defaults` adds the defaults no source sets. |
+| `navree config:show --fallbacks` | Lists the environment variables a key falls back to when nothing else sets it (`REDIS_URL`, the `AWS_*` variables) and whether each is set. It never prints a value. |
+| `navree config:check [--env production]` | Reads every section and prints all the problems together: sections that do not read or validate, keys nothing reads, keys set in two places. With `--env production`, or when the app runs in `production` or `staging`, it also fails on a missing `app.key`, a SQLite database, mail that goes to the log and `session.secure = false`. |
+| `navree config:schema [--out <file>]` | Writes a JSON Schema of the whole tree. Point your editor's TOML support at it for completion and type checks in `config/app.toml`. |
+| `navree config:publish <section>` | Writes a section's file, as above. |
+
+A module reads a fallback through `Config::fallback`, so the variable `config:show --fallbacks` lists is the one read.
+
+When the app has a kit's web app beside it, `config:check` also reads `web/.env.local` and warns about each setting it repeats that differs from the API's configuration: `NAVREE_API_URL` and `NEXT_PUBLIC_REALTIME_PORT` against `http.addr`, `NEXT_PUBLIC_REALTIME_KEY` against `realtime.key` (named, never shown), `APP_ORIGINS` against `http.cors.allowed_origins`. These are warnings; the check still passes.
+
+`navree gate` runs `config:check`, the kits run it in CI, and `navree deploy` runs it on the server, with the server's environment, before the migrations and before any traffic moves.
+
+## Strict configuration
+
+By default an app starts when the configuration has a key nothing reads (usually a typo, so the setting has no effect) and logs a warning. In an environment that behaves like production it also logs an error for each unsafe setting, such as a missing `app.key`. To refuse to start instead, turn on strict configuration:
+
+```toml title="config/env/production.toml"
+[app]
+strict_config = true
+```
+
+With it the boot stops, naming every unknown key and every failed setting, and starts only when the configuration is clean.
+
+## The application key
+
+`navree new` writes a generated key into the new app's `.env` (and leaves `APP_KEY=` empty in `.env.example`, which is committed). To make another, `navree key:generate` prints one, and `navree key:generate --write` puts it in `.env` when `APP_KEY` is empty. If a key is already set, `--write` stops; add `--force` to replace it, after moving the old key to `app.previous_keys` so that what it encrypted can still be read.
+
+## Credentials
+
+A credential in a section is a `Secret<String>` (or any `Secret<T>`): its `Debug` and `Display` print `[redacted]`, and it has no `Serialize`, so it cannot reach a log or a JSON response by accident. `config:show`, the reference and `config:publish` know which keys are credentials by their types, whatever they are called. A key whose type is not `Secret` can say so with `#[config(secret)]`, and a key that only looks like a credential (`realtime.key`, a public id) says `#[config(public)]`.
+
+One list of secret words, shared by configuration, the logger, Logbook, Lighthouse, Fleet and the audit trail, masks the rest by name: `password`, `passwd`, `pwd`, `passphrase`, `secret`, `token`, `authorization`, `cookie`, `credential`, `dsn`, `api_key`, `api-key`, `apikey`, `private_key` and `connection_string`. Configuration adds `key`. Set a credential in `.env` or in the environment, never in a file you commit.
+
+## Your own section
+
+A module reads its settings as a typed section. Derive `ConfigSection`, document the fields, and register the section:
+
+```rust title="src/modules/invoicing/options.rs"
+use navree::config::ConfigSection;
+use serde::Deserialize;
+
+/// How invoices are made.
+#[derive(Debug, Default, Deserialize, ConfigSection)]
+#[config(key = "invoicing", validate = Self::check)]
+#[serde(default)]
+pub struct InvoicingOptions {
+    /// The ISO code of the currency of invoices (`INR`).
+    pub currency: String,
+    /// Days until an invoice is due.
+    pub due_days: u32,
+}
+
+impl InvoicingOptions {
+    fn check(&self) -> Result<(), String> {
+        if self.currency.len() == 3 || self.currency.is_empty() {
+            Ok(())
+        } else {
+            Err("currency must be a 3-letter ISO code".into())
+        }
+    }
+}
+```
+
+```rust title="src/modules/invoicing/mod.rs"
+use navree::module;
+
+#[module(config = [InvoicingOptions], providers = [InvoiceService])]
+pub struct InvoicingModule;
+```
+
+The derive writes the key, the check, the defaults and a description of every field from its doc comment. `config = [InvoicingOptions]` registers the section, so the module can depend on `Arc<InvoicingOptions>`, `config:check` reads and validates it, and `config:show --defaults`, `config:schema` and `config:publish` know its keys. A field that is a table of its own derives `ConfigTable` and carries `#[config(table)]`; a field that falls back to an environment variable says `#[config(env_fallback = "REDIS_URL")]`.

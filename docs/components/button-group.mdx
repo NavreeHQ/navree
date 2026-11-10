@@ -1,0 +1,53 @@
+---
+title: "ButtonGroup"
+description: "Buttons joined into one control, side by side or stacked, under a label assistive technology reads."
+---
+
+<UiPreview example="button-group/default" />
+
+`ButtonGroup` joins buttons into one control: the corners between them square off and the borders meet. It is a `div` with `role="group"`, so its label is required.
+
+```rust
+use navree::ui::*;
+
+ButtonGroup::new("View").children((
+    Button::outline("List").icon(icons::LIST),
+    Button::outline("Board").icon(icons::KANBAN),
+))
+```
+
+## When to use it
+
+Group a few actions on the same thing: views of one list, zoom in and out. For one setting that is on or off, use a [Toggle](/docs/components/toggle/).
+
+<UiChoose name="action" current="ButtonGroup" />
+
+## Anatomy
+
+<UiAnatomy component="button-group" />
+
+## Vertical
+
+`.vertical()` stacks the buttons.
+
+<UiPreview example="button-group/vertical" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to the next button in the group, then out of it. |
+| `Enter`, `Space` | Presses the focused button. |
+
+- The group has `role="group"` and an `aria-label`, so a screen reader announces its name when focus enters it.
+- Each button keeps its own name; icon-only buttons in a group need `Button::icon_only` and its label.
+
+</UiA11y>
+
+## API
+
+### ButtonGroup
+
+<UiProps type="ButtonGroup" />

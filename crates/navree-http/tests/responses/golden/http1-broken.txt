@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+5\r\n
+start\r\n
+
+clean: true

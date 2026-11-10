@@ -1,0 +1,175 @@
+---
+title: "Telemetry"
+description: "The typed events every module reports, including model calls, broadcasts, file operations, webhook attempts, searches, sign-ins and UI operations: what each holds and leaves out, how to emit your own, and where Logbook shows them."
+---
+
+<Badge feature="telemetry" /> Navree's modules report what they do as **telemetry events**: plain, typed values that say what happened, to what, how long it took and how it ended. Nothing reads them until you register a **sink**. [Logbook](/docs/tools/logbook/) is one, [Lighthouse](/docs/tools/lighthouse/) another, [tracing](/docs/microservices/tracing/) turns them into spans, and your own code can receive them to count, store or forward them.
+
+This page lists every event, says what the platform modules' events hold and leave out, and shows how to emit and test your own. Writing a sink, what telemetry costs and `TelemetryRecorder` in depth are on [Health, metrics and telemetry](/docs/digging-deeper/health-and-metrics/#telemetry-events).
+
+## The events
+
+There are nineteen kinds. The first twelve describe the web and data layers:
+
+| Kind | Reported by | When |
+|---|---|---|
+| `request_handled` | `HttpModule` | a response is ready |
+| `query_executed` | `DatabaseModule` | a SQL statement ran |
+| `job_processed`, `job_failed` | queue workers | a job attempt ended |
+| `scheduled_task_ran` | `ScheduleModule` | a scheduled task ran |
+| `mail_sent` | `MailModule` | the transport accepted a mail |
+| `notification_sent` | `NotifyModule` | a notification went out on one channel |
+| `cache` | `CacheModule` | a cache hit, miss, write or forget |
+| `http_client_request` | `HttpClient` | an outgoing call finished |
+| `exception_reported` | `HttpModule`, or your code | an error or panic was reported |
+| `log` | `LoggerModule` | a log line passed the level filter |
+| `event_emitted` | `EventsModule` | an app event was emitted |
+
+Their fields are in the table on [Health, metrics and telemetry](/docs/digging-deeper/health-and-metrics/#telemetry-events). The other seven describe the platform modules:
+
+| Kind | Rust type | Reported by | When | Fields |
+|---|---|---|---|---|
+| `ai_call` | `AiCall` | `AiModule` | a call to a model provider finished | `provider`, `model`, `operation` (`generate`, `stream` or `embed`), `input_tokens`, `output_tokens`, `cached_input_tokens`, `cost_micros`, `duration`, `outcome`, `error` |
+| `broadcast` | `BroadcastSent` | `RealtimeModule` | an event was pushed to real-time channels | `channels`, `event`, `delivered`, `duration`, `outcome`, `error` |
+| `storage_op` | `StorageOp` | `StorageModule` | a file was read, written or deleted, or a directory listed | `disk`, `driver`, `operation` (`read`, `write`, `delete`, `list`, `copy`), `path`, `bytes`, `duration`, `outcome`, `error` |
+| `webhook_delivery` | `WebhookDelivery` | `WebhooksModule` | one attempt to deliver a webhook finished | `endpoint`, `event`, `attempt`, `status`, `duration`, `outcome`, `error` |
+| `search` | `SearchQueried` | `SearchModule` | a search finished | `engine`, `index`, `mode` (`text`, `hybrid`, `similar`, `across`), `term_length`, `hits`, `duration`, `outcome`, `error` |
+| `sign_in` | `SignInEvent` | `AuthModule` | a sign-in worked, was refused or failed | `method`, `provider`, `outcome`, `user_id`, `reason` |
+| `ui_operation` | `UiOperation` | `UiModule` | the server answered an operation of the Navree UI runtime | `name`, `kind`, `ops`, `status`, `duration` |
+
+A sink receives each one as a `TelemetryRecord`: the event, the time and the request, job or task it happened in. Serialized, an event has a `type` tag (`{"type": "ai_call", "provider": "anthropic", ...}`) and its durations in milliseconds.
+
+`outcome` is `success` or `failure` (the `Outcome` type). `error` is a short description of a failure, never a payload.
+
+### What the events leave out
+
+The seven events carry no content. They say that something happened, never what it was about:
+
+- **`ai_call`** has the token counts the provider reported and no prompt or answer. `cost_micros` is the price in millionths of a US dollar, and is empty when the app does not price its models: Navree's own calls leave it empty, and an app that prices its calls can emit its own `AiCall` with `.cost_micros(..)`.
+- **`broadcast`** names the channels and the event (`deal.updated`), not its data. `delivered` is how many deliveries went to the subscribers of this process.
+- **`storage_op`** has the path and the size in bytes, not the contents. The disk and its driver (`local`, `memory`, `s3`, `gcs`, `azure`) say where.
+- **`webhook_delivery`** names the endpoint by its id and the event by its type, with the status the endpoint answered, never the payload or the endpoint's answer. A 2xx status is a `success`; any other status, or no answer at all, is a `failure`.
+- **`search`** has the length of the term in characters, not the term, because what people search for can name a person. `hits` is what the engine found.
+- **`sign_in`** has the method (`password`, `two_factor`, `magic_link`, `code`, `passkey`, `social`, `sso` or `token_exchange`), the provider of a social sign-in, single sign-on connection or token issuer, and the outcome. A failure has a `reason` code (`invalid_credentials`, `throttled`, `invalid_code`, or the code of the sign-in policy that refused it) and no user. `user_id` is set only when the sign-in worked. The email address, the password, codes and tokens are never in it.
+- **`ui_operation`** has the route (`/deals/{id}/stage`), what kind of operation it was (`form_post`, `action`, `live_region` or `fragment`, and `table_query` or `upload` when a handler reports them), how many operations the answer held and its status, not the form's values or the markup.
+
+### What reports them
+
+The modules report from inside a request, a job or a scheduled task, the same context `request_handled` has. Work that runs outside one, such as a command, or a task you spawn without `TelemetryContext::propagate`, reports nothing; see [tracing](/docs/microservices/tracing/#your-own-code-in-a-trace) for how to carry the context across. An app without a sink pays one branch per event.
+
+- Model calls: every `Ai` text, structured, stream and embedding request, once, with the model that answered (or the last one tried, when none did).
+- Broadcasts: every `Realtime::broadcast`, which is where the `Broadcaster` ends too.
+- Storage: `put`, `put_stream`, `get`, a streamed read or a signed download, `delete` and `list` on a `Disk`.
+- Webhooks: each delivery attempt of an outgoing webhook, retries included.
+- Searches: `Search::query` in text and hybrid mode.
+- Sign-ins: password, second factor, magic link, emailed code, passkey and token exchange, social sign-in and single sign-on, and the sign-in policies' refusals. A password sign-in that the login throttle refuses is a `throttled` failure.
+- UI operations: every request the runtime makes with the `X-Navree-UI` header, apart from fetches ahead of a click: a form posted (`form_post`), another action (`action`), a region fetched again (`live_region`) and a page fragment (`fragment`). `table_query` and `upload` are there for handlers that report their own.
+
+## Emitting your own
+
+Inside a request, job or scheduled task, `Telemetry::current()` is the app's registry. Each platform event has a one-line method that builds the event only when a sink wants it:
+
+```rust
+use std::time::Instant;
+use navree::telemetry::{AiCall, Telemetry};
+
+let started = Instant::now();
+let summary = summarise(&notes).await?;
+Telemetry::current().ai_call(|| {
+    AiCall::new("anthropic", "claude-sonnet-4-5", "generate", started.elapsed())
+        .tokens(1200, 340)
+});
+```
+
+The methods are `ai_call`, `broadcast`, `storage_op`, `webhook_delivery`, `search`, `sign_in` and `ui_operation`. Each takes a closure that returns the event, and each event has a constructor with the fields every report needs and builders for the rest (`.tokens(..)`, `.bytes(..)`, `.hits(..)`, `.provider(..)`, `.failed(..)`):
+
+```rust
+use navree::telemetry::{SearchMode, SearchQueried, SignInEvent, SignInMethod, Telemetry};
+
+let telemetry = Telemetry::current();
+
+// A search of your own: only the length of the term is kept.
+telemetry.search(|| {
+    SearchQueried::new("rates-index", "branches", SearchMode::Text, &term, started.elapsed()).hits(12)
+});
+
+// A sign-in flow of your own.
+telemetry.sign_in(|| SignInEvent::succeeded(SignInMethod::Sso, user.id.to_string()).provider("okta-1"));
+telemetry.sign_in(|| SignInEvent::refused(SignInMethod::Password, "account_locked"));
+```
+
+Outside a request, resolve the registry once with `Telemetry::from_app(ctx).await` and keep it. Both are disabled, and report nothing, when the app has no sink. To skip work that only feeds an event, ask first: `telemetry.enabled(EventKind::AiCall)`.
+
+## Seeing them
+
+**Logbook** has an entry type and a watcher for each of the seven (`ai`, `broadcasts`, `storage`, `webhooks`, `search`, `sign_ins` and `ui` under `logbook.watchers`), all on by default. They appear inside the request or job that made them, are counted on its row, and have a card of their own when it is open. Filter them with `type:ai`, `type:sign_in` and the rest, and `failed` finds a refused call, a failed upload or a rejected sign-in. See [Logbook](/docs/tools/logbook/#what-logbook-records).
+
+**Lighthouse** records exceptions, requests, queries, jobs, scheduled tasks, mail, cache calls and outgoing calls. It does not record the seven platform events.
+
+**Your own sinks** receive them like any other kind. A sink that wants only some says so in `interest`:
+
+```rust
+use navree::telemetry::{EventKind, Interest};
+
+fn interest(&self) -> Interest {
+    Interest::only([EventKind::AiCall, EventKind::SignIn])
+}
+```
+
+## Testing
+
+`TelemetryRecorder` has an accessor for each: `ai_calls()`, `broadcasts()`, `storage_ops()`, `webhook_deliveries()`, `searches()`, `sign_ins()` and `ui_operations()`.
+
+```rust title="tests/summaries.rs"
+use navree::prelude::*;
+use navree::telemetry::{EventKind, Outcome, TelemetryRecorder};
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn drafting_a_summary_reports_the_model_call() {
+    let recorder = TelemetryRecorder::new();
+    let app = TestApp::builder()
+        .module(SummariesModule)
+        .module(recorder.module())
+        .build()
+        .await;
+
+    app.client()
+        .post("/api/v1/summaries/draft")
+        .send()
+        .await
+        .assert_status(200);
+
+    let call = &recorder.ai_calls()[0];
+    assert_eq!(call.model, "claude-sonnet-4-5");
+    assert_eq!(call.input_tokens, Some(1200));
+    assert_eq!(call.outcome, Outcome::Success);
+    // It happened inside the request.
+    let record = &recorder.of_kind(EventKind::AiCall)[0];
+    assert_eq!(
+        record.context.request_id.as_deref(),
+        Some(recorder.requests()[0].request_id.as_str()),
+    );
+
+    app.shutdown().await.unwrap();
+}
+```
+
+Outside an app, `Telemetry::with_sinks(vec![Arc::new(recorder.clone())])` is a live registry, and `TelemetryContext::new(telemetry).scope(async { ... }).await` runs code inside it, which is how a module's own tests check that it reports.
+
+## Related
+
+<LinkCards>
+  <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health, metrics and telemetry">
+    Writing a sink, what telemetry costs and the first twelve events' fields.
+  </LinkCard>
+  <LinkCard href="/docs/tools/logbook/" title="Logbook">
+    The timeline that shows these events as they happen.
+  </LinkCard>
+  <LinkCard href="/docs/microservices/tracing/" title="Tracing">
+    How events become spans, and how the context follows spawned work.
+  </LinkCard>
+  <LinkCard href="/docs/security/account-flows/" title="Account flows">
+    The sign-in methods whose outcomes are reported.
+  </LinkCard>
+</LinkCards>

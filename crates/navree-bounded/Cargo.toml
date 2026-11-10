@@ -1,0 +1,28 @@
+[package]
+name = "navree-bounded"
+description = "Navree's bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, and single-flight loading."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "cache", "bounded", "sieve"]
+categories = ["caching", "data-structures", "concurrency"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+hashbrown = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+proptest = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

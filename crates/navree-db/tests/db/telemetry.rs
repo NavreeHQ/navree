@@ -1,0 +1,195 @@
+//! Telemetry: every statement as a `QueryExecuted` event, carrying the
+//! request it ran in.
+
+use std::sync::Arc;
+
+use http::{Method, Request};
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, Statement, Uow};
+use navree_http::body::Body;
+use navree_http::{
+    AppError, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef, build_router,
+};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
+use navree_telemetry::{EventKind, Telemetry, TelemetryRecorder};
+use tower::ServiceExt;
+
+use crate::support::TempDb;
+
+fn quiet(temp: &TempDb) -> DbOptions {
+    DbOptions {
+        slow_query_ms: 0,
+        log_queries: false,
+        ..temp.options()
+    }
+}
+
+#[tokio::test]
+async fn every_statement_is_reported_without_bound_values() {
+    let temp = TempDb::new();
+    let recorder = TelemetryRecorder::new();
+    let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
+    let db = Db::connect_with_telemetry(&quiet(&temp), telemetry)
+        .await
+        .expect("connects");
+
+    db.fetch_optional(&Statement::portable(
+        "SELECT ? AS answer",
+        ["secret-binding".into()],
+    ))
+    .await
+    .expect("query runs");
+    let failed = db
+        .fetch_optional(&Statement::text("SELECT * FROM no_such_table"))
+        .await;
+    assert!(failed.is_err());
+
+    let queries = recorder.queries();
+    let answer = queries
+        .iter()
+        .find(|q| q.sql == "SELECT ? AS answer")
+        .expect("the query is reported");
+    assert!(!answer.failed);
+    assert_eq!(answer.rows, Some(1));
+    assert!(
+        answer.connection.starts_with("sqlite://"),
+        "{}",
+        answer.connection
+    );
+    assert!(
+        queries.iter().all(|q| !q.sql.contains("secret-binding")),
+        "{queries:?}"
+    );
+    let missing = queries
+        .iter()
+        .find(|q| q.sql.contains("no_such_table"))
+        .expect("failed statements are reported too");
+    assert!(missing.failed);
+}
+
+#[tokio::test]
+async fn a_plain_connection_reports_nothing() {
+    let temp = TempDb::new();
+    let recorder = TelemetryRecorder::new();
+    let db = Db::connect(&quiet(&temp)).await.expect("connects");
+    db.fetch_optional(&Statement::text("SELECT 1"))
+        .await
+        .unwrap();
+    assert!(recorder.is_empty());
+}
+
+/// `GET /api/answer`: one query through the request's unit of work.
+struct AnswerController;
+
+impl Injectable for AnswerController {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(AnswerController) })
+    }
+}
+
+impl Controller for AnswerController {
+    fn prefix(&self) -> &'static str {
+        "/answer"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(Method::GET, "/", |uow: Uow| async move {
+                uow.fetch_optional(&Statement::text("SELECT 42")).await?;
+                Ok::<_, AppError>("42")
+            })
+            .public(),
+        ]
+    }
+}
+
+struct AnswerModule;
+
+impl Module for AnswerModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<AnswerController>();
+    }
+}
+
+#[tokio::test]
+async fn queries_in_a_request_carry_its_request_id() {
+    let temp = TempDb::new();
+    let recorder = TelemetryRecorder::new();
+    let app = Navree::app()
+        .module(HttpModule::for_root(HttpOptions {
+            per_ip_rate_limit: None,
+            ..HttpOptions::default()
+        }))
+        .module(DatabaseModule::for_root(quiet(&temp)))
+        .module(AnswerModule)
+        .module(recorder.module())
+        .boot()
+        .await
+        .expect("boots");
+    let router = build_router(app.ctx()).await.expect("router");
+
+    let response = router
+        .oneshot(Request::get("/api/answer").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let request_id = response.headers()["x-request-id"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    let query = recorder
+        .of_kind(EventKind::QueryExecuted)
+        .into_iter()
+        .find(|record| matches!(&record.event, navree_telemetry::TelemetryEvent::QueryExecuted(q) if q.sql == "SELECT 42"))
+        .expect("the handler's query");
+    assert_eq!(
+        query.context.request_id.as_deref(),
+        Some(request_id.as_str())
+    );
+    assert!(query.context.trace.is_some());
+    app.shutdown().await.unwrap();
+}
+
+/// A statement waiting for a free connection has not been running: its
+/// reported duration is the time it ran, so a saturated pool shows up as
+/// slow requests and an exhausted pool, not as every statement being slow.
+#[tokio::test]
+async fn a_statement_waiting_for_a_connection_reports_only_the_time_it_ran() {
+    let temp = TempDb::new();
+    let recorder = TelemetryRecorder::new();
+    let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
+    let db = Db::connect_with_telemetry(
+        &DbOptions {
+            max_connections: 1,
+            ..quiet(&temp)
+        },
+        telemetry,
+    )
+    .await
+    .expect("connects");
+
+    // The only connection is busy for a while.
+    let holder = db.begin().await.expect("a transaction");
+    let waiting = {
+        let db = db.clone();
+        tokio::spawn(async move {
+            db.fetch_optional(&Statement::text("SELECT 42 AS waited"))
+                .await
+                .expect("runs once the connection is free")
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    holder.commit().await.expect("commits");
+    waiting.await.expect("joins");
+
+    let queries = recorder.queries();
+    let waited = queries
+        .iter()
+        .find(|q| q.sql == "SELECT 42 AS waited")
+        .expect("the query is reported");
+    assert!(
+        waited.duration < std::time::Duration::from_millis(150),
+        "it ran in microseconds but was reported as {:?}",
+        waited.duration
+    );
+}

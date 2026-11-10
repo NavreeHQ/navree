@@ -1,0 +1,18 @@
+[package]
+name = "xtask"
+description = "Release tooling for the Navree workspace: one version everywhere, the release checks, Navigator's staged files and the publish in dependency order."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+toml_edit = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,35 @@
+---
+source: crates/navree-cli/tests/make_resource.rs
+expression: resource
+---
+//! Deals in the admin panel (Helm), at `/admin/resources/deals`.
+
+use navree::helm::{Field, Resource};
+use navree::injectable;
+
+use super::super::models::deal::Deal;
+
+/// Deals in the panel. What a user sees and changes follows their
+/// abilities on `Deal`: grant `deals.read` (and `.create`,
+/// `.update`, `.delete`) to the roles that manage them, and `helm.view` to
+/// let them into the panel.
+#[injectable]
+pub struct DealResource;
+
+impl Resource for DealResource {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Deals";
+    const SINGULAR: &'static str = "Deal";
+    const TITLE: &'static str = "name";
+    const SEARCH: &'static [&'static str] = &["name"];
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::id(),
+            Field::text("name").required().sortable(),
+            Field::datetime("created_at").readonly().sortable(),
+            Field::datetime("updated_at").readonly().sortable(),
+        ]
+    }
+}

@@ -1,0 +1,21 @@
+---
+title: "Roadmap"
+description: "Where Navree goes after 1.0, in the order it is expected: what each item is for and where it stands, from more queue backends to Windows services."
+---
+
+This page lists where Navree is heading, in the order it is expected. It has no dates: each item ships when it is ready, and the [release notes](/docs/prologue/release-notes/) record what each release brings, and [Versioning and support](/docs/prologue/versioning-and-support/) says what you can rely on across 1.x. **Planned** means the work is decided and not started. **Ongoing** means it never finishes. **In force** means it already applies. Navree UI keeps its own list in [Coming next](/docs/ui/coming-next/). If one of these matters to you, [Contributing](/docs/prologue/contributing/) explains how to help.
+
+| Order | Item | Why | Status | Read more |
+|---|---|---|---|---|
+| 1 | More queue backends | Run jobs on a broker you already operate, through the `QueueStore` driver trait | Planned | [Queues](/docs/digging-deeper/queues/) |
+| 2 | Revocable access tokens | Sign-out takes effect before an access token expires | Planned | [Authentication](/docs/security/authentication/) |
+| 3 | More starter kits | More product shapes and front ends, each production-ready from `navree new` | Planned | [Starter kits](/docs/getting-started/starter-kits/) |
+| 4 | Windows services | `serve`, `queue:work` and `schedule:work` run as services on Windows Server | Planned | [Deployment](/docs/getting-started/deployment/) |
+| 5 | More of Navree UI | One module at a time, each only when it is finished | Ongoing | [Coming next](/docs/ui/coming-next/) |
+| 6 | Request pipeline performance | Fewer database round trips per request, less work on requests that don't need it, no process-wide locks on the hot path | Ongoing | [Performance](/performance/) |
+
+## What the other items mean
+
+- **More queue backends** arrive beside the database, memory and Redis drivers, so a new driver needs no change in your code.
+- **Revocable access tokens** are for apps that need a logout or a password change to end an access token before it expires. Today they are stateless, and the answer is a short `auth.jwt.access_ttl_secs`.
+- **Windows services** keep the graceful shutdown the commands have under systemd, and [Harbor](/docs/tools/harbor/) learns to deploy to Windows Server.

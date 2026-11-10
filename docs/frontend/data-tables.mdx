@@ -1,0 +1,261 @@
+---
+title: "Data tables"
+description: "Lists driven by list queries: filters, sort, search and paging in the URL and on the server, drawn by `DataTable` (React) or `NavreeDataTable` (Vue)."
+---
+
+A list screen has the same parts in every app: a table of one page of records, sortable headings, a search box, filters and the page buttons, all kept in the URL so a reload, the back button and a shared link show the same list. With Navree the server does the sorting, filtering and paging (the list endpoint reads a [list query](/docs/frontend/typed-client/#list-queries)), so the table only renders the page it gets and turns clicks into the next list query. `@navree/next` and `@navree/nuxt` ship that table on [TanStack Table](https://tanstack.com/table), styled with [the theme](/docs/frontend/theming/).
+
+## One grammar, from the URL to the database
+
+The table's URL, the request to the API and the server's query all use the same names, written the same way:
+
+```text
+filter[stage]=won                      equal
+filter[created_at][gte]=2026-10-01     an operator: eq ne gt gte lt lte in not_in contains starts_with null
+filter[stage][in]=lead,won             one of several values
+filter[owner_id][null]=true            is NULL (false: is not NULL)
+sort=-created_at,name                  a leading "-" sorts descending
+search=agra
+page=2&per_page=25                     numbered pages, or
+cursor=eyJpZCI6NDJ9&limit=50           cursor pages; before=... is the page before
+```
+
+- On the server, a handler that takes `List<Resource>` gets a query it can trust. The resource's `ListSpec` is an allow-list of the fields that can be filtered (and with which operators), sorted and searched. Anything outside it, a value of the wrong type or a page size past the maximum is a 400 that names the parameter. `Builder::list` then applies the query to the database query. See [list queries](/docs/basics/list-queries/) for the server side.
+- Navree UI tables and Helm use the same names, so a link from a Navree UI table, an admin screen and your Next.js or Nuxt page can all point at the same list.
+- In JavaScript, `@navree/client` reads and writes the grammar, and `useListQuery` and the table only go through it. The [typed client page](/docs/frontend/typed-client/#list-queries) has the operators table, the limits and the canonical form.
+
+The canonical form is what `useListQuery` writes to the URL: filters grouped by field, then `sort`, `search`, `page`, `per_page`, `cursor`, `before` and `limit`, so the same list is always the same address.
+
+## The URL is the state
+
+`useListQuery(defaults)` reads the list query from the current URL and writes changes back with `router.replace`, keeping the page's other parameters:
+
+| Member | What it does |
+|---|---|
+| `query` | The `ListQuery` in the URL, over `defaults`. |
+| `problems` | What is wrong in the list query of the URL, as `{ param, message }`. The rest of the query still applies, so an edited or old link shows a page; show the problems if you want. |
+| `setQuery(next)` | Replaces the list query (a value, or a function of the current one). |
+| `setFilter(field, value)` | Sets one filter, or removes it with `undefined`, and goes back to page 1. |
+| `setSearch(text)` | Sets the search (an empty string removes it) and goes back to page 1. |
+| `toggleSort(field, {multi})` | Ascending, descending, off; other fields are dropped unless `multi`. |
+| `setPage(n)` | Moves to page `n` (page 1 is left out of the URL). |
+
+Values equal to `defaults` stay out of the URL, so `useListQuery({ per_page: 25 })` keeps `?per_page=25` from every link. A list that pages by cursor (`cursor`, `before` or `limit` in the URL) takes no default `page` or `per_page`, and a numbered one takes no default `cursor`, `before` or `limit`, so the two ways of paging never mix.
+
+```text
+/deals?tab=open&filter[stage]=won&filter[created_at][gte]=2026-10-01&sort=-amount_cents&search=agra&page=2
+```
+
+Parameters that are not the list query's, such as `tab` above, stay as they are. The names of the grammar are the only ones read: nothing else (`q`, `per`, `after` or `f.stage`) is part of a list query.
+
+In Next.js the hook uses `next/navigation`, so the component must sit under a `<Suspense>` boundary (Next.js requires one around `useSearchParams` in pages that are rendered ahead of time). In Nuxt it uses vue-router's route query, and its setters return the navigation's promise.
+
+## Next.js
+
+```tsx title="web/src/app/(app)/deals/deals-table.tsx"
+"use client";
+
+import { unwrap } from "@navree/client";
+import { DataTable, useListQuery, type NavreeColumnDef, type NavreeColumnMeta } from "@navree/next";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api/client";
+import { deals as keys } from "@/lib/api/keys";
+import type { Deal } from "@/lib/api/types";
+
+const columns: NavreeColumnDef<Deal>[] = [
+  { accessorKey: "title", header: "Deal", meta: { sortField: "title" } satisfies NavreeColumnMeta },
+  { accessorKey: "stage", header: "Stage", cell: ({ row }) => <StageBadge stage={row.original.stage} /> },
+  {
+    accessorKey: "amount_cents",
+    header: "Amount",
+    cell: ({ getValue }) => <Money cents={getValue<number>()} />,
+    meta: { sortField: "amount_cents", align: "end", className: "hidden md:table-cell" } satisfies NavreeColumnMeta,
+  },
+];
+
+export function DealsTable() {
+  const router = useRouter();
+  const { query, setQuery } = useListQuery({ per_page: 25 });
+  const { data, isPending } = useQuery({
+    queryKey: keys.list(query),
+    queryFn: () => unwrap(api.GET("/api/v1/deals", { params: { query } })),
+    placeholderData: (previous) => previous,
+  });
+
+  return (
+    <DataTable<Deal>
+      columns={columns}
+      data={data?.data}
+      meta={data?.meta}
+      query={query}
+      onQueryChange={setQuery}
+      loading={isPending}
+      getRowId={(deal) => deal.id}
+      onRowClick={(deal) => router.push(`/deals/${deal.id}`)}
+      empty="No deals match these filters."
+    />
+  );
+}
+```
+
+`DataTable` props:
+
+| Prop | Meaning |
+|---|---|
+| `columns` | TanStack column definitions; `meta` takes `NavreeColumnMeta`. |
+| `data`, `meta` | The page's rows and `meta` (`current_page`, `per_page`, `total`, `last_page`). |
+| `query`, `onQueryChange` | The current list query, and what to do with the next one (`setQuery` from `useListQuery`). |
+| `loading`, `loadingRows` | Placeholder rows instead of the data (5 by default). |
+| `empty` | What an empty page shows (default: the `empty` label). |
+| `onRowClick(row)` | Makes rows clickable. |
+| `getRowId(row)` | Row keys (and `data-row-id` on each row). |
+| `search`, `searchDelay` | `search` adds the search box over the table; `searchDelay` is how long typing waits for a pause before the query changes (100 ms by default). |
+| `filterMode` | Where the filters are: `bar`, the default, in a bar behind a Filters button, or `row`, in a row under the headings. |
+| `filterOptions` | The choices of select, multi and relation filters, by filter field. |
+| `bulk` | `{ actions, onAction, selectAllMatching, version }`: a checkbox on every row and the actions on the selection. |
+| `selectableIf(row)` | A row that cannot be selected answers `false`. |
+| `selection`, `onSelectionChange` | The selection, when you hold it yourself; the table holds it otherwise. |
+| `getRowLabel(row)` | The name of a row in its checkbox (the text of its first cell by default). |
+| `total` | How many results match, for "Select all N results" (`meta.total` by default). |
+| `exportUrl` | Adds an Export link to this address, carrying the search, filters and sort. |
+| `toolbar` | Your own controls in the toolbar. |
+| `caption` | A name for the table, read by a screen reader. |
+| `labels` | `previous`, `next`, `empty`, `loading`, `pagination`, and `range(from, to, total)`; the words of the filters and the selection are in [the next section](#search-filters-selection-and-export). |
+| `className` | Classes on the outer surface. |
+
+`NavreeColumnMeta`:
+
+| Field | Meaning |
+|---|---|
+| `sortField` | The list-query field the column sorts by; the heading becomes a button only when it is set. |
+| `align` | `start` (default), `center` or `end` (amounts and counts). |
+| `className` | Classes for the column's heading and cells, such as `hidden md:table-cell` to drop a column on phones. |
+| `filter` | The filter the column offers: `text`, `range`, `select`, `multi`, `boolean` or `relation`. |
+| `filterField` | The list-query field the filter names; the `sortField`, then the column id, when it is not set. |
+| `kind` | The type of the column's values (`int`, `money`, `float`, `decimal`, `date`, `datetime`, `bool`, `uuid` or `text`): the type of a range's inputs and what a filter accepts. |
+| `nullable` | The column can be empty: its filter offers Empty. |
+| `options` | The choices of a `select`, `multi` or `relation` filter, when the page does not pass them in `filterOptions`. |
+| `label` | The column's name in the chips and the filter controls (its heading, when that is text). |
+
+A heading click sends `sort` and drops `page`, `cursor` and `before`; shift-click adds the column to the sort (up to four fields). Each heading carries `aria-sort`. The page buttons send `page`. The pagination bar shows "26–50 of 60" and hides when the list is empty. `Pagination` is exported on its own for card grids and boards.
+
+### Your own markup
+
+`useDataTable(options)` is the same table without markup: TanStack Table's instance with manual sorting and paging, plus `toggleColumnSort(header, multi)`, `columnSort(header)` and `goToPage(n)`. Use it to render the table with your own shadcn/ui `Table` components.
+
+## Nuxt
+
+```html title="web/app/pages/deals/index.vue"
+<script setup lang="ts">
+import { unwrap } from "@navree/client";
+import type { NavreeColumnDef } from "@navree/nuxt/vue";
+import type { paths } from "~/lib/api/schema";
+import type { Deal } from "~/lib/api/types";
+
+const api = useNavreeClient<paths>();
+const list = useListQuery({ per_page: 25 });
+const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api/v1/deals", { params: { query: list.query.value } })), {
+  watch: [list.query],
+});
+
+const columns: NavreeColumnDef<Deal>[] = [
+  { accessorKey: "title", header: "Deal", meta: { sortField: "title" } },
+  { accessorKey: "amount_cents", header: "Amount", meta: { sortField: "amount_cents", align: "end" } },
+];
+</script>
+
+<template>
+  <input :value="list.query.value.search ?? ''" placeholder="Search" @input="list.setSearch(($event.target as HTMLInputElement).value)" />
+  <NavreeDataTable
+    :columns="columns"
+    :data="data?.data"
+    :meta="data?.meta"
+    :query="list.query.value"
+    :loading="pending"
+    clickable
+    @update:query="list.setQuery"
+    @row-click="(deal) => navigateTo(`/deals/${deal.id}`)"
+  >
+    <template #empty>No deals match these filters.</template>
+  </NavreeDataTable>
+</template>
+```
+
+`<NavreeDataTable>` takes the same props as the React table (`columns`, `data`, `meta`, `query`, `loading`, `loadingRows`, `labels`, `getRowId`, plus `clickable`), emits `update:query` and `row-click`, and has an `empty` slot. Its markup carries shadcn-vue's `data-slot` attributes (`table`, `table-header`, `table-row`, `table-head`, `table-body`, `table-cell`), so it sits next to shadcn-vue components. `useDataTable` from `@navree/nuxt/vue` is the table without markup, for your own shadcn-vue `Table`.
+
+## Search, filters, selection and export
+
+The table does what Navree UI's `DataTable` does, in the same words and the same list query. A column's `meta.filter` gives it a filter. The Filters button opens them (or `filterMode: "row"` puts them under the headings), chips show what is in force with a button to take each one off, and Clear filters takes them all off. `search` adds the search box.
+
+`bulk` adds a checkbox to every row (shift-click selects a range), a status line, and the actions. Once the page is selected and more results match, "Select all N results" offers every result of the search and filters; that choice ends when the search or the filters change, and it needs a counted list (`meta.total` or the `total` prop). An action with `confirm: "Delete {n} deals?"` asks first. `onAction(request)` gets `{ action, mode, ids, excluded, expected, version, query }` and ends the selection unless it answers `false` or throws. `bulkParams(request)` from `@navree/client` writes the request as the form post a Navree UI bulk route reads. A selection of more than 10,000 keys is refused, not cut.
+
+`exportUrl` adds an Export link that carries the search, the filters and the sort, without the page. `toCsv(head, rows)` from `@navree/client` writes a CSV file from rows you hold, with no cell a spreadsheet would run as a formula. Counts group in lakhs with `labels={{ grouping: "indian" }}`.
+
+```tsx
+const columns: NavreeColumnDef<Deal>[] = [
+  { accessorKey: "title", header: "Title", meta: { sortField: "title", filter: "text" } },
+  { accessorKey: "stage", header: "Stage", meta: { filter: "multi", options: STAGES } },
+  { accessorKey: "amount", header: "Amount", meta: { sortField: "amount", align: "end", filter: "range", kind: "money", nullable: true } },
+];
+
+<DataTable
+  columns={columns} data={page.data} meta={page.meta} query={query} onQueryChange={setQuery}
+  getRowId={(deal) => deal.id}
+  search
+  exportUrl="/api/v1/deals/export"
+  bulk={{ actions: [{ id: "archive", label: "Archive" }], onAction: (request) => archive(request) }}
+/>
+```
+
+`<NavreeDataTable>` takes the same props, written in kebab-case in a template (`filter-mode`, `selectable-if`, `export-url`), `v-model:selection` for a selection you hold, and a `toolbar` slot for your own controls.
+
+## Filters and facets
+
+Filters are list-query filters, so a filter control is a call to `setFilter`:
+
+```tsx
+<Select value={(query.filter?.stage as string) ?? ""} onValueChange={(stage) => setFilter("stage", stage || undefined)}>
+  ...
+</Select>
+<DateRange onChange={({ from, to }) => setFilter("created_at", { gte: from, lt: to })} />
+```
+
+| Control | Call | In the URL |
+|---|---|---|
+| A select | `setFilter("stage", "won")` | `filter[stage]=won` |
+| A multi-select | `setFilter("stage", ["lead", "won"])` | `filter[stage][in]=lead,won` |
+| A text box | `setFilter("title", { contains: "agra" })` | `filter[title][contains]=agra` |
+| A date or number range | `setFilter("amount", { gte: 100, lte: 900 })` | `filter[amount][gte]=100&filter[amount][lte]=900` |
+| An "empty" toggle | `setFilter("owner_id", { null: true })` | `filter[owner_id][null]=true` |
+
+A blank value removes the filter. The server accepts only the fields and operators the resource's `ListSpec` lists, and answers anything else with a 400 that names the parameter (for example `filter[password][contains]`).
+
+When the endpoint reports facets in `meta.facets`, `facetCounts(meta, "stage")` from `@navree/client` gives `[{value, count, label?}]` for a filter's options, whether the API sends a map of counts or a list.
+
+## Right to left
+
+The table uses logical properties (`text-start`, `text-end`, `px-3`), so in a page with `dir="rtl"` its columns, alignment and pagination mirror without extra classes. Pass `labels` from your translations, including `range`, to format the numbers for the locale:
+
+```ts
+const labels = {
+  previous: t("table.previous"),
+  next: t("table.next"),
+  empty: t("table.empty"),
+  range: (from: number, to: number, total: number) => t("table.range", { from, to, total }),
+};
+```
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/typed-client/" title="The typed client">
+    `listQuery()`, the page helpers and the query keys the tables are built on.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/theming/" title="Theming">
+    The tokens and utilities the table is styled with.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Translate the table's labels and format its numbers for the locale.
+  </LinkCard>
+</LinkCards>

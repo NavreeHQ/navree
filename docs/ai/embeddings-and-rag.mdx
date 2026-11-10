@@ -1,0 +1,533 @@
+---
+title: "Embeddings and RAG"
+description: "Turn your records into vectors with `Embeddings`, keep them in pgvector, Qdrant or memory with `VectorStore`, and answer questions from your own data with sources, within the user's permissions."
+---
+
+## Introduction
+
+<Badge feature="ai" /> A model knows the world up to its training date and nothing about your customers. **Retrieval-augmented generation** (RAG) closes that gap: when a question comes in, you find the few passages of your own data that answer it, give them to the model with the question, and get an answer that cites them.
+
+Finding those passages is a search by meaning, which is what embeddings are for. An **embedding** is a vector of numbers that a model computes from a text; texts that mean similar things get vectors that point in similar directions. "The customer is worried about rollout time" and "Daljit asked whether onboarding takes more than a month" share no words and sit close together.
+
+`navree-ai` gives you the pieces:
+
+- `Embeddings` computes vectors with the provider you configure, in batches, cached by text.
+- `VectorStore` keeps them in **pgvector** (in your PostgreSQL database), **Qdrant**, or **memory**, and finds the nearest ones to a query, with metadata filters.
+- `Chunker` splits long text into passages that embed well.
+- `ai.rerank` re-orders candidates by how well they answer the question.
+
+The examples build "Ask about this deal" in the CRM: a rep asks "What did they say about the rollout timeline?" and gets an answer from the deal's notes, calls and emails, with links to the activities it came from.
+
+<Callout type="tip" title="Search or RAG">
+
+To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries. With the `ai` feature, Search embeds with the `Embeddings` service of this page, and with `search.vectors.store = "ai"` it keeps its vectors in this page's `VectorStore`, as the collections `search_<index>`, so `ai.vectors` configures both ([with the AI SDK](/docs/packages/search/#with-the-ai-sdk)). Use what this page describes when a **model answers** from passages of your data.
+
+</Callout>
+
+## Installation and configuration
+
+Everything is in the `ai` feature (see [AI SDK installation](/docs/ai/ai-sdk/#installation)). The pgvector store also needs navree-db's PostgreSQL driver, the `postgres` feature:
+
+```toml title="Cargo.toml"
+navree = { version = "1", features = ["ai", "postgres"] }
+```
+
+Name an embedding model, point `ai.embeddings` at it, and choose a store:
+
+```toml title="config/app.toml"
+[ai.models.embed]
+provider = "openai"
+model = "text-embedding-3-small"
+dimensions = 1536
+
+[ai.embeddings]
+model = "embed"
+
+[ai.vectors]
+store = "pgvector"          # pgvector | qdrant | memory
+dimensions = 1536           # must match the embedding model
+metric = "cosine"           # cosine | dot | euclidean
+
+# store = "qdrant"
+# url = "http://127.0.0.1:6333"   # the REST port; APP_AI__VECTORS__KEY for the API key
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ai.embeddings.model` | none | The model name in `ai.models` that embeds. Required for `Embeddings`. |
+| `ai.embeddings.batch_size` | `96` | Texts per provider call in `embed_many`. |
+| `ai.embeddings.cache_ttl_days` | `30` | How long a text's vector is cached; `0` turns the cache off. |
+| `ai.vectors.store` | `memory` | `pgvector`, `qdrant` or `memory`. |
+| `ai.vectors.dimensions` | `1536` | The vector size. Every collection uses it. |
+| `ai.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean`. |
+| `ai.vectors.url`, `ai.vectors.key` | none | The Qdrant server's REST address (required with `qdrant`) and its API key. |
+
+From the environment: `APP_AI__VECTORS__STORE=qdrant`, `APP_AI__VECTORS__URL=https://qdrant.internal:6333`, `APP_AI__VECTORS__KEY=...`. A model whose vectors don't have `ai.vectors.dimensions` entries fails the first embedding with `AiError::Config`, naming both sizes. The Qdrant host is let through the HTTP client's SSRF guard because you configured it.
+
+### Embedding models
+
+Anthropic doesn't offer an embedding model, so an app that writes with Claude embeds with another provider. Any of these work:
+
+| Provider | Model | Dimensions |
+|---|---|---|
+| OpenAI | `text-embedding-3-small` | 1536 (or fewer, with `dimensions`) |
+| OpenAI | `text-embedding-3-large` | 3072 (or fewer) |
+| Google Gemini | `gemini-embedding-001` | 3072 (or fewer) |
+| Mistral | `mistral-embed` | 1024 |
+| Ollama | `nomic-embed-text`, or any embedding model you pull | 768 for `nomic-embed-text` |
+| AWS Bedrock | Amazon Titan (`amazon.titan-embed-...`, one text per call) and Cohere (`cohere.embed-...`) models enabled on your account | per model |
+
+Changing the embedding model changes every vector: re-index after you switch (see [backfilling](#backfilling-existing-records)).
+
+### The stores
+
+| Store | Where vectors live | Use it for |
+|---|---|---|
+| `pgvector` | Tables in your app's PostgreSQL database, with an HNSW index | Most apps: no extra service, and vectors back up with your data. |
+| `qdrant` | A [Qdrant](https://qdrant.tech/) server over its REST API, one collection per Navree collection | Tens of millions of vectors, or a search cluster of its own. |
+| `memory` | The process's memory, searched exhaustively | Tests, and development without PostgreSQL (on SQLite, for example). Lost on restart. |
+
+Collections declared with `m.vector_collection(..)` are created at boot; any other collection is created the first time it is used. With `pgvector`, creating one enables the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector`; on managed PostgreSQL, allow the extension first) and creates its table and indexes; the database must be PostgreSQL. With `qdrant`, a missing collection is created with the configured size and metric. In both, an existing collection of another size fails the boot (or, for an undeclared one, its first use) with `AiError::Config`.
+
+## Collections
+
+A collection is a named set of vectors with their text and metadata, usually one per kind of content. Its name uses lower-case letters, digits and `_`. Declare it in the module that owns the content:
+
+```rust title="crates/crm-activities/src/lib.rs"
+use navree::ai::VectorCollection;
+
+impl ActivitiesModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.job::<IndexActivity>()
+            .vector_collection(VectorCollection::new("activity_notes"));
+    }
+}
+```
+
+With pgvector, this collection is a table `ai_vectors_activity_notes`:
+
+| Column | |
+|---|---|
+| `id` | Text, your key for the record (here `<activity id>:<chunk>`) |
+| `embedding` | `vector(1536)`, with an HNSW index for the configured metric |
+| `text` | The passage the vector was computed from |
+| `metadata` | `jsonb`, with a GIN index, for filters |
+| `updated_at` | When it was last written |
+
+Inject `Arc<VectorStore>` and open a collection by name:
+
+```rust
+use navree::ai::{Filter, VectorRecord, VectorStore};
+
+let notes = vectors.collection("activity_notes");
+
+notes.upsert(VectorRecord::new("0199c1d2-…:0", embedding)
+    .text("Pricing call with Daljit. She asked for a 12-month term...")
+    .metadata(json!({ "activity_id": activity_id, "subject_id": deal_id }))).await?;
+
+let matches = notes
+    .search("what did they say about the rollout timeline")
+    .filter(Filter::eq("subject_id", deal_id))
+    .limit(8)
+    .await?;
+
+for m in &matches {
+    println!("{:.2} {}", m.score, m.text);
+}
+```
+
+`search` takes a text, which it embeds with `Embeddings` (and the cache), or an `Embedding` you computed. It returns `Vec<VectorMatch>`, best first; each has `id`, `score` (higher is closer, whatever the metric: the cosine similarity, the dot product, or `1 / (1 + distance)` for `euclidean`), `text` and `metadata`. With Qdrant, which keys points by UUID, each record is stored under a UUID derived from its `id`, and the `id` comes back unchanged.
+
+| Method | |
+|---|---|
+| `upsert(record)`, `upsert_many(records)` | Insert or replace by `id`. A record whose vector isn't `ai.vectors.dimensions` long, or whose metadata isn't a JSON object, fails with `AiError::Config`. |
+| `delete(id)`, `delete_many(ids)` | Remove one, or several (ids that aren't there are skipped). |
+| `delete_where(filter)` | Remove every record matching a filter, e.g. all chunks of one activity. |
+| `get(id)` | The record with its vector, text and metadata, or `None`. A cosine store may give the vector back normalized (Qdrant does). |
+| `clear()` | Remove every record; the collection stays. |
+| `search(query)` | A query builder: `.filter(f)`, `.limit(n)` (default 10), `.min_score(s)`, then await. |
+| `count()` | The number of records. |
+
+Filters work on metadata fields: `Filter::eq("kind", "call")`, `Filter::any_of("subject_id", ids)`, `Filter::gte("created_at", "2026-10-01")`, combined with `.and(..)` and `.or(..)`, negated with `Filter::not(..)`. They are applied inside the vector search, so `limit(8)` returns eight matching records, not eight records of which some match. A dotted name (`owner.id`) reaches a nested field; names are letters, digits and `_`. `gt`, `gte`, `lt` and `lte` compare numbers with numbers and strings with strings (RFC 3339 dates compare correctly as strings); on Qdrant they are sent as `range` conditions, which take numbers and RFC 3339 dates. Calling `.filter(..)` twice combines both with `and`.
+
+## Embeddings
+
+Most code never calls `Embeddings` directly, because `search` embeds the query for you. You call it when you index:
+
+```rust
+use navree::ai::Embeddings;
+
+let one = embeddings.embed("Daljit asked whether onboarding takes more than a month").await?;
+let many = embeddings.embed_many(&["first passage", "second passage"]).await?; // same order
+assert_eq!(one.dimensions(), 1536);
+```
+
+- `embed_many` takes any iterator of strings, sends `ai.embeddings.batch_size` texts per provider call, in parallel, and returns the vectors in input order.
+- Vectors are cached by model and text (a SHA-256 of both) in the app's cache for `ai.embeddings.cache_ttl_days`, so re-indexing unchanged text costs no tokens.
+- Embedding calls carry no user, so they don't count against [budgets](/docs/ai/ai-sdk/#token-limits-and-budgets); they do appear in the metrics.
+- Calls go through the model's [failover chain](/docs/ai/ai-sdk/#failover-and-retries). Fallbacks of an embedding model must be embedding models of the same size, or the boot fails, since mixing models in one collection breaks its distances.
+- `Embedding` derefs to `[f32]` and has `cosine(&other)` for comparing two texts in memory.
+
+## Chunking
+
+An embedding summarizes its whole text in one vector. A two-page meeting transcript embedded whole is "about" everything in it and close to nothing in particular, so long text is split into passages first. `Chunker` splits at paragraph and sentence boundaries and overlaps neighbors, so a fact that straddles a boundary is in both:
+
+```rust
+use navree::ai::Chunker;
+
+let chunks = Chunker::new().max_tokens(300).overlap(40).split(&text);
+for chunk in &chunks {
+    println!("#{} {} chars", chunk.index, chunk.text.len());
+}
+```
+
+`Chunker::markdown()` splits at headings first (ignoring `#` inside code fences) and keeps each chunk's heading path at its start ("Pricing > Discounts"), which helps both the embedding and the model reading it. Tokens are counted as four characters each, which is close for English text with every common embedding tokenizer. The defaults are `max_tokens(512)` and `overlap(64)`; a word longer than a chunk is cut. A text shorter than `max_tokens` is one chunk, so most CRM notes are a single passage, and blank text gives none.
+
+## Indexing through the queue
+
+Embedding calls a provider, so it belongs in a [queued job](/docs/digging-deeper/queues/), not in the request that saved the note. The CRM indexes an activity whenever it is created or changed:
+
+```rust title="crates/crm-activities/src/index.rs"
+use crm_core::models::Activity;
+use navree::ai::{Chunker, Embeddings, Filter, VectorRecord, VectorStore};
+use navree::contracts::{BoxError, Job, JobContext};
+use navree::db::Db;
+use navree::orm::Model as _;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use uuid::Uuid;
+
+/// Re-embeds one activity's text, or removes it from the index once deleted.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IndexActivity {
+    pub activity_id: Uuid,
+}
+
+impl Job for IndexActivity {
+    const NAME: &'static str = "activities.index";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let db = ctx.app.get::<Db>().await?;
+        let embeddings = ctx.app.get::<Embeddings>().await?;
+        let notes = ctx.app.get::<VectorStore>().await?.collection("activity_notes");
+
+        // Old chunks go first: an edited note may now have fewer of them.
+        notes.delete_where(Filter::eq("activity_id", self.activity_id)).await?;
+        let Some(activity) = Activity::find(&db, self.activity_id).await? else {
+            return Ok(()); // deleted: nothing to index
+        };
+
+        let text = match &activity.body {
+            Some(body) => format!("{}\n\n{body}", activity.subject),
+            None => activity.subject.clone(),
+        };
+        let chunks = Chunker::new().max_tokens(300).overlap(40).split(&text);
+        let vectors = embeddings.embed_many(chunks.iter().map(|c| c.text.as_str())).await?;
+
+        let records = chunks.into_iter().zip(vectors).map(|(chunk, embedding)| {
+            VectorRecord::new(format!("{}:{}", activity.id, chunk.index), embedding)
+                .text(chunk.text)
+                .metadata(json!({
+                    "activity_id": activity.id,
+                    "kind": activity.kind,
+                    "subject_type": activity.subject_type,
+                    "subject_id": activity.subject_id,
+                    "owner_id": activity.owner_id,
+                    "created_at": activity.created_at,
+                }))
+        });
+        notes.upsert_many(records.collect()).await?;
+        Ok(())
+    }
+}
+```
+
+The service dispatches it after each write. In a request, the job joins the request's [unit of work](/docs/database/unit-of-work/), so it is queued only if the activity is saved, and the worker never reads a note that was rolled back:
+
+```rust title="crates/crm-activities/src/service.rs"
+let activity = Activity::create(uow, new_activity).await?;
+self.queue.dispatch(IndexActivity { activity_id: activity.id }).await?; // [!code ++]
+self.present_one(uow, activity).await
+```
+
+Do the same in `update` and `delete`. The job is safe to run twice, as [jobs should be](/docs/digging-deeper/queues/#retries-and-backoff): it replaces the activity's chunks every time.
+
+### Backfilling existing records
+
+Records that existed before you added the index, or every record after you change the embedding model, need a pass of their own. A command that queues one job per record does it, and the queue spreads the work over your workers:
+
+```rust title="crates/crm-activities/src/commands/reindex.rs"
+use crm_core::models::Activity;
+use navree::kernel::{AppContext, BoxError, CommandSpec};
+use navree::db::Db;
+use navree::orm::Model as _;
+use navree::queue::Queue;
+
+/// `activities:reindex`: queues an index job for every activity.
+pub fn reindex() -> CommandSpec {
+    CommandSpec::new("activities:reindex", "Queue a vector index job for every activity", run)
+}
+
+async fn run(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let db = ctx.get::<Db>().await?;
+    let queue = ctx.get::<Queue>().await?;
+    let ids: Vec<uuid::Uuid> = Activity::query().pluck(&db, Activity::ID).await?;
+    for activity_id in &ids {
+        queue.dispatch(super::IndexActivity { activity_id: *activity_id }).await?;
+    }
+    println!("Queued {} activities.", ids.len());
+    Ok(())
+}
+```
+
+```sh
+navree activities:reindex
+navree queue:work --stop-when-empty
+```
+
+Embeddings are cached by text, so a second backfill with the same model costs nothing for unchanged records.
+
+## Retrieval and permissions
+
+A vector index doesn't know your access rules. Two patterns keep retrieval inside them.
+
+**Scope by a record the route already authorized.** "Ask about this deal" runs behind `#[can(Read, Deal, from = "id")]`, so filtering by `subject_id` keeps the search inside one readable deal.
+
+**Re-check the hits.** For questions across records, take the candidate ids from the index and load them through your access filter. Anything the user can't read drops out before the model sees it:
+
+```rust
+use crm_core::models::Activity;
+use navree::access::{Accessible, Read};
+use navree::orm::access::AccessibleQuery as _;
+
+let hits = notes.search(&question).limit(30).await?;
+let ids: Vec<Uuid> = hits.iter().filter_map(|m| m.metadata["activity_id"].as_str()?.parse().ok()).collect();
+
+let readable = Accessible::<Activity, Read>::new(access.ability.clone())
+    .apply(Activity::query().where_key_in(ids))
+    .get(&uow)
+    .await?;
+```
+
+Store the fields your rules use (`owner_id`, `workspace_id`) in metadata as well, and filter on them in the search, so the top results aren't spent on records the check will discard. In a [workspace](/docs/workspaces/introduction/) app, always filter by `workspace_id`.
+
+## Reranking
+
+Vector search is fast and approximate: it finds passages near the question, not necessarily the ones that answer it. Reranking reads the question and each candidate together and orders them by how well they answer it. Retrieve generously, rerank, keep the best few:
+
+```rust
+let candidates = notes.search(&question).filter(Filter::eq("subject_id", deal_id)).limit(25).await?;
+let best = ai.rerank(&question, candidates).model("fast").top(6).await?;
+```
+
+`ai.rerank` scores every candidate in one structured-output call to the model you name (default `ai.default`), reading at most 2,000 characters of each, and returns the top ones with `score` replaced by the reranker's (0 to 1). `.user(id)` counts the call against that user's budget. It costs one model call, so skip it when the collection is small and the vector scores already separate well.
+
+## A RAG endpoint
+
+Put together: retrieve, rerank, then ask for a structured answer that cites its sources by number, so the response can link to them.
+
+```rust title="crates/crm-deals/src/ask.rs"
+use navree::ai::{Ai, Filter, VectorStore};
+use navree::prelude::*;
+use serde::{Deserialize, Serialize};
+use navree::openapi::ToSchema;
+use uuid::Uuid;
+
+/// The model's answer, citing sources by their number.
+#[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
+pub struct GroundedAnswer {
+    /// The answer in at most four sentences, using only the sources.
+    #[validate(length(min = 1, max = 2000))]
+    pub answer: String,
+    /// The numbers of the sources the answer uses, e.g. [1, 3].
+    #[validate(skip)]
+    pub sources: Vec<usize>,
+    /// False when the sources don't contain the answer.
+    #[validate(skip)]
+    pub answered: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DealAnswer {
+    pub answer: String,
+    pub answered: bool,
+    pub sources: Vec<Source>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Source {
+    pub activity_id: Uuid,
+    pub excerpt: String,
+}
+
+#[injectable]
+pub struct DealQuestions {
+    ai: Arc<Ai>,
+    vectors: Arc<VectorStore>,
+}
+
+impl DealQuestions {
+    pub async fn ask(&self, deal: &DealResource, question: &str) -> Result<DealAnswer> {
+        let candidates = self
+            .vectors
+            .collection("activity_notes")
+            .search(question)
+            .filter(Filter::eq("subject_id", deal.id))
+            .limit(25)
+            .await?;
+        let passages = self.ai.rerank(question, candidates).model("fast").top(6).await?;
+
+        let numbered = passages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| format!("[{}] ({}) {}", i + 1, p.metadata["created_at"], p.text))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let reply = self
+            .ai
+            .structured::<GroundedAnswer>(format!(
+                "Deal: {}\n\nSources:\n{numbered}\n\nQuestion: {question}",
+                deal.title
+            ))
+            .system(
+                "You answer questions about a sales deal using only the numbered sources. \
+                 Cite the sources you use by number. If the sources don't answer the \
+                 question, say what is missing and set answered to false.",
+            )
+            .model("smart")
+            .validated()
+            .await?;
+
+        let sources = reply
+            .sources
+            .iter()
+            .filter_map(|n| passages.get(n.checked_sub(1)?))
+            .map(|p| Source {
+                activity_id: p.metadata["activity_id"].as_str().and_then(|s| s.parse().ok()).unwrap_or_default(),
+                excerpt: p.text.chars().take(240).collect(),
+            })
+            .collect();
+        Ok(DealAnswer { answer: reply.answer, answered: reply.answered, sources })
+    }
+}
+```
+
+```rust title="crates/crm-deals/src/controller.rs"
+/// Answers a question from the deal's activity, with sources.
+#[post("/{id}/ask")]
+#[can(Read, Deal, from = "id")]
+async fn ask(
+    &self,
+    uow: Uow,
+    deal: Authorized<Deal, Read>,
+    Valid(Json(input)): Valid<Json<AskDeal>>,
+) -> Result<Json<DealAnswer>> {
+    let deal = self.deals.show(&uow, deal.into_inner()).await?;
+    Ok(Json(self.questions.ask(&deal, &input.question).await?))
+}
+```
+
+```http
+POST /api/v1/deals/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/ask HTTP/1.1
+Content-Type: application/json
+
+{"question": "What did they say about the rollout timeline?"}
+```
+
+```json
+{
+  "answer": "Daljit wants the team live before their January planning cycle and asked whether onboarding takes more than a month [1]. Sahil offered a two-week guided rollout on the pricing call [2].",
+  "answered": true,
+  "sources": [
+    {"activity_id": "0199c2f0-33aa-7d10-8c2b-1e2f3a4b5c6d", "excerpt": "Discovery call with Daljit. They need to be live before January planning..."},
+    {"activity_id": "0199c3a1-07bc-7e21-9d3c-2f3a4b5c6d7e", "excerpt": "Pricing call. Offered the guided rollout (two weeks) if they sign the 12-month term..."}
+  ]
+}
+```
+
+What keeps the answers honest:
+
+- **Only sources go in.** The system prompt confines the model to the passages, and `answered: false` gives it a way out that isn't a guess.
+- **Citations are checked.** Source numbers that don't exist are dropped by `passages.get`, so a source the model invents never reaches the page.
+- **Sources are visible.** The response carries the passages, and the page links each to its activity, so the rep can read the original.
+
+For a chat that keeps context across questions, give an [agent](/docs/ai/agents-and-tools/) a `search_notes` tool that wraps the same retrieval; the model then decides when to look things up.
+
+## Testing
+
+With `ai.fake` on, `Embeddings` is deterministic too: it hashes words into vectors, so texts that share words are close and texts that don't are far. That is enough to test that indexing, filters and permissions put the right passages in front of the model. Use the memory store and run the queue:
+
+```rust title="crm/api/tests/deal_questions.rs"
+use crm_testkit::{Role, TestCrm};
+use navree::ai::{Ai, FakeReply};
+use serde_json::json;
+
+#[tokio::test]
+async fn answers_use_only_the_deals_own_activity() {
+    let crm = TestCrm::builder()
+        .app(crm_api::app)
+        .config("ai.fake", true)
+        .config("ai.vectors.store", "memory")
+        .build()
+        .await;
+    let ai = crm.get::<Ai>().await.fake().unwrap();
+    let rep = crm.login_as(Role::Rep1).await;
+
+    let agra = create_deal(&rep, "Agra renewal").await;    // POSTs a company and a deal
+    let gulati = create_deal(&rep, "Gulati expansion").await;
+    log_note(&rep, &agra, "Daljit wants to be live before January planning").await;
+    log_note(&rep, &gulati, "Gulati wants to be live before the summer").await;
+    crm.run_queue().await; // runs the IndexActivity jobs
+
+    ai.respond(FakeReply::json(json!({
+        "answer": "Before January planning [1].",
+        "sources": [1],
+        "answered": true
+    })));
+
+    rep.post(&format!("/api/v1/deals/{}/ask", agra["id"].as_str().unwrap()))
+        .json(&json!({ "question": "When do they want to be live?" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("answered", json!(true))
+        .assert_json_path("sources.0.excerpt", json!("Daljit wants to be live before January planning"));
+
+    ai.assert_prompted(|r| r.last_user_message().contains("January planning"));
+    ai.assert_not_prompted(|r| r.last_user_message().contains("Gulati"));
+}
+```
+
+- `crm.run_queue()` runs the index jobs, so the test covers the dispatch in the service as well as the job.
+- With the fake, `ai.rerank` keeps the search order and makes no model call, so the only scripted reply is the answer.
+- `vectors.collection("activity_notes").count()` and `search` work against the memory store for direct assertions.
+- To test the job alone, dispatch it with `app.get::<Queue>().await.dispatch(IndexActivity { activity_id })` and run it with `run_pending()`.
+
+## Reference
+
+| Type | |
+|---|---|
+| `Embeddings` | `embed(text)`, `embed_many(texts)`, `model()`, `dimensions()`. Inject `Arc<Embeddings>`, or build one with `Embeddings::new(ai)`. |
+| `Embedding` | A vector: derefs to `[f32]`; `dimensions()`, `cosine(&other)`, `into_vec()`; `Embedding::new(values)` or `From<Vec<f32>>`. |
+| `VectorStore` | `collection(name)`, `kind()`, `dimensions()`, `metric()`, `ensure_collection(name)`. Inject `Arc<VectorStore>`; `VectorStore::memory(embeddings)` builds a memory store. |
+| `Collection` | `upsert`, `upsert_many`, `get`, `delete`, `delete_many`, `delete_where`, `clear`, `search`, `count`, `name()`. |
+| `SearchRequest`, `SearchQuery` | What `search` returns (`.filter`, `.limit`, `.min_score`, then await), and what it takes: a text or an `Embedding`. |
+| `VectorCollection` | A collection declaration, for `m.vector_collection(..)`. |
+| `VectorRecord` | `VectorRecord::new(id, embedding).text(..).metadata(..)`. |
+| `VectorMatch` | A search result: `id`, `score`, `text`, `metadata`. |
+| `Filter` | `eq`, `any_of`, `gt`, `gte`, `lt`, `lte`, `not`, `.and`, `.or`; `matches(&metadata)` checks one in memory. |
+| `Chunker`, `Chunk` | `Chunker::new()`, `Chunker::markdown()`, `.max_tokens(n)`, `.overlap(n)`, `.split(text)`; a `Chunk` has `index` and `text`. |
+| `ai.rerank(query, matches)` | A `RerankRequest`: `.model(name)`, `.top(n)`, `.user(id)`, then await. |
+| `VectorStoreKind`, `Metric` | `ai.vectors.store` and `ai.vectors.metric`. |
+
+<LinkCards>
+  <LinkCard href="/docs/ai/ai-sdk/" title="AI SDK">
+    Models, structured output and `AiFake`.
+  </LinkCard>
+  <LinkCard href="/docs/ai/agents-and-tools/" title="Agents and tools">
+    Wrap retrieval in a tool the model calls when it needs to.
+  </LinkCard>
+  <LinkCard href="/docs/packages/search/" title="Search">
+    Keyword and vector search over your models.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,78 @@
+---
+title: "Badge"
+description: "A short label beside something: a status or a category, with a tone, a dot or an icon, and outcome chips for what did or did not happen."
+---
+
+<UiPreview example="badge/default" />
+
+`Badge` is a short label: a deal's stage, an account's plan, a count. Its variant is a `BadgeVariant`, and a [DataTable](/docs/ui/data-table/) column draws one per cell with `#[col(badge = tone)]`.
+
+```rust
+use navree::ui::*;
+
+Badge::new("Won").variant(BadgeVariant::Success)
+```
+
+## When to use it
+
+Use a badge for a status or a category that a reader scans for. Green means good news, as it does everywhere in the toolkit.
+
+<UiChoose name="label" current="Badge" />
+
+## Anatomy
+
+<UiAnatomy component="badge" />
+
+## Variants
+
+<UiPreview example="badge/variants" />
+
+## With an icon
+
+`.icon(...)` puts an icon before the text and `.icon_end(...)` after it.
+
+<UiPreview example="badge/icon" />
+
+## Tones
+
+A tone colours a badge by what it means. `Tone` has five built-in values (`Neutral`, `Info`, `Success`, `Warning`, `Danger`), and `Tone::named("violet")` picks one of the extra colours the stylesheet ships (`violet`, `cyan`, `rose`) or one your own stylesheet defines with `[data-tone=brand] { --tone: #7c5cff; }`. The five variants above stay as they are; a tone is the way to reach the other colours.
+
+<UiPreview example="badge/tones" />
+
+## A dot
+
+`.dot()` adds a small round dot in the badge's colour before the text, for a status that should read at a glance in a column.
+
+<UiPreview example="badge/dot" />
+
+## Outcome chips
+
+`Badge::outcome(label, reached)` is a chip for something that did or did not happen: paid, packed, shipped. When it did, it carries a check and its tone. When it did not, it carries a dash and a quiet, dashed outline. A screen reader hears "yes" or "no" after the label; change the words with `.outcome_words("oui", "non")`.
+
+<UiPreview example="badge/outcome" />
+
+Badges keep a 4 px corner. There is no pill shape.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A badge is text in a `<span>`: it is read where it stands and isn't focusable.
+- Colour doesn't carry the meaning alone: the text says the status. The icon and the dot are hidden from assistive technology.
+- An outcome chip adds "yes" or "no" as text a screen reader hears. Sighted readers get the check or the dash and the dashed outline.
+
+</UiA11y>
+
+## API
+
+### Badge
+
+<UiProps type="Badge" />
+
+### BadgeVariant
+
+<UiProps type="BadgeVariant" />
+
+### Tone
+
+<UiProps type="Tone" />

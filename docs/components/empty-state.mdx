@@ -1,0 +1,67 @@
+---
+title: "EmptyState"
+description: "What a list, table or region shows when it has nothing in it, with the action each case needs."
+---
+
+<UiPreview example="empty-state/default" />
+
+`EmptyState` is for the three ways a list can be empty: there is nothing yet, a filter found nothing, or the work is done. Each says what to do next. It is built on the same markup as the [error states](/docs/ui/errors-and-states/), so a page of them looks like one family.
+
+```rust
+use navree::ui::*;
+
+EmptyState::nothing_yet("deals")
+    .description("Create a deal to start tracking your pipeline.")
+    .action(Button::primary("New deal").icon(icons::PLUS))
+```
+
+## When to use it
+
+Use it for a list, a table or a region. A [DataTable](/docs/ui/data-table/) takes an [Empty](/docs/components/empty/) with `.empty(empty)` and draws its own states for a filter that found nothing. Use `EmptyState` for lists you draw yourself.
+
+<UiChoose name="state" current="EmptyState" />
+
+## A filter found nothing
+
+`.clear_filters(href)` adds the way back. Inside a region the link refetches the region.
+
+<UiPreview example="empty-state/no-results" />
+
+## Done
+
+<UiPreview example="empty-state/caught-up" />
+
+## In a table
+
+An empty table keeps its header. The state takes one cell that spans it.
+
+<UiPreview example="empty-state/row" />
+
+```rust
+EmptyState::no_results().clear_filters("/deals").row(2)
+```
+
+## Anatomy
+
+<UiAnatomy component="empty-state" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The headline is a paragraph, not a heading. Ask for a heading with `.heading(2)`.
+- An empty list is not an error: it shows no status code.
+- The icon is hidden from assistive technology.
+- Only the actions you add take focus.
+
+</UiA11y>
+
+## API
+
+### EmptyState
+
+<UiProps type="EmptyState" />
+
+### EmptyKind
+
+<UiProps type="EmptyKind" />

@@ -1,0 +1,36 @@
+# Navree's data layer is its own: navree-db runs on SQLx, navree-orm renders
+# its own SQL and navree-schema writes the migrations. No source file and no
+# manifest may use sea_orm, sea_orm_migration or sea_query again, anywhere
+# (crates/navree/tests/dependency_graph.rs refuses the crates in the
+# resolved graph as well).
+#
+# Two rules, one for source (a `use`, a path such as `sea_query::Expr`, a
+# `#[sea_orm(..)]` attribute) and one for a Cargo.toml dependency. Comments
+# and string contents that merely mention the names are not matched.
+rules:
+  - id: navree-no-sea-orm
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      Navree does not use sea_orm or sea_query: run statements through
+      navree-db (Statement, Executor, Uow), models through navree-orm, and
+      migrations through navree-schema.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_(?:orm(?:_migration)?|query)\s*(?:::|;)|#\[\s*sea_orm\s*[(\]])'
+
+  - id: navree-no-sea-orm-dependency
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Navree does not depend on sea-orm, sea-orm-migration, sea-query or any
+      other sea-* crate: its data layer is navree-db, navree-orm and
+      navree-schema. See .semgrep/no-sea-orm.yml.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    paths:
+      include:
+        - "**/Cargo.toml"
+    pattern-regex: '(?m)^\s*(?:sea-[\w-]+\s*(?:=|\.)|\[(?:[\w.-]*\.)?sea-[\w-]+\])'

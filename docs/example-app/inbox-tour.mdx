@@ -1,0 +1,96 @@
+---
+title: "A tour of the inbox"
+description: "The inbox example app: three resizable panes, a desk of a lakh of conversations that loads as it is read, live updates and keys."
+---
+
+`apps/inbox-demo` is the support desk of Sukhna Labs, an invented software company in Mohali whose customers are clinics, studios and academies across India that take bookings with its product. Times are in India Standard Time and money in rupees. It is one Rust crate on SQLite, drawn with [Navree UI](/docs/ui/overview/). [The inbox's page](/showcase/inbox/) has its screens and its measured speed, and [the example apps](/docs/example-app/ui-apps/) compares it with the store and the board.
+
+## Running it
+
+```sh
+cargo run --release -p inbox-demo
+```
+
+The app listens on `http://127.0.0.1:8096`. `PORT` picks another port, and `INBOX_DATABASE_URL` another database (`sqlite://target/inbox-demo.db?mode=rwc` by default). The desk is written afresh at every start: the hand-written conversations and a lakh of generated ones, which takes a little while. `INBOX_SCALE=2000 cargo run -p inbox-demo` writes a small desk. A simulator makes customers and teammates act every few seconds (`INBOX_SIMULATOR=<milliseconds>` or `off`), and a clock redraws the timers every 30 seconds (`INBOX_TICK=<milliseconds>` or `off`).
+
+There is no sign-in. A visitor works as one of the team, named by a cookie the server signs, and can switch to another from the account menu. A real app puts the inbox behind [navree-auth](/docs/security/authentication/) and checks on every route that the person may see the conversation it names.
+
+## Three panes
+
+The inbox is a [SplitPane](/docs/components/split-pane/) of conversations, the open conversation and its customer. A person resizes the panes by dragging or with the keys, and the sizes are saved for each agent on the server. On a phone the panes stack, one at a time, with links back.
+
+```rust title="src/views/inbox.rs"
+SplitPane::new(SPLIT)
+    .height(SplitHeight::Screen)
+    .stack_below(SplitWidth::Md)
+    .save_to("/inbox/panes")
+    .pane(Pane::new("conversations", "Conversations").size(30).min(22).max(45))
+    .pane(Pane::fill("thread", "Conversation").min(30))
+```
+
+## The list loads as it is read
+
+`/inbox` shows a view (all open, mine, unassigned, snoozed or closed), a search, channel and priority filters, and rows with their unread count, priority, channel and the time left to answer. A desk of a lakh of conversations is never drawn at once: the list is a [LazyList](/docs/components/lazy-list/) that asks for fifty at a time by cursor, so page 400 costs what page 1 does.
+
+```rust title="src/views/list.rs"
+LazyList::new(LIST, "Conversations", rows_src(filters))
+    .view(filters.query())
+    .items(page.rows.iter().map(|row| conversation_item(row, filters, open, now, None)))
+    .since(page.since.clone())
+    .live_from(stream.to_owned(), Some("conversations"), LazyEnd::Start)
+    .max(300)
+```
+
+`max(300)` keeps at most 300 rows in the page: past that, rows far off screen at the other end are dropped and fetched again when the reader scrolls back. Every query in `src/queries.rs` reads by an index and never by an offset, and the search runs on a full-text index. `.since` and `.live_from` make the list ask only for what changed after the newest revision it has seen.
+
+## A conversation
+
+`/inbox/{id}` shows the customer's messages and the team's answers, with internal notes set apart and files as chips. Messages are a second LazyList of thirty at a time, newest at the end, with "Show earlier messages" above. A live message lands in the thread while what the agent is typing stays as it is.
+
+The actions are links and forms, so each one works with JavaScript off:
+
+| Action | Route |
+|---|---|
+| Reply, or add an internal note | `POST /inbox/{id}/reply` |
+| Assign to someone found by typing | `GET /inbox/agents/options`, then `POST /inbox/{id}/assign` |
+| Assign to me | `POST /inbox/{id}/assign/me` |
+| Change status or priority | `POST /inbox/{id}/status/{status}`, `POST /inbox/{id}/priority/{priority}` |
+| Snooze to a day | `POST /inbox/{id}/snooze` and `POST /inbox/{id}/snooze/{preset}` |
+
+The assignee is a [Combobox](/docs/components/combobox/) searched on the server, and the snooze takes a date from a date picker. A snoozed conversation comes back on its day.
+
+## The customer pane
+
+The customer pane shows their plan, what they have paid, their open conversations, a timeline of their history and tags. It is a region that loads after the page (`GET /inbox/{id}/fragments/customer`) and again when the customer changes.
+
+## Live updates
+
+Each change goes to every open page through the app's [live hub](/docs/ui/live-hub/). `src/live.rs` names the topics: `conversations` for any change, which the list hears; `conversation.<id>` and `customer.<id>` for one conversation or customer; and `clock` when the timers move. A nudge says only that something changed, and every live part fetches its own fragment again.
+
+Every write takes its numbers where it commits. The desk's revision comes from the one row of `desk`, updated inside the writing transaction, so a reader that moves its cursor to the newest revision it saw can never skip a change:
+
+```sql
+UPDATE desk SET rev = rev + 1 RETURNING rev
+```
+
+The next writer cannot read that revision until this one has committed. Message ids come the same way, as the row id SQLite gives as the message is inserted under the same write lock, and counts move in SQL (`messages = messages + 1`), never from a value read earlier.
+
+## Keys and the palette
+
+`j` and `k` move through the list, `r` replies, `e` closes the open conversation (only while the focus is in it), `/` searches, `?` lists the keys, and `Ctrl` and `K` open the [command palette](/docs/components/command/). Each agent can turn single keys off; `POST /inbox/keys` stores the choice for them.
+
+## Tests
+
+The browser suite is `e2e/ui/tests/inbox.test.mjs`. It runs the app with the simulator and the clock off and its test hooks on (`INBOX_SIMULATOR=off INBOX_TICK=off INBOX_TEST_HOOKS=1 cargo run --release -p inbox-demo`) and covers the panes, the live stream while an agent types, each action checked by the server, the keys, a phone, and every action with JavaScript off. `e2e/ui/tests/inbox-scale.test.mjs` runs against the full-size desk in a release build and measures what a reader waits for and what the page costs; the figures on [the inbox's page](/showcase/inbox/) come from it.
+
+<LinkCards>
+  <LinkCard href="/docs/example-app/ui-apps/" title="The Navree UI example apps">
+    The store, the board and the inbox side by side.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/store-tour/" title="A tour of the store">
+    A table over lakhs of orders, an order in a drawer and refunds checked on the server.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/board-tour/" title="A tour of the board">
+    Moves that the server places and checks.
+  </LinkCard>
+</LinkCards>

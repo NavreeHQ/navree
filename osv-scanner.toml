@@ -1,0 +1,9 @@
+# Known findings in the workspace's Cargo.lock that have no fixed release
+# their dependents can use. Reviewed 2026-10-31; each entry expires so it
+# gets looked at again. Lockfiles elsewhere in the
+# repository have their own osv-scanner.toml next to them.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0459"
+ignoreUntil = 2026-12-10
+reason = "SQLite before 3.54.0 can return uninitialized page-cache memory when it opens a database together with a crafted -wal file whose page size differs. The bundled SQLite comes from libsqlite3-sys 0.37 through sqlx-sqlite 0.9.0, which allows libsqlite3-sys below 0.38 only; the fix is in libsqlite3-sys 0.39. sqlx allows 0.39 on its main branch but has not released it. Navree requires sqlx 0.9, so cargo update brings the fix once sqlx 0.9.1 is out. Only an app that opens database files a less trusted party could have written is exposed. Drop this entry when sqlx 0.9.1 is released."

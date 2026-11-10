@@ -1,0 +1,96 @@
+---
+title: "ContextMenu"
+description: "A menu that opens where the reader presses: a right click, a long press on a touch screen, or Shift+F10 on the keyboard. It has the entries and the keys of a dropdown menu."
+---
+
+<UiPreview example="context-menu/default" />
+
+`ContextMenu` wraps some content, and a menu opens on it where the reader asks for one. The menu has the entries of a [DropdownMenu](/docs/components/dropdown-menu/): links, actions, posts, checkboxes, radios, groups, submenus, shortcut hints, and destructive and disabled items. The `menus` module gives it the keys of a menu, and the `menubar` module opens it at the pointer and closes it again.
+
+The preview shows the menu open in place. On a real page it is closed until the reader right clicks the card.
+
+```rust
+use navree::ui::*;
+
+ContextMenu::new("order-menu", "Order actions")
+    .content(Card::titled("Order 2041").body("Gurpreet Singh, Ludhiana. ₹1,24,500 by UPI."))
+    .item(MenuItem::link("Open order", "/orders/2041"))
+    .item(MenuItem::action("Copy the order number"))
+    .separator()
+    .item(MenuItem::post("Cancel order", "/orders/2041/cancel").destructive())
+```
+
+`ContextMenu::new(id, label)` names the menu for assistive technology. `.content(...)` is the area the menu opens on: any content, including links, buttons and cards.
+
+## How it opens
+
+- A right click opens the menu with its top corner at the pointer. It moves inside the window if there is not enough room, and it opens to the left in a right-to-left page.
+- A long press on a touch screen opens it, as a right click does. A press that moves, or that ends early, is a tap or a scroll.
+- On a keyboard, `Shift+F10` or the menu key opens it below the element that has focus, with focus on the first item.
+- A second right click moves the menu. A press outside, a scroll, a resize, `Esc` and `Tab` close it, and so does choosing an item.
+
+A field keeps the browser's own menu, because that menu holds copy and paste. A right click on a text field, a text area, a select or editable text does not open yours.
+
+## Without a script
+
+With no script the browser keeps its own menu, and the menu stays closed. Offer the same actions somewhere else too, such as a row's button or a toolbar. A context menu is a shortcut. It is never the only way to do something.
+
+## Reaching it from the keyboard
+
+The keys work from any element that has focus inside the region: a link, a button or a field's neighbour. If the region holds nothing a keyboard can reach, add `.focusable()`. The region then takes one tab stop and a name, and `Shift+F10` opens the menu from it.
+
+<UiPreview example="context-menu/focusable" />
+
+When the menu closes, focus goes back to the element that had it.
+
+## Checkboxes and radios
+
+<UiPreview example="context-menu/choices" />
+
+## Submenus
+
+<UiPreview example="context-menu/submenu" />
+
+## Destructive and disabled
+
+<UiPreview example="context-menu/destructive" />
+
+A post item posts through the page's post form, with the session's token, as it does in a dropdown menu.
+
+## When to use it
+
+Use a context menu for actions on one thing among many: a card, a file, a row, a pin on a map. For actions that belong to one button, use a [DropdownMenu](/docs/components/dropdown-menu/). For the actions on every row of a table, the table draws its own menu in a column of buttons, so each row is reachable without a right click.
+
+## Anatomy
+
+<UiAnatomy component="context-menu" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Shift+F10`, the menu key | Open the menu below the element in focus, on its first item. |
+| `Down`, `Up` | Move to the next or previous item, and round at the ends. |
+| `Home`, `End` | Move to the first or last item. |
+| `Enter`, `Space` | Do the item, and close the menu. |
+| `Right` (`Left` in a right-to-left page) | Opens the submenu of the item. `Left` closes one level. |
+| A letter or letters | Move to the next item that starts with them. |
+| `Esc` | Closes the submenu that is open, or else the menu, and returns focus. |
+| `Tab` | Closes the menu and moves on. |
+
+- The popup has `role="menu"` and the name you gave it. Items are `menuitem`, `menuitemcheckbox` or `menuitemradio`.
+- Opened with a pointer, focus goes to the menu itself, so the arrows start at the first or last item.
+- The menu is drawn in the top layer, so no container clips it.
+- A region you make focusable has `role="group"` and the same name.
+
+</UiA11y>
+
+## API
+
+### ContextMenu
+
+<UiProps type="ContextMenu" />
+
+The entries are the dropdown menu's: [MenuItem](/docs/components/dropdown-menu/#menuitem), `MenuCheckbox`, `MenuRadios`, `MenuGroup` and `MenuSub`.

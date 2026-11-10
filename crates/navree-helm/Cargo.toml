@@ -1,0 +1,82 @@
+[package]
+name = "navree-helm"
+description = "Navree HelmModule: an admin panel generated from your navree-orm models, checked against your access rules."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "admin", "admin-panel", "crud"]
+categories = ["web-programming"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+features = ["all-icons", "settings"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The Settings screens: every `#[derive(Settings)]` type the app registers
+## with navree-settings, edited per level (the facade turns it on with
+## `helm` and `settings`).
+settings = ["dep:navree-settings", "dep:navree-workspace"]
+## Any Lucide icon by name for a resource's or a page's `ICON`. Without it the
+## panel knows about 140 common ones, since a program that can draw any icon
+## named at run time holds all two thousand (about 640 KB in a release build).
+all-icons = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+chrono = { workspace = true }
+cookie = { workspace = true }
+form_urlencoded = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-audit = { workspace = true }
+# Browsers sign in on the shared session (`SessionStrategy`, `AuthPages`).
+navree-auth = { workspace = true, features = ["session"] }
+navree-bounded = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+# Resources are navree-orm models (access filters and subjects included).
+navree-orm = { workspace = true, features = ["access"] }
+navree-session = { workspace = true }
+navree-settings = { workspace = true, optional = true }
+navree-storage = { workspace = true }
+# The zone the panel's pages show and read date-times in (`CurrentZone`).
+navree-time = { workspace = true }
+navree-ui = { workspace = true }
+navree-validation = { workspace = true }
+navree-view = { workspace = true }
+navree-workspace = { workspace = true, optional = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The sign-in pages the tests sign in through (`AuthPages`).
+navree-auth = { workspace = true, features = ["ui"] }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+navree-workspace = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

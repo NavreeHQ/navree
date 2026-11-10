@@ -1,0 +1,68 @@
+/*
+ * navree-ui's stylesheet: sortable lists and boards. Written for Navree from the HTML
+ * list semantics, WAI-ARIA and the public feature descriptions of sortable lists and
+ * kanban boards; no third-party source is derived. The values, the 4px and 6px corners
+ * and the app rules are Navree's own.
+ */
+
+[data-slot=sortable]{min-width:0}
+[data-slot=sortable-lists]{display:flex;flex-direction:column;gap:.75rem;min-width:0}
+[data-slot=sortable][data-layout=board] > [data-slot=sortable-lists]{flex-direction:row;align-items:flex-start;gap:.625rem;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:.5rem;scroll-padding-inline:.25rem;
+  & > [data-slot=sortable-list]{flex:1 0 13.5rem;max-width:22rem;min-width:0;background:var(--ink-1);border:1px solid var(--line);border-radius:var(--radius-lg);padding:.5rem}
+}
+@media (max-width:640px){[data-slot=sortable][data-layout=board] > [data-slot=sortable-lists]{scroll-snap-type:x proximity;& > [data-slot=sortable-list]{flex-basis:min(82vw,19rem);scroll-snap-align:start}}}
+
+[data-slot=sortable-list]{position:relative;display:flex;flex-direction:column;gap:.5rem;min-width:0;transition:border-color .12s;
+  &[data-over]{border-color:color-mix(in oklab,var(--accent) 50%,var(--line))}
+  &[data-refusing]{border-color:color-mix(in oklab,var(--danger) 60%,transparent);border-style:dashed;
+    &::after{content:attr(data-refusing);order:9;padding:0 .25rem .125rem;font-size:12px;line-height:1.4;color:var(--danger)}
+  }
+}
+[data-slot=sortable-list-header]{display:flex;align-items:center;gap:.5rem;min-height:1.75rem;padding:0 .25rem}
+[data-slot=sortable-list-title]{flex:1 1 auto;min-width:0;margin:0;font-size:13px;font-weight:600;line-height:1.3;color:var(--fg);overflow-wrap:break-word}
+[data-slot=sortable-count]{display:inline-flex;align-items:center;height:1.25rem;padding:0 .375rem;border:1px solid var(--line-2);border-radius:var(--radius);font:500 12px/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--fg-2);white-space:nowrap;
+  &[data-full]{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 45%,transparent)}
+  &[data-over]{color:var(--danger);border-color:color-mix(in oklab,var(--danger) 50%,transparent)}
+}
+[data-slot=sortable-list-actions]{display:flex;align-items:center;gap:.25rem}
+[data-slot=sortable-items]{display:flex;flex-direction:column;gap:.5rem;margin:0;padding:0;list-style:none}
+[data-slot=sortable-empty]{display:none;margin:0;padding:.875rem .75rem;border:1px dashed var(--line-2);border-radius:var(--radius);font-size:13px;color:var(--fg-3);text-align:center}
+[data-slot=sortable-items]:not(:has(> [data-slot=sortable-item])) + [data-slot=sortable-empty]{display:block}
+[data-slot=sortable-more]{display:flex;justify-content:center;margin:0;
+  &:is(p){padding:.25rem .5rem;font-size:12px;line-height:1.45;color:var(--fg-3);text-align:center}
+  &[data-pending] [data-slot=button]{opacity:.6}
+}
+
+[data-slot=sortable-item]{position:relative;display:flex;align-items:flex-start;gap:.5rem;min-width:0;padding:.625rem .75rem;background:var(--ink-2);border:1px solid var(--line-2);border-radius:var(--radius-lg);color:var(--fg-1);font-size:14px;line-height:1.45;-webkit-touch-callout:none;
+  &:has(> [data-slot=sortable-handle]){padding-inline-start:.125rem}
+  &[data-pending]{opacity:.7}
+  &[data-dragging]{background:color-mix(in oklab,var(--accent) 6%,transparent);border-style:dashed;border-color:color-mix(in oklab,var(--accent) 55%,transparent);& > *{visibility:hidden}}
+  &[data-lifted]{background:var(--ink-3);border-color:var(--accent)}
+  &[data-ghost]{position:fixed;inset:auto;left:0;top:0;margin:0;overflow:visible;pointer-events:none;rotate:1.5deg;opacity:.97;box-shadow:0 14px 30px -10px rgb(0 0 0/.6),0 0 0 1px var(--line-3)}
+}
+[data-ui-sortable] [data-slot=sortable-item]{cursor:grab;&[data-locked]{cursor:default}}
+[data-slot=sortable-body]{flex:1 1 auto;min-width:0;overflow-wrap:break-word;
+  & [data-slot=button][data-variant=link]{height:auto;min-height:1.25rem;white-space:normal;text-align:start;line-height:1.35;overflow-wrap:break-word}
+}
+[data-slot=sortable-handle]{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;margin-inline-start:-.125rem;padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-3);cursor:grab;touch-action:none;
+  &:hover{background:var(--ink-3);color:var(--fg)}
+  &[aria-disabled=true]{cursor:not-allowed;opacity:.45}
+}
+@media (pointer:coarse){[data-slot=sortable-handle]{width:2rem;height:2rem;margin-block:-.25rem}}
+@media (hover:hover) and (pointer:fine){
+  [data-slot=sortable-handle]{opacity:.5}
+  [data-slot=sortable-item]:hover > [data-slot=sortable-handle],[data-slot=sortable-handle]:focus-visible,[data-slot=sortable-item][data-lifted] > [data-slot=sortable-handle]{opacity:1}
+}
+[data-slot=sortable][data-dragging]{user-select:none;-webkit-user-select:none;& *{cursor:grabbing}}
+
+/* With JavaScript off, each item moves by its own form; with it on, by dragging or the keys. */
+[data-slot=sortable-move]{margin-top:.5rem;font-size:13px;
+  & > summary{width:fit-content;color:var(--fg-2);cursor:pointer;&:hover{color:var(--fg)}}
+}
+[data-slot=sortable-form]{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:.375rem .5rem;margin-top:.5rem;
+  & > label{font-size:12px;color:var(--fg-2)}
+  & > [data-slot=input]{width:6rem}
+  & > [data-slot=button]{grid-column:1/-1;justify-self:start}
+}
+@media (scripting:enabled){[data-ui-sortable] [data-slot=sortable-move]{display:none}}
+@media (scripting:none){[data-slot=sortable-handle]{display:none}[data-slot=sortable-item]:has(> [data-slot=sortable-handle]){padding-inline-start:.75rem}}

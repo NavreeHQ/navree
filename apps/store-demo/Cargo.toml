@@ -1,0 +1,32 @@
+[package]
+name = "store-demo"
+description = "An example app on Navree UI: a shop's orders, an order in a drawer with refunds and cancels checked on the server, inventory with restocks, sales charts, and the store's activity live over server-sent events, on SQLite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "store-demo"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+# A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
+# cannot turn off default features that the workspace entry leaves on.
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime"] }
+serde = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime", "testing"] }
+serde_json = { workspace = true }

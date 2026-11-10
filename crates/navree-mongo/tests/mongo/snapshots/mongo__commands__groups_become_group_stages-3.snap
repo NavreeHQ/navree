@@ -1,0 +1,9 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"readings\").select_time_bucket(\"1 month\", \"taken_at\",\n\"month\").select_expr(Expr::count_all(), \"readings\").group_by([\"month\"]))"
+---
+db.readings.aggregate([
+  {"$group": {"_id": {"g0": {"$dateTrunc": {"date": "$taken_at", "unit": "month", "binSize": 1}}}, "__navree_a0": {"$sum": 1}}},
+  {"$set": {"month": "$_id.g0", "readings": "$__navree_a0"}},
+  {"$project": {"month": 1, "readings": 1, "_id": 0}}
+])

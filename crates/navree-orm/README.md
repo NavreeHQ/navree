@@ -1,0 +1,27 @@
+# navree-orm
+
+Navree ORM: active-record models, a typed query builder, dirty tracking and pagination on PostgreSQL/TimescaleDB, MySQL and SQLite.
+
+Part of [Navree](https://navree.com), the complete application framework for Rust.
+
+## Use it
+
+It is part of `navree`'s default `full` feature set, as `navree::orm`:
+
+```sh
+cargo add navree
+```
+
+You can also depend on it alone with `cargo add navree-orm`.
+
+## Documentation
+
+- [The guide on navree.com](https://navree.com/docs/orm/getting-started/)
+- [API reference on docs.rs](https://docs.rs/navree-orm)
+- [Source and issues on GitHub](https://github.com/NavreeHQ/navree/tree/main/crates/navree-orm)
+
+## Rust version and licence
+
+This crate needs Rust 1.95 or later.
+
+Licensed under either of the MIT licence ([LICENSE-MIT](LICENSE-MIT)) or the Apache licence, version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)), at your option.

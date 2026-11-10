@@ -1,0 +1,188 @@
+---
+title: "Theming"
+description: "`@navree/theme`: navree.com's dark theme as Tailwind CSS 4 tokens, six more themes in light and dark, shadcn/ui and shadcn-vue colors, self-hosted fonts and the tokens as data."
+---
+
+`@navree/theme` is the look of navree.com for your app: near-black ink surfaces with a faint sea-green cast, off-white text in four steps, one green accent, amber for warnings, and three self-hosted faces. `theme.css` alone is dark; `themes.css` adds six more themes and light mode (see [Themes and modes](#themes-and-modes)). shadcn/ui and shadcn-vue components pick it up without changes, so Next.js and Nuxt apps look the same.
+
+## Setting up
+
+```css title="web/src/app/globals.css"
+@import "tailwindcss";
+@import "@navree/theme/theme.css";
+@import "@navree/theme/fonts.css";
+```
+
+Put `class="dark"` on `<html>`: the theme declares `@custom-variant dark (&:where(.dark, .dark *))`, so the `dark:` classes shadcn components use always apply. Add the framework package to Tailwind's sources, so the classes its data table uses are generated:
+
+```css title="web/src/app/globals.css (Next.js)"
+@source "../../node_modules/@navree/next/dist";
+```
+
+```css title="web/app/assets/css/main.css (Nuxt)"
+@source "../../../node_modules/@navree/nuxt/dist";
+```
+
+| File | What it is |
+|---|---|
+| `@navree/theme/theme.css` | The Tailwind CSS 4 preset: `@theme` tokens, the shadcn semantic colors, the radius scale, base styles and utilities. |
+| `@navree/theme/themes.css` | Every built-in theme in light and dark, chosen with `data-theme` and `data-mode` on `<html>`. |
+| `@navree/theme/fonts.css` | `@font-face` rules for the three faces from the @fontsource packages, and the `--font-mona`, `--font-geist` and `--font-monaspace` variables. |
+| `@navree/theme/tokens.css` | The color tokens and font stacks as plain custom properties, for pages without Tailwind. |
+| `@navree/theme/registry/navree.json` | A shadcn registry theme, for the shadcn CLI. |
+| `@navree/theme` | The tokens as data (`colors`, `semanticColors`, `fonts`, `radius`, `themeColor`), `contrastRatio`, the themes as data (`themes`, `themeIds`) and the functions that choose one (`applyAppearance`, `appearanceScript`, `parseAppearance`, `themeFromBuilderCss`). |
+
+## Themes and modes
+
+`theme.css` on its own is the Navree dark theme. `themes.css` adds the other built-in themes (`neutral`, `ocean`, `violet`, `sunset`, `rose` and `contrast`, beside `navree`), each in light and dark, as the same colour tokens under two attributes:
+
+```css title="web/src/app/globals.css"
+@import "@navree/theme/theme.css";
+@import "@navree/theme/themes.css";
+```
+
+```html
+<html data-theme="ocean" data-mode="light">
+```
+
+`data-theme` is a theme id and `data-mode` is `light`, `dark` or `system` (the visitor's operating system decides). Put the attributes on any element to theme a part of a page. Without them the page stays on the Navree dark theme.
+
+`applyAppearance(root, { theme, mode })` sets both attributes and keeps the `dark` class that shadcn's `dark:` classes read in step. In `system` mode the class follows the visitor's system, and the function it returns stops that. `appearanceScript({ storageKey, defaults })` returns a script for `<head>` that applies a choice stored in `localStorage` (JSON `{theme, mode}` under `navree-appearance` unless you name another key) before the first paint, so it does not flash: inline it with `<script dangerouslySetInnerHTML>` in React or `useHead` in Nuxt. `parseAppearance(text)` reads a stored choice and leaves out anything unknown.
+
+```ts
+import { applyAppearance } from "@navree/theme";
+
+applyAppearance(document.documentElement, { theme: "ocean", mode: "system" });
+```
+
+A theme made in Navree UI's [theme builder](/docs/ui/theme-builder/) reaches a Next.js or Nuxt app through `themeFromBuilderCss(css)`. Give it the builder's CSS (its Copy CSS output, or the stylesheet Navree UI serves for the theme) and add what it returns to your CSS after `themes.css`. It renames the builder's colours to the `--color-*` names Tailwind uses, under `[data-theme="key"]`, and throws when the CSS has no theme in it.
+
+## The tokens
+
+| Token | Value | Use |
+|---|---|---|
+| `ink-0` | `#040605` | Page background |
+| `ink-1` | `#0a0e0c` | Cards, panels, the sidebar |
+| `ink-2` | `#111714` | Hover surfaces, inputs |
+| `ink-3` | `#16201b` | The current item, a selected option |
+| `line` | `#1c2420` | Every 1px border (the default border color) |
+| `line-2` | `#2a3530` | Stronger borders: buttons, inputs |
+| `fg` | `#e9efeb` | Headings, primary text |
+| `fg-1` | `#cfd8d3` | Strong secondary text, table cells |
+| `fg-2` | `#a9b5ae` | Body copy, descriptions |
+| `fg-3` | `#8a968f` | Captions, metadata, column headings |
+| `accent` | `#3dff8f` | The primary action, focus rings, positive data |
+| `accent-ink` | `#03130a` | Text on the accent |
+| `amber` | `#ffbf5e` | Warnings |
+| `danger` | `#ff6b6b` | Errors (shadcn's `destructive`) |
+
+Every text step meets WCAG AA on every ink step; the faintest pair, `fg-3` on `ink-3`, is 5.4:1. The package's tests check it, and that the tokens match navree.com's.
+
+The theme also has the display type scale (`text-display-2xl` to `text-display-sm`, `text-title` for an app's page title, `text-figure` for key figures, `text-eyebrow`), green glows (`shadow-glow-sm`, `shadow-glow`, `shadow-glow-lg`), `shadow-float` for popovers and dialogs, the easings `ease-out-quint` and `ease-spring`, and `animate-shimmer` for loading placeholders.
+
+### shadcn's semantic colors
+
+| shadcn name | Token |
+|---|---|
+| `background` | `ink-0` |
+| `foreground` | `fg` |
+| `card`, `popover` | `ink-1` |
+| `secondary`, `muted` | `ink-2` |
+| `muted-foreground` | `fg-2` |
+| `primary`, `ring` | `accent` |
+| `primary-foreground` | `accent-ink` |
+| `destructive` | `danger` |
+| `warning`, `success` | `amber`, `accent` |
+| `border`, `input` | `line`, `line-2` |
+| `sidebar`, `sidebar-accent` | `ink-1`, `ink-2` |
+| `chart-1` to `chart-5` | slate to pale mint, then `accent` |
+
+`accent` stays Navree green: it is not a grey hover color. After `pnpm dlx shadcn@latest add <component>`, replace `hover:bg-accent` and `focus:bg-accent` with `hover:bg-ink-2` and `bg-ink-3`.
+
+### Corners
+
+App UI has two radii: 4px for controls (buttons, inputs, menu items, badges, tabs, avatars) and 6px for surfaces (cards, popovers, dialogs, sheets). The theme pins Tailwind's scale to them, so whatever the shadcn CLI generates lands inside the rule: `rounded-sm`, `rounded-md` and `rounded-lg` are 4px, `rounded-xl` and up are 6px. Write `rounded-md` on a control and `rounded-xl` on a surface; `rounded-full` is for status dots only.
+
+### Utilities
+
+| Utility | What it does |
+|---|---|
+| `surface` | A raised surface: `ink-1`, a 1px `line` border, 6px corners. |
+| `th-label` | Column headings: 12px, medium, `fg-3`. |
+| `eyebrow` | The small label above a heading: 13px, medium, `fg-3`. |
+| `figures` | Tabular, lining figures for amounts, counts and dates. |
+| `scroll-thin` | A thin scrollbar for sidebars, boards and lists. |
+| `font-display-wide` | The display face at its widest, for one oversized word at most. |
+
+## Fonts
+
+- **Mona Sans** (SIL OFL), the display face: page titles and big figures, set semi-expanded (`font-display`, `wdth` 112). `h1` uses it automatically.
+- **Geist** (SIL OFL), the UI and body sans (`font-sans`).
+- **Monaspace Neon** (SIL OFL), for code, ids and keys (`font-mono`).
+
+`fonts.css` loads them from the @fontsource packages the theme depends on, every subset with its `unicode-range`, so a browser downloads only what a page uses and the app makes no requests to a font service. It works in Nuxt and any Vite or PostCSS pipeline.
+
+In Next.js, `next/font/local` preloads the files and removes the layout shift. Load the same files there instead of `fonts.css`, and put the variables on `<html>`:
+
+```ts title="web/src/app/fonts.ts"
+import localFont from "next/font/local";
+
+export const monaSans = localFont({
+  src: [{ path: "../../node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2", weight: "200 900" }],
+  variable: "--font-mona",
+  declarations: [{ prop: "font-stretch", value: "75% 125%" }],
+});
+export const geist = localFont({
+  src: [{ path: "../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2", weight: "100 900" }],
+  variable: "--font-geist",
+});
+export const monaspace = localFont({
+  src: [{ path: "../../node_modules/@fontsource/monaspace-neon/files/monaspace-neon-latin-400-normal.woff2", weight: "400" }],
+  variable: "--font-monaspace",
+});
+
+export const fontVariables = [monaSans.variable, geist.variable, monaspace.variable].join(" ");
+```
+
+```tsx title="web/src/app/layout.tsx"
+<html lang="en" className={`dark ${fontVariables}`}>
+```
+
+Add `@fontsource-variable/mona-sans`, `@fontsource-variable/geist` and `@fontsource/monaspace-neon` to the app's own dependencies for these paths. For scripts the three faces don't cover, see [fonts for other scripts](/docs/frontend/localization/#fonts-for-other-scripts).
+
+## shadcn/ui and shadcn-vue
+
+`theme.css` already maps every shadcn variable, so components added with the shadcn CLI or the shadcn-vue CLI use the theme as they are. For a project that keeps its colors in shadcn's own CSS variables instead, the package also ships the theme as a registry item in shadcn's registry schema (`registry:theme`), which the shadcn CLI installs from a path or a URL:
+
+```sh
+pnpm dlx shadcn@latest add ./node_modules/@navree/theme/registry/navree.json
+```
+
+It has the same colors in its light and dark variables, because it is the dark theme; `themes.css` has the others. A shadcn-vue project can copy the same values from it into its CSS variables, or import `theme.css`.
+
+## The tokens in code
+
+Canvas charts, `<meta name="theme-color">`, emails and PDFs can't read CSS variables. The package exports the tokens:
+
+```ts
+import { colors, contrastRatio, semanticColors, themeColor } from "@navree/theme";
+
+export const viewport = { themeColor }; // "#040605"
+const series = [semanticColors["chart-1"], semanticColors["chart-5"]];
+contrastRatio(colors["fg-3"], colors["ink-3"]); // 5.4…
+```
+
+## The rules
+
+The green is for three things: the primary action, focus rings, and positive data (a won amount, a completed task, a success toast). Navigation, selection and hover use the ink steps: `hover:bg-ink-2`, the current item `bg-ink-3`. No pills, no glows on app UI except `shadow-float` under popovers and dialogs, and no second green element competing with the primary action. The [app shell](/docs/ui/app-shell/) page covers shells and density.
+
+## Next steps
+
+<LinkCards>
+  <LinkCard href="/docs/frontend/data-tables/" title="Data tables">
+    The table that uses these tokens, with sorting and paging on the server.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/localization/" title="Localization">
+    Right-to-left layouts, and fonts for scripts the theme's faces don't cover.
+  </LinkCard>
+</LinkCards>

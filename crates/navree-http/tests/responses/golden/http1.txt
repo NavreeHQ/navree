@@ -1,0 +1,1243 @@
+GET /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 4\r\n
+\r\n
+text
+clean: true
+
+GET /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 4\r\n
+\r\n
+text
+clean: true
+
+GET /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 4\r\n
+\r\n
+text
+clean: true
+
+HEAD /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+content-length: 4\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /text HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: application/json\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 7\r\n
+\r\n
+{"a":1}
+clean: true
+
+GET /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: application/json\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 7\r\n
+\r\n
+{"a":1}
+clean: true
+
+GET /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: application/json\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 7\r\n
+\r\n
+{"a":1}
+clean: true
+
+HEAD /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: application/json\r\n
+content-length: 7\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /json HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 303 See Other\r\n
+location: /text\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+GET /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 303 See Other\r\n
+location: /text\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+GET /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 303 See Other\r\n
+location: /text\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+HEAD /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 303 See Other\r\n
+location: /text\r\n
+content-length: 0\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /redirect HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 6\r\n
+\r\n
+deal 7
+clean: true
+
+GET /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 6\r\n
+\r\n
+deal 7
+clean: true
+
+GET /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 6\r\n
+\r\n
+deal 7
+clean: true
+
+HEAD /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+content-length: 6\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /deals/7 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 400 Bad Request\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 114\r\n
+\r\n
+{"statusCode":400,"message":"Invalid URL: Cannot parse `x` to a `u32`","error":"Bad Request","code":"bad_request"}
+clean: true
+
+GET /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 400 Bad Request\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+content-encoding: gzip\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+<a gzip body, chunked>
+clean: true
+
+GET /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 400 Bad Request\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 114\r\n
+\r\n
+{"statusCode":400,"message":"Invalid URL: Cannot parse `x` to a `u32`","error":"Bad Request","code":"bad_request"}
+clean: true
+
+HEAD /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 400 Bad Request\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+content-length: 114\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /deals/x HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 202 Accepted\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-a: 1\r\n
+x-b: 2\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 8\r\n
+\r\n
+accepted
+clean: true
+
+GET /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 202 Accepted\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-a: 1\r\n
+x-b: 2\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 8\r\n
+\r\n
+accepted
+clean: true
+
+GET /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 202 Accepted\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-a: 1\r\n
+x-b: 2\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 8\r\n
+\r\n
+accepted
+clean: true
+
+HEAD /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 202 Accepted\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-a: 1\r\n
+x-b: 2\r\n
+content-length: 8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /status HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 502 Bad Gateway\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+GET /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 502 Bad Gateway\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+GET /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 502 Bad Gateway\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 0\r\n
+\r\n
+
+clean: true
+
+HEAD /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 502 Bad Gateway\r\n
+content-length: 0\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /empty-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 409 Conflict\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 74\r\n
+\r\n
+{"statusCode":409,"message":"Taken.","error":"Conflict","code":"conflict"}
+clean: true
+
+GET /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 409 Conflict\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+content-encoding: gzip\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+<a gzip body, chunked>
+clean: true
+
+GET /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 409 Conflict\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 74\r\n
+\r\n
+{"statusCode":409,"message":"Taken.","error":"Conflict","code":"conflict"}
+clean: true
+
+HEAD /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 409 Conflict\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+content-length: 74\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /app-error HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+3\r\n
+one\r\n
+3\r\n
+two\r\n
+5\r\n
+three\r\n
+0\r\n
+\r\n
+
+clean: true
+
+GET /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+content-encoding: gzip\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+<a gzip body, chunked>
+clean: true
+
+GET /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+3\r\n
+one\r\n
+3\r\n
+two\r\n
+5\r\n
+three\r\n
+0\r\n
+\r\n
+
+clean: true
+
+HEAD /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /stream HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/event-stream\r\n
+cache-control: no-cache\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+9\r\n
+data: 1
+
+\r\n
+9\r\n
+data: 2
+
+\r\n
+0\r\n
+\r\n
+
+clean: true
+
+GET /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/event-stream\r\n
+cache-control: no-cache\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+9\r\n
+data: 1
+
+\r\n
+9\r\n
+data: 2
+
+\r\n
+0\r\n
+\r\n
+
+clean: true
+
+GET /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/event-stream\r\n
+cache-control: no-cache\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+9\r\n
+data: 1
+
+\r\n
+9\r\n
+data: 2
+
+\r\n
+0\r\n
+\r\n
+
+clean: true
+
+HEAD /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/event-stream\r\n
+cache-control: no-cache\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /events HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 4096\r\n
+\r\n
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+clean: true
+
+GET /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+content-encoding: gzip\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+<a gzip body, chunked>
+clean: true
+
+GET /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 4096\r\n
+\r\n
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+clean: true
+
+HEAD /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+content-length: 4096\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+OPTIONS /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 204 No Content\r\n
+allow: GET, HEAD, OPTIONS\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+
+DELETE /large HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 405 Method Not Allowed\r\n
+allow: GET, HEAD, OPTIONS\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 106\r\n
+\r\n
+{"statusCode":405,"message":"Method Not Allowed","error":"Method Not Allowed","code":"method_not_allowed"}
+clean: true
+
+GET /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+
+GET /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+content-encoding: gzip\r\n
+connection: close\r\n
+transfer-encoding: chunked\r\n
+\r\n
+<a gzip body, chunked>
+clean: true
+
+GET /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\nOrigin: http://localhost:3000\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+access-control-allow-origin: http://localhost:3000\r\n
+access-control-allow-credentials: true\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+
+HEAD /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+
+clean: true
+
+OPTIONS /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+
+DELETE /nothing HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+
+POST /echo HTTP/1.1\r\nHost: test\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello
+=>
+HTTP/1.1 200 OK\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 5\r\n
+\r\n
+hello
+clean: true
+
+CONNECT /tunnel HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 200 OK\r\n
+content-type: text/plain; charset=utf-8\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: Origin\r\n
+connection: close\r\n
+\r\n
+
+clean: true
+

@@ -1,0 +1,8 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "rows(table(\"readings\").select_time_bucket(\"15 minutes\", \"taken_at\",\n\"bucket\").select_expr(Expr::avg(col(\"celsius\")),\n\"average\").group_by([\"bucket\"]).order_by(\"bucket\"))"
+---
+PostgreSQL: SELECT time_bucket(CAST($1 AS INTERVAL), "taken_at") AS "bucket", AVG("celsius") AS "average" FROM "readings" GROUP BY "bucket" ORDER BY "bucket" ASC
+  values: [String("15 minutes")]
+MySQL: SELECT TIMESTAMPADD(MICROSECOND, FLOOR(TIMESTAMPDIFF(MICROSECOND, CAST('2000-01-03 00:00:00' AS DATETIME(6)), `taken_at`) / 900000000) * 900000000, CAST('2000-01-03 00:00:00' AS DATETIME(6))) AS `bucket`, AVG(`celsius`) AS `average` FROM `readings` GROUP BY `bucket` ORDER BY `bucket` ASC
+SQLite: SELECT datetime(946857600 + (CAST(strftime('%s', "taken_at") AS INTEGER) - 946857600) - ((CAST(strftime('%s', "taken_at") AS INTEGER) - 946857600) % 900 + 900) % 900, 'unixepoch') AS "bucket", AVG("celsius") AS "average" FROM "readings" GROUP BY "bucket" ORDER BY "bucket" ASC

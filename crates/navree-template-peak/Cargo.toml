@@ -1,0 +1,19 @@
+[package]
+name = "navree-template-peak"
+description = "Tests that measure the heap a navree-template render uses, with a counting allocator; not published."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# The counting allocator needs `unsafe`, which the workspace's lints forbid.
+# This crate holds tests only and nothing depends on it.
+[lints.rust]
+unsafe_code = "allow"
+
+[dependencies]
+
+[dev-dependencies]
+navree-template = { workspace = true }
+serde_json = { workspace = true }

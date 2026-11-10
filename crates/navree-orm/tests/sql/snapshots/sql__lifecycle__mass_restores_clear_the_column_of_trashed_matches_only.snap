@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/lifecycle.rs
+expression: "per_dialect(|dialect| render_update(&update, dialect))"
+---
+PostgreSQL: UPDATE "deals" SET "deleted_at" = $1, "updated_at" = $2 WHERE "deals"."amount_cents" < $3 AND "deals"."deleted_at" IS NOT NULL
+  values: [Null(Timestamp), Timestamp(2026-10-27T08:30:00Z), I64(100)]
+MySQL: UPDATE `deals` SET `deleted_at` = ?, `updated_at` = ? WHERE `deals`.`amount_cents` < ? AND `deals`.`deleted_at` IS NOT NULL
+  values: [Null(Timestamp), Timestamp(2026-10-27T08:30:00Z), I64(100)]
+SQLite: UPDATE "deals" SET "deleted_at" = ?, "updated_at" = ? WHERE "deals"."amount_cents" < ? AND "deals"."deleted_at" IS NOT NULL
+  values: [Null(Timestamp), Timestamp(2026-10-27T08:30:00Z), I64(100)]

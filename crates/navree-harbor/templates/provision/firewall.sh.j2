@@ -1,0 +1,30 @@
+# harbor: firewall on {{ server.name }}
+{% include "provision/prelude.sh" %}
+harbor_installed ufw || harbor_apt install ufw
+harbor_installed fail2ban || harbor_apt install fail2ban
+ufw default deny incoming > /dev/null
+ufw default allow outgoing > /dev/null
+desired="$(cat <<'HARBOR_EOF'
+{% for rule in firewall_rules %}
+{{ rule }}
+{% endfor %}
+HARBOR_EOF
+)"
+# Remove Harbor's rules that harbor.toml no longer asks for.
+while IFS= read -r rule; do
+	[ -n "$rule" ] || continue
+	if ! grep -Fxq -- "$rule" <<< "$desired"; then
+		eval "ufw delete $rule" > /dev/null
+	fi
+done < <(ufw show added 2> /dev/null | sed -n 's/^ufw //p' | grep -F "comment 'harbor'" || true)
+while IFS= read -r rule; do
+	[ -n "$rule" ] || continue
+	eval "ufw $rule" > /dev/null
+done <<< "$desired"
+ufw --force enable > /dev/null
+harbor_file /etc/fail2ban/jail.d/harbor.conf 0644 root:root <<'HARBOR_EOF'
+{{ files.fail2ban }}HARBOR_EOF
+if [ "$HARBOR_CHANGED" = 1 ]; then
+	systemctl restart fail2ban
+fi
+systemctl enable --now fail2ban > /dev/null 2>&1

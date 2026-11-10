@@ -1,0 +1,765 @@
+---
+title: "Authorization"
+description: "Roles, permissions and abilities, checked on routes, on loaded records and in SQL list filters, and shared with the front end."
+---
+
+[Authentication](/docs/security/authentication/) tells you who is calling; authorization decides what they may do. `navree-access` combines roles and permissions, stored in the database and managed at run time, with abilities: rules that allow or deny actions on subjects. You write the rules once, in Rust, and Navree uses them in four places:
+
+- on routes, before the handler runs (`#[can(Update, Post, from = "id")]`);
+- on a loaded record, in your services;
+- in SQL, so a list returns exactly the rows the user may see;
+- in the browser, where `@casl/ability` hides the buttons a user can't use. The API still checks every request.
+
+## Setting up
+
+<Badge feature="access" /> The `access` feature of the `navree` facade (part of the default `full` feature) brings `navree-access`. Add `AccessModule` to your app root with your abilities function and, optionally, a super-admin role:
+
+```rust title="src/main.rs"
+mod abilities;
+mod modules;
+
+use navree::prelude::*;
+
+use crate::modules::posts::PostsModule;
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(CryptoModule::from_config())
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions {
+            abilities: abilities::define,
+            super_admin_role: Some("admin".to_owned()),
+        }))
+        .module(PostsModule)
+        .run()
+}
+```
+
+`AccessModule` is global and needs `DatabaseModule`. It provides `AccessService` (manage roles and permissions) and `AbilityFactory` (each user's compiled abilities), and it registers navree-http's route authorizer, which checks `#[roles]`, `#[permissions]` and `#[can]`. Routes that declare those need the module: without it the app refuses to boot. A module that imports plain `AccessModule` reuses this configured instance.
+
+The migration set `access` creates the tables `roles`, `permissions`, `role_permissions`, `user_roles`, `user_permissions` and `access_meta`. It runs after `auth`.
+
+## Concepts
+
+| Term | Meaning |
+|---|---|
+| Subject | A type of thing, named in PascalCase: `Post`, `Deal`. A model becomes a subject with `#[model(subject)]`. |
+| Action | `read`, `create`, `update`, `delete`, `manage` (any action), or your own: `publish`, `move`. |
+| Rule | Allows (`can`) or denies (`cannot`) an action on a subject, optionally only where conditions on the record hold and only for some fields. |
+| Ability | One user's rules, in order. Navree builds it from your abilities function. |
+| Role, permission | Stored in the database and managed at run time. A permission such as `posts.publish` becomes a rule. |
+
+Abilities serialise to the JSON rule format of [CASL](https://casl.js.org), so the same rules mean the same thing in Rust and, through `@casl/ability`, in the browser.
+
+### Subjects
+
+Make each model you want to check a subject, and register it with `AccessModule::for_feature` in its module. A [navree-orm model](/docs/orm/workspaces-and-access/#access-control) is a subject through its `#[model(..)]` attribute:
+
+```rust title="src/modules/posts/model.rs"
+use navree::prelude::*;
+
+/// Rules name it `Post`; permissions are `posts.<action>`.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "posts", timestamps, subject = "Post", permission_prefix = "posts")]
+pub struct Post {
+    pub id: Uuid,
+    pub author_id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+```rust title="src/modules/posts/mod.rs"
+mod controller;
+mod model;
+
+use navree::prelude::*;
+
+pub use controller::PostsController;
+pub use model::Post;
+
+#[module(
+    imports = [AccessModule::for_feature::<Post>()],
+    controllers = [PostsController],
+)]
+pub struct PostsModule;
+```
+
+`subject` alone names the subject after the struct and takes the table as the permission prefix; `policy = PostPolicy` adds the rules about it. `for_feature` maps the permission prefix to the subject, and lets routes load the model's records by route key (a UUID, an integer or a string): the ORM loads them in the request's unit of work, on navree-db's own transaction. A subject that isn't a model, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::User` is the subject `User`, with the prefix `users`. To check routes against users and to make `users.*` permissions apply, import `AccessModule::for_feature::<navree::auth::User>()`.
+
+## Defining abilities
+
+The abilities function receives the user's context and adds rules:
+
+```rust title="src/abilities.rs"
+use navree::prelude::*;
+
+use crate::modules::posts::PUBLISH;
+
+/// Who may do what with posts.
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    // Permissions from the user's roles: `posts.publish` → can publish Post.
+    ctx.grant_permissions(rules);
+
+    // Everyone, guests included, reads published posts.
+    rules.can(READ, "Post").when(field("published").eq(true));
+
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    let own = || field("author_id").eq(user.id);
+    rules.can(READ, "Post").when(own());
+    rules.can(CREATE, "Post");
+    rules.can(UPDATE, "Post").fields(["title", "body"]).when(own());
+    rules.can(PUBLISH, "Post").when(own());
+    rules.can(DELETE, "Post").when(own());
+    // Last, so it wins over the rules above.
+    rules
+        .cannot(DELETE, "Post")
+        .when(field("locked").eq(true))
+        .because("Locked posts are kept.");
+}
+```
+
+`AbilityCtx` holds:
+
+| Field | |
+|---|---|
+| `user` | `Some(AccessUser { id, roles })` for a signed-in user (`has_role`, `has_any_role`); `None` for guests |
+| `permissions` | The user's permission strings, through their roles and granted directly, sorted |
+| `team_id` | Inside a workspace request, `Some(workspace id)`, and `user.roles` and `permissions` describe the member's workspace role; `None` otherwise. See [How workspace roles reach access control](/docs/workspaces/members-and-roles/#how-workspace-roles-reach-access-control) |
+| `organization_id` | Inside an [organization](/docs/workspaces/organizations/) request, or a workspace that belongs to one, `Some(organization id)`; `None` otherwise |
+| `permission_subjects` | The permission prefix of every registered subject, for `grant_permissions` |
+
+The function is a plain `fn(&AbilityCtx, &mut Rules)`: it can't capture state or query the database. Everything a rule decides on must be a role, a permission, or a column of the record being checked.
+
+A custom action is a string, plus a marker type for route attributes and extractors:
+
+```rust title="src/modules/posts/mod.rs"
+/// `publish`, a custom action.
+pub const PUBLISH: &str = "publish";
+
+/// The `publish` action in `#[can]` and `Authorized<Post, Publish>`.
+pub struct Publish;
+
+impl ActionMarker for Publish {
+    const NAME: &'static str = PUBLISH;
+}
+```
+
+The built-in actions have constants (`READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`), marker types (`Read`, `Create`, `Update`, `Delete`, `Manage`) and `ALL`, the subject that matches every subject. All are in the prelude.
+
+### The last matching rule wins
+
+A check scans the rules from last to first, and the first rule that matches the action, the subject, the field and the record decides. No matching rule means no. So put `cannot` rules after the `can` rules they restrict: in the example, an author may delete their own posts, except locked ones.
+
+| Rule part | Matches |
+|---|---|
+| `can`, `cannot` | Allows, or denies |
+| Action | The action, or any action when the rule says `manage` |
+| Subject | The subject, or any subject when the rule says `all` |
+| `.when(..)` | Records whose columns satisfy the conditions |
+| `.fields(..)` | Checks of those fields (see [Fields](#fields)) |
+| `.because(..)` | Nothing: a reason that `access:explain` and the front end can show |
+
+A check without a record is a **type-level** check: "may this user update some post?". A conditional `can` rule counts as a match, because some records may be allowed, and a conditional `cannot` rule is skipped. `ability.can(UPDATE, "Post", None)` is therefore true for an author, although they may update only their own posts.
+
+`Rules::build` panics on an invalid rule (an unsupported operator, say), because rules are code. `Rules::try_build` returns the `RuleError` instead. In the module, an invalid rule makes every request of that user a 500, so test your abilities function (see [Testing](#testing)).
+
+### Conditions
+
+Conditions compare the record's columns with values:
+
+```rust
+rules.can(READ, "Invoice").when(
+    field("status")
+        .is_in(["sent", "paid"])
+        .and(field("total_cents").gte(10_000)),
+);
+rules.can(READ, "Invoice").when(field("archived_at").eq(None::<&str>));
+```
+
+| Method | JSON operator |
+|---|---|
+| `eq`, `ne` | `$eq`, `$ne` |
+| `lt`, `lte`, `gt`, `gte` | `$lt`, `$lte`, `$gt`, `$gte` |
+| `is_in([..])`, `not_in([..])` | `$in`, `$nin` |
+
+- Conditions combine with `.and(..)`, and several `.when(..)` calls on one rule combine the same way. There is no `$or`: write two rules.
+- Only top-level columns work. Nested fields (`author.id`), `$exists`, `$regex` and the other MongoDB operators are rejected.
+- Values can be booleans, integers, floats, strings, `Uuid`s, `DateTime<Utc>`s, `serde_json::Value`s and `Option`s, where `None` is `null`. Integers must be safe in JavaScript (at most 2^53 − 1); pass larger ones as strings.
+- Types are never converted: `7` doesn't equal `"7"`. UUIDs compare as hyphenated lower-case strings, and timestamps as RFC 3339 UTC strings with microseconds, so text order is time order.
+- `eq(None)` matches null. `ne(value)` matches null columns too, like SQL's `IS DISTINCT FROM`. `is_in` and `not_in` match null only through, or unless, a `null` in the list. Range operators never match null.
+
+### Fields
+
+`.fields([..])` limits a rule to some fields. In the example, an author may update the title and body of their own posts, and nothing else. A field-limited rule changes field checks only:
+
+- `ability.can(UPDATE, "Post", Some(&post))` is true: the author may update the post;
+- `ability.can_field(UPDATE, "Post", Some(&post), "author_id")` is false: they may not change its author.
+
+A field-limited `cannot` rule never denies a whole-record check, only checks of its fields. `ability.permitted_fields(action, subject, record, &all_fields)` lists the allowed ones. In a handler, `Authorized::check_fields` turns the check into a 403:
+
+```rust
+post.check_fields(&input.changed_fields())?;
+```
+
+```json
+{"statusCode": 403, "message": "You may not change these fields: author_id.", "error": "Forbidden", "code": "forbidden_fields"}
+```
+
+## Roles and permissions
+
+### Permission strings
+
+A permission is a string `<prefix>.<action>`. `ctx.grant_permissions(rules)` adds one unconditional `can` rule for each permission the user has:
+
+| Permission | Rule |
+|---|---|
+| `posts.publish` | `can publish Post` (when a subject has the prefix `posts`) |
+| `posts.*` | `can manage Post`: every action |
+| `audit.read` | `can read audit`: a prefix no subject claims stands for itself |
+
+The last row is how framework permissions work: the [audit log](/docs/security/audit-log/) route requires `audit.read`, and the role management routes require `roles.manage`. Grant them to a role like any other permission.
+
+Without an abilities function, `AccessOptions::default()` uses `default_abilities`, which grants the user's permissions and nothing else.
+
+A permission has at most 128 characters: ASCII letters, digits, `_`, `-`, `.`, `:` and `*`, starting with a letter or a digit, with a non-empty prefix and action. A role name has at most 64 of the same characters, without `*`.
+
+### Managing roles in code
+
+`AccessService` manages roles. Writes take the unit of work to run in: a request's `Uow`, or one from `db.uow(..)` in jobs, seeders and commands.
+
+```rust
+use navree::access::AccessService;
+use navree::db::Db;
+
+let uow = db.uow(None, None).await;
+access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
+access.grant(&uow, "editor", "posts.publish").await?;
+access.grant(&uow, "editor", "posts.update").await?;
+access.assign_role(&uow, editor_id, "editor").await?;
+uow.commit().await?;
+```
+
+| Method | |
+|---|---|
+| `create_role(&uow, name, description)`, `delete_role(&uow, name)` | Deleting a role removes its grants and assignments |
+| `grant(&uow, role, permission)`, `revoke(&uow, role, permission)` | Change one permission of a role |
+| `sync_role_permissions(&uow, role, permissions)` | Make the role's permissions exactly these |
+| `assign_role(&uow, user, role)`, `remove_role(&uow, user, role)` | Change one role of a user |
+| `sync_user_roles(&uow, user, roles)` | Make the user's roles exactly these |
+| `grant_to_user(&uow, user, permission)`, `revoke_from_user(&uow, user, permission)` | Permissions given to a user directly |
+| `role(name)`, `roles()`, `roles_of(user)`, `permissions_of(user)` | Read roles and permissions (`RoleInfo` has `id`, `name`, `description`, `permissions`, `created_at`) |
+| `explain(user, action, subject, id)` | The rule that decides a check; see [Explaining a decision](#explaining-a-decision) |
+
+The `grant`, `revoke`, `assign` and `remove` methods return `false` when there was nothing to change, and do nothing else, so seeders can run again safely. The CRM's `crm-roles` seeder creates the missing roles and calls `sync_role_permissions` for each.
+
+Each change that does something:
+
+- bumps the **access version** in the same transaction, so every instance rebuilds its cached abilities on the next request (see [Caching](#caching-and-consistency));
+- writes an `access.*` entry to the [audit log](/docs/security/audit-log/), when the app has one, once it commits;
+- ends the real-time subscriptions of the users it affects (the user whose roles or direct permissions changed, or the members of a role that lost permissions), so they must authorize their private channels again.
+
+### Console commands
+
+```sh
+navree access:role editor Publishes posts
+navree access:grant editor posts.export
+navree access:explain 01a17751-238d-7310-b5df-b4b75c48def9 export Post
+```
+
+```text
+Role `editor` created.
+Role `editor` can now `posts.export`.
+User 01a17751-238d-7310-b5df-b4b75c48def9 may `export` Post
+Decided by rule #1: can export Post
+Roles: editor
+```
+
+`access:role <name> [description]` and `access:grant <role> <permission>` say so when the role or the permission already exists. `access:explain <user> <action> <subject> [id]` explains a type-level check, or a record check when you give an id.
+
+### The management routes
+
+`AccessModule` mounts routes to manage roles over HTTP, under `/api/access`. Each requires the permission `roles.manage`:
+
+| Route | Body | Success |
+|---|---|---|
+| `GET /api/access/roles` | | 200: `{"data": [roles with their permissions]}` |
+| `POST /api/access/roles` | `{"name", "description"?}` | 201: the role |
+| `PUT /api/access/roles/{role}/permissions` | `{"permissions": [..]}` | 200: the role |
+| `DELETE /api/access/roles/{role}` | | 204 |
+| `PUT /api/access/users/{user}/roles` | `{"roles": [..]}` | 200: `{"user_id", "roles"}` |
+
+```json
+{
+  "data": [
+    {
+      "created_at": "2026-10-26T08:18:09.379917400Z",
+      "description": "Everything",
+      "id": "01a17749-d363-765c-a345-0eb1cc6d677a",
+      "name": "admin",
+      "permissions": []
+    },
+    {
+      "created_at": "2026-10-26T08:18:09.380319900Z",
+      "description": null,
+      "id": "01a17749-d364-7778-8a00-f70d50dadc62",
+      "name": "editor",
+      "permissions": ["posts.publish"]
+    }
+  ]
+}
+```
+
+An unknown role is a 404 ("The role `x` does not exist."), an existing name a 409, and an invalid name or an unknown role in a body a 400 validation error.
+
+## A super-admin role
+
+With `super_admin_role: Some("admin".to_owned())`, users with the `admin` role get one more rule, `can manage all`, after the rules your function defines. Being last, it beats every `cannot`. They also pass every `#[roles(..)]` check.
+
+The role is an ordinary role: create it and assign it like any other. The CRM makes `admin` its super-admin role, and its abilities function adds nothing for admins, so an admin's rules are only:
+
+```json
+[{"action": "manage", "subject": "all", "reason": "super admin"}]
+```
+
+## Checking routes
+
+Route attributes declare who may call a route; [Access control on routes](/docs/basics/access-control/) covers them in full. Every declaration except `#[public]` requires a signed-in user first.
+
+| Attribute | Passes when |
+|---|---|
+| `#[roles("admin", "editor")]` | The user has any of the roles (the super-admin role always passes) |
+| `#[permissions("posts.export")]` | An unconditional rule grants the permission's action on its subject. Conditional rules don't count |
+| `#[can(Create, Post)]` | The type-level check passes: the user may create some posts |
+| `#[can(Update, Post, from = "id")]` | The post whose id is the `id` path parameter exists and the rules allow updating it |
+
+A refusal is `403 Forbidden`, and with an audit log in the app it is recorded as an `access.denied` security entry naming the check, the route and the user:
+
+```json wrap
+{
+  "kind": "security",
+  "action": "access.denied",
+  "actor_id": "01a17751-238d-7310-b5df-b4b75c48def9",
+  "subject_type": "Post",
+  "subject_id": "01a17751-2395-715f-931d-d822324d98fd",
+  "metadata": {"action": "delete", "check": "can", "method": "DELETE", "route": "/api/v1/posts/{id}", "subject": "Post"}
+}
+```
+
+A 403 that a handler returns itself (from `check_fields`, say) is recorded too, with `"check": "handler"`. Hand-written routes use `.roles(&[..])`, `.permissions(&[..])` and `.can("update", "Post", Some("id"))` on `RouteDef`.
+
+Guests never pass `#[can]`, even when a rule allows guests: make such a route `#[public]` and filter what it returns with [`Accessible`](#list-filters-in-sql), as the posts index below does.
+
+## Record checks
+
+### Authorized
+
+With `from = "id"`, the route authorizer loads the record before the handler runs and hands it over as `Authorized<M, A>`:
+
+```rust title="src/modules/posts/controller.rs"
+use navree::orm::access::AccessibleQuery;
+use navree::prelude::*;
+
+use super::model::Post;
+use super::{Publish, UpdatePost};
+
+#[injectable]
+pub struct PostsController;
+
+#[controller("/posts", version = "1")]
+impl PostsController {
+    /// Only the posts the caller may read.
+    #[get("/")]
+    #[public]
+    async fn index(
+        &self,
+        uow: Uow,
+        scope: Accessible<Post, Read>,
+        page: PageQuery,
+    ) -> Result<Page<Record<Post>>> {
+        Ok(scope.query().latest().paginate(&uow, page).await?)
+    }
+
+    /// 404 when there is no such post, 403 when the rules say no.
+    #[get("/{id}")]
+    #[can(Read, Post, from = "id")]
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
+        Json(post.into_inner())
+    }
+
+    #[patch("/{id}")]
+    #[can(Update, Post, from = "id")]
+    async fn update(
+        &self,
+        post: Authorized<Post, Update>,
+        Valid(Json(input)): Valid<Json<UpdatePost>>,
+    ) -> Result<Json<Record<Post>>> {
+        // 403 "You may not change these fields: author_id." when the
+        // rule is limited to title and body.
+        post.check_fields(&input.changed_fields())?;
+        // ...
+        Ok(Json(post.into_inner()))
+    }
+
+    #[post("/{id}/publish")]
+    #[can(Publish, Post, from = "id")]
+    async fn publish(&self, post: Authorized<Post, Publish>) -> Result<Json<Record<Post>>> {
+        // ...
+        Ok(Json(post.into_inner()))
+    }
+}
+```
+
+For a `from` route, the authorizer:
+
+1. runs the type-level check;
+2. loads the record by its primary key in the request's unit of work, with `SELECT ... FOR UPDATE` on PostgreSQL and MySQL (on SQLite the write transaction already serialises writers);
+3. answers 404 when there is no such record, or when the id can't be one (not a UUID for a UUID key, say);
+4. checks the rules against the record, and answers 403 when they say no;
+5. keeps the record for the handler.
+
+For a model, `Authorized<M, A>` dereferences to its `Record<M>` (which dereferences to the model, so `post.title` works), and `into_inner()` gives the `Record<M>`; `.into_inner()` on that gives the model. It also has `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
+
+Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`. The same JSON comes from `navree::orm::access::record_json(&record)` for an ORM model (`ability.authorize(Update, &record)` checks one directly), `navree::access::row_json(&row)` for a navree-db record.
+
+<Callout type="warning" title="Soft-deleted records">
+
+The record loader doesn't know about soft deletes. A soft-deleted row still loads, so a user the rules refuse gets a 403 rather than a 404, which tells them the record existed. Check `deleted_at` in your handler or service.
+
+</Callout>
+
+### Checks in services
+
+Some decisions depend on the input as well as the record. The `Abilities` extractor gives the user's compiled rules (`Arc<Ability>`), and `Authorized::ability()` the same. For a model's record, `AbilityExt` (in `navree::orm::access`) checks an action against it:
+
+```rust
+use navree::access::Ability;
+use navree::orm::access::AbilityExt;
+
+pub fn ensure_can_publish(ability: &Ability, post: &Record<Post>) -> Result<()> {
+    // `Publish` is the action marker defined above.
+    if !ability.allows(Publish, post) {
+        return Err(AppError::forbidden().with_detail("You may not publish this post."));
+    }
+    Ok(())
+}
+```
+
+`ability.authorize(Publish, post)?` is the same check with the 403 built in, and `ability.allows_action("publish", post)` takes the action by name. For a record that isn't a model, `ability.can(PUBLISH, "Post", Some(&row_json(&row)))` checks the JSON the conditions see.
+
+The CRM's deal service does this when a `PATCH` changes a deal's stage, which needs `move` as well as `update`:
+
+```rust title="crm/api/crates/crm-deals/src/service.rs"
+let moving = input.stage.filter(|stage| *stage != deal.stage);
+if moving.is_some() && !deal.ability().can(Move::NAME, DEAL, Some(deal.record())) {
+    return Err(AppError::forbidden().with_detail("You may not move this deal"));
+}
+```
+
+`CurrentAccess` gives more: the user's `roles`, `permissions`, access `version`, whether they are the `super_admin`, and the `ability`. Both extractors compute the user's access once per request, shared with the route authorizer.
+
+Outside a request, such as in a job or a channel authorizer, ask the `AbilityFactory` for a user's permission, checked the way `#[permissions]` checks it:
+
+```rust
+let factory = ctx.get::<AbilityFactory>().await?;
+if factory.has_permission(&principal, "reports.export").await? {
+    // ...
+}
+```
+
+Code that shouldn't depend on navree-access asks `navree::contracts::permitted(&ctx, &principal, "reports.export", workspace)` instead. `AccessModule` answers it with the user's global roles and permissions, and [`WorkspaceModule`](/docs/workspaces/members-and-roles/#checks-outside-a-request) with their role in the workspace, when one is given. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) decide who sees them this way.
+
+## List filters in SQL
+
+A list endpoint must return only the rows the user may see, and it must agree with the record check, or users see records they then can't open. `Accessible<E, A>` compiles the same rules into one SQL `CASE` expression, so a row is listed exactly when `can(A, E, row)` would be true. For an ORM model, `AccessibleQuery` (in `navree::orm::access`) applies it to the model's queries: `scope.query()` starts a query of the rows the user may see, `scope.apply(query)` narrows one you have. The CRM lists deals this way:
+
+```rust title="crm/api/crates/crm-deals/src/service.rs"
+pub async fn list(
+    &self,
+    uow: &Uow,
+    scope: Accessible<Deal, Read>,
+    list: &ListQuery,
+) -> Result<Page<DealResource>> {
+    let page = scope
+        .apply(Deal::query())
+        .list(list, &DealList::SPEC)?
+        .with_all(DealResource::EMBEDS)
+        .paginate(uow, list.page_request(&DealList::SPEC))
+        .await?;
+    Ok(page.map(|deal| deal.to_resource::<DealResource>()))
+}
+```
+
+The `CASE` lists the conditional rules from last to first, so its first `WHEN` that holds is the rule a record check would pick. For a CRM sales rep deleting deals, the filter is:
+
+```sql
+CASE WHEN ("deals"."stage" IN ('won', 'lost')) THEN FALSE
+     WHEN ("deals"."owner_id" = '01920000-0000-7000-8000-000000000003') THEN TRUE
+     ELSE FALSE END
+```
+
+An unconditional rule turns into the `ELSE` (a rep reads every deal, so their read filter is `TRUE`), and an action with no rules into `FALSE`. The filter never yields `NULL`, so it is safe to negate.
+
+- Columns are qualified with the model's table, and values are bound with the column's type, so UUID and timestamp columns compare like the stored values, and numbers are bound as the column's integer or float whatever the rule's JSON says (`3` or `3.5`; `amount > 3.5` on an integer column is `amount > 3`). A rule field that isn't a column is SQL `NULL`, as it is `null` in a record check.
+- The filter is written for the query's database: `ne` is null-safe on each (`IS DISTINCT FROM` on PostgreSQL, `NOT (a <=> b)` on MySQL, `IS NOT` on SQLite). The tests check that record checks and list filters agree on random rule sets on all three. String comparisons agree with record checks under binary collation: SQLite's default, `COLLATE "C"` on PostgreSQL, a binary collation on MySQL.
+- For queries the ORM doesn't build (a navree-db record, a report written in SQL), `scope.sql_filter(&columns)` compiles the filter with a column mapping (`TypedColumns` names the table and each column's type, or implement `SqlColumns` for joins or renamed columns) and `.to_statement(backend)` writes it as a portable fragment, SQL with `?` placeholders and its values. `ability.sql_filter_with(action, subject, &columns)` does the same from an `Ability`.
+
+```rust
+use navree::access::{Accessible, Read, TypedColumns};
+use navree::db::record::Filter;
+use navree::db::{Executor, Kind, Record};
+
+let columns = TypedColumns::new("deals")
+    .with("owner_id", Kind::Uuid)
+    .with("stage", Kind::String);
+let (sql, values) = scope.sql_filter(&columns).to_statement(uow.backend()).into_parts();
+let deals = DealRow::select().filter(Filter::all().raw(sql, values)).all(&uow).await?;
+```
+
+## Abilities in the front end
+
+`GET /api/me/abilities` returns the signed-in user's rules in CASL's JSON format, which `createMongoAbility` in `@casl/ability` accepts as is. For the author in the posts example:
+
+```http wrap
+HTTP/1.1 200 OK
+Content-Type: application/json
+ETag: "01a17751-238d-7310-b5df-b4b75c48def9-1-8cbacc2d30295bd4"
+Cache-Control: private, no-cache
+
+[
+  {"action": "read", "conditions": {"published": true}, "subject": "Post"},
+  {"action": "read", "conditions": {"author_id": "01a17751-238d-7310-b5df-b4b75c48def9"}, "subject": "Post"},
+  {"action": "create", "subject": "Post"},
+  {"action": "update", "conditions": {"author_id": "01a17751-238d-7310-b5df-b4b75c48def9"}, "fields": ["title", "body"], "subject": "Post"},
+  {"action": "publish", "conditions": {"author_id": "01a17751-238d-7310-b5df-b4b75c48def9"}, "subject": "Post"},
+  {"action": "delete", "conditions": {"author_id": "01a17751-238d-7310-b5df-b4b75c48def9"}, "subject": "Post"},
+  {"action": "delete", "conditions": {"locked": true}, "inverted": true, "reason": "Locked posts are kept.", "subject": "Post"}
+]
+```
+
+The ETag is `"<user>-<access version>-<hash of the rules>"`: it changes with any role or permission change, and when a deploy changes the rules. Send it back in `If-None-Match` to get a `304 Not Modified`.
+
+The CRM's front end builds its ability from that array. Every API resource carries its subject type in `__type` (`"Deal"`, `"User"`), so CASL can check API records directly:
+
+```ts title="crm/web/src/lib/casl/ability.ts"
+export function createAppAbility(rules: readonly CaslRule[] = []): AppAbility {
+  return createMongoAbility<AppAbility>(rules as RawRuleOf<AppAbility>[], {
+    // `__type` is typed `string` for some resources in the OpenAPI document; the API always sends the subject name.
+    detectSubjectType: (o) => (typeof o === "string" ? o : o.__type) as ExtractSubjectType<AppSubjects>,
+  });
+}
+```
+
+```tsx title="crm/web/src/app/(app)/companies/[id]/company-detail.tsx"
+<Can I="update" this={c}>
+  <CompanyFormDialog
+    company={c}
+    trigger={
+      <Button variant="outline">
+        <PencilIcon data-icon="inline-start" />
+        Edit
+      </Button>
+    }
+  />
+</Can>
+```
+
+The browser's checks only decide what to show. In a few corners `@casl/ability` answers differently from Navree, which can only affect the UI because the API checks again:
+
+- a column the record lacks is `null` to Navree and `undefined` to CASL, which `$eq: null` doesn't match;
+- range operators never match `null` or a value of another type in Navree, where JavaScript would compare them;
+- strings order by code point in Navree, by UTF-16 code unit in JavaScript.
+
+`Ability::to_casl_json()` and `Ability::from_casl_json(..)` convert rules yourself. Parsing accepts only the operators listed under [Conditions](#conditions).
+
+## Tokens with limited abilities
+
+A [custom authentication strategy](/docs/security/authentication/#writing-your-own-strategy) can limit what a request may do by setting `token_abilities` on the `Principal` it returns: a list of permission strings such as `["deals.read"]`. The user's ability is then narrowed to the rules that grant those permissions; `"*"` keeps everything, and a malformed entry grants nothing. Rules keep their order and conditions, so a token never grants more than its user has. Access tokens from the JWT strategy are not limited.
+
+## Caching and consistency
+
+Each request reads the access version (one small query). A user's roles, permissions and compiled rules are cached in memory under their id and that version, for up to 10,000 users, and dropped after 10 minutes without use. Every change made through `AccessService` bumps the version in the same transaction as the change, so once it commits every instance rebuilds the abilities on the next request. No cache messages pass between instances.
+
+Rows changed in the database directly don't bump the version, so the cache won't notice them. Go through `AccessService`, or call `AbilityFactory::clear_cache()`, which clears only the current process. A change to the abilities function takes effect when the app restarts.
+
+## Explaining a decision
+
+`access:explain` and `AccessService::explain` show the rule that decides a check, with its number in definition order:
+
+```text
+User 01a17751-238d-7310-b5df-b4b75c48def9 may not `delete` Post 01a17751-2395-715f-931d-d822324d98fd
+Decided by rule #7: cannot delete Post where {"locked":true} (Locked posts are kept.)
+Roles: (none)
+```
+
+```text
+User 01a17751-238d-7310-b5df-b4b75c48def9 may not `delete` Post 01a17751-2395-715f-931d-d823132cae5e
+No rule matches: denied by default.
+Roles: (none)
+```
+
+`explain` returns an `Explanation` with `allowed`, the deciding `rule` and the user's `roles`; it prints as above. `ability.relevant_rule(action, subject, record, field)` gives the deciding rule in code.
+
+## The CRM's abilities
+
+The reference CRM has three roles: `admin` (the super-admin role), `manager` and `rep`. Managers hold six permissions (`companies.manage`, `contacts.manage`, `contacts.export`, `deals.manage`, `activities.manage` and `users.read`); reps and admins hold none. Everything else is in its abilities function:
+
+```rust title="crm/api/crates/crm-core/src/abilities.rs"
+pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+    ctx.grant_permissions(rules);
+    let Some(user) = &ctx.user else {
+        return;
+    };
+    // The super-admin rule (`manage all`) comes from the access module.
+    if user.has_role(ADMIN) || !user.has_any_role(&[MANAGER, REP]) {
+        return;
+    }
+    for subject in [COMPANY, CONTACT, DEAL, ACTIVITY, USER] {
+        rules.can(READ, subject);
+    }
+    for subject in [COMPANY, CONTACT, DEAL, ACTIVITY] {
+        rules.can(CREATE, subject);
+    }
+    let own = || field("owner_id").eq(user.id);
+    for subject in [COMPANY, CONTACT, ACTIVITY] {
+        rules.can(UPDATE, subject).when(own());
+        rules.can(DELETE, subject).when(own());
+    }
+    rules
+        .can(COMPLETE, ACTIVITY)
+        .when(field("assignee_id").eq(user.id));
+    rules.can(COMPLETE, ACTIVITY).when(own());
+    rules.can(UPDATE, DEAL).when(own());
+    rules.can(MOVE, DEAL).when(own());
+    rules.can(DELETE, DEAL).when(own());
+    let closed = || field("stage").is_in([Stage::Won.as_str(), Stage::Lost.as_str()]);
+    if !manages_deals(ctx) {
+        // The delete rule below looks at the current stage only: moving a
+        // closed deal back to an open stage would get around it.
+        rules
+            .cannot(MOVE, DEAL)
+            .when(closed())
+            .because(CLOSED_DEAL_MOVE_REASON);
+    }
+    rules
+        .cannot(DELETE, DEAL)
+        .when(closed())
+        .because(CLOSED_DEAL_REASON);
+}
+```
+
+- Everyone with a CRM role reads everything and creates records. Reps change and delete only what they own (`owner_id`), and complete the activities they own or are assigned.
+- Managers get `manage` on every customer record through their permissions, so the owner conditions don't limit them.
+- Won and lost deals are kept for reporting. The last rule stops even a manager from deleting one; only the admin's `manage all`, added after it, beats it. Reps can't move a closed deal either, or they could reopen it and then delete it.
+- Users without a CRM role, and guests, get no rules at all.
+
+The deal routes check these rules with `#[can]`, and the lists filter with `Accessible`:
+
+```rust title="crm/api/crates/crm-deals/src/controller.rs"
+#[post("/{id}/move")]
+#[can(Move, Deal, from = "id")]
+async fn move_deal(
+    &self,
+    uow: Uow,
+    CurrentUser(user): CurrentUser,
+    deal: Authorized<Deal, Move>,
+    Valid(Json(input)): Valid<Json<MoveDeal>>,
+) -> Result<Json<DealResource>> {
+    let deal = self
+        .deals
+        .move_to(&uow, user.id, deal.into_inner(), input)
+        .await?;
+    Ok(Json(deal))
+}
+```
+
+`Move`, `Export` and `Complete` are the CRM's custom action markers, in `crm-core/src/actions.rs`. The last two rules a rep's front end receives:
+
+```json wrap
+[
+  {"action": "move", "conditions": {"stage": {"$in": ["won", "lost"]}}, "inverted": true, "reason": "Won and lost deals are kept for reporting; only managers reopen them.", "subject": "Deal"},
+  {"action": "delete", "conditions": {"stage": {"$in": ["won", "lost"]}}, "inverted": true, "reason": "Won and lost deals are kept for reporting.", "subject": "Deal"}
+]
+```
+
+[A tour of the CRM](/docs/example-app/crm-tour/) shows these rules at work in the app.
+
+## Errors
+
+`AccessError`s returned from handlers become these responses:
+
+| Error | Response |
+|---|---|
+| `RoleNotFound` | 404 `role_not_found`, "The role `x` does not exist." |
+| `RecordNotFound` | 404 `not_found` |
+| `RoleExists` | 409 `role_already_exists`, "The role `x` already exists." |
+| `UnknownRoles` | 400 `validation_failed`, a field error on `roles` |
+| `InvalidName` | 400 `validation_failed`, a field error on the field |
+| `Db` | As database errors map (see [Errors](/docs/basics/errors/)) |
+| `Rules`, `Config` | 500 |
+
+## Testing
+
+Test your abilities function as a plain function, with a context for each kind of user:
+
+```rust title="src/abilities.rs"
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    use navree::access::{AbilityCtx, DELETE, Rules};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::define;
+
+    #[test]
+    fn authors_cannot_delete_locked_posts() {
+        let me = Uuid::now_v7();
+        let subjects = Arc::new(BTreeMap::from([("posts".to_owned(), "Post".to_owned())]));
+        let ctx = AbilityCtx::for_user(me, vec!["writer".into()], vec![]).with_subjects(subjects);
+        let mut rules = Rules::new();
+        define(&ctx, &mut rules);
+        let ability = rules.build();
+
+        let draft = json!({ "author_id": me, "locked": false });
+        let locked = json!({ "author_id": me, "locked": true });
+        assert!(ability.can(DELETE, "Post", Some(&draft)));
+        assert!(!ability.can(DELETE, "Post", Some(&locked)));
+    }
+}
+```
+
+`AbilityCtx::guest()` builds a guest's context. The super-admin rule is added by the module, not by your function, so add `rules.can(MANAGE, ALL)` yourself to test it. The CRM's `crm-core/src/abilities.rs` checks a table of every action, subject and role this way.
+
+For HTTP tests, give the test user roles through `AccessService` and send requests as them: with `TestApp::acting_as` when the app has no `AuthModule`, or with a real token (see [Authentication](/docs/security/authentication/#testing)). See [HTTP tests](/docs/testing/http-tests/).
+
+## Limits
+
+- Conditions are ANDed comparisons on the record's own columns: no `$or`, no nested fields, no relations.
+- The abilities function can't read the database or other services.
+- The roles you manage with `AccessService` are global. A member's role inside a workspace comes from [workspace membership](/docs/workspaces/members-and-roles/#how-workspace-roles-reach-access-control), and inside an organization from [the organization](/docs/workspaces/organizations/), not from these tables.
+- The OpenAPI document has no schemas for `GET /api/me/abilities` and the `/api/access` routes.
+
+<LinkCards>
+  <LinkCard href="/docs/basics/access-control/" title="Access control on routes">
+    `#[public]`, `#[authenticated]`, `#[roles]`, `#[permissions]` and `#[can]`.
+  </LinkCard>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Tokens, strategies and the current user.
+  </LinkCard>
+  <LinkCard href="/docs/security/audit-log/" title="The audit log">
+    Permission changes and denials are recorded.
+  </LinkCard>
+  <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
+    Roles, abilities and the front end that uses them.
+  </LinkCard>
+</LinkCards>

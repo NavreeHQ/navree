@@ -1,0 +1,45 @@
+---
+title: "Suggestions"
+description: "Messages the reader can send with one press, each a button of one form that posts it as the message. They work with no script."
+---
+
+<UiPreview example="suggestions/default" />
+
+`Suggestions` offers a few messages to start with or to follow up with: "Show unpaid orders", "Refunds this week". Pressing one sends it as if the reader had typed it. The words are yours, so they can come from the page the reader is on.
+
+```rust
+use navree::ui::genui::*;
+
+Suggestions::new("/assistant/7/messages")
+    .suggestion("Show unpaid orders")
+    .suggestion("Which city grew the most?")
+    .suggestion("Refunds this week")
+```
+
+The argument is the route that takes the composer's own post, so a suggestion goes the same way as a message the reader wrote. `.csrf(token)` puts the session's CSRF token in the form.
+
+## How it works
+
+The group is one form. Each suggestion is a small outline submit button named `message` whose value is the text, so pressing it posts `message=Show unpaid orders` to the route. Nothing needs a script, and nothing is built from the text but the button's label and value.
+
+Put suggestions where a reader looks next: in the empty conversation (see `Conversation::empty`), or below the last answer.
+
+## Words
+
+The group is named "Suggestions" for assistive technology. `.label(..)` replaces the name for another language.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The buttons are a group with a name, so a screen reader says what they are before it reads them.
+- Each is a real button in a real form: Tab reaches it, Enter and Space press it.
+- Keep each suggestion short enough to read at a glance, and write it as the reader would say it.
+
+</UiA11y>
+
+## API
+
+### Suggestions
+
+<UiProps type="Suggestions" />

@@ -1,0 +1,5 @@
+error: #[inject(name = ...)] cannot be used on a `Lazy<T>` field: lazy handles resolve the unnamed provider; inject `Arc<T>` instead
+ --> tests/ui/injectable/named_lazy.rs:8:21
+  |
+8 |     #[inject(name = "bulk")]
+  |                     ^^^^^^

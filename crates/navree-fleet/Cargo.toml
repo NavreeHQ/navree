@@ -1,0 +1,75 @@
+[package]
+name = "navree-fleet"
+description = "Navree FleetModule: supervised queue workers with auto-balancing, metrics, failed jobs and a Navree UI dashboard."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "queue", "workers", "dashboard"]
+categories = ["asynchronous"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+test-postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+test-mysql = ["navree-db/mysql"]
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+memory-stats = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+# `CurrentUser` names the signed-in user in the shell's menu, and `SIGN_OUT_PATH`
+# (the `session` feature) is where that menu signs out.
+navree-auth = { workspace = true, features = ["session"] }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-observe = { workspace = true }
+navree-queue = { workspace = true }
+# The browser session's CSRF token, which the dashboard's forms carry.
+navree-session = { workspace = true }
+navree-telemetry = { workspace = true }
+# The dashboard's pages.
+navree-ui = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-browser = { workspace = true }
+# The dashboard's tests sign browsers in on the session, as an app does.
+navree-auth = { workspace = true, features = ["session", "ui"] }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+# Spawns its own binary as the workers of a real `fleet` master (the test's
+# `main` runs the app when it is started with a command).
+[[test]]
+name = "processes"
+harness = false

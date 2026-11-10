@@ -1,0 +1,53 @@
+[package]
+name = "navree-mongo"
+description = "Navree on MongoDB: connections and pools, the ORM's document driver, the schema builder on collections, and migrations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "mongodb", "orm", "database"]
+categories = ["database"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+bson = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+mongodb = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-kernel = { workspace = true }
+navree-orm = { workspace = true }
+navree-schema = { workspace = true }
+navree-telemetry = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
+insta = { workspace = true }
+navree-testing = { workspace = true }
+
+# The suite: the generated commands (filters, pipelines, writes, schema
+# operations) are checked without a server; the rest runs against
+# NAVREE_TEST_MONGODB_URL (a replica set, so transactions work) and passes
+# with a notice when it is unset.
+[[test]]
+name = "mongo"
+path = "tests/mongo/main.rs"
