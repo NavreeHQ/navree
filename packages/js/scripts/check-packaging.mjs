@@ -98,7 +98,8 @@ if (process.argv.includes("--pack")) {
     fail(`pnpm -r pack failed:\n${packed.stdout}${packed.stderr}`);
   } else {
     for (const dir of PUBLISHED) {
-      const tarball = `navree-${dir}-1.0.0.tgz`;
+      const { version } = JSON.parse(read(join(jsRoot, dir, "package.json")));
+      const tarball = `navree-${dir}-${version}.tgz`;
       const listed = spawnSync("tar", ["-tzf", tarball], { cwd: out, encoding: "utf8" });
       if (listed.status !== 0) {
         fail(`@navree/${dir}: cannot read ${tarball} (${listed.stderr})`);
