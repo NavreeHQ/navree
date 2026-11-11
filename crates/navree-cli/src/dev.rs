@@ -9,12 +9,12 @@
 
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Stdio};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
-use notify::RecursiveMode;
-use notify_debouncer_mini::new_debouncer;
+use notify::event::{AccessKind, AccessMode};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::forward::Invocation;
 use crate::project::package_name;
@@ -68,6 +68,69 @@ pub fn triggers_rebuild(root: &Path, path: &Path) -> bool {
         WATCHED_FILES.contains(&first)
     } else {
         WATCHED_DIRS.contains(&first)
+    }
+}
+
+/// Whether a file event is an edit. Linux also reports a file being opened,
+/// read and closed (`Access`): the server reads `.env` and its configuration
+/// as it starts and `cargo build` reads `Cargo.toml`, so taking a read for an
+/// edit would restart the server again and again. A file closed after
+/// writing was edited.
+fn is_edit(kind: &EventKind) -> bool {
+    match kind {
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        EventKind::Access(_) => false,
+        _ => true,
+    }
+}
+
+/// The file events of the app at `root`: its own files, and everything in the
+/// directories of [`WATCHED_DIRS`]. Events arrive while the watcher lives.
+fn watch(root: &Path) -> anyhow::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = notify::recommended_watcher(tx).context("cannot watch files")?;
+    watcher
+        .watch(root, RecursiveMode::NonRecursive)
+        .with_context(|| format!("cannot watch {}", root.display()))?;
+    for dir in WATCHED_DIRS {
+        let path = root.join(dir);
+        if path.is_dir() {
+            watcher
+                .watch(&path, RecursiveMode::Recursive)
+                .with_context(|| format!("cannot watch {}", path.display()))?;
+        }
+    }
+    Ok((watcher, rx))
+}
+
+/// The next file whose edit needs a rebuild: waits for one, then until the
+/// edits that need a rebuild have been quiet for `quiet`, so a save touching
+/// several files rebuilds once. Only those edits restart the quiet period:
+/// a busy server writing `storage/` does not hold a rebuild back. `None`
+/// once the watcher stops.
+fn next_change(
+    events: &Receiver<notify::Result<Event>>,
+    root: &Path,
+    quiet: Duration,
+) -> Option<PathBuf> {
+    let mut changed: Option<PathBuf> = None;
+    let mut deadline = Instant::now();
+    loop {
+        let received = match changed {
+            None => events.recv().map_err(|_| RecvTimeoutError::Disconnected),
+            Some(_) => events.recv_timeout(deadline.saturating_duration_since(Instant::now())),
+        };
+        match received {
+            Ok(Ok(event)) if is_edit(&event.kind) => {
+                if let Some(path) = event.paths.iter().find(|p| triggers_rebuild(root, p)) {
+                    changed.get_or_insert_with(|| path.clone());
+                    deadline = Instant::now() + quiet;
+                }
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => eprintln!("[navree dev] watch error: {error}"),
+            Err(_) => return changed,
+        }
     }
 }
 
@@ -252,20 +315,7 @@ pub fn run(root: &Path, options: &DevOptions) -> anyhow::Result<()> {
     for problem in crate::shared_settings::mismatches(root) {
         eprintln!("[navree dev] warning: {problem}");
     }
-    let (tx, rx) = mpsc::channel();
-    let mut debouncer = new_debouncer(options.debounce, tx).context("cannot watch files")?;
-    let watcher = debouncer.watcher();
-    watcher
-        .watch(root, RecursiveMode::NonRecursive)
-        .with_context(|| format!("cannot watch {}", root.display()))?;
-    for dir in WATCHED_DIRS {
-        let path = root.join(dir);
-        if path.is_dir() {
-            watcher
-                .watch(&path, RecursiveMode::Recursive)
-                .with_context(|| format!("cannot watch {}", path.display()))?;
-        }
-    }
+    let (_watcher, events) = watch(root)?;
 
     let _web = match web_invocation(root).filter(|_| options.web) {
         Some(web) => {
@@ -291,18 +341,8 @@ pub fn run(root: &Path, options: &DevOptions) -> anyhow::Result<()> {
         &mut generation,
         &mut server,
     );
-    for events in rx {
-        let events = match events {
-            Ok(events) => events,
-            Err(error) => {
-                eprintln!("[navree dev] watch error: {error}");
-                continue;
-            }
-        };
-        let Some(changed) = events.iter().find(|e| triggers_rebuild(root, &e.path)) else {
-            continue;
-        };
-        let shown = changed.path.strip_prefix(root).unwrap_or(&changed.path);
+    while let Some(changed) = next_change(&events, root, options.debounce) {
+        let shown = changed.strip_prefix(root).unwrap_or(&changed);
         println!("[navree dev] {} changed, rebuilding", shown.display());
         rebuild(
             root,
@@ -319,7 +359,183 @@ pub fn run(root: &Path, options: &DevOptions) -> anyhow::Result<()> {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use notify::event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
+
     use super::*;
+
+    const QUIET: Duration = Duration::from_millis(50);
+
+    fn event(kind: EventKind, path: &str) -> notify::Result<Event> {
+        Ok(Event::new(kind).add_path(PathBuf::from(path)))
+    }
+
+    fn opened() -> EventKind {
+        EventKind::Access(AccessKind::Open(AccessMode::Any))
+    }
+
+    fn written() -> EventKind {
+        EventKind::Modify(ModifyKind::Data(DataChange::Content))
+    }
+
+    #[test]
+    fn opening_or_reading_a_file_is_not_an_edit() {
+        for kind in [
+            opened(),
+            EventKind::Access(AccessKind::Open(AccessMode::Read)),
+            EventKind::Access(AccessKind::Read),
+            EventKind::Access(AccessKind::Close(AccessMode::Read)),
+            EventKind::Access(AccessKind::Any),
+        ] {
+            assert!(!is_edit(&kind), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn writing_creating_renaming_and_removing_are_edits() {
+        for kind in [
+            EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            written(),
+            EventKind::Modify(ModifyKind::Any),
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)),
+            EventKind::Create(CreateKind::File),
+            EventKind::Remove(RemoveKind::File),
+            EventKind::Any,
+        ] {
+            assert!(is_edit(&kind), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn reads_of_the_watched_files_never_start_a_rebuild() {
+        // What a booting server and `cargo build` do to the app's files.
+        let (tx, rx) = mpsc::channel();
+        for path in ["/app/Cargo.toml", "/app/.env", "/app/config/app.toml"] {
+            tx.send(event(opened(), path)).unwrap();
+            let closed = EventKind::Access(AccessKind::Close(AccessMode::Read));
+            tx.send(event(closed, path)).unwrap();
+        }
+        drop(tx);
+        assert_eq!(next_change(&rx, Path::new("/app"), QUIET), None);
+    }
+
+    #[test]
+    fn a_burst_of_edits_among_reads_is_one_rebuild() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(event(opened(), "/app/.env")).unwrap();
+        tx.send(event(written(), "/app/src/main.rs")).unwrap();
+        tx.send(event(written(), "/app/src/lib.rs")).unwrap();
+        tx.send(event(opened(), "/app/Cargo.toml")).unwrap();
+        assert_eq!(
+            next_change(&rx, Path::new("/app"), QUIET),
+            Some(PathBuf::from("/app/src/main.rs"))
+        );
+        drop(tx);
+        assert_eq!(next_change(&rx, Path::new("/app"), QUIET), None);
+    }
+
+    #[test]
+    fn edits_outside_the_sources_do_not_start_a_rebuild() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(event(written(), "/app/storage/app.db")).unwrap();
+        tx.send(event(written(), "/app/target/debug/app")).unwrap();
+        drop(tx);
+        assert_eq!(next_change(&rx, Path::new("/app"), QUIET), None);
+    }
+
+    #[test]
+    fn a_busy_server_writing_its_data_does_not_hold_a_rebuild_back() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(event(written(), "/app/src/main.rs")).unwrap();
+        let server = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if tx
+                    .send(event(written(), "/app/storage/logbook.db"))
+                    .is_err()
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let started = Instant::now();
+        assert_eq!(
+            next_change(&rx, Path::new("/app"), QUIET),
+            Some(PathBuf::from("/app/src/main.rs"))
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "waited {:?}",
+            started.elapsed()
+        );
+        drop(rx);
+        server.join().unwrap();
+    }
+
+    /// An app's files on disk, as `navree new` lays them out.
+    fn app_on_disk() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("config")).unwrap();
+        for (file, text) in [
+            ("Cargo.toml", "[package]\n"),
+            (".env", "APP_KEY=\n"),
+            ("config/app.toml", "[app]\n"),
+            ("src/main.rs", "fn main() {}\n"),
+        ] {
+            std::fs::write(root.join(file), text).unwrap();
+        }
+        (dir, root)
+    }
+
+    /// The events of `watcher` for `window`; the receiver disconnects after it.
+    fn events_for(
+        watcher: RecommendedWatcher,
+        events: Receiver<notify::Result<Event>>,
+        window: Duration,
+    ) -> Receiver<notify::Result<Event>> {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let until = Instant::now() + window;
+            while let Some(left) = until.checked_duration_since(Instant::now()) {
+                if let Ok(event) = events.recv_timeout(left)
+                    && tx.send(event).is_err()
+                {
+                    break;
+                }
+            }
+            drop(watcher);
+        });
+        rx
+    }
+
+    #[test]
+    fn reading_the_files_of_an_app_on_disk_does_not_start_a_rebuild() {
+        let (_dir, root) = app_on_disk();
+        let (watcher, events) = watch(&root).unwrap();
+        for _ in 0..5 {
+            for file in ["Cargo.toml", ".env", "config/app.toml", "src/main.rs"] {
+                std::fs::read_to_string(root.join(file)).unwrap();
+            }
+        }
+        let events = events_for(watcher, events, Duration::from_secs(1));
+        assert_eq!(next_change(&events, &root, QUIET), None);
+    }
+
+    #[test]
+    fn saving_a_source_file_of_an_app_on_disk_starts_a_rebuild() {
+        let (_dir, root) = app_on_disk();
+        let (watcher, events) = watch(&root).unwrap();
+        std::fs::write(root.join("src/main.rs"), "fn main() { println!(); }\n").unwrap();
+        let events = events_for(watcher, events, Duration::from_secs(5));
+        assert_eq!(
+            next_change(&events, &root, QUIET),
+            Some(root.join("src/main.rs"))
+        );
+    }
 
     #[test]
     fn source_and_config_changes_trigger_a_rebuild() {
