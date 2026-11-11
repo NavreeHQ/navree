@@ -1,6 +1,6 @@
 {
   "name": "@navree/deepmerge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Recursive merge of plain objects and arrays with deepmerge's API, and no key that reaches a prototype. The front-end installs use it for the `deepmerge` that Nitro's bundler asks for.",
