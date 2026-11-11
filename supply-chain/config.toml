@@ -1310,10 +1310,6 @@ criteria = "safe-to-deploy"
 version = "8.2.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.notify-debouncer-mini]]
-version = "0.7.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.notify-types]]
 version = "2.1.0"
 criteria = "safe-to-deploy"

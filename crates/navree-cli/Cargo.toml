@@ -42,7 +42,6 @@ navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
 navree-navigator = { workspace = true }
 notify = { workspace = true }
-notify-debouncer-mini = { workspace = true }
 # `navree browser:install`: downloads Chrome for Testing (rustls with ring)
 # and unpacks the zip.
 reqwest = { workspace = true }
