@@ -737,7 +737,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.9",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -957,7 +957,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2154,6 +2154,7 @@ dependencies = [
  "navree-mail",
  "navree-openapi",
  "navree-orm",
+ "navree-telemetry",
  "navree-validation",
  "ring",
  "serde",
@@ -2206,7 +2207,6 @@ dependencies = [
  "navree-navigator",
  "navree-template",
  "notify",
- "notify-debouncer-mini",
  "reqwest",
  "rustls",
  "serde",
@@ -2224,6 +2224,7 @@ version = "1.0.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
+ "navree-macros",
  "serde",
  "serde_json",
  "thiserror",
@@ -2251,6 +2252,7 @@ dependencies = [
  "aes-gcm",
  "argon2",
  "base64 0.23.1",
+ "chrono",
  "hex",
  "hmac",
  "navree-config",
@@ -2281,6 +2283,7 @@ dependencies = [
  "navree-contracts",
  "navree-http",
  "navree-kernel",
+ "navree-openapi",
  "navree-schema",
  "navree-telemetry",
  "rust_decimal",
@@ -2658,7 +2661,6 @@ dependencies = [
  "encoding_rs",
  "hex",
  "hickory-resolver",
- "hmac",
  "html2text",
  "html5ever",
  "http",
@@ -2678,15 +2680,18 @@ dependencies = [
  "navree-view",
  "percent-encoding",
  "regex",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "subtle",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
  "uuid",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2718,7 +2723,6 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-openapi",
- "navree-testing",
  "navree-validation",
  "rand 0.10.3",
  "serde",
@@ -2744,7 +2748,6 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-telemetry",
- "navree-testing",
  "navree-validation",
  "percent-encoding",
  "rmp-serde",
@@ -2767,6 +2770,7 @@ version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
+ "html5ever",
  "navree-config",
  "navree-dock",
  "reqwest",
@@ -2800,7 +2804,6 @@ dependencies = [
  "navree-kernel",
  "navree-openapi",
  "navree-orm",
- "navree-testing",
  "navree-workspace",
  "rand 0.10.3",
  "serde",
@@ -2933,6 +2936,7 @@ dependencies = [
  "navree-db",
  "navree-http",
  "navree-kernel",
+ "navree-telemetry",
  "rand 0.10.3",
  "reqwest",
  "rustls",
@@ -2995,6 +2999,7 @@ dependencies = [
  "navree-macros",
  "navree-orm",
  "navree-queue",
+ "navree-telemetry",
  "navree-workspace",
  "serde",
  "serde_json",
@@ -3090,6 +3095,7 @@ dependencies = [
  "navree-crypto",
  "navree-http",
  "navree-kernel",
+ "navree-telemetry",
  "percent-encoding",
  "serde",
  "thiserror",
@@ -3172,6 +3178,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-markdown",
+ "navree-telemetry",
  "navree-ui-macros",
  "navree-validation",
  "rust_decimal",
@@ -3180,6 +3187,7 @@ dependencies = [
  "serde_path_to_error",
  "sha2 0.11.1",
  "tokio",
+ "tower",
  "uuid",
 ]
 
@@ -3269,6 +3277,7 @@ dependencies = [
  "navree-kernel",
  "navree-openapi",
  "navree-orm",
+ "navree-telemetry",
  "navree-workspace",
  "rand 0.10.3",
  "serde",
@@ -3375,18 +3384,6 @@ dependencies = [
  "objc2-core-services",
  "walkdir",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "notify-debouncer-mini"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17849edfaabd9a5fef1c606d99cfc615a8e99f7ac4366406d86c7942a3184cf2"
-dependencies = [
- "log",
- "notify",
- "notify-types",
- "tempfile",
 ]
 
 [[package]]
@@ -4113,15 +4110,15 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags",
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4178,7 +4175,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4846,7 +4843,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5448,7 +5445,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
