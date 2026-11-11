@@ -1,8 +1,20 @@
 
 # cargo-vet audits file
 
+[[audits.constant_time_eq]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.1 -> 0.6.1"
+notes = "Diff reviewed. The new build.rs only prints cfg flags chosen from the rustc version, the target arch and the COUNT_INSTRUCTIONS_TEST variable (rustversion is its only build dependency). New SSE2, NEON and word-at-a-time comparisons; the inline asm only hides values from the optimizer or sets the aarch64 DIT bit, which a guard restores. Unsafe blocks are commented and bounded by length asserts. No I/O. Same publisher as 0.3.1; the repository moved to Codeberg, as CHANGES for 0.6.0 says."
+
 [[audits.rc4]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.2.0"
 notes = "Read in full: RC4 in safe Rust (forbid(unsafe_code)), no build script, no I/O; depends only on cipher."
+
+[[audits.zeroize_derive]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.4.2 -> 1.5.0"
+notes = "Diff reviewed: edition 2024 and MSRV bump, lint settings in Cargo.toml, format-string and assert! rewrites, unused_assignments added to the allow on generated code. The derive output is otherwise unchanged; no build script, no unsafe, no I/O. Published from github:RustCrypto/utils."
