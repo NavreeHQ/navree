@@ -62,6 +62,7 @@ import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.childNodes
+import com.navree.client.design.walk
 import com.navree.protocol.Navree
 import kotlinx.coroutines.launch
 
@@ -358,10 +359,11 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             node.columns.forEachIndexed { index, column ->
+                if (ListRules.columnWeight(column) == 0f) return@forEachIndexed
                 val sort = column.sort
                 Row(
                     modifier = Modifier
-                        .weight(if (column.role == Navree.ColumnRole.ACTIONS) 0.5f else 1f)
+                        .weight(ListRules.columnWeight(column))
                         .then(
                             if (sort != null) {
                                 Modifier.clickable(role = Role.Button) {
@@ -375,6 +377,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                                 Modifier
                             },
                         )
+                        .padding(end = 8.dp)
                         .padding(vertical = 8.dp)
                         .semantics {
                             heading()
@@ -407,21 +410,24 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val titleAt = node.columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 } ?: 0
                 row.cells.forEachIndexed { index, cell ->
                     val end = atEnd(index)
                     val column = node.columns.getOrNull(index)
-                    Box(Modifier.weight(if (column?.role == Navree.ColumnRole.ACTIONS) 0.5f else 1f), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
-                        when (cell) {
-                            is Navree.Text -> Text(
-                                cell.value,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = textColour(cell.tone, Navree.TextStyle.CALLOUT, cell.muted),
-                                textAlign = if (end) TextAlign.End else TextAlign.Start,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            is Navree.Badge -> StatusView(cell)
-                            else -> NodeView(cell, place)
+                    val weight = ListRules.columnWeight(column)
+                    if (weight == 0f) return@forEachIndexed
+                    Box(Modifier.weight(weight).padding(end = 8.dp), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
+                        when {
+                            // The naming cell of a row that opens by itself is words, not a second control.
+                            index == titleAt && action != null -> {
+                                val folded = ListRules.asListRow(node.columns, row)
+                                val under = cell.walk().filterIsInstance<Navree.Text>().map { it.value }.filter { it.isNotBlank() && it != folded.headline }.toList()
+                                Column {
+                                    Text(folded.headline ?: "", style = MaterialTheme.typography.bodyLarge, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                                    for (line in under) Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            else -> TableCell(cell, end, place)
                         }
                     }
                 }
@@ -431,6 +437,24 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
         node.summary?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
         }
+    }
+}
+
+/** A cell of a wide table: words, a status, or any part. Numbers keep to one line. */
+@Composable
+private fun TableCell(cell: Navree.Node, end: Boolean, place: Place) {
+    when (cell) {
+        is Navree.Text -> Text(
+            cell.value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = textColour(cell.tone, Navree.TextStyle.CALLOUT, cell.muted),
+            textAlign = if (end) TextAlign.End else TextAlign.Start,
+            maxLines = if (end) 1 else 2,
+            softWrap = !end,
+            overflow = TextOverflow.Ellipsis,
+        )
+        is Navree.Badge -> StatusView(cell)
+        else -> NodeView(cell, place)
     }
 }
 

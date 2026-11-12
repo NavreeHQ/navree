@@ -452,7 +452,7 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
 private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
     val gap = ContentRules.gap(node.gap)
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val columns = ListRules.gridColumns(maxWidth.value.toInt(), node.min, gap, node.cols)
+        val columns = ListRules.gridColumns(maxWidth.value.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale)
         val shown = node.children.filter { inFlow(it, place.screen) }
         Column(verticalArrangement = Arrangement.spacedBy(gap.dp)) {
             for (line in shown.chunked(columns)) {

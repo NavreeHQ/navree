@@ -76,7 +76,8 @@ object ListRules {
         return TableRowAsListRow(
             leading = leadingAt?.let { cells[it] },
             headline = headline,
-            lines = rest + subtitles.map { cells[it] } + others.map { cells[it] },
+            // A line that says what a line above it already says is said once.
+            lines = (rest + subtitles.map { cells[it] } + others.map { cells[it] }).distinctBy { (it as? Navree.Text)?.value?.trim() ?: it },
             statuses = statuses.map { cells[it] },
             trailing = trailingAt?.let { cells[it] },
             menu = menu,
@@ -117,12 +118,27 @@ object ListRules {
     /**
      * How many columns a grid gets: as many as fit at the least width it
      * asks for (160 dp when it does not say), never more than it allows, and
-     * at least one.
+     * at least one. The least width grows with the person's text size, so a
+     * number is never broken across lines to keep a column.
      */
-    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null): Int {
-        val least = (minColumnDp ?: 160).coerceAtLeast(48)
+    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f): Int {
+        val least = ((minColumnDp ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
         val fit = ((contentWidthDp + gapDp) / (least + gapDp)).coerceAtLeast(1)
         return if (most != null && most > 0) minOf(fit, most) else fit
+    }
+
+    /**
+     * The share of a wide table's width a column takes: the column that names
+     * the record the most, numbers and statuses less, a row's actions least.
+     * A `subtitle` column takes none: its words stand under the title.
+     */
+    fun columnWeight(column: Navree.Column?): Float = when {
+        column == null -> 1f
+        column.role == Navree.ColumnRole.SUBTITLE -> 0f
+        column.role == Navree.ColumnRole.TITLE -> 1.6f
+        column.role == Navree.ColumnRole.ACTIONS -> 0.5f
+        column.role == Navree.ColumnRole.TRAILING || column.numeric -> 0.9f
+        else -> 1f
     }
 
     /**

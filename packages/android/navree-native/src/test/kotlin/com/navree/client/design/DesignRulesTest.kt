@@ -353,6 +353,20 @@ class ListRulesTest {
     }
 
     @Test
+    fun in_a_wide_table_the_name_takes_the_most_room_and_a_subtitle_column_none() {
+        assertEquals(0f, ListRules.columnWeight(Navree.Column(label = "Customer", role = Navree.ColumnRole.SUBTITLE)))
+        assertTrue(ListRules.columnWeight(Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE)) > ListRules.columnWeight(Navree.Column(label = "Total", numeric = true)))
+    }
+
+    @Test
+    fun a_line_already_said_is_not_said_again() {
+        val cols = listOf(Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE), Navree.Column(label = "Customer", role = Navree.ColumnRole.SUBTITLE))
+        val cell = Navree.Stack(children = listOf(Navree.Link(label = "CS-1", action = Navree.Action.Navigate("/orders/1")), Navree.Text(value = "Meera Gupta")))
+        val folded = ListRules.asListRow(cols, Navree.TableRow(cells = listOf(cell, Navree.Text(value = "Meera Gupta"))))
+        assertEquals(listOf("Meera Gupta"), folded.lines.map { (it as Navree.Text).value })
+    }
+
+    @Test
     fun at_the_largest_text_the_value_moves_under_the_text() {
         assertFalse(ListRules.trailingBelow(WindowInfo.Phone))
         assertTrue(ListRules.trailingBelow(WindowInfo.Phone.copy(fontScale = 2f)))
@@ -370,6 +384,7 @@ class ListRulesTest {
         assertEquals(1, ListRules.gridColumns(380, 200, 16))
         assertEquals(4, ListRules.gridColumns(900, 200, 16))
         assertEquals(3, ListRules.gridColumns(900, 200, 16, most = 3))
+        assertEquals("at the largest text two columns become one", 1, ListRules.gridColumns(412, 160, 16, fontScale = 2f))
     }
 }
 
