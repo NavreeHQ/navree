@@ -20,9 +20,10 @@ pretty() {
     if command -v xcbeautify >/dev/null 2>&1; then xcbeautify --quiet; else cat; fi
 }
 
-# The newest iOS runtime this Xcode has, and an iPhone on it.
+# The newest iOS runtime this Xcode has (not one made for a single device,
+# such as iPhone Duo's), and an iPhone on it.
 runtime="$(xcrun simctl list runtimes -j | jq -r '
-    [.runtimes[] | select(.isAvailable and (.identifier | contains("SimRuntime.iOS")))]
+    [.runtimes[] | select(.isAvailable and (.identifier | test("SimRuntime\\.iOS-[0-9-]+$")))]
     | sort_by(.version | split(".") | map(tonumber)) | last | .identifier')"
 udid="$(xcrun simctl list devices available -j | jq -r --arg rt "$runtime" --arg name "${DEVICE:-}" '
     (.devices[$rt] // []) | map(select(.name | startswith("iPhone"))) as $phones
@@ -36,7 +37,7 @@ echo "Runtime $runtime, device $(xcrun simctl list devices -j | jq -r --arg u "$
 destination="platform=iOS Simulator,id=$udid"
 
 cd "$here/Demo"
-xcodegen generate --spec project.yml --quiet
+xcodegen generate --quiet
 
 xcodebuild build-for-testing \
     -project NavreeDemo.xcodeproj -scheme NavreeDemo \
@@ -65,7 +66,7 @@ for pass in $passes; do
     xcrun simctl ui "$udid" content_size "$size"
     rm -rf "$build/results/$pass.xcresult" "$screens/$pass"
     echo "Pass $pass: $appearance, $size"
-    if ! TEST_RUNNER_NAVREE_SHOTS="$screens/$pass" TEST_RUNNER_NAVREE_RTL="$rtl" \
+    if ! TEST_RUNNER_NAVREE_SHOTS="$screens/$pass" TEST_RUNNER_NAVREE_RTL="$rtl" TEST_RUNNER_NAVREE_PASS="$pass" \
         xcodebuild test-without-building \
             -project NavreeDemo.xcodeproj -scheme NavreeDemo \
             -destination "$destination" -derivedDataPath "$build/DerivedData" \
