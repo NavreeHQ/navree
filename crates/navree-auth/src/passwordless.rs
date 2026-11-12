@@ -31,11 +31,12 @@ use uuid::Uuid;
 
 use crate::account::{after, send_after_commit};
 use crate::login_token::Model as LoginToken;
-use crate::service::{PasswordStep, entry, normalize_email};
+use crate::service::{PasswordStep, entry, normalize_email, revoke_user};
 use crate::token::RefreshSecret;
 use crate::two_factor::two_factor_enabled;
 use crate::{
-    AuthError, AuthService, ClientMeta, LoginOutcome, SignInAttempt, SignInMethod, User, mail, user,
+    AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, SignInAttempt, SignInMethod,
+    USER_SUBJECT, User, mail, user,
 };
 
 /// `login_tokens.kind` of magic links.
@@ -427,6 +428,14 @@ impl AuthService {
     /// it is not yet, and, for an account with two-factor authentication,
     /// a challenge (audited as `auth.two_factor_challenge`). Nothing is
     /// issued yet.
+    ///
+    /// An address verified here was never proven before: anyone could have
+    /// signed up with it and set what the account holds. So its password, its
+    /// second factor and its passkeys are cleared, and its sessions are ended
+    /// (browser sign-ins and refresh tokens, and their live subscriptions),
+    /// before the owner, who just proved the address, is signed in. The owner
+    /// sets a password again through the forgotten-password page. Audited as
+    /// `auth.unverified_account_reset`.
     pub(crate) async fn passwordless_step(
         &self,
         mut user: User,
@@ -438,15 +447,35 @@ impl AuthService {
             .await?;
         if user.email_verified_at.is_none() {
             let id = user.id;
+            // The hash of a password nobody knows: no password signs in, and a try
+            // costs the time a real one does.
+            let unknown = self.hasher.hash(&random_digits(40)?).await?;
             user = self
                 .write(Some(id), |uow| async move {
+                    revoke_user(&uow, id, now).await?;
+                    Passkey::query()
+                        .where_(Passkey::USER_ID.eq(id))
+                        .delete(&uow)
+                        .await?;
                     user::update(&uow, id, |user| {
                         user.email_verified_at = Some(now);
+                        user.password_hash = unknown;
+                        user.two_factor_secret = None;
+                        user.two_factor_recovery_codes = None;
+                        user.two_factor_confirmed_at = None;
                         user.updated_at = now;
                     })
                     .await
                 })
                 .await?;
+            crate::disconnect::end_user_subscriptions(&self.app, id).await;
+            self.audit(
+                entry(AuditKind::Security, "auth.unverified_account_reset", meta)
+                    .actor(id)
+                    .subject(USER_SUBJECT, id.to_string())
+                    .metadata(json!({ "method": method.name() })),
+            )
+            .await;
         }
         if two_factor_enabled(&user) {
             let challenge_token = self.sign_challenge(&user, &method)?;
