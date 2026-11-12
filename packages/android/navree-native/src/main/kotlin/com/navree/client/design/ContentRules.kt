@@ -42,9 +42,9 @@ object ListRules {
      * Folds a row's cells into a list row, by the role of each column.
      *
      * - `title` (or else the first column) gives the first line. When that
-     *   cell holds one control and the row has no action of its own, the
-     *   whole row takes that control's action and its label is the first
-     *   line: on a phone a row is one touch target.
+     *   cell holds one control, its label is the first line, and a row with
+     *   no action of its own takes the control's action: on a phone a row is
+     *   one touch target.
      * - `leading` leads the row; `subtitle` gives the lines under the title;
      *   `status` goes on a line of its own (and so does a badge whose column
      *   says nothing); `trailing` (or else the first numeric column) goes to
@@ -68,7 +68,8 @@ object ListRules {
 
         val title = cells.getOrNull(titleAt)
         val texts = title?.walk()?.filterIsInstance<Navree.Text>()?.filter { it.value.isNotBlank() }?.toList().orEmpty()
-        val control = if (row.action == null) singleControl(title) else null
+        // A control in the naming cell names the record (an order's number) even when the row opens by itself.
+        val control = singleControl(title)
         val headline = control?.first ?: texts.firstOrNull()?.value
         val rest = if (control != null) texts else texts.drop(1)
         val menu = actionsAt.flatMap { at -> menuItems(cells[at]) } + row.actions

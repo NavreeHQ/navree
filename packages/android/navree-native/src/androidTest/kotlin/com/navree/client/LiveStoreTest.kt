@@ -75,7 +75,11 @@ class LiveStoreTest {
             ?.let { row -> com.navree.client.design.ListRules.asListRow(com.navree.client.design.ScreenRules.mainTable(firstOrder.body)!!.columns, row).headline }
         if (rowTitle != null) {
             compose.onAllNodesWithText(rowTitle).onFirst().performClick()
-            waitFor("the order opened") { app.driver.nav.front?.let { app.driver.screens[it] }?.screen?.title != "Orders" || app.driver.nav.modals.isNotEmpty() }
+            // What a row opens is the server's to say: a screen, a cover, or a sheet over the list.
+            waitFor("the order opened") {
+                val front = app.driver.nav.front?.let { app.driver.screens[it] }
+                front?.screen?.title != "Orders" || app.driver.nav.modals.isNotEmpty() || front.overlays.isNotEmpty()
+            }
             front(app)
             Shots.take("live-order")
             compose.runOnUiThread { app.driver.send(Events.back) }

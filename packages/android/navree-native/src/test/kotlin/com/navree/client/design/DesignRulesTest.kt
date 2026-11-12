@@ -329,6 +329,18 @@ class ListRulesTest {
     }
 
     @Test
+    fun a_row_that_opens_by_itself_is_still_named_by_the_control_in_its_title() {
+        val cell = Navree.Stack(children = listOf(
+            Navree.Form(id = "peek-1", children = listOf(Navree.Button(label = "CS-220480", action = Navree.Action.Submit()))),
+            Navree.Text(value = "Tejinder Randhawa"),
+        ))
+        val folded = ListRules.asListRow(listOf(Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE)), Navree.TableRow(action = Navree.Action.Navigate("/orders/1"), cells = listOf(cell)))
+        assertEquals("CS-220480", folded.headline)
+        assertEquals(listOf("Tejinder Randhawa"), folded.lines.map { (it as Navree.Text).value })
+        assertEquals(Navree.Action.Navigate("/orders/1"), folded.action)
+    }
+
+    @Test
     fun the_real_orders_rows_each_have_a_headline_and_an_action() {
         val orders = Fixtures.screen("store-demo/orders.json")
         val table = ScreenRules.mainTable(orders.body)!!
