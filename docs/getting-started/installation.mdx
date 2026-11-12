@@ -65,7 +65,7 @@ navree --version
 ```
 
 ```text
-navree 1.0.1
+navree 1.0.2
 ```
 
 ### Where new apps get Navree from
@@ -74,7 +74,7 @@ The CLI doesn't depend on the framework; it writes the dependency into your app'
 
 1. With `--navree-path <path>`, the Navree checkout at that path (the repository, or its `crates/navree` directory).
 2. Otherwise, the checkout the CLI was built from, when it still exists. After `cargo install --path`, that is your clone.
-3. Otherwise, the published crate at the CLI's own version: `navree = "1.0.1"`. This is the case after `cargo install navree-cli`, and the one an app you keep should use.
+3. Otherwise, the published crate at the CLI's own version: `navree = "1.0.2"`. This is the case after `cargo install navree-cli`, and the one an app you keep should use.
 
 A Next.js front end takes the `@navree/*` packages from npm the same way, as version ranges; with a checkout, it links them from the checkout instead (see [Front end](/docs/frontend/introduction/#working-on-navree-itself)).
 
