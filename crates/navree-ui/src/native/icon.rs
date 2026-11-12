@@ -164,13 +164,15 @@ pub(crate) fn icon(shapes: &str, view_box: &str) -> Result<n::Icon, String> {
     if paths.is_empty() && fills.is_empty() {
         return Err("no shapes".to_owned());
     }
+    // With the system's own symbol for it, where its name means one.
     Ok(n::Icon {
         name: name_of(shapes).map(str::to_owned),
         paths,
         fills,
         view_box: (view_box != "0 0 24 24").then(|| view_box.to_owned()),
         ..n::Icon::default()
-    })
+    }
+    .with_symbol())
 }
 
 /// The `key="value"` pairs of a tag.
@@ -284,6 +286,21 @@ mod tests {
         )
         .unwrap();
         assert!(!both.paths.is_empty() && !both.fills.is_empty());
+    }
+
+    #[test]
+    fn an_icon_carries_the_systems_own_symbol_where_its_name_means_one() {
+        let cart = icon(
+            icons::SHOPPING_CART.shapes(),
+            icons::SHOPPING_CART.view_box(),
+        )
+        .unwrap();
+        let symbol = cart.symbol.expect("a symbol");
+        assert_eq!(symbol.apple, "cart");
+        assert_eq!(symbol.material, "shopping_cart");
+        // Shapes with no name mean no symbol.
+        let plain = icon(r#"<path d="M0 0h4v4z"/>"#, "0 0 24 24").unwrap();
+        assert_eq!(plain.symbol, None);
     }
 
     #[test]

@@ -149,11 +149,23 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
                 fields: fields.clone(),
             },
             // A toast is the same data on both wires, less how long it stays.
-            Op::Toast(toast) => O::Toast(
-                serde_json::to_value(toast)
+            Op::Toast(toast) => {
+                let mut said: navree_native::op::Toast = serde_json::to_value(toast)
                     .ok()
-                    .and_then(|value| serde_json::from_value(value).ok())?,
-            ),
+                    .and_then(|value| serde_json::from_value(value).ok())?;
+                // A client posts a toast's action itself: with the page's token, when it was given.
+                if let (Some(action), Some(token)) = (
+                    said.action.as_mut(),
+                    toast.offered().and_then(crate::ToastAction::token),
+                ) && action.post
+                {
+                    action.fields.push(navree_native::action::Pair {
+                        name: crate::form::CSRF_FIELD.to_owned(),
+                        value: token.to_owned(),
+                    });
+                }
+                O::Toast(said)
+            }
             Op::Open { target } => O::Open {
                 target: target.clone(),
             },
@@ -590,39 +602,16 @@ pub(crate) fn choices<'a>(
             disabled: choice.disabled,
         })
         .collect();
-    let field = N::Field(navree_native::node::Field {
-        id: None,
-        name: String::new(),
-        label: None,
-        help: None,
-        error: None,
-        required: false,
-        disabled: false,
+    // The next options are found where the options say, as a search's are.
+    let body = N::Field(navree_native::node::Field {
         input: i::Input::Choice(i::ChoiceInput {
             kind: i::ChoiceKind::List,
             options,
+            more: more.map(str::to_owned),
             ..i::ChoiceInput::default()
         }),
         ..navree_native::node::Field::default()
     });
-    let body = match more {
-        Some(more) => N::Stack(navree_native::node::Stack {
-            children: vec![
-                field,
-                N::Link(navree_native::node::Link {
-                    id: None,
-                    label: "Show more".to_owned(),
-                    action: navree_native::Action::Navigate {
-                        href: more.to_owned(),
-                        present: navree_native::action::Present::Replace,
-                    },
-                    children: Vec::new(),
-                }),
-            ],
-            ..navree_native::node::Stack::default()
-        }),
-        None => field,
-    };
     let envelope = Envelope::screen(assets::BUILD, navree_native::Screen::new("", body))
         .in_vocab(vocab_of(&request));
     Some(kept(
@@ -1088,6 +1077,33 @@ mod tests {
 
     use super::*;
     use crate::{Button, Card, Stack, Text};
+
+    #[test]
+    fn a_toasts_post_carries_the_token_it_was_given() {
+        use crate::{Toast, ToastAction, ToastTone};
+        let said = |action: ToastAction| {
+            let ops = native_ops(&[Op::Toast(
+                Toast::new(ToastTone::Success, "Archived").action(action),
+            )])
+            .expect("native ops");
+            let [navree_native::Op::Toast(toast)] = ops.as_slice() else {
+                panic!("not a toast: {ops:?}");
+            };
+            toast.action.clone().expect("an action")
+        };
+        let post = said(ToastAction::post("Undo", "/undo").csrf("tok"));
+        assert!(post.post);
+        assert_eq!(
+            post.fields,
+            [navree_native::action::Pair {
+                name: crate::form::CSRF_FIELD.to_owned(),
+                value: "tok".to_owned()
+            }]
+        );
+        // A link posts nothing, and a post given no token sends none.
+        assert!(said(ToastAction::link("Open", "/x").csrf("tok")).fields.is_empty());
+        assert!(said(ToastAction::post("Undo", "/undo")).fields.is_empty());
+    }
 
     /// What the web path pays when the feature is on, measured: the reply
     /// layer's reading of who asked (which it did before for the runtime's

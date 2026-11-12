@@ -1356,11 +1356,8 @@ async fn an_option_query_is_a_choice_for_a_native_client() {
     let app = app().await;
     let (_, answer) = ask_native(&app, Method::GET, "/agents/options?q=kaur", &[], "").await;
     let screen = answer.screen.expect("a screen");
-    let N::Stack(stack) = &screen.body else {
-        panic!("not a stack: {:?}", screen.body);
-    };
-    let [N::Field(field), N::Link(more)] = stack.children.as_slice() else {
-        panic!("not a choice and a link: {:?}", stack.children);
+    let N::Field(field) = &screen.body else {
+        panic!("not a field: {:?}", screen.body);
     };
     let Input::Choice(choice) = &field.input else {
         panic!("not a choice");
@@ -1383,9 +1380,8 @@ async fn an_option_query_is_a_choice_for_a_native_client() {
             ("2", "Manpreet Singh", None)
         ]
     );
-    assert!(
-        matches!(&more.action, Action::Navigate { href, .. } if href == "/agents/options?page=2")
-    );
+    // The next options are found where the options say.
+    assert_eq!(choice.more.as_deref(), Some("/agents/options?page=2"));
     let web = app.client().get("/agents/options?q=kaur").send().await;
     assert!(web.text().contains(r#"data-slot="option-page""#));
 }

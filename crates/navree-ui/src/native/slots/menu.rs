@@ -6,13 +6,14 @@
 //! action is a button, a post item is a submit button that names the page's
 //! one post form (`form="ui-post"`) and where to post (`formaction`): the form
 //! holds only the session's token, which the page passes down. A box or a radio
-//! button in a menu is a form control a menu of the system has no place for;
-//! it is read as a structure no reader knows.
+//! button in a menu is an item that is ticked or not (`checked`); the radio buttons
+//! of one name are a choice of one (`one_of`). What it does when it changes is the
+//! control's own `change`.
 
 use navree_native::node as n;
 
 use super::super::lower::{
-    Cx, Fail, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, slot, text_of,
+    CONTROL_HOOKS, Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, slot, text_of,
 };
 use crate::node::{Element, Node};
 
@@ -213,10 +214,7 @@ fn words(cx: &mut Cx, element: &Element) -> Read<(String, Option<n::Icon>)> {
 fn item(cx: &mut Cx, element: &Element) -> Read<N> {
     hooks(element, &["data-ui-click"])?;
     if element.tag() == "label" {
-        return Err(Fail {
-            what: None,
-            why: "a box or a radio button in a menu".to_owned(),
-        });
+        return ticked(cx, element);
     }
     let (label, icon) = words(cx, element)?;
     let disabled = attr(element, "aria-disabled").as_deref() == Some("true");
@@ -240,6 +238,59 @@ fn item(cx: &mut Cx, element: &Element) -> Read<N> {
         },
         disabled,
         action,
+        ..n::Button::default()
+    }))
+}
+
+/// A box or a radio button in its label: an item that is ticked or not, and
+/// does what the control does when it changes.
+fn ticked(cx: &mut Cx, label: &Element) -> Read<N> {
+    let mut control = None;
+    let mut words = None;
+    for child in flat(label.child_nodes()) {
+        let Node::Element(part) = child else {
+            if matches!(child, Node::Text(text) if text.trim().is_empty()) {
+                continue;
+            }
+            return fail("words in a menu item outside its text");
+        };
+        match slot(part).as_deref() {
+            // The mark every system draws itself.
+            Some("menu-mark") => {}
+            Some("menu-text") => words = Some(text_of(part)),
+            Some("menu-shortcut") => cx.dropped.push("menu-shortcut".to_owned()),
+            None if part.tag() == "input" => {
+                if control.replace(part).is_some() {
+                    return fail("a menu item with more than one control");
+                }
+            }
+            Some(other) => return fail(format!("a menu item that holds a `{other}`")),
+            None => return fail(format!("a menu item that holds a <{}>", part.tag())),
+        }
+    }
+    let (Some(control), Some(words)) = (control, words) else {
+        return fail("a box or a radio button in a menu with no control or no words");
+    };
+    hooks(control, CONTROL_HOOKS)?;
+    let radio = match attr(control, "type").as_deref() {
+        Some("checkbox") => false,
+        Some("radio") => true,
+        _ => return fail("a control in a menu that is not a box or a radio button"),
+    };
+    let Some(action) = cx.changed_of(control)? else {
+        return fail("a box or a radio button in a menu that does nothing when it changes");
+    };
+    Ok(N::Button(n::Button {
+        id: id(control).or_else(|| id(label)),
+        label: words,
+        disabled: has(control, "disabled"),
+        checked: Some(has(control, "checked")),
+        one_of: radio.then(|| {
+            attr(control, "name")
+                .map(std::borrow::Cow::into_owned)
+                .unwrap_or_default()
+        }),
+        action: Some(action),
         ..n::Button::default()
     }))
 }
@@ -396,15 +447,51 @@ mod tests {
     }
 
     #[test]
-    fn a_box_or_a_radio_button_in_a_menu_is_a_miss() {
+    fn a_box_or_a_radio_button_in_a_menu_is_ticked_or_not_and_says_what_changing_it_does() {
+        use crate::Cmd;
+        let menu = menu_of(read(
+            DropdownMenu::new("m", "View")
+                .checkbox(
+                    MenuCheckbox::new("done", "Show done")
+                        .checked(true)
+                        .on_change(Cmd::submit("filters")),
+                )
+                .radios(
+                    MenuRadios::new("sort", "Sort by")
+                        .option("date", "Date")
+                        .option("name", "Name")
+                        .value("name")
+                        .on_change(Cmd::submit("filters")),
+                ),
+        ));
+        let [N::Button(done), N::Section(sort)] = menu.items.as_slice() else {
+            panic!("not a box and a group: {:?}", menu.items);
+        };
+        assert_eq!((done.label.as_str(), done.checked), ("Show done", Some(true)));
+        assert_eq!(done.one_of, None);
+        assert_eq!(
+            done.action,
+            Some(Action::Submit {
+                form: Some("filters".into()),
+                href: None,
+                with: None
+            })
+        );
+        let [N::Button(date), N::Button(name)] = sort.children.as_slice() else {
+            panic!("not two radios: {:?}", sort.children);
+        };
+        assert_eq!(sort.title.as_deref(), Some("Sort by"));
+        assert_eq!((date.checked, name.checked), (Some(false), Some(true)));
+        assert_eq!(date.one_of.as_deref(), Some("sort"));
+        assert_eq!(name.one_of.as_deref(), Some("sort"));
+    }
+
+    #[test]
+    fn a_box_in_a_menu_that_does_nothing_when_it_changes_is_a_miss() {
         let boxes: Node = DropdownMenu::new("m", "View")
             .checkbox(MenuCheckbox::new("done", "Show done"))
             .into();
         assert_eq!(misses(boxes), ["slot:dropdown-menu"]);
-        let radios: Node = DropdownMenu::new("m", "Sort")
-            .radios(MenuRadios::new("sort", "Sort by").option("a", "Date"))
-            .into();
-        assert_eq!(misses(radios), ["slot:dropdown-menu"]);
     }
 
     #[test]

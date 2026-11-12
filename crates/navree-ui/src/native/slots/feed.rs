@@ -107,9 +107,6 @@ fn row(cx: &mut Cx, item: &Element) -> Read<N> {
     if has(item, "data-filtered") {
         return fail("an event left out by a filter");
     }
-    if attr(item, "data-state").as_deref() == Some("muted") {
-        cx.dropped.push("activity-muted".to_owned());
-    }
     let mut parts = Parts::of(item);
     let glyph = parts.slot("activity-icon");
     let body = parts.slot("activity-body");
@@ -121,6 +118,8 @@ fn row(cx: &mut Cx, item: &Element) -> Read<N> {
     let mut row = n::FeedRow {
         id: id(item),
         tone: attr(item, "data-tone").and_then(|name| tone(&name)),
+        // What a machine did is drawn quieter than what people did.
+        muted: attr(item, "data-state").as_deref() == Some("muted"),
         ..n::FeedRow::default()
     };
     if let Some(glyph) = glyph {
@@ -211,6 +210,24 @@ mod tests {
             panic!("no list: {:?}", section.children);
         };
         &list.children
+    }
+
+    #[test]
+    fn what_a_machine_did_is_a_muted_row() {
+        let section = feed_of(read(
+            ActivityFeed::new("act", "Recent activity")
+                .item(ActivityItem::new("Navree", "assigned").muted())
+                .item(ActivityItem::new("Manpreet Gill", "replied")),
+        ));
+        let [N::FeedRow(machine), N::FeedRow(person)] = rows_of(&section) else {
+            panic!("not two feed rows");
+        };
+        assert!(machine.muted && !person.muted);
+        let lowered = crate::native::lower(&crate::Node::from(
+            ActivityFeed::new("act", "Recent activity")
+                .item(ActivityItem::new("Navree", "assigned").muted()),
+        ));
+        assert!(lowered.dropped.is_empty(), "{:?}", lowered.dropped);
     }
 
     #[test]
