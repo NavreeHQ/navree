@@ -367,8 +367,12 @@ impl MatrixHeatmap {
 
                 let value_node: Node = match (value, tone) {
                     (Some(v), Some(ink)) => ink.on(el("span")).child(fmt(v)).into(),
-                    (Some(v), None) => fmt(v).into(),
-                    (None, _) => value_cell(None, &self.common.labels),
+                    // Every value carries an ink, so a tooltip never keeps the last cell's colour.
+                    (Some(v), None) => Ink::muted().on(el("span")).child(fmt(v)).into(),
+                    (None, _) => Ink::muted()
+                        .on(el("span"))
+                        .child(value_cell(None, &self.common.labels))
+                        .into(),
                 };
                 table_rows.push((
                     pair_name(r, c),
