@@ -63,7 +63,8 @@ pub mod prelude {
         Select, SelectLabels,
     };
     pub use crate::sortable::{
-        Landing, ListState, Move, Refusal, SortItem, SortLabels, SortLayout, SortList, Sortable,
+        GridOrder, GridTile, Landing, ListState, Move, Refusal, SortItem, SortLabels, SortLayout,
+        SortList, Sortable, SortableGrid,
     };
     pub use crate::table::{
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
@@ -168,8 +169,9 @@ pub use shell::{
     NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, UserMenu,
 };
 pub use sortable::{
-    Landing, ListState, Move, MoveError, MoveRejected, Placement, RankedLists, Refusal, SortItem,
-    SortLabels, SortLayout, SortList, Sortable, Spot,
+    Arranged, GridColumns, GridFit, GridOrder, GridTile, Landing, ListState, Move, MoveError,
+    MoveRejected, OrderError, OrderRejected, Placement, RankedLists, Refusal, SortItem, SortLabels,
+    SortLayout, SortList, Sortable, SortableGrid, SortableGridLabels, Spot,
 };
 pub use table::{
     BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,
