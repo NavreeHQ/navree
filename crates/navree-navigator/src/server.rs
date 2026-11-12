@@ -631,13 +631,20 @@ pub fn run_stdio(options: NavigatorOptions) -> Result<(), ServeError> {
 
 /// [`run_stdio`], reaching the database as `database` says
 /// (`NAVREE_MCP_DATABASE_URL`, `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). With a
-/// privileged role allowed, a warning goes to stderr as it starts.
+/// privileged role allowed, a warning goes to stderr as it starts. It treats
+/// the process as Navigator's own and caps the heap SQLite may use in it at
+/// [`SQLITE_HEAP_LIMIT`](crate::database::SQLITE_HEAP_LIMIT)
+/// ([`limit_sqlite_heap`](crate::database::limit_sqlite_heap)).
 pub fn run_stdio_with(
     options: NavigatorOptions,
     database: DatabaseOptions,
 ) -> Result<(), ServeError> {
     if database.allows_privileged_role() {
         eprintln!("{PRIVILEGED_ROLE_WARNING}");
+    }
+    // This process is Navigator's own: cap the heap SQLite may take in it.
+    if let Err(error) = crate::database::limit_sqlite_heap(crate::database::SQLITE_HEAP_LIMIT) {
+        eprintln!("warning: could not cap SQLite's heap: {error}");
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

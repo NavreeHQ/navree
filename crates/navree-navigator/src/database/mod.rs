@@ -52,7 +52,10 @@ use sqlx::{ConnectOptions, Executor, Row};
 pub use guard::{
     CheckedStatement, Dialect, MAX_EXPRESSION_DEPTH, MAX_SQL_BYTES, Refusal, StatementKind, check,
 };
-pub use query::{MASKED_COLUMN_PARTS, QueryResult, is_masked_column};
+pub use query::{
+    CUT_MARK, MASKED_COLUMN_PARTS, MAX_ANSWER_BYTES, MAX_COLUMNS, MAX_VALUE_BYTES, QueryResult,
+    is_masked_column,
+};
 pub use schema::{AppliedMigration, Column, ForeignKey, Index, Schema, Table};
 
 /// The most rows `query_database` returns.
@@ -201,11 +204,13 @@ pub enum DatabaseError {
     /// act with more than its own privileges, or outside the database,
     /// without `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`.
     #[error(
-        "query_database does not run as the PostgreSQL role `{role}`: it may execute {}{}, which run with \
-         their owner's privileges (SECURITY DEFINER), in an untrusted language as the server's operating \
-         system user, or in an extension that reaches files, programs or the network, so a query could \
-         act outside the read-only transaction. Revoke EXECUTE on them from PUBLIC and from the role \
-         (REVOKE EXECUTE ON FUNCTION ... FROM PUBLIC, {role}), or start Navigator with \
+        "query_database does not run as the PostgreSQL role `{role}`: it may reach {}{}. Such a function \
+         runs with its owner's privileges (SECURITY DEFINER), in an untrusted language as the server's \
+         operating system user, or in an extension that reaches files, programs, other servers or the \
+         network, and a foreign table reads another server, so a query could act outside the read-only \
+         transaction. Revoke EXECUTE on those functions from PUBLIC and from the role (for an aggregate, \
+         revoke it on the aggregate: its step functions run with the aggregate owner's rights), revoke \
+         SELECT on the foreign tables, or start Navigator with \
          `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp` to run anyway.",
         .functions.join(", "),
         .more.then_some(" and more").unwrap_or_default()
@@ -223,31 +228,65 @@ pub enum DatabaseError {
 /// The most functions [`DatabaseError::FunctionsReachOut`] names.
 const LISTED_FUNCTIONS: usize = 10;
 
-/// The functions outside `pg_catalog` and `information_schema` the session
-/// may call (EXECUTE on the function, USAGE on its schema) that act beyond
-/// the role: SECURITY DEFINER or untrusted-language functions of its own
-/// database, and the functions of the extensions that reach outside the
-/// database (dblink, postgres_fdw, file_fdw, adminpack, http, pg_net,
-/// pg_background, pg_cron, pgagent and the untrusted languages) or of an
-/// extension written in an untrusted procedural language. The C functions of other
-/// extensions (pgcrypto, PostGIS, TimescaleDB, pgvector) are code the
-/// server's administrator installed and are not counted. The first
-/// [`LISTED_FUNCTIONS`] + 1, so the refusal knows there are more.
-const REACHING_FUNCTIONS: &str = "SELECT p.oid::pg_catalog.regprocedure::text \
-     FROM pg_catalog.pg_proc p \
-     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace \
+/// What the session may reach beyond its own privileges, as "function
+/// <signature>" and "foreign table <name>" lines, the first
+/// [`LISTED_FUNCTIONS`] + 1 so the refusal knows there are more.
+///
+/// The functions are the user-defined ones (`oid >= 16384`, so not the
+/// server's own) the role may execute (directly, through a role or through
+/// PUBLIC), plus the support functions of every aggregate it may execute,
+/// whatever its privilege on them (PostgreSQL checks those against the
+/// aggregate's owner). The schema's USAGE is not required: a view, an
+/// operator, a `BEGIN ATOMIC` body or a row-level policy calls a function
+/// without it. Counted among them are a database's own SECURITY DEFINER or
+/// untrusted-language (C included) functions, and the functions of an
+/// extension that reaches files, programs, other servers or the network:
+/// those named here, any extension that owns a foreign-data-wrapper
+/// handler, and any written in an untrusted procedural language. The other
+/// extensions' functions (PostGIS, pgcrypto, TimescaleDB, pgvector, their C
+/// code and their own SECURITY DEFINER functions alike) are trusted as
+/// their administrator installed them. Trigger functions can't be called,
+/// and no trigger fires in a read-only transaction, so they don't count.
+/// Foreign tables the role may SELECT reach another server, so they count.
+/// It runs with `search_path` set to `pg_catalog` alone (see `check_role`),
+/// so no operator or cast of the database stands in for the server's.
+const REACHING: &str = "WITH risky_extension AS ( \
+       SELECT e.oid FROM pg_catalog.pg_extension e \
+       WHERE e.extname IN ('adminpack', 'aws_commons', 'aws_lambda', 'aws_s3', 'azure_ai', \
+         'azure_storage', 'dblink', 'file_fdw', 'google_ml_integration', 'http', 'orafce', \
+         'pg_background', 'pg_cron', 'pg_net', 'pgagent', 'pgml', 'plperlu', 'plproxy', \
+         'plpython3u', 'plpythonu', 'pltclu', 'postgres_fdw') \
+       OR EXISTS (SELECT 1 FROM pg_catalog.pg_depend d \
+         JOIN pg_catalog.pg_proc h ON h.oid = d.objid \
+         WHERE d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass \
+         AND d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass \
+         AND d.refobjid = e.oid AND d.deptype = 'e' \
+         AND h.prorettype = 'pg_catalog.fdw_handler'::pg_catalog.regtype)), \
+     callable AS ( \
+       SELECT p.oid AS fn FROM pg_catalog.pg_proc p \
+       WHERE pg_catalog.has_function_privilege(p.oid, 'EXECUTE') \
+       UNION \
+       SELECT s.fn::pg_catalog.oid FROM pg_catalog.pg_aggregate a, \
+         LATERAL (VALUES (a.aggtransfn), (a.aggfinalfn), (a.aggcombinefn), (a.aggserialfn), \
+           (a.aggdeserialfn), (a.aggmtransfn), (a.aggminvtransfn), (a.aggmfinalfn)) AS s(fn) \
+       WHERE s.fn::pg_catalog.oid <> 0 \
+       AND pg_catalog.has_function_privilege(a.aggfnoid, 'EXECUTE')) \
+     SELECT 'function ' || p.oid::pg_catalog.regprocedure::pg_catalog.text AS what \
+     FROM callable c \
+     JOIN pg_catalog.pg_proc p ON p.oid = c.fn \
      JOIN pg_catalog.pg_language l ON l.oid = p.prolang \
      LEFT JOIN pg_catalog.pg_depend d ON d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass \
        AND d.objid = p.oid AND d.deptype = 'e' \
-     LEFT JOIN pg_catalog.pg_extension e ON e.oid = d.refobjid \
-     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') \
-     AND p.prokind = 'f' \
-     AND CASE WHEN e.oid IS NULL THEN p.prosecdef OR NOT l.lanpltrusted \
-       ELSE e.extname IN ('adminpack', 'dblink', 'file_fdw', 'http', 'pg_background', 'pg_cron', \
-         'pg_net', 'pgagent', 'plperlu', 'plpython3u', 'plpythonu', 'pltclu', 'postgres_fdw') \
+     WHERE p.oid >= 16384 \
+     AND p.prorettype NOT IN ('pg_catalog.trigger'::pg_catalog.regtype, \
+       'pg_catalog.event_trigger'::pg_catalog.regtype) \
+     AND CASE WHEN d.refobjid IS NULL THEN p.prosecdef OR NOT l.lanpltrusted \
+       ELSE d.refobjid IN (SELECT oid FROM risky_extension) \
          OR (NOT l.lanpltrusted AND l.lanname NOT IN ('c', 'internal')) END \
-     AND pg_catalog.has_schema_privilege(n.oid, 'USAGE') \
-     AND pg_catalog.has_function_privilege(p.oid, 'EXECUTE') \
+     UNION ALL \
+     SELECT 'foreign table ' || c.oid::pg_catalog.regclass::pg_catalog.text \
+     FROM pg_catalog.pg_class c \
+     WHERE c.relkind = 'f' AND pg_catalog.has_table_privilege(c.oid, 'SELECT') \
      ORDER BY 1 LIMIT 11";
 
 /// The predefined PostgreSQL roles whose members reach outside the database
@@ -329,11 +368,46 @@ impl From<sqlx::Error> for DatabaseError {
             sqlx::Error::Database(db) if is_timeout(db.code().as_deref(), db.message()) => {
                 DatabaseError::Timeout
             }
-            sqlx::Error::Database(db) => DatabaseError::Query(db.message().to_owned()),
-            _ => DatabaseError::Query(error.to_string()),
+            sqlx::Error::Database(db) => DatabaseError::Query(short_message(db.message())),
+            _ => DatabaseError::Query(short_message(&error.to_string())),
         }
     }
 }
+
+/// The longest error message a tool passes on: a database's error can quote
+/// a value of the query at any size (`repeat('x', 300000000)::int`).
+pub const MAX_MESSAGE_BYTES: usize = 2 * 1024;
+
+/// `message` cut to [`MAX_MESSAGE_BYTES`] (at a character boundary), ending
+/// with `… [cut]` when it was longer.
+pub(crate) fn short_message(message: &str) -> String {
+    if message.len() <= MAX_MESSAGE_BYTES {
+        return message.to_owned();
+    }
+    let mut end = MAX_MESSAGE_BYTES;
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{}", &message[..end], CUT_MARK)
+}
+
+/// Caps the heap SQLite may use in this whole process
+/// (`PRAGMA hard_heap_limit`): past it, an allocation fails with "out of
+/// memory" instead of growing. `navree mcp` sets 256 MB as it starts
+/// ([`crate::run_stdio_with`]). The limit is process-wide, so code that
+/// embeds Navigator in a process of its own decides whether and how to set
+/// it: without it, an aggregate such as `json_group_array` can grow past
+/// the per-value limit before that limit applies.
+pub fn limit_sqlite_heap(bytes: u64) -> Result<(), DatabaseError> {
+    let conn = rusqlite::Connection::open_in_memory()
+        .map_err(|error| DatabaseError::Query(error.to_string()))?;
+    let bytes = i64::try_from(bytes).unwrap_or(i64::MAX);
+    conn.pragma_update(None, "hard_heap_limit", bytes)
+        .map_err(|error| DatabaseError::Query(error.to_string()))
+}
+
+/// The heap `navree mcp` lets SQLite use ([`limit_sqlite_heap`]).
+pub const SQLITE_HEAP_LIMIT: u64 = 256 * 1024 * 1024;
 
 /// PostgreSQL's `query_canceled` (statement timeout) and SQLite's
 /// `interrupted` (the progress handler's deadline).
@@ -468,7 +542,19 @@ impl Target {
         if self.allow_privileged {
             return Ok(());
         }
-        let rows = conn.fetch_all(ROLE_PRIVILEGES).await?;
+        // In a read-only transaction of its own, with only the server's
+        // catalog on the search path (no operator or cast of the database
+        // stands in for the server's); rolled back whatever happens.
+        conn.execute("BEGIN READ ONLY").await?;
+        let read = async {
+            conn.execute("SET LOCAL search_path = pg_catalog").await?;
+            let role = conn.fetch_all(ROLE_PRIVILEGES).await?;
+            let reached = conn.fetch_all(REACHING).await?;
+            Ok::<_, sqlx::Error>((role, reached))
+        }
+        .await;
+        let _ = conn.execute("ROLLBACK").await;
+        let (rows, reached) = read?;
         // The query always answers a row; without one, nothing is known, so
         // nothing runs.
         let Some(row) = rows.first() else {
@@ -488,14 +574,14 @@ impl Target {
         if !privileges.is_empty() {
             return Err(DatabaseError::PrivilegedRole { role, privileges });
         }
-        let mut functions: Vec<String> = conn
-            .fetch_all(REACHING_FUNCTIONS)
-            .await?
+        // A row that can't be read still counts: nothing is known about it.
+        let mut functions: Vec<String> = reached
             .iter()
-            .filter_map(|row| {
+            .map(|row| {
                 row.try_get_raw(0)
                     .ok()
                     .and_then(|raw| raw.as_str().ok().map(str::to_owned))
+                    .unwrap_or_else(|| "an object Navigator could not name".to_owned())
             })
             .collect();
         if functions.is_empty() {
@@ -517,9 +603,10 @@ impl Target {
     }
 
     fn connect_error(&self, error: impl std::fmt::Display) -> DatabaseError {
+        let message = short_message(&error.to_string());
         let message = match self.hint {
-            Some(hint) => format!("{error}. {hint}"),
-            None => error.to_string(),
+            Some(hint) => format!("{message}. {hint}"),
+            None => message,
         };
         DatabaseError::Connect {
             url: self.redacted_url(),
@@ -634,6 +721,21 @@ pub fn redact_url(url: &str) -> String {
 /// alias (`password_hash AS h`) or `row_to_json` returns them. On
 /// PostgreSQL a privileged role is refused first (see the module).
 pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, DatabaseError> {
+    run_query(target, sql, query::AGENT_LIMITS).await
+}
+
+/// [`query_database`] for Navigator's own fixed statements (Lighthouse's):
+/// the same guard and read-only path, with values read whole up to 8 MB and
+/// an answer of up to 8 MB, so histograms and backtraces are not cut.
+pub(crate) async fn query_own(target: &Target, sql: &str) -> Result<QueryResult, DatabaseError> {
+    run_query(target, sql, query::OWN_LIMITS).await
+}
+
+async fn run_query(
+    target: &Target,
+    sql: &str,
+    limits: query::Limits,
+) -> Result<QueryResult, DatabaseError> {
     // The guard parses on a thread of its own (see `check`), waited for here
     // on a blocking thread, not on the async runtime's.
     let (owned, dialect) = (sql.to_owned(), target.driver.dialect());
@@ -641,11 +743,14 @@ pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, D
         .await
         .map_err(|_| Refusal::Unchecked)??;
     match target.driver {
-        Driver::Sqlite => query::sqlite(target.sqlite_file()?, &checked).await,
+        Driver::Sqlite => query::sqlite(target.sqlite_file()?, &checked, limits).await,
+        Driver::Postgres if checked.kind == StatementKind::Explain => {
+            Err(Refusal::ExplainOnPostgres.into())
+        }
         Driver::Postgres => {
             let mut conn = target.postgres().await?;
             let result = match target.check_role(&mut conn).await {
-                Ok(()) => query::postgres(&mut conn, &checked).await,
+                Ok(()) => query::postgres(&mut conn, &checked, limits).await,
                 Err(error) => Err(error),
             };
             close(sqlx::Connection::close(conn)).await;

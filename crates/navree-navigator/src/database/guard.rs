@@ -39,6 +39,8 @@ use sqlparser::ast::{
 use sqlparser::dialect::{PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 
+use super::query::MAX_COLUMNS;
+
 /// The SQL dialect a statement is parsed with: the app's database driver.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dialect {
@@ -161,6 +163,23 @@ pub enum Refusal {
         MAX_EXPRESSION_DEPTH
     )]
     TooDeep,
+    /// A query with more columns than [`MAX_COLUMNS`].
+    #[error(
+        "the query answers {count} columns; select at most {} of them",
+        MAX_COLUMNS
+    )]
+    TooManyColumns {
+        /// How many it answers.
+        count: usize,
+    },
+    /// EXPLAIN on PostgreSQL, whose plan text holds any constant the query
+    /// computes, at any size.
+    #[error(
+        "EXPLAIN is not run on PostgreSQL: the planner writes the constants it folds into the plan, \
+         at any size, and the plan is one value Navigator would have to hold whole. Run EXPLAIN in \
+         psql, or ask describe_schema about the tables and indexes"
+    )]
+    ExplainOnPostgres,
     /// The guard could not run: its thread could not start, or it failed.
     #[error("the statement could not be checked (the guard's thread failed), so it is not sent")]
     Unchecked,
