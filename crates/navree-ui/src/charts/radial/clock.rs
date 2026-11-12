@@ -750,6 +750,7 @@ impl DayClock {
             height: self.size.base,
             note,
             interactive: true,
+            text: false,
             tip: Some(Tip { big: true, lines }),
         })
     }

@@ -111,6 +111,16 @@ pub struct RadialLabels {
     /// One value on a scale that does not start at zero: `{name}`, `{value}`, `{min}`,
     /// `{max}`.
     pub summary_range: Cow<'static, str>,
+    /// One value below the start of a scale that does not start at zero: `{name}`,
+    /// `{value}`, `{min}`, `{max}`. The arc is empty then.
+    pub summary_below: Cow<'static, str>,
+    /// One value above the end of a scale that does not start at zero: `{name}`,
+    /// `{value}`, `{min}`, `{max}`. The arc is full then.
+    pub summary_above: Cow<'static, str>,
+    /// In the status column, for a value below the start of its scale.
+    pub below: Cow<'static, str>,
+    /// In the status column, for a value above the end of its scale.
+    pub above: Cow<'static, str>,
     /// After the value, the band it is in: `{band}`.
     pub summary_band: Cow<'static, str>,
     /// A day clock: `{total}`, `{peak}`, `{peak_x}`.
@@ -145,6 +155,10 @@ impl RadialLabels {
             moments: Cow::Borrowed("Moments"),
             summary_ring: Cow::Borrowed("{name}: {value} of {max}, {share}."),
             summary_range: Cow::Borrowed("{name}: {value}, on a scale from {min} to {max}."),
+            summary_below: Cow::Borrowed("{name}: {value}, below the scale from {min} to {max}."),
+            summary_above: Cow::Borrowed("{name}: {value}, above the scale from {min} to {max}."),
+            below: Cow::Borrowed("Below the scale"),
+            above: Cow::Borrowed("Above the scale"),
             summary_band: Cow::Borrowed("{band}."),
             summary_clock: Cow::Borrowed("{total} in the day. Busiest at {peak_x}: {peak}."),
             summary_moments: Cow::Borrowed("{count} moments: {names}."),
@@ -563,7 +577,17 @@ pub(crate) fn finish(
         )
 }
 
+/// Where a value lies when it is off a scale that does not start at zero.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Outside {
+    /// Under the start of the scale: the arc is empty.
+    Below,
+    /// Past the end of the scale: the arc is full.
+    Above,
+}
+
 /// The summary of one value: `{name}: {value} of {max}, {share}.`, and its band.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn summary_of(
     words: &RadialLabels,
     name: &str,
@@ -572,10 +596,15 @@ pub(crate) fn summary_of(
     max: &str,
     share: &str,
     band: Option<&str>,
+    outside: Option<Outside>,
 ) -> String {
     let mut out = match min {
         Some(min) => fill(
-            &words.summary_range,
+            match outside {
+                Some(Outside::Below) => &words.summary_below,
+                Some(Outside::Above) => &words.summary_above,
+                None => &words.summary_range,
+            },
             &[("name", name), ("value", value), ("min", min), ("max", max)],
         ),
         None => fill(

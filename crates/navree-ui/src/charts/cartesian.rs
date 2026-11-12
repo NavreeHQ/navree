@@ -1525,6 +1525,7 @@ impl Chart {
             height,
             note,
             interactive: true,
+            text: false,
             tip: Some(Tip {
                 big: self.tooltip.big,
                 lines: tip_lines,

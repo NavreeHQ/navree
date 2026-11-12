@@ -472,6 +472,7 @@ impl Sparkline {
             height: self.height,
             note: None,
             interactive: false,
+            text: false,
             tip: None,
         })
     }

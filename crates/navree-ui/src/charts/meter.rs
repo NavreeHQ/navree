@@ -553,6 +553,7 @@ impl Meter {
             height: h + if show_legend { 40 } else { 0 },
             note: None,
             interactive: true,
+            text: false,
             tip: Some(Tip {
                 big: true,
                 lines: vec![

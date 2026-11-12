@@ -11,8 +11,8 @@ use super::super::{
     value_cell,
 };
 use super::{
-    Band, Middle, Paint, RadialLabels, RingTrack, Screen, Sizes, figure, finish, fit, glyph, plot,
-    summary_of, thickness_for, with_unit, wrap,
+    Band, Middle, Outside, Paint, RadialLabels, RingTrack, Screen, Sizes, figure, finish, fit,
+    glyph, plot, summary_of, thickness_for, with_unit, wrap,
 };
 use crate::components::Tone;
 use crate::icons::Icon;
@@ -285,6 +285,16 @@ impl One {
         let share_words = share_text(share, numbers);
         let ranged = self.min != 0.0;
         let min_text = ranged.then(|| with(&self.format.format(self.min, numbers)));
+        // Off a scale that starts above zero the arc is empty or full; say so.
+        let outside = if !ranged {
+            None
+        } else if value < self.min {
+            Some(Outside::Below)
+        } else if value > self.max {
+            Some(Outside::Above)
+        } else {
+            None
+        };
         let name = self.name(common);
         let summary = summary_of(
             &self.words,
@@ -294,6 +304,7 @@ impl One {
             &max_text,
             &share_words,
             band.as_deref(),
+            outside,
         );
         let mut head = vec![
             (labels.category.to_string(), None),
@@ -306,9 +317,17 @@ impl One {
             Node::from(max_text),
             Node::from(share_words),
         ];
-        if band.is_some() || !self.zones.is_empty() {
+        let off = outside.map(|o| match o {
+            Outside::Below => self.words.below.to_string(),
+            Outside::Above => self.words.above.to_string(),
+        });
+        if band.is_some() || off.is_some() || !self.zones.is_empty() {
             head.push((self.words.status.to_string(), None));
-            cells.push(value_cell(band.clone(), labels));
+            let status = match (&band, off) {
+                (Some(band), Some(off)) => Some(format!("{band}, {off}")),
+                (band, off) => band.clone().or(off),
+            };
+            cells.push(value_cell(status, labels));
         }
         // The zones: named in a legend, with their ends in the table's note.
         let (legend_node, zones_note) = if self.zones.is_empty() {
@@ -364,6 +383,7 @@ impl One {
             height: (f64::from(self.sizes.base) * ratio).round() as u32,
             note: None,
             interactive: false,
+            text: false,
             tip: None,
         })
     }
@@ -1118,6 +1138,7 @@ impl Rings {
             height: self.sizes.base,
             note,
             interactive: false,
+            text: false,
             tip: None,
         })
     }

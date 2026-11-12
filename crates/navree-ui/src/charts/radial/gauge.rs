@@ -13,7 +13,10 @@ use crate::node::Node;
 ///
 /// It has everything a [`Ring`](super::Ring) has: a gradient along the arc, a colour by
 /// band, a glow, the value in the middle with its label, motion, a size per screen
-/// width. It does not lap: a value past the top fills the arc.
+/// width. It does not lap: a value past the top fills the arc, and one below the start
+/// of the scale leaves it empty. On a scale that starts above zero the summary and the
+/// table's status say which of the two it is, as a [`RangeScale`](crate::charts::RangeScale)
+/// does.
 ///
 /// [Zones](Self::zone) lie on its track, each its stretch of the scale in its own
 /// colour, and the arc runs down their middle, half as thick, so every zone shows from
@@ -158,6 +161,54 @@ mod tests {
         let out = html(Gauge::new("Stress", 140).size(200).thickness(20.0));
         assert!(!out.contains("radial-lap"), "{out}");
         assert!(out.contains("140 of 100, 140%."), "{out}");
+    }
+
+    #[test]
+    fn a_value_below_the_scale_is_an_empty_arc_that_says_so() {
+        let low = html(
+            Gauge::new("Body temperature", 32.5)
+                .min(34)
+                .max(39)
+                .unit("°C")
+                .size(200)
+                .thickness(20.0),
+        );
+        assert!(!low.contains("radial-arc"), "{low}");
+        assert!(
+            low.contains("Body temperature: 32.5°C, below the scale from 34°C to 39°C."),
+            "{low}"
+        );
+        // The table's status column says it too.
+        assert!(
+            low.contains(">Status</th>") && low.contains(">Below the scale</td>"),
+            "{low}"
+        );
+        // Past the top the arc is full and that is said as well.
+        let high = html(
+            Gauge::new("Body temperature", 41)
+                .min(34)
+                .max(39)
+                .unit("°C"),
+        );
+        assert!(high.contains("radial-arc"), "{high}");
+        assert!(
+            high.contains("Body temperature: 41°C, above the scale from 34°C to 39°C."),
+            "{high}"
+        );
+        assert!(high.contains(">Above the scale</td>"), "{high}");
+        // On the scale, nothing is added.
+        let inside = html(
+            Gauge::new("Body temperature", 36.5)
+                .min(34)
+                .max(39)
+                .unit("°C"),
+        );
+        assert!(
+            inside.contains("on a scale from 34°C to 39°C.")
+                && !inside.contains("the scale")
+                && !inside.contains(">Status</th>"),
+            "{inside}"
+        );
     }
 
     #[test]

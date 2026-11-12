@@ -757,6 +757,9 @@ pub(crate) struct Drawn {
     /// Whether the module makes it a tab stop with tooltips. A sparkline in a row of
     /// figures is not: it is a picture with its summary as its name.
     pub interactive: bool,
+    /// Whether the drawing holds text a reader should reach (a list of rows): its body is
+    /// then a named group, not a picture, which would hide that text.
+    pub text: bool,
     /// The tooltip's lines, when not one per column of the table with its colour.
     pub tip: Option<Tip>,
 }
@@ -885,6 +888,13 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                     .attr("aria-label", named)
                     .attr("aria-describedby", summary_id.clone())
                     .attr("data-keys", keys_id.clone());
+            } else if drawn.text {
+                // The body holds text of its own, so it is a named group: a picture
+                // would hide the rows from assistive technology.
+                body = body
+                    .attr("role", "group")
+                    .attr("aria-label", named)
+                    .attr("aria-describedby", summary_id.clone());
             } else {
                 body = body
                     .attr("role", "img")
