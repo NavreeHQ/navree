@@ -190,8 +190,9 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.Message -> MessageView(node, place, modifier)
         is Navree.NativeView -> node.alt?.let { NodeView(it, place, modifier) }
         is Navree.Node.Unknown -> node.alt?.let { NodeView(it, place, modifier) }
+        is Navree.Chart -> ChartView(node, modifier)
         // A screen that holds one of these is shown in the web view, so none reaches here.
-        is Navree.Chart, is Navree.WebRegion -> Unit
+        is Navree.WebRegion -> Unit
         // Drawn over the screen, not in it.
         is Navree.Sheet, is Navree.Dialog, is Navree.Popover, is Navree.Toolbar -> Unit
         else -> Unit

@@ -213,7 +213,7 @@ class ConfigTest {
         assertEquals(listOf("clipboard", "share"), client["caps"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals("Android's back goes to the first destination before it leaves", "true", config["back_to_first"]!!.jsonPrimitive.content)
         assertNull("a release build takes no plain http", config["loopback_http"])
-        assertTrue(config["undrawable"]!!.jsonArray.any { it.jsonPrimitive.content == "chart" })
+        assertTrue("a part this build does not draw goes to the web view", config["undrawable"]!!.jsonArray.any { it.jsonPrimitive.content == "input:file" })
     }
 
     @Test

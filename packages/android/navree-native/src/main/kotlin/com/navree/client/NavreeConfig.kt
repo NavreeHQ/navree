@@ -112,7 +112,7 @@ const val LIBRARY_VERSION = "0.1.0"
  * The kinds and controls this client does not draw yet. A page that holds one
  * is shown whole in the web view, never with a hole.
  */
-val UNDRAWABLE: List<String> = listOf("chart", "web", "input:colour", "input:file")
+val UNDRAWABLE: List<String> = listOf("web", "input:colour", "input:file")
 
 /** The core's configuration for this app on this device. */
 fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>): JsonObject = buildJsonObject {
