@@ -22,6 +22,12 @@ pub const CSRF_FIELD: &str = "_csrf";
 /// default port (80 for `http`, 443 for `https`) written or not. An `Origin` that is
 /// `null`, has another scheme, a path, a user or a port that isn't one, never matches.
 ///
+/// The scheme is not compared: an HTTP/1.1 request doesn't carry it, and behind a proxy
+/// that ends TLS the app sees `http` for a page the browser loaded over `https`. So
+/// `http://app.example` matches a request to `app.example`. A browser that sends
+/// `Sec-Fetch-Site` (every current one) calls such a page `same-site`, not
+/// `same-origin`, and the checks that read it refuse it before this comparison.
+///
 /// ```
 /// use http::{HeaderMap, Uri};
 /// use navree_http::csrf::origin_is_host;

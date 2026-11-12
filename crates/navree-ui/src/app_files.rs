@@ -539,8 +539,11 @@ pub struct AppImage {
 
 impl AppImage {
     /// The picture `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), at most
-    /// `most` bytes long. A file of another kind, an SVG file with anything that runs, a file
-    /// past its ceiling, or a name of anything else, fails the app's build.
+    /// `most` bytes long. A file of another kind, an SVG file that fails the build check
+    /// (a `<script>` or `<foreignObject>` element, an event attribute, a `javascript:`
+    /// address), a file past its ceiling, or a name of anything else, fails the app's build.
+    /// Passing the check doesn't make an SVG file safe to put in a page: it is inert as an
+    /// `<img>` and as the toolkit serves it, under [`IMAGE_CSP`].
     pub const fn new(name: &'static str, bytes: &'static [u8], most: usize) -> Self {
         assert!(
             is_file_name(name),
@@ -549,7 +552,7 @@ impl AppImage {
         assert!(bytes.len() <= most, "a picture is larger than its ceiling");
         let Some(kind) = ImageKind::of(bytes) else {
             panic!(
-                "a picture is an SVG file with nothing that runs, or a PNG, WebP, JPEG, AVIF, GIF or ICO file"
+                "a picture is a PNG, WebP, JPEG, AVIF, GIF or ICO file, or an SVG file with no script or foreignObject element, event attribute or javascript: address"
             )
         };
         Self {
