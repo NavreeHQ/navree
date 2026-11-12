@@ -1,22 +1,26 @@
 /* Chart paint: what chart marks share past the plain ones, linked by a mark that uses it:
    the colours of gradient stops, glow, motion, a sparkline's points and columns, a
    progress bar drawn as a meter, a number that counts up. Colours come from tokens by
-   data-color and data-tone; nothing here needs a style attribute. */
-[data-color="1"]{--c:var(--chart-1)}
-[data-color="2"]{--c:var(--chart-2)}
-[data-color="3"]{--c:var(--chart-3)}
-[data-color="4"]{--c:var(--chart-4)}
-[data-color="5"]{--c:var(--chart-5)}
-[data-color="6"]{--c:var(--chart-6)}
-[data-color="7"]{--c:var(--chart-7)}
-[data-color="8"]{--c:var(--chart-8)}
+   data-color and data-tone; nothing here needs a style attribute. --c-vivid is the colour's
+   vivid end: deeper on a light page, brighter on a dark one. A chart colour's comes from
+   the theme (--chart-N-vivid), which deepens it along its own hue; another ink's is a mix
+   toward the text. Each rule sets both, so an ink never takes another's end. */
+[data-color],[data-tone]{--c-vivid:color-mix(in oklab,var(--c) 62%,var(--fg))}
+[data-color="1"]{--c:var(--chart-1);--c-vivid:var(--chart-1-vivid)}
+[data-color="2"]{--c:var(--chart-2);--c-vivid:var(--chart-2-vivid)}
+[data-color="3"]{--c:var(--chart-3);--c-vivid:var(--chart-3-vivid)}
+[data-color="4"]{--c:var(--chart-4);--c-vivid:var(--chart-4-vivid)}
+[data-color="5"]{--c:var(--chart-5);--c-vivid:var(--chart-5-vivid)}
+[data-color="6"]{--c:var(--chart-6);--c-vivid:var(--chart-6-vivid)}
+[data-color="7"]{--c:var(--chart-7);--c-vivid:var(--chart-7-vivid)}
+[data-color="8"]{--c:var(--chart-8);--c-vivid:var(--chart-8-vivid)}
 [data-color=other]{--c:var(--fg-3)}
 [data-color=accent]{--c:var(--accent)}
 [data-tone]{--c:var(--tone,var(--fg-3))}
 
-/* A gradient's stops: the ink, or the ink mixed toward the text (vivid) or the surface (soft). */
+/* A gradient's stops: the ink, its vivid end, or the ink mixed toward the surface (soft). */
 stop{stop-color:var(--c)}
-stop[data-mix=vivid]{stop-color:color-mix(in oklab,var(--c) 62%,var(--fg))}
+stop[data-mix=vivid]{stop-color:var(--c-vivid)}
 stop[data-mix=soft]{stop-color:color-mix(in oklab,var(--c) 30%,var(--surface,var(--ink-0)))}
 
 /* Glow: a soft shadow of the mark's own colour, fainter on a light page. */
