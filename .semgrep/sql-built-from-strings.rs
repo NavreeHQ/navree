@@ -1,4 +1,4 @@
-async fn bad(conn: Conn, name: String, id: i64) {
+async fn bad(conn: Conn, name: String, id: i64, req: Req) {
     // ruleid: navree-sql-built-from-strings
     conn.execute_unprepared(&format!("DELETE FROM users WHERE name = '{name}'")).await;
 
@@ -8,6 +8,17 @@ async fn bad(conn: Conn, name: String, id: i64) {
 
     // ruleid: navree-sql-built-from-strings
     sqlx::query(&format!("update t set a = {}", name)).execute(&pool).await;
+
+    // An argument that is a call (a method, a hand-written escaper) is still interpolated text.
+    // ruleid: navree-sql-built-from-strings
+    conn.fetch_all(format!("SELECT * FROM users WHERE name = {}", req.name())).await;
+
+    // ruleid: navree-sql-built-from-strings
+    conn.fetch_all(AssertSqlSafe(format!("SELECT * FROM t WHERE n = {}", literal(&name)))).await;
+
+    let sql = format!("SELECT * FROM t WHERE a = {} AND b = {}", id, req.id());
+    // ruleid: navree-sql-built-from-strings
+    conn.fetch_optional(&sql).await;
 }
 
 async fn good(conn: Conn, name: String, table: &str) {
@@ -29,4 +40,12 @@ async fn good(conn: Conn, name: String, table: &str) {
     // A format! that is not SQL.
     // ok: navree-sql-built-from-strings
     conn.execute_unprepared(&format!("{table}")).await;
+
+    // A constant table name beside a call that builds no SQL text.
+    // ok: navree-sql-built-from-strings
+    conn.fetch_all(Statement::portable(&format!("SELECT id FROM {JOBS_TABLE}"), vec![name.into()])).await;
+
+    // A call argument in a format! that is not SQL.
+    // ok: navree-sql-built-from-strings
+    conn.execute_unprepared(&format!("{}", quote(table))).await;
 }
