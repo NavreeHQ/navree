@@ -1,15 +1,17 @@
 //! Running a checked statement and turning its rows into JSON.
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use futures_util::TryStreamExt;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::{PgConnection, PgRow};
-use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{AssertSqlSafe, Column, Executor, Row, TypeInfo, ValueRef};
 
-use super::{CheckedStatement, DatabaseError, ROW_LIMIT, STATEMENT_TIMEOUT, StatementKind};
+use super::{
+    CheckedStatement, DatabaseError, ROW_LIMIT, Refusal, STATEMENT_TIMEOUT, StatementKind,
+};
 
 /// Fragments (matched case-insensitively) that mark a column as secret: its
 /// values come back as `"[redacted]"`.
@@ -58,41 +60,145 @@ impl QueryResult {
     }
 }
 
-/// Runs `statement` on a SQLite connection opened read-only with
-/// `query_only` on; a progress handler interrupts it after
-/// [`STATEMENT_TIMEOUT`]. Only the first statement's rows are read: the
-/// stream is dropped at the end of the first statement (the guard already
-/// refuses text after it).
+/// The SQLite database a query reads.
+#[derive(Clone, Debug)]
+pub(super) enum SqliteFile {
+    /// `:memory:` (empty, and gone when the query ends).
+    Memory,
+    /// A file that exists.
+    Path(PathBuf),
+}
+
+/// Runs `statement` on SQLite, with SQLite itself as the boundary (on a
+/// blocking thread, through rusqlite):
+///
+/// - the file is opened read-only (`SQLITE_OPEN_READONLY`, which attached
+///   databases share) with `PRAGMA query_only` on;
+/// - an authorizer, installed before the statement is prepared, allows only
+///   reading a table, `SELECT`, recursive CTEs and functions not in the
+///   guard's deny list; PRAGMA (pragma table functions included), ATTACH,
+///   DETACH, VACUUM, writes, DDL and transactions are refused while SQLite
+///   prepares the text;
+/// - SQLite prepares the text: anything but whitespace or comments after
+///   the first statement, as SQLite's own tokenizer reads it, is refused;
+/// - the statement must be read-only (`sqlite3_stmt_readonly`) and take no
+///   parameters; then that one statement runs, interrupted after
+///   [`STATEMENT_TIMEOUT`].
 pub(super) async fn sqlite(
-    conn: &mut SqliteConnection,
+    file: SqliteFile,
     statement: &CheckedStatement,
 ) -> Result<QueryResult, DatabaseError> {
+    let sql = statement.sql.clone();
+    let work = tokio::task::spawn_blocking(move || run_sqlite(&file, &sql));
+    with_timeout(async {
+        work.await
+            .map_err(|error| DatabaseError::Query(error.to_string()))?
+    })
+    .await
+}
+
+/// [`sqlite`] on this thread, for `sql` as given.
+pub(super) fn run_sqlite(file: &SqliteFile, sql: &str) -> Result<QueryResult, DatabaseError> {
+    use rusqlite::{Connection, OpenFlags};
+
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = match file {
+        SqliteFile::Memory => Connection::open_in_memory_with_flags(flags),
+        SqliteFile::Path(path) => Connection::open_with_flags(path, flags),
+    }
+    .map_err(sqlite_error)?;
+    conn.busy_timeout(Duration::from_secs(1))
+        .map_err(sqlite_error)?;
+    conn.pragma_update(None, "query_only", "ON")
+        .map_err(sqlite_error)?;
     let deadline = Instant::now() + STATEMENT_TIMEOUT;
-    conn.lock_handle()
-        .await?
-        .set_progress_handler(1_000, move || Instant::now() < deadline);
-    let started = Instant::now();
-    let fetch = async {
-        let mut stream = conn.fetch_many(AssertSqlSafe(statement.sql.clone()));
-        let mut rows: Vec<SqliteRow> = Vec::new();
-        while let Some(step) = stream.try_next().await? {
-            match step {
-                sqlx::Either::Left(_end_of_statement) => break,
-                sqlx::Either::Right(row) => rows.push(row),
-            }
-            if rows.len() > ROW_LIMIT {
-                break;
-            }
+    conn.progress_handler(1_000, Some(move || Instant::now() >= deadline))
+        .map_err(sqlite_error)?;
+    conn.authorizer(Some(authorize)).map_err(sqlite_error)?;
+    let result = run_prepared(&conn, sql);
+    let _ = conn
+        .authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization>);
+    result
+}
+
+/// What a guarded query may do on SQLite: read.
+fn authorize(context: rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization {
+    use rusqlite::hooks::{AuthAction, Authorization};
+
+    match context.action {
+        AuthAction::Select | AuthAction::Read { .. } | AuthAction::Recursive => {
+            Authorization::Allow
         }
-        Ok::<_, DatabaseError>(rows)
-    };
-    let rows = with_timeout(fetch).await?;
-    let columns = match rows.first() {
-        Some(row) => column_names(row.columns()),
-        None => describe_columns_sqlite(conn, &statement.sql).await,
-    };
-    let values = rows.iter().map(sqlite_values).collect();
+        AuthAction::Function { function_name }
+            if !super::guard::is_denied(&function_name.to_ascii_lowercase()) =>
+        {
+            Authorization::Allow
+        }
+        _ => Authorization::Deny,
+    }
+}
+
+fn run_prepared(conn: &rusqlite::Connection, sql: &str) -> Result<QueryResult, DatabaseError> {
+    let mut statement = conn.prepare(sql).map_err(sqlite_error)?;
+    if !statement.readonly() {
+        return Err(Refusal::Writes.into());
+    }
+    if statement.parameter_count() > 0 {
+        let name = statement.parameter_name(1).unwrap_or("?").to_owned();
+        return Err(Refusal::Parameter { name }.into());
+    }
+    let columns: Vec<String> = statement
+        .column_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let started = Instant::now();
+    let mut rows = statement.query([]).map_err(sqlite_error)?;
+    let mut values: Vec<Vec<Value>> = Vec::new();
+    while let Some(row) = rows.next().map_err(sqlite_error)? {
+        values.push(
+            (0..columns.len())
+                .map(|i| row.get_ref(i).map_or(Value::Null, sqlite_value))
+                .collect(),
+        );
+        if values.len() > ROW_LIMIT {
+            break;
+        }
+    }
     Ok(QueryResult::new(columns, values, started))
+}
+
+/// A SQLite value as JSON, by its storage class.
+fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> Value {
+    use rusqlite::types::ValueRef;
+
+    match value {
+        ValueRef::Null => Value::Null,
+        ValueRef::Integer(n) => Value::from(n),
+        ValueRef::Real(f) => float(f),
+        ValueRef::Text(text) => Value::from(String::from_utf8_lossy(text).into_owned()),
+        ValueRef::Blob(bytes) => Value::from(hex(bytes)),
+    }
+}
+
+/// A rusqlite error as Navigator says it.
+fn sqlite_error(error: rusqlite::Error) -> DatabaseError {
+    use rusqlite::ErrorCode;
+
+    match &error {
+        rusqlite::Error::MultipleStatement => Refusal::Trailing.into(),
+        rusqlite::Error::SqliteFailure(failure, message) => match failure.code {
+            ErrorCode::OperationInterrupted => DatabaseError::Timeout,
+            ErrorCode::AuthorizationForStatementDenied => Refusal::NotAuthorized {
+                reason: message
+                    .clone()
+                    .unwrap_or_else(|| "not authorized".to_owned()),
+            }
+            .into(),
+            _ => DatabaseError::Query(message.clone().unwrap_or_else(|| error.to_string())),
+        },
+        _ => DatabaseError::Query(error.to_string()),
+    }
 }
 
 /// Runs `statement` in a read-only PostgreSQL transaction with a statement
@@ -172,47 +278,6 @@ async fn with_timeout<T>(
 
 fn column_names<C: Column>(columns: &[C]) -> Vec<String> {
     columns.iter().map(|c| c.name().to_owned()).collect()
-}
-
-/// The column names of a query that returned no rows.
-async fn describe_columns_sqlite(conn: &mut SqliteConnection, sql: &str) -> Vec<String> {
-    use sqlx::SqlSafeStr;
-    match conn
-        .prepare(AssertSqlSafe(sql.to_owned()).into_sql_str())
-        .await
-    {
-        Ok(statement) => column_names(sqlx::Statement::columns(&statement)),
-        Err(_) => Vec::new(),
-    }
-}
-
-/// A SQLite row as JSON, by each value's storage class.
-fn sqlite_values(row: &SqliteRow) -> Vec<Value> {
-    (0..row.columns().len())
-        .map(|i| {
-            let Ok(raw) = row.try_get_raw(i) else {
-                return Value::Null;
-            };
-            if raw.is_null() {
-                return Value::Null;
-            }
-            let kind = raw.type_info().name().to_owned();
-            match kind.as_str() {
-                "INTEGER" | "BOOLEAN" => row
-                    .try_get_unchecked::<i64, _>(i)
-                    .map_or(Value::Null, Value::from),
-                "REAL" | "NUMERIC" => row
-                    .try_get_unchecked::<f64, _>(i)
-                    .map_or(Value::Null, float),
-                "BLOB" => row
-                    .try_get_unchecked::<Vec<u8>, _>(i)
-                    .map_or(Value::Null, |bytes| Value::from(hex(&bytes))),
-                _ => row
-                    .try_get_unchecked::<String, _>(i)
-                    .map_or(Value::Null, Value::from),
-            }
-        })
-        .collect()
 }
 
 /// A PostgreSQL row (text format) as JSON, by each column's type.
@@ -358,5 +423,100 @@ mod tests {
     fn blobs_are_shown_as_hex() {
         assert_eq!(hex(&[0x0a, 0xff]), "\\x0aff");
         assert!(hex(&[0; 100]).ends_with("... (100 bytes)"));
+    }
+
+    /// A database with one table, `users`, holding one row.
+    fn users_db(dir: &std::path::Path) -> SqliteFile {
+        let path = dir.join("app.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT); \
+             INSERT INTO users (email) VALUES ('anu@example.com');",
+        )
+        .unwrap();
+        drop(conn);
+        SqliteFile::Path(path)
+    }
+
+    /// `char(..)` of `text`'s bytes: a string SQL without a quote in it.
+    fn chars(text: &str) -> String {
+        let codes: Vec<String> = text.bytes().map(|b| b.to_string()).collect();
+        format!("char({})", codes.join(","))
+    }
+
+    /// Text SQLite reads as several statements while a SQL parser of
+    /// another make reads one: each, sent to SQLite as it is (past the guard),
+    /// is refused, and writes nothing, attaches nothing, creates no file.
+    #[test]
+    fn sqlite_itself_refuses_smuggled_statements() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = users_db(dir.path());
+        let copy = dir.path().join("copy.db");
+        let attached = dir.path().join("attached.db");
+        let mut inputs = Vec::new();
+        for variable in ["$a", ":a", "@a", "#a", "$a::b", ":a::b"] {
+            for tail in [
+                format!("VACUUM INTO {}", chars(&copy.to_string_lossy())),
+                format!(
+                    "ATTACH DATABASE {} AS n; CREATE TABLE n.t (a)",
+                    chars(&attached.to_string_lossy())
+                ),
+                "PRAGMA query_only = OFF; DELETE FROM users".to_owned(),
+            ] {
+                inputs.push(format!(
+                    "SELECT {variable}::ENUM('x)'), '; PRAGMA query_only = OFF; {tail}; --'"
+                ));
+            }
+        }
+        inputs.extend([
+            format!("VACUUM INTO {}", chars(&copy.to_string_lossy())),
+            "PRAGMA query_only = OFF".to_owned(),
+            "SELECT 1; DELETE FROM users".to_owned(),
+            "DELETE FROM users".to_owned(),
+            "BEGIN".to_owned(),
+            format!(
+                "ATTACH DATABASE {} AS n",
+                chars(&attached.to_string_lossy())
+            ),
+            "SELECT * FROM pragma_table_info('users')".to_owned(),
+            "SELECT load_extension('x')".to_owned(),
+            "SELECT ?".to_owned(),
+            "SELECT :name".to_owned(),
+        ]);
+        for sql in &inputs {
+            assert!(run_sqlite(&db, sql).is_err(), "{sql}");
+            assert!(!copy.exists(), "{sql}: VACUUM INTO wrote a copy");
+            assert!(!attached.exists(), "{sql}: ATTACH created a file");
+        }
+        let users = run_sqlite(&db, "SELECT count(*) AS n FROM users").unwrap();
+        assert_eq!(
+            users.rows,
+            vec![vec![Value::from(1)]],
+            "nothing was deleted"
+        );
+        // Trailing whitespace and comments are not a second statement.
+        let ok = run_sqlite(&db, "SELECT email FROM users -- the one user\n /* done */ ").unwrap();
+        assert_eq!(ok.columns, ["email"]);
+    }
+
+    #[test]
+    fn sqlite_refusals_say_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = users_db(dir.path());
+        assert!(matches!(
+            run_sqlite(&db, "SELECT 1; SELECT 2"),
+            Err(DatabaseError::Refused(Refusal::Trailing))
+        ));
+        assert!(matches!(
+            run_sqlite(&db, "PRAGMA query_only = OFF"),
+            Err(DatabaseError::Refused(Refusal::NotAuthorized { .. }))
+        ));
+        assert!(matches!(
+            run_sqlite(&db, "SELECT :name"),
+            Err(DatabaseError::Refused(Refusal::Parameter { .. }))
+        ));
+        let empty = run_sqlite(&db, "SELECT id, email FROM users WHERE id = 0").unwrap();
+        assert_eq!(empty.columns, ["id", "email"], "columns without rows");
+        assert!(empty.rows.is_empty());
     }
 }

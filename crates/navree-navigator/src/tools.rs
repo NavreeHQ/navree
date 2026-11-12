@@ -26,17 +26,86 @@ pub struct NavigatorOptions {
     pub no_build: bool,
     /// Allow databases that aren't on this machine (`--allow-remote-database`).
     pub allow_remote_database: bool,
-    /// Let `query_database` and Lighthouse's tools run as a PostgreSQL role
-    /// with superuser or server-file, server-program or signal privileges
-    /// (`--allow-privileged-database-role`).
-    pub allow_privileged_database_role: bool,
-    /// The database Navigator reads instead of the app's `database.url`
-    /// (`--database-url`): typically the same database through a read-only
-    /// role.
-    pub database_url: Option<String>,
     /// Never download docs (`--docs-offline`).
     pub docs_offline: bool,
 }
+
+/// How Navigator reaches the database, beyond [`NavigatorOptions`]: set with
+/// [`Navigator::with_database`] or [`crate::run_stdio_with`].
+///
+/// ```
+/// use navree_navigator::DatabaseOptions;
+///
+/// let database = DatabaseOptions::default()
+///     .url("postgres://navree_reader@localhost/crm")
+///     .allow_privileged_role(false);
+/// assert_eq!(database.database_url(), Some("postgres://navree_reader@localhost/crm"));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DatabaseOptions {
+    url: Option<String>,
+    allow_privileged_role: bool,
+}
+
+impl DatabaseOptions {
+    /// The database the database tools read instead of the app's
+    /// `database.url` (`NAVREE_MCP_DATABASE_URL`): typically the same database
+    /// through a read-only role.
+    #[must_use]
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    /// Lets `query_database` and Lighthouse's tools run as a PostgreSQL role
+    /// with superuser or server-file, server-program or signal privileges
+    /// (`NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). Refused by default.
+    #[must_use]
+    pub fn allow_privileged_role(mut self, allow: bool) -> Self {
+        self.allow_privileged_role = allow;
+        self
+    }
+
+    /// The URL set with [`url`](Self::url).
+    pub fn database_url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
+    /// Whether [`allow_privileged_role`](Self::allow_privileged_role) is on.
+    pub fn allows_privileged_role(&self) -> bool {
+        self.allow_privileged_role
+    }
+
+    /// The settings `navree mcp` reads from its environment:
+    /// [`DATABASE_URL_VAR`] (a URL) and [`ALLOW_PRIVILEGED_ROLE_VAR`] (`1`,
+    /// `true`, `yes` or `on`).
+    pub fn from_env() -> Self {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    fn from_vars(get: impl Fn(&str) -> Option<String>) -> Self {
+        let url = get(DATABASE_URL_VAR).filter(|url| !url.trim().is_empty());
+        let allow = get(ALLOW_PRIVILEGED_ROLE_VAR).is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        });
+        DatabaseOptions {
+            url,
+            allow_privileged_role: allow,
+        }
+    }
+}
+
+/// The environment variable naming the database `navree mcp` reads instead
+/// of the app's `database.url`.
+pub const DATABASE_URL_VAR: &str = "NAVREE_MCP_DATABASE_URL";
+
+/// The environment variable that lets `navree mcp` query as a privileged
+/// PostgreSQL role.
+pub const ALLOW_PRIVILEGED_ROLE_VAR: &str = "NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE";
 
 /// One tool's definition.
 #[derive(Clone, Debug)]
@@ -168,10 +237,11 @@ pub fn tools() -> Vec<ToolDef> {
             title: "Query database",
             description: "Runs one read-only SQL statement (SELECT, WITH, EXPLAIN or SHOW) against the \
                 development database and returns at most 100 rows: columns, rows, truncated, duration_ms. \
-                Anything else is refused before it is sent. The database keeps it read-only: a SQLite file \
-                opened read-only, or a read-only PostgreSQL transaction with a 5 second timeout, run by a role \
+                Anything else is refused before it is sent. The database keeps it read-only: on SQLite a file \
+                opened read-only where SQLite itself allows one statement that only reads (no PRAGMA, pragma \
+                functions, ATTACH or parameters), or a read-only PostgreSQL transaction with a 5 second timeout, run by a role \
                 without superuser or server-file, server-program or signal privileges (such a role is refused \
-                unless Navigator was started with --allow-privileged-database-role). Columns whose names \
+                unless Navigator was started with NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1). Columns whose names \
                 contain password, secret, token, api_key or private_key come back as [redacted], which keeps \
                 them out of a transcript but is not a protection: an alias returns them.",
             input_schema: json!({
@@ -299,6 +369,7 @@ pub fn tools() -> Vec<ToolDef> {
 /// Answers the tools for one app.
 pub struct Navigator {
     options: NavigatorOptions,
+    database: DatabaseOptions,
     project: Result<Project, String>,
     probe: Option<Arc<AppProbe>>,
     docs_settings: DocsSettings,
@@ -424,12 +495,20 @@ impl Navigator {
         });
         Navigator {
             options,
+            database: DatabaseOptions::default(),
             project,
             probe,
             docs_settings: docs,
             docs: tokio::sync::OnceCell::new(),
             lighthouse,
         }
+    }
+
+    /// The same Navigator, reaching the database as `database` says.
+    #[must_use]
+    pub fn with_database(mut self, database: DatabaseOptions) -> Navigator {
+        self.database = database;
+        self
     }
 
     /// Whether the app includes Lighthouse (a file under `src/` adds
@@ -514,7 +593,7 @@ impl Navigator {
 
     fn database(&self) -> Result<Target, ToolError> {
         let project = self.project()?;
-        let url = match &self.options.database_url {
+        let url = match &self.database.url {
             Some(url) => url.clone(),
             None => self
                 .config()?
@@ -523,7 +602,7 @@ impl Navigator {
         };
         Ok(
             Target::new(&url, &project.root, self.options.allow_remote_database)?
-                .allow_privileged_role(self.options.allow_privileged_database_role),
+                .allow_privileged_role(self.database.allow_privileged_role),
         )
     }
 
@@ -536,7 +615,7 @@ impl Navigator {
             .filter(|url| !url.trim().is_empty());
         let url = own
             .clone()
-            .or_else(|| self.options.database_url.clone())
+            .or_else(|| self.database.url.clone())
             .or_else(|| config.get_string("database.url"))
             .unwrap_or_default();
         let target = Target::new(&url, &project.root, self.options.allow_remote_database).map_err(
@@ -552,7 +631,7 @@ impl Navigator {
                 }
             },
         )?;
-        let target = target.allow_privileged_role(self.options.allow_privileged_database_role);
+        let target = target.allow_privileged_role(self.database.allow_privileged_role);
         Ok(LighthouseDb { target })
     }
 
@@ -939,5 +1018,36 @@ impl crate::docs::DocsFetcher for FailingFetcher {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + '_>> {
         let message = self.0.clone();
         Box::pin(async move { Err(message) })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn database_options_come_from_the_environment() {
+        let none = DatabaseOptions::from_vars(|_| None);
+        assert_eq!(none, DatabaseOptions::default());
+        assert!(!none.allows_privileged_role());
+        let set = DatabaseOptions::from_vars(|name| match name {
+            DATABASE_URL_VAR => Some("postgres://navree_reader@localhost/crm".to_owned()),
+            ALLOW_PRIVILEGED_ROLE_VAR => Some(" Yes ".to_owned()),
+            _ => None,
+        });
+        assert_eq!(
+            set.database_url(),
+            Some("postgres://navree_reader@localhost/crm")
+        );
+        assert!(set.allows_privileged_role());
+        for off in ["0", "false", "no", ""] {
+            let options = DatabaseOptions::from_vars(|name| {
+                (name == ALLOW_PRIVILEGED_ROLE_VAR).then(|| off.to_owned())
+            });
+            assert!(!options.allows_privileged_role(), "{off}");
+        }
+        let blank =
+            DatabaseOptions::from_vars(|name| (name == DATABASE_URL_VAR).then(|| "  ".to_owned()));
+        assert_eq!(blank.database_url(), None);
     }
 }

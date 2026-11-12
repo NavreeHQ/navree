@@ -121,14 +121,17 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             navree_harbor::run(command, &navree_harbor::Context::system(cwd.to_path_buf()))
         }
         Command::Mcp(args) => {
-            navree_navigator::run_stdio(navree_navigator::NavigatorOptions {
-                path: absolute(cwd, args.path.as_deref()),
-                no_build: args.no_build,
-                allow_remote_database: args.allow_remote_database,
-                allow_privileged_database_role: args.allow_privileged_database_role,
-                database_url: args.database_url.clone(),
-                docs_offline: args.docs_offline,
-            })?;
+            // NAVREE_MCP_DATABASE_URL and NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE.
+            let database = navree_navigator::DatabaseOptions::from_env();
+            navree_navigator::run_stdio_with(
+                navree_navigator::NavigatorOptions {
+                    path: absolute(cwd, args.path.as_deref()),
+                    no_build: args.no_build,
+                    allow_remote_database: args.allow_remote_database,
+                    docs_offline: args.docs_offline,
+                },
+                database,
+            )?;
             Ok(ExitCode::SUCCESS)
         }
         Command::SkillsInstall(args) => {

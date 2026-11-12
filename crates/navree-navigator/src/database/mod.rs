@@ -1,21 +1,26 @@
 //! The app's database, seen read-only: `query_database` and
 //! `describe_schema`.
 //!
-//! Navigator connects to `database.url` (or `navree mcp --database-url`)
+//! Navigator connects to `database.url` (or `NAVREE_MCP_DATABASE_URL`)
 //! itself, one connection per call, closed afterwards, never through the
 //! app. The database is what keeps it read-only; the statement guard
 //! ([`check`]) is a second layer:
 //!
 //! - **SQLite** files are opened read-only (`SQLITE_OPEN_READONLY`), never
 //!   created, with `PRAGMA query_only = ON`; relative paths are relative to
-//!   the app. Only the first statement's rows are read.
+//!   the app. For `query_database`, SQLite itself prepares the text and
+//!   refuses anything after the first statement, the statement must be
+//!   read-only by SQLite's account and take no parameters, and an authorizer
+//!   allows only reading (see `query::sqlite`).
 //! - **PostgreSQL** sessions default to read-only transactions and pin
 //!   `standard_conforming_strings = on`, checked after connecting, so the
 //!   server reads a statement's strings as the guard did. `query_database`
-//!   refuses a role that is a superuser or a member of
-//!   [`PRIVILEGED_ROLES`] unless `--allow-privileged-database-role` is
-//!   given: such a role reaches the server's files, programs and other
-//!   sessions from a query, which no read-only transaction stops. Each query
+//!   refuses a role that is, or can become, a superuser, or is a member of
+//!   one of [`PRIVILEGED_ROLES`], unless
+//!   `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` is given: such a role
+//!   reaches the server's files, programs and other sessions from a query,
+//!   which no read-only transaction stops. A plain role can still call
+//!   `SECURITY DEFINER` functions that `PUBLIC` may execute. Each query
 //!   runs inside `BEGIN READ ONLY` with a statement timeout, is sent as one
 //!   prepared statement (the extended protocol takes exactly one), then
 //!   rolls back. Read-only means as far as a role without those privileges
@@ -36,7 +41,9 @@ use sqlx::postgres::{PgConnectOptions, PgConnection};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::{ConnectOptions, Executor, Row};
 
-pub use guard::{CheckedStatement, Dialect, Refusal, StatementKind, check};
+pub use guard::{
+    CheckedStatement, Dialect, MAX_EXPRESSION_DEPTH, MAX_SQL_BYTES, Refusal, StatementKind, check,
+};
 pub use query::{MASKED_COLUMN_PARTS, QueryResult, is_masked_column};
 pub use schema::{AppliedMigration, Column, ForeignKey, Index, Schema, Table};
 
@@ -157,7 +164,7 @@ pub enum DatabaseError {
         setting: String,
     },
     /// `query_database` would run as a role that can act outside the
-    /// read-only transaction, without `--allow-privileged-database-role`.
+    /// read-only transaction, without `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`.
     #[error(
         "query_database does not run as the PostgreSQL role `{role}`: it has {}, and from a query such a role \
          can read or write the server's files, run programs or end other sessions, outside the read-only \
@@ -167,9 +174,11 @@ pub enum DatabaseError {
          GRANT USAGE ON SCHEMA public TO navree_reader;\n\
          GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader;\n\
          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader;\n\n\
-         and start Navigator with `navree mcp --database-url postgres://navree_reader:...@localhost/your_db` \
-         (run the last line as the role that creates your tables). To run as `{role}` anyway, start it with \
-         `navree mcp --allow-privileged-database-role`.",
+         and start Navigator with `NAVREE_MCP_DATABASE_URL=postgres://navree_reader:...@localhost/your_db navree mcp` \
+         (run the last line as the role that creates your tables). The role must be no superuser and \
+         no member of one. Even so it can call any SECURITY DEFINER function that PUBLIC may execute, \
+         with its owner's privileges: check those your database has. To run as `{role}` anyway, start \
+         it with `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp`.",
         .privileges.join(", ")
     )]
     PrivilegedRole {
@@ -183,21 +192,34 @@ pub enum DatabaseError {
 
 /// The predefined PostgreSQL roles whose members reach outside the database
 /// from a query: server files, server programs, other sessions.
-pub const PRIVILEGED_ROLES: [&str; 4] = [
+/// `pg_signal_autovacuum_worker` exists from PostgreSQL 18; an older server
+/// has none to be a member of.
+pub const PRIVILEGED_ROLES: [&str; 5] = [
     "pg_read_server_files",
     "pg_write_server_files",
     "pg_execute_server_program",
     "pg_signal_backend",
+    "pg_signal_autovacuum_worker",
 ];
 
-/// The session's role, whether it is a superuser, and the roles of
-/// [`PRIVILEGED_ROLES`] it is a member of (comma-separated, or NULL).
-const ROLE_PRIVILEGES: &str = "SELECT current_user::text, r.rolsuper, \
-     (SELECT string_agg(g.rolname::text, ',' ORDER BY g.rolname) FROM pg_roles g \
+/// The session's roles (`current_user`, then `session_user` when it
+/// differs), whether either is a superuser or a member of a superuser role
+/// (a member can `SET ROLE` to it), and the roles of [`PRIVILEGED_ROLES`]
+/// either is a member of (comma-separated, or NULL). Every catalog name is
+/// qualified, so nothing on the search path stands in for it. It always
+/// answers one row.
+const ROLE_PRIVILEGES: &str = "SELECT \
+     CASE WHEN current_user = session_user THEN current_user::text \
+          ELSE current_user::text || ' (session ' || session_user::text || ')' END, \
+     EXISTS (SELECT 1 FROM pg_catalog.pg_roles s WHERE s.rolsuper \
+       AND (pg_catalog.pg_has_role(current_user, s.oid, 'MEMBER') \
+         OR pg_catalog.pg_has_role(session_user, s.oid, 'MEMBER'))), \
+     (SELECT pg_catalog.string_agg(g.rolname::text, ',' ORDER BY g.rolname) \
+      FROM pg_catalog.pg_roles g \
       WHERE g.rolname IN ('pg_read_server_files', 'pg_write_server_files', \
-      'pg_execute_server_program', 'pg_signal_backend') \
-      AND pg_has_role(current_user, g.oid, 'MEMBER')) \
-     FROM pg_roles r WHERE r.rolname = current_user";
+        'pg_execute_server_program', 'pg_signal_backend', 'pg_signal_autovacuum_worker') \
+      AND (pg_catalog.pg_has_role(current_user, g.oid, 'MEMBER') \
+        OR pg_catalog.pg_has_role(session_user, g.oid, 'MEMBER')))";
 
 /// What makes a role privileged: `superuser`, then the predefined roles it
 /// is a member of (`members`, comma-separated).
@@ -269,7 +291,7 @@ pub struct Target {
     /// The app's directory (relative SQLite paths start there).
     root: PathBuf,
     /// Whether `query_database` may run as a privileged PostgreSQL role
-    /// (`--allow-privileged-database-role`).
+    /// (`NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`).
     allow_privileged: bool,
 }
 
@@ -295,7 +317,7 @@ impl Target {
 
     /// Lets `query_database` run as a PostgreSQL role with superuser or
     /// server-file, server-program or signal privileges
-    /// (`--allow-privileged-database-role`). Off by default: such a role can
+    /// (`NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). Off by default: such a role can
     /// act outside the read-only transaction, so a query is refused.
     pub fn allow_privileged_role(mut self, allow: bool) -> Target {
         self.allow_privileged = allow;
@@ -307,26 +329,36 @@ impl Target {
         redact_url(&self.url)
     }
 
-    /// Opens a SQLite connection: read-only (`SQLITE_OPEN_READONLY`, which
-    /// also holds for any database attached to it), never creates the file,
-    /// `query_only` on.
-    async fn sqlite(&self) -> Result<SqliteConnection, DatabaseError> {
+    /// The SQLite database of the URL: `:memory:`, or a file that exists
+    /// (relative paths start at the app; Navigator never creates one).
+    fn sqlite_file(&self) -> Result<query::SqliteFile, DatabaseError> {
         let options =
             SqliteConnectOptions::from_str(&self.url).map_err(|e| self.connect_error(e))?;
         let file = options.get_filename().to_path_buf();
-        let memory = file.as_os_str() == ":memory:" || self.url.contains(":memory:");
-        let options = if memory {
-            options
+        if file.as_os_str() == ":memory:" || self.url.contains(":memory:") {
+            return Ok(query::SqliteFile::Memory);
+        }
+        let path = if file.is_absolute() {
+            file
         } else {
-            let path = if file.is_absolute() {
-                file
-            } else {
-                self.root.join(file)
-            };
-            if !path.is_file() {
-                return Err(DatabaseError::MissingFile { path });
-            }
-            options.filename(path)
+            self.root.join(file)
+        };
+        if !path.is_file() {
+            return Err(DatabaseError::MissingFile { path });
+        }
+        Ok(query::SqliteFile::Path(path))
+    }
+
+    /// Opens a SQLite connection for `describe_schema`: read-only
+    /// (`SQLITE_OPEN_READONLY`, which also holds for any database attached to
+    /// it), never creates the file, `query_only` on. `query_database` runs
+    /// through [`query::sqlite`] instead.
+    async fn sqlite(&self) -> Result<SqliteConnection, DatabaseError> {
+        let options =
+            SqliteConnectOptions::from_str(&self.url).map_err(|e| self.connect_error(e))?;
+        let options = match self.sqlite_file()? {
+            query::SqliteFile::Memory => options,
+            query::SqliteFile::Path(path) => options.filename(path),
         };
         let options = options
             .read_only(true)
@@ -373,8 +405,13 @@ impl Target {
             return Ok(());
         }
         let rows = conn.fetch_all(ROLE_PRIVILEGES).await?;
+        // The query always answers a row; without one, nothing is known, so
+        // nothing runs.
         let Some(row) = rows.first() else {
-            return Ok(());
+            return Err(DatabaseError::PrivilegedRole {
+                role: "unknown".to_owned(),
+                privileges: vec!["privileges that could not be read".to_owned()],
+            });
         };
         let text = |i: usize| -> Option<String> {
             row.try_get_raw(i)
@@ -507,12 +544,7 @@ pub fn redact_url(url: &str) -> String {
 pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, DatabaseError> {
     let checked = check(sql, target.driver.dialect())?;
     match target.driver {
-        Driver::Sqlite => {
-            let mut conn = target.sqlite().await?;
-            let result = query::sqlite(&mut conn, &checked).await;
-            close(sqlx::Connection::close(conn)).await;
-            result
-        }
+        Driver::Sqlite => query::sqlite(target.sqlite_file()?, &checked).await,
         Driver::Postgres => {
             let mut conn = target.postgres().await?;
             let result = match target.check_role(&mut conn).await {
@@ -591,8 +623,8 @@ mod tests {
             "CREATE ROLE navree_reader LOGIN",
             "GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader",
             "ALTER DEFAULT PRIVILEGES",
-            "--database-url",
-            "--allow-privileged-database-role",
+            "NAVREE_MCP_DATABASE_URL",
+            "NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1",
         ] {
             assert!(message.contains(part), "{part}: {message}");
         }

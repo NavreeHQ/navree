@@ -15,7 +15,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinSet};
 
-use crate::tools::{Navigator, NavigatorOptions, ToolDef, ToolOutput};
+use crate::tools::{DatabaseOptions, Navigator, NavigatorOptions, ToolDef, ToolOutput};
 
 /// What the server tells the agent when it connects.
 pub const INSTRUCTIONS: &str = "Navigator answers questions about this Navree app from the app itself. \
@@ -616,24 +616,34 @@ where
 }
 
 /// The warning written to stderr when Navigator starts with
-/// `--allow-privileged-database-role`.
-pub const PRIVILEGED_ROLE_WARNING: &str = "warning: navree mcp --allow-privileged-database-role: \
+/// `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`.
+pub const PRIVILEGED_ROLE_WARNING: &str = "warning: NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE is set: \
 query_database and Lighthouse's tools may run as a PostgreSQL superuser or a role that reaches the \
 server's files, programs or other sessions; only the statement guard then stands between a query and \
-those. Prefer a read-only role (navree mcp --database-url).";
+those. Prefer a read-only role (NAVREE_MCP_DATABASE_URL).";
 
 /// `navree mcp`: serves Navigator for the app at `options.path` on stdin and
-/// stdout until the client goes away. Nothing else is written to stdout; a
-/// warning about `--allow-privileged-database-role` goes to stderr.
+/// stdout until the client goes away, reaching the database with the
+/// default [`DatabaseOptions`]. Nothing else is written to stdout.
 pub fn run_stdio(options: NavigatorOptions) -> Result<(), ServeError> {
-    if options.allow_privileged_database_role {
+    run_stdio_with(options, DatabaseOptions::default())
+}
+
+/// [`run_stdio`], reaching the database as `database` says
+/// (`NAVREE_MCP_DATABASE_URL`, `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). With a
+/// privileged role allowed, a warning goes to stderr as it starts.
+pub fn run_stdio_with(
+    options: NavigatorOptions,
+    database: DatabaseOptions,
+) -> Result<(), ServeError> {
+    if database.allows_privileged_role() {
         eprintln!("{PRIVILEGED_ROLE_WARNING}");
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     runtime.block_on(async move {
-        let navigator = Arc::new(Navigator::new(options));
+        let navigator = Arc::new(Navigator::new(options).with_database(database));
         serve(navigator, tokio::io::stdin(), tokio::io::stdout()).await
     })
 }

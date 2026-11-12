@@ -2,20 +2,24 @@
 //! is sent, and only one read-only statement passes.
 //!
 //! The guard is the second layer, not the boundary. The boundary is the
-//! database: a SQLite file opened read-only, and on PostgreSQL a read-only
-//! transaction run by a role without superuser or the `pg_read_server_files`,
-//! `pg_write_server_files`, `pg_execute_server_program` and
-//! `pg_signal_backend` privileges (`query_database` refuses such a role unless
-//! Navigator is started with `--allow-privileged-database-role`).
+//! database engine: on SQLite a file opened read-only, where SQLite itself
+//! prepares exactly one read-only statement under an authorizer that allows
+//! only reading; on PostgreSQL a read-only transaction run by a role without
+//! superuser (or a way to become one) or server-file, server-program and
+//! signal privileges (`query_database` refuses such a role unless Navigator
+//! is started with `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). The guard
+//! and SQLite do not tokenize alike (SQLite's `$name::x(..)` variables), so
+//! on SQLite the guard's own checks are never what keeps a query read-only.
 //!
 //! What is sent is the parsed statement rendered back to SQL, and only when
 //! that text parses again to exactly one statement with the same tree: a
 //! value the renderer writes back differently from how it was read cannot
 //! become a second statement or a different one. Literals the renderer
 //! writes back raw (hex, bit, byte, raw, national and triple-quoted strings)
-//! and custom types with modifiers are refused outright. On SQLite the text
-//! must also hold no `;` before its end, read with SQLite's own quoting
-//! rules. The renderer writes standard SQL strings, which a PostgreSQL server
+//! and custom types with modifiers are refused outright, and so are
+//! parameters, which nothing binds. On SQLite the text must also hold no `;`
+//! before its end, as far as a simple reading of SQLite's quoting finds. The
+//! renderer writes standard SQL strings, which a PostgreSQL server
 //! reads the same way only with `standard_conforming_strings = on`:
 //! Navigator's connections pin that and check it, and send the statement as
 //! one prepared statement, which cannot hold a second command. Changing a
@@ -27,8 +31,8 @@ use std::fmt;
 use std::ops::ControlFlow;
 
 use sqlparser::ast::{
-    ArrayElemTypeDef, DataType, Expr, ObjectName, Query, Select, Statement, TableFactor, Value,
-    ValueWithSpan, Visit, Visitor,
+    ArrayElemTypeDef, DataType, DollarQuotedString, Expr, ObjectName, ObjectNamePart, Query,
+    Select, Statement, TableFactor, Value, ValueWithSpan, Visit, Visitor,
 };
 use sqlparser::dialect::{PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
@@ -140,6 +144,51 @@ pub enum Refusal {
         "the statement does not read back as the same single statement once rendered, so it is not sent"
     )]
     Rendering,
+    /// A statement longer than [`MAX_SQL_BYTES`].
+    #[error(
+        "the statement is {bytes} bytes long; send one under {} bytes",
+        MAX_SQL_BYTES
+    )]
+    TooLong {
+        /// Its length.
+        bytes: usize,
+    },
+    /// Expressions nested deeper than [`MAX_EXPRESSION_DEPTH`].
+    #[error(
+        "the statement's expressions nest more than {} deep",
+        MAX_EXPRESSION_DEPTH
+    )]
+    TooDeep,
+    /// A parameter (`$1`, `?`, `:name`, `@name`, `$name`): nothing is bound.
+    #[error(
+        "parameters ({name}) are not allowed: query_database binds no values; write the value itself"
+    )]
+    Parameter {
+        /// The parameter as written.
+        name: String,
+    },
+    /// A dollar-quoted string whose tag starts with a digit (`$1$..$1$`),
+    /// which PostgreSQL reads as a parameter.
+    #[error("a dollar-quote tag may not start with a digit (`${tag}$`)")]
+    DollarTag {
+        /// The tag.
+        tag: String,
+    },
+    /// SQLite reads more than one statement in the text.
+    #[error("SQLite reads more than one statement in it; send one statement")]
+    Trailing,
+    /// SQLite says the statement writes.
+    #[error("SQLite says the statement writes; only statements that read are allowed")]
+    Writes,
+    /// SQLite's authorizer refused something the statement does.
+    #[error(
+        "not authorized: {reason}. On SQLite only reading tables and calling functions is allowed \
+         (no PRAGMA, ATTACH, VACUUM, writes or transactions, and no pragma table functions)"
+    )]
+    NotAuthorized {
+        /// SQLite's message.
+        reason: String,
+    },
 }
 
 /// Functions refused anywhere in a statement (matched on the unqualified,
@@ -212,7 +261,40 @@ const DENIED_FUNCTIONS: &[&str] = &[
 /// statement: `SELECT` (with `WITH`, `VALUES` or `TABLE`), `EXPLAIN` of
 /// such a query, or `SHOW`. Nested data-changing statements, `SELECT ...
 /// INTO`, locking clauses and side-effecting functions are refused too.
+///
+/// A statement longer than [`MAX_SQL_BYTES`] is refused unread, and one
+/// whose expressions nest deeper than [`MAX_EXPRESSION_DEPTH`] once parsed
+/// (`1+1+...+1` thousands of times) is refused before it is rendered. The
+/// parse tree is walked recursively (checking, rendering, comparing,
+/// dropping), so all of it happens on a thread with a stack sized for the
+/// longest statement allowed: a deep tree is refused, not a crash.
 pub fn check(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
+    if sql.len() > MAX_SQL_BYTES {
+        return Err(Refusal::TooLong { bytes: sql.len() });
+    }
+    let sql = sql.to_owned();
+    std::thread::Builder::new()
+        .name("navigator-sql-guard".to_owned())
+        .stack_size(GUARD_STACK_BYTES)
+        .spawn(move || check_here(&sql, dialect))
+        .map_err(|_| Refusal::TooDeep)?
+        .join()
+        .unwrap_or(Err(Refusal::TooDeep))
+}
+
+/// The longest statement `query_database` reads: far more than a hand- or
+/// model-written query needs.
+pub const MAX_SQL_BYTES: usize = 64 * 1024;
+
+/// How deep expressions may nest (operands of operands, arguments of
+/// arguments).
+pub const MAX_EXPRESSION_DEPTH: usize = 1_000;
+
+/// The guard thread's stack: room for a tree of [`MAX_SQL_BYTES`] of text,
+/// which nests at most about half as deep as it is long.
+const GUARD_STACK_BYTES: usize = 64 * 1024 * 1024;
+
+fn check_here(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
     let parsed = parse(sql, dialect)?;
     let statement = match parsed.as_slice() {
         [] => return Err(Refusal::Empty),
@@ -237,7 +319,7 @@ pub fn check(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
             });
         }
     };
-    if let ControlFlow::Break(refusal) = statement.visit(&mut Guard) {
+    if let ControlFlow::Break(refusal) = statement.visit(&mut Guard::default()) {
         return Err(refusal);
     }
     Ok(CheckedStatement {
@@ -372,8 +454,12 @@ fn custom_with_modifiers(data_type: &DataType) -> Option<String> {
     }
 }
 
-/// Walks every statement, query, select and expression of the tree.
-struct Guard;
+/// Walks every statement, query, select and expression of the tree,
+/// counting how deep expressions nest.
+#[derive(Default)]
+struct Guard {
+    depth: usize,
+}
 
 impl Visitor for Guard {
     type Break = Refusal;
@@ -407,6 +493,10 @@ impl Visitor for Guard {
     }
 
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<Refusal> {
+        self.depth += 1;
+        if self.depth > MAX_EXPRESSION_DEPTH {
+            return ControlFlow::Break(Refusal::TooDeep);
+        }
         let data_type = match expr {
             Expr::Function(function) => return deny_function(&function.name),
             Expr::Cast { data_type, .. } => data_type,
@@ -419,10 +509,25 @@ impl Visitor for Guard {
         }
     }
 
+    fn post_visit_expr(&mut self, _expr: &Expr) -> ControlFlow<Refusal> {
+        self.depth -= 1;
+        ControlFlow::Continue(())
+    }
+
     fn pre_visit_value(&mut self, value: &ValueWithSpan) -> ControlFlow<Refusal> {
-        match raw_literal(&value.value) {
-            Some(kind) => ControlFlow::Break(Refusal::Literal { kind }),
-            None => ControlFlow::Continue(()),
+        match &value.value {
+            Value::Placeholder(name) => {
+                ControlFlow::Break(Refusal::Parameter { name: name.clone() })
+            }
+            Value::DollarQuotedString(DollarQuotedString { tag: Some(tag), .. })
+                if tag.starts_with(|c: char| c.is_ascii_digit()) =>
+            {
+                ControlFlow::Break(Refusal::DollarTag { tag: tag.clone() })
+            }
+            other => match raw_literal(other) {
+                Some(kind) => ControlFlow::Break(Refusal::Literal { kind }),
+                None => ControlFlow::Continue(()),
+            },
         }
     }
 
@@ -441,15 +546,15 @@ impl Visitor for Guard {
     }
 }
 
-/// Breaks when the function `name` (qualified or not) is denied.
+/// Breaks when the function `name` (qualified or not) is denied. The name
+/// compared is the last part's identifier as written, without its quotes of
+/// any style (`"f"`, `` `f` ``, `[f]`), lower-cased.
 fn deny_function(name: &ObjectName) -> ControlFlow<Refusal> {
-    let qualified = name.to_string().to_lowercase();
-    let name = qualified
-        .rsplit('.')
-        .next()
-        .unwrap_or(&qualified)
-        .trim_matches('"')
-        .to_owned();
+    let name = match name.0.last() {
+        Some(ObjectNamePart::Identifier(ident)) => ident.value.to_lowercase(),
+        Some(ObjectNamePart::Function(function)) => function.name.value.to_lowercase(),
+        None => String::new(),
+    };
     if is_denied(&name) {
         ControlFlow::Break(Refusal::Function { name })
     } else {
@@ -457,7 +562,9 @@ fn deny_function(name: &ObjectName) -> ControlFlow<Refusal> {
     }
 }
 
-fn is_denied(name: &str) -> bool {
+/// Whether the function `name` (unqualified, lower-cased) is in
+/// [`DENIED_FUNCTIONS`].
+pub(crate) fn is_denied(name: &str) -> bool {
     DENIED_FUNCTIONS.iter().any(|denied| {
         if denied.ends_with('_') {
             name.starts_with(denied)
@@ -943,5 +1050,71 @@ mod tests {
                 "{sql}"
             );
         }
+    }
+
+    #[test]
+    fn sqlite_variables_and_parameters_are_refused() {
+        // SQLite reads `$a::ENUM('x)')` as one variable token, and the rest as
+        // more statements; whatever the guard makes of it, it is refused.
+        for variable in ["$a", ":a", "@a", "#a"] {
+            let sql = format!(
+                "SELECT {variable}::ENUM('x)'), '; PRAGMA query_only = OFF; VACUUM INTO char(47,116,109,112,47,120); --'"
+            );
+            assert!(lite(&sql).is_err(), "{sql}: {:?}", lite(&sql));
+        }
+        assert!(matches!(lite("SELECT ?"), Err(Refusal::Parameter { .. })));
+        assert!(matches!(
+            lite("SELECT :name"),
+            Err(Refusal::Parameter { .. })
+        ));
+        assert!(matches!(pg("SELECT $1"), Err(Refusal::Parameter { .. })));
+    }
+
+    #[test]
+    fn a_dollar_tag_that_starts_with_a_digit_is_refused() {
+        assert!(matches!(
+            pg("SELECT $1$a; DELETE FROM deals$1$"),
+            Err(Refusal::DollarTag { .. } | Refusal::Parameter { .. } | Refusal::Parse { .. })
+        ));
+        assert!(pg("SELECT $tag$a; b$tag$").is_ok());
+    }
+
+    #[test]
+    fn denied_functions_are_matched_whatever_their_quotes() {
+        for (sql, name) in [
+            ("SELECT [load_extension]('/x')", "load_extension"),
+            ("SELECT `fts3_tokenizer`('simple')", "fts3_tokenizer"),
+            ("SELECT \"readfile\"('/etc/passwd')", "readfile"),
+        ] {
+            assert_eq!(
+                lite(sql),
+                Err(Refusal::Function {
+                    name: name.to_owned()
+                }),
+                "{sql}"
+            );
+        }
+        assert_eq!(
+            pg("SELECT \"PG_SLEEP\"(1)"),
+            Err(Refusal::Function {
+                name: "pg_sleep".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn long_or_deep_statements_are_refused_not_a_crash() {
+        let deep = format!("SELECT 1{}", "+1".repeat(20_000));
+        assert!(deep.len() < MAX_SQL_BYTES);
+        for dialect in [Dialect::Sqlite, Dialect::Postgres] {
+            assert_eq!(check(&deep, dialect), Err(Refusal::TooDeep), "{dialect}");
+        }
+        let long = format!("SELECT '{}'", "x".repeat(MAX_SQL_BYTES));
+        assert!(matches!(
+            check(&long, Dialect::Postgres),
+            Err(Refusal::TooLong { .. })
+        ));
+        let fine = format!("SELECT 1{}", "+1".repeat(500));
+        assert!(pg(&fine).is_ok());
     }
 }
