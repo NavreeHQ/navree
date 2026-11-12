@@ -389,7 +389,7 @@ where
     // An answer with no screen and no web view is a reply's ops: a redirect, say.
     if envelope.screen.is_none() && envelope.web.is_none() {
         let leads_to = envelope.ops.iter().find_map(|op| match op {
-            navree_native::Op::Navigate { href } => Some(href.as_str()),
+            navree_native::Op::Navigate { href, .. } => Some(href.as_str()),
             _ => None,
         });
         return Asked::Skipped(match leads_to {
