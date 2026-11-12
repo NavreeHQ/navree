@@ -17,6 +17,8 @@
 [data-tone=violet]{--tone:var(--violet)}
 [data-tone=cyan]{--tone:var(--cyan)}
 [data-tone=rose]{--tone:var(--rose)}
+[data-tone=orange]{--tone:var(--chart-2)}
+[data-tone=slate]{--tone:var(--fg-3)}
 [data-slot=timeline-event],[data-slot=activity-item],[data-slot=fact-card]{--tone-text:color-mix(in oklab,var(--tone) 78%,var(--fg))}
 
 /* Badge: a dot, a tone, an outcome. A label too long for its place is clipped, never spilled. */

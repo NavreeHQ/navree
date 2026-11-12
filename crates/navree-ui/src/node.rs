@@ -311,6 +311,10 @@ impl Uses {
     /// day clock: their tracks and arcs, the words in the middle sized by the ring, and the
     /// size each takes from a screen width up.
     pub const CHART_RADIAL: Self = Self(1 << 34);
+    /// The linear chart stylesheet: no script, only the styles of the meter, the mini
+    /// columns, the colour strip, the range scale and the trend indicator. The ones with
+    /// a tooltip link the charts module as well.
+    pub const CHART_LINEAR: Self = Self(1 << 35);
 
     /// Both sets together.
     #[must_use]
