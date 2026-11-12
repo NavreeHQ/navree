@@ -338,11 +338,17 @@ impl Sparkline {
                 }
             }
             flush(&mut run, &mut line, &mut area);
-            let gradient = self.fill.clone().or_else(|| self.fade.then(|| Gradient::fade(Ink::own())));
+            let gradient = self
+                .fill
+                .clone()
+                .or_else(|| self.fade.then(|| Gradient::fade(Ink::own())));
             let area_path = (!area.is_empty()).then(|| {
                 let path = self.color.on(el("path").slot("chart-area").attr("d", area));
                 match &gradient {
-                    Some(g) => path.attr("fill", defs.gradient(g, self.color, Some([0.0, 0.0, 1000.0, h]))),
+                    Some(g) => path.attr(
+                        "fill",
+                        defs.gradient(g, self.color, Some([0.0, 0.0, 1000.0, h])),
+                    ),
                     None => path,
                 }
             });

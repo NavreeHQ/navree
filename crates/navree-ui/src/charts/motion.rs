@@ -124,8 +124,9 @@ impl Motion {
 
     /// The delay step of mark `index`: 50 ms each.
     pub(crate) fn step(self, index: usize) -> u32 {
-        let ms = u64::from(self.delay)
-            .saturating_add(u64::from(self.stagger).saturating_mul(u64::try_from(index).unwrap_or(u64::MAX)));
+        let ms = u64::from(self.delay).saturating_add(
+            u64::from(self.stagger).saturating_mul(u64::try_from(index).unwrap_or(u64::MAX)),
+        );
         u32::try_from(ms.saturating_add(25) / 50)
             .unwrap_or(MAX_STEPS)
             .min(MAX_STEPS)
@@ -239,7 +240,10 @@ impl CountUp {
     /// page's language when not set.
     pub fn locale(mut self, tag: impl Into<String>) -> Self {
         let tag: String = tag.into();
-        if !tag.is_empty() && tag.len() <= 35 && tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        if !tag.is_empty()
+            && tag.len() <= 35
+            && tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
             self.locale = Some(tag);
         }
         self

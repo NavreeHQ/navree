@@ -246,7 +246,13 @@ impl TooltipStyle {
 /// `join`), then straight lines, a monotone curve, or steps. `scale_x` multiplies x (10
 /// turns percent into a 0..1000 stretched layer). Fewer than three points draw
 /// straight, whatever the curve, except steps.
-pub(crate) fn curve_path(out: &mut String, points: &[(f64, f64)], curve: Curve, join: bool, scale_x: f64) {
+pub(crate) fn curve_path(
+    out: &mut String,
+    points: &[(f64, f64)],
+    curve: Curve,
+    join: bool,
+    scale_x: f64,
+) {
     let x = |v: f64| v * scale_x;
     let Some((first_x, first_y)) = points.first() else {
         return;
@@ -298,7 +304,11 @@ pub(crate) fn curve_path(out: &mut String, points: &[(f64, f64)], curve: Curve, 
                 let (x1, y1) = points[i + 1];
                 let h = (x1 - x0) / 3.0;
                 out.push('C');
-                for (cx, cy) in [(x0 + h, y0 + t[i] * h), (x1 - h, y1 - t[i + 1] * h), (x1, y1)] {
+                for (cx, cy) in [
+                    (x0 + h, y0 + t[i] * h),
+                    (x1 - h, y1 - t[i + 1] * h),
+                    (x1, y1),
+                ] {
                     num(out, x(cx), 1);
                     out.push(' ');
                     num(out, cy, 1);
@@ -339,14 +349,20 @@ pub(crate) fn reference_line(
     let text = label.map(|label| {
         let at_end = matches!(place, Place::EndAbove | Place::EndBelow) != rtl;
         let below = matches!(place, Place::EndBelow | Place::StartBelow);
-        let (x, y) = if at_end { (x2.clone(), y2) } else { (x1.clone(), y1) };
+        let (x, y) = if at_end {
+            (x2.clone(), y2)
+        } else {
+            (x1.clone(), y1)
+        };
         mark_text(label)
             .attr("x", x)
             .attr("y", n(if below { y + 13.0 } else { y - 4.0 }, 1))
             .attr("text-anchor", if at_end { "end" } else { "start" })
             .attr("dx", if at_end { "-2" } else { "2" })
     });
-    let group = el("g").slot("chart-ref").attr_opt("data-solid", solid.then_some(""));
+    let group = el("g")
+        .slot("chart-ref")
+        .attr_opt("data-solid", solid.then_some(""));
     let group = match ink {
         Some(ink) => ink.on(group),
         None => group,
@@ -356,7 +372,13 @@ pub(crate) fn reference_line(
 
 /// A band of the plot from pixel `top` to `bottom`, the full width, in `ink` or the
 /// muted ink, with `label` inside its top edge at the start.
-pub(crate) fn zone_rect(top: f64, bottom: f64, label: Option<&str>, ink: Option<Ink>, rtl: bool) -> Element {
+pub(crate) fn zone_rect(
+    top: f64,
+    bottom: f64,
+    label: Option<&str>,
+    ink: Option<Ink>,
+    rtl: bool,
+) -> Element {
     let (top, bottom) = (top.min(bottom), top.max(bottom));
     let group = el("g").slot("chart-zone");
     let group = match ink {
@@ -404,7 +426,13 @@ mod tests {
     #[test]
     fn steps_hold_each_value_until_the_next() {
         let mut d = String::new();
-        curve_path(&mut d, &[(0.0, 30.0), (50.0, 10.0), (100.0, 10.0)], Curve::Step, false, 10.0);
+        curve_path(
+            &mut d,
+            &[(0.0, 30.0), (50.0, 10.0), (100.0, 10.0)],
+            Curve::Step,
+            false,
+            10.0,
+        );
         assert_eq!(d, "M0 30H500V10H1000");
         let mut one = String::new();
         curve_path(&mut one, &[(5.0, 5.0)], Curve::Step, true, 1.0);
@@ -417,11 +445,23 @@ mod tests {
     #[test]
     fn monotone_curves_never_overshoot() {
         let mut d = String::new();
-        curve_path(&mut d, &[(0.0, 10.0), (50.0, 0.0), (100.0, 0.0)], Curve::Monotone, false, 10.0);
+        curve_path(
+            &mut d,
+            &[(0.0, 10.0), (50.0, 0.0), (100.0, 0.0)],
+            Curve::Monotone,
+            false,
+            10.0,
+        );
         assert!(d.starts_with("M0 10C"), "{d}");
         assert!(d.ends_with("833.3 0 1000 0"), "{d}");
         let mut two = String::new();
-        curve_path(&mut two, &[(0.0, 1.0), (100.0, 2.0)], Curve::Monotone, false, 1.0);
+        curve_path(
+            &mut two,
+            &[(0.0, 1.0), (100.0, 2.0)],
+            Curve::Monotone,
+            false,
+            1.0,
+        );
         assert_eq!(two, "M0 1L100 2");
     }
 
@@ -439,8 +479,14 @@ mod tests {
             )
             .into(),
         );
-        assert!(out.starts_with(r#"<g data-slot="chart-ref"><line x1="0" y1="40" x2="100%" y2="40">"#), "{out}");
-        assert!(out.contains(r#"x="100%" y="36" text-anchor="end""#), "{out}");
+        assert!(
+            out.starts_with(r#"<g data-slot="chart-ref"><line x1="0" y1="40" x2="100%" y2="40">"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"x="100%" y="36" text-anchor="end""#),
+            "{out}"
+        );
         let out = render(
             &reference_line(
                 ("0".into(), 40.0),
@@ -469,7 +515,10 @@ mod tests {
 
     #[test]
     fn long_names_are_cut() {
-        assert_eq!(short("Northern Europe and the Baltics", 16), "Northern Europe…");
+        assert_eq!(
+            short("Northern Europe and the Baltics", 16),
+            "Northern Europe…"
+        );
         assert_eq!(short("Short", 16), "Short");
         let out = render(&mark_text(&"x".repeat(40)).into());
         assert!(out.contains("<title>"), "{out}");

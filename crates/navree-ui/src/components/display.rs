@@ -1410,8 +1410,8 @@ impl Progress {
     /// The meter: the progress bar's root as a `div` with the progressbar role, and an
     /// SVG track, fill and goal marker.
     fn meter_node(self) -> Element {
-        use crate::charts::paint::{Defs, glow};
         use crate::charts::motion::Effect;
+        use crate::charts::paint::{Defs, glow};
         let meter = self.meter;
         let h = meter.height.unwrap_or(6);
         let share = f64::from(self.value) / f64::from(self.max) * 100.0;
@@ -1446,7 +1446,7 @@ impl Progress {
             .and_then(|a| a.value.as_text().map(|t| t.into_owned()))
             .unwrap_or_else(|| format!("meter-{:x}", fnv(&root)));
         let mut defs = Defs::new(&id);
-        let color = ink.map_or(crate::charts::Ink::muted(), |i| i).color();
+        let color = ink.unwrap_or(crate::charts::Ink::muted()).color();
         let radius = f64::from(h) / 2.0;
         let fill = (self.value > 0).then(|| {
             let rect = el("rect")
@@ -1540,7 +1540,11 @@ fn pct(share: f64) -> String {
 fn num_text(value: f64) -> String {
     let out = format!("{value:.2}");
     let out = out.trim_end_matches('0').trim_end_matches('.');
-    if out.is_empty() || out == "-" { "0".to_owned() } else { out.to_owned() }
+    if out.is_empty() || out == "-" {
+        "0".to_owned()
+    } else {
+        out.to_owned()
+    }
 }
 
 /// A short hash of an element's attributes: an id for a meter that has none, the same on
