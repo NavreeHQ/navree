@@ -23852,5 +23852,35 @@
     ],
     "variants": [],
     "shared": []
+  },
+  "Zone": {
+    "name": "Zone",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/marks.rs",
+    "summary": "A band of the value axis: a target zone, a healthy range, a heart-rate zone. It is shaded behind the data across the plot, in a soft wash of its ink, with its label inside its top edge.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "from: impl IntoValue, to: impl IntoValue",
+        "doc": "The band from `from` to `to` (in either order)."
+      }
+    ],
+    "methods": [
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "What the band is."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The band's colour (the muted ink by default)."
+      }
+    ],
+    "variants": [],
+    "shared": []
   }
 }

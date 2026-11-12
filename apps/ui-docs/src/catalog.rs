@@ -767,6 +767,7 @@ pub const COMPONENTS: &[Component] = &[
             "Chart",
             "Series",
             "Annotation",
+            "Zone",
             "At",
             "NumberFormat",
             "TableMode",
@@ -811,7 +812,7 @@ pub const COMPONENTS: &[Component] = &[
     component("rings", "Rings", &["Rings", "RingValue", "RingTrack"], "thumb")
         .about("Two to six values on rings inside each other, each against its own goal.")
         .parts("default"),
-    component("gauge", "Gauge", &["Gauge", "RingTrack", "Screen"], "thumb")
+    component("gauge", "Gauge", &["Gauge", "Zone", "RingTrack", "Screen"], "thumb")
         .about("One value on an open arc, 270 degrees or any sweep, on a scale that may start above zero.")
         .parts("default"),
     component("day-clock", "Day clock", &["DayClock", "Moment"], "thumb")

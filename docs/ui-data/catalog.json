@@ -1966,6 +1966,7 @@
         "Chart",
         "Series",
         "Annotation",
+        "Zone",
         "At",
         "NumberFormat",
         "TableMode"
@@ -2153,6 +2154,7 @@
       "group": "charts",
       "types": [
         "Gauge",
+        "Zone",
         "RingTrack",
         "Screen"
       ],

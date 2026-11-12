@@ -244,6 +244,49 @@ fn a_props_table_lists_the_methods_a_macro_wrote() {
     }
 }
 
+/// `Zone`, the band a line chart shades and a gauge lays on its track, has a props table in
+/// the written data, and the two pages that use it list it.
+#[test]
+fn a_zone_has_a_props_table_and_the_pages_that_use_it_list_it() {
+    let files = ui_docs::generate();
+    let api: serde_json::Value = serde_json::from_str(
+        files
+            .get("api.json")
+            .unwrap_or_else(|| panic!("no api.json in the generated files")),
+    )
+    .unwrap_or_default();
+    let zone = &api["Zone"];
+    assert_eq!(zone["name"], "Zone", "{zone}");
+    let constructors = zone["constructors"].as_array().cloned().unwrap_or_default();
+    assert!(
+        constructors.iter().any(|c| c["name"] == "new"),
+        "Zone::new is documented: {zone}"
+    );
+    let methods: Vec<&str> = zone["methods"]
+        .as_array()
+        .map(|m| m.iter().filter_map(|m| m["name"].as_str()).collect())
+        .unwrap_or_default();
+    assert!(
+        methods.contains(&"label") && methods.contains(&"ink"),
+        "{methods:?}"
+    );
+    let catalog = &files["catalog.json"];
+    let catalog: serde_json::Value = serde_json::from_str(catalog).unwrap_or_default();
+    for page in ["line-chart", "gauge"] {
+        let types = catalog["components"]
+            .as_array()
+            .and_then(|all| all.iter().find(|c| c["id"] == page))
+            .map(|c| c["types"].clone())
+            .unwrap_or_default();
+        assert!(
+            types
+                .as_array()
+                .is_some_and(|t| t.iter().any(|t| t == "Zone")),
+            "{page} lists Zone: {types}"
+        );
+    }
+}
+
 /// The parts of a conversation with an assistant have a table each, and the page of each is
 /// in the catalog.
 #[test]
