@@ -323,6 +323,10 @@ impl Uses {
     /// icon, unit, status and ring, the info tip, the chart skeletons, the breathing guide
     /// and the dock, linked on a page that draws one. An info tip links the overlay module.
     pub const APP_BLOCKS: Self = Self(1 << 37);
+    /// The marketing stylesheet: no script, only the styles of the blocks of a public site,
+    /// its header, hero, sections, pricing, questions, frames and footer, linked on a page
+    /// that draws one. A part of a block that needs a script, such as a form, loads its own.
+    pub const MARKETING: Self = Self(1 << 40);
 
     /// Both sets together.
     #[must_use]

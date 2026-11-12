@@ -165,6 +165,8 @@ const FILES = [
   ["app-blocks", "css", "text/css; charset=utf-8", await extraCss(["app-blocks.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
+  // The blocks of a public site: header, hero, sections, pricing, questions, frames, footer. No script.
+  ["marketing", "css", "text/css; charset=utf-8", await extraCss(["marketing.css"])],
 ];
 // The sheets of `MODULE_STYLES`, each from its sources in `styles`; the phone's ships with its feature.
 for (const [name, sources] of Object.entries(MODULE_STYLES)) {
