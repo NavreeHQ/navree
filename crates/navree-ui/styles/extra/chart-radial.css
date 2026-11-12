@@ -56,8 +56,10 @@
 [data-slot=radial-share]{grid-row:1/3;grid-column:3;align-self:center;font-weight:700;font-variant-numeric:tabular-nums;color:color-mix(in oklab,var(--c) 78%,var(--fg))}
 
 /* The day clock: wedges, the dashed ring and the hours, the hub, moments, now. */
-[data-kind=clock] [data-slot=radial-center]{inset:36%}
-[data-kind=clock] [data-slot=radial-value]{font-size:24cqi}
+[data-kind=clock] [data-slot=radial-center]{inset:38.7%}
+[data-kind=clock] [data-slot=radial-value]{font-size:26cqi}
+[data-kind=clock] [data-fit="3"] [data-slot=radial-value]{font-size:22cqi}
+[data-kind=clock] [data-fit="4"] [data-slot=radial-value]{font-size:17cqi}
 [data-kind=clock] [data-slot=radial-label]{font-size:max(9px,10cqi);color:var(--fg-2)}
 [data-kind=clock] [data-slot=radial-center] > [data-slot=radial-icon]{width:20cqi;height:20cqi}
 [data-slot=clock-wedge]{fill:var(--c);stroke:var(--c);stroke-opacity:.45;stroke-width:.5px;transition:fill .1s}
@@ -66,7 +68,7 @@
 [data-slot=clock-anchor]{fill:none;stroke:none;pointer-events:none}
 [data-slot=clock-ring]{fill:none;stroke:var(--line-3);stroke-width:1px;stroke-dasharray:2 4}
 [data-slot=clock-hub]{stroke:color-mix(in oklab,var(--c) 30%,transparent);stroke-width:1px}
-[data-slot=chart] svg [data-slot=clock-hour]{font-size:13px;fill:var(--fg-3)}
+[data-slot=chart] svg [data-slot=clock-hour]{font-size:12px;fill:var(--fg-3)}
 [data-slot=clock-moment]{cursor:default;& circle{fill:color-mix(in oklab,var(--c) 22%,var(--surface,var(--ink-0)));stroke:var(--c);stroke-width:1.5px}& [data-slot=radial-icon]{stroke:color-mix(in oklab,var(--c) 78%,var(--fg))}}
 @keyframes ui-pulse{50%{stroke-opacity:.2}}
 @media (prefers-reduced-motion:no-preference){[data-slot=clock-now][data-pulse]{animation:ui-pulse 2s ease-in-out infinite}}

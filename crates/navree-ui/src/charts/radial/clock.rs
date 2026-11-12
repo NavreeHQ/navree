@@ -10,24 +10,26 @@ use super::super::{
     Color, Common, Drawn, Key, LegendItem, TableData, Tip, TipLine, common_methods, fill, legend,
     n, value_cell,
 };
-use super::{RadialLabels, Sizes, glyph, polar, wedge, with_unit, wrap};
+use super::{RadialLabels, Sizes, fit, glyph, polar, wedge, with_unit, wrap};
 use crate::components::Tone;
 use crate::icons::Icon;
 use crate::node::{AttrValue, Node, el};
 
-/// The drawing's own box: 360 units square, its centre in the middle.
-const BOX: f64 = 360.0;
+/// The drawing's own box: 372 units square, its centre in the middle. The hour names sit
+/// in its corners of room outside the ring.
+const BOX: f64 = 372.0;
 const C: f64 = BOX / 2.0;
 /// The hub in the middle, and the wedges from just outside it.
-const HUB: f64 = 50.0;
-const INNER: f64 = 58.0;
-/// The shortest wedge (an hour of nothing) and the longest.
-const SHORT: f64 = 70.0;
-const LONG: f64 = 114.0;
-/// Where moments are marked, how big a marker is, and the dashed ring round it all.
-const MARKS: f64 = 126.0;
+const HUB: f64 = 42.0;
+const INNER: f64 = 48.0;
+/// The dashed ring round it all, and the moments on it: how big a marker is.
+const RING: f64 = 136.0;
+const MARKS: f64 = RING;
 const MARK: f64 = 11.0;
-const RING: f64 = 140.0;
+/// The shortest wedge (an hour of nothing) and the longest, which ends just inside the
+/// markers on the ring, so a moment never covers a wedge.
+const SHORT: f64 = 54.0;
+const LONG: f64 = RING - MARK - 4.0;
 /// The space between two wedges, in degrees.
 const SPACE: f64 = 1.2;
 /// The most moments marked; the table lists every one.
@@ -178,7 +180,7 @@ impl DayClock {
             icon: None,
             hub: Hub::Total,
             hub_ink: Ink::slot(7),
-            size: Sizes::new(300),
+            size: Sizes::new(440),
             motion: Motion::none(),
             words: RadialLabels::english(),
         }
@@ -282,8 +284,8 @@ impl DayClock {
         self
     }
 
-    /// The drawing's width in pixels, 200 to 480 (300 by default); it shrinks to fit a
-    /// narrower space.
+    /// The widest the drawing grows, in pixels, 200 to 480 (440 by default): it fills a
+    /// narrower space, so the clock is as wide as its container up to this.
     pub fn size(mut self, px: u32) -> Self {
         self.size.base = px.clamp(200, 480);
         self
@@ -525,13 +527,16 @@ impl DayClock {
         let total_text = self.format.format(total, numbers);
         let label = self.label.clone().or_else(|| self.unit.clone());
         let middle = match &self.hub {
-            Hub::Total => el("div").slot("radial-center").children((
-                self.icon.map(glyph),
-                el("span")
-                    .slot("radial-value")
-                    .child(CountUp::new(total, total_text.clone()).motion(self.motion.after(300))),
-                label.map(|l| el("span").slot("radial-label").child(l)),
-            )),
+            Hub::Total => el("div")
+                .slot("radial-center")
+                .attr("data-fit", fit(&total_text, None))
+                .children((
+                    self.icon.map(glyph),
+                    el("span").slot("radial-value").child(
+                        CountUp::new(total, total_text.clone()).motion(self.motion.after(300)),
+                    ),
+                    label.map(|l| el("span").slot("radial-label").child(l)),
+                )),
             Hub::Custom(node) => el("div").slot("radial-center").child(node.clone()),
         }
         .attr("aria-hidden", "true");

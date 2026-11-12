@@ -5953,7 +5953,7 @@
         "name": "size",
         "generics": "",
         "args": "px: u32",
-        "doc": "The drawing's width in pixels, 200 to 480 (300 by default); it shrinks to fit a narrower space."
+        "doc": "The widest the drawing grows, in pixels, 200 to 480 (440 by default): it fills a narrower space, so the clock is as wide as its container up to this."
       },
       {
         "name": "size_on",
