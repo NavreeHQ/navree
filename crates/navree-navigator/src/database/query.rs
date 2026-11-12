@@ -113,33 +113,46 @@ async fn postgres_in_transaction(
     .await?;
     conn.execute("SET LOCAL lock_timeout = 1000").await?;
     let started = Instant::now();
-    // Text results (the simple protocol): every type has a readable form.
-    let sql = match statement.kind {
+    // The checked statement goes to the server as one prepared statement (the
+    // extended protocol): a prepared statement holds exactly one command, so
+    // however the server reads the text, it cannot run a second one. A query is
+    // declared as a cursor that way, then read with a FETCH of this module's own
+    // over the simple protocol, whose text results give every type a readable
+    // form. EXPLAIN and SHOW answer in text-like types (text, json, xml), whose
+    // binary form is their text.
+    let rows = match statement.kind {
         StatementKind::Query => {
-            conn.execute(AssertSqlSafe(format!(
+            let declare = format!(
                 "DECLARE navigator_rows NO SCROLL CURSOR FOR {}",
                 statement.sql
-            )))
-            .await?;
-            format!("FETCH FORWARD {} FROM navigator_rows", ROW_LIMIT + 1)
+            );
+            conn.execute(sqlx::query(AssertSqlSafe(declare)).persistent(false))
+                .await?;
+            let fetch = format!("FETCH FORWARD {} FROM navigator_rows", ROW_LIMIT + 1);
+            with_timeout(collect(conn.fetch(AssertSqlSafe(fetch)))).await?
         }
-        StatementKind::Explain | StatementKind::Show => statement.sql.clone(),
-    };
-    let fetch = async {
-        let mut stream = conn.fetch(AssertSqlSafe(sql));
-        let mut rows: Vec<PgRow> = Vec::new();
-        while let Some(row) = stream.try_next().await? {
-            rows.push(row);
+        StatementKind::Explain | StatementKind::Show => {
+            let prepared = sqlx::query(AssertSqlSafe(statement.sql.clone())).persistent(false);
+            with_timeout(collect(conn.fetch(prepared))).await?
         }
-        Ok::<_, DatabaseError>(rows)
     };
-    let rows = with_timeout(fetch).await?;
     let columns = rows
         .first()
         .map(|row| column_names(row.columns()))
         .unwrap_or_default();
     let values = rows.iter().map(postgres_values).collect();
     Ok(QueryResult::new(columns, values, started))
+}
+
+/// Every row of `stream`.
+async fn collect(
+    mut stream: impl futures_util::Stream<Item = Result<PgRow, sqlx::Error>> + Unpin,
+) -> Result<Vec<PgRow>, DatabaseError> {
+    let mut rows: Vec<PgRow> = Vec::new();
+    while let Some(row) = stream.try_next().await? {
+        rows.push(row);
+    }
+    Ok(rows)
 }
 
 /// A backstop above the database's own timeout.

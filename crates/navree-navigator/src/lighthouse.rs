@@ -426,14 +426,21 @@ fn upper_bound(bucket: u16) -> f64 {
 // Statements
 // ---------------------------------------------------------------------------
 
-/// A SQL string literal.
-fn literal(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+/// A SQL string literal. On PostgreSQL an escape string (`E'..'`) with
+/// backslashes and quotes doubled, which reads the same whatever
+/// `standard_conforming_strings` is set to; on SQLite, where a backslash is
+/// an ordinary character, quotes doubled.
+fn literal(driver: Driver, text: &str) -> String {
+    match driver {
+        Driver::Sqlite => format!("'{}'", text.replace('\'', "''")),
+        Driver::Postgres => format!("E'{}'", text.replace('\\', "\\\\").replace('\'', "''")),
+    }
 }
 
-/// A time literal in the form Lighthouse stores (RFC 3339, UTC offset).
+/// A time literal in the form Lighthouse stores (RFC 3339, UTC offset):
+/// digits, `-`, `:`, `T` and `+` only.
 fn time_literal(at: DateTime<Utc>) -> String {
-    literal(&at.format("%Y-%m-%dT%H:%M:%S+00:00").to_string())
+    format!("'{}'", at.format("%Y-%m-%dT%H:%M:%S+00:00"))
 }
 
 /// A UUID column as text: SQLite holds Lighthouse's ids as 16-byte blobs.
@@ -479,13 +486,13 @@ const ISSUE_COLUMNS: &str = "kind, level, status, title, culprit, count, first_s
 pub(crate) fn issues_sql(driver: Driver, args: &IssuesArgs) -> String {
     let mut conditions = Vec::new();
     if let Some(status) = args.status.unwrap_or(IssueStatus::Open).as_str() {
-        conditions.push(format!("status = {}", literal(status)));
+        conditions.push(format!("status = {}", literal(driver, status)));
     }
     if let Some(kind) = args.kind {
-        conditions.push(format!("kind = {}", literal(kind.as_str())));
+        conditions.push(format!("kind = {}", literal(driver, kind.as_str())));
     }
     if let Some(level) = args.level {
-        conditions.push(format!("level = {}", literal(level.as_str())));
+        conditions.push(format!("level = {}", literal(driver, level.as_str())));
     }
     if let Some(search) = args
         .search
@@ -498,9 +505,10 @@ pub(crate) fn issues_sql(driver: Driver, args: &IssuesArgs) -> String {
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        let pattern = literal(&format!("%{escaped}%"));
+        let pattern = literal(driver, &format!("%{escaped}%"));
+        let escape = literal(driver, "\\");
         conditions.push(format!(
-            "(lower(title) LIKE {pattern} ESCAPE '\\' OR lower(culprit) LIKE {pattern} ESCAPE '\\')"
+            "(lower(title) LIKE {pattern} ESCAPE {escape} OR lower(culprit) LIKE {pattern} ESCAPE {escape})"
         ));
     }
     let order = match args.sort.unwrap_or(Sort::LastSeen) {
@@ -566,7 +574,7 @@ fn aggregates_sql(
         "SELECT key, sum(count) AS count, sum(errors) AS errors, sum(extra) AS extra, sum(total_ms) AS total_ms, \
          max(max_ms) AS max_ms, {concat} AS histogram FROM lighthouse_aggregates WHERE kind = {} AND resolution = {} \
          AND bucket >= {} GROUP BY key_hash, key ORDER BY {order} LIMIT 100",
-        literal(kind),
+        literal(driver, kind),
         period.resolution(),
         time_literal(period.start(now)),
     )
@@ -895,10 +903,30 @@ mod tests {
         };
         let sql = issues_sql(Driver::Postgres, &args);
         assert!(
+            sql.contains(r"LIKE E'%it''s 50\\%\\_off\\\\%' ESCAPE E'\\'"),
+            "{sql}"
+        );
+        assert!(sql.contains("status = E'open'"), "{sql}");
+        let sql = issues_sql(Driver::Sqlite, &args);
+        assert!(
             sql.contains(r"LIKE '%it''s 50\%\_off\\%' ESCAPE '\'"),
             "{sql}"
         );
         assert!(sql.contains("status = 'open'"), "{sql}");
+        // A backslash before a quote cannot close a PostgreSQL literal early.
+        let quote = IssuesArgs {
+            search: Some(r"\' OR 1=1 --".to_owned()),
+            ..IssuesArgs::default()
+        };
+        let sql = issues_sql(Driver::Postgres, &quote);
+        assert!(sql.contains(r"LIKE E'%\\\\'' or 1=1 --%'"), "{sql}");
+        // Still one query, its ORDER BY not commented out by the search text.
+        let checked = crate::database::check(&sql, Driver::Postgres.dialect()).unwrap();
+        assert!(
+            checked.sql.ends_with("ORDER BY last_seen DESC LIMIT 20"),
+            "{}",
+            checked.sql
+        );
         let all = IssuesArgs {
             status: Some(IssueStatus::All),
             ..IssuesArgs::default()
