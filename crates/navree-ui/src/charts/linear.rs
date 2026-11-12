@@ -50,6 +50,8 @@ pub struct LinearLabels {
     pub summary_above: Cow<'static, str>,
     /// The value column of a meter or columns whose values are minutes.
     pub duration: Cow<'static, str>,
+    /// The column of a meter's segment details, unless the meter names it.
+    pub detail: Cow<'static, str>,
     /// A scale's table column for its low end.
     pub minimum: Cow<'static, str>,
     /// A scale's table column for its high end.
@@ -79,6 +81,7 @@ impl LinearLabels {
             summary_below: Cow::Borrowed("{value}, below the scale from {min} to {max}."),
             summary_above: Cow::Borrowed("{value}, above the scale from {min} to {max}."),
             duration: Cow::Borrowed("Duration"),
+            detail: Cow::Borrowed("Detail"),
             minimum: Cow::Borrowed("Minimum"),
             maximum: Cow::Borrowed("Maximum"),
         }
@@ -165,6 +168,10 @@ pub(crate) struct Entry {
     pub value: Option<String>,
     /// The row it belongs to, so hovering it marks the mark and the reverse.
     pub index: Option<usize>,
+    /// A second line under the name.
+    pub detail: Option<String>,
+    /// Whether the part holds nothing: its key is hollow.
+    pub empty: bool,
 }
 
 /// A legend that wraps along a row: a key in the part's colour, its name and, when there
@@ -179,7 +186,8 @@ pub(crate) fn legend_list(entries: Vec<Entry>) -> Node {
                 .attr("aria-hidden", "true");
             let li = el("li")
                 .slot("chart-legend-item")
-                .attr_opt("data-i", e.index.map(|i| i as i64));
+                .attr_opt("data-i", e.index.map(|i| i as i64))
+                .flag("data-empty", e.empty);
             let color: Color = e.ink.color();
             e.ink
                 .on(li)
@@ -189,6 +197,8 @@ pub(crate) fn legend_list(entries: Vec<Entry>) -> Node {
                     el("span").slot("chart-legend-name").child(e.name),
                     e.value
                         .map(|v| el("span").slot("chart-legend-value").child(v)),
+                    e.detail
+                        .map(|d| el("span").slot("chart-legend-detail").child(d)),
                 ))
                 .into()
         })

@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "99940ae3c0d5";
+pub const BUILD: &str = "dc0be6e10172";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-97b1dcae61e2.js";
@@ -125,7 +125,7 @@ pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-6133a5ac46b9.css";
 pub const CHART_RADIAL_URL: &str = "/_navree/ui/chart-radial-92fb7286c3b3.css";
 
 /// The URL of `chart-linear.css`.
-pub const CHART_LINEAR_URL: &str = "/_navree/ui/chart-linear-a4308e3546dd.css";
+pub const CHART_LINEAR_URL: &str = "/_navree/ui/chart-linear-7e06b5727a51.css";
 
 /// The URL of `chart-grids.css`.
 pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-19e28de744c5.css";
@@ -540,7 +540,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "chart-linear",
         ext: "css",
-        hash: "a4308e3546dd",
+        hash: "7e06b5727a51",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/chart-linear.css"),
         gzip: Some(include_bytes!("../dist/chart-linear.css.gz")),

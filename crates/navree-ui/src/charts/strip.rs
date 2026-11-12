@@ -286,6 +286,8 @@ impl ColorStrip {
                         .shares
                         .then(|| share_text(*n as f64 / total as f64, &numbers)),
                     index: None,
+                    detail: None,
+                    empty: false,
                 })
                 .collect(),
         );
