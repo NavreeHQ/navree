@@ -46,16 +46,21 @@ mod donut;
 mod downsample;
 mod format;
 mod funnel;
+mod linear;
 pub(crate) mod marks;
+mod meter;
+mod mini_columns;
 pub(crate) mod motion;
 pub(crate) mod paint;
 pub(crate) mod radial;
+mod range_scale;
 mod report;
 mod report_export;
 #[cfg(feature = "orm")]
 mod report_orm;
 mod scale;
 mod sparkline;
+mod strip;
 mod value;
 
 pub use axes::{Axis, Domain, Gridlines, Ticks};
@@ -64,18 +69,23 @@ pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
+pub use linear::{LinearLabels, MAX_PARTS};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
+pub use meter::{Meter, Segment};
+pub use mini_columns::{MAX_COLUMNS, MiniColumn, MiniColumns};
 pub use motion::{CountUp, Motion, Speed};
 pub use paint::{ColorScale, Gradient, Ink};
 pub use radial::{
     DayClock, Gauge, Moment, RadialLabels, Ring, RingTrack, RingValue, Rings, Screen,
 };
+pub use range_scale::RangeScale;
 pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
 pub use report_export::ReportTable;
 #[cfg(feature = "orm")]
 pub use report_orm::{Bucketing, Metric, TimeColumn};
 pub use scale::Grain;
 pub use sparkline::Sparkline;
+pub use strip::{ColorStrip, MAX_CELLS};
 pub use value::IntoValue;
 
 /// The most categorical colours: a ninth series folds into Other.

@@ -32,6 +32,7 @@ mod toast;
 mod toggle_group;
 mod tone;
 mod trace;
+mod trend;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
@@ -76,6 +77,7 @@ pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
 pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
 pub use tone::{DisplayLabels, Meta, Tone};
 pub use trace::{Trace, TraceLabels, TraceState, TraceStep};
+pub use trend::Trend;
 
 use crate::icons::Icon;
 use crate::node::{Node, el};
