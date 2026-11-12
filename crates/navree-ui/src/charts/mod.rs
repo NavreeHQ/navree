@@ -1,6 +1,7 @@
 //! Charts drawn on the server as SVG: [`Chart`] (line, area and bar, vertical and
 //! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], the
-//! grids and points ([`CalendarHeatmap`], [`MatrixHeatmap`] and [`Scatter`]), and
+//! grids and points ([`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`] and
+//! [`Scatter`]), and
 //! [`Report`], which reads a date range from the URL, picks a grain and buckets a
 //! query by it.
 //!
@@ -72,7 +73,8 @@ pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
 pub use grids::{
-    CalendarHeatmap, GridLabels, HeatSteps, MatrixHeatmap, PointSeries, Relation, Scatter,
+    CalendarHeatmap, GridLabels, HeatSteps, MAX_RELATIONS, MatrixHeatmap, PointSeries, Relation,
+    RelationList, Scatter,
 };
 pub use linear::{LinearLabels, MAX_PARTS};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
@@ -81,7 +83,8 @@ pub use mini_columns::{MAX_COLUMNS, MiniColumn, MiniColumns};
 pub use motion::{CountUp, Motion, Speed};
 pub use paint::{ColorScale, Gradient, Ink};
 pub use radial::{
-    DayClock, Gauge, Moment, RadialLabels, Ring, RingTrack, RingValue, Rings, Screen,
+    DayClock, Gauge, MAX_MOMENTS, MAX_RINGS, Moment, RadialLabels, Ring, RingTrack, RingValue,
+    Rings, Screen,
 };
 pub use range_scale::RangeScale;
 pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
