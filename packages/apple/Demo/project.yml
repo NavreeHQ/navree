@@ -1,0 +1,70 @@
+# The demo app, as a text description: `xcodegen generate` in this folder
+# writes NavreeDemo.xcodeproj (never committed).
+name: NavreeDemo
+options:
+  bundleIdPrefix: com.navree
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  NavreeNative:
+    path: ..
+targets:
+  NavreeDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: NavreeDemo
+    dependencies:
+      - package: NavreeNative
+        product: NavreeNative
+    info:
+      path: Generated/NavreeDemo-Info.plist
+      properties:
+        CFBundleDisplayName: Charkha
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.navree.demo
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+  NavreeDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: NavreeDemoUITests
+    dependencies:
+      - target: NavreeDemo
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.navree.demo.uitests
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  NavreeDemo:
+    build:
+      targets:
+        NavreeDemo: all
+        NavreeDemoUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - NavreeDemoUITests

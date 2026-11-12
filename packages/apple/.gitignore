@@ -1,0 +1,7 @@
+# SwiftPM and Xcode output
+/.build/
+/.swiftpm/
+/build/
+# Written by `xcodegen generate` from Demo/project.yml
+/Demo/*.xcodeproj/
+/Demo/Generated/
