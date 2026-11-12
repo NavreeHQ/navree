@@ -12,7 +12,11 @@
 //!   configuration sections, and this is the one default that comes from the
 //!   crate's version; a value of this form is the only text changed;
 //! - `docs/prologue/release-notes.mdx`: a `## Navree <version>` section at the
-//!   top, written from the version's section of `CHANGELOG.md`.
+//!   top, written from the version's section of `CHANGELOG.md`;
+//! - the other places that name the CLI's own version, listed in
+//!   [`FOLLOWING`]: what `navree new` writes into an app, and the examples
+//!   of the version in the docs and the agent skills. A version that is not
+//!   Navree's (`api.version`, an OpenAPI example) is not among them.
 //!
 //! Every function takes the text of a page and returns the new text, so a
 //! second run changes nothing. A page that has no place to change is an
@@ -29,6 +33,29 @@ const INTRODUCTION: &str = "docs/prologue/introduction.mdx";
 const ROADMAP: &str = "docs/prologue/roadmap.mdx";
 const REFERENCE: &str = "docs/configuration/reference.mdx";
 const RELEASE_NOTES: &str = "docs/prologue/release-notes.mdx";
+
+/// The places, besides the pages above, where the text right after a prefix
+/// is Navree's version: (file, the text before the version). Each is the
+/// version `navree new` writes (`navree = "1.0.1"`, the `^1.0.1` range of
+/// the front-end packages) or an example of what the CLI, a docs file or a
+/// log prints, which follows the release.
+pub const FOLLOWING: &[(&str, &str)] = &[
+    ("docs/digging-deeper/cli.mdx", "else `navree = \""),
+    ("docs/getting-started/directory-structure.mdx", "or `\""),
+    ("docs/database/postgresql.mdx", "navree = { version = \""),
+    ("docs/frontend/introduction.mdx", "(`^"),
+    (
+        "docs/digging-deeper/http-client.mdx",
+        "for example `navree-http-client/",
+    ),
+    ("docs/ai/docs-for-agents.mdx", "- Version: "),
+    ("docs/ai/navigator.mdx", "{\"version\": \""),
+    ("skills/navree-new-app/SKILL.md", "navree = \""),
+    (
+        "skills/navree-cli-generators/SKILL.md",
+        "`navree new` writes `navree = \"",
+    ),
+];
 
 /// `1.0` for `1.0.1` and for `1.0.0-rc.1`.
 pub fn series(version: &str) -> String {
@@ -151,6 +178,21 @@ pub fn set_introduction(text: &str, version: &str) -> Result<String, String> {
 /// series of `version`.
 pub fn set_roadmap(text: &str, version: &str) -> Result<String, String> {
     set_series_after(ROADMAP, text, "Where Navree goes after ", version)
+}
+
+/// `text` of `page` with the version after `prefix` set to `version`, for a
+/// place of [`FOLLOWING`].
+pub fn set_following(
+    page: &str,
+    text: &str,
+    prefix: &str,
+    version: &str,
+) -> Result<String, String> {
+    replaced(
+        page,
+        &format!("version after `{prefix}`"),
+        replace_after(text, prefix, is_valid_version, version),
+    )
 }
 
 /// The configuration reference with the default `User-Agent` of the HTTP
@@ -311,7 +353,7 @@ pub fn add_release_notes(
 /// the files that changed.
 pub fn update(root: &Path, version: &str, changelog_text: &str) -> Result<Vec<PathBuf>, String> {
     type Edit<'a> = Box<dyn Fn(&str) -> Result<String, String> + 'a>;
-    let edits: Vec<(&str, Edit<'_>)> = vec![
+    let mut edits: Vec<(&str, Edit<'_>)> = vec![
         (INSTALLATION, Box::new(|t| set_installation(t, version))),
         (STARTER_KITS, Box::new(|t| set_kit_version(t, version))),
         (INTRODUCTION, Box::new(|t| set_introduction(t, version))),
@@ -322,6 +364,12 @@ pub fn update(root: &Path, version: &str, changelog_text: &str) -> Result<Vec<Pa
             Box::new(|t| add_release_notes(t, version, changelog_text)),
         ),
     ];
+    for &(page, prefix) in FOLLOWING {
+        edits.push((
+            page,
+            Box::new(move |t| set_following(page, t, prefix, version)),
+        ));
+    }
     // Every page is computed before any is written, so a page that cannot
     // be updated leaves the docs as they were.
     let mut new_pages = Vec::new();
