@@ -74,11 +74,11 @@ impl TestNative {
     /// ```
     pub fn build(client: navree_native::Client, build: impl FnOnce() -> View) -> Self {
         let asked = Asked::Native(std::sync::Arc::new(scope::Request::new(client.clone(), "")));
-        let mut view = scope::sync(asked, build);
-        Self {
-            page: page::of_view(&mut view, false),
-            client,
-        }
+        let mut view = scope::sync(asked.clone(), build);
+        // The page is read while the client is still the one asking, as the reply
+        // layer reads it, so what its components wrote for the client is there.
+        let page = scope::sync(asked, || page::of_view(&mut view, false));
+        Self { page, client }
     }
 
     /// Whether every part of the page was read: the client gets a screen.

@@ -6,14 +6,17 @@
 //! of stops being read, and the test beside the reader, which builds the real
 //! component, fails in the same crate.
 
+pub(crate) mod chart;
 mod chat;
 mod date;
 mod feed;
 mod fold;
 mod menu;
 mod select;
+mod sortable;
 mod split;
 mod tabs;
+mod upload;
 #[cfg(test)]
 mod testing;
 
@@ -143,6 +146,9 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "bubble" => (chat::bubble, &[]),
         "attachment" => (chat::attachment, &[]),
         "marker" => (chat::marker, &[]),
+        "chart" => (chart::figure, chart::HOOKS),
+        "sortable" => (sortable::sortable, sortable::HOOKS),
+        "upload" => (upload::upload, upload::HOOKS),
         _ => return None,
     };
     Some(hooks(element, known).and_then(|()| reader(cx, element)))

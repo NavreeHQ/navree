@@ -90,9 +90,8 @@ pub(crate) fn attachment(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let media = parts.slot("attachment-media");
     let content = parts.slot("attachment-content");
-    // What the page puts beside it, such as a way to remove it.
-    let actions = parts.slot("attachment-action");
-    parts.done()?;
+    // What the page puts after it, such as a way to remove it, has no slot of its own.
+    let after = parts.left().to_vec();
     let Some(content) = content else {
         return fail("a file with no name");
     };
@@ -118,8 +117,9 @@ pub(crate) fn attachment(cx: &mut Cx, element: &Element) -> Read {
     if title.tag() == "a" {
         row.action = cx.action_of(title)?;
     }
-    if let Some(actions) = actions {
-        row.trailing = Some(Box::new(super::super::lower::one(cx.of(actions))));
+    let after = cx.flat_sequence(&after);
+    if !after.is_empty() {
+        row.trailing = Some(Box::new(super::super::lower::one(after)));
     }
     Ok(vec![N::Row(row)])
 }

@@ -1070,6 +1070,13 @@ impl Chart {
             height,
             note,
             interactive: true,
+            #[cfg(feature = "native-preview")]
+            native: crate::native::chart_numbers(
+                rows.iter().map(|row| row.name.as_str()),
+                series
+                    .iter()
+                    .map(|s| (s.name.as_str(), s.values.as_slice())),
+            ),
         })
     }
 }

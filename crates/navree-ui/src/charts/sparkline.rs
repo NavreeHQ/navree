@@ -302,6 +302,15 @@ impl Sparkline {
             links: Vec::new(),
             note: None,
         };
+        #[cfg(feature = "native-preview")]
+        let native = {
+            let values: Vec<Option<f64>> = kept.iter().map(|i| self.values[*i]).collect();
+            let names: Vec<String> = kept.iter().map(|i| name(*i)).collect();
+            crate::native::chart_numbers(
+                names.iter().map(String::as_str),
+                std::iter::once((self.common.title.as_str(), values.as_slice())),
+            )
+        };
         Some(Drawn {
             legend: None,
             body: drawing.into(),
@@ -311,6 +320,8 @@ impl Sparkline {
             height: self.height,
             note: None,
             interactive: false,
+            #[cfg(feature = "native-preview")]
+            native,
         })
     }
 }

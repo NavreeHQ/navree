@@ -47,6 +47,11 @@ pub(crate) struct Request {
     /// Where a guest signs in: the route a shell document presents over
     /// everything, and so part of the shell's stamp.
     pub(crate) sign_in: Option<String>,
+    /// What components built during the request wrote for a native client and the
+    /// HTML cannot hold: the typed values of each chart, by the id of its figure.
+    /// The page's markup carries none of it, so a node built now and written for a
+    /// browser later is the markup it always was.
+    pub(crate) charts: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl Request {
@@ -58,7 +63,20 @@ impl Request {
             region: None,
             stamp: super::Stamp::of(None),
             sign_in: None,
+            charts: std::sync::Mutex::default(),
         }
+    }
+
+    /// Keeps the values the chart `id` wrote.
+    pub(crate) fn record_chart(&self, id: &str, values: String) {
+        if let Ok(mut charts) = self.charts.lock() {
+            charts.insert(id.to_owned(), values);
+        }
+    }
+
+    /// The values the chart `id` wrote during this request.
+    pub(crate) fn chart(&self, id: &str) -> Option<String> {
+        self.charts.lock().ok()?.get(id).cloned()
     }
 }
 
@@ -98,6 +116,7 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
                 .map(str::to_owned),
             stamp: super::Stamp::of(None),
             sign_in: None,
+            charts: std::sync::Mutex::default(),
         }))),
         Err(error) => Reading::Refused(error),
     }

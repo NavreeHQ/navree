@@ -670,6 +670,10 @@ pub(crate) struct Drawn {
     /// Whether the module makes it a tab stop with tooltips. A sparkline in a row of
     /// figures is not: it is a picture with its summary as its name.
     pub interactive: bool,
+    /// The values as typed, for a native client: the labels and the series the
+    /// chart draws, written only while one asks.
+    #[cfg(feature = "native-preview")]
+    pub native: Option<String>,
 }
 
 /// The figure every chart is drawn in. `drawn` is `None` when there is nothing to
@@ -787,6 +791,10 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
             ))
         }
         (State::Ready, Some(drawn)) => {
+            #[cfg(feature = "native-preview")]
+            if let Some(values) = &drawn.native {
+                crate::native::record_chart(&id, values.clone());
+            }
             let summary = common.summary.clone().unwrap_or(drawn.summary);
             let mut body = el("div").slot("chart-body");
             if drawn.interactive {

@@ -11,7 +11,9 @@
 
 use navree_native::node as n;
 
-use super::super::lower::{Cx, Fail, N, Parts, Read, attr, fail, flat, has, hooks, id, slot, text_of};
+use super::super::lower::{
+    Cx, Fail, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, slot, text_of,
+};
 use crate::node::{Element, Node};
 
 /// The hooks the popup of a menu carries that this reader answers for.
@@ -118,10 +120,48 @@ fn items(cx: &mut Cx, nodes: &[&Node]) -> Read<Vec<N>> {
             }
             Some("menu-item") => out.push(item(cx, element)?),
             Some(other) => return fail(format!("an unexpected `{other}` in a menu")),
+            // A post in a table's row menu: a small form that holds the token and the item.
+            None if element.tag() == "form" => out.push(posting(cx, element)?),
             None => return fail(format!("an unexpected <{}> in a menu", element.tag())),
         }
     }
     Ok(out)
+}
+
+/// An item that posts, written as a form of its own around the one button: the
+/// button that sends what the form holds.
+fn posting(cx: &mut Cx, form: &Element) -> Read<N> {
+    hooks(form, &["data-ui-form"])?;
+    let method = match attr(form, "method").as_deref() {
+        Some("post" | "POST") => n::Method::Post,
+        _ => return fail("an item of a menu that is a form sent another way"),
+    };
+    let mut hidden = Vec::new();
+    super::super::lower::hidden_in(form.child_nodes(), &mut hidden);
+    let mut button = None;
+    for part in elements(form)? {
+        match slot(part).as_deref() {
+            Some("menu-item") if button.is_none() => button = Some(item(cx, part)?),
+            None if part.tag() == "input" => {}
+            _ => return fail("a part of a posting item no reader here knows"),
+        }
+    }
+    let Some(button) = button else {
+        return fail("a form among the items of a menu with no item in it");
+    };
+    let form = n::Form {
+        id: id(form),
+        method,
+        action: attr(form, "action")
+            .map(std::borrow::Cow::into_owned)
+            .unwrap_or_default(),
+        hidden,
+        children: vec![button],
+    };
+    match super::button_of(form) {
+        Ok(button) => Ok(N::Button(button)),
+        Err(_) => fail("an item that posts and cannot be sent"),
+    }
 }
 
 /// A group of items under a heading.

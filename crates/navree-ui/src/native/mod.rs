@@ -62,6 +62,15 @@ pub use navree_native as protocol;
 pub use page::Page;
 pub use routes::{LOWERING, Stamp};
 pub(crate) use routes::{Routes, app_stamp};
+pub(crate) use slots::chart::written as chart_numbers;
+
+/// Keeps the typed values of the chart `id` for the native client whose request
+/// is current; a browser's request keeps nothing.
+pub(crate) fn record_chart(id: &str, values: String) {
+    if let Some(request) = scope::native() {
+        request.record_chart(id, values);
+    }
+}
 pub use scope::Client;
 pub use swap::{Answered, How, NodeOp};
 pub use test::TestNative;
