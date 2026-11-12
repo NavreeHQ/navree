@@ -539,7 +539,37 @@ The routes are part of the [notification routes](/docs/digging-deeper/notificati
 
 Registering a token that is already saved moves it to the signed-in user and session: a phone belongs to whoever signed in on it last. A session keeps one device per app, so a new token replaces the one the system dropped. In code, `PushDevices` has `register(notifiable, session_id, device)`, `unregister`, `of(notifiable_type, notifiable_id)`, `delete`, `end_session(session_id)` and `end_all`.
 
-The channel sends to each device of the recipient when the notification goes out. Before it does, it asks which of their sessions are still signed in: with the `auth` feature, navree-auth's sessions answer (the ones `GET /auth/sessions` lists), and a device of an ended session is deleted instead of sent to. An app with its own sign-in registers a `dyn LiveSessions`. Offboarding a user deletes their devices too.
+The channel sends to each device of the recipient when the notification goes out. Before it does, it asks the app's `dyn LiveSessions` which of their sessions are still signed in, and a device of an ended session is deleted instead of sent to. Register one that answers from your sessions; with navree-auth, the ones `GET /auth/sessions` lists:
+
+```rust title="src/modules/push/sessions.rs"
+use navree::auth::AuthService;
+use navree::contracts::{BoxError, BoxFuture};
+use navree::notify::LiveSessions;
+use std::sync::Arc;
+use uuid::Uuid;
+
+/// A push device lives as long as the navree-auth session that registered it.
+pub struct SignedInSessions(pub Arc<AuthService>);
+
+impl LiveSessions for SignedInSessions {
+    fn live<'a>(
+        &'a self,
+        user_id: Uuid,
+        sessions: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<String>, BoxError>> {
+        Box::pin(async move {
+            let live = self.0.sessions(user_id, None).await?;
+            Ok(live
+                .into_iter()
+                .map(|session| session.id.to_string())
+                .filter(|id| sessions.contains(id))
+                .collect())
+        })
+    }
+}
+```
+
+Without one, every device is sent to and the notifier logs a warning once. Offboarding a user deletes their devices too.
 
 | `PushMessage` | Apple | Android (Firebase) |
 |---|---|---|

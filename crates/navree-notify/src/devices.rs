@@ -296,11 +296,39 @@ impl NewPushDevice {
     }
 }
 
-/// Which signed-in sessions are still live. The push channel asks before
-/// it sends: a device whose session has ended (signed out, ended from
-/// another device, revoked) gets nothing and is deleted. With the `auth`
-/// feature, navree-auth's sessions answer when the app has no
-/// `dyn LiveSessions` of its own; without either, every device is sent to.
+/// Which signed-in sessions are still live. The push channel asks the
+/// app's `dyn LiveSessions` before it sends: a device whose session has
+/// ended (signed out, ended from another device, revoked by a password
+/// change or offboarding) gets nothing and is deleted. Without one, every
+/// device is sent to (logged once), so an app that signs people in
+/// registers one answering from its sessions: with navree-auth, the ids
+/// `AuthService::sessions` lists.
+///
+/// ```
+/// use std::collections::HashSet;
+/// use std::sync::{Arc, Mutex};
+///
+/// use navree_contracts::{BoxError, BoxFuture};
+/// use navree_notify::LiveSessions;
+/// use uuid::Uuid;
+///
+/// /// The sessions the app's sign-in keeps (here, in memory).
+/// struct SignedIn(Arc<Mutex<HashSet<String>>>);
+///
+/// impl LiveSessions for SignedIn {
+///     fn live<'a>(
+///         &'a self,
+///         _user_id: Uuid,
+///         sessions: &'a [String],
+///     ) -> BoxFuture<'a, Result<Vec<String>, BoxError>> {
+///         let open = self.0.lock().unwrap().clone();
+///         let live = sessions.iter().filter(|s| open.contains(*s)).cloned().collect();
+///         Box::pin(async move { Ok(live) })
+///     }
+/// }
+/// // Registered in a module with
+/// // `m.value_arc::<dyn LiveSessions>(Arc::new(SignedIn(..)))`.
+/// ```
 pub trait LiveSessions: Send + Sync + 'static {
     /// The ones of `sessions` (session ids of user `user_id`) that are
     /// still live.
@@ -309,31 +337,6 @@ pub trait LiveSessions: Send + Sync + 'static {
         user_id: Uuid,
         sessions: &'a [String],
     ) -> BoxFuture<'a, Result<Vec<String>, BoxError>>;
-}
-
-/// navree-auth's sessions as [`LiveSessions`]: a session is live while its
-/// refresh-token family has an unexpired, unrevoked token (what
-/// `GET /auth/sessions` lists), so signing out, ending it from another
-/// device, a password change and offboarding all end its devices.
-#[cfg(feature = "auth")]
-pub(crate) struct AuthSessions(pub(crate) std::sync::Arc<navree_auth::AuthService>);
-
-#[cfg(feature = "auth")]
-impl LiveSessions for AuthSessions {
-    fn live<'a>(
-        &'a self,
-        user_id: Uuid,
-        sessions: &'a [String],
-    ) -> BoxFuture<'a, Result<Vec<String>, BoxError>> {
-        Box::pin(async move {
-            let live = self.0.sessions(user_id, None).await?;
-            Ok(live
-                .into_iter()
-                .map(|session| session.id.to_string())
-                .filter(|id| sessions.contains(id))
-                .collect())
-        })
-    }
 }
 
 /// The apps devices may register for, by platform; an empty list takes

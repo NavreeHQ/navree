@@ -5495,7 +5495,6 @@ dependencies = [
  "chrono",
  "form_urlencoded",
  "http",
- "navree-auth",
  "navree-config",
  "navree-contracts",
  "navree-crypto",

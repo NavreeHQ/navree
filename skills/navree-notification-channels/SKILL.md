@@ -84,10 +84,12 @@ fn to_push(&self, _n: &dyn Notifiable) -> Option<PushMessage> {
   `{platform: "ios"|"android", token, app_id, environment?: "sandbox"}`
   (403 without a session, 422 by field, 30 a minute); `DELETE` with
   `{token}` on sign-out. The token is never returned.
-- A device belongs to the session that registered it: with the `auth`
-  feature the channel sends only to devices whose navree-auth session is
-  live and deletes the rest (own auth: register a `dyn LiveSessions`).
-  Offboarding deletes them. A token re-registered by another user moves.
+- A device belongs to the session that registered it: register a
+  `dyn LiveSessions` (with navree-auth, answer from
+  `AuthService::sessions(user_id, None)`) and the channel sends only to
+  devices whose session is live, deleting the rest; without one it sends to
+  all and warns once. Offboarding deletes them. A token re-registered by
+  another user moves.
 - `PushMessage`: `.body`, `.href`, `.badge`, `.sound("default")`, `.thread`,
   `.collapse` (<= 64 bytes), `.ttl_secs`, `.urgency(Urgency::High)`,
   `.mutable_content()`, `.data(k, v)`; `PushMessage::silent()` wakes the app

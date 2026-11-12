@@ -26,18 +26,12 @@ test-mysql = ["navree-db/mysql"]
 ## `navree_notify::ui::NotificationBell`: the signed-in user's stored notifications in a Navree UI
 ## shell, and the routes it uses. The facade turns it on when both `ui` and `notify` are on.
 ui = ["dep:navree-ui"]
-## The push channel sends only to devices whose navree-auth session is still
-## signed in, and deletes the others. The facade turns it on when both `auth`
-## and `notify` are on.
-auth = ["dep:navree-auth"]
 
 [dependencies]
 base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
-# The sessions that own push devices (feature `auth`).
-navree-auth = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # VAPID signatures (ES256 through `jose`), push message encryption and
@@ -77,9 +71,8 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-# The crate's own tests draw the bell, and check push devices against
-# navree-auth's sessions.
-navree-notify = { path = ".", features = ["auth", "ui"] }
+# The crate's own tests draw the bell.
+navree-notify = { path = ".", features = ["ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

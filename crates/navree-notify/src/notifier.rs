@@ -49,6 +49,9 @@ pub struct Notifier {
     warned_inline: AtomicBool,
     /// Whether the "no database, not holding" warning was logged.
     pub(crate) warned_no_hold: AtomicBool,
+    /// Whether the "push devices are not checked against sessions" warning
+    /// was logged.
+    warned_no_sessions: AtomicBool,
     /// Where delivered channels are reported (`NotificationSent`).
     telemetry: Telemetry,
     /// The drivers configured in `notify`.
@@ -86,6 +89,7 @@ impl Notifier {
             app: parts.app,
             warned_inline: AtomicBool::new(false),
             warned_no_hold: AtomicBool::new(false),
+            warned_no_sessions: AtomicBool::new(false),
             telemetry: parts.telemetry,
             drivers: parts.drivers,
             log: parts.log,
@@ -695,8 +699,7 @@ impl Notifier {
     }
 
     /// The `devices` whose session is still live, when the app can tell
-    /// (a `dyn LiveSessions`, or navree-auth's sessions with the `auth`
-    /// feature); the others are deleted. Devices of a notifiable that is
+    /// (a `dyn LiveSessions`); the others are deleted. Devices of a notifiable that is
     /// not a user are all kept.
     async fn signed_in(
         &self,
@@ -710,7 +713,13 @@ impl Notifier {
         let Ok(user) = Uuid::parse_str(&job.notifiable_id) else {
             return Ok(devices);
         };
-        let Some(sessions) = live_sessions(ctx).await else {
+        let Some(sessions) = ctx.try_get::<dyn LiveSessions>().await else {
+            if !self.warned_no_sessions.swap(true, Ordering::Relaxed) {
+                tracing::warn!(
+                    target: "navree::notify",
+                    "no `dyn LiveSessions` is registered: push devices are sent to without checking that their session is still signed in"
+                );
+            }
             return Ok(devices);
         };
         let mut asked: Vec<String> = devices.iter().map(|d| d.session_id.clone()).collect();
@@ -1024,19 +1033,6 @@ async fn overrides(ctx: &AppContext, workspace: Option<Uuid>) -> Option<Notifica
             None
         }
     }
-}
-
-/// What tells which sessions are live: the app's `dyn LiveSessions`, else
-/// (with the `auth` feature) navree-auth's sessions.
-async fn live_sessions(ctx: &AppContext) -> Option<Arc<dyn LiveSessions>> {
-    if let Some(sessions) = ctx.try_get::<dyn LiveSessions>().await {
-        return Some(sessions);
-    }
-    #[cfg(feature = "auth")]
-    if let Some(auth) = ctx.try_get::<navree_auth::AuthService>().await {
-        return Some(Arc::new(crate::devices::AuthSessions(auth)));
-    }
-    None
 }
 
 /// Whether the app has a database (the channel tables).
