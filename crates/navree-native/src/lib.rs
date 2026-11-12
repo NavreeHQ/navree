@@ -36,7 +36,10 @@ pub mod vocab;
 
 pub use action::{Action, Command, Pair, Present, State};
 pub use device::{DeviceCall, ReplyCall, Ticket};
-pub use client::{Client, ClientError, Contrast, FormFactor, Platform, Scheme};
+pub use client::{
+    Client, ClientDescriptor, ClientError, Contrast, DescriptorError, FormFactor, Platform, Scheme,
+    WebViewToken,
+};
 pub use envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 pub use input::Input;
 pub use node::{Node, Prominence, Role, Standard, Tone};
@@ -62,8 +65,14 @@ pub const NATIVE_HEADER: &str = "x-navree-native";
 pub const CLIENT_HEADER: &str = "x-navree-client";
 
 /// The request header a client's web view sends with the value `1`: the page
-/// comes as HTML without the app's chrome, which the client draws itself.
+/// comes as HTML without the app's chrome, which the client draws itself. A
+/// web view sends it with its first request only, so a page also knows it is
+/// in one by the [`WebViewToken`] in its user agent.
 pub const EMBED_HEADER: &str = "x-navree-embed";
+
+/// The product a native client's web view adds to its user agent:
+/// `NavreeNative/1 (platform=ios; lib=0.3.0)`. See [`WebViewToken`].
+pub const USER_AGENT_PRODUCT: &str = "NavreeNative";
 
 /// The media type of an [`Envelope`] and of a [`Shell`].
 pub const CONTENT_TYPE: &str = "application/vnd.navree.native+json";
