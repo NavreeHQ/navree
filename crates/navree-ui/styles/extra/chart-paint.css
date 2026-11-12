@@ -20,7 +20,7 @@ stop[data-mix=vivid]{stop-color:color-mix(in oklab,var(--c) 62%,var(--fg))}
 stop[data-mix=soft]{stop-color:color-mix(in oklab,var(--c) 30%,var(--surface,var(--ink-0)))}
 
 /* Glow: a soft shadow of the mark's own colour, fainter on a light page. */
-[data-glow]{filter:drop-shadow(0 0 5px light-dark(color-mix(in oklab,var(--c) 30%,transparent),color-mix(in oklab,var(--c) 55%,transparent)))}
+[data-glow]{--g:light-dark(color-mix(in oklab,var(--c) 35%,transparent),color-mix(in oklab,var(--c) 70%,transparent));filter:drop-shadow(0 0 2px var(--g)) drop-shadow(0 0 7px var(--g))}
 
 /* Motion: a way in, never a state. The marks are drawn where they end; the animations only
    start them elsewhere, and only for a reader who has not asked for less motion. */
@@ -54,7 +54,7 @@ stop[data-mix=soft]{stop-color:color-mix(in oklab,var(--c) 30%,var(--surface,var
 
 /* A sparkline's columns and its points. */
 [data-slot=chart-column]:not([fill]){fill:var(--c)}
-[data-kind=sparkline] [data-slot=chart-point]{fill:var(--c);stroke:var(--surface);stroke-width:1.5px}
+[data-kind=sparkline] [data-slot=chart-point]{fill:var(--c);stroke:none}
 
 /* A progress bar drawn as a meter: a rounded track, the fill, a goal marker. */
 [data-slot=meter]{display:block;width:100%;min-width:0;& svg{display:block;overflow:visible}}

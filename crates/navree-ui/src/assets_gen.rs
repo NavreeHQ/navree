@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "c9ff7811a79b";
+pub const BUILD: &str = "3caea7f48289";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-97b1dcae61e2.js";
@@ -116,10 +116,10 @@ pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-b75b29f68c27.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
 
 /// The URL of `charts-styles.css`.
-pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-d9ff7d7c4f3f.css";
+pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-8c2dc9bac340.css";
 
 /// The URL of `chart-paint.css`.
-pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-1c50a31274af.css";
+pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-e4c8ec2ec030.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
@@ -498,7 +498,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts-styles",
         ext: "css",
-        hash: "d9ff7d7c4f3f",
+        hash: "8c2dc9bac340",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/charts-styles.css"),
         gzip: Some(include_bytes!("../dist/charts-styles.css.gz")),
@@ -507,7 +507,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "chart-paint",
         ext: "css",
-        hash: "1c50a31274af",
+        hash: "e4c8ec2ec030",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/chart-paint.css"),
         gzip: Some(include_bytes!("../dist/chart-paint.css.gz")),
