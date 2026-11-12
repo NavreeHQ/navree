@@ -323,6 +323,7 @@ const REQUIRED: &[&str] = &[
     "deep-tree",
     "device-reply",
     "form-file",
+    "redirects",
 ];
 
 #[test]
