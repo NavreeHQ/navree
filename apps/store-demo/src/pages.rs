@@ -317,6 +317,8 @@ fn fragment(title: &'static str, body: impl IntoNodes) -> View {
 
 #[derive(Deserialize, Default)]
 struct AfterQuery {
+    /// What a browser's feed asks from; a native client's list asks `since`.
+    #[serde(alias = "since")]
     after: Option<String>,
 }
 
@@ -351,26 +353,12 @@ impl Pages {
     /// HTML, with the newest cursor in `X-UI-Cursor`.
     async fn activity(&self, uow: Uow, query: AfterQuery) -> Result<Response> {
         let (entries, _) = feed(&uow, query.after.as_deref().and_then(Cursor::parse), 100).await?;
-        let html = render(&ActivityFeed::rows(
-            entries.iter().map(activity_item),
-            OFFSET,
-        ));
-        let mut response = (
-            [
-                (CONTENT_TYPE, "text/html; charset=utf-8"),
-                (CACHE_CONTROL, "no-store"),
-            ],
-            html,
-        )
-            .into_response();
-        if let Some(newest) = entries.first()
-            && let Ok(value) = HeaderValue::from_str(&Cursor::of(&newest.event).to_string())
-        {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("x-ui-cursor"), value);
+        let rows = ActivityFeed::answer(entries.iter().map(activity_item), OFFSET);
+        Ok(match entries.first() {
+            Some(newest) => rows.cursor(Cursor::of(&newest.event).to_string()),
+            None => rows,
         }
-        Ok(response)
+        .into_response())
     }
 
     /// `GET /orders`.

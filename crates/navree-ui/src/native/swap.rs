@@ -438,6 +438,66 @@ fn kept(mut response: Response, answered: Answered) -> Response {
     response
 }
 
+/// The new rows of a live feed for the native client the current request comes from:
+/// the events to merge into the feed's list at its top, with the cursor of the newest
+/// as the revision the list is at now (the one it asked from, when nothing is new).
+/// `None` when no native client asked.
+pub(crate) fn feed_rows(rows: &Node, cursor: Option<&str>) -> Option<Response> {
+    let request = scope::native()?;
+    let vocab = vocab_of(&request);
+    let mut cx = Cx::new(false);
+    let read = super::slots::feed::rows(&mut cx, std::slice::from_ref(rows));
+    let nodes = match read {
+        Ok(nodes) if cx.misses.is_empty() => nodes,
+        other => {
+            let why = match other {
+                Err(fail) => vec![fail.what.unwrap_or_else(|| "slot:activity-item".to_owned())],
+                Ok(_) => {
+                    let mut why: Vec<String> = Vec::new();
+                    for miss in &cx.misses {
+                        if !why.contains(&miss.what) {
+                            why.push(miss.what.clone());
+                        }
+                    }
+                    why
+                }
+            };
+            let envelope = Envelope::web(
+                assets::BUILD,
+                Web {
+                    url: request.url.clone(),
+                    title: None,
+                    why: why.clone(),
+                },
+            )
+            .in_vocab(vocab);
+            return Some(kept(
+                respond(StatusCode::OK, "no-store", envelope, &request, ""),
+                Answered::web(why),
+            ));
+        }
+    };
+    let query = request.url.split_once('?').map_or("", |(_, query)| query);
+    let asked = query
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("since="))
+        .and_then(unpercent)
+        .unwrap_or_default();
+    let ops = vec![navree_native::Op::Merge {
+        target: request.region.clone().unwrap_or_default(),
+        nodes,
+        gone: Vec::new(),
+        since: cursor.map_or(asked, str::to_owned),
+        at: navree_native::op::Edge::Start,
+        more: false,
+    }];
+    let envelope = Envelope::ops(assets::BUILD, ops).in_vocab(vocab);
+    Some(kept(
+        respond(StatusCode::OK, "no-store", envelope, &request, ""),
+        Answered::parts(std::mem::take(&mut cx.dropped)),
+    ))
+}
+
 /// `text` as a query value: the bytes that are not plain stay as `%` and two digits.
 pub(crate) fn percent(text: &str) -> String {
     let mut out = String::with_capacity(text.len());

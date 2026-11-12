@@ -504,6 +504,14 @@ impl Controller for Pages {
                 },
             )
             .public(),
+            RouteDef::on(Method::GET, "!/feed/rows", || async {
+                navree_ui::ActivityFeed::answer(
+                    [navree_ui::ActivityItem::new("Manpreet Gill", "packed").id("event-9")],
+                    19_800,
+                )
+                .cursor("0009")
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/agents/options", || async {
                 ChoiceList::new()
                     .choice(Choice::new("1", "Harpreet Kaur").description("Ludhiana"))
@@ -1349,6 +1357,33 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
         .await;
     assert_eq!(web.header("x-ui-more"), Some("1"));
     assert!(web.text().starts_with(r#"<li data-key="3""#));
+}
+
+#[tokio::test]
+async fn the_new_rows_of_a_feed_are_a_merge_for_a_native_client_and_markup_for_a_browser() {
+    let app = app().await;
+    let region = [("x-navree-region", "activity-list")];
+    let (_, answer) = ask_native(&app, Method::GET, "/feed/rows?since=0003", &region, "").await;
+    let [
+        NativeOp::Merge {
+            target,
+            nodes,
+            gone,
+            since,
+            at,
+            more,
+        },
+    ] = answer.ops.as_slice()
+    else {
+        panic!("not one merge: {:?}", answer.ops);
+    };
+    assert_eq!(target, "activity-list");
+    assert!(matches!(nodes.as_slice(), [N::FeedRow(row)] if row.id.as_deref() == Some("event-9")));
+    assert_eq!((gone.len(), since.as_str(), *more), (0, "0009", false));
+    assert_eq!(*at, navree_native::op::Edge::Start);
+    let web = app.client().get("/feed/rows?after=0003").send().await;
+    assert_eq!(web.header("x-ui-cursor"), Some("0009"));
+    assert!(web.text().starts_with("<li"));
 }
 
 #[tokio::test]

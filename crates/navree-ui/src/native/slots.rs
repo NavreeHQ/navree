@@ -9,7 +9,7 @@
 pub(crate) mod chart;
 mod chat;
 mod date;
-mod feed;
+pub(crate) mod feed;
 mod fold;
 mod lazy;
 mod menu;
@@ -758,6 +758,25 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
     })])
 }
 
+/// Puts the list `list` at the revision `cursor`, asking `src` what changed since and
+/// following `live`. Whether the list was found. Walked with a list of its own, so a
+/// tree of any depth is searched without using up the stack.
+fn follow(nodes: &mut [N], list: &str, cursor: &str, src: &str, live: n::Live) -> bool {
+    let mut stack: Vec<&mut N> = nodes.iter_mut().collect();
+    while let Some(node) = stack.pop() {
+        match node {
+            N::List(found) if found.id.as_deref() == Some(list) => {
+                found.since = Some(cursor.to_owned());
+                found.changes = Some(src.to_owned());
+                found.live = Some(live);
+                return true;
+            }
+            other => stack.extend(other.children_mut()),
+        }
+    }
+    false
+}
+
 /// Whether a form stands in `node`, at any depth. Walked with a list of its own, so
 /// a tree of any depth is searched without using up the stack.
 fn holds_form(node: &N) -> bool {
@@ -1321,7 +1340,22 @@ fn region(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let _waiting = parts.slots("skeleton");
     let _failed = parts.slots("region-failed");
-    let children = cx.flat_sequence(parts.left());
+    let mut children = cx.flat_sequence(parts.left());
+    // A feed asks only for what is newer than a cursor: its list is at that revision, asks
+    // the region's source for what changed since, and follows the region's stream.
+    if let (Some(list), Some(cursor), Some(live)) = (
+        attr(element, "data-ui-feed"),
+        attr(element, "data-ui-after"),
+        attr(element, "data-ui-live-src"),
+    ) {
+        let live = n::Live {
+            src: live.into_owned(),
+            event: attr(element, "data-ui-live-event").map(Cow::into_owned),
+        };
+        if follow(&mut children, &list, &cursor, &src, live) {
+            return Ok(children);
+        }
+    }
     Ok(vec![N::Region(n::Region {
         id,
         src: src.into_owned(),

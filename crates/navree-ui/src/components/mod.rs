@@ -34,7 +34,7 @@ mod tone;
 mod trace;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
-pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
+pub use activity::{ActivityFeed, ActivityItem, ActivityRows, FeedHeight};
 pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
 pub use color_picker::ColorPicker;
 pub use context_menu::ContextMenu;

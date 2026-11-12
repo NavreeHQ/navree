@@ -101,6 +101,22 @@ fn heading(cx: &mut Cx, header: &Element, section: &mut n::Section) -> Read<()> 
     Ok(())
 }
 
+/// The events a feed answers a native client with when it asks for what is new: the
+/// rows, each an event.
+pub(crate) fn rows(cx: &mut Cx, nodes: &[crate::node::Node]) -> Read<Vec<N>> {
+    let mut out = Vec::new();
+    for node in super::super::lower::flat(nodes) {
+        let crate::node::Node::Element(item) = node else {
+            return fail("something that is not an event among the rows of a feed");
+        };
+        if slot(item).as_deref() != Some("activity-item") {
+            return fail("something that is not an event among the rows of a feed");
+        }
+        out.push(row(cx, item)?);
+    }
+    Ok(out)
+}
+
 /// One event.
 fn row(cx: &mut Cx, item: &Element) -> Read<N> {
     hooks(item, &[])?;
@@ -201,6 +217,17 @@ mod tests {
         section
     }
 
+    fn rows_list(section: &n::Section) -> &n::List {
+        section
+            .children
+            .iter()
+            .find_map(|node| match node {
+                N::List(list) => Some(list),
+                _ => None,
+            })
+            .expect("a list")
+    }
+
     fn rows_of(section: &n::Section) -> &[N] {
         let Some(N::List(list)) = section
             .children
@@ -210,6 +237,28 @@ mod tests {
             panic!("no list: {:?}", section.children);
         };
         &list.children
+    }
+
+    #[test]
+    fn a_feed_in_a_region_that_asks_for_what_is_newer_is_a_list_at_a_revision() {
+        let N::Section(section) = read(
+            ActivityFeed::new("act", "Recent activity")
+                .live()
+                .item(ActivityItem::new("Manpreet Gill", "replied"))
+                .in_region(
+                    "act-region",
+                    "/fragments/activity",
+                    "/events",
+                    "0009",
+                ),
+        ) else {
+            panic!("not a section");
+        };
+        let list = rows_list(&section);
+        assert_eq!(list.id.as_deref(), Some("act-list"));
+        assert_eq!(list.since.as_deref(), Some("0009"));
+        assert_eq!(list.changes.as_deref(), Some("/fragments/activity"));
+        assert_eq!(list.live.as_ref().map(|live| live.src.as_str()), Some("/events"));
     }
 
     #[test]
