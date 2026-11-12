@@ -277,6 +277,56 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "paint",
+            Chart::area("Heart rate")
+                .id("paint")
+                .description("A gradient wash, a resting line, a zone and a big tooltip")
+                .times(hours(24))
+                .series(
+                    Series::new("Heart rate", wave(21, 24, 76.0, 18.0))
+                        .ink(Ink::slot(8))
+                        .unit("BPM")
+                        .fade()
+                        .glow()
+                        .stroke(Gradient::horizontal().stop(0.0, Ink::own()).stop(1.0, Ink::own().vivid())),
+                )
+                .smooth()
+                .dots(Dots::All)
+                .active_dot(ActiveDot::Halo)
+                .y_domain(Domain::padded(10))
+                .grid(Gridlines::horizontal().dashed())
+                .x_ticks(Ticks::every(3).keep_ends())
+                .reference(Reference::level(58).label("Resting {value}"))
+                .zone(Zone::new(90, 110).label("Cardio").ink(Ink::tone(Tone::Warning)))
+                .tooltip(TooltipStyle::big())
+                .motion(Motion::new())
+                .into(),
+        ),
+        (
+            "steps",
+            Chart::area("Sleep stages")
+                .id("steps")
+                .times(hours(8))
+                .series(
+                    Series::new("Stage", [1, 0, 1, 2, 1, 0, 2, 3]).ink(Ink::slot(7)).colors(
+                        ColorScale::new(Ink::slot(7))
+                            .label("Deep")
+                            .from(1, Ink::slot(1))
+                            .label("Light")
+                            .from(2, Ink::slot(5))
+                            .label("REM")
+                            .from(3, Ink::slot(4))
+                            .label("Awake"),
+                    ),
+                )
+                .curve(Curve::Step)
+                .y_categories(["Deep", "Light", "REM", "Awake"])
+                .dots(Dots::None)
+                .detail("Lasted", ["40 min", "55 min", "30 min", "20 min", "45 min", "60 min", "25 min", "5 min"])
+                .tooltip(TooltipStyle::big())
+                .into(),
+        ),
+        (
             "sparkline",
             Grid::cols(3)
                 .gap(3)
