@@ -1,6 +1,7 @@
 //! The components that show things: no behaviour, no script.
 
 use super::tone::Tone;
+use super::trend::Trend;
 use super::{Size, icon, root_methods};
 use crate::cmd::Cmd;
 use crate::html::Href;
@@ -1974,6 +1975,7 @@ pub struct Stat {
     label: Node,
     value: Node,
     trend: Option<(Node, bool)>,
+    change: Option<Node>,
     chart: Option<Node>,
 }
 
@@ -1985,6 +1987,7 @@ impl Stat {
             label: label.into(),
             value: value.into(),
             trend: None,
+            change: None,
             chart: None,
         }
     }
@@ -2002,17 +2005,28 @@ impl Stat {
         self
     }
 
+    /// Adds how it's moving as a [`Trend`]: an arrow, the change with its sign, and a
+    /// colour for what it means. It replaces [`trend`](Self::trend).
+    pub fn change(mut self, trend: Trend) -> Self {
+        self.change = Some(trend.into());
+        self
+    }
+
     fn into_node(self) -> Node {
         self.el
             .children((
                 el("span").slot("stat-label").child(self.label),
                 el("span").slot("stat-value").child(self.value),
-                self.trend.map(|(text, good)| {
-                    el("span")
-                        .slot("stat-trend")
-                        .attr("data-tone", if good { "up" } else { "down" })
-                        .child(text)
-                }),
+                self.change
+                    .map(|change| el("span").slot("stat-trend").child(change))
+                    .or_else(|| {
+                        self.trend.map(|(text, good)| {
+                            el("span")
+                                .slot("stat-trend")
+                                .attr("data-tone", if good { "up" } else { "down" })
+                                .child(text)
+                        })
+                    }),
                 self.chart
                     .map(|chart| el("div").slot("stat-chart").child(chart)),
             ))

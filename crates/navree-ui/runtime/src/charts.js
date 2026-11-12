@@ -111,9 +111,17 @@ function show(body, i, keyed) {
   // Beside the value, on whichever side has room; never past the chart's edges. A chart
   // shorter than its tooltip (a few bars with many series) grows to hold it.
   const w = tip.offsetWidth, h = tip.offsetHeight;
-  if (h > box.height) body.style.minHeight = h + "px";
-  tip.style.left = clamp(0, ax + 12 + w > box.width ? ax - 12 - w : ax + 12, box.width - w) + "px";
-  tip.style.top = clamp(0, ay - h / 2, Math.max(box.height, h) - h) + "px";
+  if (body.hasAttribute("data-float") && marks[0]) {
+    // A thin chart (a meter, a strip) floats the tooltip over the page, above the mark
+    // and centred on it, or below it when the window has no room above; it never grows.
+    const r = marks[0].getBoundingClientRect();
+    tip.style.left = clamp(0, r.left - box.left + (r.width - w) / 2, box.width - w) + "px";
+    tip.style.top = (r.top < h + 12 ? r.bottom - box.top + 6 : r.top - box.top - h - 6) + "px";
+  } else {
+    if (h > box.height) body.style.minHeight = h + "px";
+    tip.style.left = clamp(0, ax + 12 + w > box.width ? ax - 12 - w : ax + 12, box.width - w) + "px";
+    tip.style.top = clamp(0, ay - h / 2, Math.max(box.height, h) - h) + "px";
+  }
   const say = keyed && $(figure, "[data-slot=chart-announce]");
   if (say) say.textContent = said.join(", ");
 }

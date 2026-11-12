@@ -164,6 +164,13 @@ fn the_radial_sheet_is_at_most_2_kb_gzip_and_a_ring_loads_no_script() {
     assert!(!html.contains("<script"), "{html}");
 }
 
+/// The linear charts' sheet (meter, mini columns, colour strip, range scale, trend) is
+/// linked only by a page that draws one, and stays under 2 KB gzip.
+#[test]
+fn the_chart_linear_sheet_is_at_most_2_kb_gzip() {
+    assert!(size("chart-linear") <= 2048, "{}", size("chart-linear"));
+}
+
 /// A page to read with a chart on it loads the charts module and no other.
 #[test]
 fn a_page_with_a_chart_loads_the_charts_module_alone() {
@@ -476,6 +483,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "charts-styles",
         "chart-paint",
         "chart-radial",
+        "chart-linear",
         "select-styles",
         "phone-styles",
         "slider-styles",
@@ -652,6 +660,9 @@ fn no_two_modules_share_a_bit() {
         Uses::PARTS_STYLES,
         Uses::GENUI,
         Uses::CHART_RADIAL,
+        Uses::COUNT_UP,
+        Uses::CHART_PAINT,
+        Uses::CHART_LINEAR,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {
