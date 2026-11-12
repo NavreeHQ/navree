@@ -54,9 +54,11 @@ fn database(error: DbError) -> AiError {
     AiError::internal(format!("pgvector: {error}"))
 }
 
-/// The table of `collection`.
+/// The table of `collection`, a quoted identifier. `Collection::ensure`
+/// checks every name against `[a-z0-9_]{1,48}` (`check_name`) before a
+/// driver call; a quote is doubled all the same.
 pub(crate) fn table(collection: &str) -> String {
-    format!("\"ai_vectors_{collection}\"")
+    format!("\"ai_vectors_{}\"", collection.replace('"', "\"\""))
 }
 
 /// pgvector's text form of a vector: `[1,2,3]`.
@@ -123,7 +125,20 @@ pub(crate) fn filter_sql(filter: &Filter, values: &mut Vec<SqlValue>) -> String 
         values.push(value);
         format!("${}", values.len())
     };
-    let path = |field: &str| format!("'{{{}}}'", field.replace('.', ","));
+    // The field's path into the metadata, one bound text per segment: a field
+    // name is the caller's text and never part of the SQL.
+    let path = |field: &str, values: &mut Vec<SqlValue>| {
+        let segments: Vec<String> = field
+            .split('.')
+            .map(|segment| {
+                format!(
+                    "{}::text",
+                    param(SqlValue::from(segment.to_owned()), values)
+                )
+            })
+            .collect();
+        format!("ARRAY[{}]", segments.join(", "))
+    };
     match filter {
         Filter::Eq(field, value) => {
             let p = param(
@@ -158,7 +173,10 @@ pub(crate) fn filter_sql(filter: &Filter, values: &mut Vec<SqlValue>) -> String 
                 Filter::Lt(..) => "<",
                 _ => "<=",
             };
-            let path = path(field);
+            if !matches!(value, Value::Number(_) | Value::String(_)) {
+                return "FALSE".to_owned();
+            }
+            let path = path(field, values);
             match value {
                 Value::Number(number) => {
                     let p = param(SqlValue::from(number.as_f64().unwrap_or(0.0)), values);
@@ -273,6 +291,8 @@ impl VectorDriver for PgVector {
                 table(collection)
             );
             for record in records {
+                // `table()` quotes a collection name `check_name` allowed; the values are bound.
+                // nosemgrep: navree-sql-built-from-strings-in-async
                 self.execute(
                     sql.clone(),
                     vec![
@@ -295,6 +315,8 @@ impl VectorDriver for PgVector {
     ) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
             for id in ids {
+                // `table()` quotes a collection name `check_name` allowed; the id is bound.
+                // nosemgrep: navree-sql-built-from-strings-in-async
                 self.execute(
                     format!("DELETE FROM {} WHERE id = $1", table(collection)),
                     vec![SqlValue::from(id)],
@@ -313,6 +335,9 @@ impl VectorDriver for PgVector {
         Box::pin(async move {
             let mut values = Vec::new();
             let condition = filter_sql(filter, &mut values);
+            // `table()` quotes a collection name `check_name` allowed; `filter_sql` writes
+            // fixed SQL and `$n` placeholders, binding every field name and value.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             self.execute(
                 format!("DELETE FROM {} WHERE {condition}", table(collection)),
                 values,
@@ -355,6 +380,8 @@ impl VectorDriver for PgVector {
     fn count<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<u64, AiError>> {
         Box::pin(async move {
             self.check_backend()?;
+            // `table()` quotes a collection name `check_name` allowed.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let row = self
                 .db
                 .fetch_optional(&Statement::text(format!(
@@ -378,6 +405,8 @@ impl VectorDriver for PgVector {
     ) -> BoxFuture<'a, Result<Option<VectorRecord>, AiError>> {
         Box::pin(async move {
             self.check_backend()?;
+            // `table()` quotes a collection name `check_name` allowed; the id is bound.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let row = self
                 .db
                 .fetch_optional(&Statement::new(
@@ -405,6 +434,8 @@ impl VectorDriver for PgVector {
 
     fn clear<'a>(&'a self, collection: &'a str) -> BoxFuture<'a, Result<(), AiError>> {
         Box::pin(async move {
+            // `table()` quotes a collection name `check_name` allowed.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             self.execute(format!("DELETE FROM {}", table(collection)), Vec::new())
                 .await?;
             Ok(())
@@ -549,11 +580,13 @@ mod tests {
             sql,
             "SELECT id, text, metadata, (1 - (embedding <=> $1::vector))::double precision AS score \
              FROM \"ai_vectors_notes\" WHERE (metadata @> $2::jsonb AND (metadata @> $3::jsonb OR metadata @> $4::jsonb) \
-             AND (jsonb_typeof(metadata #> '{created_at}') = 'string' AND (metadata #>> '{created_at}') >= $5) \
-             AND NOT ((jsonb_typeof(metadata #> '{count}') = 'number' AND (metadata #>> '{count}')::double precision < $6))) \
-             AND (1 - (embedding <=> $1::vector)) >= $7 ORDER BY embedding <=> $1::vector LIMIT 8"
+             AND (jsonb_typeof(metadata #> ARRAY[$5::text]) = 'string' AND (metadata #>> ARRAY[$5::text]) >= $6) \
+             AND NOT ((jsonb_typeof(metadata #> ARRAY[$7::text]) = 'number' AND (metadata #>> ARRAY[$7::text])::double precision < $8))) \
+             AND (1 - (embedding <=> $1::vector)) >= $9 ORDER BY embedding <=> $1::vector LIMIT 8"
         );
-        assert_eq!(values.len(), 7);
+        assert_eq!(values.len(), 9);
+        assert_eq!(values[4], SqlValue::from("created_at".to_owned()));
+        assert_eq!(values[6], SqlValue::from("count".to_owned()));
         assert_eq!(values[0], SqlValue::from("[0.5,1]".to_owned()));
         assert_eq!(
             values[1],
@@ -566,8 +599,24 @@ mod tests {
         let mut values = Vec::new();
         assert_eq!(
             filter_sql(&Filter::gt("owner.level", 2), &mut values),
-            "(jsonb_typeof(metadata #> '{owner,level}') = 'number' AND (metadata #>> '{owner,level}')::double precision > $1)"
+            "(jsonb_typeof(metadata #> ARRAY[$1::text, $2::text]) = 'number' AND (metadata #>> ARRAY[$1::text, $2::text])::double precision > $3)"
         );
+        assert_eq!(
+            values[..2],
+            [
+                SqlValue::from("owner".to_owned()),
+                SqlValue::from("level".to_owned())
+            ]
+        );
+        // A field name with a quote stays a bound value.
+        let mut values = Vec::new();
+        let sql = filter_sql(&Filter::lt("x}') OR TRUE OR ('{", "z"), &mut values);
+        assert!(!sql.contains("OR TRUE"), "{sql}");
+        assert_eq!(values[0], SqlValue::from("x}') OR TRUE OR ('{".to_owned()));
+        // A value that is neither a number nor a string binds nothing.
+        let mut values = Vec::new();
+        assert_eq!(filter_sql(&Filter::gt("k", true), &mut values), "FALSE");
+        assert!(values.is_empty());
         let (sql, _) = search_sql("n", Metric::Dot, &[1.0], None, 3, None);
         assert!(sql.contains("(-(embedding <#> $1::vector))"), "{sql}");
         assert!(filter_sql(&Filter::any_of("k", Vec::<String>::new()), &mut values) == "FALSE");
