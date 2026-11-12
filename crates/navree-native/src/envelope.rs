@@ -116,7 +116,7 @@ pub struct Upgrade {
 /// );
 /// assert_eq!(
 ///     serde_json::to_string(&envelope).unwrap(),
-///     r#"{"navree":1,"build":"3f9a1c07b2de","vocab":1,"screen":{"title":"Orders","body":{"t":"text","value":"No orders yet"}}}"#
+///     r#"{"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Orders","body":{"t":"text","value":"No orders yet"}}}"#
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,7 +231,7 @@ mod tests {
         let json = serde_json::to_string(&web).unwrap();
         assert_eq!(
             json,
-            r#"{"navree":1,"build":"b1","vocab":1,"web":{"url":"/reports/42","title":"Report","why":["slot:chart","tag:canvas"]}}"#
+            r#"{"navree":1,"build":"b1","vocab":0,"web":{"url":"/reports/42","title":"Report","why":["slot:chart","tag:canvas"]}}"#
         );
         assert_eq!(serde_json::from_str::<Envelope>(&json).unwrap(), web);
 
@@ -245,13 +245,13 @@ mod tests {
         let json = serde_json::to_string(&upgrade).unwrap();
         assert_eq!(
             json,
-            r#"{"navree":1,"build":"b1","vocab":1,"upgrade":{"min_app":"1.2.0","url":"https://example.com/app"}}"#
+            r#"{"navree":1,"build":"b1","vocab":0,"upgrade":{"min_app":"1.2.0","url":"https://example.com/app"}}"#
         );
 
         let ops = Envelope::ops("b1", vec![Op::Reload]);
         assert_eq!(
             serde_json::to_string(&ops).unwrap(),
-            r#"{"navree":1,"build":"b1","vocab":1,"ops":[{"op":"reload"}]}"#
+            r#"{"navree":1,"build":"b1","vocab":0,"ops":[{"op":"reload"}]}"#
         );
     }
 }

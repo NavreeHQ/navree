@@ -205,7 +205,7 @@ impl std::error::Error for ClientError {}
 /// use navree_native::{Client, FormFactor, Platform, Scheme};
 ///
 /// let client = Client::parse(
-///     "platform=android; os=16; form=phone; app=1.4.0; vocab=1; scheme=dark; \
+///     "platform=android; os=16; form=phone; app=1.4.0; vocab=0; scheme=dark; \
 ///      text=1.3; locale=en-IN; tz=Asia/Kolkata; caps=biometrics+push",
 /// )
 /// .unwrap();
@@ -282,7 +282,7 @@ impl Client {
         let mut form = None;
         let mut client = Self::new(Platform::Linux, FormFactor::Desktop);
         // A client that names no vocabulary draws the first.
-        client.vocab = 1;
+        client.vocab = 0;
         for pair in header.split(';') {
             let pair = pair.trim();
             if pair.is_empty() {
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn the_descriptor_of_the_protocol_reads_whole() {
         let client = Client::parse(
-            "platform=ios; os=26.1; form=phone; app=1.4.0; vocab=1; scheme=dark; contrast=normal; \
+            "platform=ios; os=26.1; form=phone; app=1.4.0; vocab=0; scheme=dark; contrast=normal; \
              text=1.0; locale=en-IN; tz=Asia/Kolkata; caps=biometrics+push+camera",
         )
         .unwrap();
@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(client.os, "26.1");
         assert_eq!(client.form, FormFactor::Phone);
         assert_eq!(client.app, "1.4.0");
-        assert_eq!(client.vocab, 1);
+        assert_eq!(client.vocab, 0);
         assert_eq!(client.scheme, Scheme::Dark);
         assert_eq!(client.contrast, Contrast::Normal);
         assert_eq!(client.text_percent, 100);
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn only_the_platform_and_the_form_are_needed() {
         let client = Client::parse("platform=linux;form=desktop").unwrap();
-        assert_eq!(client.vocab, 1);
+        assert_eq!(client.vocab, 0);
         assert_eq!(client.text_percent, 100);
         assert_eq!(client.scheme, Scheme::Light);
         assert!(client.caps.is_empty());
@@ -541,7 +541,7 @@ mod tests {
         let header = client.to_header();
         assert_eq!(
             header,
-            "platform=ipados; os=26.1; form=tablet; app=2.0.0; vocab=1; scheme=dark; \
+            "platform=ipados; os=26.1; form=tablet; app=2.0.0; vocab=0; scheme=dark; \
              contrast=more; text=1.35; locale=pa-IN; tz=Asia/Kolkata; caps=push+camera"
         );
         assert_eq!(Client::parse(&header).unwrap(), client);

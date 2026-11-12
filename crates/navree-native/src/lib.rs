@@ -47,8 +47,10 @@ pub use vocab::Kind;
 /// what is in it breaks; each side refuses a major it does not know.
 pub const MAJOR: u32 = 1;
 
-/// The newest vocabulary: the number a current client sends as `vocab`.
-pub const VOCAB: u32 = 1;
+/// The newest vocabulary: the number a current client sends as `vocab`. It
+/// stays 0 while the vocabulary may still change, and counts up from the
+/// first release that freezes it.
+pub const VOCAB: u32 = 0;
 
 /// The request header that says "answer me as a native client", with the
 /// protocol's major version as its value.

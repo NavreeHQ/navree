@@ -50,40 +50,40 @@ macro_rules! kinds {
 }
 
 kinds! {
-    Stack => "stack" since 1,
-    Grid => "grid" since 1,
-    Section => "section" since 1,
-    List => "list" since 1,
-    Row => "row" since 1,
-    Split => "split" since 1,
-    Tabs => "tabs" since 1,
-    Disclosure => "disclosure" since 1,
-    Divider => "divider" since 1,
-    Spacer => "spacer" since 1,
-    Region => "region" since 1,
-    Text => "text" since 1,
-    Rich => "rich" since 1,
-    Image => "image" since 1,
-    Icon => "icon" since 1,
-    Avatar => "avatar" since 1,
-    Badge => "badge" since 1,
-    Progress => "progress" since 1,
-    Banner => "banner" since 1,
-    Empty => "empty" since 1,
-    Facts => "facts" since 1,
-    Table => "table" since 1,
-    Chart => "chart" since 1,
-    Code => "code" since 1,
-    Button => "button" since 1,
-    Link => "link" since 1,
-    Menu => "menu" since 1,
-    Form => "form" since 1,
-    Field => "field" since 1,
-    Sheet => "sheet" since 1,
-    Dialog => "dialog" since 1,
-    Popover => "popover" since 1,
-    Native => "native" since 1,
-    Web => "web" since 1,
+    Stack => "stack" since 0,
+    Grid => "grid" since 0,
+    Section => "section" since 0,
+    List => "list" since 0,
+    Row => "row" since 0,
+    Split => "split" since 0,
+    Tabs => "tabs" since 0,
+    Disclosure => "disclosure" since 0,
+    Divider => "divider" since 0,
+    Spacer => "spacer" since 0,
+    Region => "region" since 0,
+    Text => "text" since 0,
+    Rich => "rich" since 0,
+    Image => "image" since 0,
+    Icon => "icon" since 0,
+    Avatar => "avatar" since 0,
+    Badge => "badge" since 0,
+    Progress => "progress" since 0,
+    Banner => "banner" since 0,
+    Empty => "empty" since 0,
+    Facts => "facts" since 0,
+    Table => "table" since 0,
+    Chart => "chart" since 0,
+    Code => "code" since 0,
+    Button => "button" since 0,
+    Link => "link" since 0,
+    Menu => "menu" since 0,
+    Form => "form" since 0,
+    Field => "field" since 0,
+    Sheet => "sheet" since 0,
+    Dialog => "dialog" since 0,
+    Popover => "popover" since 0,
+    Native => "native" since 0,
+    Web => "web" since 0,
 }
 
 /// A field that arrived after its kind did: the kind, the field's name in the
@@ -97,11 +97,10 @@ pub const LATER_FIELDS: &[(Kind, &str, u32)] = &[];
 /// of it.
 ///
 /// ```
-/// use navree_native::{Kind, Node, vocab};
+/// use navree_native::{Node, VOCAB, vocab};
 ///
 /// let node = Node::text("Orders");
-/// assert_eq!(vocab::newer_than(&node, 1), None);
-/// assert_eq!(vocab::newer_than(&node, 0), Some(Kind::Text));
+/// assert_eq!(vocab::newer_than(&node, VOCAB), None);
 /// ```
 pub fn newer_than(node: &Node, vocab: u32) -> Option<Kind> {
     let mut stack = vec![node];
@@ -133,7 +132,7 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), count, "two kinds share a name");
         for kind in Kind::ALL {
-            assert!((1..=crate::VOCAB).contains(&kind.since()), "{kind:?}");
+            assert!(kind.since() <= crate::VOCAB, "{kind:?}");
         }
         for (kind, field, since) in LATER_FIELDS {
             assert!(*since > kind.since(), "{kind:?}.{field}");
@@ -142,12 +141,18 @@ mod tests {
     }
 
     #[test]
-    fn a_kind_newer_than_the_client_is_found_however_deep() {
+    fn the_vocabulary_is_0_until_it_is_frozen() {
+        assert_eq!(crate::VOCAB, 0);
+        assert!(Kind::ALL.iter().all(|kind| kind.since() == 0));
+    }
+
+    #[test]
+    fn a_client_of_the_first_vocabulary_draws_every_kind() {
         let tree = Node::Section(Section {
             children: vec![Node::text("a"), Node::text("b")],
             ..Section::default()
         });
         assert_eq!(newer_than(&tree, crate::VOCAB), None);
-        assert_eq!(newer_than(&tree, 0), Some(Kind::Section));
+        assert_eq!(newer_than(&tree, 0), None);
     }
 }
