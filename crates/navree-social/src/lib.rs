@@ -16,6 +16,18 @@
 //!   | `GET accounts` | signed in | 200 `[`[`LinkedAccount`]`]` |
 //!   | `POST {provider}/link` `{code, state}` | signed in | 201 [`LinkedAccount`] |
 //!   | `DELETE accounts/{provider}` | signed in | 204 |
+//!   | `POST {provider}/native/nonce` | public (`apple`, `google`) | 200 [`NativeNonce`] `{nonce, state, expires_in}` |
+//!   | `POST {provider}/native` [`NativeSignIn`] | public; counted by the login throttle | 200 like `POST /auth/login` |
+//!   | `POST {provider}/native/session` [`NativeSignIn`] | public, on the session cookie (feature `session`) | 200 the user, or `{"two_factor_required": true}` |
+//!   | `POST apple/notifications` `{payload}` | public; Apple's signature checked | 200 |
+//!
+//! - **Native apps** sign in with the identity token the system's sheet
+//!   gives them (Sign in with Apple, Android's Credential Manager), bound
+//!   to a one-time nonce the server issued, for one of the site's app ids
+//!   (`auth.apps.apple` bundle ids; the Google client id). Apple's
+//!   authorization code is exchanged and its tokens kept, so that
+//!   disconnecting Apple, [`Social::revoke_tokens`] and navree-auth's
+//!   offboarding revoke them at Apple ([`Social::native_user`]).
 //!
 //! - **The state** is sealed with the application key (AES-256-GCM): it
 //!   carries the PKCE verifier (S256), the OpenID Connect nonce, the

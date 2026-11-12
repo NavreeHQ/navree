@@ -1,6 +1,6 @@
 ---
 name: navree-social
-description: "Social sign-in with navree-social: `SocialModule` and the `social` config section, providers (google, github, apple, microsoft, gitlab, slack, linkedin, discord, x, any `oidc` issuer, `custom` via `SocialProvider`), the `/api/auth/social/*` routes, the `Social` service (`redirect`, `user`, `sign_in`, `link`, `unlink`, `accounts`, `token`), linked accounts and `link_by_email`, two-factor on social sign-ins, stored provider tokens, and tests with `Social::fake()`/`SocialFake` or a wiremock provider. Use when adding \"Continue with Google/GitHub/Apple/...\" buttons, single sign-on with Okta, Auth0, Keycloak or Entra ID, connecting providers from a settings page, calling a provider's API on a user's behalf, or debugging a 400 `Invalid or expired state`, 403, 409 or 502 from a social route."
+description: "Social sign-in with navree-social: `SocialModule` and the `social` config section, providers (google, github, apple, microsoft, gitlab, slack, linkedin, discord, x, any `oidc` issuer, `custom` via `SocialProvider`), the `/api/auth/social/*` routes, the `Social` service (`redirect`, `user`, `sign_in`, `link`, `unlink`, `accounts`, `token`), native Apple and Google sign-in from apps (`native/nonce`, `native`), Apple token revocation (`revoke_tokens`) and notifications, linked accounts and `link_by_email`, two-factor on social sign-ins, stored provider tokens, and tests with `Social::fake()`/`SocialFake` or a wiremock provider. Use when adding \"Continue with Google/GitHub/Apple/...\" buttons, single sign-on with Okta, Auth0, Keycloak or Entra ID, signing in from a native app, deleting an Apple-linked account, connecting providers from a settings page, calling a provider's API on a user's behalf, or debugging a 400 `Invalid or expired state`, 403, 409 or 502 from a social route."
 ---
 
 # Social sign-in
@@ -70,7 +70,11 @@ client_id = "0oa8f2kq1xYz3AbC4d5e"
 | `POST {provider}/callback {code, state, user?}` | public; per-IP `auth.login_throttle_per_minute` (429) | login body + `return_to` |
 | `GET accounts` | signed in | `[{provider, provider_name, email, name, avatar_url, linked_at}]` |
 | `POST {provider}/link {code, state}` | signed in; state from `?intent=link` by the same user | 201 account |
-| `DELETE accounts/{provider}` | signed in | 204; 409 if it is the last way to sign in |
+| `DELETE accounts/{provider}` | signed in | 204 (stored Apple/Google tokens revoked first; 502 if the provider is down); 409 if it is the last way to sign in |
+| `POST {provider}/native/nonce` | public; `apple` (needs `auth.apps.apple`) or `google` | `{nonce, state, expires_in: 300}` |
+| `POST {provider}/native {id_token, state, authorization_code?, user?}` | public; login throttle | login body |
+| `POST {provider}/native/session {.., remember?}` | public, session cookie + `X-XSRF-TOKEN` (feature `session`) | the user, or `{two_factor_required: true}` |
+| `POST apple/notifications {payload}` | public; Apple's JWS verified | `{}`; 400 `invalid_notification` |
 
 `social.routes = false` removes them; the `Social` service still works.
 
@@ -148,6 +152,43 @@ return_to, intent, user_id, .. })` (`Intent::Link` needs `user_id`),
 `provider_name(key)`, `token(user_id, key)`. `SocialError` returned with
 `?` keeps its status (the module registers the mapping).
 
+## Native apps (Sign in with Apple and Google from the system sheet)
+
+No redirect: the system sheet gives the app an identity token. Audiences
+come from config already there: Apple = `auth.apps.apple.<name>.bundle_id`
+(none: 404 `native_sign_in_unavailable`); Google = the Google provider's
+`client_id` (the web client id, passed by Android as `setServerClientId`).
+iPhone Google sign-in uses the web flow in `ASWebAuthenticationSession`.
+
+1. `POST {provider}/native/nonce` -> `{nonce, state, expires_in}` (stateless,
+   sealed, single use, 5 min or `state_ttl_secs` if shorter).
+2. Sheet: Google `setNonce(nonce)`; Apple `request.nonce =
+   lowercase_hex(SHA-256(nonce))` (the server compares that hashed form).
+3. `POST {provider}/native {"id_token", "state", "authorization_code"?
+   (Apple), "user"? (Apple's first-sign-in `{"name": {"firstName",
+   "lastName"}}`, display only)}` -> the callback's body (tokens) or the 2FA
+   challenge. Cookie apps: `.../native/session` (+ `"remember"`).
+
+Checked: attempt (once, provider, expiry), signature (provider key set,
+cached by `max-age`, one refetch for an unknown `kid`), issuer, audience,
+`exp`, `iat` within the attempt (60 s leeway), nonce. Then `sign_in`'s
+linking rules unchanged. Service: `native_nonce`, `native_user`,
+`sign_in_session` (feature `session`).
+
+Apple's code is exchanged as the bundle id (ES256 client secret, `sub` =
+bundle id); the returned ID token must have the same `sub`; Apple tokens
+are stored encrypted **whatever `store_tokens` says**, with their client
+(`social_account_clients`). Revoked at Apple by `unlink`,
+`Social::revoke_tokens(user_id)` and `AuthService::revoke_all_credentials`
+(credential revoker `social`, kind `social_provider_tokens`). An account
+deletion route: `auth.revoke_all_credentials(user.id).await?` then delete
+the user.
+
+Apple notifications (`POST /api/auth/social/apple/notifications`, register
+it with Apple): `consent-revoked` forgets tokens + signs out everywhere;
+`account-deleted` unlinks + signs out; `email-disabled`/`email-enabled`
+recorded. Event `SocialProviderNotice` (`social.provider_notice`).
+
 ## Provider API calls later
 
 ```toml
@@ -216,7 +257,11 @@ let app = TestApp::builder()
 `fake.on_code_error(key, code, "access_denied")` gives a 400;
 `fake.on_refresh(key, ProviderToken::new(..))` answers `Social::token`
 refreshes; `fake.exchanged()` lists `(provider, code)`. Unknown codes are
-`invalid_grant`. For a real provider integration test, keep the real
+`invalid_grant`. Native: `fake.on_id_token(key, id_token, user)` answers
+`POST .../native` (state still checked); `fake.revocations()` lists
+revoked `(provider, provider user id)`. Native tests against a stand-in:
+`crates/navree-social/tests/social/native.rs` (wiremock key set, tokens
+signed with test keys, `url` of `apple`/`google` pointing at it). For a real provider integration test, keep the real
 `Social`, point `url` / `authorize_url` / `token_url` / `userinfo_url` /
 `jwks_url` at a wiremock server and allow it in the HTTP client
 (`HttpClientModule::for_root(HttpClientOptions { ssrf: SsrfPolicy {
@@ -250,7 +295,13 @@ Use `FixedClock` (`override_value::<dyn Clock>`) to expire states (600 s).
   /api/auth/me/password` can't work for them; use password reset.
 - Provider keys are lower-case `[a-z0-9_-]`, never `accounts`.
 - Apple sends the name only on the first sign-in: pass the `user` field to
-  the callback or it is lost.
+  the callback (or the native post) or it is lost.
+- Native Apple tokens are for the bundle id, never the Services ID: a
+  bundle id missing from `auth.apps.apple` gives 400 `invalid_id_token`.
+- Apple's nonce in the token is the hex SHA-256 the app passed, not the raw
+  nonce; sending the raw nonce to Apple is refused.
+- Validation failures are 400 `validation_failed`, like every Navree
+  route.
 
 ## Docs
 

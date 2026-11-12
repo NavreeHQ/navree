@@ -28,8 +28,14 @@ use crate::{Social, SocialError, SocialOptions, SocialProvider};
 ///   `GET {provider}/redirect` and `POST {provider}/callback` (public; the
 ///   callback counts against `auth.login_throttle_per_minute` per client
 ///   IP), `GET accounts`, `POST {provider}/link` and `DELETE
-///   accounts/{provider}` (signed in);
-/// - the `social` migration set (`social_accounts`, after `auth`);
+///   accounts/{provider}` (signed in), the native apps' `POST
+///   {provider}/native/nonce`, `POST {provider}/native` (and `.../session`
+///   with the feature `session`), and Apple's `POST apple/notifications`
+///   (public);
+/// - the `social` migration set (`social_accounts` and
+///   `social_account_clients`, after `auth`);
+/// - a credential revoker (`social`): navree-auth's offboarding revokes the
+///   users' stored Apple and Google tokens at the provider;
 /// - the mapping of [`SocialError`]s returned from handlers to error
 ///   responses.
 ///

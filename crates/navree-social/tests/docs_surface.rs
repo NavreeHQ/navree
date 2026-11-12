@@ -13,10 +13,10 @@ use navree_contracts::Secret;
 use navree_db::Uow;
 use navree_events::Event;
 use navree_social::{
-    AuthorizeUrl, Intent, LinkByEmail, LinkedAccount, ProviderConfig, ProviderToken,
-    RedirectOptions, SOCIAL_MIGRATIONS, Social, SocialAccountLinked, SocialAccountUnlinked,
-    SocialCallback, SocialError, SocialModule, SocialOptions, SocialRedirect, SocialUser,
-    TwoFactorPolicy,
+    AuthorizeUrl, Intent, LinkByEmail, LinkedAccount, NativeNonce, NativeSignIn, ProviderConfig,
+    ProviderToken, RedirectOptions, SOCIAL_MIGRATIONS, Social, SocialAccountLinked,
+    SocialAccountUnlinked, SocialCallback, SocialError, SocialModule, SocialOptions,
+    SocialProviderNotice, SocialRedirect, SocialUser, TwoFactorPolicy,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -112,9 +112,57 @@ fn the_documented_values_have_their_fields() {
 }
 
 #[test]
+fn the_native_post_has_its_documented_fields() {
+    let post: NativeSignIn = serde_json::from_value(json!({
+        "id_token": "eyJ.x.y",
+        "state": "nvs1.s",
+        "authorization_code": "c",
+        "user": { "name": { "firstName": "Simran", "lastName": "Gill" } },
+        "remember": true,
+    }))
+    .unwrap();
+    let NativeSignIn {
+        id_token,
+        state,
+        authorization_code,
+        user,
+        remember,
+        ..
+    } = post.clone();
+    assert_eq!((id_token.as_str(), state.as_str()), ("eyJ.x.y", "nvs1.s"));
+    assert!(authorization_code.is_some() && user.is_some() && remember);
+    let debug = format!("{post:?}");
+    assert!(
+        !debug.contains("eyJ.x.y") && !debug.contains("nvs1.s"),
+        "{debug}"
+    );
+    let built = NativeSignIn::new("t", "s")
+        .authorization_code("c")
+        .user(json!({}));
+    assert!(built.authorization_code.is_some());
+    let _ = |nonce: NativeNonce| (nonce.nonce, nonce.state, nonce.expires_in);
+    let _ = [
+        SocialError::NativeUnavailable {
+            provider: String::new(),
+        },
+        SocialError::InvalidNotification {
+            provider: String::new(),
+            reason: String::new(),
+        },
+    ];
+}
+
+#[test]
 fn the_events_have_their_documented_names() {
     assert_eq!(SocialAccountLinked::NAME, "social.linked");
     assert_eq!(SocialAccountUnlinked::NAME, "social.unlinked");
+    assert_eq!(SocialProviderNotice::NAME, "social.provider_notice");
+    let _ = SocialProviderNotice {
+        user_id: Uuid::nil(),
+        provider: String::new(),
+        provider_user_id: String::new(),
+        notice: "consent_revoked".to_owned(),
+    };
     let _ = SocialAccountLinked {
         user_id: Uuid::nil(),
         provider: String::new(),
@@ -256,5 +304,23 @@ async fn the_service_methods(
     let _: Secret<String> = social.token(Uuid::nil(), "google").await?;
     let _: Vec<String> = social.providers()?;
     let _: String = social.provider_name("github")?;
+    let nonce: NativeNonce = social.native_nonce("apple").await?;
+    let user: SocialUser = social
+        .native_user("apple", &NativeSignIn::new("token", nonce.state))
+        .await?;
+    let _: LoginOutcome = social.sign_in(&user, meta).await?;
+    let _: u64 = social.revoke_tokens(Uuid::nil()).await?;
+    social.receive_notification("apple", "payload").await?;
     Ok(())
+}
+
+/// `sign_in_session` (feature `session`).
+#[allow(dead_code)]
+async fn the_session_sign_in(
+    social: &Social,
+    session: &navree_session::Session,
+    user: &SocialUser,
+    meta: &ClientMeta,
+) -> Result<navree_auth::SessionSignIn, SocialError> {
+    social.sign_in_session(session, user, true, meta).await
 }

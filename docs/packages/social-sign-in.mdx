@@ -41,6 +41,7 @@ It covers the whole flow:
 - **Verified identities:** ID tokens are checked against the provider's published keys (signature, issuer, audience, expiry and nonce) before Navree trusts them.
 - **Linked accounts:** one user can sign in with a password, GitHub and Google. Accounts are linked automatically only when the provider has verified the email address.
 - **Navree tokens:** the callback answers exactly like `POST /api/auth/login`, two-factor challenge included.
+- **Native apps:** Sign in with Apple and Google from the system's own sheet on iPhone and Android, with a one-time nonce per attempt, and Apple's tokens revoked when the account is deleted, as the App Store requires.
 - **Provider tokens** (optional), encrypted at rest and refreshed for you, for apps that call the provider's API later, such as syncing meetings from Google Calendar into CRM activities.
 
 ## Installation
@@ -108,7 +109,7 @@ A provider without a `client_id`, an unknown provider type, a `redirect_base` th
 |---|---|---|
 | `google` | Google | OpenID Connect. `hosted_domain` limits sign-in to one Google Workspace domain (the `hd` claim is checked). |
 | `github` | GitHub | Reads the primary verified email from the emails API. `url` and `api_url` point at GitHub Enterprise Server. |
-| `apple` | Sign in with Apple | Needs `team_id`, `key_id` and `private_key` (the `.p8` key); Navree signs the ES256 client secret for you. Apple posts the callback (`response_mode=form_post`) and sends the name only on the first sign-in, in the `user` field; pass it on, and Navree stores it then. |
+| `apple` | Sign in with Apple | Needs `team_id`, `key_id` and `private_key` (the `.p8` key); Navree signs the ES256 client secret for you. Apple posts the callback (`response_mode=form_post`) and sends the name only on the first sign-in, in the `user` field; pass it on, and Navree stores it then. Apps on Apple's systems use the [native sign-in](#sign-in-from-native-apps). |
 | `microsoft` | Microsoft Entra ID and personal accounts | `tenant` picks who may sign in. Microsoft lets account owners set their email address, so it counts as verified only with the `xms_edov` optional claim. |
 | `gitlab` | GitLab | `url` for a self-hosted instance (default `https://gitlab.com`). |
 | `slack` | Slack | OpenID Connect; `team` limits sign-in to one workspace (team id). |
@@ -131,7 +132,7 @@ Each provider asks for the scopes it needs to read a name and an email. Add more
 
 How Navree reads the user:
 
-- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, never HMAC or `none`; key sets are cached for an hour and fetched again when a new key id appears). When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
+- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, never HMAC or `none`). Key sets are fetched over TLS and kept as long as the provider's `Cache-Control: max-age` says (between five minutes and a day; an hour without one), and fetched once more when a token names a key id the set lacks, at most every 30 seconds. When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
 - **GitLab, Slack and LinkedIn:** from their userinfo endpoints, with the access token.
 - **GitHub, Discord and X:** from their APIs.
 
@@ -181,7 +182,7 @@ Content-Type: application/json
 }
 ```
 
-`return_to` comes back from the sealed state, and only relative paths are accepted (`/deals`, never `https://...` or `//...`), so it can't send the browser to another site. A native or mobile app that holds its own tokens follows the same two calls, with its own redirect URI and its own state check.
+`return_to` comes back from the sealed state, and only relative paths are accepted (`/deals`, never `https://...` or `//...`), so it can't send the browser to another site. A native app that signs in through the system browser (`ASWebAuthenticationSession`, Android's Custom Tabs) follows the same two calls; Sign in with Apple on Apple's systems and Sign in with Google on Android use the system's own sheet instead, as the [next section](#sign-in-from-native-apps) shows.
 
 What can go wrong:
 
@@ -199,6 +200,116 @@ What can go wrong:
 | 502 | `provider_unavailable` | The provider couldn't be reached |
 
 Every answer carries its `code` in the [error body](/docs/basics/errors/#error-codes), so your sign-in page can tell "registration is closed" from "use your work address" in the user's language.
+
+## Sign-in from native apps
+
+On a phone, Sign in with Apple and Sign in with Google don't go through a browser redirect. The system shows its own sheet (Apple's `ASAuthorizationController`, Android's Credential Manager) and hands the app a signed identity token, which the app posts to your server. Navree verifies the token and signs the person in exactly as the web callback does: the same linking rules, sign-in policies, two-factor challenge, events and audit entries.
+
+The apps' ids come from the [association files' section](/docs/security/passwordless/), `auth.apps`, so you configure them once:
+
+```toml title="config/app.toml"
+[social.providers.apple]
+client_id = "com.sutlej.orders.web"   # the Services ID of the web flow
+team_id = "ABCDE12345"
+key_id = "KEY1234567"                 # private_key from .env
+
+[social.providers.google]
+client_id = "481203-k2l9.apps.googleusercontent.com"  # the web client id
+
+[auth.apps.apple.main]
+team_id = "ABCDE12345"
+bundle_id = "com.sutlej.orders"
+```
+
+- **Apple:** an identity token from an app is for its bundle id, so the audiences accepted are the `bundle_id`s of `auth.apps.apple`. Without an Apple app there, native Sign in with Apple answers 404 `native_sign_in_unavailable`.
+- **Google:** the Android app passes the Google provider's `client_id` (the web client id) to Credential Manager as its server client id (`GetGoogleIdOption.Builder().setServerClientId(..)`), so that is the audience accepted. On iPhone, sign in with Google through the system browser and the web flow.
+
+### What the app sends
+
+1. **Ask for a nonce** before showing the sheet:
+
+   ```http
+   POST /api/auth/social/apple/native/nonce HTTP/1.1
+   ```
+
+   ```json
+   { "nonce": "Xk3v9Qm2...", "state": "nvs1.Bq2...", "expires_in": 300 }
+   ```
+
+   The `state` is the attempt, sealed like the web flow's: it is for this provider, expires after `expires_in` seconds (five minutes, or `social.state_ttl_secs` when shorter) and works once. Nothing is stored on the server.
+
+2. **Show the sheet with the nonce.** Google takes it as it is (`setNonce(nonce)`). Apple takes its SHA-256, in lower-case hex (`request.nonce = sha256Hex(nonce)`); Apple puts the value it was given in the token, and the server compares that hashed form.
+
+3. **Post the token with the state:**
+
+   ```http
+   POST /api/auth/social/apple/native HTTP/1.1
+   Content-Type: application/json
+
+   {
+     "id_token": "eyJraWQiOiJXNldjT0tC...",
+     "state": "nvs1.Bq2...",
+     "authorization_code": "c3b1f2e0a9d84c...",
+     "user": { "name": { "firstName": "Simran", "lastName": "Gill" } }
+   }
+   ```
+
+   `authorization_code` (Apple only) is the credential's `authorizationCode`; see [revoking](#revoking-tokens-and-deleting-accounts). `user` carries the name Apple hands the app on the first sign-in only (`fullName`): it is used as a display name and never to find or link an account, and any email in it is ignored (the token's counts). Google posts `id_token` and `state` only.
+
+The answer is the callback's: the user with an access and a refresh token, or the two-factor challenge.
+
+An app that keeps navree-session's session cookie instead of tokens (feature `session`) posts the same body to `POST /api/auth/social/{provider}/native/session`, with the session's CSRF token as `X-XSRF-TOKEN` (`"remember": true` keeps it signed in for `auth.session.remember_days`). The session gets a new id and a new CSRF token, and the answer is the user, or `{"two_factor_required": true}`, finished with `POST /api/auth/session/2fa/verify`.
+
+### What the server checks
+
+The attempt is used up first (sealed by this app, for this provider, not expired, not used before), then the token:
+
+- its signature, against the provider's published keys (Apple's `/auth/keys`, Google's certificates);
+- its issuer (`https://appleid.apple.com`, `https://accounts.google.com`);
+- its audience: one of the apps' ids above, nothing else (a token Apple made for another app, or for the web flow's Services ID, is refused);
+- its expiry, and that it was issued after the attempt started and not in the future, with a minute's tolerance;
+- its nonce: the attempt's (Apple's in the hashed form). A token taken from one attempt can't be posted with another, and an attempt can't be posted twice.
+
+Each failure is a 400 `invalid_id_token` (or `invalid_state` for the attempt), and the post counts against `auth.login_throttle_per_minute` like the callback. A malformed post is a 400 `validation_failed` naming the fields. Then the [linking rules](#linking-accounts) apply as they are: an unverified email never links to an existing account. Apple's private relay addresses (`...@privaterelay.appleid.com`) are verified ones.
+
+`Social::native_nonce(provider)` and `Social::native_user(provider, &NativeSignIn)` are the routes' two steps, for your own routes: pass the user to `sign_in` (or `sign_in_session` with the feature `session`).
+
+### Revoking tokens and deleting accounts
+
+The App Store requires that an app offering account creation lets people delete their account in the app, and that deleting an account that used Sign in with Apple revokes its tokens with Apple. When the app sends `authorization_code`, Navree exchanges it at Apple's token endpoint with a client secret it signs for the app's bundle id (ES256, from the `.p8` key), checks that the ID token Apple returns names the same person, and keeps the refresh token encrypted in `social_accounts`, with the client it was issued to. Sign in with Apple's tokens are kept whatever `store_tokens` says, from the web flow too, because revoking them needs them.
+
+They are revoked at Apple (with `client_id` the bundle id or the Services ID they belong to), and the stored copies forgotten, when:
+
+- the person disconnects Apple (`DELETE /api/auth/social/accounts/apple`, `Social::unlink`): an Apple that can't be reached answers 502 and leaves the account linked, to try again;
+- you call `Social::revoke_tokens(user_id)`;
+- you offboard the user with `AuthService::revoke_all_credentials(user_id)` (or `revoke_credentials_of_domain`): the module takes part as a credential revoker (kind `social_provider_tokens`).
+
+Stored Google tokens (`store_tokens`) are revoked the same way, at `https://oauth2.googleapis.com/revoke` (the provider's `url` changes the host). A token the provider no longer knows counts as revoked.
+
+Navree has no account-deletion route of its own. Yours revokes first, then deletes the user (the `social_accounts` rows go with it):
+
+```rust title="src/modules/account/controller.rs"
+#[delete("/account")]
+#[recent_auth]
+async fn delete(&self, uow: Uow, CurrentUser(user): CurrentUser) -> Result<NoContent> {
+    // Every session, token and Apple grant of the user ends first.
+    self.auth.revoke_all_credentials(user.id).await?;
+    User::query().where_key(user.id).delete(&uow).await?;
+    Ok(NoContent)
+}
+```
+
+### Apple's notifications
+
+Apple tells your server when a person stops using Sign in with Apple with your app, deletes their Apple account or changes mail forwarding. Register `https://<your site>/api/auth/social/apple/notifications` as the server-to-server notification endpoint of your App ID. Apple posts `{"payload": "<JWS>"}`; Navree checks the signature against Apple's keys, the issuer, the audience (the Services ID or one of the bundle ids), that it is less than seven days old and that its `jti` wasn't handled before, then acts on the account it names:
+
+| `type` | What Navree does |
+|---|---|
+| `consent-revoked` | Forgets the stored Apple tokens and signs the user out everywhere; the account stays linked |
+| `account-deleted` | Removes the link (`social.unlinked`) and signs the user out everywhere. A user left with no way to sign in is yours to handle |
+| `email-disabled`, `email-enabled` | Records it: mail to the private relay address stops or starts reaching the person |
+
+Each emits `SocialProviderNotice` and is audited (`social.consent_revoked`, `social.account_deleted`, `social.email_disabled`, `social.email_enabled`). A forged or stale notification is a 400 `invalid_notification`; one about nobody linked here is accepted and ignored. `Social::receive_notification(provider, payload)` does the same in your own route.
 
 ## Linking accounts
 
@@ -231,7 +342,7 @@ Signed-in users manage their providers with three routes:
 |---|---|
 | `GET /api/auth/social/accounts` | The user's linked accounts: `provider`, `provider_name`, `email`, `name`, `avatar_url`, `linked_at` |
 | `POST /api/auth/social/{provider}/link` | `{code, state}` from a flow started with `GET .../redirect?intent=link`; links the account to the signed-in user (201) |
-| `DELETE /api/auth/social/accounts/{provider}` | Disconnects the provider (204) |
+| `DELETE /api/auth/social/accounts/{provider}` | Disconnects the provider (204), revoking its stored tokens at Apple or Google first |
 
 `GET .../redirect?intent=link` needs the user's access token too (401 without it): the state is sealed for that user, so only they can finish the link, and a link state can't sign anyone in. Linking an account that already belongs to another user is a 409 (`account_already_linked`), and so is connecting a second account of a provider the user has already connected (`provider_already_connected`). Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too (`last_sign_in_method`), so nobody locks themselves out; disconnecting a provider that isn't connected is a 404 (`provider_not_connected`).
 
@@ -298,6 +409,10 @@ A `SocialError` returned with `?` keeps its answer (400 for a bad state, 409 for
 | `accounts(user_id)` | The user's linked accounts (`LinkedAccount`) |
 | `find_user(provider, provider_user_id)` | The linked user, if any |
 | `token(user_id, provider)` | A current provider access token (see below) |
+| `native_nonce(provider)`, `native_user(provider, &post)` | The two steps of a [native sign-in](#sign-in-from-native-apps) |
+| `sign_in_session(&session, &social_user, remember, &meta)` | `sign_in` on navree-session's session (feature `session`): a `SessionSignIn` |
+| `revoke_tokens(user_id)` | Revokes the user's stored Apple and Google tokens at the provider and forgets them |
+| `receive_notification(provider, payload)` | Acts on one of Apple's server-to-server notifications |
 | `providers()`, `provider_name(provider)` | The configured provider keys and their display names, for a sign-in page |
 
 `SocialUser` has `provider`, `id` (the provider's user id), `name`, `email`, `email_verified`, `avatar_url`, `nickname`, `token` and `raw`, the provider's whole profile as JSON (the ID token's claims, or the API's user object). Build one with `SocialUser::new(provider, id)` and `.name(..)`, `.email(Some(..), verified)`, `.avatar_url(..)`, `.nickname(..)`, `.token(..)` and `.raw(..)`.
@@ -388,11 +503,12 @@ Register it with `.module(SocialModule::for_feature::<Zoho>())` and configure it
 | Event | `NAME` | When |
 |---|---|---|
 | `SocialAccountLinked` | `social.linked` | A provider account was linked, at sign-in or from settings |
-| `SocialAccountUnlinked` | `social.unlinked` | A provider account was disconnected |
+| `SocialAccountUnlinked` | `social.unlinked` | A provider account was disconnected (by the person, or by Apple's `account-deleted`) |
+| `SocialProviderNotice` | `social.provider_notice` | Apple notified a change, after Navree acted on it; `notice` is `consent_revoked`, `account_deleted`, `email_disabled` or `email_enabled` |
 
-Both carry `user_id`, `provider` and `provider_user_id`, and are emitted after the change commits, when `EventsModule` is in the app.
+All carry `user_id`, `provider` and `provider_user_id`, and are emitted after the change commits, when `EventsModule` is in the app.
 
-With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due), new users as `auth.register` with `metadata.provider`, and links as `social.linked` and `social.unlinked`. Provider tokens are never recorded.
+With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due; `metadata.via = "session"` on the session cookie), new users as `auth.register` with `metadata.provider`, links as `social.linked` and `social.unlinked`, and Apple's notifications as `social.consent_revoked`, `social.account_deleted`, `social.email_disabled` and `social.email_enabled`. Provider tokens, identity tokens, authorization codes and the Apple key are never recorded, logged or put in an error.
 
 ## Testing
 
@@ -460,8 +576,10 @@ async fn a_new_github_user_gets_an_account_and_tokens() {
 | `on_code_error(provider, code, error)` | Answers a code with a provider error (`access_denied`): a 400 `GitHub refused the sign-in: access_denied` |
 | `on_refresh(provider, token)` | Answers token refreshes for `Social::token`; without it a refresh is refused (`SocialError::Reauthorize`) |
 | `exchanged()` | The `(provider, code)` pairs exchanged so far |
+| `on_id_token(provider, id_token, user)` | Answers a native sign-in posting that identity token with a profile (the attempt's state is still checked) |
+| `revocations()` | The `(provider, provider user id)` pairs whose stored tokens were revoked (disconnecting, offboarding) |
 
-A code the fake doesn't know is refused with `invalid_grant`, as a provider would. The fake skips an `oidc` provider's discovery document. To test a provider integration itself, keep the real `Social`, point the provider's endpoint keys (`url`, `authorize_url`, `token_url`, `userinfo_url`, `jwks_url`) at a local mock server, and let the HTTP client reach it (`http_client.ssrf.allow_hosts = ["127.0.0.1"]`).
+A code the fake doesn't know is refused with `invalid_grant`, as a provider would, and an identity token it doesn't know with `invalid_id_token`. The fake reads Apple's notifications without checking their signature. The fake skips an `oidc` provider's discovery document. To test a provider integration itself, keep the real `Social`, point the provider's endpoint keys (`url`, `authorize_url`, `token_url`, `userinfo_url`, `jwks_url`) at a local mock server, and let the HTTP client reach it (`http_client.ssrf.allow_hosts = ["127.0.0.1"]`).
 
 ## Reference
 
@@ -487,13 +605,18 @@ A code the fake doesn't know is refused with `invalid_grant`, as a provider woul
 | `social.providers.<key>.tenant` | `common` | Microsoft: `common`, `organizations`, `consumers` or a tenant id |
 | `social.providers.<key>.team` | none | Slack: one workspace (team id) |
 | `social.providers.<key>.team_id`, `.key_id`, `.private_key` | none | Apple: the team, the key id and the `.p8` key (PEM; `\n` escapes are accepted) |
-| `social.providers.<key>.url`, `.api_url` | the provider's | GitLab's instance; GitHub Enterprise Server and its API root |
+| `social.providers.<key>.url`, `.api_url` | the provider's | GitLab's instance; GitHub Enterprise Server and its API root; Apple's and Google's base for a local stand-in in tests |
+| `auth.apps.apple.<name>.bundle_id` | none | The apps whose Sign in with Apple identity tokens are accepted ([native apps](#sign-in-from-native-apps)) |
 | `social.providers.<key>.authorize_url`, `.token_url`, `.userinfo_url`, `.jwks_url` | the provider's | Endpoint overrides; `token_url` is required for `custom` |
 
 | Route | Access |
 |---|---|
 | `GET /api/auth/social/{provider}/redirect` | Public (signed in with `?intent=link`) |
 | `POST /api/auth/social/{provider}/callback` | Public; counted by the login throttle |
+| `POST /api/auth/social/{provider}/native/nonce` | Public (`apple`, `google`) |
+| `POST /api/auth/social/{provider}/native` | Public; counted by the login throttle |
+| `POST /api/auth/social/{provider}/native/session` | Public, on the session cookie with `X-XSRF-TOKEN` (feature `session`); counted by the login throttle |
+| `POST /api/auth/social/apple/notifications` | Public; verified as Apple's |
 | `GET /api/auth/social/accounts` | Signed in |
 | `POST /api/auth/social/{provider}/link` | Signed in |
 | `DELETE /api/auth/social/accounts/{provider}` | Signed in |
