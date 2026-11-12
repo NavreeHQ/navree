@@ -20,6 +20,7 @@
 [data-slot=radial-arc]:not([stroke]){stroke:var(--c)}
 [data-slot=radial-lap]{stroke:color-mix(in oklab,var(--c) 60%,var(--fg));filter:drop-shadow(0 0 2.5px color-mix(in oklab,var(--surface,var(--ink-0)) 85%,transparent))}
 [data-slot=chart]:is([data-kind=ring],[data-kind=gauge]){container-type:normal;width:max-content;max-width:100%;margin-inline:auto}
+:is([data-kind=ring],[data-kind=gauge],[data-kind=rings]) [data-slot=chart-state][data-state=loading]>[data-slot=skeleton]{place-self:center;height:100%;aspect-ratio:1;border-radius:50%}
 [data-slot=radial-halo]{stroke-opacity:.35}
 [data-slot=radial-halo]:not([stroke]){stroke:var(--c)}
 
