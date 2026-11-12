@@ -99,17 +99,28 @@ async fn secret_looking_columns_are_masked() {
     );
 }
 
+/// SQLite's authorizer allows reading tables and calling functions, nothing
+/// else: pragma table functions, which run a PRAGMA, are refused too.
 #[tokio::test]
-async fn the_connection_itself_is_read_only() {
+async fn sqlite_allows_reading_only() {
     let fixture = Fixture::new(APP_TOML);
     crm_db(&fixture).await;
-    let answer = call(
-        &fixture.navigator(),
+    let navigator = fixture.navigator();
+    let message = refused(
+        &navigator,
         "query_database",
         json!({"sql": "SELECT query_only FROM pragma_query_only"}),
     )
     .await;
-    assert_eq!(answer["rows"], json!([[1]]));
+    assert!(message.contains("not authorized"), "{message}");
+    let answer = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) \
+                SELECT count(*) AS n, max(lower(name)) AS name FROM n, companies"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[3, "agra"]]));
 }
 
 #[tokio::test]

@@ -33,7 +33,7 @@
 //! Everything is read-only and local: Navigator writes nothing to the app,
 //! reads its database read-only (as far as the database role allows: a
 //! PostgreSQL superuser or a role with server-file, server-program or signal
-//! privileges is refused for queries unless `--allow-privileged-database-role`
+//! privileges is refused for queries unless `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`
 //! is given), connects only to databases on this machine unless told
 //! otherwise, and reaches the network only to download the docs of the
 //! app's Navree version once. `render_page` has the app draw a page with a
@@ -57,5 +57,8 @@ mod embedded {
 }
 
 pub use project::Project;
-pub use server::{NavigatorServer, ServeError, run_stdio, serve};
-pub use tools::{Navigator, NavigatorOptions, ToolDef, ToolError, ToolOutput, tools};
+pub use server::{NavigatorServer, ServeError, run_stdio, run_stdio_with, serve};
+pub use tools::{
+    ALLOW_PRIVILEGED_ROLE_VAR, DATABASE_URL_VAR, DatabaseOptions, Navigator, NavigatorOptions,
+    ToolDef, ToolError, ToolOutput, tools,
+};

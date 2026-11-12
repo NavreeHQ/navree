@@ -8,7 +8,7 @@
 //! superuser. Without the variable the tests print `SKIPPED` and pass,
 //! unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
 
-use navree_navigator::NavigatorOptions;
+use navree_navigator::DatabaseOptions;
 use serde_json::json;
 use sqlx::{AssertSqlSafe, Connection, Executor, PgConnection};
 
@@ -157,6 +157,19 @@ impl Scratch {
                 .unwrap();
         }
         conn.close().await.unwrap();
+    }
+
+    /// A role `<database>_<suffix>` with `attributes` (`SUPERUSER NOLOGIN`),
+    /// dropped with the database; its name.
+    async fn bare_role(&mut self, suffix: &str, attributes: &str) -> String {
+        let role = format!("{}_{suffix}", self.name);
+        let mut conn = PgConnection::connect(&self.admin).await.unwrap();
+        conn.execute(AssertSqlSafe(format!("CREATE ROLE {role} {attributes}")))
+            .await
+            .unwrap();
+        conn.close().await.unwrap();
+        self.roles.push(role.clone());
+        role
     }
 
     /// An app whose `database.url` is the read-only role's.
@@ -460,7 +473,7 @@ async fn postgres_a_backslash_quote_cannot_write() {
 }
 
 /// A superuser is refused for queries unless Navigator is started with
-/// `--allow-privileged-database-role`; a read-only role is not. Reading
+/// `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`; a read-only role is not. Reading
 /// the schema runs no query of the agent's and works either way.
 #[tokio::test]
 async fn postgres_a_superuser_is_refused_unless_allowed() {
@@ -492,7 +505,7 @@ async fn postgres_a_superuser_is_refused_unless_allowed() {
     assert!(message.contains("superuser"), "{message}");
     assert!(message.contains("CREATE ROLE navree_reader"), "{message}");
     assert!(
-        message.contains("--allow-privileged-database-role"),
+        message.contains("NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1"),
         "{message}"
     );
     let schema = call(
@@ -502,12 +515,9 @@ async fn postgres_a_superuser_is_refused_unless_allowed() {
     )
     .await;
     assert_eq!(schema["tables"][0]["name"], "deals");
-    let allowed = admin.navigator_with(NavigatorOptions {
-        path: admin.root().to_path_buf(),
-        docs_offline: true,
-        allow_privileged_database_role: true,
-        ..NavigatorOptions::default()
-    });
+    let allowed = admin
+        .navigator()
+        .with_database(DatabaseOptions::default().allow_privileged_role(true));
     let answer = call(
         &allowed,
         "query_database",
@@ -515,13 +525,10 @@ async fn postgres_a_superuser_is_refused_unless_allowed() {
     )
     .await;
     assert_eq!(answer["rows"], json!([[1]]));
-    // `--database-url` reads through another role than the app's.
-    let through_reader = admin.navigator_with(NavigatorOptions {
-        path: admin.root().to_path_buf(),
-        docs_offline: true,
-        database_url: Some(db.reader_url.clone()),
-        ..NavigatorOptions::default()
-    });
+    // `NAVREE_MCP_DATABASE_URL` reads through another role than the app's.
+    let through_reader = admin
+        .navigator()
+        .with_database(DatabaseOptions::default().url(db.reader_url.clone()));
     let answer = call(
         &through_reader,
         "query_database",
@@ -555,6 +562,56 @@ async fn postgres_a_role_with_server_privileges_is_refused() {
         .await;
         assert!(message.contains(membership), "{membership}: {message}");
     }
+    db.drop_db().await;
+}
+
+/// A role that can become a superuser is refused like one: a member of a
+/// superuser role (it can `SET ROLE` to it), and a superuser session whose
+/// `role` setting makes `current_user` a lesser role.
+#[tokio::test]
+async fn postgres_a_role_that_can_become_a_superuser_is_refused() {
+    let test = "postgres_a_role_that_can_become_a_superuser_is_refused";
+    let Some(mut db) = Scratch::new(test).await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    if !db.admin_is_superuser().await {
+        eprintln!("SKIPPED {test}: NAVREE_TEST_POSTGRES_URL is not a superuser");
+        db.drop_db().await;
+        return;
+    }
+    let boss = db.bare_role("boss", "SUPERUSER NOLOGIN").await;
+    let member = db.role("member", &[boss.as_str()]).await;
+    let fixture = Fixture::new(&format!("[database]\nurl = \"{member}\"\n"));
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("superuser"), "member: {message}");
+
+    let sessions = db.role("session", &[]).await;
+    let session_role = db.roles.last().unwrap().clone();
+    let reader = db.roles[0].clone();
+    let mut conn = PgConnection::connect(&db.admin).await.unwrap();
+    for statement in [
+        format!("ALTER ROLE {session_role} SUPERUSER"),
+        format!("GRANT {reader} TO {session_role}"),
+        format!("ALTER ROLE {session_role} SET role = {reader}"),
+    ] {
+        conn.execute(AssertSqlSafe(statement)).await.unwrap();
+    }
+    conn.close().await.unwrap();
+    let fixture = Fixture::new(&format!("[database]\nurl = \"{sessions}\"\n"));
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("superuser"), "session: {message}");
+    assert!(message.contains("(session "), "session: {message}");
     db.drop_db().await;
 }
 

@@ -48,6 +48,9 @@ serde_json = { workspace = true }
 # databases of any app, so it carries both drivers whatever the app compiles.
 sqlx = { workspace = true, features = ["postgres", "sqlite-bundled", "tls-rustls-ring-webpki"] }
 sqlparser = { workspace = true }
+# Runs `query_database` on SQLite: SQLite prepares the one statement, checks
+# it reads only, and an authorizer allows nothing but reading.
+rusqlite = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
