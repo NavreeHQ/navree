@@ -190,11 +190,22 @@ impl Service<Request> for GuestOr {
             // A signed-in reader's page is theirs alone: no shared cache may keep it,
             // whatever its handler said (or didn't). `Vary: Cookie` is not enough, since
             // several CDNs ignore it.
-            if signed_in && !kept_private(headers) {
-                headers.insert(
-                    http::header::CACHE_CONTROL,
-                    http::HeaderValue::from_static("private, no-store"),
-                );
+            if signed_in {
+                if !kept_private(headers) {
+                    headers.insert(
+                        http::header::CACHE_CONTROL,
+                        http::HeaderValue::from_static("private, no-store"),
+                    );
+                }
+                // The headers a CDN reads in place of Cache-Control would let it keep the
+                // page anyway.
+                for cdn in [
+                    "cdn-cache-control",
+                    "cloudflare-cdn-cache-control",
+                    "surrogate-control",
+                ] {
+                    headers.remove(cdn);
+                }
             }
             // The same address answers by who is asking: a cache keeps a copy per sign-in.
             headers.append(
@@ -207,24 +218,26 @@ impl Service<Request> for GuestOr {
 }
 
 /// Whether `Cache-Control` keeps a response out of shared caches: it says `private` or
-/// `no-store` and not `public` or `s-maxage`.
+/// `no-store` with no argument, and not `public` or `s-maxage`. `private="Set-Cookie"`
+/// makes only the named fields private, so a shared cache may keep the rest: it doesn't
+/// count, nor does a header that can't be read.
 fn kept_private(headers: &http::HeaderMap) -> bool {
-    let directives: Vec<String> = headers
-        .get_all(http::header::CACHE_CONTROL)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .map(|directive| {
-            directive
-                .split('=')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-        })
-        .collect();
-    let has = |name: &str| directives.iter().any(|directive| directive == name);
-    (has("private") || has("no-store")) && !has("public") && !has("s-maxage")
+    let mut directives: Vec<(String, bool)> = Vec::new();
+    for value in headers.get_all(http::header::CACHE_CONTROL) {
+        let Ok(value) = value.to_str() else {
+            return false;
+        };
+        for directive in value.split(',') {
+            let (name, argument) = match directive.split_once('=') {
+                Some((name, _)) => (name, true),
+                None => (directive, false),
+            };
+            directives.push((name.trim().to_ascii_lowercase(), argument));
+        }
+    }
+    let bare = |name: &str| directives.iter().any(|(have, arg)| have == name && !arg);
+    let any = |name: &str| directives.iter().any(|(have, _)| have == name);
+    (bare("private") || bare("no-store")) && !any("public") && !any("s-maxage")
 }
 
 impl std::fmt::Debug for Endpoint {
