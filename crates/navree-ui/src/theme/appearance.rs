@@ -372,11 +372,13 @@ pub(crate) fn decide(
         match &*name {
             "theme" => theme = Some(Theme::from_short_form(&value).ok_or(ChoiceError::Invalid)?),
             "mode" => mode = Some(Mode::from_id(&value).ok_or(ChoiceError::Invalid)?),
+            // A path of this site: a relative address would be read against this route's
+            // own (`/_navree/ui/...`), and an address with a host could be another site.
             "back" => {
                 back = LocalHref::parse(value.trim())
                     .ok()
                     .map(|href| href.as_str().to_owned())
-                    .filter(|href| !href.is_empty())
+                    .filter(|href| href.starts_with('/'))
             }
             _ => {}
         }
@@ -542,12 +544,27 @@ mod tests {
             cookie.contains("HttpOnly") && cookie.contains("SameSite=Lax"),
             "{cookie}"
         );
-        // Off the site, or a scheme: home instead.
+        // The page it was given, as it was given: a path with its query and fragment.
+        for back in ["/pricing/", "/", "/deals?page=2#notes", "/blog/naïve-sleep"] {
+            let body = format!("mode=light&back={}", urlencode(back));
+            let response = respond_setting(&headers, body.as_bytes());
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{back}");
+            assert_eq!(
+                response.headers()[LOCATION].as_bytes(),
+                back.as_bytes(),
+                "{back}"
+            );
+        }
+        // Off the site, a scheme, or an address that isn't a path: home instead.
         for back in [
             "https://evil.example/",
             "//evil.example",
+            "/\\evil.example",
             "javascript:alert(1)",
             "\\\\evil",
+            "pricing",
+            "?page=2",
+            "#top",
         ] {
             let body = format!("theme=ocean&back={}", urlencode(back));
             let response = respond_setting(&headers, body.as_bytes());

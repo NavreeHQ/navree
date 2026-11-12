@@ -100,6 +100,11 @@ impl BrowserFrame {
 /// top of the screen, and the screen at a phone's shape. Like [`BrowserFrame`] it follows
 /// the page's mode unless [`mode`](Self::mode) fixes it.
 ///
+/// A picture starts below a strip the height of a phone's status bar, in the screen's
+/// colour, so the camera never covers the top of the app it shows. A screenshot taken on a
+/// phone has its own status bar: [`edge_to_edge`](Self::edge_to_edge) draws it from the
+/// very top.
+///
 /// ```
 /// use navree_ui::marketing::PhoneFrame;
 /// use navree_ui::{Picture, render};
@@ -114,6 +119,7 @@ pub struct PhoneFrame {
     content: Node,
     mode: Option<Mode>,
     caption: Option<Node>,
+    edge_to_edge: bool,
 }
 
 impl PhoneFrame {
@@ -124,7 +130,15 @@ impl PhoneFrame {
             content: content.into(),
             mode: None,
             caption: None,
+            edge_to_edge: false,
         }
+    }
+
+    /// Draws a picture from the very top of the screen, under the camera: for a screenshot
+    /// taken on a phone, which has a status bar of its own.
+    pub fn edge_to_edge(mut self) -> Self {
+        self.edge_to_edge = true;
+        self
     }
 
     /// Draws it, and what it holds, light or dark whatever the page's mode.
@@ -145,6 +159,7 @@ impl PhoneFrame {
             .children((
                 el("div")
                     .slot("phone-body")
+                    .flag("data-edge", self.edge_to_edge)
                     .child(el("div").slot("phone-screen").children((
                         el("span").slot("phone-camera").attr("aria-hidden", "true"),
                         el("div").slot("phone-view").child(self.content),
@@ -170,6 +185,26 @@ mod tests {
         assert!(!plain.contains("data-mode"), "{plain}");
         let light = render(&PhoneFrame::new("x").mode(Mode::Light).into());
         assert!(light.contains(r#"data-mode="light""#), "{light}");
+    }
+
+    // The camera stands over the top of the screen: a picture starts below a status bar's
+    // height unless it brings a status bar of its own.
+    #[test]
+    fn a_picture_in_a_phone_starts_below_the_camera_unless_edge_to_edge() {
+        let shot = || crate::Picture::new("/today.png", "Today", 390, 844);
+        let inset = render(&PhoneFrame::new(shot()).into());
+        assert!(!inset.contains("data-edge"), "{inset}");
+        let edge = render(&PhoneFrame::new(shot()).edge_to_edge().into());
+        assert!(
+            edge.contains(r#"<div data-slot="phone-body" data-edge>"#),
+            "{edge}"
+        );
+        let css = include_str!("../../styles/extra/marketing.css");
+        assert!(
+            css.contains("[data-slot=phone-view]:has(> :is(img,[data-slot=picture])){padding-top:var(--phone-status)}"),
+            "the status bar's strip"
+        );
+        assert!(css.contains("[data-edge] [data-slot=phone-view]{padding-top:0}"));
     }
 
     #[test]

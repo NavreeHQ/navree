@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use http::StatusCode;
 use http::header::{
-    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE,
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE, VARY,
 };
 use navree_http::response::{IntoResponse, Response};
 
@@ -53,6 +53,7 @@ pub struct View {
     body: Node,
     status: StatusCode,
     cache: &'static str,
+    vary: Vec<&'static str>,
     cookies: Vec<HeaderValue>,
     csrf: Option<String>,
     appearance: Option<Appearance>,
@@ -73,6 +74,7 @@ impl View {
             body: Node::Empty,
             status: StatusCode::OK,
             cache: "no-store",
+            vary: Vec::new(),
             cookies: Vec::new(),
             csrf: None,
             appearance: None,
@@ -259,6 +261,36 @@ impl View {
     /// `private`, never in a shared cache.
     pub fn cache(mut self, cache: &'static str) -> Self {
         self.cache = cache;
+        self
+    }
+
+    /// Adds a request header to `Vary`: the page differs by it, so a cache keeps one copy
+    /// per value. A page that is public for a guest and private for a reader who is signed
+    /// in varies by `Cookie` (and `Authorization`, for a client that signs in with a token),
+    /// so no cache hands a reader's page to a guest:
+    ///
+    /// ```
+    /// use navree_http::response::IntoResponse;
+    /// use navree_ui::View;
+    ///
+    /// let response = View::new("Kesar")
+    ///     .cache("public, max-age=300")
+    ///     .vary("Cookie")
+    ///     .vary("Authorization")
+    ///     .into_response();
+    /// assert_eq!(response.headers()["vary"], "Cookie, Authorization");
+    /// ```
+    ///
+    /// A name that is not a header's is passed over, and each name is written once.
+    pub fn vary(mut self, header: &'static str) -> Self {
+        if HeaderName::from_bytes(header.as_bytes()).is_ok()
+            && !self
+                .vary
+                .iter()
+                .any(|have| have.eq_ignore_ascii_case(header))
+        {
+            self.vary.push(header);
+        }
         self
     }
 
@@ -589,12 +621,26 @@ impl IntoResponse for View {
                 HeaderValue::from_static(assets::SPECULATION_HEADER),
             );
         }
+        if !self.vary.is_empty()
+            && let Ok(vary) = HeaderValue::from_str(&self.vary.join(", "))
+        {
+            headers.append(VARY, vary);
+        }
         for cookie in self.cookies {
             headers.append(SET_COOKIE, cookie);
         }
+        // Whether a region's fetch was answered with a page the toolkit drew: see `ViewAnswer`.
+        response.extensions_mut().insert(ViewAnswer);
         response
     }
 }
+
+/// On a response a [`View`] made. A region's fetch answered with one, successfully, is the
+/// region's fragment, whatever its body uses: the reply layer says so in `X-Navree-Fragment`,
+/// so the runtime draws it in place rather than taking a page that loads the runtime for a
+/// page of its own (somewhere else, such as a sign-in page).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ViewAnswer;
 
 #[cfg(test)]
 mod tests {
