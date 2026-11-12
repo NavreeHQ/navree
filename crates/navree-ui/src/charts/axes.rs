@@ -282,7 +282,8 @@ impl Domain {
         }
     }
 
-    /// From the lowest value less `by` to the highest plus `by`.
+    /// From the lowest value less `by` to the highest plus `by`, exactly, with the ticks
+    /// inside it.
     pub fn padded(by: impl IntoValue) -> Self {
         Self {
             kind: DomainKind::Padded(by.into_value().unwrap_or(0.0).abs()),
@@ -290,7 +291,7 @@ impl Domain {
     }
 
     /// From the lowest value to the highest, with `share` (0.1 is a tenth) of their
-    /// spread added each way.
+    /// spread added each way, exactly, with the ticks inside it.
     pub fn relative(share: f64) -> Self {
         let share = if share.is_finite() { share.abs().min(10.0) } else { 0.0 };
         Self {
@@ -323,9 +324,13 @@ impl Domain {
         }
     }
 
-    /// Whether the ticks stay inside the range rather than reaching nice numbers past it.
-    pub(crate) fn is_fixed(self) -> bool {
-        matches!(self.kind, DomainKind::Fixed(..))
+    /// Whether the range is kept as it is, with the ticks inside it, rather than widened
+    /// to nice numbers past it.
+    pub(crate) fn is_exact(self) -> bool {
+        matches!(
+            self.kind,
+            DomainKind::Fixed(..) | DomainKind::Padded(_) | DomainKind::Relative(_)
+        )
     }
 }
 
@@ -362,7 +367,8 @@ mod tests {
         assert!(lo < 50.0 && hi > 50.0);
         assert_eq!(Domain::fixed(10, 0).range(2.0, 8.0), Some((0.0, 10.0)));
         assert_eq!(Domain::fixed(0, 10).range(-1.0, 12.0), Some((-1.0, 12.0)));
-        assert!(Domain::fixed(0, 1).is_fixed() && !Domain::data().is_fixed());
+        assert!(Domain::fixed(0, 1).is_exact() && Domain::padded(1).is_exact());
+        assert!(!Domain::data().is_exact() && !Domain::auto().is_exact());
         assert_eq!(Domain::relative(f64::NAN).range(0.0, 1.0), Some((0.0, 1.0)));
     }
 

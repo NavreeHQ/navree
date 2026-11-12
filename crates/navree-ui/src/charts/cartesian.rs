@@ -1187,7 +1187,9 @@ impl Chart {
         let mut hi = f64::NEG_INFINITY;
         for column in &edges {
             for (base, top) in column.iter().flatten() {
-                if stacked || bars || self.kind == Kind::Area {
+                // An area's baseline counts unless a domain was asked for: then the area
+                // runs down to the foot of the plot.
+                if stacked || bars || (self.kind == Kind::Area && self.domain == Domain::auto()) {
                     lo = lo.min(*base);
                     hi = hi.max(*base);
                 }
@@ -1255,7 +1257,7 @@ impl Chart {
                 values: (0..names.len()).map(|i| i as f64).collect(),
                 places: 0,
             },
-            None if self.domain.is_fixed() && !percent => {
+            None if self.domain.is_exact() && !percent => {
                 let found = nice(lo, hi, count, format.whole());
                 let slack = (hi - lo).abs() * 1e-9;
                 super::scale::Ticks {
@@ -1926,7 +1928,7 @@ impl Chart {
                         .attr("data-s", s as i64)
                         .attr("cx", pct(rows[*j].x))
                         .attr("cy", n(plan.y(top), 1))
-                        .attr("r", if self.dots == Dots::End { "4" } else { "3" }));
+                        .attr("r", "4"));
                     let dot = if ready.paint.glow { glow(dot) } else { dot };
                     // Dots come in after the line has drawn to them.
                     let after = rows[*j].x / 100.0;

@@ -63,7 +63,7 @@
 [data-slot=chart-ref] line{stroke:var(--c,var(--fg-2));stroke-width:1px;stroke-dasharray:4 3}
 [data-slot=chart-ref][data-solid] line{stroke-dasharray:none}
 [data-slot=chart-zone] rect{fill:var(--c);fill-opacity:.08}
-[data-slot=chart] svg :is([data-slot=chart-ref],[data-slot=chart-zone]) text{fill:var(--fg-2)}
+[data-slot=chart] svg :is([data-slot=chart-ref],[data-slot=chart-zone]) text{fill:var(--fg-2);paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
 @container (301px<=width<=480px){[data-slot=chart] svg [data-minor]{display:none}}
 @container (max-width:300px){[data-slot=chart] svg [data-tight]{display:none}}
 
