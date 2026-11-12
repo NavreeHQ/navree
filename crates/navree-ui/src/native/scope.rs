@@ -11,7 +11,9 @@ use std::sync::Arc;
 use http::HeaderMap;
 use http::request::Parts;
 use navree_http::extract::FromRequestParts;
-use navree_native::{CLIENT_HEADER, ClientError, FormFactor, NATIVE_HEADER, Platform};
+use navree_native::{
+    CLIENT_HEADER, ClientDescriptor, DescriptorError, FormFactor, NATIVE_HEADER, Platform,
+};
 
 use crate::asked::{WhoAsked, in_web_view, who_asked};
 
@@ -40,8 +42,11 @@ pub(crate) struct Request {
     /// The part of the screen it asked for, by id, when it fetched a region
     /// or a list's next rows (`X-Navree-Region`).
     pub(crate) region: Option<String>,
-    /// The app's stamp, which every envelope carries as its `build`.
+    /// The app's stamp, which every envelope carries as its `app`.
     pub(crate) stamp: super::Stamp,
+    /// Where a guest signs in: the route a shell document presents over
+    /// everything, and so part of the shell's stamp.
+    pub(crate) sign_in: Option<String>,
 }
 
 impl Request {
@@ -52,6 +57,7 @@ impl Request {
             url: url.into(),
             region: None,
             stamp: super::Stamp::of(None),
+            sign_in: None,
         }
     }
 }
@@ -62,10 +68,9 @@ pub(crate) enum Reading {
     Web,
     /// A native client or its web view.
     Asked(Asked),
-    /// A native client whose protocol this server does not speak.
-    UnknownMajor(String),
-    /// A native client whose descriptor can't be read.
-    BadClient(ClientError),
+    /// A native client this server can't answer: an unreadable descriptor
+    /// (400) or a protocol major it does not speak (406).
+    Refused(DescriptorError),
 }
 
 /// Reads what `headers` ask for, by [`who_asked`]: a native client, the web
@@ -80,15 +85,10 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
     let Some(major) = headers.get(NATIVE_HEADER) else {
         return Reading::Web;
     };
-    let major = major.to_str().unwrap_or("").trim();
-    if major.parse::<u32>().ok() != Some(navree_native::MAJOR) {
-        return Reading::UnknownMajor(major.to_owned());
-    }
     let descriptor = headers
         .get(CLIENT_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("");
-    match navree_native::Client::parse(descriptor) {
+        .map(|value| value.to_str().unwrap_or("\u{0}"));
+    match ClientDescriptor::read(major.to_str().unwrap_or(""), descriptor) {
         Ok(client) => Reading::Asked(Asked::Native(Arc::new(Request {
             client,
             url: url.to_owned(),
@@ -97,8 +97,9 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
                 .and_then(|value| value.to_str().ok())
                 .map(str::to_owned),
             stamp: super::Stamp::of(None),
+            sign_in: None,
         }))),
-        Err(error) => Reading::BadClient(error),
+        Err(error) => Reading::Refused(error),
     }
 }
 
@@ -253,13 +254,22 @@ mod tests {
 
     #[test]
     fn a_major_or_a_descriptor_the_server_can_not_read_is_said() {
+        let refused = |pairs: &[(&'static str, &'static str)]| match read(&headers(pairs), "/") {
+            Reading::Refused(error) => error,
+            _ => panic!("not refused"),
+        };
+        let unknown = refused(&[(NATIVE_HEADER, "2")]);
+        assert!(matches!(&unknown, DescriptorError::UnknownMajor(major) if major == "2"));
+        assert_eq!(unknown.status(), 406);
+        let missing = refused(&[(NATIVE_HEADER, "1")]);
         assert!(matches!(
-            read(&headers(&[(NATIVE_HEADER, "2")]), "/"),
-            Reading::UnknownMajor(major) if major == "2"
+            missing,
+            DescriptorError::Unreadable(navree_native::ClientError::Missing)
         ));
+        assert_eq!(missing.status(), 400);
         assert!(matches!(
-            read(&headers(&[(NATIVE_HEADER, "1")]), "/"),
-            Reading::BadClient(ClientError::NoPlatform)
+            refused(&[(NATIVE_HEADER, "1"), (CLIENT_HEADER, "form=phone")]),
+            DescriptorError::Unreadable(navree_native::ClientError::NoPlatform)
         ));
         assert!(matches!(
             read(
@@ -269,7 +279,9 @@ mod tests {
                 ]),
                 "/"
             ),
-            Reading::BadClient(ClientError::UnknownPlatform(_))
+            Reading::Refused(DescriptorError::Unreadable(
+                navree_native::ClientError::UnknownPlatform(_)
+            ))
         ));
     }
 
@@ -279,7 +291,7 @@ mod tests {
             read(&headers(&[(navree_native::EMBED_HEADER, "1")]), "/"),
             Reading::Asked(Asked::Embed)
         ));
-        let agent = "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/0.1.0";
+        let agent = "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/1 (platform=android; lib=0.1.0)";
         for pairs in [
             &[("user-agent", agent)][..],
             &[("user-agent", agent), ("x-navree-ui", "1")][..],

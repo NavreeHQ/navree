@@ -32,12 +32,13 @@
 //!     page.json(),
 //!     format!(
 //!         concat!(
-//!             r#"{{"navree":1,"build":"{}","vocab":1,"#,
+//!             r#"{{"navree":1,"build":"{}","vocab":0,"app":"{}","#,
 //!             r#""screen":{{"title":"Orders","body":{{"t":"stack","children":["#,
 //!             r#"{{"t":"text","value":"No orders yet"}},"#,
 //!             r#"{{"t":"button","label":"New order","role":"primary","prominence":"high","#,
 //!             r#""action":{{"t":"navigate","href":"/orders/new"}}}}]}}}}}}"#
 //!         ),
+//!         navree_ui::assets::BUILD,
 //!         navree_ui::native::Stamp::of(None).as_str()
 //!     )
 //! );
@@ -54,12 +55,12 @@ pub(crate) mod swap;
 mod table;
 mod test;
 
-pub use crate::asked::{WEB_VIEW_TOKEN, WhoAsked, who_asked};
+pub use crate::asked::{WhoAsked, who_asked};
 pub use coverage::{Coverage, Grade, graded};
 pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
 pub use navree_native as protocol;
 pub use page::Page;
-pub use routes::{LOWERING, SHELL_STAMP_HEADER, Stamp};
+pub use routes::{LOWERING, Stamp};
 pub(crate) use routes::{Routes, app_stamp};
 pub use scope::Client;
 pub use swap::{Answered, How, NodeOp};

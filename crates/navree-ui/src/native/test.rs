@@ -105,7 +105,24 @@ impl TestNative {
     /// The envelope the client gets for the address `url`.
     pub fn envelope_at(&self, url: &str) -> Envelope {
         let request = scope::Request::new(self.client.clone(), url);
-        super::swap::envelope(self.page.clone(), &request).0
+        // A screen too deep for a client is not copied: it goes to the web view.
+        let page = if super::swap::too_deep(&self.page.screen) {
+            Page {
+                screen: Screen::new(
+                    self.page.screen.title.clone(),
+                    N::Stack(n::Stack::default()),
+                ),
+                ops: self.page.ops.clone(),
+                misses: vec![super::Miss {
+                    what: "depth".to_owned(),
+                    why: "deeper than a client reads".to_owned(),
+                }],
+                dropped: Vec::new(),
+            }
+        } else {
+            self.page.clone()
+        };
+        super::swap::finished(super::swap::envelope(page, &request).0, &request, "")
     }
 
     /// The envelope's JSON, as it goes on the wire.
@@ -217,7 +234,7 @@ mod tests {
         let envelope = page.envelope_at("/orders/1");
         assert!(envelope.screen.is_some());
         assert!(envelope.web.is_none());
-        assert_eq!(envelope.build, super::super::Stamp::of(None).as_str());
+        assert_eq!(envelope.build, crate::assets::BUILD);
     }
 
     #[test]
@@ -235,14 +252,25 @@ mod tests {
     }
 
     #[test]
-    fn a_client_too_old_for_a_kind_is_answered_with_the_web_view() {
-        let mut old = phone();
-        old.vocab = 0;
-        let page = TestNative::build(old, || View::new("x").body(Text::new("a")));
+    fn a_page_deeper_than_a_client_reads_is_answered_with_the_web_view() {
+        let deep = |levels: usize| {
+            let mut node: Node = Text::new("the bottom").into();
+            for level in 0..levels {
+                node = el("section")
+                    .children((Text::new(format!("level {level}")), node))
+                    .into();
+            }
+            View::new("Deep").body(node)
+        };
+        // Read whole: the server never runs out of stack reading it.
+        let page = TestNative::of(&deep(500));
         assert!(page.is_native());
-        let envelope = page.envelope_at("/x");
-        assert_eq!(envelope.web.unwrap().why, ["vocab:text"]);
-        assert_eq!(envelope.vocab, 0);
+        // But no client reads a tree that deep, so it goes to the web view.
+        let envelope = page.envelope_at("/deep");
+        assert_eq!(envelope.web.unwrap().why, ["depth"]);
+        assert_eq!(envelope.vocab, navree_native::VOCAB);
+        let shallow = TestNative::of(&deep(20)).envelope_at("/deep");
+        assert!(shallow.screen.is_some());
     }
 
     #[test]

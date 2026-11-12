@@ -17,7 +17,7 @@ use navree_native::node::{self as n, Node as N};
 use navree_native::{Action, Client, Command, Envelope, FormFactor, Op as NativeOp, Platform};
 use navree_testing::TestApp;
 use navree_ui::form::{FormView, Money, Rejected, Submit};
-use navree_ui::native::{SHELL_STAMP_HEADER, Stamp, TestNative, lower};
+use navree_ui::native::{Stamp, TestNative, lower};
 use navree_ui::select::{Choice, ChoiceList};
 use navree_ui::sortable::{Move, MoveRejected};
 use navree_ui::table::BulkRequest;
@@ -546,6 +546,16 @@ impl Controller for Pages {
                 Err::<View, AppError>(AppError::unauthenticated())
             })
             .public(),
+            RouteDef::on(Method::GET, "!/deep", || async {
+                let mut node: navree_ui::Node = Text::new("the bottom").into();
+                for level in 0..100 {
+                    node = el("section")
+                        .children((Text::new(format!("level {level}")), node))
+                        .into();
+                }
+                View::new("Deep").body(node)
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/big", || async {
                 View::new("Big").body(
                     (0..2000)
@@ -600,10 +610,10 @@ async fn a_native_client_gets_the_page_as_a_screen() {
     assert_eq!(response.header("cache-control"), Some("no-store"));
     let envelope = envelope(&response.text());
     assert_eq!(envelope.navree, 1);
-    // Its build is the app's stamp, not the toolkit's assets'.
-    assert_eq!(envelope.build, Stamp::of(None).as_str());
-    assert_ne!(envelope.build, assets::BUILD);
-    assert_eq!(envelope.vocab, 1);
+    // The app's stamp beside the web's build.
+    assert_eq!(envelope.build, assets::BUILD);
+    assert_eq!(envelope.app, Stamp::of(None).as_str());
+    assert_eq!(envelope.vocab, navree_native::VOCAB);
     assert!(envelope.web.is_none());
     let screen = envelope.screen.expect("a screen");
     assert_eq!(screen.title, "Order CS-20481");
@@ -882,7 +892,7 @@ async fn the_web_view_of_a_native_client_gets_the_page_without_the_chrome() {
         .get("/board")
         .header(
             "user-agent",
-            "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/0.1.0",
+            "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/1 (platform=android; lib=0.1.0)",
         )
         .send()
         .await;
@@ -923,13 +933,12 @@ async fn the_shell_is_answered_as_a_document() {
         response.header("content-type"),
         Some("application/vnd.navree.native+json")
     );
-    let stamp = response
-        .header(SHELL_STAMP_HEADER)
-        .expect("the shell's stamp")
-        .to_owned();
     let shell: navree_native::Shell = serde_json::from_str(&response.text()).expect("a shell");
     assert_eq!(shell.navree, 1);
-    assert_eq!(shell.build, Stamp::of(None).as_str());
+    assert_eq!(shell.build, assets::BUILD);
+    // The document's stamp is the stamp of what it says.
+    assert_eq!(shell.stamp, shell.clone().stamped().stamp);
+    assert!(!shell.stamp.is_empty());
     // A page drawn in the shell says the same stamp, so the client knows its shell is current.
     let page = app
         .client()
@@ -938,7 +947,9 @@ async fn the_shell_is_answered_as_a_document() {
         .header(CLIENT, PHONE)
         .send()
         .await;
-    assert_eq!(page.header(SHELL_STAMP_HEADER), Some(stamp.as_str()));
+    let page = envelope(&page.text());
+    assert_eq!(page.shell, shell.stamp);
+    assert_eq!(page.app, Stamp::of(None).as_str());
     assert_eq!(shell.name, "Charkha Supply Co.");
     assert_eq!(shell.context.as_deref(), Some("Store operations"));
     let [store] = shell.nav.groups.as_slice() else {
@@ -991,19 +1002,20 @@ async fn a_client_the_server_can_not_read_is_refused_before_a_handler_runs() {
 }
 
 #[tokio::test]
-async fn a_client_too_old_for_the_page_is_sent_to_the_web_view() {
+async fn a_page_deeper_than_a_client_reads_is_sent_to_the_web_view() {
     let app = app().await;
     let response = app
         .client()
-        .get("/orders/1")
+        .get("/deep")
         .header(NATIVE, "1")
         .header(CLIENT, "platform=ios; form=phone; vocab=0")
         .send()
         .await;
     let envelope = envelope(&response.text());
-    assert_eq!(envelope.vocab, 0);
     assert!(envelope.screen.is_none());
-    assert!(envelope.web.expect("the web view").why[0].starts_with("vocab:"));
+    let web = envelope.web.expect("the web view");
+    assert_eq!(web.why, ["depth"]);
+    assert_eq!(web.url, "/deep");
 }
 
 #[tokio::test]
@@ -1090,7 +1102,7 @@ async fn both_answers_vary_on_who_asked() {
         .get("/orders/1")
         .header(
             "user-agent",
-            "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 NavreeNative/0.1.0",
+            "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 NavreeNative/1 (platform=ios; lib=0.1.0)",
         )
         .send()
         .await;
@@ -1733,4 +1745,58 @@ impl Controller for KeptPage {
             .public(),
         ]
     }
+}
+
+/// A layer where the unit of work stands that runs the rest of every request
+/// on a task of its own, as the unit of work does when a client goes away.
+struct ElsewhereTask;
+
+impl Module for ElsewhereTask {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(navree_http::GlobalLayer::new(
+            navree_http::LayerSlot::Uow,
+            "test.elsewhere",
+            |_, router| {
+                Ok(router.layer(navree_http::middleware::from_fn(
+                    |request: navree_http::extract::Request,
+                     next: navree_http::middleware::Next| async move {
+                        tokio::spawn(next.run(request))
+                            .await
+                            .expect("the request's task")
+                    },
+                )))
+            },
+        ));
+    }
+}
+
+#[tokio::test]
+async fn who_asked_is_current_where_the_handler_runs_even_on_another_task() {
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App)
+        .module(ElsewhereTask)
+        .build()
+        .await;
+    let response = app
+        .client()
+        .get("/orders")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    let envelope = envelope(&response.text());
+    // The table's rows are built as parts only when the handler knows a
+    // native client asked.
+    let screen = envelope
+        .screen
+        .unwrap_or_else(|| panic!("{:?}", envelope.web));
+    let Some(N::Region(region)) = screen.body.find("orders") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    assert_eq!(table.rows.len(), 2);
 }

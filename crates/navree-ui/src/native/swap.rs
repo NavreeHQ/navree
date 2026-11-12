@@ -34,7 +34,7 @@ use crate::asked::{WhoAsked, in_web_view};
 use crate::node::Node;
 use crate::op::{OPS_CONTENT_TYPE, Op, PendingOps, UI_HEADER, is_prefetch};
 use crate::view::View;
-use crate::compress;
+use crate::{assets, compress};
 
 /// How a node op changes the screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -87,6 +87,12 @@ pub(crate) fn node_op(how: How, target: &str, node: &Node) -> Option<Op> {
             misses.push(Miss {
                 what: format!("vocab:{}", kind.as_str()),
                 why: "newer than the client draws".to_owned(),
+            });
+        }
+        if node.depth() > navree_native::MAX_DEPTH {
+            misses.push(Miss {
+                what: "depth".to_owned(),
+                why: "deeper than a client reads".to_owned(),
             });
         }
     }
@@ -234,10 +240,43 @@ impl Answered {
     }
 }
 
-/// An envelope as a response.
-fn respond(status: StatusCode, cache: &'static str, envelope: &Envelope) -> Response {
-    let body = serde_json::to_string(envelope)
+/// `envelope` as the client `request` gets it: in the client's vocabulary,
+/// stamped with the app's stamp and `shell`'s, its icon shapes said once each.
+pub(crate) fn finished(envelope: Envelope, request: &scope::Request, shell: &str) -> Envelope {
+    let mut envelope = envelope
+        .in_vocab(request.client.vocab.min(navree_native::VOCAB))
+        .stamped(request.stamp.as_str(), shell);
+    envelope.share_icons();
+    envelope
+}
+
+/// An envelope as the client `request` gets it, as a response: in the
+/// client's vocabulary, stamped with the app's stamp and `shell`'s, its icon
+/// shapes said once each. JSON nested deeper than a client reads is refused
+/// as the web view.
+fn respond(
+    status: StatusCode,
+    cache: &'static str,
+    mut envelope: Envelope,
+    request: &scope::Request,
+    shell: &str,
+) -> Response {
+    envelope = finished(envelope, request, shell);
+    let mut body = serde_json::to_string(&envelope)
         .unwrap_or_else(|_| format!("{{\"navree\":{}}}", navree_native::MAJOR));
+    if navree_native::nesting(&body) > navree_native::MAX_NESTING {
+        let web = Envelope::web(
+            assets::BUILD,
+            Web {
+                url: request.url.clone(),
+                title: envelope.screen.map(|screen| screen.title),
+                why: vec!["depth".to_owned()],
+            },
+        )
+        .in_vocab(envelope.vocab)
+        .stamped(envelope.app, envelope.shell);
+        body = serde_json::to_string(&web).unwrap_or_default();
+    }
     (
         status,
         [
@@ -250,38 +289,59 @@ fn respond(status: StatusCode, cache: &'static str, envelope: &Envelope) -> Resp
         .into_response()
 }
 
-/// The envelope a page answers a native client with: its screen, or the word
-/// to show it in the web view, with why.
+/// The envelope a page answers a native client with: its screen in the
+/// client's vocabulary, or the word to show it in the web view, with why: a
+/// part that could not be read, a kind the client lacks with no older form,
+/// or a tree deeper than a client reads.
 pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answered) {
     let mut why = page.why();
+    let mut screen = page.screen;
     if why.is_empty() {
-        let newer = std::iter::once(&page.screen.body)
-            .chain(&page.screen.actions)
-            .find_map(|node| navree_native::vocab::newer_than(node, request.client.vocab));
-        if let Some(kind) = newer {
-            why.push(format!("vocab:{}", kind.as_str()));
+        let to = request.client.vocab;
+        let body = std::mem::replace(&mut screen.body, N::Stack(Default::default()));
+        let parts = std::iter::once(body).chain(std::mem::take(&mut screen.actions));
+        let mut read = Vec::new();
+        for part in parts {
+            match navree_native::vocab::downgrade(part, to) {
+                navree_native::vocab::Downgraded::Node(node) => read.push(node),
+                navree_native::vocab::Downgraded::Web { why: more } => why.extend(more),
+            }
         }
+        let mut read = read.into_iter();
+        if let Some(body) = read.next() {
+            screen.body = body;
+        }
+        screen.actions = read.collect();
     }
-    let vocab = request.client.vocab.min(navree_native::VOCAB);
+    if why.is_empty() && too_deep(&screen) {
+        why.push("depth".to_owned());
+    }
     if why.is_empty() {
-        let answered = Answered::screen(&page.screen, page.dropped);
-        let mut envelope = Envelope::screen(request.stamp.as_str(), page.screen).in_vocab(vocab);
+        let answered = Answered::screen(&screen, page.dropped);
+        let mut envelope = Envelope::screen(assets::BUILD, screen);
         envelope.ops = page.ops;
         (envelope, answered)
     } else {
         let mut envelope = Envelope::web(
-            request.stamp.as_str(),
+            assets::BUILD,
             Web {
                 url: request.url.clone(),
-                title: Some(page.screen.title),
+                title: Some(screen.title),
                 why: why.clone(),
             },
-        )
-        .in_vocab(vocab);
+        );
         // A toast left for the page is shown whichever way the page is.
         envelope.ops = page.ops;
         (envelope, Answered::web(why))
     }
+}
+
+/// Whether a client can't read `screen`: a part sits deeper in it than
+/// [`MAX_DEPTH`](navree_native::MAX_DEPTH). Measured without recursion.
+pub(crate) fn too_deep(screen: &navree_native::Screen) -> bool {
+    std::iter::once(&screen.body)
+        .chain(&screen.actions)
+        .any(|node| node.depth() > navree_native::MAX_DEPTH)
 }
 
 /// What a form that was refused answers a native client: the messages at its
@@ -292,7 +352,7 @@ pub(crate) fn errors(
 ) -> Option<Response> {
     let request = scope::native()?;
     let envelope = Envelope::ops(
-        request.stamp.as_str(),
+        assets::BUILD,
         vec![navree_native::Op::Errors {
             form: form.to_owned(),
             fields: fields.clone(),
@@ -302,7 +362,9 @@ pub(crate) fn errors(
     Some(respond(
         StatusCode::UNPROCESSABLE_ENTITY,
         "no-store",
-        &envelope,
+        envelope,
+        &request,
+        "",
     ))
 }
 
@@ -328,11 +390,11 @@ pub(crate) async fn client_of(
 /// happened.
 pub(crate) fn ops_for(request: &scope::Request, status: StatusCode, ops: &[Op]) -> Response {
     let envelope = match native_ops(ops) {
-        Some(ops) => Envelope::ops(request.stamp.as_str(), ops),
-        None => Envelope::ops(request.stamp.as_str(), Vec::new()),
+        Some(ops) => Envelope::ops(assets::BUILD, ops),
+        None => Envelope::ops(assets::BUILD, Vec::new()),
     }
     .in_vocab(request.client.vocab.min(navree_native::VOCAB));
-    respond(status, "no-store", &envelope)
+    respond(status, "no-store", envelope, &request, "")
 }
 
 /// `ops` for the native client the current request comes from, as an
@@ -344,8 +406,9 @@ pub(crate) fn ops(status: StatusCode, ops: &[Op]) -> Option<Response> {
     Some(respond(
         status,
         "no-store",
-        &Envelope::ops(request.stamp.as_str(), native)
-            .in_vocab(request.client.vocab.min(navree_native::VOCAB)),
+        Envelope::ops(assets::BUILD, native),
+        &request,
+        "",
     ))
 }
 
@@ -401,12 +464,12 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
     let vocab = request.client.vocab.min(navree_native::VOCAB);
     if live {
         let envelope = Envelope::ops(
-            request.stamp.as_str(),
+            assets::BUILD,
             vec![navree_native::Op::Invalidate { target }],
         )
         .in_vocab(vocab);
         return Some(kept(
-            respond(StatusCode::OK, "no-store", &envelope),
+            respond(StatusCode::OK, "no-store", envelope, &request, ""),
             Answered::web(vec!["lazy:live".to_owned()]),
         ));
     }
@@ -436,7 +499,7 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
         // Rows a client can't draw are not sent: the list is the web view's,
         // and the client is told why.
         let envelope = Envelope::web(
-            request.stamp.as_str(),
+            assets::BUILD,
             Web {
                 url: request.url.clone(),
                 title: None,
@@ -445,7 +508,7 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
         )
         .in_vocab(vocab);
         return Some(kept(
-            respond(StatusCode::OK, "no-store", &envelope),
+            respond(StatusCode::OK, "no-store", envelope, &request, ""),
             Answered::web(why),
         ));
     }
@@ -461,9 +524,9 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
             more,
         }]
     };
-    let envelope = Envelope::ops(request.stamp.as_str(), ops).in_vocab(vocab);
+    let envelope = Envelope::ops(assets::BUILD, ops).in_vocab(vocab);
     Some(kept(
-        respond(StatusCode::OK, "no-store", &envelope),
+        respond(StatusCode::OK, "no-store", envelope, &request, ""),
         Answered::parts(std::mem::take(&mut cx.dropped)),
     ))
 }
@@ -518,10 +581,10 @@ pub(crate) fn choices<'a>(
         }),
         None => field,
     };
-    let envelope = Envelope::screen(request.stamp.as_str(), navree_native::Screen::new("", body))
+    let envelope = Envelope::screen(assets::BUILD, navree_native::Screen::new("", body))
         .in_vocab(request.client.vocab.min(navree_native::VOCAB));
     Some(kept(
-        respond(StatusCode::OK, "no-store", &envelope),
+        respond(StatusCode::OK, "no-store", envelope, &request, ""),
         Answered::parts(Vec::new()),
     ))
 }
@@ -546,15 +609,13 @@ pub(crate) fn view(view: View) -> Result<Response, View> {
 fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     let page = page::of_view(&mut view, false);
     // The stamp of the shell the page stands in, so the client knows its own is current.
-    let shell = view.note().map(crate::shell::PageNote::shell_stamp);
+    let shell = view
+        .note()
+        .map(|note| note.shell_stamp(request.sign_in.as_deref()))
+        .unwrap_or_default();
     let parts = view.native_parts();
     let (envelope, answered) = envelope(page, request);
-    let mut response = respond(parts.status, parts.cache, &envelope);
-    if let Some(shell) = shell.and_then(|shell| HeaderValue::from_str(&shell).ok()) {
-        response
-            .headers_mut()
-            .insert(super::SHELL_STAMP_HEADER, shell);
-    }
+    let mut response = respond(parts.status, parts.cache, envelope, request, &shell);
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
@@ -676,14 +737,10 @@ pub(crate) async fn layer(
     );
     Ok(match scope::read(request.headers(), &url) {
         Reading::Web => return Err((request, next)),
-        Reading::UnknownMajor(major) => refuse(
-            StatusCode::NOT_ACCEPTABLE,
-            &format!(
-                "this server speaks version {} of the native protocol, not `{major}`",
-                navree_native::MAJOR
-            ),
+        Reading::Refused(error) => refuse(
+            StatusCode::from_u16(error.status()).unwrap_or(StatusCode::BAD_REQUEST),
+            &error.to_string(),
         ),
-        Reading::BadClient(error) => refuse(StatusCode::BAD_REQUEST, &error.to_string()),
         Reading::Asked(Asked::Embed) => embedded(request, next).await,
         Reading::Asked(Asked::Native(native)) => {
             let ctx = request
@@ -722,12 +779,28 @@ async fn stamped(
     let Some(stamp) = ctx.try_get::<super::Stamp>().await else {
         return native;
     };
+    let sign_in = ctx
+        .try_get::<crate::pages::PagesOptions>()
+        .await
+        .map(|options| options.sign_in.clone());
     match Arc::try_unwrap(native) {
         Ok(mut request) => {
             request.stamp = (*stamp).clone();
+            request.sign_in = sign_in;
             Arc::new(request)
         }
         Err(native) => native,
+    }
+}
+
+/// The layer in the context slot, innermost, that makes current again who
+/// asked, as the reply layer read it: the unit of work may finish a request
+/// on a task of its own, where the reply layer's scope is not. A browser's
+/// request costs one look in its extensions.
+pub(crate) async fn context_layer(request: Request, next: Next) -> Response {
+    match request.extensions().get::<Asked>().cloned() {
+        Some(asked) => scope::scope(asked, next.run(request)).await,
+        None => next.run(request).await,
     }
 }
 
@@ -749,7 +822,9 @@ fn refuse(status: StatusCode, why: &str) -> Response {
 
 /// A request from the web view inside a native client: the web path, with
 /// pages drawn without the app's chrome.
-async fn embedded(request: Request, next: Next) -> Response {
+async fn embedded(mut request: Request, next: Next) -> Response {
+    // Made current again where the handler runs: see `context_layer`.
+    request.extensions_mut().insert(Asked::Embed);
     let from_runtime = request.headers().contains_key(UI_HEADER);
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
@@ -767,7 +842,11 @@ async fn embedded(request: Request, next: Next) -> Response {
 
 /// A native client's request: the handler runs with the client current, and
 /// whatever it answers leaves as an envelope or as something that is not a page.
-async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Response {
+async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -> Response {
+    // Made current again where the handler runs: see `context_layer`.
+    request
+        .extensions_mut()
+        .insert(Asked::Native(native.clone()));
     let accept = compress::accept_of(request.headers());
     // Recorded as the runtime's requests are: each is an operation of the app.
     let operation = (!is_prefetch(request.headers()))
@@ -788,8 +867,9 @@ async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Re
             let mut native = respond(
                 parts.status,
                 "no-store",
-                &Envelope::ops(native.stamp.as_str(), ops)
-                    .in_vocab(native.client.vocab.min(navree_native::VOCAB)),
+                Envelope::ops(assets::BUILD, ops),
+                &native,
+                "",
             );
             for (name, value) in &parts.headers {
                 if !matches!(
@@ -824,7 +904,7 @@ async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Re
             },
             &native,
         );
-        let mut wrapped = respond(parts.status, "no-store", &envelope);
+        let mut wrapped = respond(parts.status, "no-store", envelope, &native, "");
         for value in parts.headers.get_all(SET_COOKIE) {
             wrapped.headers_mut().append(SET_COOKIE, value.clone());
         }

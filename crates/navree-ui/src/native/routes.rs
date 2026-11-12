@@ -24,10 +24,6 @@ use crate::shell::Shell;
 /// into other parts than before is a new number, so a client drops what it kept.
 pub const LOWERING: u32 = 1;
 
-/// The response header that carries the stamp of the app's shell: a client
-/// that sees one it has not seen fetches the shell again.
-pub const SHELL_STAMP_HEADER: &str = "x-navree-shell";
-
 /// The app's stamp: what a native client keeps its screens under, and drops
 /// them when it changes. It is made of the app's version (`app.version`), the
 /// version of the reading of pages and the vocabulary; an app that names no
@@ -67,13 +63,6 @@ impl Stamp {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-/// The stamp of what a client draws from: a shell document, or any data.
-pub(crate) fn stamp_of(data: &impl Hash) -> String {
-    let mut hasher = std::hash::DefaultHasher::new();
-    data.hash(&mut hasher);
-    short(hasher.finish())
 }
 
 /// Twelve hexadecimal digits of `hash`.
@@ -129,25 +118,20 @@ async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppSh
 /// The app's shell as a native client draws it, for this request: the
 /// person signed in and their menu are theirs.
 async fn document(ctx: &AppContext, parts: &Parts) -> Response {
-    let stamp = match ctx.try_get::<Stamp>().await {
-        Some(stamp) => (*stamp).clone(),
-        None => app_stamp(ctx).await,
-    };
     let sign_in = ctx
         .try_get::<PagesOptions>()
         .await
         .map(|options| options.sign_in.clone());
     let document = match shell_of(ctx, parts).await {
-        Some(shell) => shell.native_document(stamp.as_str(), sign_in.as_deref()),
+        Some(shell) => shell.native_document(sign_in.as_deref()),
         None => {
-            let mut document = navree_native::Shell::new(stamp.as_str(), "");
+            let mut document = navree_native::Shell::new(crate::assets::BUILD, "");
             document.routes = crate::shell::native_routes(sign_in.as_deref());
-            document
+            document.stamped()
         }
     };
-    let shell = crate::shell::shell_stamp(&document);
     let body = serde_json::to_string(&document).unwrap_or_else(|_| String::from("{}"));
-    let mut response = (
+    (
         [
             (
                 CONTENT_TYPE,
@@ -159,11 +143,7 @@ async fn document(ctx: &AppContext, parts: &Parts) -> Response {
         ],
         body,
     )
-        .into_response();
-    if let Ok(value) = HeaderValue::from_str(&shell) {
-        response.headers_mut().insert(SHELL_STAMP_HEADER, value);
-    }
-    response
+        .into_response()
 }
 
 impl Controller for Routes {
@@ -189,8 +169,8 @@ impl Controller for Routes {
                 description: Some(
                     "The app's name, its destinations, the menu of the person signed in, its \
                      theme's accent and how its screens are presented, as data a native client \
-                     draws its own chrome from. Its stamp is in `X-Navree-Shell`; a client \
-                     fetches it again when an answer carries another."
+                     draws its own chrome from. Every page drawn in it carries its `stamp` \
+                     as `shell`; a client fetches it again when an answer carries another."
                         .to_owned(),
                 ),
                 tags: vec!["UI".to_owned()],
@@ -213,7 +193,5 @@ mod tests {
         assert_eq!(Stamp::of(None), Stamp::of(None));
         assert_ne!(Stamp::of(None), one);
         assert!(one.as_str().bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert_eq!(stamp_of(&"a"), stamp_of(&"a"));
-        assert_ne!(stamp_of(&"a"), stamp_of(&"b"));
     }
 }

@@ -165,12 +165,28 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             Ok(Arc::new(UiGate(slot)))
         }
     }));
+    #[cfg(feature = "native-preview")]
+    let for_context = slot.clone();
     m.http_layer(GlobalLayer::new(
         LayerSlot::Session,
         "ui.reply",
         move |_, router| {
             if slot.get().copied().unwrap_or(false) {
                 Ok(router.layer(middleware::from_fn(reply_layer)))
+            } else {
+                Ok(router)
+            }
+        },
+    ));
+    // Who asked, made current where handlers run, as a task-local value of the
+    // request belongs: inside the unit of work.
+    #[cfg(feature = "native-preview")]
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Context,
+        "ui.native",
+        move |_, router| {
+            if for_context.get().copied().unwrap_or(false) {
+                Ok(router.layer(middleware::from_fn(crate::native::swap::context_layer)))
             } else {
                 Ok(router)
             }

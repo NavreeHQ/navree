@@ -844,6 +844,7 @@ impl Cx {
                 .map(Cow::into_owned),
             cells,
             action: None,
+            actions: Vec::new(),
         })
     }
 
@@ -920,6 +921,7 @@ impl Cx {
                 value: value.clone(),
                 min: attr(element, "min").map(Cow::into_owned),
                 max: attr(element, "max").map(Cow::into_owned),
+                ..i::DateInput::default()
             })
         };
         let input = match element.tag() {
@@ -940,6 +942,7 @@ impl Cx {
                     i::Input::Choices(i::ChoicesInput {
                         options,
                         values: chosen,
+                        ..i::ChoicesInput::default()
                     })
                 } else {
                     i::Input::Choice(i::ChoiceInput {
@@ -951,6 +954,7 @@ impl Cx {
                         }),
                         options,
                         placeholder,
+                        ..i::ChoiceInput::default()
                     })
                 }
             }
@@ -1016,6 +1020,7 @@ impl Cx {
                     accept: attr(element, "accept").map(Cow::into_owned),
                     multiple: has(element, "multiple"),
                     capture: attr(element, "capture").map(Cow::into_owned),
+                    ..i::FileInput::default()
                 }),
                 "radio" => return fail("a radio button outside a group that reads it"),
                 other => return fail(format!("an input of type `{other}`")),
@@ -1107,6 +1112,7 @@ impl Cx {
                 || attr(element, "aria-disabled").as_deref() == Some("true"),
             pending: has(element, "data-pending"),
             action: self.action_of(element)?,
+            ..n::Button::default()
         })
     }
 
@@ -2181,6 +2187,7 @@ mod tests {
                     id: Some("4".into()),
                     cells: vec![N::text("Phulkari dupatta"), N::text("2"), N::text("")],
                     action: None,
+                    actions: Vec::new(),
                 }],
                 ..n::Table::default()
             })

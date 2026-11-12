@@ -5,17 +5,13 @@
 //! from the toolkit's browser runtime, which says so with `X-Navree-UI`, or,
 //! with the `native-preview` feature, from a native client (`X-Navree-Native`)
 //! or the web view inside one. A web view sends a custom header on its first
-//! request only, so it is known by the last word of its user agent,
-//! `NavreeNative/<version>`, which it sends on every request.
+//! request only, so it is known by the token its user agent carries on every
+//! request: navree-native's [`WebViewToken`](navree_native::WebViewToken),
+//! `NavreeNative/1 (platform=ios; lib=0.1.0)`.
 
 use http::HeaderMap;
 
 use crate::op::UI_HEADER;
-
-/// The word a native client's web view ends its user agent with, before a `/`
-/// and the client library's version: `... Mobile Safari/537.36 NavreeNative/0.1.0`.
-#[cfg(feature = "native-preview")]
-pub const WEB_VIEW_TOKEN: &str = "NavreeNative/";
 
 /// Who a request came from, as the toolkit answers it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -98,9 +94,9 @@ pub fn who_asked(headers: &HeaderMap) -> WhoAsked {
     WhoAsked::Browser
 }
 
-/// Whether the request came from a native client's web view: the last word of
-/// its user agent is [`WEB_VIEW_TOKEN`] and a version, or, on the first load,
-/// it says `X-Navree-Embed`. Only the end of the user agent is read.
+/// Whether the request came from a native client's web view: its user agent
+/// carries navree-native's [`WebViewToken`](navree_native::WebViewToken), or,
+/// on the first load, it says `X-Navree-Embed`.
 #[cfg(feature = "native-preview")]
 #[inline]
 pub(crate) fn in_web_view(headers: &HeaderMap) -> bool {
@@ -109,21 +105,8 @@ pub(crate) fn in_web_view(headers: &HeaderMap) -> bool {
     }
     headers
         .get(http::header::USER_AGENT)
-        .is_some_and(|agent| last_word(agent.as_bytes()).starts_with(WEB_VIEW_TOKEN.as_bytes()))
-}
-
-/// The bytes after the last space of `agent`, trailing spaces left out.
-#[cfg(feature = "native-preview")]
-fn last_word(agent: &[u8]) -> &[u8] {
-    let mut end = agent.len();
-    while end > 0 && agent[end - 1] == b' ' {
-        end -= 1;
-    }
-    let trimmed = &agent[..end];
-    match trimmed.iter().rposition(|byte| *byte == b' ') {
-        Some(space) => &trimmed[space + 1..],
-        None => trimmed,
-    }
+        .and_then(|agent| agent.to_str().ok())
+        .is_some_and(|agent| navree_native::WebViewToken::find(agent).is_some())
 }
 
 #[cfg(test)]
@@ -173,8 +156,8 @@ mod tests {
 
     #[cfg(feature = "native-preview")]
     #[test]
-    fn a_web_view_is_known_by_the_last_word_of_its_user_agent() {
-        let agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 NavreeNative/0.1.0";
+    fn a_web_view_is_known_by_the_token_in_its_user_agent() {
+        let agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 NavreeNative/1 (platform=ios; lib=0.1.0)";
         assert_eq!(
             who_asked(&headers(&[("user-agent", agent)])),
             WhoAsked::WebView
@@ -189,16 +172,13 @@ mod tests {
             who_asked(&headers(&[("x-navree-embed", "1")])),
             WhoAsked::WebView
         );
-        // The word anywhere but at the end is a browser's own words.
+        // A word that only looks like the token is a browser's own.
         assert_eq!(
             who_asked(&headers(&[(
                 "user-agent",
-                "NavreeNative/0.1.0 (a crawler) Mozilla/5.0"
+                "Mozilla/5.0 NotNavreeNative/1 (platform=ios)"
             )])),
             WhoAsked::Browser
         );
-        assert_eq!(last_word(b"a b  "), b"b");
-        assert_eq!(last_word(b"single"), b"single");
-        assert_eq!(last_word(b""), b"");
     }
 }

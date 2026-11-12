@@ -29,7 +29,7 @@ use crate::view::View;
 #[cfg(feature = "native-preview")]
 mod native;
 #[cfg(feature = "native-preview")]
-pub(crate) use native::{PageNote, routes as native_routes, shell_stamp};
+pub(crate) use native::{PageNote, routes as native_routes};
 
 /// The cookie holding a toast for the next page.
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";

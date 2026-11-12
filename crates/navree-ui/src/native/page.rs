@@ -13,9 +13,7 @@ use navree_native::action::{Action, Pair};
 use navree_native::node as n;
 use navree_native::{Op, Screen};
 
-use super::lower::{
-    Cx, Lowered, Miss, N, Parts, attr, flat, id, one, slot, text_of, tone_of,
-};
+use super::lower::{Cx, Lowered, Miss, N, Parts, attr, flat, id, one, slot, text_of, tone_of};
 use super::slots;
 use crate::node::{Element, Node};
 
@@ -462,11 +460,12 @@ mod tests {
         let shell = app()
             .for_request("/", &http::HeaderMap::new())
             .csrf("tok")
-            .native_document("b1", Some("/sign-in?from=app"));
+            .native_document(Some("/sign-in?from=app"));
         assert_eq!(shell.name, "Charkha Supply Co.");
         assert_eq!(shell.context.as_deref(), Some("Store operations"));
         assert_eq!(shell.home, "/");
-        assert_eq!(shell.build, "b1");
+        assert_eq!(shell.build, crate::assets::BUILD);
+        assert_eq!(shell.stamp, shell.clone().stamped().stamp);
         let [store, plain] = shell.nav.groups.as_slice() else {
             panic!("not two groups");
         };
@@ -532,9 +531,17 @@ mod tests {
         assert_eq!(
             routes,
             [
-                ("/sign-in", Some(navree_native::action::Present::Full), false),
+                (
+                    "/sign-in",
+                    Some(navree_native::action::Present::Full),
+                    false
+                ),
                 ("/*/new", Some(navree_native::action::Present::Sheet), true),
-                ("/*/*/edit", Some(navree_native::action::Present::Sheet), true),
+                (
+                    "/*/*/edit",
+                    Some(navree_native::action::Present::Sheet),
+                    true
+                ),
             ]
         );
     }

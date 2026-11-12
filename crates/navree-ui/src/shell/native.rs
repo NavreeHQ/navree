@@ -156,50 +156,33 @@ impl AppShell {
     /// the theme's accent for a light and a dark ground, and how screens are
     /// presented. `build` is the app's stamp; `sign_in` is where a guest goes,
     /// which a client presents over everything, with no chrome.
-    pub(crate) fn native_document(
-        &self,
-        build: &str,
-        sign_in: Option<&str>,
-    ) -> navree_native::Shell {
+    pub(crate) fn native_document(&self, sign_in: Option<&str>) -> navree_native::Shell {
         let mut document = document(
             &self.shell,
             self.user_menu.as_ref(),
             self.csrf.as_deref(),
             &self.appearance(),
-            build,
         );
         document.routes = routes(sign_in);
-        document
+        document.stamped()
     }
 }
 
 impl PageNote {
-    /// The stamp of the shell the page is drawn in, as the shell's own
-    /// document says it, so a client that sees another fetches the shell again.
-    pub(crate) fn shell_stamp(&self) -> String {
+    /// The stamp of the shell the page is drawn in: the stamp the shell's own
+    /// document has for the same person, so a client that sees another
+    /// fetches the shell again.
+    pub(crate) fn shell_stamp(&self, sign_in: Option<&str>) -> String {
         let page = &self.page;
-        shell_stamp(&document(
+        let mut document = document(
             &page.shell,
             page.user.as_ref(),
             page.csrf.as_deref(),
             &page.appearance,
-            "",
-        ))
+        );
+        document.routes = routes(sign_in);
+        document.stamped().stamp
     }
-}
-
-/// The stamp of a shell document: of what the person signed in sees in it,
-/// which is the same whether the document or a page of it is asked for.
-pub(crate) fn shell_stamp(document: &navree_native::Shell) -> String {
-    let seen = (
-        &document.name,
-        &document.context,
-        &document.home,
-        &document.nav,
-        &document.user,
-        &document.theme,
-    );
-    crate::native::routes::stamp_of(&serde_json::to_string(&seen).unwrap_or_default())
 }
 
 /// The document of `shell`, for the person `user` with the session's token
@@ -209,9 +192,9 @@ fn document(
     user: Option<&UserMenu>,
     csrf: Option<&str>,
     appearance: &crate::theme::Appearance,
-    build: &str,
 ) -> navree_native::Shell {
-    let mut document = navree_native::Shell::new(build, shell.name.clone().into_owned());
+    let mut document =
+        navree_native::Shell::new(crate::assets::BUILD, shell.name.clone().into_owned());
     document.context = shell.context.clone().map(std::borrow::Cow::into_owned);
     document.home = shell.home.as_str().to_owned();
     document.nav.groups = shell
