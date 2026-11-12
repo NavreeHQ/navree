@@ -1,10 +1,7 @@
 //! [`Meter`]: one bar split into segments that add up to the whole.
 
-use super::format::NumberFormat;
-use super::linear::{
-    Entry, LinearLabels, MAX_PARTS, Shares, Unit, default_ink, legend_list, say, share_text,
-    share_whole,
-};
+use super::format::{NumberFormat, share_text};
+use super::linear::{Entry, LinearLabels, MAX_PARTS, Shares, Unit, legend_list, say};
 use super::motion::{Effect, Motion};
 use super::paint::{Defs, Gradient, Ink};
 use super::value::{IntoValue, finite};
@@ -283,7 +280,7 @@ impl Meter {
             .map(|(at, s)| Part {
                 name: s.name.clone(),
                 value: s.value,
-                ink: s.ink.unwrap_or_else(|| default_ink(at)),
+                ink: s.ink.unwrap_or_else(|| Ink::nth(at)),
                 fill: s.fill.clone(),
                 text: s.text.clone(),
             })
@@ -374,7 +371,7 @@ impl Meter {
                     .attr("y", n(hf / 2.0 + 0.5, 1))
                     .attr("text-anchor", "middle")
                     .attr("dominant-baseline", "central")
-                    .child(share_whole(fraction, &numbers)));
+                    .child(share_text(fraction, &numbers)));
                 self.motion.after(300).apply(text, Effect::Fade, at)
             });
             cells.push(
@@ -605,16 +602,16 @@ mod tests {
     #[test]
     fn the_legend_gives_durations_and_shares_and_the_table_the_same() {
         let out = html(sleep());
-        assert!(out.contains("1 h 23 min · 25.1%"), "{out}");
-        assert!(out.contains("2 h 38 min · 47.7%"), "{out}");
-        assert!(out.contains("16 min · 4.8%"), "{out}");
+        assert!(out.contains("1 h 23 min · 25%"), "{out}");
+        assert!(out.contains("2 h 38 min · 48%"), "{out}");
+        assert!(out.contains("16 min · 5%"), "{out}");
         assert!(
             out.contains(r#"<th scope="col" data-num="">Duration</th>"#),
             "{out}"
         );
-        assert!(out.contains(r#"<th scope="row">Deep</th><td data-num=""><span data-color="7">1 h 23 min</span></td><td data-num="">25.1%</td>"#), "{out}");
+        assert!(out.contains(r#"<th scope="row">Deep</th><td data-num=""><span data-color="7">1 h 23 min</span></td><td data-num="">25%</td>"#), "{out}");
         assert!(
-            out.contains("4 parts, total 5 h 31 min. Largest: Core, 47.7%."),
+            out.contains("4 parts, total 5 h 31 min. Largest: Core, 48%."),
             "{out}"
         );
         // The tooltip lists the value large, then the share.

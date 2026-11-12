@@ -158,11 +158,6 @@ impl Shares {
     }
 }
 
-/// The colour a part wears when none was chosen: the categorical colours in turn.
-pub(crate) fn default_ink(index: usize) -> Ink {
-    Ink::slot(u8::try_from(index % 8).unwrap_or(0) + 1)
-}
-
 /// One entry of a legend.
 pub(crate) struct Entry {
     pub ink: Ink,
@@ -205,18 +200,6 @@ pub(crate) fn legend_list(entries: Vec<Entry>) -> Node {
         .into()
 }
 
-/// A share written the way every linear chart writes one: up to one decimal.
-pub(crate) fn share_text(fraction: f64, numbers: &NumberLocale) -> String {
-    NumberFormat::percent().format(fraction, numbers)
-}
-
-/// A share written whole, for a label inside a mark.
-pub(crate) fn share_whole(fraction: f64, numbers: &NumberLocale) -> String {
-    NumberFormat::percent()
-        .max_decimals(0)
-        .format(fraction, numbers)
-}
-
 /// `template` filled, for the summaries.
 pub(crate) fn say(template: &str, values: &[(&str, &str)]) -> String {
     fill(template, values)
@@ -255,12 +238,5 @@ mod tests {
         assert!((big.fraction(Some(f64::MAX)) - 0.5).abs() < 1e-12);
         assert!(Shares::of(&[Some(0.0), None]).is_none());
         assert!(Shares::of(&[]).is_none());
-    }
-
-    #[test]
-    fn parts_without_a_colour_take_the_categorical_colours_in_turn() {
-        assert_eq!(default_ink(0), Ink::slot(1));
-        assert_eq!(default_ink(7), Ink::slot(8));
-        assert_eq!(default_ink(8), Ink::slot(1));
     }
 }

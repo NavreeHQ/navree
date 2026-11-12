@@ -1,7 +1,7 @@
 //! [`ColorStrip`]: a sequence of equal-width cells, each in the colour of its category.
 
-use super::format::NumberFormat;
-use super::linear::{Entry, LinearLabels, default_ink, legend_list, say, share_text};
+use super::format::{NumberFormat, share_text};
+use super::linear::{Entry, LinearLabels, legend_list, say};
 use super::motion::{Effect, Motion};
 use super::paint::{ColorScale, Ink};
 use super::value::{IntoValue, finite};
@@ -238,7 +238,7 @@ impl ColorStrip {
             let at = match cats.iter().position(|(n, ..)| *n == name) {
                 Some(at) => at,
                 None => {
-                    let ink = ink.unwrap_or_else(|| default_ink(cats.len()));
+                    let ink = ink.unwrap_or_else(|| Ink::nth(cats.len()));
                     cats.push((name, ink, 0));
                     cats.len() - 1
                 }

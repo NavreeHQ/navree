@@ -1,7 +1,7 @@
 //! [`MiniColumns`]: small multiples, one 100% column for each item.
 
 use super::format::NumberFormat;
-use super::linear::{Entry, LinearLabels, MAX_PARTS, Shares, Unit, default_ink, legend_list, say};
+use super::linear::{Entry, LinearLabels, MAX_PARTS, Shares, Unit, legend_list, say};
 use super::motion::{Effect, Motion};
 use super::paint::Ink;
 use super::value::{IntoValue, clean};
@@ -113,7 +113,7 @@ impl MiniColumns {
 
     /// Adds a part in the next of the categorical colours.
     pub fn part_auto(mut self, name: impl Into<String>) -> Self {
-        let ink = default_ink(self.parts.len());
+        let ink = Ink::nth(self.parts.len());
         self.parts.push((name.into(), ink));
         self
     }
