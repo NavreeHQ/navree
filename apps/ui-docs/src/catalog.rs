@@ -166,6 +166,9 @@ pub const GROUPS: &[Group] = &[
             "color-strip",
             "range-scale",
             "trend",
+            "calendar-heatmap",
+            "matrix-heatmap",
+            "scatter-chart",
         ],
     },
     Group {
@@ -797,6 +800,30 @@ pub const COMPONENTS: &[Component] = &[
     component("trend", "Trend", &["Trend"], "thumb")
         .about("Which way something moved and by how much: an arrow, a signed change and a colour for what it means.")
         .parts("default"),
+    component(
+        "calendar-heatmap",
+        "Calendar heat map",
+        &["CalendarHeatmap", "HeatSteps", "GridLabels"],
+        "thumb",
+    )
+    .about("A day per cell in weeks, shaded in five steps: how consistent a habit is over months. A day with no data is hollow, not zero.")
+    .parts("default"),
+    component(
+        "matrix-heatmap",
+        "Matrix heat map",
+        &["MatrixHeatmap", "Relation", "GridLabels"],
+        "thumb",
+    )
+    .about("Every measure against every other, such as a correlation matrix: a tone for the sign, depth for the strength, neutral for chance and blank for untested.")
+    .parts("default"),
+    component(
+        "scatter-chart",
+        "Scatter chart",
+        &["Scatter", "PointSeries", "GridLabels"],
+        "thumb",
+    )
+    .about("A translucent point for each pair of values, in one series or several: a cloud of beats, steps against resting heart rate. Axes can be hidden and both can share a range.")
+    .parts("default"),
     // Assistant
     component(
         "conversation",

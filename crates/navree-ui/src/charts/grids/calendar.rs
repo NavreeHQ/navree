@@ -596,7 +596,7 @@ mod tests {
     fn the_table_lists_each_day_and_the_summary_names_the_busiest() {
         let chart = CalendarHeatmap::new("Training load")
             .locale("en-IN")
-            .days([(day(2), 1_20_000.0), (day(3), 50_000.0)])
+            .days([(day(2), 120_000.0), (day(3), 50_000.0)])
             .unit("kcal");
         let html = render(&chart.into());
         assert!(

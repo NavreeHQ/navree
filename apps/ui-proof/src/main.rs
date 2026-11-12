@@ -30,6 +30,7 @@
 //! | `/otp` | one-time code fields of every length and state, a form that posts them and one that sends itself |
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
+//! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/compare/{screen}` | the four screens that measure speed: `table`, `select`, `dates` and `tabs` |
@@ -57,6 +58,7 @@ mod deals;
 mod display;
 mod flow;
 mod gallery;
+mod grids;
 mod icons_flags;
 mod islands;
 mod markdown;
@@ -154,6 +156,7 @@ impl Module for ProofModule {
             .controller::<upload::ClaimPages>()
             .controller::<markdown::MarkdownPages>()
             .controller::<charts::ChartPages>()
+            .controller::<grids::GridPages>()
             .controller::<islands::IslandPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>();
