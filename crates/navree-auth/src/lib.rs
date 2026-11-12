@@ -238,6 +238,7 @@ mod strategy;
 mod telemetry;
 pub mod testing;
 mod throttle;
+mod tickets;
 mod token;
 mod two_factor;
 
@@ -297,4 +298,5 @@ pub use session_json::{
 pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
 pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy, email_domain};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
+pub use tickets::SealedTickets;
 pub use two_factor::{LoginOutcome, TwoFactorProof, TwoFactorSetup, two_factor_enabled};

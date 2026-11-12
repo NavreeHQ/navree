@@ -194,6 +194,16 @@ pub enum AuthError {
     /// The feature is turned off in the configuration.
     #[error("{0} is not enabled")]
     Disabled(&'static str),
+    /// A call ticket was refused: forged, expired, used, or issued to
+    /// another session, call or route (422 `invalid_ticket`; the reason is
+    /// logged, never sent).
+    #[error("ticket refused: {0}")]
+    TicketRefused(#[from] navree_contracts::TicketError),
+    /// A confirmation of an action was refused (403
+    /// `confirmation_refused`; the reason is logged and audited, never
+    /// sent).
+    #[error("confirmation refused: {0}")]
+    ConfirmationRefused(String),
     /// The browser's session could not hold the sign-in (navree-session).
     #[error("auth session error: {0}")]
     Session(String),
@@ -320,6 +330,19 @@ impl AuthError {
                     .with_detail("Invalid passkey"),
             ),
             AuthError::Disabled(_) => Some(AppError::not_found()),
+            AuthError::TicketRefused(navree_contracts::TicketError::Unavailable(_)) => None,
+            AuthError::TicketRefused(_) => Some(
+                AppError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_ticket",
+                    "Unprocessable Entity",
+                )
+                .with_detail("Invalid or expired ticket"),
+            ),
+            AuthError::ConfirmationRefused(_) => Some(
+                AppError::new(StatusCode::FORBIDDEN, "confirmation_refused", "Forbidden")
+                    .with_detail("The confirmation was refused"),
+            ),
             AuthError::Db(error) => navree_db::map_db_error(error),
             AuthError::Orm(error) => error.db_error().and_then(navree_db::map_db_error),
             AuthError::Signing(_)

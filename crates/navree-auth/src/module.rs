@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use http::Method;
 use navree_config::ModuleBuilderConfigExt;
+use navree_contracts::CallTickets;
 use navree_crypto::{Encrypter, random_token};
 use navree_db::ModuleBuilderDbExt;
 use navree_http::{Authenticator, HttpOptions, ModuleBuilderHttpExt};
@@ -19,7 +20,7 @@ use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AppsOptions, AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SignInPolicy, Strategy,
+    AppsOptions, AuthError, AuthOptions, AuthService, SealedTickets, JwtService, JwtStrategy, SignInPolicy, Strategy,
     StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
 };
 
@@ -133,6 +134,21 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .exports::<JwtService>()
         .provider::<AuthService>()
         .exports::<AuthService>()
+        // Sealed one-time tickets for results clients post back, on the
+        // service's key, cache and clock.
+        .factory(
+            Factory::<dyn CallTickets>::new(|r: Resolver| async move {
+                let service = r.get::<AuthService>().await?;
+                let tickets = SealedTickets::new(
+                    service.encrypter.clone(),
+                    service.cache.clone(),
+                    service.clock.clone(),
+                );
+                Ok(Arc::new(tickets) as Arc<dyn CallTickets>)
+            })
+            .deps(vec![ProviderKey::of::<AuthService>()]),
+        )
+        .exports::<dyn CallTickets>()
         .multi(
             Factory::<dyn Strategy>::new(|r: Resolver| async move {
                 let jwt = r.get::<JwtService>().await?;
