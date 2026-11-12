@@ -228,6 +228,12 @@ Logout needs a valid access token, so one user can't end another's session. When
 
 `POST /api/auth/register` with `{"name", "email", "password"}` creates an account and signs it in: the answer is `201 Created` with the same body as a login. It is public by default; turn it off with `auth.registration = false`. The [Account flows](/docs/security/account-flows/#registration) page covers the password rules and what to do instead.
 
+#### An address registered by someone else
+
+Registering does not prove the address: the account can be used before its address is verified. So someone can register an account with another person's address before that person signs up, and sign in to it with the password they chose. When the owner later proves the address (the verification link, a [magic link or an emailed code](/docs/security/passwordless/)), the account becomes verified but keeps that password, any second factor or passkey set on it, and its sessions: the person who registered it can still sign in until the owner [resets the password](/docs/security/account-flows/#password-reset), which signs every session out, and removes any second factor or passkey they didn't add.
+
+Navree has no setting yet that requires a verified address before a password sign-in. Until it does, either keep registration closed (`auth.registration = false`, accounts made by invitation or by an administrator), or require verification before use: a [sign-in policy](#sign-in-policies) that refuses `SignInMethod::Password` for an account whose `email_verified_at` is empty, with the verification mail sent at registration.
+
 ## Access tokens
 
 Access tokens are JWTs signed with HS256 (HMAC-SHA-256), written and read by [`navree::crypto::jose`](/docs/security/signatures-and-keys/), Navree's own code. Here are the header and the claims of a real one:
