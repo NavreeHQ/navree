@@ -315,6 +315,10 @@ impl Uses {
     /// columns, the colour strip, the range scale and the trend indicator. The ones with
     /// a tooltip link the charts module as well.
     pub const CHART_LINEAR: Self = Self(1 << 35);
+    /// The grid charts stylesheet: no script of its own, only the styles of the calendar and
+    /// matrix heat maps and of the scatter plot, linked on a page that draws one. The charts
+    /// module moves between their cells and points.
+    pub const CHART_GRIDS: Self = Self(1 << 36);
 
     /// Both sets together.
     #[must_use]

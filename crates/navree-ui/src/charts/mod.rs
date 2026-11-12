@@ -46,6 +46,7 @@ mod donut;
 mod downsample;
 mod format;
 mod funnel;
+mod grids;
 mod linear;
 pub(crate) mod marks;
 mod meter;
@@ -69,6 +70,9 @@ pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
+pub use grids::{
+    CalendarHeatmap, GridLabels, HeatSteps, MatrixHeatmap, PointSeries, Relation, Scatter,
+};
 pub use linear::{LinearLabels, MAX_PARTS};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
 pub use meter::{Meter, Segment};
