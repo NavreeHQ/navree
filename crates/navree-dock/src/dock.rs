@@ -140,7 +140,7 @@ impl<E: Executor> Dock<E> {
 
         let ready_after = self.wait_until_ready(&selected)?;
         for spec in &selected {
-            for step in spec.setup() {
+            for step in spec.setup().into_iter().chain(spec.reader_setup()) {
                 let cmd = self.exec_in(&spec.container, &step.env, &step.args, false);
                 self.run_checked(&cmd.timeout(COMMAND_TIMEOUT))?;
             }

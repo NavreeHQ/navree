@@ -132,6 +132,8 @@ Every port is bound to `127.0.0.1` only, so nothing on your network can reach th
 
 `[services.postgres]` runs [TimescaleDB](/docs/database/timescaledb/), Navree's default database: TimescaleDB 2.31.0 on PostgreSQL 17, from the `timescale/timescaledb` image, which also has pgvector. Dock starts the server with TimescaleDB preloaded and its telemetry off, and once the server is ready creates the `timescaledb` extension in your database, before the ones `extensions` lists. Your migrations then decide which tables become hypertables.
 
+The `user` of `[services.postgres]` (`navree` by default) is a superuser, as the official images make it. On every `up`, Dock also keeps a second role, `navree_reader`, with the same password: it may log in, use the `public` schema and read its tables, the ones there now and the ones `user` creates later, and nothing else. [Navigator](/docs/ai/navigator/) reads the Dock database through it, since its `query_database` tool refuses to run as a superuser.
+
 `version` picks the PostgreSQL major version under TimescaleDB, `"16"`, `"17"` or `"18"`:
 
 ```toml title="dock.toml"
@@ -220,7 +222,7 @@ A placeholder the service doesn't have is an error that lists the ones it has.
 | `navree dock:add <service>` | Adds a service to `dock.toml`, creating the file if needed. Comments and the rest of the file stay as they are. |
 | `navree dock:remove <service> [--volumes]` | Stops a service and removes it from `dock.toml`. |
 
-`navree dock up` checks every port first: when one is taken, it says which, and names the container that holds it when a container does, before starting anything. Then it waits for each service's own readiness check (`pg_isready` over TCP, a Redis `PING`, Meilisearch's `/health`, Mailpit's `/readyz`, MinIO's `/minio/health/live` and NATS's `/healthz`), creates the PostgreSQL extensions (TimescaleDB's first) and the MinIO bucket, and fails with the service's last 20 log lines if one isn't ready within 60 seconds. Checking over TCP matters for PostgreSQL: during its first start the image sets the database up on a server that only listens on a Unix socket, then restarts it. When Docker or Podman doesn't answer within 30 seconds (Docker Desktop isn't running, or the Podman machine is stopped), Dock says so instead of waiting forever.
+`navree dock up` checks every port first: when one is taken, it says which, and names the container that holds it when a container does, before starting anything. Then it waits for each service's own readiness check (`pg_isready` over TCP, a Redis `PING`, Meilisearch's `/health`, Mailpit's `/readyz`, MinIO's `/minio/health/live` and NATS's `/healthz`), creates the PostgreSQL extensions (TimescaleDB's first) and the read-only `navree_reader` role, and the MinIO bucket, and fails with the service's last 20 log lines if one isn't ready within 60 seconds. Checking over TCP matters for PostgreSQL: during its first start the image sets the database up on a server that only listens on a Unix socket, then restarts it. When Docker or Podman doesn't answer within 30 seconds (Docker Desktop isn't running, or the Podman machine is stopped), Dock says so instead of waiting forever.
 
 ```text title="navree dock status"
 Service      State    Image                              Address

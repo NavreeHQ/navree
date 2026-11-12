@@ -71,6 +71,7 @@ pub use exec::{Cmd, CmdOutput, Executor, ProcessExecutor};
 pub use fake::FakeExecutor;
 pub use runtime::{RUNTIME_VARIABLE, Runtime, RuntimeChoice};
 pub use service::{
-    HOST, NATS_BOX_IMAGE, POSTGRES_VERSION, Port, Readiness, Service, ServiceOptions, ServiceSpec,
-    SetupStep, Shell, TIMESCALEDB_IMAGE, TIMESCALEDB_POSTGRES_VERSIONS, TIMESCALEDB_VERSION,
+    HOST, NATS_BOX_IMAGE, POSTGRES_VERSION, Port, READER_ROLE, Readiness, Service, ServiceOptions,
+    ServiceSpec, SetupStep, Shell, TIMESCALEDB_IMAGE, TIMESCALEDB_POSTGRES_VERSIONS,
+    TIMESCALEDB_VERSION,
 };

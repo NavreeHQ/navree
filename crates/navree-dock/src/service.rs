@@ -298,6 +298,12 @@ pub struct SetupStep {
 /// The nats-box image `navree dock shell nats` runs the `nats` CLI from.
 pub const NATS_BOX_IMAGE: &str = "natsio/nats-box:0.20.1";
 
+/// The read-only role `navree dock up` keeps in a PostgreSQL service, with
+/// the service's own password, for Navigator's database tools (`navree
+/// mcp` reads the dock database through it): it may log in and read the
+/// tables of `public`, and nothing more.
+pub const READER_ROLE: &str = "navree_reader";
+
 /// One service of `dock.toml`, resolved: its image, container, volume,
 /// ports, settings and options.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -527,6 +533,57 @@ impl ServiceSpec {
             }],
             _ => vec![],
         }
+    }
+
+    /// For PostgreSQL, the command run after [`setup`](Self::setup) that keeps
+    /// [`READER_ROLE`]: created when missing, then (on every `up`) a plain
+    /// login role with the service's password, allowed to connect, to use
+    /// `public` and to read its tables, now and the ones the service's user
+    /// creates later.
+    pub fn reader_setup(&self) -> Option<SetupStep> {
+        let ServiceOptions::Postgres {
+            database,
+            user,
+            password,
+            ..
+        } = &self.options
+        else {
+            return None;
+        };
+        let ident = |name: &str| format!("\"{}\"", name.replace('"', "\"\""));
+        // Dollar-quoted, so the command holds no single quote. A dock.toml
+        // credential is letters, digits, `.`, `_`, `~` and `-` only, so it
+        // cannot hold the tag.
+        let tag = "$pw$";
+        let sql = format!(
+            "DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = \
+             $r${READER_ROLE}$r$) THEN CREATE ROLE {READER_ROLE}; END IF; END $do$; \
+             ALTER ROLE {READER_ROLE} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION \
+             NOBYPASSRLS PASSWORD {tag}{password}{tag}; \
+             GRANT CONNECT ON DATABASE {db} TO {READER_ROLE}; \
+             GRANT USAGE ON SCHEMA public TO {READER_ROLE}; \
+             GRANT SELECT ON ALL TABLES IN SCHEMA public TO {READER_ROLE}; \
+             ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public GRANT SELECT ON TABLES TO {READER_ROLE}",
+            db = ident(database),
+            owner = ident(user),
+        );
+        Some(SetupStep {
+            env: vec![],
+            args: [
+                "psql",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-U",
+                user,
+                "-d",
+                database,
+                "-c",
+                &sql,
+            ]
+            .iter()
+            .map(|word| (*word).to_owned())
+            .collect(),
+        })
     }
 
     /// `MC_HOST_dock`, which points the bundled `mcli` (or `mc`) at the server.
@@ -779,6 +836,39 @@ mod tests {
             spec.readiness().to_string(),
             "`pg_isready -h 127.0.0.1 -p 5432 -U navree -d crm_api`"
         );
+    }
+
+    #[test]
+    fn postgres_keeps_a_read_only_role_for_navigator() {
+        let spec = postgres("[services.postgres]\npassword = \"s3cret.x~y-z\"\n");
+        let step = spec.reader_setup().unwrap();
+        assert_eq!(
+            step.args[..8],
+            words(&[
+                "psql",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-U",
+                "navree",
+                "-d",
+                "crm_api",
+                "-c"
+            ])[..]
+        );
+        let sql = &step.args[8];
+        for part in [
+            "CREATE ROLE navree_reader;",
+            "ALTER ROLE navree_reader WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE",
+            "PASSWORD $pw$s3cret.x~y-z$pw$",
+            "GRANT CONNECT ON DATABASE \"crm_api\" TO navree_reader",
+            "GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader",
+            "ALTER DEFAULT PRIVILEGES FOR ROLE \"navree\" IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader",
+        ] {
+            assert!(sql.contains(part), "{part}: {sql}");
+        }
+        assert!(!sql.contains('\''), "no single quote to escape: {sql}");
+        let redis = postgres("[services.redis]\n");
+        assert_eq!(redis.reader_setup(), None);
     }
 
     #[test]
