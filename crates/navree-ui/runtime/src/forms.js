@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
-import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, set, unset, toggle } from "./dom.js";
+import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, sameOrigin, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -93,6 +93,9 @@ function fieldsOf(form, submitter) {
   return data;
 }
 
+/** Where a send goes: the submitter's `formaction`, the form's `action`, or this page. @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
+const actionOf = (form, submitter) => (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
+
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
 async function send(form, submitter) {
   const one = sendOf(form, submitter);
@@ -115,7 +118,16 @@ async function send(form, submitter) {
     return emit(new CustomEvent("ui:sent", { cancelable: true, detail: { form, ok, status } }));
   };
   try {
-    const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
+    const action = actionOf(form, submitter);
+    // Only this site is fetched, as by every other fetch of the runtime: a form aimed at
+    // another origin is refused, so the session token in the header and the ops of an
+    // answer never come from or go to another site, whatever the page's content policy.
+    if (!sameOrigin(action)) {
+      pending(form, submitter, false);
+      if (over(false)) toast("danger", "That didn't work. Try again.");
+      told = true;
+      return;
+    }
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
     const data = fieldsOf(form, submitter);
     /** @type {Record<string, string>} */
