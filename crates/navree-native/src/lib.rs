@@ -9,19 +9,26 @@
 //! with its system's own toolkit and places as that system's guidelines say.
 //! The tree is data: nothing in it is code, and every list in it is closed.
 //!
-//! - [`Client`]: the descriptor a client sends in [`CLIENT_HEADER`] on every
-//!   request, beside [`NATIVE_HEADER`].
+//! - [`ClientDescriptor`]: what a client sends in [`CLIENT_HEADER`] on every
+//!   request, beside [`NATIVE_HEADER`]; [`WebViewToken`]: how a page in its
+//!   web view is known.
 //! - [`Envelope`]: the answer, as [`CONTENT_TYPE`]. It holds a [`Screen`], ops
-//!   for the screen in front, or a word to show the page in the web view.
+//!   for the screen in front, or a word to show the page in the web view, with
+//!   the stamps of the app and of the shell.
 //! - [`Node`]: the vocabulary. [`Action`] and [`Command`]: what a control does.
 //!   [`Op`]: what the server changes.
+//! - [`device`]: the device features a tap may start ([`DeviceCall`]), the few
+//!   a reply may start ([`ReplyCall`]), and the sealed one-time [`Ticket`] a
+//!   result is posted back with.
 //! - [`Shell`]: the app's chrome, fetched from [`SHELL_PATH`].
 //! - [`vocab`]: which vocabulary each kind arrived in, so an old app is
 //!   answered in what it can draw.
+//! - [`schema`]: the JSON Schema every client's models are generated from.
 //!
 //! The crate has no dependency on the toolkit that builds pages. The example
 //! envelopes in `corpus/` are written from these types, and every client decodes
-//! all of them in its own tests.
+//! all of them in its own tests; `corpus/from-the-future.json`, written by hand,
+//! holds what no build knows, and every client reads it without failing.
 #![forbid(unsafe_code)]
 
 pub mod action;
@@ -57,6 +64,48 @@ pub const MAJOR: u32 = 1;
 /// stays 0 while the vocabulary may still change, and counts up from the
 /// first release that freezes it.
 pub const VOCAB: u32 = 0;
+
+/// The deepest a node may sit inside other nodes in an answer: a client
+/// refuses a deeper tree, with an error and never by running out of stack, so
+/// a server answers a deeper page with the web view. See [`Node::depth`].
+pub const MAX_DEPTH: usize = 64;
+
+/// The deepest objects and arrays may nest in an answer's JSON: what the
+/// readers of every client take. A server answers a deeper page with the web
+/// view. See [`nesting`].
+pub const MAX_NESTING: usize = 127;
+
+/// How deep the objects and arrays of `json` nest, read without recursion.
+///
+/// ```
+/// assert_eq!(navree_native::nesting(r#"{"t":"stack","children":[{"t":"text","value":"[{"}]}"#), 3);
+/// assert_eq!(navree_native::nesting("7"), 0);
+/// ```
+pub fn nesting(json: &str) -> usize {
+    let (mut depth, mut deepest) = (0_usize, 0_usize);
+    let (mut in_text, mut escaped) = (false, false);
+    for byte in json.bytes() {
+        if in_text {
+            match byte {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                b'"' => in_text = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_text = true,
+            b'{' | b'[' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            b'}' | b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
 
 /// The request header that says "answer me as a native client", with the
 /// protocol's major version as its value.

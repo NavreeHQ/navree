@@ -377,6 +377,19 @@ impl Node {
         }
     }
 
+    /// How many nodes deep the tree is: 1 for a node with none inside it. A
+    /// server answers a tree deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) with
+    /// the web view. It walks with a list of its own, so any depth is measured.
+    pub fn depth(&self) -> usize {
+        let mut deepest = 0;
+        let mut stack = vec![(self, 1)];
+        while let Some((node, depth)) = stack.pop() {
+            deepest = deepest.max(depth);
+            stack.extend(node.children().into_iter().map(|child| (child, depth + 1)));
+        }
+        deepest
+    }
+
     /// The first node with this id, here or anywhere inside, in the order a
     /// reader meets them. It walks with a list of its own, so a tree of any
     /// depth is searched without using up the stack.

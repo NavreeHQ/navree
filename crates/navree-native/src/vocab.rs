@@ -4,7 +4,10 @@
 //! answer for the vocabulary the client says it draws. A kind the client is too
 //! old for is found with [`newer_than`] before an answer leaves.
 
-use serde::de::Error as _;
+use std::fmt;
+
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{Error as _, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::node::{self, Node};
@@ -106,24 +109,117 @@ macro_rules! kinds {
         /// A node of a kind this build knows is held to that kind's shape; a
         /// node of any other kind is read as [`Node::Unknown`], keeping its id
         /// and its `alt`.
+        ///
+        /// A server writes `t` first, so the rest of the node is read straight
+        /// into its kind's struct, with nothing held aside: a deep tree costs
+        /// little stack for each level. A node whose `t` comes later is read
+        /// whole first, then as the same.
         impl<'de> Deserialize<'de> for Node {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                let value = serde_json::Value::deserialize(deserializer)?;
+                let _inside = Inside::enter().ok_or_else(|| {
+                    D::Error::custom(format!(
+                        "a tree more than {} nodes deep",
+                        crate::MAX_DEPTH
+                    ))
+                })?;
+                deserializer.deserialize_map(NodeVisitor)
+            }
+        }
+
+        struct NodeVisitor;
+
+        impl<'de> Visitor<'de> for NodeVisitor {
+            type Value = Node;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a node: an object that names its kind in `t`")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Node, A::Error> {
+                let mut before = serde_json::Map::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if key != "t" {
+                        before.insert(key, map.next_value()?);
+                        continue;
+                    }
+                    let name: String = map.next_value()?;
+                    if !before.is_empty() {
+                        before.insert(key, name.into());
+                        while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+                            before.insert(key, value);
+                        }
+                        return Node::from_whole(serde_json::Value::Object(before))
+                            .map_err(A::Error::custom);
+                    }
+                    let rest = MapAccessDeserializer::new(map);
+                    return match Kind::parse(&name) {
+                        $(Some(Kind::$variant) => node::$ty::deserialize(rest).map(Node::$variant),)+
+                        _ => UnknownRest::deserialize(rest).map(|rest| {
+                            Node::Unknown(node::Unknown {
+                                kind: name,
+                                id: rest.id.as_ref().and_then(serde_json::Value::as_str).map(str::to_owned),
+                                alt: rest.alt,
+                            })
+                        }),
+                    };
+                }
+                Err(A::Error::custom("a node names its kind in `t`"))
+            }
+        }
+
+        impl Node {
+            /// Reads a node held whole, whatever the order of its fields.
+            fn from_whole(value: serde_json::Value) -> Result<Self, serde_json::Error> {
                 let Some(name) = value.get("t").and_then(serde_json::Value::as_str) else {
-                    return Err(D::Error::custom("a node names its kind in `t`"));
+                    return Err(serde_json::Error::custom("a node names its kind in `t`"));
                 };
                 if Kind::parse(name).is_none() {
                     let name = name.to_owned();
-                    return node::Unknown::read(&name, &value)
-                        .map(Node::Unknown)
-                        .map_err(D::Error::custom);
+                    return node::Unknown::read(&name, &value).map(Node::Unknown);
                 }
-                match Read::deserialize(value).map_err(D::Error::custom)? {
-                    $(Read::$variant(node) => Ok(Node::$variant(node)),)+
-                }
+                Ok(match Read::deserialize(value)? {
+                    $(Read::$variant(node) => Node::$variant(node),)+
+                })
             }
         }
     };
+}
+
+thread_local! {
+    /// How many nodes are being read inside one another on this thread.
+    static READING: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// One level of nodes being read, counted while it lasts: a tree deeper than
+/// [`MAX_DEPTH`](crate::MAX_DEPTH) is refused with an error before it can use
+/// up the stack, in a debug build too.
+struct Inside;
+
+impl Inside {
+    fn enter() -> Option<Self> {
+        READING.with(|reading| {
+            let depth = reading.get() + 1;
+            (depth <= crate::MAX_DEPTH).then(|| {
+                reading.set(depth);
+                Self
+            })
+        })
+    }
+}
+
+impl Drop for Inside {
+    fn drop(&mut self) {
+        READING.with(|reading| reading.set(reading.get() - 1));
+    }
+}
+
+/// What a node of an unknown kind keeps, read from the fields after its `t`.
+#[derive(Deserialize)]
+struct UnknownRest {
+    #[serde(default)]
+    id: Option<serde_json::Value>,
+    #[serde(default)]
+    alt: Option<Box<Node>>,
 }
 
 kinds! {
