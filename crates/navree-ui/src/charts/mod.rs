@@ -1,5 +1,6 @@
 //! Charts drawn on the server as SVG: [`Chart`] (line, area and bar, vertical and
-//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], and
+//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], the
+//! grids and points ([`CalendarHeatmap`], [`MatrixHeatmap`] and [`Scatter`]), and
 //! [`Report`], which reads a date range from the URL, picks a grain and buckets a
 //! query by it.
 //!
