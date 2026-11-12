@@ -7,12 +7,14 @@ on:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/apple/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/apple/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -400,3 +402,118 @@ jobs:
           if-no-files-found: ignore
           path: ${{ runner.temp }}/screens
           retention-days: 30
+
+  # The Apple client: the package's tests on the Mac and in an iPhone
+  # simulator, the core's iOS libraries from the job above made into an
+  # XCFramework, the demo app built from its text project, and its UI tests run
+  # in light, dark, the largest text size, right to left and an iPad's regular
+  # width, with what each screen looked like kept as an artifact. Once on the
+  # current Xcode and once on the one before, the two systems the client
+  # supports (the one before in fewer passes, as its runner is slower).
+  apple:
+    name: Apple client (Xcode ${{ matrix.xcode }})
+    needs: core
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    concurrency:
+      group: native-apple-${{ github.ref }}-${{ matrix.xcode }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            xcode: "26.6"
+            passes: light dark ipad
+          - runner: xcode-27
+            xcode: "27.2"
+            passes: light dark light-largest dark-largest rtl ipad
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/apple
+    env:
+      XCODEGEN_VERSION: "2.46.0"
+      XCODEGEN_SHA256: "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806"
+    steps:
+      - name: Tools on the runner
+        working-directory: .
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+          ls -d /Applications/Xcode*.app
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${{ matrix.xcode }}.app"
+          xcodebuild -version
+          swift --version
+      - name: The core's libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: navree-native-core
+          path: ${{ runner.temp }}/navree-native-core
+      # The header and the device and simulator archives as one XCFramework, the
+      # package's binary target (never committed).
+      - name: The core as an XCFramework
+        run: |
+          core="$RUNNER_TEMP/navree-native-core"
+          (cd "$core" && shasum -a 256 -c SHA256SUMS)
+          cat "$core/COMMIT" "$core/ios/links.txt"
+          headers="$RUNNER_TEMP/navree-core-headers"
+          mkdir -p "$headers"
+          cp "$core/include/navree_core.h" "$headers/"
+          printf 'module NavreeCore {\n    header "navree_core.h"\n    export *\n}\n' > "$headers/module.modulemap"
+          rm -rf NavreeCore.xcframework
+          xcodebuild -create-xcframework \
+            -library "$core/ios/device/libnavree_native_core.a" -headers "$headers" \
+            -library "$core/ios/simulator/libnavree_native_core.a" -headers "$headers" \
+            -output NavreeCore.xcframework
+          ls -R NavreeCore.xcframework | head -30
+      - name: Restore XcodeGen
+        id: xcodegen
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/xcodegen
+          key: xcodegen-${{ env.XCODEGEN_VERSION }}
+      - name: Install XcodeGen
+        if: steps.xcodegen.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  /tmp/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q /tmp/xcodegen.zip -d ~/xcodegen
+      - name: Keep XcodeGen
+        if: steps.xcodegen.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/xcodegen
+          key: xcodegen-${{ env.XCODEGEN_VERSION }}
+      - name: Put XcodeGen on the path
+        run: |
+          echo "$HOME/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Package tests on the Mac
+        run: swift test 2>&1 | tee swift-test.log
+      - name: Demo app screens in an iPhone simulator
+        if: ${{ !cancelled() }}
+        run: |
+          xcodegen --version
+          PASSES="${{ matrix.passes }}" bash scripts/demo-screens.sh
+      - name: Keep the screens
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apple-screens-xcode-${{ matrix.xcode }}
+          path: packages/apple/build/screens
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Keep the logs and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apple-results-xcode-${{ matrix.xcode }}
+          path: |
+            packages/apple/swift-test.log
+            packages/apple/build/logs
+            packages/apple/build/results
+          if-no-files-found: warn
+          retention-days: 14
