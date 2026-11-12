@@ -280,28 +280,36 @@ jobs:
 
       - name: Check that npm has every package
         # `pnpm -r publish` also succeeds when it publishes nothing (it skips
-        # any version it believes npm has), so ask npm for each one.
+        # any version it believes npm has), so ask npm for each one. A new
+        # version can take minutes to show in `npm view` (at 1.0.1 one took
+        # two and a half), so the packages get ten minutes between them.
         run: |
-          missing=0
+          missing=()
           for file in */package.json; do
-            if [ "$(jq -r '.private // false' "$file")" = true ]; then
-              continue
-            fi
-            spec="$(jq -r '.name + "@" + .version' "$file")"
-            found=""
-            for _ in 1 2 3 4 5 6; do
-              found="$(npm view "$spec" version 2> /dev/null || true)"
-              [ -n "$found" ] && break
-              sleep 10
-            done
-            if [ -n "$found" ]; then
-              echo "$spec is on npm"
-            else
-              echo "::error::$spec is not on npm"
-              missing=1
+            if [ "$(jq -r '.private // false' "$file")" != true ]; then
+              missing+=("$(jq -r '.name + "@" + .version' "$file")")
             fi
           done
-          exit "$missing"
+          deadline=$((SECONDS + 600))
+          while :; do
+            still=()
+            for spec in "${missing[@]}"; do
+              if [ -n "$(npm view "$spec" version 2> /dev/null || true)" ]; then
+                echo "$spec is on npm"
+              else
+                still+=("$spec")
+              fi
+            done
+            missing=("${still[@]}")
+            if [ "${#missing[@]}" -eq 0 ] || [ "$SECONDS" -ge "$deadline" ]; then
+              break
+            fi
+            sleep 15
+          done
+          for spec in "${missing[@]}"; do
+            echo "::error::$spec is not on npm"
+          done
+          [ "${#missing[@]}" -eq 0 ]
 
   publish-release:
     needs: [verify, binaries, crates, npm]
