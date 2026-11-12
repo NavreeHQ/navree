@@ -78,8 +78,47 @@ semgrep_scan() {
     echo "   diff-aware: only findings introduced since ${SEMGREP_BASELINE}"
     args+=(--baseline-commit "$SEMGREP_BASELINE")
   fi
+  local status=0
   docker run --rm "${GIT_SAFE[@]}" -v "$src_mount:/src" -v "$reports_mount:/reports" -w /src \
-    "$SEMGREP_IMAGE" semgrep scan "${args[@]}" .
+    "$SEMGREP_IMAGE" semgrep scan "${args[@]}" . || status=$?
+  drop_suppressed "$reports/semgrep.sarif"
+  return "$status"
+}
+
+# Semgrep writes a finding silenced by a `nosemgrep` comment into its SARIF
+# report too, marked with an in-source suppression. GitHub code scanning does
+# not read that mark and would show each one as an open alert, so the report
+# for code scanning leaves them out. The whole report stays beside it, as
+# semgrep-with-suppressed.sarif, for reviewing the suppressions.
+drop_suppressed() {
+  local sarif="$1"
+  [ -f "$sarif" ] || return 0
+  local full="${sarif%.sarif}-with-suppressed.sarif"
+  # The container may own the report; a copy is ours to replace it with.
+  cp "$sarif" "$full"
+  # The first Python that runs (the Windows Store's python3 stand-in does not).
+  local python=""
+  for candidate in python3 python; do
+    if "$candidate" -c "import json" >/dev/null 2>&1; then
+      python="$candidate"
+      break
+    fi
+  done
+  if [ -z "$python" ]; then
+    echo "   no Python found: $sarif keeps its suppressed findings" >&2
+    return 0
+  fi
+  "$python" -I -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    report = json.load(f)
+for run in report.get("runs", []):
+    run["results"] = [r for r in run.get("results", []) if not r.get("suppressions")]
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(report, f)
+' "$(host_path "$full")" "$(host_path "$sarif.tmp")"
+  mv -f "$sarif.tmp" "$sarif"
+  echo "   $sarif: findings silenced in the source left out; all of them in $full"
 }
 
 # Gitleaks reads history through git, which cannot follow a linked checkout's
