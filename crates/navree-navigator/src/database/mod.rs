@@ -208,9 +208,10 @@ pub enum DatabaseError {
          runs with its owner's privileges (SECURITY DEFINER), in an untrusted language as the server's \
          operating system user, or in an extension that reaches files, programs, other servers or the \
          network, and a foreign table reads another server, so a query could act outside the read-only \
-         transaction. Revoke EXECUTE on those functions from PUBLIC and from the role (for an aggregate, \
-         revoke it on the aggregate: its step functions run with the aggregate owner's rights), revoke \
-         SELECT on the foreign tables, or start Navigator with \
+         transaction. Revoke EXECUTE on those functions from PUBLIC and from the role (for an aggregate's \
+         support function, revoke it on the aggregate: PostgreSQL checks EXECUTE on those against the \
+         aggregate's owner), revoke SELECT on the foreign tables and on the views that read them, or \
+         start Navigator with \
          `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp` to run anyway.",
         .functions.join(", "),
         .more.then_some(" and more").unwrap_or_default()
@@ -246,11 +247,15 @@ const LISTED_FUNCTIONS: usize = 10;
 /// extensions' functions (PostGIS, pgcrypto, TimescaleDB, pgvector, their C
 /// code and their own SECURITY DEFINER functions alike) are trusted as
 /// their administrator installed them. Trigger functions can't be called,
-/// and no trigger fires in a read-only transaction, so they don't count.
-/// Foreign tables the role may SELECT reach another server, so they count.
+/// and no trigger fires in a read-only transaction, so they don't count;
+/// an aggregate itself only calls its support functions, which are counted
+/// on their own. Foreign tables reach another server, so they count when
+/// the role may SELECT from any of their columns, or from a view that
+/// reads them, through any number of views (a view reads its tables with
+/// its owner's privileges).
 /// It runs with `search_path` set to `pg_catalog` alone (see `check_role`),
 /// so no operator or cast of the database stands in for the server's.
-const REACHING: &str = "WITH risky_extension AS ( \
+const REACHING: &str = "WITH RECURSIVE risky_extension AS ( \
        SELECT e.oid FROM pg_catalog.pg_extension e \
        WHERE e.extname IN ('adminpack', 'aws_commons', 'aws_lambda', 'aws_s3', 'azure_ai', \
          'azure_storage', 'dblink', 'file_fdw', 'google_ml_integration', 'http', 'orafce', \
@@ -270,23 +275,33 @@ const REACHING: &str = "WITH risky_extension AS ( \
          LATERAL (VALUES (a.aggtransfn), (a.aggfinalfn), (a.aggcombinefn), (a.aggserialfn), \
            (a.aggdeserialfn), (a.aggmtransfn), (a.aggminvtransfn), (a.aggmfinalfn)) AS s(fn) \
        WHERE s.fn::pg_catalog.oid <> 0 \
-       AND pg_catalog.has_function_privilege(a.aggfnoid, 'EXECUTE')) \
+       AND pg_catalog.has_function_privilege(a.aggfnoid, 'EXECUTE')), \
+     readable (rel) AS ( \
+       SELECT c.oid FROM pg_catalog.pg_class c \
+       WHERE c.relkind IN ('v', 'f') AND pg_catalog.has_any_column_privilege(c.oid, 'SELECT') \
+       UNION \
+       SELECT d.refobjid FROM readable x \
+       JOIN pg_catalog.pg_class v ON v.oid = x.rel AND v.relkind = 'v' \
+       JOIN pg_catalog.pg_rewrite r ON r.ev_class = v.oid \
+       JOIN pg_catalog.pg_depend d ON d.classid = 'pg_catalog.pg_rewrite'::pg_catalog.regclass \
+         AND d.objid = r.oid AND d.refclassid = 'pg_catalog.pg_class'::pg_catalog.regclass \
+       WHERE d.refobjid <> v.oid) \
      SELECT 'function ' || p.oid::pg_catalog.regprocedure::pg_catalog.text AS what \
      FROM callable c \
      JOIN pg_catalog.pg_proc p ON p.oid = c.fn \
      JOIN pg_catalog.pg_language l ON l.oid = p.prolang \
      LEFT JOIN pg_catalog.pg_depend d ON d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass \
        AND d.objid = p.oid AND d.deptype = 'e' \
-     WHERE p.oid >= 16384 \
+     WHERE p.oid >= 16384 AND p.prokind <> 'a' \
      AND p.prorettype NOT IN ('pg_catalog.trigger'::pg_catalog.regtype, \
        'pg_catalog.event_trigger'::pg_catalog.regtype) \
      AND CASE WHEN d.refobjid IS NULL THEN p.prosecdef OR NOT l.lanpltrusted \
        ELSE d.refobjid IN (SELECT oid FROM risky_extension) \
          OR (NOT l.lanpltrusted AND l.lanname NOT IN ('c', 'internal')) END \
      UNION ALL \
-     SELECT 'foreign table ' || c.oid::pg_catalog.regclass::pg_catalog.text \
-     FROM pg_catalog.pg_class c \
-     WHERE c.relkind = 'f' AND pg_catalog.has_table_privilege(c.oid, 'SELECT') \
+     SELECT DISTINCT 'foreign table ' || c.oid::pg_catalog.regclass::pg_catalog.text \
+     FROM readable x JOIN pg_catalog.pg_class c ON c.oid = x.rel \
+     WHERE c.relkind = 'f' \
      ORDER BY 1 LIMIT 11";
 
 /// The predefined PostgreSQL roles whose members reach outside the database
