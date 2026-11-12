@@ -110,6 +110,7 @@ pub const FILES: &[&str] = &[
     "charts/radial/gauge.rs",
     "charts/radial/clock.rs",
     "charts/format.rs",
+    "charts/marks.rs",
     "charts/scale.rs",
     "charts/report.rs",
     "charts/report_orm.rs",
