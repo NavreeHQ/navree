@@ -509,6 +509,8 @@ struct Dressing {
 struct Look {
     appearance: Option<Appearance>,
     back: String,
+    /// The page was drawn again after a post whose session had ended (`?status=expired`).
+    expired: bool,
 }
 
 tokio::task_local! {
@@ -540,12 +542,17 @@ impl Dressing {
                 !pair.is_empty() && key != "theme" && key != "mode"
             })
             .collect();
+        let expired = kept.contains(&"status=expired");
         let back = if kept.is_empty() {
             path.to_owned()
         } else {
             format!("{path}?{}", kept.join("&"))
         };
-        Look { appearance, back }
+        Look {
+            appearance,
+            back,
+            expired,
+        }
     }
 
     /// The themes the theme menu offers: the shell's, else the page's own alone
@@ -572,6 +579,100 @@ impl Dressing {
 struct Looked<S> {
     inner: S,
     dressing: Arc<Dressing>,
+    paths: Arc<Paths>,
+}
+
+impl Paths {
+    /// Where a page's form goes when it is posted without the session's cookie, as one
+    /// left open past the session's lifetime is: the page's own `GET` with a notice, never
+    /// with what was typed. Sign-out goes where it would have gone; a step with no page of
+    /// its own (a code, a second factor) starts again at the sign-in page; a new password
+    /// asks for a new link, since the old one's token isn't carried.
+    fn after_expiry(&self, path: &str) -> String {
+        if path == SIGN_OUT_PATH {
+            return self.after_sign_out.clone();
+        }
+        let page = if path == self.reset {
+            &self.forgot
+        } else if [
+            Some(&self.sign_in),
+            self.sign_up.as_ref(),
+            Some(&self.forgot),
+            Some(&self.magic_link),
+            Some(&self.code),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|page| page == path)
+        {
+            path
+        } else {
+            &self.sign_in
+        };
+        format!("{page}?status=expired")
+    }
+}
+
+/// Whether `headers` say the body is a form a page posted.
+fn is_form_post(headers: &HeaderMap) -> bool {
+    headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|kind| {
+            let kind = kind.trim_start().to_ascii_lowercase();
+            kind.starts_with("application/x-www-form-urlencoded")
+                || kind.starts_with("multipart/form-data")
+        })
+}
+
+/// Logs a request refused for coming without the session's cookie, as the session layer
+/// logs its CSRF refusals: on `navree::security`, and in the audit trail as
+/// `csrf.mismatch` with the reason `no_session`.
+fn log_refusal(
+    request: &navree_http::extract::Request,
+) -> impl Future<Output = ()> + Send + 'static {
+    let method = request.method().to_string();
+    let path = request.uri().path().to_owned();
+    let ip = request
+        .extensions()
+        .get::<navree_http::ClientIp>()
+        .map(|ip| ip.0);
+    tracing::warn!(
+        target: "navree::security",
+        method,
+        path,
+        reason = "no_session",
+        ip = ip.map(tracing::field::display),
+        "CSRF token mismatch"
+    );
+    let ctx = request
+        .extensions()
+        .get::<navree_kernel::AppContext>()
+        .cloned();
+    let mut entry =
+        navree_contracts::AuditEntry::new(navree_contracts::AuditKind::Security, "csrf.mismatch")
+            .metadata(serde_json::json!({
+                "method": method,
+                "path": path,
+                "reason": "no_session",
+            }));
+    if let Some(ip) = ip {
+        entry = entry.ip(ip.to_string());
+    }
+    if let Some(request_id) = request.extensions().get::<navree_contracts::RequestId>() {
+        entry = entry.request_id(request_id.as_str());
+    }
+    async move {
+        let Some(ctx) = ctx else {
+            return;
+        };
+        let Some(sink) = ctx.try_get::<dyn navree_contracts::AuditSink>().await else {
+            return;
+        };
+        if let Err(error) = sink.record(entry).await {
+            tracing::warn!(target: "navree::security", %error, "could not audit a CSRF failure");
+        }
+    }
 }
 
 impl<S> tower::Service<navree_http::extract::Request> for Looked<S>
@@ -604,7 +705,21 @@ where
             .get::<Session>()
             .is_some_and(Session::is_resumed);
         if !safe && !resumed {
-            return Box::pin(async { Ok(AppError::csrf_mismatch().into_response()) });
+            let logged = log_refusal(&request);
+            // A form left open past the session's lifetime comes back the same way: its
+            // page is drawn again with a notice, and nothing in the post is used.
+            let answer = if is_form_post(request.headers()) {
+                Reply::redirect(LocalHref::from(
+                    self.paths.after_expiry(request.uri().path()),
+                ))
+                .into_response()
+            } else {
+                AppError::csrf_mismatch().into_response()
+            };
+            return Box::pin(async move {
+                logged.await;
+                Ok(answer)
+            });
         }
         let look = self.dressing.look_for(
             request.uri().path(),
@@ -622,11 +737,16 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
     let look = LOOK.try_with(Clone::clone).unwrap_or_else(|_| Look {
         appearance: dressing.appearance.clone(),
         back: paths.sign_in.clone(),
+        expired: false,
     });
+    // The sign-in page says it in its own notice.
+    let expired = (look.expired && title != "Sign in")
+        .then(|| Alert::new(AlertTone::Warning).title("Your session expired. Please try again."));
     let heading = paths.app_name.clone().map(Text::muted);
     let card = Stack::gap(4).children((
         heading,
         el("h1").slot("page-title").child(title),
+        expired,
         Card::new().description(description).body(body),
     ));
     let mut layout = AuthLayout::new(card);
@@ -1446,13 +1566,14 @@ impl Controller for PagesController {
         // Every page is drawn in the look of the request it answers.
         let dressing = paths.dressing.clone();
         for route in &mut routes {
-            let dressing = dressing.clone();
+            let (dressing, paths) = (dressing.clone(), paths.clone());
             route.handler = route
                 .handler
                 .clone()
                 .layer(tower::layer::layer_fn(move |inner| Looked {
                     inner,
                     dressing: dressing.clone(),
+                    paths: paths.clone(),
                 }));
         }
         routes
