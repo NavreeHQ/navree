@@ -1,8 +1,12 @@
-name: Native
+name: Native clients
 
 on:
   push:
-    branches: [main]
+    branches: ["feat/native**"]
+    paths:
+      - "crates/navree-native/**"
+      - "crates/navree-native-core/**"
+      - ".github/workflows/native.yml"
   pull_request:
     paths:
       - "crates/navree-native/**"
@@ -12,23 +16,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: native-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
-
 jobs:
-  # ---------------------------------------------------------------------------
-  # The runtime core: its tests, a C program built against its header, and the
-  # libraries the phones' clients link. Nothing here needs a Mac: a static
-  # library is an archive, which is written without Apple's linker.
-  # ---------------------------------------------------------------------------
+  # The runtime core: the protocol's tests and its own, a C program built
+  # against its header, and the libraries the phones' clients link. Nothing
+  # here needs a Mac: a static library is an archive, which is written without
+  # Apple's linker.
   core:
     name: Runtime core
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: native-core-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -38,8 +40,14 @@ jobs:
           targets: aarch64-linux-android,x86_64-linux-android,aarch64-apple-ios,aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      # Every transcript replayed, each held to the schema; the scale test.
-      - name: Tests
+      # The crate the core stands on: every example envelope read and held to
+      # the schema, and a tree at the depth limit read without running out of stack.
+      - name: The protocol's tests
+        run: cargo test -p navree-native
+
+      # Every transcript replayed, each held to the schema; ten thousand rows
+      # a page at a time; the deepest tree the protocol allows on 512 KiB of stack.
+      - name: The core's tests
         run: cargo test -p navree-native-core
 
       - name: Lints, with the Kotlin glue
@@ -62,25 +70,47 @@ jobs:
           CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$ndk/x86_64-linux-android26-clang" \
           CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="$PAGES" \
             cargo rustc -p navree-native-core --release --features jni --target x86_64-linux-android --crate-type cdylib
-          # The four native methods of the Kotlin class are in each library.
           for target in aarch64-linux-android x86_64-linux-android; do
-            count=$("$ndk/llvm-nm" -D --defined-only "target/$target/release/libnavree_native_core.so" | grep -c ' T Java_com_navree_core_Core_native')
-            test "$count" -eq 4
+            library="target/$target/release/libnavree_native_core.so"
+            # The five functions of the C interface and the four native methods
+            # of the Kotlin class are in each library.
+            "$ndk/llvm-nm" -D --defined-only "$library" | awk '{print $3}' | grep -E '^(navree_|Java_)' | sort | tee "$target.symbols"
+            test "$(grep -c '^navree_' "$target.symbols")" -eq 5
+            test "$(grep -c '^Java_com_navree_core_Core_native' "$target.symbols")" -eq 4
+            # Every part of the library that is loaded is laid out for 16 KB pages.
+            "$ndk/llvm-readelf" -lW "$library" | awk '$1 == "LOAD" && $NF != "0x4000" { print "a part laid out for " $NF; bad = 1 } END { exit bad }'
           done
 
+      # iOS: static libraries for a device and for a simulator on Apple silicon.
       - name: iOS libraries
         run: |
           cargo rustc -p navree-native-core --release --target aarch64-apple-ios --crate-type staticlib
           cargo rustc -p navree-native-core --release --target aarch64-apple-ios-sim --crate-type staticlib
+          # The NDK's tools read Apple's object files as well as Android's.
+          ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+            # The five functions of the C interface are in each library.
+            "$ndk/llvm-nm" -g --defined-only "target/$target/release/libnavree_native_core.a" 2>/dev/null | awk '{print $3}' | grep -E '^_navree_' | sort -u | tee "$target.symbols"
+            test "$(wc -l < "$target.symbols")" -eq 5
+          done
+
+      # One folder a client's build takes whole: the header, a library for each
+      # system and processor, and a checksum of each.
+      - name: Lay the libraries out
+        run: |
+          out=dist/navree-native-core
+          mkdir -p "$out/include" "$out/android/arm64-v8a" "$out/android/x86_64" "$out/ios/device" "$out/ios/simulator"
+          cp crates/navree-native-core/include/navree_core.h "$out/include/"
+          cp target/aarch64-linux-android/release/libnavree_native_core.so "$out/android/arm64-v8a/"
+          cp target/x86_64-linux-android/release/libnavree_native_core.so "$out/android/x86_64/"
+          cp target/aarch64-apple-ios/release/libnavree_native_core.a "$out/ios/device/"
+          cp target/aarch64-apple-ios-sim/release/libnavree_native_core.a "$out/ios/simulator/"
+          (cd "$out" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && cat SHA256SUMS && du -ah . | sort -k2)
 
       - name: Keep the libraries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: navree-native-core
           if-no-files-found: error
-          path: |
-            crates/navree-native-core/include/navree_core.h
-            target/aarch64-linux-android/release/libnavree_native_core.so
-            target/x86_64-linux-android/release/libnavree_native_core.so
-            target/aarch64-apple-ios/release/libnavree_native_core.a
-            target/aarch64-apple-ios-sim/release/libnavree_native_core.a
+          path: dist/navree-native-core
+          retention-days: 30
