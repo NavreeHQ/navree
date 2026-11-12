@@ -23,7 +23,7 @@
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
 //! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
-//! | `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
+//! | `navree mcp [--path <dir>] [--no-build] [--database-url <url>] [--allow-remote-database] [--allow-privileged-database-role] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
 //! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
 //! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree openapi:client [--out web/src/lib/api] [--input <file>]` | The OpenAPI document and the front end's `schema.d.ts` for `@navree/client` ([`openapi_client`]) |

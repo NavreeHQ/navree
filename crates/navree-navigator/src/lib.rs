@@ -30,8 +30,11 @@
 //! is embedded the same way, so `list_components` works offline and names
 //! the Navree version it describes.
 //!
-//! Everything is read-only and local: Navigator writes nothing to the app
-//! or its database, connects only to databases on this machine unless told
+//! Everything is read-only and local: Navigator writes nothing to the app,
+//! reads its database read-only (as far as the database role allows: a
+//! PostgreSQL superuser or a role with server-file, server-program or signal
+//! privileges is refused for queries unless `--allow-privileged-database-role`
+//! is given), connects only to databases on this machine unless told
 //! otherwise, and reaches the network only to download the docs of the
 //! app's Navree version once. `render_page` has the app draw a page with a
 //! `GET` as a guest, in the app's own process; no server needs to run.

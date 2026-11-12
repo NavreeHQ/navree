@@ -1,16 +1,25 @@
 //! The app's database, seen read-only: `query_database` and
 //! `describe_schema`.
 //!
-//! Navigator connects to `database.url` itself (one connection per call,
-//! closed afterwards), never through the app:
+//! Navigator connects to `database.url` (or `navree mcp --database-url`)
+//! itself, one connection per call, closed afterwards, never through the
+//! app. The database is what keeps it read-only; the statement guard
+//! ([`check`]) is a second layer:
 //!
-//! - **SQLite** files are opened without creating them and with `PRAGMA
-//!   query_only = ON`; relative paths are relative to the app.
+//! - **SQLite** files are opened read-only (`SQLITE_OPEN_READONLY`), never
+//!   created, with `PRAGMA query_only = ON`; relative paths are relative to
+//!   the app. Only the first statement's rows are read.
 //! - **PostgreSQL** sessions default to read-only transactions and pin
-//!   `standard_conforming_strings = on`, so the server reads a statement's
-//!   strings as the guard did. Each query runs inside `BEGIN READ ONLY` with
-//!   a statement timeout, is sent as one prepared statement (the extended
-//!   protocol takes exactly one), then rolls back.
+//!   `standard_conforming_strings = on`, checked after connecting, so the
+//!   server reads a statement's strings as the guard did. `query_database`
+//!   refuses a role that is a superuser or a member of
+//!   [`PRIVILEGED_ROLES`] unless `--allow-privileged-database-role` is
+//!   given: such a role reaches the server's files, programs and other
+//!   sessions from a query, which no read-only transaction stops. Each query
+//!   runs inside `BEGIN READ ONLY` with a statement timeout, is sent as one
+//!   prepared statement (the extended protocol takes exactly one), then
+//!   rolls back. Read-only means as far as a role without those privileges
+//!   allows.
 //! - Unless `--allow-remote-database` is given, only SQLite files and
 //!   servers on this machine (`localhost`, a loopback address or a Unix
 //!   socket) are allowed ([`check_local`]).
@@ -23,9 +32,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use sqlx::ConnectOptions;
 use sqlx::postgres::{PgConnectOptions, PgConnection};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::{ConnectOptions, Executor, Row};
 
 pub use guard::{CheckedStatement, Dialect, Refusal, StatementKind, check};
 pub use query::{MASKED_COLUMN_PARTS, QueryResult, is_masked_column};
@@ -135,6 +144,101 @@ pub enum DatabaseError {
     /// The statement ran longer than [`STATEMENT_TIMEOUT`].
     #[error("the statement ran longer than {} seconds and was cancelled", STATEMENT_TIMEOUT.as_secs())]
     Timeout,
+    /// The PostgreSQL session reads backslash escapes in plain strings
+    /// although Navigator asked for `standard_conforming_strings = on`.
+    #[error(
+        "the server reports standard_conforming_strings = {setting} although Navigator asked for `on` when \
+         connecting; a connection pooler that drops startup options (PgBouncer's ignore_startup_parameters) \
+         does that. Navigator only queries PostgreSQL with it on: connect it to the server directly, or let \
+         the pooler pass `options`."
+    )]
+    StringsNotStandard {
+        /// What the server reported.
+        setting: String,
+    },
+    /// `query_database` would run as a role that can act outside the
+    /// read-only transaction, without `--allow-privileged-database-role`.
+    #[error(
+        "query_database does not run as the PostgreSQL role `{role}`: it has {}, and from a query such a role \
+         can read or write the server's files, run programs or end other sessions, outside the read-only \
+         transaction. Give Navigator a read-only role instead, for example:\n\n\
+         CREATE ROLE navree_reader LOGIN PASSWORD 'choose-one';\n\
+         GRANT CONNECT ON DATABASE your_db TO navree_reader;\n\
+         GRANT USAGE ON SCHEMA public TO navree_reader;\n\
+         GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader;\n\
+         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader;\n\n\
+         and start Navigator with `navree mcp --database-url postgres://navree_reader:...@localhost/your_db` \
+         (run the last line as the role that creates your tables). To run as `{role}` anyway, start it with \
+         `navree mcp --allow-privileged-database-role`.",
+        .privileges.join(", ")
+    )]
+    PrivilegedRole {
+        /// The session's role.
+        role: String,
+        /// What makes it privileged: `superuser`, or the predefined roles it
+        /// is a member of.
+        privileges: Vec<String>,
+    },
+}
+
+/// The predefined PostgreSQL roles whose members reach outside the database
+/// from a query: server files, server programs, other sessions.
+pub const PRIVILEGED_ROLES: [&str; 4] = [
+    "pg_read_server_files",
+    "pg_write_server_files",
+    "pg_execute_server_program",
+    "pg_signal_backend",
+];
+
+/// The session's role, whether it is a superuser, and the roles of
+/// [`PRIVILEGED_ROLES`] it is a member of (comma-separated, or NULL).
+const ROLE_PRIVILEGES: &str = "SELECT current_user::text, r.rolsuper, \
+     (SELECT string_agg(g.rolname::text, ',' ORDER BY g.rolname) FROM pg_roles g \
+      WHERE g.rolname IN ('pg_read_server_files', 'pg_write_server_files', \
+      'pg_execute_server_program', 'pg_signal_backend') \
+      AND pg_has_role(current_user, g.oid, 'MEMBER')) \
+     FROM pg_roles r WHERE r.rolname = current_user";
+
+/// What makes a role privileged: `superuser`, then the predefined roles it
+/// is a member of (`members`, comma-separated).
+fn privileges_of(superuser: bool, members: Option<&str>) -> Vec<String> {
+    let mut privileges = Vec::new();
+    if superuser {
+        privileges.push("superuser".to_owned());
+    }
+    privileges.extend(
+        members
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|name| PRIVILEGED_ROLES.contains(name))
+            .map(str::to_owned),
+    );
+    privileges
+}
+
+/// Fails unless `standard_conforming_strings` reads `on`.
+fn standard_strings(setting: Option<&str>) -> Result<(), DatabaseError> {
+    match setting {
+        Some("on") => Ok(()),
+        other => Err(DatabaseError::StringsNotStandard {
+            setting: other.unwrap_or("unknown").to_owned(),
+        }),
+    }
+}
+
+/// The first column of the first row of `sql`, as text (simple protocol).
+async fn first_text(
+    conn: &mut PgConnection,
+    sql: &'static str,
+) -> Result<Option<String>, DatabaseError> {
+    let rows = conn.fetch_all(sql).await?;
+    Ok(rows.first().and_then(|row| {
+        row.try_get_raw(0)
+            .ok()
+            .filter(|raw| !sqlx::ValueRef::is_null(raw))
+            .and_then(|raw| raw.as_str().ok().map(str::to_owned))
+    }))
 }
 
 impl From<sqlx::Error> for DatabaseError {
@@ -164,6 +268,9 @@ pub struct Target {
     url: String,
     /// The app's directory (relative SQLite paths start there).
     root: PathBuf,
+    /// Whether `query_database` may run as a privileged PostgreSQL role
+    /// (`--allow-privileged-database-role`).
+    allow_privileged: bool,
 }
 
 impl Target {
@@ -182,7 +289,17 @@ impl Target {
             driver,
             url: url.to_owned(),
             root: root.to_path_buf(),
+            allow_privileged: false,
         })
+    }
+
+    /// Lets `query_database` run as a PostgreSQL role with superuser or
+    /// server-file, server-program or signal privileges
+    /// (`--allow-privileged-database-role`). Off by default: such a role can
+    /// act outside the read-only transaction, so a query is refused.
+    pub fn allow_privileged_role(mut self, allow: bool) -> Target {
+        self.allow_privileged = allow;
+        self
     }
 
     /// The URL with its password masked, for messages.
@@ -190,7 +307,9 @@ impl Target {
         redact_url(&self.url)
     }
 
-    /// Opens a SQLite connection: never creates the file, `query_only` on.
+    /// Opens a SQLite connection: read-only (`SQLITE_OPEN_READONLY`, which
+    /// also holds for any database attached to it), never creates the file,
+    /// `query_only` on.
     async fn sqlite(&self) -> Result<SqliteConnection, DatabaseError> {
         let options =
             SqliteConnectOptions::from_str(&self.url).map_err(|e| self.connect_error(e))?;
@@ -210,6 +329,7 @@ impl Target {
             options.filename(path)
         };
         let options = options
+            .read_only(true)
             .create_if_missing(false)
             .pragma("query_only", "ON")
             .busy_timeout(Duration::from_secs(1))
@@ -228,17 +348,47 @@ impl Target {
     /// configuration, or by `ALTER DATABASE` / `ALTER ROLE`) reads the same
     /// text as an escaped quote, so the statement it runs could differ from
     /// the one checked. Options in the startup message win over those
-    /// settings, so the connection pins the standard reading.
+    /// settings, so the connection pins the standard reading, then checks it
+    /// held: a connection pooler can drop startup options.
     async fn postgres(&self) -> Result<PgConnection, DatabaseError> {
         let options = PgConnectOptions::from_str(&self.url)
             .map_err(|e| self.connect_error(e))?
             .application_name("navree-navigator")
             .options(POSTGRES_SESSION)
             .disable_statement_logging();
-        tokio::time::timeout(CONNECT_TIMEOUT, options.connect())
+        let mut conn = tokio::time::timeout(CONNECT_TIMEOUT, options.connect())
             .await
             .map_err(|_| self.connect_error("timed out"))?
-            .map_err(|e| self.connect_error(e))
+            .map_err(|e| self.connect_error(e))?;
+        let setting = first_text(&mut conn, "SHOW standard_conforming_strings").await?;
+        standard_strings(setting.as_deref())?;
+        Ok(conn)
+    }
+
+    /// Fails with [`DatabaseError::PrivilegedRole`] when the session's role
+    /// is a superuser or a member of a role that reaches outside the
+    /// database, unless [`allow_privileged_role`](Self::allow_privileged_role).
+    async fn check_role(&self, conn: &mut PgConnection) -> Result<(), DatabaseError> {
+        if self.allow_privileged {
+            return Ok(());
+        }
+        let rows = conn.fetch_all(ROLE_PRIVILEGES).await?;
+        let Some(row) = rows.first() else {
+            return Ok(());
+        };
+        let text = |i: usize| -> Option<String> {
+            row.try_get_raw(i)
+                .ok()
+                .filter(|raw| !sqlx::ValueRef::is_null(raw))
+                .and_then(|raw| raw.as_str().ok().map(str::to_owned))
+        };
+        let role = text(0).unwrap_or_default();
+        let privileges = privileges_of(text(1).as_deref() == Some("t"), text(2).as_deref());
+        if privileges.is_empty() {
+            Ok(())
+        } else {
+            Err(DatabaseError::PrivilegedRole { role, privileges })
+        }
     }
 
     fn connect_error(&self, error: impl std::fmt::Display) -> DatabaseError {
@@ -350,7 +500,10 @@ pub fn redact_url(url: &str) -> String {
 }
 
 /// Runs one read-only statement (see [`check`]) and returns at most
-/// [`ROW_LIMIT`] rows, secret-looking columns masked.
+/// [`ROW_LIMIT`] rows. Values of columns with secret-looking names are
+/// masked as a courtesy for logs and transcripts, not as a protection: an
+/// alias (`password_hash AS h`) or `row_to_json` returns them. On
+/// PostgreSQL a privileged role is refused first (see the module).
 pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, DatabaseError> {
     let checked = check(sql, target.driver.dialect())?;
     match target.driver {
@@ -362,7 +515,10 @@ pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, D
         }
         Driver::Postgres => {
             let mut conn = target.postgres().await?;
-            let result = query::postgres(&mut conn, &checked).await;
+            let result = match target.check_role(&mut conn).await {
+                Ok(()) => query::postgres(&mut conn, &checked).await,
+                Err(error) => Err(error),
+            };
             close(sqlx::Connection::close(conn)).await;
             result
         }
@@ -399,6 +555,48 @@ async fn close<F: std::future::Future<Output = Result<(), sqlx::Error>>>(closing
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_standard_strings_are_accepted() {
+        assert!(standard_strings(Some("on")).is_ok());
+        for setting in [Some("off"), Some("ON "), None] {
+            let error = standard_strings(setting).unwrap_err();
+            assert!(
+                matches!(error, DatabaseError::StringsNotStandard { .. }),
+                "{setting:?}"
+            );
+            assert!(
+                error.to_string().contains("ignore_startup_parameters"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn privileged_roles_are_named_and_the_message_says_what_to_do() {
+        assert!(privileges_of(false, None).is_empty());
+        assert!(privileges_of(false, Some("pg_monitor")).is_empty());
+        assert_eq!(
+            privileges_of(true, Some("pg_read_server_files,pg_signal_backend")),
+            ["superuser", "pg_read_server_files", "pg_signal_backend"]
+        );
+        let message = DatabaseError::PrivilegedRole {
+            role: "postgres".to_owned(),
+            privileges: privileges_of(true, None),
+        }
+        .to_string();
+        for part in [
+            "`postgres`",
+            "superuser",
+            "CREATE ROLE navree_reader LOGIN",
+            "GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader",
+            "ALTER DEFAULT PRIVILEGES",
+            "--database-url",
+            "--allow-privileged-database-role",
+        ] {
+            assert!(message.contains(part), "{part}: {message}");
+        }
+    }
 
     #[test]
     fn drivers_come_from_the_scheme() {

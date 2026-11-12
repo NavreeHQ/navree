@@ -58,8 +58,11 @@ impl QueryResult {
     }
 }
 
-/// Runs `statement` on a `query_only` SQLite connection; a progress handler
-/// interrupts it after [`STATEMENT_TIMEOUT`].
+/// Runs `statement` on a SQLite connection opened read-only with
+/// `query_only` on; a progress handler interrupts it after
+/// [`STATEMENT_TIMEOUT`]. Only the first statement's rows are read: the
+/// stream is dropped at the end of the first statement (the guard already
+/// refuses text after it).
 pub(super) async fn sqlite(
     conn: &mut SqliteConnection,
     statement: &CheckedStatement,
@@ -70,10 +73,13 @@ pub(super) async fn sqlite(
         .set_progress_handler(1_000, move || Instant::now() < deadline);
     let started = Instant::now();
     let fetch = async {
-        let mut stream = conn.fetch(AssertSqlSafe(statement.sql.clone()));
+        let mut stream = conn.fetch_many(AssertSqlSafe(statement.sql.clone()));
         let mut rows: Vec<SqliteRow> = Vec::new();
-        while let Some(row) = stream.try_next().await? {
-            rows.push(row);
+        while let Some(step) = stream.try_next().await? {
+            match step {
+                sqlx::Either::Left(_end_of_statement) => break,
+                sqlx::Either::Right(row) => rows.push(row),
+            }
             if rows.len() > ROW_LIMIT {
                 break;
             }

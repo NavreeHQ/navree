@@ -453,11 +453,14 @@ fn uuid_column(driver: Driver, column: &str) -> String {
     }
 }
 
-/// `column = <the id>` for an id given as 32 hex digits.
+/// `column = <the id>` for an id given as 32 hex digits. On SQLite the blob
+/// is written `unhex('..')`: the guard refuses `X'..'` literals.
 fn uuid_equals(driver: Driver, column: &str, hex: &str) -> String {
     let hyphenated = hyphenate(hex);
     match driver {
-        Driver::Sqlite => format!("({column} = X'{hex}' OR lower({column}) = '{hyphenated}')"),
+        Driver::Sqlite => {
+            format!("({column} = unhex('{hex}') OR lower({column}) = '{hyphenated}')")
+        }
         Driver::Postgres => format!("{column} = '{hyphenated}'"),
     }
 }
@@ -885,7 +888,7 @@ mod tests {
         assert_eq!(parse_id("0192f3a4"), None);
         let sql = issue_sql(Driver::Sqlite, "0192f3a4b5c67d8e9f00112233445566");
         assert!(
-            sql.contains("id = X'0192f3a4b5c67d8e9f00112233445566'"),
+            sql.contains("id = unhex('0192f3a4b5c67d8e9f00112233445566')"),
             "{sql}"
         );
         let sql = issue_sql(Driver::Postgres, "0192f3a4b5c67d8e9f00112233445566");

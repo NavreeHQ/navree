@@ -1,6 +1,6 @@
 ---
 name: navree-navigator
-description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the fourteen read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`, `list_components`, `render_page`) and, when the app includes Lighthouse, its five (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs`); the options `--path`, `--no-build`, `--allow-remote-database` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error, before adding a route, wiring a provider or writing a migration, or when asked why a request failed or what is slow."
+description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the fourteen read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`, `list_components`, `render_page`) and, when the app includes Lighthouse, its five (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs`); the options `--path`, `--no-build`, `--database-url`, `--allow-remote-database`, `--allow-privileged-database-role` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error, before adding a route, wiring a provider or writing a migration, or when asked why a request failed or what is slow."
 ---
 
 # Navigator
@@ -103,7 +103,9 @@ the environment. Answers are cached while the binary is unchanged.
 |---|---|
 | `--path <dir>` | The app to serve instead of the current directory |
 | `--no-build` | Never run `cargo build`; use `target/debug/<app>` if it exists |
+| `--database-url <url>` | Read this database instead of the app's `database.url` (a read-only role on the same database) |
 | `--allow-remote-database` | Allow a `database.url` (or `lighthouse.database_url`) that isn't on this machine |
+| `--allow-privileged-database-role` | Let `query_database` run as a PostgreSQL superuser or a role with server-file, server-program or signal privileges (refused by default) |
 | `--docs-offline` | Never download docs; use the cache or the built-in docs |
 
 `NAVREE_HOME` moves the docs cache (default `~/.navree`, so
@@ -129,6 +131,11 @@ cargo test -p navree-navigator
   `pg_sleep`, `pg_read_file` or `load_extension` are refused before
   sending. Change data with migrations, seeders or the app, never through
   Navigator.
+- **"does not run as the PostgreSQL role"**: the database URL logs in as
+  a superuser (often `postgres` in development) or a role with server-file,
+  server-program or signal privileges. Create the read-only role the
+  message shows and start with `--database-url`, or pass
+  `--allow-privileged-database-role` on purpose.
 - **"isn't on this machine"**: `database.url` points at a remote server
   (often a forgotten `.env`). Fix the URL, or start with
   `--allow-remote-database` on purpose.
@@ -140,7 +147,8 @@ cargo test -p navree-navigator
   `LighthouseModule`. "Lighthouse's tables aren't in the database": run
   `navree migrate`.
 - Values of columns whose names contain `password`, `secret`, `token`,
-  `api_key` or `private_key` come back as `[redacted]`; that is expected.
+  `api_key` or `private_key` come back as `[redacted]`; that is expected,
+  and only a convenience: don't select secrets on purpose.
 
 ## Docs
 

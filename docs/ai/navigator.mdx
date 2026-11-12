@@ -171,7 +171,24 @@ Runs one read-only SQL statement against your development database and returns a
 }
 ```
 
-`truncated` is `true` when the statement had more rows than the 100 returned. The [limits](#security) below keep it read-only. Values in columns whose names contain `password`, `secret`, `token`, `api_key` or `private_key` come back as `[redacted]`.
+`truncated` is `true` when the statement had more rows than the 100 returned. The [limits](#security) below keep it read-only. Values in columns whose names contain `password`, `secret`, `token`, `api_key` or `private_key` come back as `[redacted]`, which keeps them out of the agent's transcript by default but is not a protection: an alias (`password_hash AS h`) or `row_to_json` returns them.
+
+On PostgreSQL, `query_database` and Lighthouse's tools refuse to run as a superuser or as a member of `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program` or `pg_signal_backend`: from a query, such a role can read and write the server's files, run programs and end other sessions, which no read-only transaction stops. The development database usually runs as `postgres`, a superuser, so give Navigator a read-only role on the same database and pass its URL with `--database-url`:
+
+```sql title="A read-only role for Navigator"
+CREATE ROLE navree_reader LOGIN PASSWORD 'choose-one';
+GRANT CONNECT ON DATABASE crm TO navree_reader;
+GRANT USAGE ON SCHEMA public TO navree_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader;
+-- As the role that runs your migrations, so new tables are readable too:
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader;
+```
+
+```bash
+navree mcp --database-url postgres://navree_reader:choose-one@localhost/crm
+```
+
+To run as the privileged role anyway, start Navigator with `--allow-privileged-database-role`; it says so in a warning each time it starts.
 
 ### read_logs and last_error
 
@@ -206,7 +223,7 @@ A version's docs are one JSON file, `docs.json`: `{"version": "1.0.1", "pages": 
 
 ### Lighthouse's tools
 
-When a file under your app's `src/` adds `LighthouseModule`, Navigator lists five more tools. They read Lighthouse's tables (`lighthouse_issues`, `lighthouse_occurrences`, `lighthouse_aggregates`, `lighthouse_alerts`) in the database Lighthouse writes to: `lighthouse.database_url` when it is set, otherwise `database.url`, with the same rules as `query_database` (local databases only unless `--allow-remote-database`, read-only, 5 seconds). Your app doesn't have to be running, and nothing needs an access token: the data is your local database's.
+When a file under your app's `src/` adds `LighthouseModule`, Navigator lists five more tools. They read Lighthouse's tables (`lighthouse_issues`, `lighthouse_occurrences`, `lighthouse_aggregates`, `lighthouse_alerts`) in the database Lighthouse writes to: `lighthouse.database_url` when it is set, otherwise `--database-url` or `database.url`, with the same rules as `query_database` (local databases only unless `--allow-remote-database`, read-only, no privileged PostgreSQL role unless `--allow-privileged-database-role`, 5 seconds). Your app doesn't have to be running, and nothing needs an access token: the data is your local database's.
 
 | Tool | Arguments | Answers |
 |---|---|---|
@@ -249,7 +266,9 @@ adds it hasn't run on your database. Run `navree migrate` and reload the page.
 |---|---|
 | `--path <dir>` | The app to serve, instead of the current directory. |
 | `--no-build` | Never run `cargo build`; use the last built binary (`target/debug/<app>`), or answer without one. |
+| `--database-url <url>` | The database the database tools read instead of your app's `database.url` (and instead of it for Lighthouse when `lighthouse.database_url` isn't set): the same database through a read-only role. |
 | `--allow-remote-database` | Let `query_database`, `describe_schema` and Lighthouse's tools connect to a database that isn't on this machine. |
+| `--allow-privileged-database-role` | Let `query_database` and Lighthouse's tools run as a PostgreSQL superuser or a role with server-file, server-program or signal privileges. Refused by default; Navigator warns on each start with it. |
 | `--docs-offline` | Never download docs; use the cache, or the docs Navigator ships with (and say so). |
 
 ## Security
@@ -257,10 +276,11 @@ adds it hasn't run on your database. Run `navree migrate` and reload the page.
 Navigator gives a model a view into your app, so it is built to show and never to change.
 
 - **Development only.** It runs on your machine, as you, over stdio. It opens no port, and it isn't part of your app's binary, so nothing you deploy contains it.
-- **Read-only.** No tool writes anything. `query_database` parses the statement before sending it and refuses anything but one `SELECT`, `WITH`, `EXPLAIN` or `SHOW`: writes, DDL, `PRAGMA`, `ATTACH`, `SET`, transaction control, several statements, data-changing `WITH` clauses, `EXPLAIN` of a write, `SELECT ... INTO`, `FOR UPDATE` and `FOR SHARE`, and functions that act outside the transaction (`pg_sleep`, `pg_terminate_backend`, `pg_read_file`, advisory locks, `dblink`, `lo_*`, `set_config`, `load_extension`, ...). What is sent is the statement as parsed, never the raw text. It then runs read-only: on PostgreSQL in a session whose transactions default to read-only, inside `BEGIN READ ONLY` with a 5 second `statement_timeout`, through a cursor that fetches at most 101 rows, then rolled back; on SQLite on a connection with `PRAGMA query_only` on, interrupted after 5 seconds. At most 100 rows come back.
+- **Read-only, held by the database.** No tool writes anything, and the database is what makes that hold. SQLite files are opened read-only (`SQLITE_OPEN_READONLY`, which also covers anything attached), with `PRAGMA query_only` on, and only the first statement's rows are read. On PostgreSQL each query runs in a session whose transactions default to read-only, inside `BEGIN READ ONLY` with a 5 second `statement_timeout`, sent as one prepared statement, through a cursor that fetches at most 101 rows, then rolled back; the session pins `standard_conforming_strings = on` and checks it after connecting. Read-only means as far as the role allows, which is why a superuser or a role with server-file, server-program or signal privileges is refused unless you pass `--allow-privileged-database-role`. At most 100 rows come back.
+- **A statement guard on top.** `query_database` parses the statement before sending it and refuses anything but one `SELECT`, `WITH`, `EXPLAIN` or `SHOW`: writes, DDL, `PRAGMA`, `ATTACH`, `SET`, transaction control, several statements, data-changing `WITH` clauses, `EXPLAIN` of a write, `SELECT ... INTO`, `FOR UPDATE` and `FOR SHARE`, hex, bit and other literals that don't render back as they were read, types with custom modifiers, and functions known to act outside the transaction or to run SQL text (`pg_sleep`, `pg_terminate_backend`, `pg_read_file`, `ts_stat`, `query_to_xml`, advisory locks, `dblink`, `lo_*`, `set_config`, `load_extension`, ...). What is sent is the statement rendered from the parse tree, and only when it reads back as the same single statement. The guard is a second layer: an extension can add a function the list doesn't know, so the role is the boundary.
 - **Local databases.** Unless you pass `--allow-remote-database`, Navigator only connects to SQLite files and to databases on `localhost`, a loopback address (`127.0.0.1`, `::1`) or a Unix socket. The same goes for `lighthouse.database_url`. A `database.url` pointing at a server elsewhere, such as a staging database in a `.env` you forgot to change, is refused with a message that says why. Navigator never creates a SQLite file that doesn't exist. It reads SQLite and PostgreSQL databases; other drivers are refused.
 - **Asking the app.** `routes --json` and `migrate:status --json` boot your app the way `navree routes` does, with `migrate_on_boot` turned off for that process; `introspect --json` constructs nothing.
-- **Secrets redacted.** Configuration is redacted like `Config::redacted()`, query results mask secret-looking columns, and logs carry what your app's `log.redact` already left out.
+- **Secrets redacted.** Configuration is redacted like `Config::redacted()`, and logs carry what your app's `log.redact` already left out. Query results mask columns with secret-looking names as a convenience, not a protection: a query can rename or wrap the column. A role that can't read a table is what keeps it out of reach.
 - **What leaves your machine.** Tool results go to the model your agent uses, like any file the agent reads. Keep customer data out of your development database: seed it with [factories](/docs/database/seeding-and-factories/) instead of copying production. Navigator itself only reaches the network to download the docs of your Navree version once.
 
 <LinkCards>

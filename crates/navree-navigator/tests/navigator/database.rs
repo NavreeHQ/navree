@@ -148,6 +148,32 @@ async fn writes_and_tricks_are_refused_before_they_are_sent() {
     assert_eq!(count["rows"], json!([[150]]), "nothing changed");
 }
 
+/// Statements whose literals or types the SQL renderer writes back
+/// differently from how they were read: sent as rendered, each would be
+/// several statements, the later ones turning `query_only` off and writing.
+#[tokio::test]
+async fn statements_that_render_back_differently_are_refused() {
+    let fixture = Fixture::new(APP_TOML);
+    crm_db(&fixture).await;
+    let navigator = fixture.navigator();
+    for sql in [
+        "SELECT X'00''; PRAGMA query_only = OFF; DROP TABLE users; --'",
+        "SELECT CAST(1 AS x('1)); PRAGMA query_only=OFF; DROP TABLE users; SELECT CAST(1 AS x(1'))",
+        "SELECT X'00''; ATTACH DATABASE ''storage/new.db'' AS n; CREATE TABLE n.t (a); --'",
+    ] {
+        let message = refused(&navigator, "query_database", json!({ "sql": sql })).await;
+        assert!(message.starts_with("refused: "), "{sql}: {message}");
+    }
+    let users = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SELECT count(*) FROM users"}),
+    )
+    .await;
+    assert_eq!(users["rows"], json!([[1]]), "the table is still there");
+    assert!(!fixture.root().join("storage/new.db").exists());
+}
+
 #[tokio::test]
 async fn a_long_statement_is_cancelled_after_5_seconds() {
     let fixture = Fixture::new(APP_TOML);
