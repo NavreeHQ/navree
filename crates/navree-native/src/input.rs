@@ -311,6 +311,63 @@ pub struct FileInput {
     /// The camera it asks for, by the web's own names (`user`, `environment`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture: Option<String>,
+    /// Whether a photo keeps the place it was taken. A client takes the place
+    /// out of every photo before it is sent unless the field says to keep it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keep_location: bool,
+}
+
+/// Where a file field's files come from on a device. Each opens the system's
+/// own picker, which asks for no permission except the camera.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CaptureSource {
+    /// The camera: the field asks for one, and takes pictures or video.
+    Camera,
+    /// The photo library: the field takes only pictures and video.
+    Photos,
+    /// The files on the device and its cloud drives.
+    Files,
+}
+
+impl FileInput {
+    /// Where the field's files come from, by the web's own rule: a field that
+    /// asks for a camera and takes pictures or video opens the camera; one
+    /// that takes only pictures and video opens the photo library; any other
+    /// opens the files.
+    ///
+    /// ```
+    /// use navree_native::input::{CaptureSource, FileInput};
+    ///
+    /// let field = |accept: &str, capture: Option<&str>| FileInput {
+    ///     accept: Some(accept.to_owned()),
+    ///     capture: capture.map(str::to_owned),
+    ///     ..FileInput::default()
+    /// };
+    /// assert_eq!(field("image/*", Some("environment")).source(), CaptureSource::Camera);
+    /// assert_eq!(field("image/png,image/jpeg", None).source(), CaptureSource::Photos);
+    /// assert_eq!(field("image/*,.pdf", None).source(), CaptureSource::Files);
+    /// assert_eq!(FileInput::default().source(), CaptureSource::Files);
+    /// ```
+    pub fn source(&self) -> CaptureSource {
+        let accept: Vec<&str> = self
+            .accept
+            .as_deref()
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|kind| !kind.is_empty())
+            .collect();
+        let media = |kind: &&str| kind.starts_with("image/") || kind.starts_with("video/");
+        if !accept.is_empty() && accept.iter().all(media) {
+            if self.capture.is_some() {
+                CaptureSource::Camera
+            } else {
+                CaptureSource::Photos
+            }
+        } else {
+            CaptureSource::Files
+        }
+    }
 }
 
 #[cfg(test)]

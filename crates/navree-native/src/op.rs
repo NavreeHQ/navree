@@ -142,6 +142,13 @@ pub enum Op {
         /// The region's id.
         target: String,
     },
+    /// Starts a device call that needs no tap: a haptic, the app's badge, a
+    /// cancelled notification, the store's review prompt. The type has no
+    /// other calls, so a reply can't open the camera or ask for a location.
+    Device {
+        /// The call.
+        call: crate::device::ReplyCall,
+    },
     /// An op from a newer server, which this build does not know. A client
     /// skips it and applies the rest.
     #[serde(other)]

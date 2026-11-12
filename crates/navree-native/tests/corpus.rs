@@ -9,6 +9,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use navree_native::action::{Action, Command, Pair, Present, State};
+use navree_native::device::{
+    Accuracy, Alt, AppLock, AuthSession, CancelNotification, CodeFormat, Confirm, ConfirmMethod,
+    CopyText, DeviceCall, Haptic, HapticKind, HttpsUrl, LocateOnce, Notify, OpenSettings, OpenUrl,
+    OriginPath, Passkey, PasskeyMode, PlatformSignIn, RegisterPush, ReplyCall, ScanCode, SetBadge,
+    SettingsPage, Share, SignInProvider, Then, Ticket, When,
+};
 use navree_native::envelope::{Back, Envelope, Screen, Upgrade, Web};
 use navree_native::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
@@ -753,6 +759,7 @@ fn screen_form() -> Envelope {
                     accept: Some(s("image/*,.pdf")),
                     multiple: true,
                     capture: Some(s("environment")),
+                    keep_location: false,
                 }),
             ),
             Node::Stack(Stack {
@@ -1291,12 +1298,228 @@ fn shell() -> Shell {
         },
     ];
     shell.device = Some(Device {
-        caps: vec![s("biometrics"), s("push")],
+        caps: vec![s("confirm"), s("push"), s("share"), s("scan_code")],
         push: Some(Push {
             register: s("/_navree/native/push"),
         }),
+        lock: Some(AppLock { after_secs: 300 }),
     });
     shell
+}
+
+fn path(text: &str) -> OriginPath {
+    OriginPath::parse(text).unwrap()
+}
+
+fn then(href: &str, ticket: &str) -> Then {
+    Then {
+        href: path(href),
+        ticket: Ticket::from(s(ticket)),
+        exp: 1_794_000_000,
+    }
+}
+
+/// Buttons for every device call a tap may start, each with where its result
+/// goes and what stands in its place where it can't start.
+fn screen_device() -> Envelope {
+    let button = |label: &str, role: Role, call: DeviceCall| {
+        Node::Button(Button {
+            label: s(label),
+            role,
+            action: Some(Action::Device(call)),
+            ..Button::default()
+        })
+    };
+    let calls = vec![
+        button(
+            "Pick a size",
+            Role::None,
+            DeviceCall::new(Haptic {
+                kind: HapticKind::Selection,
+            }),
+        ),
+        button(
+            "Copy the code",
+            Role::None,
+            DeviceCall::new(CopyText {
+                text: s("482913"),
+                sensitive: true,
+            }),
+        ),
+        button(
+            "Share the invoice",
+            Role::Secondary,
+            DeviceCall::new(Share {
+                title: Some(s("Invoice CH-1042")),
+                text: Some(s("₹1,24,050 from Charkha Supply Co.")),
+                href: Some(path("/orders/1042")),
+                url: None,
+                file: Some(path("/orders/1042/invoice.pdf")),
+            })
+            .then(then("/orders/1042/shared", "tk-share"))
+            .alt(Alt::Text {
+                text: s("Copy the link from the address bar"),
+            }),
+        ),
+        button(
+            "Track the parcel",
+            Role::None,
+            DeviceCall::new(OpenUrl {
+                url: HttpsUrl::parse("https://track.example/LDH-7731").unwrap(),
+                inside: true,
+            }),
+        ),
+        button(
+            "Continue with Google",
+            Role::Primary,
+            DeviceCall::new(AuthSession {
+                start: path("/auth/google/redirect"),
+                ephemeral: false,
+            }),
+        ),
+        button(
+            "Turn on order updates",
+            Role::None,
+            DeviceCall::new(RegisterPush {
+                categories: vec![s("orders"), s("stock")],
+            })
+            .then(then("/settings/push", "tk-push")),
+        ),
+        button(
+            "Remind me at 9",
+            Role::None,
+            DeviceCall::new(Notify {
+                id: s("restock"),
+                title: s("Restock the shelves"),
+                body: Some(s("Brass Kadhai is down to 9 in Amritsar.")),
+                at: When::Daily { hour: 9, minute: 0 },
+                href: Some(path("/inventory?filter[stock][lt]=10")),
+                thread: Some(s("stock")),
+            }),
+        ),
+        button(
+            "Stop the reminder",
+            Role::None,
+            DeviceCall::new(CancelNotification { id: s("restock") }),
+        ),
+        button(
+            "Show 3 on the icon",
+            Role::None,
+            DeviceCall::new(SetBadge { count: Some(3) }),
+        ),
+        button(
+            "Allow notifications in Settings",
+            Role::None,
+            DeviceCall::new(OpenSettings {
+                page: SettingsPage::Notifications,
+            }),
+        ),
+        button(
+            "Sign in with a passkey",
+            Role::Primary,
+            DeviceCall::new(Passkey {
+                mode: PasskeyMode::SignIn,
+                options: path("/auth/passkeys/login/options"),
+                conditional: false,
+            })
+            .then(then("/auth/passkeys/login", "tk-passkey")),
+        ),
+        button(
+            "Approve",
+            Role::Confirm,
+            DeviceCall::new(Confirm {
+                reason: s("Approve payment"),
+                detail: Some(s("₹1,00,000 to Gurpreet Kaur, HDFC ••4821")),
+                method: ConfirmMethod::Either,
+            })
+            .then(then("/payments/42/approve", "tk-confirm"))
+            .alt(Alt::Navigate {
+                href: path("/payments/42/approve-with-code"),
+            }),
+        ),
+        button(
+            "Find the nearest store",
+            Role::None,
+            DeviceCall::new(LocateOnce {
+                accuracy: Accuracy::Approximate,
+                max_age_secs: 600,
+                timeout_secs: 10,
+            })
+            .then(then("/stores/nearest", "tk-locate")),
+        ),
+        button(
+            "Scan a product",
+            Role::None,
+            DeviceCall::new(ScanCode {
+                formats: vec![CodeFormat::Ean13, CodeFormat::Code128],
+                prompt: Some(s("Scan the SKU on the box")),
+            })
+            .then(then("/inventory/scanned", "tk-scan"))
+            .alt(Alt::Hide),
+        ),
+        button(
+            "Sign in with Apple",
+            Role::Primary,
+            DeviceCall::new(PlatformSignIn {
+                provider: SignInProvider::Apple,
+                nonce: s("q9Zs3"),
+                client_id: None,
+            })
+            .then(then("/auth/apple/native", "tk-apple")),
+        ),
+        Node::Field(Field {
+            id: Some(s("receipt")),
+            name: s("receipt"),
+            label: Some(s("Photo of the receipt")),
+            help: None,
+            error: None,
+            required: false,
+            disabled: false,
+            input: Input::File(FileInput {
+                accept: Some(s("image/*")),
+                capture: Some(s("environment")),
+                keep_location: true,
+                ..FileInput::default()
+            }),
+        }),
+    ];
+    Envelope::screen(
+        BUILD,
+        Screen::new(
+            "Pay and share",
+            Node::Stack(Stack {
+                gap: 2,
+                children: calls,
+                ..Stack::default()
+            }),
+        ),
+    )
+}
+
+/// What a reply may start with no tap.
+fn ops_device() -> Envelope {
+    Envelope::ops(
+        BUILD,
+        vec![
+            Op::Device {
+                call: ReplyCall::Haptic(Haptic::success()),
+            },
+            Op::Device {
+                call: ReplyCall::SetBadge(SetBadge { count: None }),
+            },
+            Op::Device {
+                call: ReplyCall::CancelNotification(CancelNotification { id: s("restock") }),
+            },
+            Op::Device {
+                call: ReplyCall::RequestReview,
+            },
+            Op::Toast(Toast {
+                tone: Tone::Success,
+                text: s("Order CH-1042 delivered to Amritsar."),
+                ..Toast::default()
+            }),
+        ],
+    )
 }
 
 fn run(text: &str) -> Run {
@@ -1892,6 +2115,8 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("screen-kinds", screen_kinds()),
         ("screen-dashboard", screen_dashboard()),
         ("screen-inbox", screen_inbox()),
+        ("screen-device", screen_device()),
+        ("ops-device", ops_device()),
         ("screen-with-toast", screen_with_toast()),
         ("ops-reply", ops_reply()),
         ("ops-errors", ops_errors()),
@@ -1984,6 +2209,10 @@ fn kinds_in(
             if let Some(standard) = &button.standard {
                 seen("standard", standard);
             }
+            if let Some(Action::Device(call)) = &button.action {
+                let tag = serde_json::to_value(&call.call).unwrap()["f"].clone();
+                seen("call", &tag.as_str().unwrap());
+            }
         }
         Node::Toolbar(toolbar) => {
             for standard in toolbar.items.iter().filter_map(|item| item.standard.as_ref()) {
@@ -2033,6 +2262,13 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
             match op {
                 Op::Morph { node, .. } | Op::Replace { node, .. } => roots.push(node),
                 Op::Append { nodes, .. } | Op::Prepend { nodes, .. } => roots.extend(nodes),
+                Op::Device { call } => {
+                    let tag = serde_json::to_value(call).unwrap()["f"].clone();
+                    values
+                        .entry("reply")
+                        .or_default()
+                        .insert(format!("{:?}", tag.as_str().unwrap()));
+                }
                 _ => {}
             }
         }
@@ -2064,6 +2300,35 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         (
             "column",
             &["Leading", "Title", "Subtitle", "Status", "Trailing", "Actions"],
+        ),
+        (
+            "call",
+            &[
+                "\"haptic\"",
+                "\"copy\"",
+                "\"share\"",
+                "\"open_url\"",
+                "\"auth_session\"",
+                "\"register_push\"",
+                "\"notify\"",
+                "\"cancel_notification\"",
+                "\"set_badge\"",
+                "\"open_settings\"",
+                "\"passkey\"",
+                "\"confirm\"",
+                "\"locate_once\"",
+                "\"scan_code\"",
+                "\"platform_sign_in\"",
+            ],
+        ),
+        (
+            "reply",
+            &[
+                "\"haptic\"",
+                "\"set_badge\"",
+                "\"cancel_notification\"",
+                "\"request_review\"",
+            ],
         ),
     ] {
         for name in names {

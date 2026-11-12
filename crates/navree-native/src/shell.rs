@@ -105,12 +105,17 @@ pub struct Push {
 /// The device features the app uses.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Device {
-    /// The features, by name.
+    /// The features, by name. They can only narrow what the client was built
+    /// with, never widen it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub caps: Vec<String>,
     /// Push messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<Push>,
+    /// Whether the person may lock the app behind the device's own unlock,
+    /// and after how long away.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock: Option<crate::device::AppLock>,
 }
 
 /// The app's chrome.

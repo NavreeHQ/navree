@@ -95,11 +95,16 @@
   ],
   "device": {
     "caps": [
-      "biometrics",
-      "push"
+      "confirm",
+      "push",
+      "share",
+      "scan_code"
     ],
     "push": {
       "register": "/_navree/native/push"
+    },
+    "lock": {
+      "after_secs": 300
     }
   }
 }

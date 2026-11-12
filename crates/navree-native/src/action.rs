@@ -85,6 +85,9 @@ pub enum Action {
     Refresh,
     /// Closes the sheet or dialog the control stands in.
     Dismiss,
+    /// Starts a device call: a share sheet, a scanner, a confirmation. Only a
+    /// person's tap runs an action, which is what most calls require.
+    Device(crate::device::DeviceCall),
     /// An action from a newer server, which this build does not know. A client
     /// draws the control as one that can't be used now.
     #[serde(other)]

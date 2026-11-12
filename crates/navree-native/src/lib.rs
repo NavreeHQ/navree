@@ -26,6 +26,7 @@
 
 pub mod action;
 pub mod client;
+pub mod device;
 pub mod envelope;
 pub mod input;
 pub mod node;
@@ -34,6 +35,7 @@ pub mod shell;
 pub mod vocab;
 
 pub use action::{Action, Command, Pair, Present, State};
+pub use device::{DeviceCall, ReplyCall, Ticket};
 pub use client::{Client, ClientError, Contrast, FormFactor, Platform, Scheme};
 pub use envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 pub use input::Input;
