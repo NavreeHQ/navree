@@ -1,6 +1,7 @@
 package com.navree.client.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -254,6 +255,7 @@ internal fun RemoteImage(url: String, description: String?, cover: Boolean, modi
     if (loaded != null) {
         Image(bitmap = loaded, contentDescription = description, contentScale = if (cover) ContentScale.Crop else ContentScale.Fit, modifier = modifier)
     } else {
-        Box(modifier.semantics { })
+        // Its place is kept, tinted, so a picture still on its way reads as one.
+        Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest).semantics { })
     }
 }

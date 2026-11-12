@@ -310,6 +310,14 @@ object ScreenRules {
         return QueryPlan(form, search, filters)
     }
 
+    /**
+     * Whether a screen's toolbar floats over its content. A floating toolbar
+     * and a navigation bar are never shown together: on a first screen above
+     * the bar, the toolbar's items are actions of the app bar instead.
+     */
+    fun toolbarFloats(context: ScreenContext): Boolean =
+        !(context.root && context.chrome && context.navigation == NavigationKind.Bar && context.presentation == Presentation.Stack)
+
     /** Whether an action creates something: its role, or its standard `add`. */
     fun creates(node: Navree.Node): Boolean =
         node is Navree.Button && (node.role == Navree.Role.CREATE || node.standard == Navree.Standard.ADD) && !destructive(node)

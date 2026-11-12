@@ -362,8 +362,9 @@ jobs:
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            "$adb" shell settings put global debug.force_rtl "$rtl"
-            "$adb" shell setprop debug.force_rtl "$rtl"
+            # Right to left as a person gets it: the app's language set to one written that way.
+            if [ "$rtl" = 1 ]; then locales=he; else locales=""; fi
+            "$adb" shell cmd locale set-app-locales com.navree.client.test --locales "$locales" || true
             "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" -e store http://10.0.2.2:8095 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$look.txt"
             if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$look.txt"; then status=1; fi

@@ -636,7 +636,7 @@ internal fun AvatarView(node: Navree.Avatar, modifier: Modifier = Modifier, size
             // The circle does not grow with the user's text size, so neither do the letters in it:
             // the name is written out beside it.
             val fixed = with(LocalDensity.current) { (size * 0.4f).dp.toSp() }
-            Text(initials, style = MaterialTheme.typography.titleMedium.copy(fontSize = fixed), color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1)
+            Text(initials, style = MaterialTheme.typography.titleMedium.copy(fontSize = fixed, lineHeight = fixed), color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1)
         }
     }
 }

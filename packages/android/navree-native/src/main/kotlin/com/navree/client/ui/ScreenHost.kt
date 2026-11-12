@@ -232,9 +232,9 @@ private fun WebScreen(screen: ScreenView, content: Content.Web, info: HostInfo) 
 private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo) {
     val ui = LocalUi.current
     val window = ui.window
-    val bars = remember(screen, view.states) { screenToolbars(screen, view) }
+    val (arranged, bars) = remember(screen, view.states, info.context) { arrange(screen, view, info.context) }
     val context = info.context.copy(toolbar = bars.isNotEmpty())
-    val plan = remember(screen, context, window) { ScreenRules.plan(screen, context, window) }
+    val plan = remember(arranged, context, window) { ScreenRules.plan(arranged, context, window) }
     val place = Place(view, selectedUrl = info.selectedUrl)
     val list = rememberLazyListState()
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -247,11 +247,11 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val query = remember(screen) { ScreenRules.query(screen) }
     val hoisted = if (plan.searchInQuery) query?.form else null
     val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 24 } }
-    val fab = plan.fab?.let { screen.actions.getOrNull(it) as? Navree.Button }
+    val fab = plan.fab?.let { arranged.actions.getOrNull(it) as? Navree.Button }
 
     Scaffold(
         modifier = Modifier.nestedScroll(behaviour.nestedScrollConnection),
-        topBar = { ScreenBar(view, screen, plan, place, info, behaviour, searching) { searching = it } },
+        topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
         floatingActionButton = {
             if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
         },
@@ -383,6 +383,20 @@ internal fun RailFab(screen: ScreenView, plan: ScreenPlan) {
     val tree = screen.screen ?: return
     val button = plan.fab?.let { tree.actions.getOrNull(it) as? Navree.Button } ?: return
     Fab(button, Place(screen), extended = plan.fabExtended, expanded = true)
+}
+
+/**
+ * A screen's actions and the toolbars that float over it. Where a toolbar may
+ * not float (above a navigation bar), its items join the screen's actions and
+ * are placed in the app bar and its overflow like any other.
+ */
+internal fun arrange(screen: Navree.Screen, view: ScreenView, context: ScreenContext): Pair<Navree.Screen, List<Navree.Toolbar>> {
+    val bars = screenToolbars(screen, view)
+    if (bars.isEmpty() || ScreenRules.toolbarFloats(context)) return screen to bars
+    val items = bars.flatMap { it.items }.map { item ->
+        if (item.menu.isNotEmpty()) Navree.Menu(icon = item.icon, id = item.id, items = item.menu, label = item.title) else item.asButton()
+    }
+    return screen.copy(actions = screen.actions.filterNot { it is Navree.Toolbar } + items) to emptyList()
 }
 
 /** A toolbar item as the button it stands for, so it is pressed (and asks) like one. */

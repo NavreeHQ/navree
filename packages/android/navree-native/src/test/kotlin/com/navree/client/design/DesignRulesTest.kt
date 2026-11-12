@@ -185,6 +185,13 @@ class ScreenRulesTest {
     }
 
     @Test
+    fun a_toolbar_never_floats_above_a_navigation_bar() {
+        assertFalse(ScreenRules.toolbarFloats(root))
+        assertTrue("beside a rail it floats", ScreenRules.toolbarFloats(root.copy(navigation = NavigationKind.Rail)))
+        assertTrue("a pushed screen has no navigation bar under it", ScreenRules.toolbarFloats(pushed))
+    }
+
+    @Test
     fun a_whole_form_is_finished_from_the_bar_and_inline_without_chrome() {
         val form = Navree.Form(id = "customer", method = Navree.Method.POST, children = listOf(button("Save", Navree.Role.PRIMARY, action = Navree.Action.Submit())))
         val plan = ScreenRules.plan(screen(body = form), pushed, WindowInfo.Phone)

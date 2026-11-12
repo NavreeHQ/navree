@@ -216,7 +216,12 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     val rootScreen = root?.screen
     val twoPanes = ScreenRules.twoPanes(window, rootScreen, destination?.stack?.size ?: 0)
     val rootContext = context(plan, user, root, index = 0, presentation = Presentation.Stack, detailPane = false)
-    val rootPlan = if (root != null && rootScreen != null) ScreenRules.plan(rootScreen, rootContext.copy(toolbar = screenToolbars(rootScreen, root).isNotEmpty()), window) else null
+    val rootPlan = if (root != null && rootScreen != null) {
+        val (arranged, bars) = arrange(rootScreen, root, rootContext)
+        ScreenRules.plan(arranged, rootContext.copy(toolbar = bars.isNotEmpty()), window)
+    } else {
+        null
+    }
     val railFab = rootPlan != null && rootPlan.fab != null && rootPlan.fabPlace == FabPlace.RailHeader && (destination?.stack?.size == 1 || twoPanes)
 
     CompositionLocalProvider(LocalOpenMenu provides { scope.launch { menu.expand() } }) {
