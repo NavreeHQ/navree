@@ -254,14 +254,15 @@ pub(crate) async fn render_json(
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
 /// and sends rendered responses in brotli to clients that take it.
 async fn reply_layer(request: Request, next: Next) -> Response {
+    let asked = crate::asked::who_asked(request.headers());
     // A native client's request, or its web view's, is answered its own way;
     // a browser's is handed back untouched.
     #[cfg(feature = "native-preview")]
-    let (request, next) = match crate::native::swap::layer(request, next).await {
+    let (request, next) = match crate::native::swap::layer(asked, request, next).await {
         Ok(response) => return response,
         Err(back) => back,
     };
-    let from_runtime = request.headers().contains_key(UI_HEADER);
+    let from_runtime = asked.is_runtime();
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
     // What the runtime asked for, for telemetry: a fetch ahead of a click is

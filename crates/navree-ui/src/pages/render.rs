@@ -29,7 +29,7 @@ use crate::components::Toast;
 use crate::html::{Href, LocalHref};
 use crate::module::UiAlways;
 use crate::node::{Node, el};
-use crate::op::{Envelope, Op, ToastTone, UI_HEADER};
+use crate::op::{Envelope, Op, ToastTone};
 use crate::shell::Shell;
 
 /// The request header the runtime adds to a region's fetch, naming the region.
@@ -104,6 +104,9 @@ pub(crate) enum Form {
     Region,
     /// An ops envelope.
     Action,
+    /// The native protocol's envelope.
+    #[cfg(feature = "native-preview")]
+    Native,
 }
 
 /// The form `request` gets.
@@ -115,17 +118,23 @@ pub(crate) fn form_of(request: &ErrorContext) -> Form {
     if kind == RouteKind::Json {
         return Form::Json;
     }
-    // The runtime only asks for what the app wrote for it: pages, fragments and actions.
-    if request.headers.contains_key(UI_HEADER) {
-        return if request.method == Method::GET || request.method == Method::HEAD {
-            if request.headers.contains_key(REGION_HEADER) {
-                Form::Region
+    match crate::asked::who_asked(&request.headers) {
+        // The runtime only asks for what the app wrote for it: pages, fragments and actions.
+        crate::asked::WhoAsked::Runtime => {
+            return if request.method == Method::GET || request.method == Method::HEAD {
+                if request.headers.contains_key(REGION_HEADER) {
+                    Form::Region
+                } else {
+                    Form::Document
+                }
             } else {
-                Form::Document
-            }
-        } else {
-            Form::Action
-        };
+                Form::Action
+            };
+        }
+        // A native client asks only for what it can draw.
+        #[cfg(feature = "native-preview")]
+        crate::asked::WhoAsked::Native => return Form::Native,
+        _ => {}
     }
     match (kind, request.accepts()) {
         // A page asked for in JSON alone is data.
@@ -164,6 +173,8 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
         Form::Document => document(request, error, &options).await,
         Form::Region => region(request, error, &options),
         Form::Action => action(request, error, &options),
+        #[cfg(feature = "native-preview")]
+        Form::Native => native(request, error, &options),
     };
     let headers = response.headers_mut();
     // `Retry-After`, `Allow`, `WWW-Authenticate`: the error's own headers belong to the answer.
@@ -401,6 +412,13 @@ fn region(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> R
 /// An ops envelope for an action: a toast that says what happened, and for a guest the
 /// way to sign in.
 fn action(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
+    let mut response = Envelope::new(action_ops(request, error, options)).into_response();
+    *response.status_mut() = error.status;
+    response
+}
+
+/// The ops of [`action`]'s envelope.
+fn action_ops(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Vec<Op> {
     let kind = StateKind::of(error.status, &error.code);
     let tone = match kind {
         StateKind::SignIn | StateKind::Conflict | StateKind::Expired | StateKind::RateLimited => {
@@ -443,9 +461,41 @@ fn action(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> R
             Err(_) => Op::navigate_external(target),
         });
     }
-    let mut response = Envelope::new(ops).into_response();
-    *response.status_mut() = error.status;
-    response
+    ops
+}
+
+/// The error as a native client draws it: the way to sign in for a guest, the
+/// state as a screen for a page, and a toast for an action, in the native
+/// protocol's envelope with the error's status.
+#[cfg(feature = "native-preview")]
+fn native(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
+    let Some(client) = crate::native::swap::client_of(&request.headers, &request.uri) else {
+        return action(request, error, options);
+    };
+    let kind = StateKind::of(error.status, &error.code);
+    let repeatable = matches!(request.method, Method::GET | Method::HEAD);
+    if !repeatable {
+        return crate::native::swap::ops_for(
+            &client,
+            error.status,
+            &action_ops(request, error, options),
+        );
+    }
+    // A page asked for by a guest is the way in, back to the page after: the client
+    // presents sign-in as the shell's routes say. Not from the sign-in page itself.
+    if kind == StateKind::SignIn && !is_at_or_below(request.uri.path(), &options.sign_in) {
+        let target = back_to(request, &options.sign_in, ReturnTo::of_uri(&request.uri))
+            .map_or_else(
+                || Href::from(options.sign_in.as_str()),
+                |back| back.sign_in_href(&options.sign_in),
+            );
+        let op = match LocalHref::parse(target.as_str()) {
+            Ok(local) => Op::navigate(local),
+            Err(_) => Op::navigate_external(target),
+        };
+        return crate::native::swap::ops_for(&client, error.status, &[op]);
+    }
+    crate::native::swap::view_for(page_of(request, error, options).into_view(), &client)
 }
 
 /// Words for tests and docs: the labels as a page would use them.
@@ -458,6 +508,8 @@ pub(crate) fn default_labels() -> StateLabels {
 mod tests {
     use http::{HeaderMap, Method, Uri};
     use navree_http::RouteMeta;
+
+    use crate::op::UI_HEADER;
 
     use super::*;
 

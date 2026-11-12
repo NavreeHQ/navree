@@ -36,7 +36,7 @@ use crate::dates::{DateLocale, DatePicker, DateRules, TimePicker, TimeRules};
 use crate::html::Href;
 use crate::localize::ReaderWords;
 use crate::node::{Element, Node, Uses, el};
-use crate::op::{Envelope, Op, UI_HEADER};
+use crate::op::{Envelope, Op};
 use crate::shell::AppShell;
 use crate::view::View;
 
@@ -2719,7 +2719,7 @@ impl<T: Form> Rejected<T> {
         Self {
             values: echo::<T>(values),
             errors,
-            from_runtime: parts.headers.contains_key(UI_HEADER),
+            from_runtime: crate::asked::who_asked(&parts.headers).is_runtime(),
             action: parts.uri.path_and_query().map_or_else(
                 || parts.uri.path().to_owned(),
                 |path| path.as_str().to_owned(),
@@ -2924,7 +2924,7 @@ where
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body): (Parts, _) = request.into_parts();
-        let from_runtime = parts.headers.contains_key(UI_HEADER);
+        let from_runtime = crate::asked::who_asked(&parts.headers).is_runtime();
         let action = parts.uri.path_and_query().map_or_else(
             || parts.uri.path().to_owned(),
             |path| path.as_str().to_owned(),

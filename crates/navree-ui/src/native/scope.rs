@@ -11,9 +11,9 @@ use std::sync::Arc;
 use http::HeaderMap;
 use http::request::Parts;
 use navree_http::extract::FromRequestParts;
-use navree_native::{
-    CLIENT_HEADER, ClientError, EMBED_HEADER, FormFactor, NATIVE_HEADER, Platform,
-};
+use navree_native::{CLIENT_HEADER, ClientError, FormFactor, NATIVE_HEADER, Platform};
+
+use crate::asked::{WhoAsked, in_web_view, who_asked};
 
 tokio::task_local! {
     static ASKED: Asked;
@@ -51,14 +51,17 @@ pub(crate) enum Reading {
     BadClient(ClientError),
 }
 
-/// Reads what `headers` ask for. A browser's request costs two header lookups.
+/// Reads what `headers` ask for, by [`who_asked`]: a native client, the web
+/// view inside one (its runtime's requests too), or the web.
 pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
+    match who_asked(headers) {
+        WhoAsked::Native => {}
+        WhoAsked::WebView => return Reading::Asked(Asked::Embed),
+        WhoAsked::Runtime if in_web_view(headers) => return Reading::Asked(Asked::Embed),
+        _ => return Reading::Web,
+    }
     let Some(major) = headers.get(NATIVE_HEADER) else {
-        return if headers.contains_key(EMBED_HEADER) {
-            Reading::Asked(Asked::Embed)
-        } else {
-            Reading::Web
-        };
+        return Reading::Web;
     };
     let major = major.to_str().unwrap_or("").trim();
     if major.parse::<u32>().ok() != Some(navree_native::MAJOR) {
@@ -254,9 +257,19 @@ mod tests {
     #[test]
     fn the_web_view_of_a_native_client_asks_for_a_page_without_chrome() {
         assert!(matches!(
-            read(&headers(&[(EMBED_HEADER, "1")]), "/"),
+            read(&headers(&[(navree_native::EMBED_HEADER, "1")]), "/"),
             Reading::Asked(Asked::Embed)
         ));
+        let agent = "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/0.1.0";
+        for pairs in [
+            &[("user-agent", agent)][..],
+            &[("user-agent", agent), ("x-navree-ui", "1")][..],
+        ] {
+            assert!(matches!(
+                read(&headers(pairs), "/"),
+                Reading::Asked(Asked::Embed)
+            ));
+        }
     }
 
     #[tokio::test]

@@ -10,7 +10,7 @@ use navree_http::extract::{FromRequest, Request, urlencoded};
 use navree_http::response::{IntoResponse, Response};
 
 use crate::html::LocalHref;
-use crate::op::{Envelope, Op, Reply, ToastTone, UI_HEADER};
+use crate::op::{Envelope, Op, Reply, ToastTone};
 
 /// The longest key, list or anchor a move may name, in bytes.
 const MAX_KEY: usize = 256;
@@ -320,7 +320,7 @@ pub enum MoveError {
 #[derive(Debug)]
 pub struct MoveRejected {
     status: StatusCode,
-    from_runtime: bool,
+    asked: crate::asked::WhoAsked,
 }
 
 impl MoveRejected {
@@ -332,12 +332,26 @@ impl MoveRejected {
 
 impl IntoResponse for MoveRejected {
     fn into_response(self) -> Response {
-        if self.status == StatusCode::BAD_REQUEST && self.from_runtime {
+        if self.status == StatusCode::BAD_REQUEST
+            && matches!(
+                self.asked,
+                crate::asked::WhoAsked::Runtime | crate::asked::WhoAsked::Native
+            )
+        {
             let ops = vec![Op::toast(
                 ToastTone::Danger,
                 "That move couldn't be read. Reload the page and try again.",
             )];
-            return (self.status, Envelope::new(ops)).into_response();
+            // A native client is told the same, as a native op.
+            #[cfg(feature = "native-preview")]
+            if self.asked.is_native()
+                && let Some(response) = crate::native::swap::ops(self.status, &ops)
+            {
+                return response;
+            }
+            if self.asked.is_runtime() {
+                return (self.status, Envelope::new(ops)).into_response();
+            }
         }
         let mut response = self.status.into_response();
         if self.status == StatusCode::METHOD_NOT_ALLOWED {
@@ -354,11 +368,8 @@ impl FromRequest for Move {
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body): (Parts, _) = request.into_parts();
-        let from_runtime = parts.headers.contains_key(UI_HEADER);
-        let refuse = |status| MoveRejected {
-            status,
-            from_runtime,
-        };
+        let asked = crate::asked::who_asked(&parts.headers);
+        let refuse = |status| MoveRejected { status, asked };
         if let Some(status) = crate::form::refusal(&parts).await {
             return Err(refuse(status));
         }

@@ -78,6 +78,7 @@ pub mod prelude {
 
 #[cfg(feature = "access")]
 pub mod ability;
+mod asked;
 pub mod assets;
 #[rustfmt::skip]
 mod assets_gen;

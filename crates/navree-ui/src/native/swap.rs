@@ -30,6 +30,7 @@ use serde::Serialize;
 use super::lower::{Cx, Miss, N};
 use super::page::{self, Page};
 use super::scope::{self, Asked, Reading};
+use crate::asked::{WhoAsked, in_web_view};
 use crate::node::Node;
 use crate::op::{Op, PendingOps, UI_HEADER};
 use crate::view::View;
@@ -267,6 +268,49 @@ pub(crate) fn errors(
     ))
 }
 
+/// The native client that sent a request with these headers, for an answer
+/// made outside the reply layer: an error page. `None` for anyone else, and
+/// for a descriptor that can't be read.
+pub(crate) fn client_of(headers: &http::HeaderMap, uri: &http::Uri) -> Option<Arc<scope::Request>> {
+    let url = uri
+        .path_and_query()
+        .map_or_else(|| uri.path().to_owned(), |url| url.as_str().to_owned());
+    match scope::read(headers, &url) {
+        Reading::Asked(Asked::Native(request)) => Some(request),
+        _ => None,
+    }
+}
+
+/// `ops` as the envelope a native client gets, with `status`. Ops that can't
+/// be said natively leave the client nothing to change, and say why.
+pub(crate) fn ops_for(request: &scope::Request, status: StatusCode, ops: &[Op]) -> Response {
+    let envelope = match native_ops(ops) {
+        Some(ops) => Envelope::ops(assets::BUILD, ops),
+        None => Envelope::ops(assets::BUILD, Vec::new()),
+    }
+    .in_vocab(request.client.vocab.min(navree_native::VOCAB));
+    respond(status, "no-store", &envelope)
+}
+
+/// `ops` for the native client the current request comes from, as an
+/// envelope with `status`. `None` when no native client asked, or one of the
+/// ops can't be said natively.
+pub(crate) fn ops(status: StatusCode, ops: &[Op]) -> Option<Response> {
+    let request = scope::native()?;
+    let native = native_ops(ops)?;
+    Some(respond(
+        status,
+        "no-store",
+        &Envelope::ops(assets::BUILD, native)
+            .in_vocab(request.client.vocab.min(navree_native::VOCAB)),
+    ))
+}
+
+/// A page as the native client `request` gets it, outside the reply layer.
+pub(crate) fn view_for(view: View, request: &Arc<scope::Request>) -> Response {
+    native(view, request)
+}
+
 /// A page's answer when the request did not come from a browser. `Err` hands
 /// the page back for the HTML path, untouched: the request came from a
 /// browser, or from outside any request.
@@ -380,14 +424,19 @@ fn take_main(nodes: &mut [Node]) -> Option<crate::node::Element> {
     None
 }
 
-/// The layer around a request that did not come from a browser. `Err` hands
-/// the request back for the web path, untouched, at the cost of two header
-/// lookups.
-pub(crate) async fn layer(request: Request, next: Next) -> Result<Response, (Request, Next)> {
-    if !request.headers().contains_key(NATIVE_HEADER)
-        && !request.headers().contains_key(EMBED_HEADER)
-    {
-        return Err((request, next));
+/// The layer around a request that did not come from a browser, given who
+/// asked. `Err` hands the request back for the web path, untouched: a
+/// browser's at no cost, the runtime's at the cost of reading whether it runs
+/// in a native client's web view.
+pub(crate) async fn layer(
+    asked: WhoAsked,
+    request: Request,
+    next: Next,
+) -> Result<Response, (Request, Next)> {
+    match asked {
+        WhoAsked::Native | WhoAsked::WebView => {}
+        WhoAsked::Runtime if in_web_view(request.headers()) => {}
+        _ => return Err((request, next)),
     }
     let url = request.uri().path_and_query().map_or_else(
         || request.uri().path().to_owned(),
