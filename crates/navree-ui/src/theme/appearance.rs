@@ -280,15 +280,31 @@ pub(crate) fn read_setting(
 /// The `Set-Cookie` that keeps `appearance` in the browser for a year. The
 /// toolkit's own route adds `Secure` when the request came over HTTPS.
 pub fn appearance_cookie(appearance: &Appearance) -> HeaderValue {
-    cookie(appearance, false)
+    cookie(&appearance.to_value(), false)
 }
 
-fn cookie(appearance: &Appearance, secure: bool) -> HeaderValue {
+/// The text a cookie keeps for `setting`: `dark.ocean`, `dark` for a mode alone, `.ocean`
+/// for a theme alone, so a reader who chose only a mode keeps the theme of the app, the
+/// workspace or the site they are on. Nothing chosen keeps the default look.
+fn setting_value(setting: &ThemeSetting) -> String {
+    match (setting.mode, &setting.theme) {
+        (None, None) => Appearance::default().to_value(),
+        (mode, theme) => format!(
+            "{}{}",
+            mode.map_or("", Mode::id),
+            theme
+                .as_ref()
+                .map(|theme| format!(".{}", theme.short_form()))
+                .unwrap_or_default()
+        ),
+    }
+}
+
+fn cookie(value: &str, secure: bool) -> HeaderValue {
     // The value is a mode id, a dot and a built-in id or a short form: only
     // `[0-9a-z.-]`, which a header always carries.
     HeaderValue::from_str(&format!(
-        "{THEME_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
-        appearance.to_value(),
+        "{THEME_COOKIE}={value}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
         if secure { "; Secure" } else { "" }
     ))
     .unwrap_or(HeaderValue::from_static(
@@ -340,12 +356,14 @@ fn over_https(headers: &HeaderMap) -> bool {
     })
 }
 
-/// What the settings route does with a posted form: the cookie to set and where
-/// to go, or why not.
+/// What the settings route does with a posted form: the reader's setting to keep and
+/// where to go, or why not. The setting is the cookie's with what was posted laid over
+/// it: a form that posts only a mode, such as a site's theme toggle, leaves the theme as
+/// it was, chosen or not.
 pub(crate) fn decide(
     headers: &HeaderMap,
     body: &[u8],
-) -> Result<(Appearance, String), ChoiceError> {
+) -> Result<(ThemeSetting, String), ChoiceError> {
     if !same_site(headers) {
         return Err(ChoiceError::CrossSite);
     }
@@ -363,29 +381,31 @@ pub(crate) fn decide(
             _ => {}
         }
     }
-    let (cookie, _) = read_setting(headers, None);
-    let mut appearance = Appearance::default();
-    cookie.over(&mut appearance, false);
-    if let Some(theme) = theme {
-        appearance.theme = theme;
+    let (mut setting, _) = read_setting(headers, None);
+    if theme.is_some() {
+        setting.theme = theme;
     }
-    if let Some(mode) = mode {
-        appearance.mode = mode;
+    if mode.is_some() {
+        setting.mode = mode;
     }
-    Ok((appearance, back.unwrap_or_else(|| "/".to_owned())))
+    setting.locked = false;
+    Ok((setting, back.unwrap_or_else(|| "/".to_owned())))
 }
 
 /// Answers `POST /_navree/ui/appearance`: sets the cookie and sends the reader
 /// back with a 303, so it works as a plain form with JavaScript off.
 pub(crate) fn respond_setting(headers: &HeaderMap, body: &[u8]) -> Response {
     match decide(headers, body) {
-        Ok((appearance, back)) => {
+        Ok((setting, back)) => {
             let location = HeaderValue::from_str(&back).unwrap_or(HeaderValue::from_static("/"));
             (
                 StatusCode::SEE_OTHER,
                 [
                     (LOCATION, location),
-                    (SET_COOKIE, cookie(&appearance, over_https(headers))),
+                    (
+                        SET_COOKIE,
+                        cookie(&setting_value(&setting), over_https(headers)),
+                    ),
                 ],
             )
                 .into_response()
@@ -545,6 +565,16 @@ mod tests {
                 .unwrap()
                 .starts_with("navree_ui_theme=light.rose;")
         );
+        // A mode alone, with no theme chosen before, keeps no theme: the page's own holds.
+        let mut fresh = HeaderMap::new();
+        fresh.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        let response = respond_setting(&fresh, b"mode=dark&back=%2Fpricing");
+        let cookie = response.headers()[SET_COOKIE].to_str().unwrap();
+        assert!(cookie.starts_with("navree_ui_theme=dark;"), "{cookie}");
+        let mut later = HeaderMap::new();
+        later.insert(COOKIE, HeaderValue::from_static("navree_ui_theme=dark"));
+        let site = Appearance::new(Theme::SUNSET, Mode::System).for_reader(&later, None);
+        assert_eq!(site, Appearance::new(Theme::SUNSET, Mode::Dark));
         // Bad values are refused, not stored.
         for body in ["theme=nope", "mode=dim", "theme=%3Cscript%3E"] {
             assert_eq!(
