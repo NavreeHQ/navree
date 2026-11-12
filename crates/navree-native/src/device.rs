@@ -421,8 +421,9 @@ pub trait Sealer {
     fn open(&self, sealed: &str) -> Option<Vec<u8>>;
 }
 
-/// What a ticket holds once it is opened. Only the server reads it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// What a ticket holds once it is opened. Only the server reads it, and its
+/// `Debug` leaves out the session and the nonce, which are never logged.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Claims {
     /// The feature the call belongs to.
     pub feature: Feature,
@@ -439,6 +440,17 @@ pub struct Claims {
     pub exp: i64,
     /// What makes the ticket one of a kind: it is spent on first use.
     pub nonce: String,
+}
+
+impl fmt::Debug for Claims {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Claims")
+            .field("feature", &self.feature)
+            .field("digest", &self.digest)
+            .field("href", &self.href)
+            .field("exp", &self.exp)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What a handler expects of the ticket a result came with.
@@ -1610,6 +1622,8 @@ mod tests {
             Err(TicketError::Unreadable)
         );
         assert_eq!(format!("{ticket:?}"), "Ticket(..)");
+        let shown = format!("{:?}", claims());
+        assert!(!shown.contains("session-a") && !shown.contains("n-1"), "{shown}");
     }
 
     #[test]
