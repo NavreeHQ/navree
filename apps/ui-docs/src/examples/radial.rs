@@ -18,7 +18,13 @@ pub fn all() -> Vec<Example> {
         single!("ring", "default", "A score with its label", ring_default)
             .start()
             .height(300),
-        gallery!("ring", "paint", "Solid, gradient, halo and glow", ring_paint).height(250),
+        gallery!(
+            "ring",
+            "paint",
+            "Solid, gradient, halo and glow",
+            ring_paint
+        )
+        .height(250),
         single!("ring", "colors", "Colour by band", ring_colors)
             .start()
             .width(820)
@@ -41,9 +47,14 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(420)
             .height(220),
-        single!("rings", "default", "Three rings with a legend", rings_default)
-            .start()
-            .height(320),
+        single!(
+            "rings",
+            "default",
+            "Three rings with a legend",
+            rings_default
+        )
+        .start()
+        .height(320),
         single!("rings", "two", "Two rings and an icon", rings_two)
             .start()
             .height(300),
@@ -61,10 +72,15 @@ pub fn all() -> Vec<Example> {
             .height(300),
         gallery!("gauge", "sweeps", "Other sweeps and scales", gauge_sweeps).height(240),
         // Day clock
-        single!("day-clock", "thumb", "A day round the clock", day_clock_thumb)
-            .start()
-            .width(420)
-            .height(360),
+        single!(
+            "day-clock",
+            "thumb",
+            "A day round the clock",
+            day_clock_thumb
+        )
+        .start()
+        .width(420)
+        .height(360),
         single!(
             "day-clock",
             "default",
@@ -242,10 +258,11 @@ fn ring_middle() -> Vec<(&'static str, Node)> {
             "Your own words",
             Ring::new("VO2 max 48.2, top 8% for age", 92)
                 .id("middle-own")
-                .center(Stack::gap(0).align(Align::Center).children((
-                    Text::new("Top 8%"),
-                    Text::muted("for your age"),
-                )))
+                .center(
+                    Stack::gap(0)
+                        .align(Align::Center)
+                        .children((Text::new("Top 8%"), Text::muted("for your age"))),
+                )
                 .ink(Ink::slot(7))
                 .size(140)
                 .into(),
@@ -316,7 +333,10 @@ fn ring_sizes() -> Row {
 
 fn ring_states() -> Row {
     Row::gap(6).children((
-        Ring::new("Sleep score", 0).id("state-loading").size(140).loading(),
+        Ring::new("Sleep score", 0)
+            .id("state-loading")
+            .size(140)
+            .loading(),
         Ring::new("Sleep score", 0)
             .id("state-failed")
             .size(140)
@@ -324,7 +344,10 @@ fn ring_states() -> Row {
         Ring::new("Sleep score", None::<f64>)
             .id("state-empty")
             .size(140)
-            .empty("No sleep yet", Some("It shows after the first night.".into())),
+            .empty(
+                "No sleep yet",
+                Some("It shows after the first night.".into()),
+            ),
     ))
 }
 
@@ -333,7 +356,11 @@ fn rings_thumb() -> Rings {
         .id("rings-thumb")
         .ring(RingValue::new("Move", 540).max(600).ink(Ink::slot(8)))
         .ring(RingValue::new("Exercise", 38).max(30).ink(Ink::slot(3)))
-        .ring(RingValue::new("Stand", 9).max(12).ink(Ink::tone(Tone::named("cyan"))))
+        .ring(
+            RingValue::new("Stand", 9)
+                .max(12)
+                .ink(Ink::tone(Tone::named("cyan"))),
+        )
         .track(RingTrack::Tinted)
         .size(180)
 }
@@ -520,12 +547,36 @@ fn day_clock_default() -> Card {
             .categories([
                 4, 4, 4, 4, 4, 4, 1, 0, 0, 1, 2, 1, 1, 3, 3, 2, 1, 0, 0, 1, 2, 4, 4, 4,
             ])
-            .moment(Moment::new(6.5, "Woke up").icon(icons::SUNRISE).ink(Ink::slot(4)))
-            .moment(Moment::new(7.5, "Morning walk").icon(icons::FOOTPRINTS).ink(Ink::slot(3)))
-            .moment(Moment::new(13.5, "Lunch").icon(icons::UTENSILS).ink(Ink::slot(2)))
-            .moment(Moment::new(14.5, "Long meeting").icon(icons::BRAIN).ink(Ink::slot(8)))
-            .moment(Moment::new(17.5, "Badminton").icon(icons::FLAME).ink(Ink::slot(2)))
-            .moment(Moment::new(22.5, "Asleep").icon(icons::MOON).ink(Ink::slot(7)))
+            .moment(
+                Moment::new(6.5, "Woke up")
+                    .icon(icons::SUNRISE)
+                    .ink(Ink::slot(4)),
+            )
+            .moment(
+                Moment::new(7.5, "Morning walk")
+                    .icon(icons::FOOTPRINTS)
+                    .ink(Ink::slot(3)),
+            )
+            .moment(
+                Moment::new(13.5, "Lunch")
+                    .icon(icons::UTENSILS)
+                    .ink(Ink::slot(2)),
+            )
+            .moment(
+                Moment::new(14.5, "Long meeting")
+                    .icon(icons::BRAIN)
+                    .ink(Ink::slot(8)),
+            )
+            .moment(
+                Moment::new(17.5, "Badminton")
+                    .icon(icons::FLAME)
+                    .ink(Ink::slot(2)),
+            )
+            .moment(
+                Moment::new(22.5, "Asleep")
+                    .icon(icons::MOON)
+                    .ink(Ink::slot(7)),
+            )
             .now(15)
             .label("Steps")
             .center_icon(icons::FOOTPRINTS)
@@ -553,8 +604,16 @@ fn day_clock_scale() -> Card {
                     .from(30, Ink::slot(8))
                     .label("Vigorous"),
             )
-            .moment(Moment::new(7.25, "Cycling").icon(icons::BIKE).ink(Ink::slot(4)))
-            .moment(Moment::new(17.25, "Gym").icon(icons::DUMBBELL).ink(Ink::slot(8)))
+            .moment(
+                Moment::new(7.25, "Cycling")
+                    .icon(icons::BIKE)
+                    .ink(Ink::slot(4)),
+            )
+            .moment(
+                Moment::new(17.25, "Gym")
+                    .icon(icons::DUMBBELL)
+                    .ink(Ink::slot(8)),
+            )
             .now(20)
             .label("Active min")
             .hub(Ink::slot(4))

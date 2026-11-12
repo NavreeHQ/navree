@@ -534,7 +534,14 @@ mod tests {
     fn every_chart_has_the_builders_all_charts_share() {
         let api = read(|file| crate::read_repo(&format!("crates/navree-ui/src/{file}")));
         for name in [
-            "Chart", "Donut", "Funnel", "Sparkline", "Ring", "Rings", "Gauge", "DayClock",
+            "Chart",
+            "Donut",
+            "Funnel",
+            "Sparkline",
+            "Ring",
+            "Rings",
+            "Gauge",
+            "DayClock",
         ] {
             let doc = &api[name];
             for method in [
