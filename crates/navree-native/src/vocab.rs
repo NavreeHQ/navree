@@ -182,6 +182,9 @@ kinds! {
 pub const LATER_FIELDS: &[(&str, &str, u32)] = &[];
 
 /// A node written for an older vocabulary.
+// The node is moved through once, on its way into an envelope; boxing it would
+// only add an allocation.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Downgraded {
     /// The node as the older client draws it: each kind it lacks replaced by
@@ -448,12 +451,14 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), count, "two kinds share a name");
+        // No kind or field is newer than the newest vocabulary, and a field
+        // later than its type needs a vocabulary after the first.
+        let at_most_the_newest = |since: u32| crate::VOCAB.checked_sub(since).is_some();
         for kind in Kind::ALL {
-            assert!(kind.since() <= crate::VOCAB, "{kind:?}");
+            assert!(at_most_the_newest(kind.since()), "{kind:?}");
         }
         for (ty, field, since) in LATER_FIELDS {
-            // A field later than its type needs a vocabulary after the first.
-            assert!((1..=crate::VOCAB).contains(since), "{ty}.{field}");
+            assert!(*since > 0 && at_most_the_newest(*since), "{ty}.{field}");
         }
     }
 

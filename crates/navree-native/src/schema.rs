@@ -69,15 +69,18 @@ pub trait Describe {
     fn describe(schema: &mut Schema) -> Value;
 }
 
+/// Reads a JSON value as an object's type and writes each of its fields, by
+/// its name in the JSON.
+type ReadFields = fn(Value) -> Result<BTreeMap<String, Value>, String>;
+
 /// How a definition is held to serde in the tests.
 #[derive(Clone, Copy)]
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct Check {
     /// Reads a JSON value as the type and writes it back.
     pub(crate) round_trip: fn(Value) -> Result<Value, String>,
-    /// Reads a JSON value as the type and writes each of its fields, by its
-    /// name in the JSON: for objects.
-    pub(crate) fields: Option<fn(Value) -> Result<BTreeMap<String, Value>, String>>,
+    /// Reads an object's fields.
+    pub(crate) fields: Option<ReadFields>,
 }
 
 /// The schema being written: its definitions so far.
