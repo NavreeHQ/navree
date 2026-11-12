@@ -458,9 +458,22 @@ impl Testimonial {
         self
     }
 
-    /// Their picture: an [`Avatar`](crate::Avatar).
+    /// Their picture: an [`Avatar`](crate::Avatar) with their photo.
     pub fn avatar(mut self, avatar: impl Into<Node>) -> Self {
         self.avatar = Some(avatar.into());
+        self
+    }
+
+    /// Their initials in place of a picture, in a raised tile. The name
+    /// beside it says who they are, so assistive technology passes over the tile.
+    pub fn initials(mut self, initials: impl Into<Cow<'static, str>>) -> Self {
+        self.avatar = Some(
+            el("span")
+                .slot("testimonial-initials")
+                .attr("aria-hidden", "true")
+                .child(initials.into())
+                .into(),
+        );
         self
     }
 
@@ -477,7 +490,7 @@ impl Testimonial {
         self
     }
 
-    /// A larger card, two columns wide on a wide screen.
+    /// A larger quote, in a card set apart from the others.
     pub fn featured(mut self) -> Self {
         self.el = self.el.flag("data-featured", true);
         self
