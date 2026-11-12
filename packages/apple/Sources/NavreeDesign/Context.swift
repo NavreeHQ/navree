@@ -7,7 +7,7 @@ import SwiftUI
 public struct FormRef: Sendable, Equatable, Hashable {
     /// The form's id, or `@` and its address when it has none.
     public let key: String
-    public let method: Method
+    public let method: HTTPMethod
     public let action: String
     public let hidden: [Pair]
 
@@ -18,7 +18,7 @@ public struct FormRef: Sendable, Equatable, Hashable {
         hidden = form.hidden.map { Pair(name: $0.name, value: $0.value) }
     }
 
-    public init(key: String, method: Method = .get, action: String = "", hidden: [Pair] = []) {
+    public init(key: String, method: HTTPMethod = .get, action: String = "", hidden: [Pair] = []) {
         self.key = key
         self.method = method
         self.action = action

@@ -139,7 +139,7 @@ public enum ChartKind: String, Sendable, Hashable, Decodable {
 }
 
 /// How a form is sent.
-public enum Method: String, Sendable, Hashable, Decodable {
+public enum HTTPMethod: String, Sendable, Hashable, Decodable {
     case get, post
 
     public init(from decoder: any Decoder) throws {

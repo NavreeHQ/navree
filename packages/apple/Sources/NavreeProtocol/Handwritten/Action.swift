@@ -22,7 +22,7 @@ public enum Action: Sendable, Equatable, Decodable {
     /// Sends a form: `form` names it, or it is the one the control stands in.
     case submit(form: String?, href: String?, with: Pair?)
     /// Sends a request of its own: a button that posts.
-    case request(method: Method, href: String, fields: [Pair])
+    case request(method: HTTPMethod, href: String, fields: [Pair])
     /// Changes the screen in front, with no request.
     case commands([Command])
     /// Goes back one screen.

@@ -3,13 +3,13 @@ import NavreeProtocol
 
 /// A request the app makes to its origin.
 public struct OriginRequest: Sendable, Equatable {
-    public var method: Method
+    public var method: HTTPMethod
     /// The path and query on the origin: `/orders?sort=total`.
     public var address: String
     /// The values a post sends, in order.
     public var form: [Pair]
 
-    public init(method: Method = .get, address: String, form: [Pair] = []) {
+    public init(method: HTTPMethod = .get, address: String, form: [Pair] = []) {
         self.method = method
         self.address = address
         self.form = form
