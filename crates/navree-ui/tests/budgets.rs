@@ -484,6 +484,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "chart-paint",
         "chart-radial",
         "chart-linear",
+        "chart-grids",
         "select-styles",
         "phone-styles",
         "slider-styles",
