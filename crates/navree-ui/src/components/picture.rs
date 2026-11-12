@@ -4,6 +4,7 @@
 use super::root_methods;
 use crate::html::Href;
 use crate::node::{Element, Node, el, into_node};
+use crate::theme::Mode;
 
 /// A responsive image: the sizes it comes in (`srcset` and `sizes`), AVIF and WebP for
 /// the browsers that read them with the original as the fallback (`<picture>`), its width
@@ -28,7 +29,28 @@ use crate::node::{Element, Node, el, into_node};
 /// ```
 ///
 /// Images come from the page's own site: the content security policy's `img-src` is
-/// `'self'` and `data:`.
+/// `'self'` and `data:`. An [`AppImage`](crate::AppImage) the toolkit serves is one:
+/// `Picture::new(&MARK, ..)`.
+///
+/// A screenshot of the product has a light and a dark version: [`dark`](Self::dark) gives
+/// the dark one, which a reader whose device is dark gets (`prefers-color-scheme`), and
+/// [`for_mode`](Self::for_mode) settles it by the page's own mode when the reader chose
+/// light or dark on the site, so only the one they see is fetched:
+///
+/// ```
+/// use navree_ui::theme::Mode;
+/// use navree_ui::{Picture, render};
+///
+/// let shot = || {
+///     Picture::new("/img/today-light.png", "Today: a score of 82", 1440, 900)
+///         .dark(Picture::new("/img/today-dark.png", "", 1440, 900).webp([(1440, "/img/today-dark.webp")]))
+/// };
+/// let system = render(&shot().into());
+/// assert!(system.contains(r#"<source media="(prefers-color-scheme: dark)" type="image/webp" srcset="/img/today-dark.webp 1440w""#));
+/// assert!(system.contains(r#"<img src="/img/today-light.png""#));
+/// let dark = render(&shot().for_mode(Mode::Dark).into());
+/// assert!(dark.contains(r#"<img src="/img/today-dark.png""#) && !dark.contains("today-light"));
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Picture {
@@ -42,6 +64,18 @@ pub struct Picture {
     webp: Vec<(u32, String)>,
     sizes: Option<String>,
     priority: bool,
+    /// The dark version's files: its original, its sizes, its AVIF and its WebP.
+    dark: Option<Box<DarkFiles>>,
+    mode: Option<Mode>,
+}
+
+/// The files of a [`Picture`]'s dark version.
+#[derive(Clone, Debug)]
+struct DarkFiles {
+    src: String,
+    srcset: Vec<(u32, String)>,
+    avif: Vec<(u32, String)>,
+    webp: Vec<(u32, String)>,
 }
 
 impl Picture {
@@ -60,7 +94,32 @@ impl Picture {
             webp: Vec::new(),
             sizes: None,
             priority: false,
+            dark: None,
+            mode: None,
         }
+    }
+
+    /// The image as it looks in dark mode: `dark`'s file, its sizes and its formats (its
+    /// alt text and size are this picture's, which it must share). A device in dark mode
+    /// gets it, through `prefers-color-scheme`, unless [`for_mode`](Self::for_mode) says
+    /// which mode the page is in.
+    pub fn dark(mut self, dark: Picture) -> Self {
+        self.dark = Some(Box::new(DarkFiles {
+            src: dark.src,
+            srcset: dark.srcset,
+            avif: dark.avif,
+            webp: dark.webp,
+        }));
+        self
+    }
+
+    /// The mode the page is drawn in (its [`Appearance`](crate::theme::Appearance)'s): light
+    /// or dark draws that version alone, so the reader's own choice on the site wins over
+    /// the device's; [`Mode::System`] leaves it to the device. Without a
+    /// [`dark`](Self::dark) version it changes nothing.
+    pub fn for_mode(mut self, mode: Mode) -> Self {
+        self.mode = Some(mode);
+        self
     }
 
     /// An image that only decorates, which assistive technology passes over: its `alt`
@@ -113,7 +172,20 @@ impl Picture {
         self
     }
 
-    fn into_node(self) -> Node {
+    fn into_node(mut self) -> Node {
+        // A page in light or dark draws that version alone.
+        let mut dark = self.dark.take();
+        match (self.mode, dark.take()) {
+            (Some(Mode::Dark), Some(files)) => {
+                let files = *files;
+                self.src = files.src;
+                self.srcset = files.srcset;
+                self.avif = files.avif;
+                self.webp = files.webp;
+            }
+            (Some(Mode::Light), Some(_)) => {}
+            (_, files) => dark = files,
+        }
         let sizes = self.sizes.clone().unwrap_or_else(|| {
             if self.priority {
                 "100vw".to_owned()
@@ -131,6 +203,39 @@ impl Picture {
                     .attr("height", i64::from(self.height))
             })
         };
+        // The dark version first: a source in the media query, for each format and then the
+        // original, which a browser takes before any source without one.
+        let dark_sources: Vec<Element> = dark
+            .as_deref()
+            .map(|files| {
+                let media = |kind: Option<&'static str>, srcset: String, sized: bool| {
+                    el("source")
+                        .attr("media", "(prefers-color-scheme: dark)")
+                        .attr_opt("type", kind)
+                        .attr("srcset", srcset)
+                        .attr_opt("sizes", sized.then(|| sizes.clone()))
+                        .attr("width", i64::from(self.width))
+                        .attr("height", i64::from(self.height))
+                };
+                let original = if files.srcset.is_empty() {
+                    candidates_of([(1, files.src.clone())])
+                        .first()
+                        .map(|_| media(None, files.src.clone(), false))
+                } else {
+                    Some(media(None, srcset_text(&files.srcset), true))
+                };
+                [
+                    (!files.avif.is_empty())
+                        .then(|| media(Some("image/avif"), srcset_text(&files.avif), true)),
+                    (!files.webp.is_empty())
+                        .then(|| media(Some("image/webp"), srcset_text(&files.webp), true)),
+                    original,
+                ]
+                .into_iter()
+                .flatten()
+                .collect()
+            })
+            .unwrap_or_default();
         let any_set = !(self.srcset.is_empty() && self.avif.is_empty() && self.webp.is_empty());
         let img = el("img")
             .attr("src", self.src.clone())
@@ -147,6 +252,7 @@ impl Picture {
             .attr("decoding", if self.priority { "auto" } else { "async" });
         self.el
             .children((
+                dark_sources,
                 source("image/avif", &self.avif),
                 source("image/webp", &self.webp),
                 img,
@@ -225,6 +331,52 @@ mod tests {
         let img = html.find("<img").unwrap();
         assert!(avif < webp && webp < img, "{html}");
         assert_eq!(html.matches(r#"sizes="50vw""#).count(), 3, "{html}");
+    }
+
+    // A screenshot in both modes: the device's mode picks it, unless the page says its own.
+    #[test]
+    fn a_dark_version_follows_the_device_or_the_page() {
+        let shot = || {
+            Picture::new("/l.png", "Today", 10, 10)
+                .webp([(10, "/l.webp")])
+                .dark(
+                    Picture::new("/d.png", "ignored", 99, 99)
+                        .avif([(10, "/d.avif")])
+                        .webp([(10, "/d.webp")]),
+                )
+        };
+        let system = render(&shot().into());
+        assert_eq!(
+            system,
+            concat!(
+                r#"<picture data-slot="picture">"#,
+                r#"<source media="(prefers-color-scheme: dark)" type="image/avif" srcset="/d.avif 10w" sizes="auto, 100vw" width="10" height="10">"#,
+                r#"<source media="(prefers-color-scheme: dark)" type="image/webp" srcset="/d.webp 10w" sizes="auto, 100vw" width="10" height="10">"#,
+                r#"<source media="(prefers-color-scheme: dark)" srcset="/d.png" width="10" height="10">"#,
+                r#"<source type="image/webp" srcset="/l.webp 10w" sizes="auto, 100vw" width="10" height="10">"#,
+                r#"<img src="/l.png" alt="Today" width="10" height="10" sizes="auto, 100vw" loading="lazy" decoding="async">"#,
+                r#"</picture>"#
+            )
+        );
+        assert_eq!(render(&shot().for_mode(Mode::System).into()), system);
+        let light = render(&shot().for_mode(Mode::Light).into());
+        assert!(
+            !light.contains("/d.") && light.contains(r#"<img src="/l.png""#),
+            "{light}"
+        );
+        let dark = render(&shot().for_mode(Mode::Dark).into());
+        assert!(!dark.contains("/l.") && !dark.contains("media="), "{dark}");
+        assert!(
+            dark.contains(r#"<img src="/d.png" alt="Today" width="10" height="10""#),
+            "{dark}"
+        );
+        // A dark file that isn't an address an image may hold is dropped.
+        let bad = render(
+            &Picture::new("/l.png", "x", 1, 1)
+                .dark(Picture::new("javascript:alert(1)", "", 1, 1))
+                .into(),
+        );
+        assert!(!bad.contains("javascript"), "{bad}");
     }
 
     #[test]

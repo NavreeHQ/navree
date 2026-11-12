@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a4d4e043f42d";
+pub const BUILD: &str = "321ed7162444";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-d6362b33823e.js";
+pub const CORE_URL: &str = "/_navree/ui/core-78dbad0e5d84.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-4e91853b1fde.js";
@@ -92,7 +92,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-b5ecfee204b8.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-9ef4cf39ddb0.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -131,13 +131,13 @@ pub const CHART_LINEAR_URL: &str = "/_navree/ui/chart-linear-7e06b5727a51.css";
 pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-70741be83598.css";
 
 /// The URL of `app-blocks.css`.
-pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-5acfd687d72d.css";
+pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-fc6e632d3e40.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
 
 /// The URL of `marketing.css`.
-pub const MARKETING_URL: &str = "/_navree/ui/marketing-c66dc7275f2a.css";
+pub const MARKETING_URL: &str = "/_navree/ui/marketing-f051192c072e.css";
 
 /// The URL of `table-styles.css`.
 pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-b8d141ebcbb8.css";
@@ -187,7 +187,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "d6362b33823e",
+        hash: "78dbad0e5d84",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -441,7 +441,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "b5ecfee204b8",
+        hash: "9ef4cf39ddb0",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -558,7 +558,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "app-blocks",
         ext: "css",
-        hash: "5acfd687d72d",
+        hash: "fc6e632d3e40",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/app-blocks.css"),
         gzip: Some(include_bytes!("../dist/app-blocks.css.gz")),
@@ -576,7 +576,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "marketing",
         ext: "css",
-        hash: "c66dc7275f2a",
+        hash: "f051192c072e",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/marketing.css"),
         gzip: Some(include_bytes!("../dist/marketing.css.gz")),

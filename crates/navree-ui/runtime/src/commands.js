@@ -118,4 +118,9 @@ export function startCommands() {
   on(document, "click", (e) => handle(e, "data-ui-click"));
   on(document, "change", (e) => handle(e, "data-ui-change"));
   on(document, "input", (e) => handle(e, "data-ui-input"));
+  // A read-only value to take elsewhere (a copy field) is selected whole as it takes focus.
+  on(document, "focusin", (e) => {
+    const field = /** @type {any} */ (e.target);
+    if (field?.readOnly && field.hasAttribute?.("data-ui-select")) field.select();
+  });
 }

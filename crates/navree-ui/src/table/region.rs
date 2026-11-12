@@ -44,9 +44,11 @@ impl Region {
     }
 
     /// Sets where its content comes from: a page holding an element with this
-    /// id, or a fragment, which is a page with no script of its own. A page with
-    /// the runtime that lacks this id, or a redirect, is somewhere else: the user
-    /// goes there, as when a session has ended.
+    /// id, or a fragment: a [`View`](crate::View) whose body is what goes inside, which
+    /// may hold parts that need the runtime (a lazy tab, another region), since the
+    /// toolkit marks a view answered to a region's fetch as its fragment. A page with
+    /// the runtime that lacks this id and isn't marked so (one a proxy serves), or a
+    /// redirect, is somewhere else: the user goes there, as when a session has ended.
     pub fn src(mut self, src: impl Into<Href>) -> Self {
         self.el = self.el.attr("data-ui-src", src.into());
         self

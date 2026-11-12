@@ -561,6 +561,7 @@ pub struct Shell {
     toasts: crate::components::ToastPosition,
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
+    title_template: Option<Cow<'static, str>>,
 }
 
 impl Shell {
@@ -584,6 +585,38 @@ impl Shell {
             toasts: crate::components::ToastPosition::BottomEnd,
             app_sheets: Vec::new(),
             app_fonts: Vec::new(),
+            title_template: None,
+        }
+    }
+
+    /// Sets how a page's title reads in the browser's tab, `{}` standing for the page's
+    /// own: `"{} · Kesar"` makes a page headed "Deals" read "Deals · Kesar". The heading
+    /// stays as it is. A template with no `{}` is passed over.
+    ///
+    /// ```
+    /// use navree_ui::Shell;
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .title_template("{} · Kesar")
+    ///     .page("Deals", "/deals")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains("<title>Deals · Kesar</title>"));
+    /// assert!(html.contains(r#"<h1 data-slot="page-title">Deals</h1>"#));
+    /// ```
+    #[must_use]
+    pub fn title_template(mut self, template: impl Into<Cow<'static, str>>) -> Self {
+        let template = template.into();
+        self.title_template = template.contains("{}").then_some(template);
+        self
+    }
+
+    /// `title` as the browser's tab reads it: through the [title
+    /// template](Self::title_template), when there is one.
+    pub fn document_title(&self, title: &str) -> String {
+        match &self.title_template {
+            Some(template) => template.replacen("{}", title, 1),
+            None => title.to_owned(),
         }
     }
 
@@ -654,6 +687,22 @@ impl Shell {
         &self.themes
     }
 
+    /// The app's own stylesheets every page of the shell links, in order: what a page drawn
+    /// outside the shell (a sign-in page) links to look like the app.
+    pub fn stylesheets(&self) -> &[AppSheet] {
+        &self.app_sheets
+    }
+
+    /// The app's own typefaces every page of the shell links.
+    pub fn fonts(&self) -> &[AppFont] {
+        &self.app_fonts
+    }
+
+    /// Whether the top bar holds a [`ThemeMenu`](crate::theme::ThemeMenu).
+    pub fn has_theme_menu(&self) -> bool {
+        self.theme_menu
+    }
+
     /// `setting` with its theme kept only when the app offers it.
     fn offered(&self, mut setting: ThemeSetting) -> ThemeSetting {
         if setting.theme.as_ref().is_some_and(|theme| {
@@ -691,7 +740,8 @@ impl Shell {
     }
 
     /// Draws the picture at `src` as the app's mark, in place of Navree's: a path on
-    /// the app or an `https://` URL. It is decorative, beside the app's name.
+    /// the app, an `https://` URL, or an [`AppImage`](crate::AppImage) the toolkit
+    /// serves (`.logo(&MARK)`). It is decorative, beside the app's name.
     #[must_use]
     pub fn logo(mut self, src: impl Into<Href>) -> Self {
         self.logo = Some(src.into());
@@ -1020,6 +1070,10 @@ pub struct AppPage {
     header_slot: Option<Node>,
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
+    /// What stands in the middle of the top bar for this page.
+    topbar: Option<Node>,
+    /// The browser tab's title, in place of the heading.
+    document_title: Option<Cow<'static, str>>,
 }
 
 impl AppPage {
@@ -1052,8 +1106,51 @@ impl AppPage {
             header_slot: None,
             app_sheets: shell.app_sheets.clone(),
             app_fonts: shell.app_fonts.clone(),
+            topbar: None,
+            document_title: None,
             shell,
         }
+    }
+
+    /// Puts `node` in the middle of the top bar for this page: what belongs to the page
+    /// and the request, such as a pager between days that depends on the day shown. It
+    /// stands centred in the bar, between the navigation and the bar's own controls, and
+    /// stays on phones.
+    ///
+    /// ```
+    /// use navree_ui::{Shell, el};
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .page("Today", "/")
+    ///     .topbar(el("nav").attr("aria-label", "Day").child("Tue 11 Nov"))
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains(r#"<div data-slot="topbar-center"><nav aria-label="Day">"#));
+    /// ```
+    pub fn topbar(mut self, node: impl Into<Node>) -> Self {
+        self.topbar = Some(node.into());
+        self
+    }
+
+    /// Sets the title the browser's tab shows, in place of the heading: a page headed
+    /// with a greeting is titled by what it is. The shell's [title
+    /// template](Shell::title_template) still applies.
+    ///
+    /// ```
+    /// use navree_ui::Shell;
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .title_template("{} · Kesar")
+    ///     .page("Good evening, Simran", "/")
+    ///     .document_title("Today")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains("<title>Today · Kesar</title>"));
+    /// assert!(html.contains("Good evening, Simran</h1>"));
+    /// ```
+    pub fn document_title(mut self, title: impl Into<Cow<'static, str>>) -> Self {
+        self.document_title = Some(title.into());
+        self
     }
 
     /// Sets how this page looks, in place of what the app, the workspace and the
@@ -1172,13 +1269,14 @@ impl AppPage {
             self.sheets.extend(menu.sheets());
         }
         let user = self.user.as_ref().or(shell.user.as_ref());
-        let topbar = el("header").slot("topbar").children((
+        let start = Node::list((
             trigger,
             (!header).then(Separator::vertical),
             header.then(|| el("div").slot("topbar-brand").child(shell.brand())),
             header.then(|| shell.topnav(&self.path)),
             (!header).then(|| crumbs.clone()),
-            el("div").slot("topbar-spacer"),
+        ));
+        let end = Node::list((
             shell.search.clone(),
             menu,
             user.filter(|_| header).map(|user| {
@@ -1187,6 +1285,22 @@ impl AppPage {
                     .child(user.to_node(self.csrf.as_deref(), "bottom"))
             }),
         ));
+        let topbar = match self.topbar.take() {
+            // Three columns, the outer two of equal width, so the middle is the bar's middle.
+            Some(centre) => el("header")
+                .slot("topbar")
+                .flag("data-centred", true)
+                .children((
+                    el("div").slot("topbar-start").child(start),
+                    el("div").slot("topbar-center").child(centre),
+                    el("div").slot("topbar-end").child(end),
+                )),
+            None => {
+                el("header")
+                    .slot("topbar")
+                    .children((start, el("div").slot("topbar-spacer"), end))
+            }
+        };
         let had_flash = self.flash.is_some();
         let mut toaster = Toaster::new().position(shell.toasts);
         if let Some((tone, text)) = self.flash {
@@ -1237,7 +1351,8 @@ impl AppPage {
                 el("div").slot("sidebar-overlay"),
                 el("div").slot("sidebar-inset").children((topbar, main)),
             ));
-        let mut view = View::new(self.title)
+        let title = shell.document_title(self.document_title.as_deref().unwrap_or(&self.title));
+        let mut view = View::new(title)
             .appearance(self.appearance)
             .status(self.status)
             .body((wrapper, toaster));
