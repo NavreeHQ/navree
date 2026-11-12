@@ -18,4 +18,12 @@ enum Shots {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? shot.pngRepresentation.write(to: directory.appendingPathComponent("\(name).png"))
     }
+
+    /// Keeps text beside the pictures: what the accessibility tree held.
+    static func note(_ name: String, _ text: String) {
+        guard let folder = ProcessInfo.processInfo.environment["NAVREE_SHOTS"], !folder.isEmpty else { return }
+        let directory = URL(fileURLWithPath: folder, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? Data(text.utf8).write(to: directory.appendingPathComponent("\(name).txt"))
+    }
 }

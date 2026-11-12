@@ -42,7 +42,7 @@ final class ScreensTests: XCTestCase {
     func test01Orders() {
         let app = launch()
         wait(app.navigationBars["Orders"], "The orders screen")
-        wait(app.staticTexts["CS-220480"], "The first order")
+        wait(app.descendants(matching: .any)["CS-220480"].firstMatch, "The first order")
         Shots.save("01-orders", in: self)
     }
 
@@ -65,19 +65,21 @@ final class ScreensTests: XCTestCase {
         Shots.save("04-refund", in: self)
         let amount = app.textFields["Amount"].firstMatch
         wait(amount, "The amount field")
-        amount.tap()
+        let rtl = ProcessInfo.processInfo.environment["NAVREE_RTL"] == "1"
+        amount.coordinate(withNormalizedOffset: CGVector(dx: rtl ? 0.03 : 0.97, dy: 0.75)).tap()
         amount.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "0")
         sheet.buttons["Refund"].tap()
         let error = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Enter an amount above zero")).firstMatch
-        wait(error, "The amount's error")
+        let shown = error.waitForExistence(timeout: 20)
         Shots.save("05-refund-errors", in: self)
+        XCTAssertTrue(shown, "The amount's error did not appear")
     }
 
     @MainActor
     func test06Inventory() {
         let app = launch(select: "/inventory")
         wait(app.navigationBars["Inventory"], "The inventory")
-        wait(app.staticTexts["Chakla belan, Amritsar"], "The first product")
+        wait(app.descendants(matching: .any)["Chakla belan, Amritsar"].firstMatch, "The first product")
         Shots.save("06-inventory", in: self)
     }
 
@@ -136,8 +138,9 @@ final class ScreensTests: XCTestCase {
         try onlyInFullPasses()
         let app = launch(select: "/")
         wait(app.webViews.firstMatch, "The dashboard's web view")
-        sleep(2)
+        _ = app.webViews.firstMatch.staticTexts.firstMatch.waitForExistence(timeout: 10)
         Shots.save("14-dashboard-web", in: self)
+        Shots.note("14-dashboard-web", app.webViews.firstMatch.debugDescription)
     }
 
     @MainActor

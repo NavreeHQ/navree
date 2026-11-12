@@ -9,12 +9,17 @@ public struct Notice: Sendable, Equatable, Identifiable {
     public var tone: Tone
     public var title: String?
     public var text: String
+    /// What the message offers to do next: a link, or a button that posts.
+    public var action: Action?
+    public var actionLabel: String?
 
-    public init(id: String, tone: Tone, title: String?, text: String) {
+    public init(id: String, tone: Tone, title: String?, text: String, action: Action? = nil, actionLabel: String? = nil) {
         self.id = id
         self.tone = tone
         self.title = title
         self.text = text
+        self.action = action
+        self.actionLabel = actionLabel
     }
 }
 
@@ -164,6 +169,12 @@ struct NoticeRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let title = notice.title { Text(title).font(.headline) }
                 Text(notice.text).font(.subheadline).foregroundStyle(.secondary)
+                if let action = notice.action, let label = notice.actionLabel {
+                    Button(label) { context.send(.act(action, Place())) }
+                        .buttonStyle(.borderless)
+                        .font(.subheadline)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: 0)
             Button {

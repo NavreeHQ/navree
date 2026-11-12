@@ -600,7 +600,13 @@ public struct InterimRuntime: Sendable {
     /// What the web shows as a toast: a line of status in the screen, or an
     /// alert when something failed; and a haptic and VoiceOver's words.
     mutating func notice(_ toast: Toast, at ref: PageRef) -> [Effect] {
-        let notice = Notice(id: toast.id ?? "notice", tone: toast.tone, title: toast.title, text: toast.text)
+        let next: Action? = toast.action.map { action in
+            action.post ? .request(method: .post, href: action.href, fields: []) : .navigate(href: action.href, present: .push)
+        }
+        let notice = Notice(
+            id: toast.id ?? "notice", tone: toast.tone, title: toast.title, text: toast.text,
+            action: next, actionLabel: toast.action?.label
+        )
         switch PresentationRules.message(toast.tone) {
         case .alert: update(ref) { $0.failure = notice }
         case .inlineStatus: update(ref) { $0.notice = notice }
