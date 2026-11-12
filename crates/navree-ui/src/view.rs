@@ -8,6 +8,7 @@ use http::header::{
 };
 use navree_http::response::{IntoResponse, Response};
 
+use crate::app_files::{AppFont, AppSheet};
 use crate::assets;
 use crate::form::csrf_field;
 use crate::html::escape_into;
@@ -53,6 +54,8 @@ pub struct View {
     appearance: Option<Appearance>,
     density: Option<Density>,
     sheets: Vec<Theme>,
+    app_sheets: Vec<AppSheet>,
+    app_fonts: Vec<AppFont>,
     mark_build: bool,
 }
 
@@ -70,6 +73,8 @@ impl View {
             appearance: None,
             density: None,
             sheets: Vec::new(),
+            app_sheets: Vec::new(),
+            app_fonts: Vec::new(),
             mark_build: false,
         }
     }
@@ -97,6 +102,37 @@ impl View {
             self.sheets.push(theme.clone());
         }
         self
+    }
+
+    /// Links a stylesheet of the app's own ([`AppSheet`]), after the toolkit's sheets and the
+    /// page's theme, so its rules win over rules of equal weight. Sheets load in the order
+    /// they are added, each once.
+    pub fn stylesheet(mut self, sheet: &AppSheet) -> Self {
+        if !self.app_sheets.contains(sheet) {
+            self.app_sheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own ([`AppFont`]): its `@font-face` rule, and its file
+    /// as a preload, so text drawn in it paints right on first load. Each font once.
+    pub fn font(mut self, font: &AppFont) -> Self {
+        if !self.app_fonts.contains(font) {
+            self.app_fonts.push(*font);
+        }
+        self
+    }
+
+    /// The app's stylesheets the page links, in order. A static copy of the page writes each
+    /// one's [`AppSheet::bytes`] where its [`AppSheet::url`] points.
+    pub fn app_sheets(&self) -> &[AppSheet] {
+        &self.app_sheets
+    }
+
+    /// The app's fonts the page links. A static copy of the page writes each one's
+    /// [`AppFont::face`] and [`AppFont::bytes`] where their URLs point.
+    pub fn app_fonts(&self) -> &[AppFont] {
+        &self.app_fonts
     }
 
     /// The stylesheets of the themes the page draws, its own first: each URL once.
@@ -257,6 +293,14 @@ impl View {
             out.push_str(assets::GEIST_URL);
             out.push_str("\">");
         }
+        // The app's fonts are asked for first, so the file is on its way while the sheets load.
+        for font in self.app_fonts.iter().filter(|font| font.preloads()) {
+            out.push_str(
+                "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
+            );
+            out.push_str(&font.url());
+            out.push_str("\">");
+        }
         out.push_str("<link rel=\"stylesheet\" href=\"");
         out.push_str(assets::NAVREE_UI_URL);
         out.push_str("\">");
@@ -270,6 +314,17 @@ impl View {
             out.push_str("<link rel=\"stylesheet\" href=\"");
             out.push_str(&url);
             out.push_str("\" data-ui-theme>");
+        }
+        // The app's own, last of the sheets: its fonts' rules, then its stylesheets.
+        for font in &self.app_fonts {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(&font.face_url());
+            out.push_str("\" data-ui-app>");
+        }
+        for sheet in &self.app_sheets {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(&sheet.url());
+            out.push_str("\" data-ui-app>");
         }
         out.push_str("<link rel=\"icon\" href=\"");
         out.push_str(assets::FAVICON_URL);
@@ -597,6 +652,69 @@ mod tests {
         for (name, value) in page.look() {
             assert!(html.contains(&format!(" {name}=\"{value}\"")), "{html}");
         }
+    }
+
+    #[test]
+    fn the_apps_own_sheets_and_fonts_come_after_the_toolkits_and_the_themes() {
+        use crate::app_files::{AppFont, AppSheet};
+        use crate::theme::{Mode, Rgb, ThemeId};
+        static BRAND: AppSheet = AppSheet::new("brand", b".hero{color:var(--accent)}", 1024);
+        static ART: AppSheet = AppSheet::new("art", b".blob{opacity:.5}", 1024);
+        static DISPLAY: AppFont =
+            AppFont::new("display", "Fraunces", b"wOF2\0\0\0\0", 1024).weights(400, 700);
+        static BODY: AppFont = AppFont::new("body", "Inter Tight", b"wOF2\0\0\0\0", 1024).lazy();
+
+        let mine = Theme::custom(
+            ThemeId::parse("brand").unwrap(),
+            "Brand",
+            Theme::NAVREE
+                .spec()
+                .with_accent(Rgb::hex(0x2dd4bf), Rgb::hex(0x0f766e)),
+        )
+        .unwrap();
+        let html = View::new("x")
+            .appearance(Appearance::new(mine.clone(), Mode::Light))
+            .stylesheet(&BRAND)
+            .font(&DISPLAY)
+            .stylesheet(&ART)
+            .stylesheet(&BRAND)
+            .font(&DISPLAY)
+            .font(&BODY)
+            .to_html();
+        let at = |needle: &str| {
+            html.find(needle)
+                .unwrap_or_else(|| panic!("{needle} in {html}"))
+        };
+        // Once each, in the order they were added, after the theme's sheet and before the icon.
+        for url in [BRAND.url(), ART.url(), DISPLAY.face_url(), BODY.face_url()] {
+            assert_eq!(html.matches(url.as_str()).count(), 1, "{url}");
+        }
+        let theme = at(&mine.stylesheet().unwrap());
+        let (display, body) = (at(&DISPLAY.face_url()), at(&BODY.face_url()));
+        let (brand, art) = (at(&BRAND.url()), at(&ART.url()));
+        let icon = at("rel=\"icon\"");
+        assert!(theme < display && display < body, "fonts after the theme");
+        assert!(
+            body < brand && brand < art && art < icon,
+            "sheets after fonts"
+        );
+        // The file of a font that is preloaded is asked for before any sheet; a lazy one is not.
+        let preload = at(&format!(
+            "rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"{}\"",
+            DISPLAY.url()
+        ));
+        assert!(preload < at(assets::NAVREE_UI_URL), "{html}");
+        assert!(
+            !html.contains(&format!("href=\"{}\"", BODY.url())),
+            "{html}"
+        );
+        // The page lists what it links, for a static copy of it.
+        let page = View::new("x").stylesheet(&BRAND).font(&DISPLAY);
+        assert_eq!(page.app_sheets(), &[BRAND]);
+        assert_eq!(page.app_fonts(), &[DISPLAY]);
+        // Nothing inline: the policy allows files of the page's own origin only.
+        assert!(!html.contains("<style"), "{html}");
+        assert!(!html.contains(" style="), "{html}");
     }
 
     #[test]

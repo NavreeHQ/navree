@@ -359,6 +359,7 @@ fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Respons
 struct Assets {
     wanted: bool,
     islands: Arc<Vec<crate::island::Served>>,
+    app_files: Arc<Vec<crate::app_files::Served>>,
 }
 
 impl Injectable for Assets {
@@ -374,9 +375,20 @@ impl Injectable for Assets {
                 .contributions::<crate::IslandScript>()
                 .into_iter()
                 .map(|contributed| *contributed.value);
+            let sheets = r
+                .app()
+                .contributions::<crate::AppSheet>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
+            let fonts = r
+                .app()
+                .contributions::<crate::AppFont>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
                 islands: Arc::new(crate::island::served(scripts)),
+                app_files: Arc::new(crate::app_files::served(sheets, fonts)),
             })
         })
     }
@@ -424,6 +436,26 @@ impl Controller for Assets {
             .api(api(
                 "An island script of the app",
                 "A script one of the app's modules contributed, by its name and content hash; \
+                 under an older hash it is still served, uncached.",
+                &[304, 404],
+            )),
+            // The app's own stylesheets and fonts: by their name and content hash.
+            RouteDef::on(
+                Method::GET,
+                format!("!{}/{{file}}", crate::app_files::APP_PATH),
+                {
+                    let files = self.app_files.clone();
+                    move |Path(file): Path<String>, headers: HeaderMap| {
+                        let files = files.clone();
+                        async move { crate::app_files::respond(&file, &headers, &files) }
+                    }
+                },
+            )
+            .name("ui.app-files")
+            .public()
+            .api(api(
+                "A stylesheet or font of the app",
+                "A file one of the app's modules contributed, by its name and content hash; \
                  under an older hash it is still served, uncached.",
                 &[304, 404],
             )),
