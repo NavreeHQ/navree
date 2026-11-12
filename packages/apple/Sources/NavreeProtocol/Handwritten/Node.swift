@@ -738,7 +738,7 @@ extension Node {
     /// A form. The client holds its fields and sends them with the hidden values.
     public struct Form: Sendable, Equatable, Decodable {
         public var id: String?
-        public var method: Method
+        public var method: HTTPMethod
         /// Where it is sent: the screen's own address when empty.
         public var action: String
         public var hidden: [Hidden]
