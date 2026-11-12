@@ -2,8 +2,8 @@
 //! notes from the changelog.
 
 use xtask::docs::{
-    add_release_notes, release_notes_section, series, set_installation, set_introduction,
-    set_kit_version, set_reference, set_roadmap, update,
+    FOLLOWING, add_release_notes, release_notes_section, series, set_following, set_installation,
+    set_introduction, set_kit_version, set_reference, set_roadmap, update,
 };
 
 const INSTALLATION: &str = "Check that it works:\n\n```sh\nnavree --version\n```\n\n```text\nnavree 1.0.0\n```\n\nThe CLI says navree 1.0.0 in prose, and `cargo add navree` is not a pin.\n\n3. Otherwise, the published crate at the CLI's own version: `navree = \"1.0.0\"`. This is the case after `cargo install navree-cli`.\n\n`navree = { version = \"1\", features = [\"postgres\"] }` stays.\n";
@@ -224,25 +224,31 @@ fn write(root: &std::path::Path, path: &str, text: &str) {
     std::fs::write(file, text).unwrap();
 }
 
-#[test]
-fn update_changes_the_six_pages_once() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+/// A sentence with the version after `prefix`, as the pages of `FOLLOWING`
+/// have one.
+fn following_text(prefix: &str) -> String {
+    format!("Before {prefix}1.0.0 after.\n")
+}
+
+fn write_pages(root: &std::path::Path, reference: &str) {
     let pages = [
         ("docs/getting-started/installation.mdx", INSTALLATION),
         ("docs/getting-started/starter-kits.mdx", KITS),
         ("docs/prologue/introduction.mdx", INTRODUCTION),
         ("docs/prologue/roadmap.mdx", ROADMAP),
-        ("docs/configuration/reference.mdx", REFERENCE),
+        ("docs/configuration/reference.mdx", reference),
         ("docs/prologue/release-notes.mdx", NOTES),
     ];
     for (path, text) in pages {
         write(root, path, text);
     }
+    for (page, prefix) in FOLLOWING {
+        write(root, page, &following_text(prefix));
+    }
+}
 
-    // A patch release changes every page but the two with the series.
-    let changed = update(root, "1.0.1", CHANGELOG).unwrap();
-    let names: Vec<String> = changed
+fn names(root: &std::path::Path, changed: &[std::path::PathBuf]) -> Vec<String> {
+    changed
         .iter()
         .map(|f| {
             f.strip_prefix(root)
@@ -250,22 +256,46 @@ fn update_changes_the_six_pages_once() {
                 .to_string_lossy()
                 .replace('\\', "/")
         })
-        .collect();
-    assert_eq!(
-        names,
-        [
-            "docs/getting-started/installation.mdx",
-            "docs/getting-started/starter-kits.mdx",
-            "docs/configuration/reference.mdx",
-            "docs/prologue/release-notes.mdx",
-        ]
-    );
+        .collect()
+}
+
+#[test]
+fn update_changes_every_page_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_pages(root, REFERENCE);
+
+    // A patch release changes every page but the two with the series.
+    let changed = update(root, "1.0.1", CHANGELOG).unwrap();
+    let mut expected: Vec<String> = [
+        "docs/getting-started/installation.mdx",
+        "docs/getting-started/starter-kits.mdx",
+        "docs/configuration/reference.mdx",
+        "docs/prologue/release-notes.mdx",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect();
+    expected.extend(FOLLOWING.iter().map(|(page, _)| (*page).to_owned()));
+    // The pages are written in the order of the list: the six, then FOLLOWING.
+    let mut found = names(root, &changed);
+    found.sort();
+    expected.sort();
+    assert_eq!(found, expected);
+
     let read = |path: &str| std::fs::read_to_string(root.join(path)).unwrap();
     assert!(read("docs/configuration/reference.mdx").contains("navree-http-client/1.0.1\""));
     assert!(
         read("docs/prologue/release-notes.mdx")
             .starts_with("---\ntitle: \"Release notes\"\n---\n\n## Navree 1.0.1\n")
     );
+    for (page, prefix) in FOLLOWING {
+        assert_eq!(
+            read(page),
+            format!("Before {prefix}1.0.1 after.\n"),
+            "{page}"
+        );
+    }
 
     // The same version again changes nothing.
     assert_eq!(
@@ -277,25 +307,139 @@ fn update_changes_the_six_pages_once() {
     let changelog =
         format!("## [1.1.0] - 2026-12-01\n\n### Added\n\n- ui: a date picker\n\n{CHANGELOG}");
     let changed = update(root, "1.1.0", &changelog).unwrap();
-    assert_eq!(changed.len(), 6);
+    assert_eq!(changed.len(), 6 + FOLLOWING.len());
     assert!(read("docs/prologue/introduction.mdx").contains("describes Navree 1.1."));
     assert!(read("docs/prologue/roadmap.mdx").contains("goes after 1.1,"));
+
+    // And a pre-release is set everywhere, then a release over it.
+    let changelog = format!("## [2.0.0-rc.1] - 2026-12-02\n\n### Changed\n\n- x: y\n\n{changelog}");
+    update(root, "2.0.0-rc.1", &changelog).unwrap();
+    for (page, prefix) in FOLLOWING {
+        assert_eq!(
+            read(page),
+            format!("Before {prefix}2.0.0-rc.1 after.\n"),
+            "{page}"
+        );
+    }
+    let changelog = format!("## [2.0.0] - 2026-12-03\n\n### Changed\n\n- x: y\n\n{changelog}");
+    update(root, "2.0.0", &changelog).unwrap();
+    for (page, prefix) in FOLLOWING {
+        assert_eq!(
+            read(page),
+            format!("Before {prefix}2.0.0 after.\n"),
+            "{page}"
+        );
+    }
 }
 
 #[test]
 fn update_writes_nothing_when_a_page_cannot_be_updated() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    write(root, "docs/getting-started/installation.mdx", INSTALLATION);
-    write(root, "docs/getting-started/starter-kits.mdx", KITS);
-    write(root, "docs/prologue/introduction.mdx", INTRODUCTION);
-    write(root, "docs/prologue/roadmap.mdx", ROADMAP);
-    write(root, "docs/configuration/reference.mdx", "nothing to set\n");
-    write(root, "docs/prologue/release-notes.mdx", NOTES);
+    write_pages(root, "nothing to set\n");
     let error = update(root, "1.0.1", CHANGELOG).unwrap_err();
     assert!(error.contains("reference.mdx"), "{error}");
     assert_eq!(
         std::fs::read_to_string(root.join("docs/getting-started/installation.mdx")).unwrap(),
         INSTALLATION
     );
+
+    // The same for a page of FOLLOWING that lost its sentence.
+    write_pages(root, REFERENCE);
+    let (page, _) = FOLLOWING[0];
+    write(root, page, "The sentence is gone.\n");
+    let error = update(root, "1.0.1", CHANGELOG).unwrap_err();
+    assert!(error.contains(page), "{error}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("docs/configuration/reference.mdx")).unwrap(),
+        REFERENCE
+    );
+}
+
+#[test]
+fn each_following_place_is_set_from_its_own_sentence() {
+    // The sentences as the pages have them, with a version that is not
+    // Navree's beside the one that is.
+    let sentences: [(&str, &str); 9] = [
+        (
+            "docs/digging-deeper/cli.mdx",
+            "else `navree = \"1.0.0\"` (the CLI's own version). Set `api.version = \"1.0.0\"` yourself.",
+        ),
+        (
+            "docs/getting-started/directory-structure.mdx",
+            "or `\"1.0.0\"` (the CLI's own version) when there is none.",
+        ),
+        (
+            "docs/database/postgresql.mdx",
+            "`navree = { version = \"1.0.0\", features = [\"postgres\"] }`.",
+        ),
+        (
+            "docs/frontend/introduction.mdx",
+            "as version ranges (`^1.0.0`), with no build step.",
+        ),
+        (
+            "docs/digging-deeper/http-client.mdx",
+            "for example `navree-http-client/1.0.0`). The default is `navree-http-client/<version>`.",
+        ),
+        (
+            "docs/ai/docs-for-agents.mdx",
+            "- Version: 1.0.0 (from the workspace Cargo.toml)\n- Install: `cargo install navree-cli`",
+        ),
+        (
+            "docs/ai/navigator.mdx",
+            "`{\"version\": \"1.0.0\", \"pages\": []}` and `{\"version\": \"2\"}`",
+        ),
+        (
+            "skills/navree-new-app/SKILL.md",
+            "The app depends on the published crate, `navree = \"1.0.0\"` (the CLI's own",
+        ),
+        (
+            "skills/navree-cli-generators/SKILL.md",
+            "- `navree new` writes `navree = \"1.0.0\"` (the CLI's own version) when it",
+        ),
+    ];
+    assert_eq!(sentences.len(), FOLLOWING.len());
+    for (page, sentence) in sentences {
+        let (_, prefix) = FOLLOWING
+            .iter()
+            .find(|(p, _)| *p == page)
+            .unwrap_or_else(|| panic!("{page} is not in FOLLOWING"));
+        let out = set_following(page, sentence, prefix, "1.0.1").unwrap();
+        // Exactly the version after the prefix changed.
+        let at = sentence.find(prefix).unwrap() + prefix.len();
+        assert_eq!(
+            out,
+            format!(
+                "{}1.0.1{}",
+                &sentence[..at],
+                &sentence[at + "1.0.0".len()..]
+            ),
+            "{page}"
+        );
+        assert_eq!(set_following(page, &out, prefix, "1.0.1").unwrap(), out);
+        let pre = set_following(page, sentence, prefix, "2.0.0-rc.1").unwrap();
+        assert!(
+            pre.contains(&format!("{prefix}2.0.0-rc.1")),
+            "{page}: {pre}"
+        );
+        assert_eq!(
+            set_following(page, &pre, prefix, "2.0.0-rc.1").unwrap(),
+            pre
+        );
+        assert!(set_following(page, "nothing here\n", prefix, "1.0.1").is_err());
+    }
+}
+
+#[test]
+fn the_following_places_exist_in_the_repository_at_the_workspace_version() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let version = env!("CARGO_PKG_VERSION");
+    for (page, prefix) in FOLLOWING {
+        let text = std::fs::read_to_string(root.join(page))
+            .unwrap_or_else(|e| panic!("cannot read {page}: {e}"));
+        assert!(
+            text.contains(&format!("{prefix}{version}")),
+            "{page} should contain `{prefix}{version}`; update it with the version bump (and the list in xtask/src/docs.rs if the sentence moved)"
+        );
+    }
 }

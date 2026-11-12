@@ -59,4 +59,46 @@ fn the_docs_print_the_current_version() {
         "docs/prologue/release-notes.mdx",
         &format!("## Navree {version}\n"),
     );
+    // The HTTP client's default `User-Agent`, in the generated reference.
+    must_contain(
+        "docs/configuration/reference.mdx",
+        &format!("\"navree-http-client/{version}\""),
+    );
+}
+
+/// The pages and agent skills that name the version `navree new` writes or
+/// an example of the version the CLI prints. A version that is not Navree's
+/// (`api.version`, an OpenAPI example) is not here. `release prepare` sets
+/// these (`xtask/src/docs.rs`).
+#[test]
+fn the_pages_that_name_the_cli_version_follow_it() {
+    let version = env!("CARGO_PKG_VERSION");
+    for (path, before) in [
+        ("docs/digging-deeper/cli.mdx", "else `navree = \""),
+        ("docs/getting-started/directory-structure.mdx", "or `\""),
+        ("docs/database/postgresql.mdx", "navree = { version = \""),
+        ("docs/frontend/introduction.mdx", "(`^"),
+        (
+            "docs/digging-deeper/http-client.mdx",
+            "for example `navree-http-client/",
+        ),
+        ("docs/ai/docs-for-agents.mdx", "- Version: "),
+        ("docs/ai/navigator.mdx", "{\"version\": \""),
+        ("skills/navree-new-app/SKILL.md", "navree = \""),
+        (
+            "skills/navree-cli-generators/SKILL.md",
+            "`navree new` writes `navree = \"",
+        ),
+    ] {
+        must_contain(path, &format!("{before}{version}"));
+    }
+}
+
+/// The range of the front-end packages `navree new` writes is the version.
+#[test]
+fn new_apps_take_the_front_end_packages_at_this_version() {
+    assert_eq!(
+        navree_cli::new_app::NavreeSource::JS_RANGE,
+        format!("^{}", env!("CARGO_PKG_VERSION"))
+    );
 }
