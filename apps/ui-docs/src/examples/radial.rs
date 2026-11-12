@@ -37,6 +37,13 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(820)
             .height(250),
+        gallery!(
+            "ring",
+            "ends",
+            "Every chart colour's sheen and second lap",
+            ring_ends
+        )
+        .height(200),
         single!("ring", "sizes", "From 56 to 200 pixels", ring_sizes)
             .start()
             .width(820)
@@ -61,6 +68,17 @@ pub fn all() -> Vec<Example> {
         single!("rings", "two", "Two rings and an icon", rings_two)
             .start()
             .height(300),
+        single!("rings", "five", "Five scores of a day", rings_five)
+            .start()
+            .height(320),
+        single!(
+            "rings",
+            "beside",
+            "Beside their words, in a row that sizes to its content",
+            rings_beside
+        )
+        .start()
+        .height(240),
         single!("rings", "pill", "Tiny rings in a date pill", rings_pill)
             .start()
             .width(520)
@@ -74,6 +92,9 @@ pub fn all() -> Vec<Example> {
             .start()
             .height(300),
         gallery!("gauge", "sweeps", "Other sweeps and scales", gauge_sweeps).height(240),
+        single!("gauge", "zones", "Zones on the track", gauge_zones)
+            .start()
+            .height(330),
         // Day clock
         single!(
             "day-clock",
@@ -100,6 +121,14 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(520),
+        single!(
+            "day-clock",
+            "band",
+            "A band of categories, asleep hours too",
+            day_clock_band
+        )
+        .start()
+        .height(560),
     ]
 }
 
@@ -619,5 +648,112 @@ fn day_clock_scale() -> Card {
             .now(20)
             .label("Active min")
             .hub(Ink::slot(4)),
+    )
+}
+
+fn ring_ends() -> Vec<(&'static str, Node)> {
+    // Past the goal, so each ring shows its sheen's far end and its second lap: the
+    // colour deeper on a light page and brighter on a dark one, never brown.
+    (1..=8)
+        .map(|slot: u8| {
+            let caption: &'static str = [
+                "Chart 1", "Chart 2", "Chart 3", "Chart 4", "Chart 5", "Chart 6", "Chart 7",
+                "Chart 8",
+            ][usize::from(slot - 1)];
+            (
+                caption,
+                Ring::new(caption, 128)
+                    .id(format!("ring-end-{slot}"))
+                    .unit("%")
+                    .fill(Gradient::sheen(Ink::slot(slot)))
+                    .size(112)
+                    .into(),
+            )
+        })
+        .collect()
+}
+
+fn rings_five() -> Card {
+    Card::titled("Harleen Sandhu · today").body(
+        Rings::new("Today's scores")
+            .id("rings-five")
+            .ring(RingValue::new("Sleep", 84).fill(Gradient::sheen(Ink::slot(7))))
+            .ring(RingValue::new("Recovery", 71).fill(Gradient::sheen(Ink::slot(3))))
+            .ring(RingValue::new("Movement", 58).fill(Gradient::sheen(Ink::slot(2))))
+            .ring(RingValue::new("Stress", 36).fill(Gradient::sheen(Ink::slot(4))))
+            .ring(RingValue::new("Mind", 66).fill(Gradient::sheen(Ink::slot(1))))
+            .track(RingTrack::Tinted)
+            .center_values()
+            .legend()
+            .size(220)
+            .motion(Motion::new().delay(150)),
+    )
+}
+
+fn rings_beside() -> Card {
+    // The row sizes each item to its content: the rings take their drawing's width.
+    Card::titled("Karan Bedi · this week").body(
+        Row::gap(6).children((
+            Rings::new("This week")
+                .id("rings-beside")
+                .ring(
+                    RingValue::new("Move", 4_820)
+                        .max(4_200)
+                        .unit("kcal")
+                        .ink(Ink::slot(8)),
+                )
+                .ring(
+                    RingValue::new("Exercise", 190)
+                        .max(210)
+                        .unit("min")
+                        .ink(Ink::slot(3)),
+                )
+                .ring(
+                    RingValue::new("Stand", 72)
+                        .max(84)
+                        .unit("hr")
+                        .ink(Ink::slot(1)),
+                )
+                .size(150),
+            Stack::gap(1).children((
+                Text::new("Move goal met on five days"),
+                Text::muted("Exercise 20 minutes short of the week's goal."),
+            )),
+        )),
+    )
+}
+
+fn gauge_zones() -> Card {
+    Card::titled("Training load · Gurleen Grewal").body(
+        Gauge::new("Load ratio", 1.12)
+            .id("gauge-zones")
+            .max(2)
+            .format(NumberFormat::decimals(2).fixed())
+            .label("Acute : chronic")
+            .sublabel("Optimal")
+            .zone(Zone::new(0, 0.8).label("Undertraining").ink(Ink::slot(1)))
+            .zone(Zone::new(0.8, 1.3).label("Optimal").ink(Ink::slot(3)))
+            .zone(Zone::new(1.3, 1.5).label("Overreaching").ink(Ink::slot(4)))
+            .zone(Zone::new(1.5, 2).label("Overuse").ink(Ink::slot(8)))
+            .size(220)
+            .motion(Motion::new()),
+    )
+}
+
+fn day_clock_band() -> Card {
+    Card::titled("Ravneet Kaur · awake and asleep").body(
+        DayClock::new("Steps by hour, awake and asleep")
+            .id("clock-band")
+            .hide_title()
+            .values(STEPS)
+            .unit("steps")
+            .category("Awake", Ink::slot(3))
+            .category("Asleep", Ink::slot(7))
+            .categories([
+                1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+            ])
+            .band()
+            .label("Steps")
+            .locale("en-IN"),
     )
 }

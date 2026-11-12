@@ -55,6 +55,10 @@ A value below zero stacks downward from the baseline, away from the positive val
 
 <UiPreview example="area-chart/steps" />
 
+The lowest level sits on the foot of the plot, so its stretches (deep sleep here) are a line with no area under them. `.lanes()` gives each named level a lane of its own: the axis runs half a step past the first and last names, each name sits in the middle of its lane, and the area fills down to the foot of the lowest lane, so every level reads as an area.
+
+<UiPreview example="area-chart/lanes" />
+
 ## Points, a glow and a zero line
 
 <UiPreview example="area-chart/trend" />
