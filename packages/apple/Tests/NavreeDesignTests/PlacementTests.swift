@@ -220,3 +220,8 @@ func recordedScreen(_ name: String) throws -> Screen {
     #expect(NavigationRules.webTitleMode(.root) == .inline)
     #expect(NavigationRules.titleMode(.root) == .large)
 }
+
+@Test func aWideWindowShowsTheShellsGroupsAsSectionsOnlyWhenThereAreSeveral() {
+    #expect(NavigationRules.groupsAsSections(1) == false)
+    #expect(NavigationRules.groupsAsSections(2) == true)
+}

@@ -66,7 +66,7 @@ final class ScreensTests: XCTestCase {
         let amount = app.textFields["Amount"].firstMatch
         wait(amount, "The amount field")
         let rtl = ProcessInfo.processInfo.environment["NAVREE_RTL"] == "1"
-        amount.coordinate(withNormalizedOffset: CGVector(dx: rtl ? 0.03 : 0.97, dy: 0.75)).tap()
+        amount.coordinate(withNormalizedOffset: CGVector(dx: rtl ? 0.5 : 0.97, dy: 0.75)).tap()
         amount.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "0")
         sheet.buttons["Refund"].tap()
         let error = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Enter an amount above zero")).firstMatch
