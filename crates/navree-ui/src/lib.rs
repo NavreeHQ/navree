@@ -11,7 +11,8 @@
 //!   in one pass to one `String`.
 //! - [`Cmd`]: what an element does in the browser with no request. [`Op`] and
 //!   [`Reply`]: what the server sends back from an action.
-//! - [`View`]: a page, with its strict content security policy.
+//! - [`View`]: a page, with its strict content security policy. [`seo`]: what it tells
+//!   search engines, link previews and answer engines, and its sitemap and robots file.
 //! - [`assets`]: one stylesheet and the runtime's modules, embedded with
 //!   brotli and gzip forms, at content-hash URLs.
 //! - [`tokens`]: the design tokens' one source. [`theme`]: the built-in themes,
@@ -106,6 +107,7 @@ pub mod pages;
 pub mod phone;
 pub mod render;
 pub mod select;
+pub mod seo;
 pub mod shell;
 pub mod sortable;
 pub mod table;
