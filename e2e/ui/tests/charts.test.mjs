@@ -65,6 +65,8 @@ const CASES = {
   hostile: ["hostile"],
   extremes: ["extremes"],
   rtl: ["rtl"],
+  paint: ["paint"],
+  steps: ["steps"],
   locale: ["locale-de", "locale-in"],
   shown: ["shown"],
 };
@@ -300,8 +302,8 @@ for (const name of NAMES) {
      * are kept; `page.done()` asserts there are none. `light` asks for the light palette with
      * `?mode=light`, as a reader's choice would; `theme` asks for a built-in theme by its id.
      */
-    async function open(path, { width = 1440, height = 900, light = false, js = true, theme = null } = {}) {
-      const context = await browser.newContext({ viewport: { width, height }, javaScriptEnabled: js, colorScheme: light ? "light" : "dark" });
+    async function open(path, { width = 1440, height = 900, light = false, js = true, theme = null, reducedMotion = "no-preference" } = {}) {
+      const context = await browser.newContext({ viewport: { width, height }, javaScriptEnabled: js, colorScheme: light ? "light" : "dark", reducedMotion });
       contexts.push(context);
       const page = await context.newPage();
       page.problems = [];
@@ -547,6 +549,41 @@ for (const name of NAMES) {
           await settle(page);
           const plain = await look();
           assert.ok(marked1.some((m, k) => m !== plain[k]), `${kase}: a marked mark looks different from the same mark unmarked`);
+          await page.done();
+        }
+      });
+
+      test("a big tooltip shows the value large with its unit, and a value's band colours its line", async () => {
+        const page = await open("/charts?case=paint");
+        await tabTo(page, "#paint [data-slot=chart-body]");
+        const big = await page.evaluate(() => {
+          const row = document.querySelector("#paint [data-slot=chart-tip][data-open] [data-tip=head] + [data-tip=row]");
+          const strong = row?.querySelector("strong");
+          return { value: strong?.textContent, unit: row?.querySelector("em")?.textContent, size: strong && parseFloat(getComputedStyle(strong).fontSize) };
+        });
+        assert.ok(big.value && /\d/.test(big.value), `a value: ${JSON.stringify(big)}`);
+        assert.equal(big.unit, "BPM");
+        assert.ok(big.size >= 18, `large: ${big.size}`);
+        await page.done();
+        const steps = await open("/charts?case=steps");
+        await tabTo(steps, "#steps [data-slot=chart-body]");
+        await steps.keyboard.press("End");
+        const line = await steps.evaluate(() => {
+          const row = document.querySelector("#steps [data-slot=chart-tip][data-open] [data-tip=head] + [data-tip=row]");
+          const detail = [...document.querySelectorAll("#steps [data-slot=chart-tip] [data-tip=row]")].at(-1);
+          return { value: row?.querySelector("strong")?.textContent, color: row?.getAttribute("data-color"), detail: detail?.querySelector("strong")?.textContent };
+        });
+        assert.deepEqual(line, { value: "Awake", color: "4", detail: "5 min" });
+        assert.match(await steps.locator("#steps [data-slot=chart-announce]").textContent(), /Awake/);
+        await steps.done();
+      });
+
+      test("marks come in only for a reader who has not asked for less motion", async () => {
+        for (const reduce of [false, true]) {
+          const page = await open("/charts?case=paint", { reducedMotion: reduce ? "reduce" : "no-preference" });
+          const running = await page.evaluate(() => document.getAnimations().length);
+          if (reduce) assert.equal(running, 0, "nothing moves");
+          else assert.ok(running > 0, "the marks come in");
           await page.done();
         }
       });
