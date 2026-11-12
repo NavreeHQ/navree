@@ -20,7 +20,7 @@ unsafe_code = "forbid"
 
 [features]
 # Answers native clients too (`navree::ui::native`); off unless asked.
-native = ["navree/ui-native"]
+native-preview = ["navree/ui-native-preview"]
 
 [dependencies]
 chrono = { workspace = true }

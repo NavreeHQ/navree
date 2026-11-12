@@ -44,8 +44,9 @@ access = ["dep:navree-access"]
 ## Native clients (`navree_ui::native`): a request that says `X-Navree-Native`
 ## is answered with the page as a tree of parts from navree-native's closed
 ## vocabulary, which the client draws with its system's own toolkit. A browser's
-## request is answered as before, byte for byte.
-native = ["dep:navree-native"]
+## request is answered as before, byte for byte. A preview: what it answers may
+## change in a minor release, and it is outside the 1.x promise.
+native-preview = ["dep:navree-native"]
 
 [dependencies]
 navree-native = { workspace = true, optional = true }
@@ -89,7 +90,7 @@ uuid = { workspace = true }
 serde_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
 # Its own `phone` and `storage` features, for the tests of the phone input and the uploads.
-navree-ui = { path = ".", features = ["phone", "storage", "time", "access", "native"] }
+navree-ui = { path = ".", features = ["phone", "storage", "time", "access", "native-preview"] }
 navree-testing = { workspace = true }
 # The envelopes a native client is answered with, read back in the tests.
 navree-native = { workspace = true }

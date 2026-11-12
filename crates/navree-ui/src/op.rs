@@ -184,7 +184,7 @@ pub enum Op {
     /// A change whose payload is native parts, not markup: what
     /// [`Op::morph`], [`Op::replace`], [`Op::append`] and [`Op::prepend`] build
     /// when the request came from a native client.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "native-preview")]
     Native(crate::native::NodeOp),
 }
 
@@ -192,7 +192,7 @@ impl Op {
     /// Morphs element `target` into `node`.
     pub fn morph(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Morph, &target, node) {
             return op;
         }
@@ -205,7 +205,7 @@ impl Op {
     /// Replaces element `target` with `node`.
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node) {
             return op;
         }
@@ -218,7 +218,7 @@ impl Op {
     /// Adds `node` at the end of `target`.
     pub fn append(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Append, &target, node) {
             return op;
         }
@@ -231,7 +231,7 @@ impl Op {
     /// Adds `node` at the start of `target`.
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node) {
             return op;
         }

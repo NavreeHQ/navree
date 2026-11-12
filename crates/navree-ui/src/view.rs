@@ -462,7 +462,7 @@ fn cap_eager_markup(html: &str, left: &mut usize) -> Option<String> {
 }
 
 /// What a page is made of, for the answer to a client that is not a browser.
-#[cfg(feature = "native")]
+#[cfg(feature = "native-preview")]
 pub(crate) struct NativeParts<'a> {
     pub(crate) title: &'a str,
     pub(crate) body: &'a mut Node,
@@ -471,7 +471,7 @@ pub(crate) struct NativeParts<'a> {
     pub(crate) cookies: &'a [HeaderValue],
 }
 
-#[cfg(feature = "native")]
+#[cfg(feature = "native-preview")]
 impl View {
     pub(crate) fn native_parts(&mut self) -> NativeParts<'_> {
         NativeParts {
@@ -488,7 +488,7 @@ impl IntoResponse for View {
     fn into_response(mut self) -> Response {
         // A native client, or its web view, gets its own answer; a browser's
         // request goes on as it always has.
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         {
             self = match crate::native::swap::view(self) {
                 Ok(response) => return response,

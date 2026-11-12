@@ -2849,7 +2849,7 @@ impl<T: Form> Rejected<T> {
             return response;
         }
         // A native client shows the messages at its own fields, as the runtime does.
-        #[cfg(feature = "native")]
+        #[cfg(feature = "native-preview")]
         if let Some(response) = crate::native::swap::errors(T::ID, &self.errors) {
             return response;
         }

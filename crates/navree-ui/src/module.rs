@@ -177,7 +177,7 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         },
     ));
     m.controller::<Assets>();
-    #[cfg(feature = "native")]
+    #[cfg(feature = "native-preview")]
     m.controller::<crate::native::Routes>();
     m.command(
         CommandSpec::new(
@@ -256,7 +256,7 @@ pub(crate) async fn render_json(
 async fn reply_layer(request: Request, next: Next) -> Response {
     // A native client's request, or its web view's, is answered its own way;
     // a browser's is handed back untouched.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "native-preview")]
     let (request, next) = match crate::native::swap::layer(request, next).await {
         Ok(response) => return response,
         Err(back) => back,

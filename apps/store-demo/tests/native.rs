@@ -2,9 +2,9 @@
 //! which fall back to the web view and why, what the actions answer, and that a
 //! browser asking the same routes gets HTML as before.
 //!
-//! `cargo test -p store-demo --features native --test native -- --nocapture`
+//! `cargo test -p store-demo --features native-preview --test native -- --nocapture`
 //! prints the coverage table.
-#![cfg(feature = "native")]
+#![cfg(feature = "native-preview")]
 
 use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
 use navree::ui::native::protocol::input::{Input, TextKind};

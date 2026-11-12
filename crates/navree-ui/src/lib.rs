@@ -97,7 +97,7 @@ pub mod island;
 pub mod localize;
 pub mod markdown;
 mod module;
-#[cfg(feature = "native")]
+#[cfg(feature = "native-preview")]
 pub mod native;
 pub mod node;
 pub mod op;
