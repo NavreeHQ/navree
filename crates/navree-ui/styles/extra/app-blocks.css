@@ -1,0 +1,113 @@
+/*
+ * navree-ui's stylesheet: the app blocks, linked only on a page that draws one. A figure tile
+ * with an icon, a unit, a status, a ring or a link, a grid that wraps by the room it has, the
+ * info tip's chip, chart-shaped loading skeletons, the breathing guide, the dock and the day
+ * pager. Written for Navree from the HTML and WAI-ARIA patterns of a disclosure, a status and a
+ * navigation landmark; no third-party source is derived. Every colour is a token, so each block
+ * follows light and dark; the guide's motion is off when the reader asks for less.
+ */
+
+/* A grid whose columns are at least so wide and wrap by the room there is */
+[data-slot=grid][data-fit]{grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--fit)),1fr))}
+[data-fit="8"]{--fit:8rem}[data-fit="10"]{--fit:10rem}[data-fit="12"]{--fit:12rem}[data-fit="14"]{--fit:14rem}[data-fit="16"]{--fit:16rem}[data-fit="20"]{--fit:20rem}[data-fit="24"]{--fit:24rem}
+
+/* A figure tile: an icon chip, a unit, a status, the change with its words, a ring beside, a link over it all */
+[data-slot=stat]{position:relative;min-width:0}
+[data-slot=stat-head]{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .5rem;min-width:0;margin-bottom:.25rem;& [data-slot=stat-label]{flex:1 1 6rem;min-width:0;overflow-wrap:anywhere}}
+:where([data-slot=stat-icon]){--tone:var(--fg-3)}
+[data-slot=stat-icon]{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border-radius:var(--radius);background:color-mix(in oklab,var(--tone) 13%,transparent);color:color-mix(in oklab,var(--tone) 78%,var(--fg));& [data-slot=icon]{width:1rem;height:1rem}}
+[data-slot=stat-status]{flex:none;display:inline-flex;max-width:50%}
+[data-slot=stat]:has([data-slot=stat-head],[data-slot=stat-unit],[data-slot=stat-body]) [data-slot=stat-value]{overflow-wrap:anywhere}
+[data-slot=stat-unit]{color:var(--fg-2);font-size:.875rem;font-weight:400}
+[data-slot=stat-body]{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+[data-slot=stat-figure]{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+[data-slot=stat-aside]{flex:none;display:flex}
+[data-slot=stat-trend]{display:flex;flex-wrap:wrap;align-items:center;column-gap:.375rem}
+[data-slot=stat-caption]{color:var(--fg-2)}
+[data-slot=stat-link]{color:inherit;text-decoration:none;&::after{content:"";position:absolute;inset:0;border-radius:inherit}&:focus-visible{outline:0}}
+[data-slot=stat]:has([data-slot=stat-link]){transition:border-color .1s;&:hover{border-color:var(--line-3)}&:has(:focus-visible){outline:2px solid var(--ring);outline-offset:2px}}
+
+/* The info tip: a chip that opens a note */
+[data-slot=info-tip]{display:inline-flex;flex:none;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-2);cursor:pointer;vertical-align:middle;&:hover{background:var(--ink-2);color:var(--fg)}&:focus-visible{outline:2px solid var(--ring);outline-offset:1px}}
+[data-slot=info-tip-content]{font-size:13px;line-height:1.5;&:focus{outline:0}& > :last-child{margin-bottom:0}}
+[data-slot=info-tip-title]{margin:0 0 .25rem;color:var(--fg);font-weight:600}
+
+/* Loading skeletons shaped like the chart that is coming */
+[data-slot=chart-skeleton]{display:block;min-width:0;width:100%;& svg{display:block;max-width:100%;animation:ui-pulse 1.6s ease-in-out infinite}
+  &:is([data-kind=ring],[data-kind=gauge]){width:fit-content}
+  &[data-kind=matrix]{max-width:18rem}
+  &:not([data-kind=line],[data-kind=bars]) svg{height:auto}
+  & rect,& [data-part=wash]{fill:var(--line-2)}
+  & [data-part=track],& [data-part=arc]{fill:none;stroke:var(--line-2);stroke-width:10;stroke-linecap:round}
+  & [data-part=track]:is(rect){fill:var(--line-2);stroke:none}
+  & [data-part=arc]{stroke:var(--line-3)}
+  & [data-part=grid]{stroke:var(--line);stroke-width:1}
+  & [data-part=wash]{opacity:.6}
+  & [data-part=line]{fill:none;stroke:var(--line-3);stroke-width:3;stroke-linecap:round}
+}
+
+[data-ui-region][data-ui-failed] > [data-slot=chart-skeleton]{display:none}
+
+/* The breathing guide: a circle that grows, rests and shrinks, 4, 7 and 8 seconds */
+@keyframes ui-breathe{0%{scale:.6}21.05%,57.89%{scale:1}100%{scale:.6}}
+@keyframes ui-breathe-in{0%,21%{opacity:1}21.05%,100%{opacity:0}}
+@keyframes ui-breathe-hold{0%,21%{opacity:0}21.05%,57.84%{opacity:1}57.89%,100%{opacity:0}}
+@keyframes ui-breathe-out{0%,57.84%{opacity:0}57.89%,100%{opacity:1}}
+@keyframes ui-step-in{0%,21%{border-color:var(--tone);background:color-mix(in oklab,var(--tone) 14%,transparent)}21.05%,100%{border-color:var(--line);background:transparent}}
+@keyframes ui-step-hold{0%,21%{border-color:var(--line);background:transparent}21.05%,57.84%{border-color:var(--tone);background:color-mix(in oklab,var(--tone) 14%,transparent)}57.89%,100%{border-color:var(--line);background:transparent}}
+@keyframes ui-step-out{0%,57.84%{border-color:var(--line);background:transparent}57.89%,100%{border-color:var(--tone);background:color-mix(in oklab,var(--tone) 14%,transparent)}}
+[data-slot=breathing]{--cycle:19s;--d:200px;display:flex;flex-direction:column;align-items:center;gap:1rem;min-width:0;
+  &:not([data-tone]){--tone:var(--accent-text)}
+  &[data-size="120"]{--d:120px}&[data-size="160"]{--d:160px}&[data-size="240"]{--d:240px}&[data-size="280"]{--d:280px}&[data-size="320"]{--d:320px}
+}
+[data-slot=breathing-stage]{position:relative;display:grid;place-items:center;width:var(--d);max-width:100%;aspect-ratio:1}
+[data-slot=breathing-track]{position:absolute;inset:0;border:2px solid var(--line-2);border-radius:50%}
+[data-slot=breathing-orb]{position:absolute;inset:4%;border-radius:50%;background:radial-gradient(closest-side,color-mix(in oklab,var(--tone) 34%,transparent),color-mix(in oklab,var(--tone) 10%,transparent));box-shadow:0 0 2rem color-mix(in oklab,var(--tone) 30%,transparent);scale:.6;animation:ui-breathe var(--cycle) ease-in-out infinite paused}
+[data-slot=breathing-label]{position:relative;display:grid;place-items:center;color:var(--fg);font-size:1.125rem;font-weight:600;text-align:center;
+  & > span{grid-area:1/1;visibility:hidden;opacity:0}
+  & > [data-phase=idle]{opacity:1}
+  & > [data-phase=in]{animation:ui-breathe-in var(--cycle) infinite paused}
+  & > [data-phase=hold]{animation:ui-breathe-hold var(--cycle) infinite paused}
+  & > [data-phase=out]{animation:ui-breathe-out var(--cycle) infinite paused}
+}
+[data-slot=breathing]:not(:has(input:checked)) [data-phase=idle]{visibility:visible}
+[data-slot=breathing]:has(input:checked){
+  & [data-slot=breathing-orb],& [data-slot=breathing-label] > span,& [data-slot=breathing-steps] li{animation-play-state:running}
+  & [data-slot=breathing-label] > :not([data-phase=idle]){visibility:visible}
+}
+[data-slot=breathing-run]{display:inline-flex;align-items:center;gap:.5rem;color:var(--fg-1);font-size:14px;& label{cursor:pointer}}
+[data-slot=breathing-steps]{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;margin:0;padding:0;list-style:none;
+  & li{display:flex;align-items:baseline;gap:.375rem;padding:.375rem .625rem;border:1px solid var(--line);border-radius:var(--radius);color:var(--fg-1);font-size:13px;animation-duration:var(--cycle);animation-iteration-count:infinite;animation-play-state:paused;& b{color:var(--fg);font-size:1rem;font-variant-numeric:tabular-nums}}
+  & li[data-phase=in]{animation-name:ui-step-in}
+  & li[data-phase=hold]{animation-name:ui-step-hold}
+  & li[data-phase=out]{animation-name:ui-step-out}
+}
+/* Less motion: no circle in motion, no switch; the three steps written under it are the guide. */
+@media (prefers-reduced-motion:reduce){
+  [data-slot=breathing-orb],[data-slot=breathing-label] > span,[data-slot=breathing-steps] li{animation:none!important}
+  [data-slot=breathing-orb]{scale:.85}
+  [data-slot=breathing-label],[data-slot=breathing-run]{display:none}
+}
+
+/* The dock: icon links floating at the bottom of the page */
+[data-slot=dock]{position:fixed;inset-block-end:max(1rem,env(safe-area-inset-bottom));inset-inline:0;z-index:30;display:flex;align-items:center;gap:.25rem;width:fit-content;max-width:calc(100vw - 1rem);margin-inline:auto;padding:.375rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);box-shadow:0 8px 24px rgb(0 0 0/.22)}
+:where([data-slot=dock-item]){--tone:var(--accent-text)}
+[data-slot=dock-item]{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:var(--radius);color:var(--fg-2);text-decoration:none;transition:background-color .1s,color .1s;
+  & [data-slot=icon]{width:1.25rem;height:1.25rem}
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  &:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+  &[data-prominent]{width:3rem;height:3rem;& [data-slot=icon]{width:1.5rem;height:1.5rem}}
+  &[aria-current=page]{background:color-mix(in oklab,var(--tone) 13%,transparent);color:color-mix(in oklab,var(--tone) 78%,var(--fg));box-shadow:0 0 1rem color-mix(in oklab,var(--tone) 28%,transparent)}
+}
+
+/* The day pager: the day before, the day shown, the day after */
+[data-slot=day-pager]{display:flex;align-items:center;gap:.125rem;width:fit-content;max-width:100%;padding:.125rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1);
+  & [data-slot=button]{gap:.5rem;padding-inline:.5rem}
+}
+[data-slot=day-pager-previous],[data-slot=day-pager-next]{display:grid;flex:none;place-items:center;width:1.75rem;height:1.75rem;border-radius:var(--radius);color:var(--fg-1);text-decoration:none;
+  &:is(a):hover{background:var(--ink-2);color:var(--fg)}
+  &:is(a):focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+  &[aria-disabled=true]{opacity:.35}
+}
+[data-slot=day-pager-face]{display:inline-flex;align-items:center;gap:.5rem;padding-inline:.5rem}
+[data-slot=day-pager-day]{color:var(--fg);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}

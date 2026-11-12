@@ -511,6 +511,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "chart-radial",
         "chart-linear",
         "chart-grids",
+        "app-blocks",
         "select-styles",
         "phone-styles",
         "slider-styles",
@@ -690,6 +691,8 @@ fn no_two_modules_share_a_bit() {
         Uses::COUNT_UP,
         Uses::CHART_PAINT,
         Uses::CHART_LINEAR,
+        Uses::CHART_GRIDS,
+        Uses::APP_BLOCKS,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

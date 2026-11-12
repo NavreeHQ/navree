@@ -319,6 +319,10 @@ impl Uses {
     /// matrix heat maps and of the scatter plot, linked on a page that draws one. The charts
     /// module moves between their cells and points.
     pub const CHART_GRIDS: Self = Self(1 << 36);
+    /// The app blocks stylesheet: no script of its own, only the styles of a figure tile's
+    /// icon, unit, status and ring, the info tip, the chart skeletons, the breathing guide
+    /// and the dock, linked on a page that draws one. An info tip links the overlay module.
+    pub const APP_BLOCKS: Self = Self(1 << 37);
 
     /// Both sets together.
     #[must_use]

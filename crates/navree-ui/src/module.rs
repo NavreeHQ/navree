@@ -616,6 +616,6 @@ mod tests {
             assert!(api.summary.is_some(), "{label}");
             assert_eq!(api.tags, ["UI"], "{label}");
         }
-        assert_eq!(toolkit, 4);
+        assert_eq!(toolkit, 5);
     }
 }
