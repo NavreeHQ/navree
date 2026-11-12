@@ -100,9 +100,11 @@ fn quote(identifier: &str) -> String {
     format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
-/// `'text'` with embedded quotes doubled.
+/// `E'text'`: a PostgreSQL escape string with backslashes and quotes
+/// doubled. An escape string reads a backslash as an escape whatever
+/// `standard_conforming_strings` is set to, so no text can close it early.
 fn literal(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+    format!("E'{}'", text.replace('\\', "\\\\").replace('\'', "''"))
 }
 
 pub(super) async fn sqlite(
@@ -223,20 +225,16 @@ pub(super) async fn postgres(
             .filter(|raw| !sqlx::ValueRef::is_null(raw))
             .and_then(|raw| raw.as_str().ok().map(str::to_owned))
     };
-    let filter = only
-        .map(|t| format!(" AND c.relname = {}", literal(t)))
-        .unwrap_or_default();
-    // The table name goes through `literal` (quote doubling); this connection uses the simple
-    // protocol, which cannot bind parameters.
-    // nosemgrep: navree-sql-built-from-strings
+    // Every table, then the one asked for picked here: the name asked for never reaches the SQL.
     let tables: Vec<String> = conn
-        .fetch_all(AssertSqlSafe(format!(
+        .fetch_all(
             "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
-             WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p'){filter} ORDER BY c.relname"
-        )))
+             WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p') ORDER BY c.relname",
+        )
         .await?
         .iter()
         .filter_map(|row| text(row, 0))
+        .filter(|name| only.is_none_or(|only| only == name.as_str()))
         .collect();
     let mut schema = Schema::default();
     for name in &tables {
@@ -244,6 +242,10 @@ pub(super) async fn postgres(
             name: name.clone(),
             ..Table::default()
         };
+        // In this query and the three after it, `name` is a table name read from pg_class above,
+        // written by `literal` as an escape string: the simple protocol these text results need
+        // binds no parameters.
+        // nosemgrep: navree-sql-built-from-strings
         let primary: Vec<String> = conn
             .fetch_all(AssertSqlSafe(format!(
                 "SELECT a.attname FROM pg_index i \
@@ -255,6 +257,8 @@ pub(super) async fn postgres(
             .iter()
             .filter_map(|row| text(row, 0))
             .collect();
+        // A catalog table name through `literal`, as above.
+        // nosemgrep: navree-sql-built-from-strings
         for row in conn
             .fetch_all(AssertSqlSafe(format!(
                 "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns \
@@ -272,6 +276,8 @@ pub(super) async fn postgres(
                 default: text(&row, 3),
             });
         }
+        // A catalog table name through `literal`, as above.
+        // nosemgrep: navree-sql-built-from-strings
         for row in conn
             .fetch_all(AssertSqlSafe(format!(
                 "SELECT ic.relname, i.indisunique, \
@@ -294,6 +300,8 @@ pub(super) async fn postgres(
                     .collect(),
             });
         }
+        // A catalog table name through `literal`, as above.
+        // nosemgrep: navree-sql-built-from-strings
         for row in conn
             .fetch_all(AssertSqlSafe(format!(
                 "SELECT \
@@ -330,8 +338,7 @@ pub(super) async fn postgres(
     let has_migrations = conn
         .fetch_all(AssertSqlSafe(format!(
             "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
-             WHERE n.nspname = current_schema() AND c.relname = {}",
-            literal(MIGRATIONS_TABLE)
+             WHERE n.nspname = current_schema() AND c.relname = '{MIGRATIONS_TABLE}'"
         )))
         .await?;
     if !has_migrations.is_empty() {
