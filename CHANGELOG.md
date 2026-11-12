@@ -9,6 +9,14 @@ every `@navree/*` package carries the same version.
 
 ### Added
 
+- `SortableGrid`, `GridTile` and `GridOrder` in `navree::ui`: a grid of tiles that people put in their
+  own order by mouse, touch or keys, and take away. The page changes at once, and a moment after the
+  last change the whole order is posted to your server, which checks and saves it.
+- Charts drawn as PNG pictures on the server, for places that show only an image such as a
+  home-screen widget, an email or a link preview: `ChartImage`, `Tile` and `Block` in
+  `navree::ui::image`, with colours from the theme, light or dark, and the toolkit's typeface built
+  in. It is behind the `image` feature of `navree-ui` and the `ui-image` feature of `navree`, off by
+  default.
 - Navree Native, a preview behind the `ui-native-preview` feature: a `ui` app's pages answer a
   native client as well as a browser. A request that sends `X-Navree-Native: 1` and describes
   itself in `X-Navree-Client` gets the page as a tree of parts (a screen with a title and actions

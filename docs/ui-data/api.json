@@ -988,6 +988,16 @@
     ],
     "shared": []
   },
+  "Arranged": {
+    "name": "Arranged",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/order.rs",
+    "summary": "An order put together with the tiles the server holds: what to save.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "AspectRatio": {
     "name": "AspectRatio",
     "kind": "struct",
@@ -1343,24 +1353,24 @@
   "Backdrop": {
     "name": "Backdrop",
     "kind": "enum",
-    "file": "crates/navree-ui/src/marketing/hero.rs",
-    "summary": "What is drawn behind a `Hero` or a band: soft light from the theme's accent, a fine grid, or nothing. Each is drawn by the stylesheet from the theme's colours, needs no image and holds still for a reader who asks for less motion.",
+    "file": "crates/navree-ui/src/image/mod.rs",
+    "summary": "What a picture sits on.",
     "constructors": [],
     "methods": [],
     "variants": [
       {
-        "name": "None",
-        "doc": "The page's own background.",
-        "default": false
-      },
-      {
-        "name": "Glow",
-        "doc": "Light from the accent, from above. The default.",
+        "name": "Page",
+        "doc": "The page's colour (`ink-0`). The default.",
         "default": true
       },
       {
-        "name": "Grid",
-        "doc": "A fine grid fading out from the middle, with the glow over it.",
+        "name": "Card",
+        "doc": "A card's colour (`ink-1`), as a tile on a home screen.",
+        "default": false
+      },
+      {
+        "name": "Clear",
+        "doc": "Nothing: a clear picture, for a place that brings its own colour.",
         "default": false
       }
     ],
@@ -1583,6 +1593,72 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Block": {
+    "name": "Block",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/image/tile.rs",
+    "summary": "One block of a `Tile`: a ring, a sparkline or a figure, with its label, its figure and a quieter note. Its colour is the picture's accent unless it names its own.",
+    "constructors": [
+      {
+        "name": "ring",
+        "generics": "",
+        "args": "label: impl Into<String>, value: impl IntoValue, max: impl IntoValue",
+        "doc": "A ring filled to `value` of `max`, the figure in its middle and the label under it (beside it in a wide block). A value past `max` laps the ring."
+      },
+      {
+        "name": "sparkline",
+        "generics": "<V: IntoValue>",
+        "args": "label: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "A line over `values`, with a wash under it, below the label and the figure. With no `value`, the figure is the last value."
+      },
+      {
+        "name": "columns",
+        "generics": "<V: IntoValue>",
+        "args": "label: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "Columns over `values`, such as stress by the hour, below the label and the figure."
+      },
+      {
+        "name": "stat",
+        "generics": "",
+        "args": "label: impl Into<String>, value: impl Into<String>",
+        "doc": "A figure on its own: the label above it and the note below."
+      }
+    ],
+    "methods": [
+      {
+        "name": "value",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "The figure, as words: `7h 42m`, `8,432`, `₹1,20,000`. A ring's and a line's figure is otherwise its value."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "The unit after the figure, smaller: `%`, `bpm`, `kcal`."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "A quieter line under the figure: `+18 min vs 7-day avg`."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "The note's colour: `Tone::Success` for good news, `Tone::Danger` for bad."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: Ink",
+        "doc": "The colour of the ring, line or columns: a chart colour, a tone. The picture's accent by default."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Brand": {
     "name": "Brand",
@@ -3470,6 +3546,102 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ChartImage": {
+    "name": "ChartImage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/image/mod.rs",
+    "summary": "A picture of a drawing, at a size, in a theme and a mode.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "width: u32, height: u32",
+        "doc": "A picture `width` by `height` pixels (before `scale`), in the default theme, dark, on the page's colour."
+      },
+      {
+        "name": "for_tile",
+        "generics": "",
+        "args": "tile: &Tile",
+        "doc": "The picture of `tile`, at its size."
+      }
+    ],
+    "methods": [
+      {
+        "name": "theme",
+        "generics": "",
+        "args": "theme: &Theme",
+        "doc": "Draws in `theme`'s colours."
+      },
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "Draws light or dark. A picture can't follow a device, so `Mode::System` is dark, the toolkit's default."
+      },
+      {
+        "name": "accent",
+        "generics": "",
+        "args": "colour: Rgb",
+        "doc": "Makes `colour` the accent, with the text on it and the accent as text derived from it as the theme builder derives them. What is drawn in the accent (`Ink::accent()`, every block of a `Tile` that names no colour) takes it."
+      },
+      {
+        "name": "backdrop",
+        "generics": "",
+        "args": "backdrop: Backdrop",
+        "doc": "What the picture sits on."
+      },
+      {
+        "name": "scale",
+        "generics": "",
+        "args": "factor: u32",
+        "doc": "Draws `factor` pixels for each one of the size, for a screen that packs 2 or 3 into a point. 1 to 4."
+      },
+      {
+        "name": "cache_control",
+        "generics": "",
+        "args": "value: &'static str",
+        "doc": "The `Cache-Control` of `respond`'s answers: `no-cache` by default, so a client asks each time and gets `304 Not Modified` while the picture is the same. A picture of private data should say `private, no-cache`."
+      },
+      {
+        "name": "pixels",
+        "generics": "",
+        "args": "",
+        "doc": "The size in pixels, scale included."
+      },
+      {
+        "name": "svg",
+        "generics": "",
+        "args": "node: &Node",
+        "doc": "The drawing as a standalone SVG document, every colour resolved: what the PNG is drawn from, and a picture in its own right for a place that shows SVG."
+      },
+      {
+        "name": "svg_node",
+        "generics": "",
+        "args": "node: &Node",
+        "doc": "The same document as a node, to put in a page as it is: it fills the width it is given and keeps its shape."
+      },
+      {
+        "name": "etag",
+        "generics": "",
+        "args": "node: &Node",
+        "doc": "The tag of the picture of `node`: a hash of the resolved drawing, the size and the renderer, quoted as an `ETag` is. The same inputs always give the same tag, and it is made without drawing anything."
+      },
+      {
+        "name": "png",
+        "generics": "",
+        "args": "node: &Node",
+        "doc": "The picture of `node`, as a PNG."
+      },
+      {
+        "name": "respond",
+        "generics": "",
+        "args": "node: &Node, request: &HeaderMap",
+        "doc": "The answer to a request for the picture of `node`: `304 Not Modified` when the request's `If-None-Match` holds its tag (nothing is drawn), otherwise the PNG with its `ETag` and `Cache-Control`. A drawing that can't be made answers 500."
       }
     ],
     "variants": [],
@@ -9358,6 +9530,32 @@
       }
     ]
   },
+  "GridFit": {
+    "name": "GridFit",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/sortable/grid.rs",
+    "summary": "The narrowest a tile gets when the grid fits as many columns as it can.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Narrow",
+        "doc": "8 rem: small tiles, a figure each.",
+        "default": false
+      },
+      {
+        "name": "Medium",
+        "doc": "12 rem: a figure with a small chart. The default.",
+        "default": true
+      },
+      {
+        "name": "Wide",
+        "doc": "16 rem: a card with a title, a chart and a line of text.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "GridLabels": {
     "name": "GridLabels",
     "kind": "struct",
@@ -9372,6 +9570,96 @@
       }
     ],
     "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "GridOrder": {
+    "name": "GridOrder",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/order.rs",
+    "summary": "The order of a `SortableGrid`'s tiles, as the grid posts it: every tile's key in the order the page shows them, the tiles taken away, and, from a page with JavaScript off, one tile to move a place earlier or later.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<I, K>",
+        "args": "keys: I",
+        "doc": "An order of `keys`, with nothing taken away."
+      },
+      {
+        "name": "from_form",
+        "generics": "",
+        "args": "body: &[u8]",
+        "doc": "Reads an order from a urlencoded body: every `order` field in turn, every `remove`, and the first non-empty `up` and `down`. Other fields are passed over."
+      }
+    ],
+    "methods": [
+      {
+        "name": "remove",
+        "generics": "",
+        "args": "key: impl Into<String>",
+        "doc": "Takes `key` away too."
+      },
+      {
+        "name": "up",
+        "generics": "",
+        "args": "key: impl Into<String>",
+        "doc": "Moves `key` one place earlier, as the button of a page with JavaScript off does."
+      },
+      {
+        "name": "down",
+        "generics": "",
+        "args": "key: impl Into<String>",
+        "doc": "Moves `key` one place later."
+      },
+      {
+        "name": "keep",
+        "generics": "<I, K>",
+        "args": "keys: I",
+        "doc": "Never takes these keys away, whatever the post asks: the tiles drawn with `GridTile::fixed`."
+      },
+      {
+        "name": "arrange",
+        "generics": "<K: AsRef<str>>",
+        "args": "current: &[K]",
+        "doc": "Puts the order together with `current`, the keys of the tiles the server holds now, in their saved order."
+      },
+      {
+        "name": "done",
+        "generics": "",
+        "args": "page: impl Into<LocalHref>",
+        "doc": "The answer to an order that was saved. The page shows the order already, so it gets no ops of its own (add a preview drawn again, say); with JavaScript off the browser goes back to `page`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "GridTile": {
+    "name": "GridTile",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/grid.rs",
+    "summary": "One tile of a `SortableGrid`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "key: impl Into<String>, name: impl Into<String>",
+        "doc": "A tile: `key` is what the order posts and must be unique in the grid, `name` is what it is called when it is announced and on its buttons. With no `body`, the name is what shows."
+      }
+    ],
+    "methods": [
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Sets what the tile shows: a figure, a small chart, a card. Links in it still work: a press that doesn't move is a click."
+      },
+      {
+        "name": "fixed",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it with no remove button: a tile the grid always holds. The server must keep it too, with `GridOrder::keep`: this is only what the page shows."
+      }
+    ],
     "variants": [],
     "shared": []
   },
@@ -14251,6 +14539,53 @@
     "variants": [],
     "shared": []
   },
+  "Png": {
+    "name": "Png",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/image/mod.rs",
+    "summary": "A picture, as PNG bytes, with its tag.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "bytes",
+        "generics": "",
+        "args": "",
+        "doc": "The file."
+      },
+      {
+        "name": "into_bytes",
+        "generics": "",
+        "args": "",
+        "doc": "The file, taken."
+      },
+      {
+        "name": "width",
+        "generics": "",
+        "args": "",
+        "doc": "Its width in pixels."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "",
+        "doc": "Its height in pixels."
+      },
+      {
+        "name": "etag",
+        "generics": "",
+        "args": "",
+        "doc": "Its `ETag`, quoted: the same for the same inputs."
+      },
+      {
+        "name": "respond",
+        "generics": "",
+        "args": "request: &HeaderMap",
+        "doc": "The answer to `request`: `304 Not Modified` when its `If-None-Match` holds this picture's tag, otherwise the picture."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "PointSeries": {
     "name": "PointSeries",
     "kind": "struct",
@@ -19097,6 +19432,88 @@
     "variants": [],
     "shared": []
   },
+  "SortableGrid": {
+    "name": "SortableGrid",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/grid.rs",
+    "summary": "Tiles in a grid that people put in their own order and take away: the tiles of a dashboard, of a home-screen widget, of a launcher.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<String>",
+        "doc": "A grid with the id `id`, named `label` for assistive technology. The tiles' ids and the order form's are made from it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tile",
+        "generics": "",
+        "args": "tile: GridTile",
+        "doc": "Adds a tile."
+      },
+      {
+        "name": "tiles",
+        "generics": "",
+        "args": "tiles: impl IntoIterator<Item = GridTile>",
+        "doc": "Adds tiles, in order."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "action: impl Into<Href>",
+        "doc": "Makes the tiles move and go, the order posted to `action` after each change. Without it nothing moves."
+      },
+      {
+        "name": "columns",
+        "generics": "",
+        "args": "n: u8",
+        "doc": "Exactly `n` columns, 1 to 6, at every width."
+      },
+      {
+        "name": "fit",
+        "generics": "",
+        "args": "fit: GridFit",
+        "doc": "As many columns as fit, each tile at least as wide as `fit` says. The default, with `GridFit::Medium`."
+      },
+      {
+        "name": "autosave_ms",
+        "generics": "",
+        "args": "ms: u32",
+        "doc": "How long the grid waits after the last change before it posts the order, in milliseconds: 500 by default, at most 10 s. 0 posts at once."
+      },
+      {
+        "name": "deadline_ms",
+        "generics": "",
+        "args": "ms: u32",
+        "doc": "How long a post may wait for the server's answer before it counts as failed, in milliseconds: 15 s by default, at least 1 s."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: SortableGridLabels",
+        "doc": "Sets the words."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Puts the session's token in the order form, for a server whose session checks a field when JavaScript is off."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SortableGridLabels": {
+    "name": "SortableGridLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/sortable/grid.rs",
+    "summary": "The words a `SortableGrid` says and shows. `{item}`, `{position}` and `{total}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "Sources": {
     "name": "Sources",
     "kind": "struct",
@@ -21772,6 +22189,111 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Tile": {
+    "name": "Tile",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/image/tile.rs",
+    "summary": "Several blocks in one picture at the size of a home-screen widget: what `ChartImage::for_tile` draws.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "size: TileSize",
+        "doc": "An empty tile of `size`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "",
+        "doc": "Its size."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A title above the blocks: `Today`, a name."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "note: impl Into<String>",
+        "doc": "A quieter note across from the title: `Updated 07:30`."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "block: Block",
+        "doc": "Adds a block. Blocks past the size's `most_blocks` aren't drawn."
+      },
+      {
+        "name": "blocks",
+        "generics": "",
+        "args": "blocks: impl IntoIterator<Item = Block>",
+        "doc": "Adds blocks, in order."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TileSize": {
+    "name": "TileSize",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/image/tile.rs",
+    "summary": "The size of a `Tile`.",
+    "constructors": [
+      {
+        "name": "from_name",
+        "generics": "",
+        "args": "name: &str",
+        "doc": "The size called `name` (`small`, `medium` or `large`), as a URL names it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "pixels",
+        "generics": "",
+        "args": "",
+        "doc": "Its width and height in pixels."
+      },
+      {
+        "name": "most_blocks",
+        "generics": "",
+        "args": "",
+        "doc": "The most blocks it draws: 2 small, 4 medium, 6 large, and for another size as many as fit at about 200 pixels a side, 1 to 12."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "Its name: `small`, `medium`, `large`, or `custom`."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Small",
+        "doc": "474 by 474 pixels: a small home-screen widget, two blocks.",
+        "default": false
+      },
+      {
+        "name": "Medium",
+        "doc": "1014 by 474 pixels: a medium one, four blocks side by side. The default.",
+        "default": true
+      },
+      {
+        "name": "Large",
+        "doc": "1014 by 1014 pixels: a large one, up to six blocks.",
+        "default": false
+      },
+      {
+        "name": "Custom",
+        "doc": "Any other size, in pixels, each side 64 to 4096.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "TimeColumn": {

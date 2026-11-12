@@ -39,6 +39,7 @@ mod states;
 mod store;
 mod themes;
 mod upload;
+mod widgets;
 
 /// Every example, in the order the docs list them.
 pub fn all() -> Vec<Example> {
@@ -66,6 +67,7 @@ pub fn all() -> Vec<Example> {
     all.extend(flow::all());
     all.extend(data::all());
     all.extend(sortable::all());
+    all.extend(widgets::all());
     all.extend(charts::all());
     all.extend(radial::all());
     all.extend(linear::all());

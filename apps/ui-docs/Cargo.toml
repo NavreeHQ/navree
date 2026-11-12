@@ -26,7 +26,7 @@ chrono = { workspace = true }
 chrono-tz = { workspace = true }
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
 # cannot turn off default features that the workspace entry leaves on.
-navree = { path = "../../crates/navree", default-features = false, features = ["ui", "validation-phone"] }
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "ui-image", "validation-phone"] }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 serde = { workspace = true }

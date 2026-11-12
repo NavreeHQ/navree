@@ -146,7 +146,8 @@
         "data-table",
         "lazy-list",
         "stat",
-        "sortable"
+        "sortable",
+        "sortable-grid"
       ]
     },
     {
@@ -171,7 +172,8 @@
         "calendar-heatmap",
         "matrix-heatmap",
         "relation-list",
-        "scatter-chart"
+        "scatter-chart",
+        "chart-image"
       ]
     },
     {
@@ -1957,6 +1959,29 @@
       ]
     },
     {
+      "id": "sortable-grid",
+      "name": "SortableGrid",
+      "url": "/docs/components/sortable-grid/",
+      "summary": "Tiles in a grid that people put in their own order and take away: the tiles of a dashboard, of a home-screen widget, of a launcher.",
+      "group": "data",
+      "types": [
+        "SortableGrid",
+        "GridTile",
+        "GridFit",
+        "SortableGridLabels",
+        "GridOrder",
+        "Arranged"
+      ],
+      "thumb": "sortable-grid/thumb",
+      "anatomy": "sortable-grid/default",
+      "examples": [
+        "sortable-grid/thumb",
+        "sortable-grid/default",
+        "sortable-grid/fit",
+        "sortable-grid/still"
+      ]
+    },
+    {
       "id": "line-chart",
       "name": "Line chart",
       "url": "/docs/components/line-chart/",
@@ -2356,6 +2381,29 @@
         "scatter-chart/default",
         "scatter-chart/axes",
         "scatter-chart/states"
+      ]
+    },
+    {
+      "id": "chart-image",
+      "name": "Chart pictures",
+      "url": "/docs/components/chart-image/",
+      "summary": "A chart drawn as a PNG on the server, for a home-screen widget, an email or an Open Graph card.",
+      "group": "charts",
+      "types": [
+        "ChartImage",
+        "Tile",
+        "Block",
+        "TileSize",
+        "Backdrop",
+        "Png"
+      ],
+      "thumb": "chart-image/thumb",
+      "anatomy": "chart-image/ring",
+      "examples": [
+        "chart-image/thumb",
+        "chart-image/default",
+        "chart-image/modes",
+        "chart-image/ring"
       ]
     },
     {
@@ -37400,6 +37448,710 @@
           ]
         }
       ]
+    },
+    {
+      "id": "sortable-grid/thumb",
+      "component": "sortable-grid",
+      "slug": "thumb",
+      "title": "Widget tiles",
+      "kind": "single",
+      "code": "SortableGrid::new(\"thumb-tiles\", \"Widget tiles\")\n    .post(\"/widgets/7/tiles\")\n    .columns(2)\n    .tile(tile(\"recovery\", \"Recovery\", \"82%\", 82))\n    .tile(tile(\"sleep\", \"Sleep score\", \"88\", 88))",
+      "src": "/ui-preview/sortable-grid/thumb.html",
+      "height": 260,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [
+        "sortable-grid-78436201d178.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-grid-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-form",
+              "tag": "form",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-items",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-grid-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "sortable-grid-tools",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-grid-handle",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-steps",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sortable-grid-step",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-grid-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "text",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-inline",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-size",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-plot",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial-track",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-arc",
+                                          "tag": "path",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "radial-center",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial-value",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "count-up",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sortable-grid-empty",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable-grid/default",
+      "component": "sortable-grid",
+      "slug": "default",
+      "title": "Tiles in two columns",
+      "kind": "single",
+      "code": "SortableGrid::new(\"tiles\", \"Simran's widget\")\n    .post(\"/widgets/7/tiles\")\n    .columns(2)\n    .tile(tile(\"health\", \"Health score\", \"78\", 78).fixed())\n    .tile(tile(\"recovery\", \"Recovery\", \"82%\", 82))\n    .tile(\n        GridTile::new(\"sleep\", \"Sleep\")\n            .body(Stack::gap(1).children((Text::muted(\"Sleep\"), el(\"strong\").child(\"7h 42m\")))),\n    )\n    .tile(\n        GridTile::new(\"resting-hr\", \"Resting HR\").body(\n            Stack::gap(1).children((\n                Text::muted(\"Resting HR\"),\n                el(\"strong\").child(\"58 bpm\"),\n                Sparkline::new(\"Resting HR\", [62, 61, 63, 60, 59, 61, 58])\n                    .height(28)\n                    .ink(Ink::accent()),\n            )),\n        ),\n    )",
+      "src": "/ui-preview/sortable-grid/default.html",
+      "height": 360,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "core-3c822350aba2.js",
+        "sortable-grid-78436201d178.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-grid-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-form",
+              "tag": "form",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-items",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-grid-item",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "sortable-grid-tools",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-grid-handle",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-steps",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sortable-grid-step",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-grid-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "text",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart",
+                              "tag": "figure",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-header",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-heading",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-title",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "chart-body",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-plot",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-marks",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "chart-line",
+                                              "tag": "path",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "slot": "chart-end",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "chart-summary",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart-data",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-table",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sortable-grid-empty",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable-grid/fit",
+      "component": "sortable-grid",
+      "slug": "fit",
+      "title": "As many columns as fit",
+      "kind": "single",
+      "code": "let names = [\n    \"Steps\",\n    \"Water\",\n    \"Mindful minutes\",\n    \"Weight\",\n    \"Calories\",\n    \"Stand hours\",\n];\nSortableGrid::new(\"fit-tiles\", \"Today's figures\")\n    .post(\"/today/tiles\")\n    .fit(GridFit::Narrow)\n    .autosave_ms(800)\n    .tiles(names.iter().enumerate().map(|(at, name)| {\n        GridTile::new(format!(\"t{at}\"), *name).body(Stack::gap(1).children((\n            Text::muted(*name),\n            el(\"strong\").child([\"8,432\", \"2.1 L\", \"18 min\", \"61.4 kg\", \"1,840\", \"9 of 12\"][at]),\n        )))\n    }))",
+      "src": "/ui-preview/sortable-grid/fit.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": true,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "core-3c822350aba2.js",
+        "sortable-grid-78436201d178.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-grid-help",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-form",
+              "tag": "form",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sortable-grid-items",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-grid-item",
+                  "tag": "li",
+                  "count": 6,
+                  "children": [
+                    {
+                      "slot": "sortable-grid-tools",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sortable-grid-handle",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-steps",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sortable-grid-step",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sortable-grid-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sortable-grid-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "text",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sortable-grid-empty",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortable-grid/still",
+      "component": "sortable-grid",
+      "slug": "still",
+      "title": "With nowhere to post",
+      "kind": "single",
+      "code": "SortableGrid::new(\"still-tiles\", \"Gurpreet's tiles\")\n    .columns(3)\n    .tile(GridTile::new(\"a\", \"Recovery\"))\n    .tile(GridTile::new(\"b\", \"Sleep\"))\n    .tile(GridTile::new(\"c\", \"Movement\"))",
+      "src": "/ui-preview/sortable-grid/still.html",
+      "height": 220,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sortable-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sortable-grid-items",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sortable-grid-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "sortable-grid-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sortable-grid-empty",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chart-image/thumb",
+      "component": "chart-image",
+      "slug": "thumb",
+      "title": "A widget's picture",
+      "kind": "single",
+      "code": "picture(day(TileSize::Medium), Mode::Dark, 0x22d3ee)",
+      "src": "/ui-preview/chart-image/thumb.html",
+      "height": 260,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
+      "id": "chart-image/default",
+      "component": "chart-image",
+      "slug": "default",
+      "title": "Small, medium and large",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"Small, 474 × 474\",\n        picture(day(TileSize::Small), Mode::Dark, 0x22d3ee),\n    ),\n    (\n        \"Medium, 1014 × 474\",\n        picture(day(TileSize::Medium), Mode::Dark, 0x22d3ee),\n    ),\n    (\n        \"Large, 1014 × 1014\",\n        picture(day(TileSize::Large), Mode::Dark, 0x22d3ee),\n    ),\n]",
+      "src": "/ui-preview/chart-image/default.html",
+      "height": 320,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Small, 474 × 474",
+        "Medium, 1014 × 474",
+        "Large, 1014 × 1014"
+      ],
+      "slots": []
+    },
+    {
+      "id": "chart-image/modes",
+      "component": "chart-image",
+      "slug": "modes",
+      "title": "Dark and light, two accents",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"Dark, green\",\n        picture(day(TileSize::Medium), Mode::Dark, 0x34d399),\n    ),\n    (\n        \"Light, purple\",\n        picture(day(TileSize::Medium), Mode::Light, 0xa78bfa),\n    ),\n]",
+      "src": "/ui-preview/chart-image/modes.html",
+      "height": 280,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Dark, green",
+        "Light, purple"
+      ],
+      "slots": []
+    },
+    {
+      "id": "chart-image/ring",
+      "component": "chart-image",
+      "slug": "ring",
+      "title": "One ring, on its own",
+      "kind": "single",
+      "code": "let ring = Ring::new(\"Sleep score\", 88).fill(Gradient::sheen(Ink::slot(7)));\nChartImage::new(240, 240)\n    .mode(Mode::Light)\n    .svg_node(&ring.into())\n    .unwrap_or_default()",
+      "src": "/ui-preview/chart-image/ring.html",
+      "height": 280,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 320,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": []
     },
     {
       "id": "line-chart/thumb",

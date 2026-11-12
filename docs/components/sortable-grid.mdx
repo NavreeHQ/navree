@@ -1,0 +1,108 @@
+---
+title: "SortableGrid"
+description: "Tiles in rows and columns that people put in their own order by mouse, touch or keys, and take away. The whole order is saved to your server a moment after the last change."
+---
+
+<UiPreview example="sortable-grid/default" />
+
+`SortableGrid` draws tiles in a grid that people arrange themselves: the tiles of a dashboard, of a home-screen widget, of a launcher. A tile moves with a mouse, with a finger or with the keyboard alone, and its remove button takes it away. The page changes at once, and half a second after the last change the grid posts the whole order to your server, which saves it.
+
+```rust
+use navree::ui::*;
+
+SortableGrid::new("tiles", "Simran's widget")
+    .post("/widgets/7/tiles")
+    .columns(2)
+    .tile(GridTile::new("health", "Health score").fixed())
+    .tile(GridTile::new("recovery", "Recovery"))
+    .tile(GridTile::new("sleep", "Sleep"))
+```
+
+Without `.post(...)` the tiles are drawn in their grid with no handles, no buttons and no script.
+
+## When to use it
+
+Use it when people choose which tiles they see and in what order, and the order is one list: the blocks of a widget, the cards of a personal dashboard. For work that moves between columns, or a list that is long and loads by pages, use [Sortable](/docs/components/sortable/), which posts each move on its own and checks it against the lists.
+
+## Anatomy
+
+<UiAnatomy component="sortable-grid" />
+
+## Columns
+
+`.columns(n)` draws exactly `n` columns, 1 to 6, at every width. `.fit(GridFit::Narrow)`, `Medium` (the default) or `Wide` draws as many columns as fit, each tile at least 8, 12 or 16 rem wide, so a phone shows one or two and a wide screen more.
+
+<UiPreview example="sortable-grid/fit" />
+
+## Saving the order
+
+The grid holds one form. A moment after the last change (500 ms, or `.autosave_ms(ms)`), it writes every tile's key into the form as an `order` field, in the order the page shows them, adds a `remove` field for each tile taken away, and submits it through the page's own forms. So the post carries the session's token, quick changes are one post, a change made while a post is on its way is sent after it with the latest order, and the answer's ops apply: draw a preview again, update a count. Each change also fires a `ui:grid-change` event on the grid, with the order and the tile taken away.
+
+A failed save leaves the page as it is and says so with a toast. The next change posts the whole order again, so nothing is lost and nothing needs putting back.
+
+Read the post with `GridOrder` and put it together with the tiles you hold with `arrange`:
+
+```rust
+use navree::ui::*;
+
+fn save(order: GridOrder, now: &[String]) -> Reply {
+    let arranged = order.clone().keep(["health"]).arrange(now);
+    if arranged.changed {
+        // Save arranged.order in one write.
+    }
+    order.done("/widgets/7")
+}
+```
+
+`arrange` trusts nothing in the post. The tiles come in the order posted; a key you no longer hold is passed over, and a tile the page didn't know of (added in another window) keeps its place at the end, so a page drawn earlier never loses one. Only the tiles named in `remove` go, never one you `keep`.
+
+## Moving with the keys
+
+Each tile has a handle, a button named "Move" and the tile's name. Press **Space** or **Enter** to pick the tile up, the **arrow keys** to move it (left and right one place, as the page reads; up and down a row), **Home** and **End** to go to the ends, **Space** or **Enter** to drop it, and **Escape** to put it back. Leaving the handle with **Tab** puts it back too.
+
+Every step is said: "Picked up Recovery. Position 2 of 4." then "Position 3 of 4." then "Dropped Recovery at position 3 of 4." Taking a tile away says "Removed Sleep. 3 left." and moves the focus to the next tile. Change the words with `SortableGridLabels`.
+
+## With JavaScript off
+
+Each tile shows two buttons, **Move earlier** and **Move later**, beside its remove button. They post the same form with `up` or `down` naming the tile, and `arrange` moves it one place. Answer with `GridOrder::done(page)` and the browser goes back to the page, the tiles in their new order.
+
+<UiPreview example="sortable-grid/still" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The grid is a group named by its label, and its tiles are an ordered list, so a screen reader reads their number and order.
+- Each handle is a real `button`, at least 28 by 28 pixels and 36 on a touch screen, described by the instructions above.
+- Every step of a move is said in the grid's own live region, and the focus stays on the handle of the tile that moves.
+- Moving never relies on dragging: the keys and, with JavaScript off, the move buttons do everything a drag does.
+- On touch, the handle drags at once and a press held still on a tile drags it; a swipe still scrolls the page.
+- With reduced motion, tiles jump to their places instead of sliding.
+
+</UiA11y>
+
+## API
+
+### SortableGrid
+
+<UiProps type="SortableGrid" />
+
+### GridTile
+
+<UiProps type="GridTile" />
+
+### GridFit
+
+<UiProps type="GridFit" />
+
+### SortableGridLabels
+
+<UiProps type="SortableGridLabels" />
+
+### GridOrder
+
+<UiProps type="GridOrder" />
+
+### Arranged
+
+<UiProps type="Arranged" />
