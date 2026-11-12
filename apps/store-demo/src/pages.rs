@@ -532,22 +532,21 @@ impl Pages {
                 ProductRow::from(record.into_inner())
             })
             .await?;
-        Ok(shell
-            .page("Inventory")
-            .crumb("Dashboard", "/")
-            .body((
-                inventory_table(&query, &page),
-                // Where a native client's tap on a row opens the product.
-                crate::views::native_only(empty_sheet()),
-            )))
+        Ok(shell.page("Inventory").crumb("Dashboard", "/").body((
+            inventory_table(&query, &page),
+            // Where a native client's tap on a row opens the product.
+            crate::views::native_only(empty_sheet()),
+        )))
     }
 
     /// `GET /inventory/{id}/peek`: the product in a sheet, opened. With
     /// JavaScript off, the inventory.
     async fn product_peek(&self, uow: Uow, id: i64) -> Result<Reply> {
         let Some(product) = Product::query().find(&uow, id).await? else {
-            return Ok(Reply::ops_or_redirect("/inventory")
-                .toast(ToastTone::Warning, "That product isn't on the shelves any more."));
+            return Ok(Reply::ops_or_redirect("/inventory").toast(
+                ToastTone::Warning,
+                "That product isn't on the shelves any more.",
+            ));
         };
         Ok(Reply::ops_or_redirect("/inventory")
             .morph(inventory::SHEET, product_sheet(product.into_inner()))

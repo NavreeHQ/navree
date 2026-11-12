@@ -252,7 +252,7 @@ mod tests {
     use super::*;
     use crate::native::TestNative;
     use crate::{
-        DropdownMenu, MenuGroup, MenuItem, MenuRadios, MenuSub, MenuCheckbox, View, icons,
+        DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub, View, icons,
     };
 
     fn menu_of(node: N) -> n::Menu {
@@ -409,8 +409,7 @@ mod tests {
 
     #[test]
     fn a_menu_away_from_its_button_is_a_miss_and_a_button_for_no_menu_is_a_button() {
-        let both =
-            Node::from(DropdownMenu::new("m", "Actions").item(MenuItem::link("Open", "/x")));
+        let both = Node::from(DropdownMenu::new("m", "Actions").item(MenuItem::link("Open", "/x")));
         let Node::Fragment(parts) = &both else {
             panic!("not two nodes");
         };

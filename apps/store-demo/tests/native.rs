@@ -115,7 +115,11 @@ async fn the_store_answers_a_native_client() {
     // Each native screen is graded, and what keeps one from its system is said:
     // the store says what its parts are, so every native screen belongs to it.
     assert_eq!(coverage.native(), native_routes.len());
-    assert_eq!(coverage.graded(Grade::Idiom), native_routes.len(), "{coverage}");
+    assert_eq!(
+        coverage.graded(Grade::Idiom),
+        native_routes.len(),
+        "{coverage}"
+    );
     assert_eq!(coverage.graded(Grade::Layout), 0, "{coverage}");
     assert_eq!(
         native_routes,
@@ -372,7 +376,12 @@ async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
     let lines: Vec<&n::Row> = nodes
         .iter()
         .filter_map(|node| match node {
-            N::Row(row) if row.subtitle.as_deref().is_some_and(|line| line.contains(" × ")) => {
+            N::Row(row)
+                if row
+                    .subtitle
+                    .as_deref()
+                    .is_some_and(|line| line.contains(" × ")) =>
+            {
                 Some(row)
             }
             _ => None,
@@ -475,12 +484,23 @@ async fn the_dashboard_gives_its_charts_as_numbers_and_what_it_cannot_say_falls_
         assert!(!chart.labels.is_empty(), "{:?}", chart.title);
         for series in &chart.series {
             assert_eq!(series.values.len(), chart.labels.len());
-            assert!(series.values.iter().flatten().all(|value| value.as_f64().is_some()));
+            assert!(
+                series
+                    .values
+                    .iter()
+                    .flatten()
+                    .all(|value| value.as_f64().is_some())
+            );
         }
     }
     let sales = charts
         .iter()
-        .find(|chart| chart.series.iter().any(|series| series.shown.iter().any(|words| words.contains('₹'))))
+        .find(|chart| {
+            chart
+                .series
+                .iter()
+                .any(|series| series.shown.iter().any(|words| words.contains('₹')))
+        })
         .expect("a chart of rupees");
     assert!(sales.series[0].values.iter().flatten().count() > 0);
     // The live feed's rows are written by the handler itself: a client is sent to
@@ -555,7 +575,10 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
         })
     );
     assert!(matches!(screen.body.find("product"), Some(N::Sheet(_))));
-    assert!(!asked.html.contains("/peek\""), "a browser's table has no peek");
+    assert!(
+        !asked.html.contains("/peek\""),
+        "a browser's table has no peek"
+    );
 
     // The sheet comes as ops: the sheet morphed, then opened.
     let peek = app
@@ -573,7 +596,12 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
     let N::Sheet(sheet) = node else {
         panic!("not a sheet");
     };
-    assert!(sheet.title.as_deref().is_some_and(|title| !title.is_empty()));
+    assert!(
+        sheet
+            .title
+            .as_deref()
+            .is_some_and(|title| !title.is_empty())
+    );
     let fields: Vec<&str> = all(node)
         .into_iter()
         .filter_map(|node| match node {

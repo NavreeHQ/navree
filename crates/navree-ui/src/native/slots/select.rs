@@ -262,6 +262,22 @@ mod tests {
     }
 
     #[test]
+    fn a_picker_in_a_field_takes_the_fields_label_help_and_error() {
+        let N::Field(field) = read(
+            crate::Field::new("agent-combobox", "Assignee")
+                .help("Who answers it")
+                .error("Pick someone")
+                .control(Combobox::new("agent").option("1", "Gurpreet Sandhu")),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(field.name, "agent");
+        assert_eq!(field.label.as_deref(), Some("Assignee"));
+        assert_eq!(field.help.as_deref(), Some("Who answers it"));
+        assert_eq!(field.error.as_deref(), Some("Pick someone"));
+    }
+
+    #[test]
     fn several_choices_are_a_field_of_values() {
         let field = field_of(read(
             MultiSelect::new("labels")

@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use navree_native::node as n;
 
 use super::super::lower::{
-    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, hidden_in, id, slot,
+    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hidden_in, hooks, id, slot,
     text_of,
 };
 use crate::node::{Element, Node};
@@ -136,10 +136,12 @@ fn heading(cx: &mut Cx, header: &Element, section: &mut n::Section) -> Read<()> 
 
 /// The number a count shows: the span the page marks as the count.
 fn shown_count(count: &Element) -> Option<String> {
-    flat(count.child_nodes()).into_iter().find_map(|node| match node {
-        Node::Element(span) if has(span, "data-count") => Some(text_of(span)),
-        _ => None,
-    })
+    flat(count.child_nodes())
+        .into_iter()
+        .find_map(|node| match node {
+            Node::Element(span) if has(span, "data-count") => Some(text_of(span)),
+            _ => None,
+        })
 }
 
 /// Where the rest of a list is.
@@ -156,7 +158,9 @@ fn more_of(more: &Element) -> Read<More> {
         return Ok(More::Note(text_of(more)));
     }
     hooks(more, &["data-ui-form", "data-ui-autoload"])?;
-    let action = attr(more, "action").map(Cow::into_owned).unwrap_or_default();
+    let action = attr(more, "action")
+        .map(Cow::into_owned)
+        .unwrap_or_default();
     let mut fields = Vec::new();
     hidden_in(more.child_nodes(), &mut fields);
     let query: Vec<(&str, &str)> = fields
@@ -226,7 +230,10 @@ fn is_only_the_name(body: &Element, name: &str) -> bool {
             span.tag() == "span"
                 && span.attrs().is_empty()
                 && text_of(span) == name
-                && span.child_nodes().iter().all(|node| matches!(node, Node::Text(_)))
+                && span
+                    .child_nodes()
+                    .iter()
+                    .all(|node| matches!(node, Node::Text(_)))
         }
         _ => false,
     }
@@ -288,7 +295,9 @@ fn move_of(cx: &mut Cx, moves: &Element) -> Read<N> {
         children: vec![N::Form(n::Form {
             id: id(form),
             method: n::Method::Post,
-            action: attr(form, "action").map(Cow::into_owned).unwrap_or_default(),
+            action: attr(form, "action")
+                .map(Cow::into_owned)
+                .unwrap_or_default(),
             hidden,
             children,
         })],
@@ -383,9 +392,12 @@ mod tests {
         let N::Section(empty) = done else {
             panic!("not a section");
         };
-        assert!(empty.children.iter().any(
-            |part| matches!(part, N::Text(text) if text.value == "Nothing here yet")
-        ));
+        assert!(
+            empty
+                .children
+                .iter()
+                .any(|part| matches!(part, N::Text(text) if text.value == "Nothing here yet"))
+        );
     }
 
     #[test]

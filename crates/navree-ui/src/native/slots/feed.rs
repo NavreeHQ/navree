@@ -8,7 +8,9 @@
 
 use navree_native::node as n;
 
-use super::super::lower::{Cx, N, Parts, Read, attr, elements, fail, has, hooks, id, slot, text_of, tone};
+use super::super::lower::{
+    Cx, N, Parts, Read, attr, elements, fail, has, hooks, id, slot, text_of, tone,
+};
 use crate::node::Element;
 
 /// `ActivityFeed`.
@@ -240,9 +242,17 @@ mod tests {
         assert!(matches!(first.trailing.as_deref(), Some(N::Text(time)) if time.muted));
         assert!(!first.detail.is_empty());
         assert_eq!(second.title, "Simran Grewal closed");
-        assert_eq!(second.action, Some(navree_native::Action::navigate("/people/3")));
-        assert_eq!(second.badge.as_ref().map(|badge| badge.text.as_str()), Some("Billing"));
-        assert!(matches!(second.trailing.as_deref(), Some(N::Text(time)) if time.value == "2 min ago"));
+        assert_eq!(
+            second.action,
+            Some(navree_native::Action::navigate("/people/3"))
+        );
+        assert_eq!(
+            second.badge.as_ref().map(|badge| badge.text.as_str()),
+            Some("Billing")
+        );
+        assert!(
+            matches!(second.trailing.as_deref(), Some(N::Text(time)) if time.value == "2 min ago")
+        );
     }
 
     #[test]

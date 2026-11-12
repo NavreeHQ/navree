@@ -58,6 +58,7 @@ use crate::views::thread::{
     ActForm, AssignForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
     SnoozeForm, composer, message_item,
 };
+use crate::views::web_only;
 use crate::views::{Filters, View, ViewCounts, shell, views_src};
 
 /// The cookie that says which agent a visitor works as.
@@ -581,7 +582,12 @@ impl Pages {
         }
         let view = app_page
             .actions(page_actions(me.single_keys))
-            .body((split, palette(&page), shortcuts(me.single_keys)))
+            // The palette is for a keyboard: a native client has its own way to search and act.
+            .body((
+                split,
+                web_only(palette(&page)),
+                web_only(shortcuts(me.single_keys)),
+            ))
             .to_view();
         Ok(no_store(view.into_response()))
     }

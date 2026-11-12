@@ -11,14 +11,16 @@ mod chat;
 mod date;
 mod feed;
 mod fold;
+mod lazy;
 mod menu;
 mod select;
 mod sortable;
 mod split;
 mod tabs;
-mod upload;
 #[cfg(test)]
 mod testing;
+mod toggle;
+mod upload;
 
 use std::borrow::Cow;
 
@@ -147,6 +149,9 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "attachment" => (chat::attachment, &[]),
         "marker" => (chat::marker, &[]),
         "chart" => (chart::figure, chart::HOOKS),
+        "lazy-list" => (lazy::lazy_list, lazy::HOOKS),
+        "live-state" => (lazy::live_state, &[]),
+        "toggle-group" => (toggle::toggle_group, toggle::HOOKS),
         "sortable" => (sortable::sortable, sortable::HOOKS),
         "upload" => (upload::upload, upload::HOOKS),
         _ => return None,
@@ -828,7 +833,12 @@ fn named(
         }
         // Two fields that are one choice, a range of dates: the words that name
         // it stand over them.
-        [N::Stack(stack)] if stack.children.iter().all(|child| matches!(child, N::Field(_))) => {
+        [N::Stack(stack)]
+            if stack
+                .children
+                .iter()
+                .all(|child| matches!(child, N::Field(_))) =>
+        {
             let words = |value: String, tone| {
                 N::Text(n::Text {
                     value,

@@ -12,7 +12,9 @@
 //! The files the server already has are rows under the field, each with a way
 //! to open it and, when the page allows, to remove it.
 
-use super::super::lower::{Control, Cx, N, Parts, Read, attr, elements, fail, hidden_in, hooks, id, slot, text_of};
+use super::super::lower::{
+    Control, Cx, N, Parts, Read, attr, elements, fail, hidden_in, hooks, id, slot, text_of,
+};
 use crate::node::{Element, Node};
 use navree_native::node as n;
 
@@ -249,7 +251,10 @@ mod tests {
         };
         assert_eq!(row.title, "invoice.pdf");
         assert_eq!(row.subtitle.as_deref(), Some("1.2 KB"));
-        assert_eq!(row.action, Some(navree_native::Action::navigate("/files/1")));
+        assert_eq!(
+            row.action,
+            Some(navree_native::Action::navigate("/files/1"))
+        );
         // Taking it away posts with the page's token.
         let Some(N::Button(remove)) = row.trailing.as_deref() else {
             panic!("no way to remove it");

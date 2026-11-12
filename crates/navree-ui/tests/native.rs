@@ -1866,7 +1866,15 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
         .collect();
     assert_eq!(
         labels,
-        ["Select all on this page", "", "Order", "Status", "Total", "Placed", "Actions"]
+        [
+            "Select all on this page",
+            "",
+            "Order",
+            "Status",
+            "Total",
+            "Placed",
+            "Actions"
+        ]
     );
     // Row 1 is open: its detail follows it, across the table.
     assert_eq!(table.rows.len(), 3);
@@ -1875,7 +1883,10 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
     let N::Field(tick) = &first.cells[0] else {
         panic!("not a box: {:?}", first.cells[0]);
     };
-    assert_eq!((tick.name.as_str(), tick.label.as_deref()), ("ids", Some("Select CS-20481")));
+    assert_eq!(
+        (tick.name.as_str(), tick.label.as_deref()),
+        ("ids", Some("Select CS-20481"))
+    );
     assert!(matches!(&tick.input, Input::Toggle(toggle) if toggle.value.as_deref() == Some("1")));
     let N::Button(open) = &first.cells[1] else {
         panic!("not a control: {:?}", first.cells[1]);
@@ -1884,7 +1895,10 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
     assert_eq!(open.label, "Hide details");
     assert!(matches!(
         &open.action,
-        Some(Action::Navigate { present: navree_native::action::Present::Replace, .. })
+        Some(Action::Navigate {
+            present: navree_native::action::Present::Replace,
+            ..
+        })
     ));
     // The menu: a link and a post that carries the token the table was given.
     let N::Menu(menu) = &first.cells[6] else {
@@ -1944,12 +1958,14 @@ fn an_action_that_asks_first_and_a_hook_no_reader_knows_are_misses() {
     let page = TestNative::build(phone(), || {
         let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
         let page = TablePage::new(vec![order(1, "open")], 1);
-        View::new("Orders").body(orders_table(&query, &page).bulk(
-            "/orders/bulk",
-            [navree_ui::table::BulkAction::new("delete", "Delete")
-                .destructive()
-                .confirm("Delete these orders?")],
-        ))
+        View::new("Orders").body(
+            orders_table(&query, &page).bulk(
+                "/orders/bulk",
+                [navree_ui::table::BulkAction::new("delete", "Delete")
+                    .destructive()
+                    .confirm("Delete these orders?")],
+            ),
+        )
     });
     assert_eq!(page.why(), ["slot:data-table"]);
     assert_eq!(

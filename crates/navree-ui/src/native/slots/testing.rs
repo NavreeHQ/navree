@@ -22,7 +22,10 @@ pub(crate) fn misses(node: impl Into<Node>) -> Vec<String> {
 /// `node` with the hook `hook` put on its first element whose slot is `name`.
 pub(crate) fn tamper(node: impl Into<Node>, name: &str, hook: &'static str) -> Node {
     let mut node = node.into();
-    assert!(add(&mut node, name, hook), "no element with the slot `{name}`");
+    assert!(
+        add(&mut node, name, hook),
+        "no element with the slot `{name}`"
+    );
     node
 }
 
@@ -36,7 +39,10 @@ fn add(node: &mut Node, name: &str, hook: &'static str) -> bool {
                 });
                 return true;
             }
-            element.children.iter_mut().any(|child| add(child, name, hook))
+            element
+                .children
+                .iter_mut()
+                .any(|child| add(child, name, hook))
         }
         Node::Fragment(nodes) => nodes.iter_mut().any(|child| add(child, name, hook)),
         _ => false,

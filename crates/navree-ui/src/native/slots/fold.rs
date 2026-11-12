@@ -41,12 +41,7 @@ pub(crate) fn collapsible(cx: &mut Cx, element: &Element) -> Read {
 }
 
 /// A `<details>` with the trigger and the content that components give it.
-fn disclosure(
-    cx: &mut Cx,
-    element: &Element,
-    trigger: &str,
-    content: &str,
-) -> Read<n::Disclosure> {
+fn disclosure(cx: &mut Cx, element: &Element, trigger: &str, content: &str) -> Read<n::Disclosure> {
     if element.tag() != "details" {
         return fail(format!("a section that is a <{}>", element.tag()));
     }
@@ -86,7 +81,10 @@ mod tests {
     fn an_accordion_is_sections_that_open_under_their_labels() {
         let N::Stack(stack) = read(
             Accordion::new()
-                .item("How long does delivery take?", Text::new("Three to five days."))
+                .item(
+                    "How long does delivery take?",
+                    Text::new("Three to five days."),
+                )
                 .open_item(
                     "Can I return it?",
                     Card::titled("Returns").body(Text::new("Within 30 days.")),
@@ -102,7 +100,10 @@ mod tests {
         assert_eq!(section(first).children, [N::text("Three to five days.")]);
         assert_eq!(section(second).label, "Can I return it?");
         assert!(section(second).open);
-        assert!(matches!(section(second).children.as_slice(), [N::Section(_)]));
+        assert!(matches!(
+            section(second).children.as_slice(),
+            [N::Section(_)]
+        ));
     }
 
     #[test]
@@ -118,7 +119,11 @@ mod tests {
 
     #[test]
     fn a_collapsible_is_one_section() {
-        let node = read(Collapsible::new("More details").open(true).body(Text::new("Hidden")));
+        let node = read(
+            Collapsible::new("More details")
+                .open(true)
+                .body(Text::new("Hidden")),
+        );
         let section = section(&node);
         assert_eq!(section.label, "More details");
         assert!(section.open);

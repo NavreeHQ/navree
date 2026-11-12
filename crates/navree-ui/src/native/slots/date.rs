@@ -11,7 +11,9 @@ use std::borrow::Cow;
 
 use navree_native::node as n;
 
-use super::super::lower::{Control, Cx, N, Parts, Read, attr, elements, fail, has, id, slot, text_of};
+use super::super::lower::{
+    Control, Cx, N, Parts, Read, attr, elements, fail, has, id, slot, text_of,
+};
 use super::without;
 use crate::node::Element;
 
@@ -83,9 +85,11 @@ fn rules(cx: &mut Cx, popup: &Element) -> Read<()> {
     let Ok(rules) = serde_json::from_str::<serde_json::Value>(&json) else {
         return fail("rules for a calendar that are not readable");
     };
-    let off = rules
-        .as_object()
-        .is_some_and(|rules| rules.keys().any(|key| !matches!(key.as_str(), "min" | "max")));
+    let off = rules.as_object().is_some_and(|rules| {
+        rules
+            .keys()
+            .any(|key| !matches!(key.as_str(), "min" | "max"))
+    });
     if off {
         cx.dropped.push("date-rules".to_owned());
     }
@@ -225,11 +229,9 @@ mod tests {
 
     #[test]
     fn a_range_of_dates_is_two_dates_named_from_and_to() {
-        let N::Stack(stack) = read(
-            DateRangePicker::new("from", "to").value(
-                crate::dates::DateRange::new(day(2026, 11, 1), day(2026, 11, 12)),
-            ),
-        ) else {
+        let N::Stack(stack) = read(DateRangePicker::new("from", "to").value(
+            crate::dates::DateRange::new(day(2026, 11, 1), day(2026, 11, 12)),
+        )) else {
             panic!("not a stack");
         };
         let [N::Field(from), N::Field(to)] = stack.children.as_slice() else {
@@ -241,7 +243,45 @@ mod tests {
         let (i::Input::Date(first), i::Input::Date(last)) = (&from.input, &to.input) else {
             panic!("not dates");
         };
-        assert_eq!((first.value.as_str(), last.value.as_str()), ("2026-11-01", "2026-11-12"));
+        assert_eq!(
+            (first.value.as_str(), last.value.as_str()),
+            ("2026-11-01", "2026-11-12")
+        );
+    }
+
+    #[test]
+    fn a_date_control_in_a_field_takes_the_fields_words_and_so_does_a_range() {
+        let N::Field(field) = read(
+            crate::Field::new("due", "Due on")
+                .help("When it is owed")
+                .error("Pick a day")
+                .control(DatePicker::new("due")),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(field.label.as_deref(), Some("Due on"));
+        assert_eq!(field.help.as_deref(), Some("When it is owed"));
+        assert_eq!(field.error.as_deref(), Some("Pick a day"));
+        // A range is two fields: the words that name it stand over them and under them.
+        let N::Stack(range) = read(
+            crate::Field::new("when", "Placed")
+                .help("Between two days")
+                .control(DateRangePicker::new("from", "to")),
+        ) else {
+            panic!("not a stack");
+        };
+        assert_eq!(range.children.len(), 4);
+        assert_eq!(
+            range.children[0],
+            N::Text(n::Text {
+                value: "Placed".into(),
+                style: n::TextStyle::Caption,
+                muted: true,
+                ..n::Text::default()
+            })
+        );
+        assert!(matches!(range.children[1], N::Field(_)));
+        assert!(matches!(&range.children[3], N::Text(text) if text.value == "Between two days"));
     }
 
     #[test]
@@ -255,7 +295,10 @@ mod tests {
         for (node, slot) in [
             (Node::from(DatePicker::new("due")), "date-picker"),
             (Node::from(TimePicker::new("at")), "time-picker"),
-            (Node::from(DateRangePicker::new("from", "to")), "date-range-picker"),
+            (
+                Node::from(DateRangePicker::new("from", "to")),
+                "date-range-picker",
+            ),
             (Node::from(DatePicker::new("due")), "input"),
         ] {
             assert_eq!(

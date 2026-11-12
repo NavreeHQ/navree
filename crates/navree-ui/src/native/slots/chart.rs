@@ -13,7 +13,9 @@
 
 use navree_native::node as n;
 
-use super::super::lower::{Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, text_of};
+use super::super::lower::{
+    Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, text_of,
+};
 use crate::node::{Element, Node};
 
 /// The hooks the figure of a chart carries that this reader answers for.
@@ -260,11 +262,11 @@ fn shown_in(data: &Element) -> Read<Vec<(String, Vec<String>)>> {
 mod tests {
     use super::super::testing::{misses, tamper};
     use super::*;
-    use crate::charts::{Chart, Donut, Funnel, Series, Sparkline, Stage};
-    use crate::native::scope::{Asked, Request};
-    use crate::native::TestNative;
-    use crate::node::Node;
     use crate::View;
+    use crate::charts::{Chart, Donut, Funnel, Series, Sparkline, Stage};
+    use crate::native::TestNative;
+    use crate::native::scope::{Asked, Request};
+    use crate::node::Node;
     use navree_native::{Client, FormFactor, Platform};
 
     fn phone() -> Client {
@@ -330,13 +332,20 @@ mod tests {
             [Some(3_070_972.0), Some(2_500_000.0)]
         );
         // The page's words stay as the page wrote them.
-        assert!(chart.series[0].shown[0].contains('₹'), "{:?}", chart.series[0].shown);
+        assert!(
+            chart.series[0].shown[0].contains('₹'),
+            "{:?}",
+            chart.series[0].shown
+        );
     }
 
     #[test]
     fn a_donut_a_funnel_and_a_sparkline_give_theirs() {
         let donut = chart_of(|| {
-            Donut::new("Sales").part("Online", 70).part("Store", 30).into()
+            Donut::new("Sales")
+                .part("Online", 70)
+                .part("Store", 30)
+                .into()
         });
         assert_eq!(donut.kind, n::ChartKind::Donut);
         assert_eq!(donut.labels, ["Online", "Store"]);
@@ -352,7 +361,10 @@ mod tests {
         assert_eq!(numbers_of(&funnel.series[0]), [Some(100.0), Some(20.0)]);
         let spark = chart_of(|| Sparkline::new("Trend", [1, 3, 2, 5]).into());
         assert_eq!(spark.kind, n::ChartKind::Sparkline);
-        assert_eq!(numbers_of(&spark.series[0]), [Some(1.0), Some(3.0), Some(2.0), Some(5.0)]);
+        assert_eq!(
+            numbers_of(&spark.series[0]),
+            [Some(1.0), Some(3.0), Some(2.0), Some(5.0)]
+        );
     }
 
     #[test]

@@ -74,7 +74,10 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                     .attr("name", "ids")
                     .attr("value", key.clone().unwrap_or_default())
                     .attr("form", self.bulk_id())
-                    .attr("aria-label", self.labels.select_row.replace("{label}", &text));
+                    .attr(
+                        "aria-label",
+                        self.labels.select_row.replace("{label}", &text),
+                    );
                 if self.selectable_if.as_ref().is_some_and(|can| !can(row)) {
                     box_ = box_.flag("disabled", true);
                 }
@@ -211,7 +214,10 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             .attr("aria-haspopup", "menu")
             .attr("aria-expanded", "false")
             .attr("data-ui-keep-attrs", "aria-expanded")
-            .attr("aria-label", self.labels.row_actions.replace("{label}", label))
+            .attr(
+                "aria-label",
+                self.labels.row_actions.replace("{label}", label),
+            )
             .child(icon(icons::ELLIPSIS));
         let menu = crate::components::menu_element(
             &menu_id,

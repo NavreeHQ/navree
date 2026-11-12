@@ -230,7 +230,9 @@ fn bulk_form(cx: &mut Cx, bulk: &Element) -> Read<n::Form> {
     Ok(n::Form {
         id: id(bulk),
         method: n::Method::Post,
-        action: attr(bulk, "action").map(Cow::into_owned).unwrap_or_default(),
+        action: attr(bulk, "action")
+            .map(Cow::into_owned)
+            .unwrap_or_default(),
         hidden,
         children,
     })

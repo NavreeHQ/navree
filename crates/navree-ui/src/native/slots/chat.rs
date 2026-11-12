@@ -69,20 +69,22 @@ pub(crate) fn bubble(cx: &mut Cx, element: &Element) -> Read {
     };
     hooks(content, &[])?;
     let children = cx.of(content);
-    Ok(vec![if attr(element, "data-variant").as_deref() == Some("note") {
-        N::Section(n::Section {
-            id: id(element),
-            style: n::SectionStyle::Inset,
-            children,
-            ..n::Section::default()
-        })
-    } else {
-        N::Stack(n::Stack {
-            id: id(element),
-            children,
-            ..n::Stack::default()
-        })
-    }])
+    Ok(vec![
+        if attr(element, "data-variant").as_deref() == Some("note") {
+            N::Section(n::Section {
+                id: id(element),
+                style: n::SectionStyle::Inset,
+                children,
+                ..n::Section::default()
+            })
+        } else {
+            N::Stack(n::Stack {
+                id: id(element),
+                children,
+                ..n::Stack::default()
+            })
+        },
+    ])
 }
 
 /// `Attachment`: a file, with its size, that opens when tapped.
@@ -152,8 +154,22 @@ fn words_only(element: &Element) -> bool {
         Node::Element(inner) => {
             matches!(
                 inner.tag(),
-                "span" | "div" | "p" | "bdi" | "strong" | "b" | "em" | "i" | "time" | "small"
-                    | "svg" | "path" | "circle" | "rect" | "line" | "polyline"
+                "span"
+                    | "div"
+                    | "p"
+                    | "bdi"
+                    | "strong"
+                    | "b"
+                    | "em"
+                    | "i"
+                    | "time"
+                    | "small"
+                    | "svg"
+                    | "path"
+                    | "circle"
+                    | "rect"
+                    | "line"
+                    | "polyline"
             ) && words_only(inner)
         }
         Node::Raw(_) | Node::Static(_) => true,
@@ -195,7 +211,9 @@ mod tests {
         ));
         assert_eq!(row.id.as_deref(), Some("message-3"));
         assert_eq!(row.title, "Tanvi Sharma");
-        assert!(matches!(row.leading.as_deref(), Some(N::Avatar(avatar)) if avatar.name == "Tanvi Sharma"));
+        assert!(
+            matches!(row.leading.as_deref(), Some(N::Avatar(avatar)) if avatar.name == "Tanvi Sharma")
+        );
         assert!(matches!(row.trailing.as_deref(), Some(N::Text(time)) if time.value == "9:41 am"));
         let [N::Stack(said), N::Row(file)] = row.detail.as_slice() else {
             panic!("not a bubble and a file: {:?}", row.detail);
@@ -203,8 +221,13 @@ mod tests {
         assert_eq!(said.children, [N::text("Where is my order?")]);
         assert_eq!(file.title, "invoice.pdf");
         assert_eq!(file.subtitle.as_deref(), Some("40 KB"));
-        assert_eq!(file.action, Some(navree_native::Action::navigate("/files/1")));
-        assert!(matches!(file.leading.as_deref(), Some(N::Icon(icon)) if icon.name.as_deref() == Some("file")));
+        assert_eq!(
+            file.action,
+            Some(navree_native::Action::navigate("/files/1"))
+        );
+        assert!(
+            matches!(file.leading.as_deref(), Some(N::Icon(icon)) if icon.name.as_deref() == Some("file"))
+        );
     }
 
     #[test]
@@ -235,7 +258,10 @@ mod tests {
     #[test]
     fn a_marker_is_a_small_quiet_line() {
         assert_eq!(
-            read(Marker::new(MarkerVariant::Separator, "Closed by Simran Grewal")),
+            read(Marker::new(
+                MarkerVariant::Separator,
+                "Closed by Simran Grewal"
+            )),
             N::Text(n::Text {
                 value: "Closed by Simran Grewal".into(),
                 style: n::TextStyle::Caption,

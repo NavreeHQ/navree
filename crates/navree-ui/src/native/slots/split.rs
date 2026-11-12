@@ -32,11 +32,9 @@ pub(crate) fn split(cx: &mut Cx, element: &Element) -> Read {
         cx.dropped.push("split-sizes".to_owned());
     }
     // The pane a narrow screen shows is not said to a client yet.
-    if element
-        .child_nodes()
-        .iter()
-        .any(|node| matches!(node, crate::node::Node::Element(pane) if has(pane, "data-split-current")))
-    {
+    if element.child_nodes().iter().any(
+        |node| matches!(node, crate::node::Node::Element(pane) if has(pane, "data-split-current")),
+    ) {
         cx.dropped.push("split-current".to_owned());
     }
     if attr(element, "data-orientation").as_deref() == Some("vertical") {
@@ -124,7 +122,11 @@ mod tests {
     fn two_panes_are_a_primary_and_its_detail() {
         let N::Split(split) = read(
             SplitPane::new("mail")
-                .pane(Pane::new("list", "Conversations").size(30).body(Text::new("rows")))
+                .pane(
+                    Pane::new("list", "Conversations")
+                        .size(30)
+                        .body(Text::new("rows")),
+                )
                 .pane(
                     Pane::fill("thread", "Conversation")
                         .header(Text::new("Refund for CS-20481"))
@@ -157,7 +159,11 @@ mod tests {
             SplitPane::new("mail")
                 .pane(Pane::new("list", "Conversations").body(Text::new("rows")))
                 .pane(Pane::fill("thread", "Conversation").body(Text::new("messages")))
-                .pane(Pane::new("customer", "Customer").collapsible().body(Text::new("who"))),
+                .pane(
+                    Pane::new("customer", "Customer")
+                        .collapsible()
+                        .body(Text::new("who")),
+                ),
         ) else {
             panic!("not a split");
         };

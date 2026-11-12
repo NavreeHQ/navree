@@ -1225,11 +1225,13 @@ impl Cx {
                             value: token.clone(),
                         })
                         .collect();
-                    fields.extend(attr(element, "name").map(|name| Pair {
-                        name: name.into_owned(),
-                        value: attr(element, "value")
-                            .map(Cow::into_owned)
-                            .unwrap_or_default(),
+                    fields.extend(attr(element, "name").map(|name| {
+                        Pair {
+                            name: name.into_owned(),
+                            value: attr(element, "value")
+                                .map(Cow::into_owned)
+                                .unwrap_or_default(),
+                        }
                     }));
                     actions.push(Action::Request {
                         method: n::Method::Post,
@@ -1297,6 +1299,9 @@ const QUIET_HOOKS: &[&str] = &[
     "data-ui-row-key",
     "data-ui-place",
     "data-ui-sr",
+    // How long a filter waits for typing to stop before it asks; a drag a press may start.
+    "data-ui-debounce",
+    "data-ui-drag",
 ];
 
 /// The hooks the generic reader answers for: commands on a click, a region

@@ -6,7 +6,9 @@
 //! holds its panel, so a client switches without asking the server; a lazy
 //! one is fetched when it is first in view.
 
-use super::super::lower::{Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, slot, text_of};
+use super::super::lower::{
+    Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, slot, text_of,
+};
 use crate::node::{Element, Node};
 use navree_native::node as n;
 
@@ -14,7 +16,12 @@ use navree_native::node as n;
 pub(crate) const HOOKS: &[&str] = &["data-ui-tabs"];
 
 /// The hooks a lazy panel carries: it is a region.
-const PANEL: &[&str] = &["data-ui-region", "data-ui-src", "data-ui-lazy", "data-ui-loaded"];
+const PANEL: &[&str] = &[
+    "data-ui-region",
+    "data-ui-src",
+    "data-ui-lazy",
+    "data-ui-loaded",
+];
 
 /// `Tabs`.
 pub(crate) fn tabs(cx: &mut Cx, element: &Element) -> Read {
@@ -171,10 +178,9 @@ mod tests {
 
     #[test]
     fn an_icon_alone_is_named_by_what_the_page_says_it_is() {
-        let tabs = tabs_of(read(
-            Tabs::new("t", "Views")
-                .tab(Tab::icon_only("grid", icons::LAYOUT_GRID, "Grid").panel(Text::new("g"))),
-        ));
+        let tabs = tabs_of(read(Tabs::new("t", "Views").tab(
+            Tab::icon_only("grid", icons::LAYOUT_GRID, "Grid").panel(Text::new("g")),
+        )));
         assert_eq!(tabs.items[0].label, "Grid");
         assert!(tabs.items[0].icon.is_some());
     }
