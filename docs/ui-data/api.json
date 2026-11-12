@@ -5455,6 +5455,240 @@
     "variants": [],
     "shared": []
   },
+  "DayClock": {
+    "name": "DayClock",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/clock.rs",
+    "summary": "A day round a clock face: one wedge for each of the 24 hours, midnight at the top and running clockwise. A wedge's length is its hour's value (steps, active minutes); its colour is its category (a mood, a kind of activity) or the band of a `ColorScale`; how strong it is says its level. Up to eight moments are marked round the outside with icons, the hour that is now is outlined, and the hub holds the day's total.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A clock called `title`, with no values yet."
+      }
+    ],
+    "methods": [
+      {
+        "name": "values",
+        "generics": "<V: IntoValue>",
+        "args": "values: impl IntoIterator<Item = V>",
+        "doc": "The value of each hour from midnight, 24 of them: what sets a wedge's length. Fewer leave the rest empty; more are not read. A gap (`None`, NaN) is an hour with no value."
+      },
+      {
+        "name": "levels",
+        "generics": "<V: IntoValue>",
+        "args": "levels: impl IntoIterator<Item = V>",
+        "doc": "How strong each hour is drawn, 0 to 1: how much of the hour was active, say. By default it is the hour's value against the busiest hour's."
+      },
+      {
+        "name": "category",
+        "generics": "",
+        "args": "name: impl Into<String>, ink: impl Into<Ink>",
+        "doc": "Adds a category called `name` in `ink`: the next one is numbered after it, from 0. Wedges take theirs from `categories`, and the legend names them."
+      },
+      {
+        "name": "categories",
+        "generics": "<K: Into<Option<usize>>>",
+        "args": "of: impl IntoIterator<Item = K>",
+        "doc": "The category of each hour from midnight, by its number: `None` for an hour with none."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours each hour by the band its value falls in, where it has no category."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour of an hour with no category or band: chart colour 1 by default."
+      },
+      {
+        "name": "moment",
+        "generics": "",
+        "args": "moment: Moment",
+        "doc": "Marks a moment round the outside. Eight are marked at most, in the order given; the table lists every one in its hour."
+      },
+      {
+        "name": "now",
+        "generics": "",
+        "args": "hour: u32",
+        "doc": "Outlines the hour that is now, 0 to 23."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: impl IntoValue",
+        "doc": "The value a full-length wedge stands for: the busiest hour's by default."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the values count, written after them: `steps`, `min`."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "The small capitals under the total in the hub: the unit by default."
+      },
+      {
+        "name": "center_icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "An icon over the total in the hub."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "Puts markup of your own in the hub instead of the total, hidden from assistive technology."
+      },
+      {
+        "name": "hub",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour the hub is washed with: chart colour 7 by default."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The drawing's width in pixels, 200 to 480 (300 by default); it shrinks to fit a narrower space."
+      },
+      {
+        "name": "size_on",
+        "generics": "",
+        "args": "screen: super::Screen, px: u32",
+        "doc": "Another width from `screen` up."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How it comes in: the wedges pop in round the clock, then the moments, and the total counts up; the hour that is now pulses."
+      },
+      {
+        "name": "radial_labels",
+        "generics": "",
+        "args": "labels: RadialLabels",
+        "doc": "The words it writes past the ones every chart shares."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Density": {
     "name": "Density",
     "kind": "enum",
@@ -7283,6 +7517,270 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Gauge": {
+    "name": "Gauge",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/gauge.rs",
+    "summary": "One value on an open arc: a stress level, a recovery index, a temperature on its scale. The arc is 270 degrees by default, open at the bottom, and runs clockwise from its lower left end; `sweep` makes it a half circle or any angle from 90 to 360 degrees. `min` starts the scale somewhere other than zero.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>, value: impl IntoValue",
+        "doc": "A gauge called `title` holding `value`, on a scale from 0 to 100 unless `min` and `max` say otherwise."
+      }
+    ],
+    "methods": [
+      {
+        "name": "min",
+        "generics": "",
+        "args": "min: impl IntoValue",
+        "doc": "Where the scale starts (0 by default): 34 for a body temperature in °C."
+      },
+      {
+        "name": "sweep",
+        "generics": "",
+        "args": "degrees: f64",
+        "doc": "How far the arc sweeps, in degrees from 90 to 360 (270 by default): 180 is a half circle, open below."
+      },
+      {
+        "name": "show_title",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the title over the gauge, and the switch that shows its table."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: impl IntoValue",
+        "doc": "The top of the scale: the goal the value is measured against (100 by default). A value past it draws a second lap on a ring."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How the value is written in the middle, the summary and the table."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the value counts, written after it: `%`, `kcal`, `bpm`. A word gets a space before it; a sign such as `%` or `°C` doesn't."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Colours the arc with any `Ink` of the theme."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the arc by what it means."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints the arc with `gradient`, which spans the whole ring, so the colour moves round it. `Ink::own` in its stops is the arc's own colour: `Gradient::sheen(Ink::own())` turns it brighter along the diagonal."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours the arc by the band its share of the scale (0 to 100) falls in. The band's label is said in the summary and the table, so the colour is never alone."
+      },
+      {
+        "name": "track",
+        "generics": "",
+        "args": "track: RingTrack",
+        "doc": "What the track under the arc is drawn in: a faint grey (the default), a faint tint of the arc's colour, or nothing."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around the arc."
+      },
+      {
+        "name": "halo",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a thin halo ring just outside the track, in the arc's colour or gradient."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Small capitals under the value: what it is, such as `Sleep score`. Under a ring smaller than 96 pixels it is written under the ring. It also names the row of the table."
+      },
+      {
+        "name": "sublabel",
+        "generics": "",
+        "args": "sublabel: impl Into<String>",
+        "doc": "A quieter line under the label: `Great recovery`."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "Puts markup of your own in the middle instead of the value. It is hidden from assistive technology, which reads the summary: say what it says there."
+      },
+      {
+        "name": "center_icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "Puts an icon in the middle instead of the value."
+      },
+      {
+        "name": "center_none",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the middle empty."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The drawing's width in pixels, 24 to 320."
+      },
+      {
+        "name": "size_on",
+        "generics": "",
+        "args": "screen: Screen, px: u32",
+        "doc": "Another width from `screen` up: `size(112).size_on(Screen::Md, 128)`. The arc, its thickness and the words in the middle all scale with it."
+      },
+      {
+        "name": "thickness",
+        "generics": "",
+        "args": "px: f64",
+        "doc": "The arc's thickness in pixels at the base size. By default it grows with the size, a little thicker for its size when small."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the arc comes in: it draws on from the start, and the value counts up. Off by default, and always off for a reader who asks for less motion; `Motion::none` is the still drawing an image is made from."
+      },
+      {
+        "name": "inline",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it small for a pill, a button or a row: the picture alone in a span, named by its summary, with no figure, heading or table."
+      },
+      {
+        "name": "radial_labels",
+        "generics": "",
+        "args": "labels: RadialLabels",
+        "doc": "The words it writes past the ones every chart shares."
       }
     ],
     "variants": [],
@@ -9381,6 +9879,42 @@
     ],
     "shared": []
   },
+  "Moment": {
+    "name": "Moment",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/clock.rs",
+    "summary": "Something that happened at a time of day, marked on a `DayClock` with an icon: a run, a meal, a meeting, waking up.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "hour: f64, name: impl Into<String>",
+        "doc": "A moment called `name` at `hour` of the day, 0 to 24: `6.75` is a quarter to seven in the morning."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "The icon in its marker."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The marker's colour: any `Ink` of the theme."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "The marker's colour by what it means."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Move": {
     "name": "Move",
     "kind": "struct",
@@ -11296,6 +11830,23 @@
     ],
     "shared": []
   },
+  "RadialLabels": {
+    "name": "RadialLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/mod.rs",
+    "summary": "The words a radial chart writes, in English by default. Templates name their blanks in braces. Change a field of `RadialLabels::english` and give it to the chart's `radial_labels`; the words every chart shares (Value, Share, No data) are its `ChartLabels`.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "The English words."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "RadioGroup": {
     "name": "RadioGroup",
     "kind": "struct",
@@ -12095,6 +12646,554 @@
     "variants": [],
     "shared": []
   },
+  "Ring": {
+    "name": "Ring",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/ring.rs",
+    "summary": "One value on a ring: a score out of 100, steps toward a goal, a share. The ring starts at twelve o'clock and runs clockwise; past its goal it draws a second lap.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>, value: impl IntoValue",
+        "doc": "A ring called `title` holding `value`, out of 100 unless `max` says otherwise. A value that is missing or not a number draws the empty state."
+      }
+    ],
+    "methods": [
+      {
+        "name": "show_title",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the title over the ring, as a chart's caption, and the switch that shows its table."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: impl IntoValue",
+        "doc": "The top of the scale: the goal the value is measured against (100 by default). A value past it draws a second lap on a ring."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How the value is written in the middle, the summary and the table."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the value counts, written after it: `%`, `kcal`, `bpm`. A word gets a space before it; a sign such as `%` or `°C` doesn't."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Colours the arc with any `Ink` of the theme."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the arc by what it means."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints the arc with `gradient`, which spans the whole ring, so the colour moves round it. `Ink::own` in its stops is the arc's own colour: `Gradient::sheen(Ink::own())` turns it brighter along the diagonal."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours the arc by the band its share of the scale (0 to 100) falls in. The band's label is said in the summary and the table, so the colour is never alone."
+      },
+      {
+        "name": "track",
+        "generics": "",
+        "args": "track: RingTrack",
+        "doc": "What the track under the arc is drawn in: a faint grey (the default), a faint tint of the arc's colour, or nothing."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around the arc."
+      },
+      {
+        "name": "halo",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a thin halo ring just outside the track, in the arc's colour or gradient."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Small capitals under the value: what it is, such as `Sleep score`. Under a ring smaller than 96 pixels it is written under the ring. It also names the row of the table."
+      },
+      {
+        "name": "sublabel",
+        "generics": "",
+        "args": "sublabel: impl Into<String>",
+        "doc": "A quieter line under the label: `Great recovery`."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "Puts markup of your own in the middle instead of the value. It is hidden from assistive technology, which reads the summary: say what it says there."
+      },
+      {
+        "name": "center_icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "Puts an icon in the middle instead of the value."
+      },
+      {
+        "name": "center_none",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the middle empty."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The drawing's width in pixels, 24 to 320."
+      },
+      {
+        "name": "size_on",
+        "generics": "",
+        "args": "screen: Screen, px: u32",
+        "doc": "Another width from `screen` up: `size(112).size_on(Screen::Md, 128)`. The arc, its thickness and the words in the middle all scale with it."
+      },
+      {
+        "name": "thickness",
+        "generics": "",
+        "args": "px: f64",
+        "doc": "The arc's thickness in pixels at the base size. By default it grows with the size, a little thicker for its size when small."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the arc comes in: it draws on from the start, and the value counts up. Off by default, and always off for a reader who asks for less motion; `Motion::none` is the still drawing an image is made from."
+      },
+      {
+        "name": "inline",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it small for a pill, a button or a row: the picture alone in a span, named by its summary, with no figure, heading or table."
+      },
+      {
+        "name": "radial_labels",
+        "generics": "",
+        "args": "labels: RadialLabels",
+        "doc": "The words it writes past the ones every chart shares."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "RingTrack": {
+    "name": "RingTrack",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/radial/mod.rs",
+    "summary": "What the track under a ring's arc is drawn in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Theme",
+        "doc": "A faint ring of the text ink: the same quiet grey under every colour, in light and dark.",
+        "default": true
+      },
+      {
+        "name": "Tinted",
+        "doc": "A faint ring of the arc's own colour.",
+        "default": false
+      },
+      {
+        "name": "None",
+        "doc": "No track: the arc alone.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "RingValue": {
+    "name": "RingValue",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/ring.rs",
+    "summary": "One value of `Rings`: a name, a value and the goal it is measured against, with its own colour, gradient and track.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl IntoValue",
+        "doc": "`value`, called `name`, out of 100 unless `max` says otherwise."
+      }
+    ],
+    "methods": [
+      {
+        "name": "max",
+        "generics": "",
+        "args": "max: impl IntoValue",
+        "doc": "The goal: the whole ring. A value past it draws a second lap."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the value counts, written after it: `kcal`, `min`, `%`."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Its colour: any `Ink` of the theme. The rings take the chart colours in order by default."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Its colour by what it means."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints its arc with `gradient`, spanning the drawing."
+      },
+      {
+        "name": "track",
+        "generics": "",
+        "args": "track: RingTrack",
+        "doc": "Its own track, in place of the one `Rings::track` gives every ring."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Rings": {
+    "name": "Rings",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/radial/ring.rs",
+    "summary": "Two to four values on rings inside each other, the first outside: the day's movement, exercise and standing; the two branches of the nervous system. Each ring starts at twelve o'clock, has its own colour or gradient and track, and draws a second lap past its goal. They come in one after another.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Rings called `title`, with no values yet."
+      }
+    ],
+    "methods": [
+      {
+        "name": "ring",
+        "generics": "",
+        "args": "ring: RingValue",
+        "doc": "Adds a ring inside the ones before it. Four are drawn at most; the table lists every value."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The drawing's width in pixels, 24 to 320 (160 by default)."
+      },
+      {
+        "name": "size_on",
+        "generics": "",
+        "args": "screen: Screen, px: u32",
+        "doc": "Another width from `screen` up."
+      },
+      {
+        "name": "thickness",
+        "generics": "",
+        "args": "px: f64",
+        "doc": "Each ring's thickness in pixels at the base size: in step with the size by default, 12 at 160."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "px: f64",
+        "doc": "The space between rings in pixels: three tenths of the thickness by default."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around each arc."
+      },
+      {
+        "name": "track",
+        "generics": "",
+        "args": "track: RingTrack",
+        "doc": "The track every ring has unless its own says otherwise."
+      },
+      {
+        "name": "center_values",
+        "generics": "",
+        "args": "",
+        "doc": "Writes each ring's value over its goal in the middle, in the ring's colour."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "Puts markup of your own in the middle, hidden from assistive technology."
+      },
+      {
+        "name": "center_icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "Puts an icon in the middle."
+      },
+      {
+        "name": "legend",
+        "generics": "",
+        "args": "",
+        "doc": "Names each ring beside the drawing, with its value and share."
+      },
+      {
+        "name": "show_title",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the title over the rings, and the switch that shows the table."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the rings come in: each draws on after the one outside it."
+      },
+      {
+        "name": "inline",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it small for a pill, a button or a row: the picture alone in a span, named by its summary."
+      },
+      {
+        "name": "radial_labels",
+        "generics": "",
+        "args": "labels: RadialLabels",
+        "doc": "The words it writes past the ones every chart shares."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Row": {
     "name": "Row",
     "kind": "struct",
@@ -12220,6 +13319,32 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Screen": {
+    "name": "Screen",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/radial/mod.rs",
+    "summary": "A screen width from which a radial chart takes another size: `Ring::size_on`. The widths are the toolkit's: 640, 768 and 1024 pixels.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Sm",
+        "doc": "640 pixels and wider: a large phone on its side, a small tablet.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "768 pixels and wider: a tablet, a narrow window.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "1024 pixels and wider: a laptop.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "ScrollArea": {
