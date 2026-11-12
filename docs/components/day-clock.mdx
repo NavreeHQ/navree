@@ -1,0 +1,159 @@
+---
+title: "Day clock"
+description: "A day round a clock face: a wedge for each of the 24 hours, its length the hour's value and its colour a category or a band, with moments marked round the outside. Drawn as SVG on the server."
+---
+
+<UiPreview example="day-clock/default" />
+
+`DayClock` shows one day as 24 wedges round a clock face, midnight at the top and running clockwise. A wedge's length is its hour's value, such as steps or active minutes; its colour is the hour's category, such as a mood, or the band its value falls in. Up to eight moments are marked round the outside with icons, the hour that is now is outlined, and the hub holds the day's total.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+DayClock::new("Steps and mood by hour")
+    .values([
+        0, 0, 0, 0, 0, 30, 640, 1_850, 920, 410, 380, 520,
+        760, 310, 280, 350, 620, 1_240, 940, 430, 260, 120, 30, 0,
+    ])
+    .unit("steps")
+    .category("Great", Ink::slot(3))
+    .category("Good", Ink::tone(Tone::named("cyan")))
+    .category("Neutral", Ink::muted())
+    .category("Stressed", Ink::slot(8))
+    .category("Rest", Ink::slot(7))
+    .categories([4, 4, 4, 4, 4, 4, 1, 0, 0, 1, 2, 1, 1, 3, 3, 2, 1, 0, 0, 1, 2, 4, 4, 4])
+    .moment(Moment::new(6.5, "Woke up").icon(icons::SUNRISE).ink(Ink::slot(4)))
+    .moment(Moment::new(7.5, "Morning walk").icon(icons::FOOTPRINTS).ink(Ink::slot(3)))
+    .moment(Moment::new(17.5, "Badminton").icon(icons::FLAME).ink(Ink::slot(2)))
+    .now(15)
+    .label("Steps")
+    .center_icon(icons::FOOTPRINTS)
+    .locale("en-IN")
+    .motion(Motion::new())
+```
+
+`.values(...)` takes the value of each hour from midnight, 24 of them: fewer leave the rest of the day empty, and more are not read. A gap (`None`, NaN) is an hour with no value.
+
+## When to use it
+
+Use a day clock for the shape of one day by the hour, where the time of day is the point: when someone walked, slept and was stressed. To compare the hours of a day as amounts, or to read exact values, use [bars](/docs/components/bar-chart/). For a sequence of states with no amounts, use a [colour strip](/docs/components/color-strip/). For many days at once, use a [calendar heat map](/docs/components/calendar-heatmap/).
+
+## Anatomy
+
+<UiAnatomy component="day-clock" />
+
+## Wedges
+
+A wedge reaches its full length at the busiest hour's value, or at `.max(value)` when you set one, so two days drawn with the same `max` compare. An hour with nothing in it is a faint stub. How strong a wedge is drawn is its value against the busiest hour's; `.levels(...)` sets it yourself, 0 to 1 for each hour from midnight, such as how much of the hour was active.
+
+`.format(NumberFormat)` writes the values and `.unit("steps")` says what they count. The hour names are written as the chart's locale writes a time.
+
+## Categories
+
+`.category(name, ink)` adds a category, numbered from 0 in the order added, and `.categories([...])` gives each hour from midnight its category by number: `None` for an hour with none. The legend names the categories, and the table and the tooltip give each hour's.
+
+`.band()` draws a thin band round the hub, under the wedges, in each hour's category. Every hour shows its category there, an hour with nothing in it too (asleep, resting), where its wedge is only a stub. An hour with no category leaves a gap in the band.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+DayClock::new("Steps by hour, awake and asleep")
+    .values([
+        0, 0, 0, 0, 0, 30, 640, 1_850, 920, 410, 380, 520,
+        760, 310, 280, 350, 620, 1_240, 940, 430, 260, 120, 30, 0,
+    ])
+    .unit("steps")
+    .category("Awake", Ink::slot(3))
+    .category("Asleep", Ink::slot(7))
+    .categories([1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1])
+    .band()
+    .label("Steps")
+```
+
+<UiPreview example="day-clock/band" />
+
+## Colour by band
+
+`.colors(ColorScale)` colours each hour by the band its value falls in, where it has no category. Name each band with `label`: the legend names the bands and the table gives each hour's. `.ink(Ink)` colours an hour with no category or band (chart colour 1 by default).
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+DayClock::new("Active minutes by hour")
+    .values([0, 0, 0, 0, 0, 0, 12, 38, 22, 6, 4, 8, 10, 3, 2, 5, 14, 46, 30, 9, 4, 1, 0, 0])
+    .max(60)
+    .unit("min")
+    .colors(
+        ColorScale::new(Ink::slot(1))
+            .label("Light")
+            .from(15, Ink::slot(4))
+            .label("Moderate")
+            .from(30, Ink::slot(8))
+            .label("Vigorous"),
+    )
+    .moment(Moment::new(7.25, "Cycling").icon(icons::BIKE).ink(Ink::slot(4)))
+    .moment(Moment::new(17.25, "Gym").icon(icons::DUMBBELL).ink(Ink::slot(8)))
+    .label("Active min")
+    .hub(Ink::slot(4))
+```
+
+<UiPreview example="day-clock/scale" />
+
+## Moments
+
+`Moment::new(hour, name)` marks something that happened at a time of day: `6.75` is a quarter to seven in the morning. `.icon(icon)` puts an icon in its marker, and `.ink(Ink)` or `.tone(Tone)` colours it. A moment sits on the ring round the outside, past the longest wedge, so it never covers one. Eight are marked at most, in the order given; past eight, a note under the drawing says how many are marked, and the table lists every one in its hour. The summary names them all.
+
+`.now(hour)` outlines the hour that is now, 0 to 23, and the table names its row.
+
+## The hub
+
+The hub holds the day's total, with the label in small capitals under it: `.label(...)`, or the unit when there is none. `.center_icon(icon)` puts an icon over the total, `.center(node)` puts markup of your own in its place, and `.hub(Ink)` sets the colour the hub is washed with (chart colour 7 by default). Markup in the hub is hidden from assistive technology, which reads the summary.
+
+## Size
+
+The clock fills the width it is given, up to `.size(px)`: 200 to 480 pixels (440 by default). `.size_on(Screen, px)` sets another from a screen width up, as on a [ring](/docs/components/ring/#sizes).
+
+## Motion
+
+`.motion(Motion::new())` pops the wedges in round the clock, then the moments, and counts the total up; the hour that is now pulses. The clock is drawn finished, so a reader who asks for less motion sees it in place.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A clock with no hour that has a value is empty.
+
+## The table
+
+A row for each of the 24 hours: its value, its category or band, and its moments. The value column is named by the label, the unit, or Value. See [The table](/docs/components/line-chart/#the-table). The words only a radial chart writes, such as the Moments column and the summary's templates, are fields of [`RadialLabels`](/docs/components/ring/#words).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the clock, which is one tab stop. |
+| `→`, `↓` | Moves to the next hour. |
+| `←`, `↑` | Moves to the previous hour. |
+| `Home`, `End` | Moves to midnight or to eleven at night. |
+| `Page Up`, `Page Down` | Moves two hours back or on. |
+| `Esc` | Hides the tooltip. |
+
+- The clock is a group named by its title and described by its summary: the day's total, the busiest hour and its value, and the moments.
+- A move by key shows the hour's tooltip beside it and is announced politely: the hour, its value, its category and its moments. A pointer over an hour or its moment shows the same tooltip.
+- The legend names every category or band, and the table twin gives every hour's, so colour is never alone.
+- Nothing moves for a reader who asks for less motion.
+
+</UiA11y>
+
+## API
+
+### DayClock
+
+<UiProps type="DayClock" />
+
+### Moment
+
+<UiProps type="Moment" />
