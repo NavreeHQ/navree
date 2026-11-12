@@ -59,7 +59,7 @@ class LiveStoreTest {
             app = NavreeSession(compose.activity.application, config, store.toHttpUrl())
             app.effects.activity = compose.activity
         }
-        compose.setContent { NavreeApp(app.driver, config, image = app::image) }
+        compose.setContent { Shots.Directed { NavreeApp(app.driver, config, image = app::image) } }
         waitFor("the app is ready") { app.driver.nav.stage == Stage.Ready }
 
         front(app)
