@@ -106,7 +106,26 @@ let actions = ability.only([
 
 `Shell::layout` places the navigation: a docked sidebar (the default), `ShellLayout::Inset` with the page in a card beside the sidebar, `ShellLayout::Floating` with the sidebar as a card, or `ShellLayout::Header` with the links in the top bar and each labelled group as a menu. `Shell::collapse` sets what folding does: `Collapse::Icons` (the default), `Collapse::Offcanvas` to slide it away, or `Collapse::Never`. On a phone every layout puts the links in a sheet. See [Themes](/docs/ui/themes/#layouts) for each one drawn.
 
-`Shell::theme_menu()` adds the reader's theme and mode to the top bar; see [Themes](/docs/ui/themes/#the-theme-menu).
+`Shell::theme_menu()` adds the reader's theme and mode to the top bar; see [Themes](/docs/ui/themes/#the-theme-menu). An app that offers one theme (`Shell::themes([brand])`) has nothing to choose there, so the menu holds the modes only.
+
+With `ShellLayout::Header` the app's mark and name stay in the top bar on a phone too, beside the menu button. `Shell::logo` takes the mark: a path, or an [`AppImage`](/docs/ui/app-styles/#pictures) the toolkit serves.
+
+## The middle of the top bar
+
+`AppPage::topbar(node)` puts what belongs to this page and this request in the middle of the top bar: a pager between days that depends on the day shown, a switch between views. It stands centred in the bar, between the navigation and the bar's own controls, and stays on a phone.
+
+```rust
+async fn today(shell: AppShell, day: Day) -> AppPage {
+    shell
+        .page(day.greeting())
+        .topbar(DayPager::new("day", day.label()).previous(day.before_href()))
+        .body(day.cards())
+}
+```
+
+## The title in the tab
+
+The page's heading is also its title in the browser's tab, unless you say otherwise. `Shell::title_template("{} · Kesar")` writes every title through a template, `{}` standing for the page's own, and `AppPage::document_title("Today")` titles a page whose heading is a greeting ("Good evening, Simran") by what it is. Both keep the heading as it is.
 
 ## Fetched ahead of a click
 

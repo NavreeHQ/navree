@@ -374,6 +374,8 @@ export const sections: DocsSection[] = [
       "breathing-guide",
       "dock",
       "day-pager",
+      "copy-field",
+      "auth-layout",
       // Marketing
       "site-page",
       "site-header",

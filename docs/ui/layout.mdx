@@ -51,6 +51,19 @@ Grid::fit(12).gap(3).children((
 ))
 ```
 
+### Columns in a ratio
+
+`Grid::ratio([7, 5])` makes columns of unequal width, in the ratio of the parts: a wide column of trends beside a narrower one of notes, or `[3, 2]`, or `[1, 2, 1]`. Two to four columns, each part 1 to 12. From 768 px up the columns stand side by side; on a phone they stack in the order given.
+
+```rust
+use navree::ui::*;
+
+Grid::ratio([7, 5]).gap(4).children((
+    Card::new().title("Trends").body(Text::new("The last 30 nights.")),
+    Card::new().title("Notes").body(Text::new("What changed this week.")),
+))
+```
+
 ## Spanning columns
 
 `.span(n)` on any component makes it take `n` columns of its grid.

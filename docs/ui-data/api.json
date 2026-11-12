@@ -666,6 +666,18 @@
     "constructors": [],
     "methods": [
       {
+        "name": "topbar",
+        "generics": "",
+        "args": "node: impl Into<Node>",
+        "doc": "Puts `node` in the middle of the top bar for this page: what belongs to the page and the request, such as a pager between days that depends on the day shown. It stands centred in the bar, between the navigation and the bar's own controls, and stays on phones."
+      },
+      {
+        "name": "document_title",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "Sets the title the browser's tab shows, in place of the heading: a page headed with a greeting is titled by what it is. The shell's title template still applies."
+      },
+      {
         "name": "appearance",
         "generics": "",
         "args": "appearance: Appearance",
@@ -1133,6 +1145,42 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "AuthLayout": {
+    "name": "AuthLayout",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "The page of one form a guest fills in (signing in, signing up, a new password): the form centred in the window, a panel beside it on wide screens for the app's own picture and words, and a corner at the top for a theme menu. navree-auth's `AuthPages` draws its pages in it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "body: impl Into<Node>",
+        "doc": "The page around `body`: the heading and the form's card."
+      }
+    ],
+    "methods": [
+      {
+        "name": "aside",
+        "generics": "",
+        "args": "aside: impl Into<Node>",
+        "doc": "The panel beside the form on wide screens: the app's mark, a line about it, a picture."
+      },
+      {
+        "name": "aside_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "What the panel is called to a screen reader (\"About\" by default): \"About Kesar\"."
+      },
+      {
+        "name": "corner",
+        "generics": "",
+        "args": "corner: impl Into<Node>",
+        "doc": "What stands in the top corner, over the form: a theme menu."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Avatar": {
     "name": "Avatar",
@@ -5092,6 +5140,36 @@
     "variants": [],
     "shared": []
   },
+  "CopyField": {
+    "name": "CopyField",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "A value to take elsewhere (an invite link, a key, a code to type on another device), in a read-only field with a Copy button beside it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<Cow<'static, str>>, label: impl Into<Cow<'static, str>>, value: impl Into<String>",
+        "doc": "The field `id`, called `label`, holding `value`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "help",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "A line under the field: what the value is for."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "copy: impl Into<Cow<'static, str>>, copied: impl Into<Cow<'static, str>>",
+        "doc": "The button's words, in the page's language: \"Copy\" and \"Copied\" by default."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "CountryCode": {
     "name": "CountryCode",
     "kind": "struct",
@@ -6743,10 +6821,16 @@
         "name": "new",
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>",
-        "doc": "A dock whose navigation is called `label` to a screen reader."
+        "doc": "A dock whose navigation is called `label` to a screen reader. It shows at every width until `below` says otherwise."
       }
     ],
     "methods": [
+      {
+        "name": "below",
+        "generics": "",
+        "args": "screen: crate::charts::Screen",
+        "doc": "Shows the dock only below `screen`: on phones, when the app's top bar holds the same places from `Screen::Md` up. From that width on it is not drawn at all, so it is neither seen nor read twice."
+      },
       {
         "name": "item",
         "generics": "",
@@ -9133,7 +9217,7 @@
     "name": "Grid",
     "kind": "struct",
     "file": "crates/navree-ui/src/components/layout.rs",
-    "summary": "A grid of equal columns, one column on phones.",
+    "summary": "A grid of columns, one column on phones: equal (`cols`), as many as fit (`fit`) or in a ratio (`ratio`).",
     "constructors": [
       {
         "name": "cols",
@@ -9146,6 +9230,12 @@
         "generics": "",
         "args": "min: u8",
         "doc": "A grid of as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20 or 24; another number takes the nearest): a row of figure tiles that wraps by the room it has, from one column on a phone to six on a wide screen, with no breakpoint to choose. The columns share the width equally."
+      },
+      {
+        "name": "ratio",
+        "generics": "",
+        "args": "parts: impl IntoIterator<Item = u8>",
+        "doc": "A grid of unequal columns, their widths in the ratio of `parts`: `[7, 5]` for a wide column beside a narrower one, `[3, 2]`, `[1, 2, 1]`. Two to four columns, each part 1 to 12 (others are taken to the nearest). One column under 768 px, in the order given."
       }
     ],
     "methods": [
@@ -13541,6 +13631,12 @@
     ],
     "methods": [
       {
+        "name": "edge_to_edge",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a picture from the very top of the screen, under the camera: for a screenshot taken on a phone, which has a status bar of its own."
+      },
+      {
         "name": "mode",
         "generics": "",
         "args": "mode: Mode",
@@ -13764,6 +13860,18 @@
       }
     ],
     "methods": [
+      {
+        "name": "dark",
+        "generics": "",
+        "args": "dark: Picture",
+        "doc": "The image as it looks in dark mode: `dark`'s file, its sizes and its formats (its alt text and size are this picture's, which it must share). A device in dark mode gets it, through `prefers-color-scheme`, unless `for_mode` says which mode the page is in."
+      },
+      {
+        "name": "for_mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "The mode the page is drawn in (its `Appearance`'s): light or dark draws that version alone, so the reader's own choice on the site wins over the device's; `Mode::System` leaves it to the device. Without a `dark` version it changes nothing."
+      },
       {
         "name": "srcset",
         "generics": "<S: Into<String>>",
@@ -14905,7 +15013,7 @@
         "name": "src",
         "generics": "",
         "args": "src: impl Into<Href>",
-        "doc": "Sets where its content comes from: a page holding an element with this id, or a fragment, which is a page with no script of its own. A page with the runtime that lacks this id, or a redirect, is somewhere else: the user goes there, as when a session has ended."
+        "doc": "Sets where its content comes from: a page holding an element with this id, or a fragment: a `View` whose body is what goes inside, which may hold parts that need the runtime (a lazy tab, another region), since the toolkit marks a view answered to a region's fetch as its fragment. A page with the runtime that lacks this id and isn't marked so (one a proxy serves), or a redirect, is somewhere else: the user goes there, as when a session has ended."
       },
       {
         "name": "lazy",
@@ -16613,7 +16721,7 @@
         "name": "eyebrow",
         "generics": "",
         "args": "eyebrow: impl Into<Node>",
-        "doc": "The small line above the title, saying what the section is about."
+        "doc": "The small line above the title, saying what the section is about. It is set in the theme's text face; a site that wants its labels in another face (its code face, a display face) sets `--font-label` in its own stylesheet, and the legal page's date follows it too."
       },
       {
         "name": "lead",
@@ -17157,6 +17265,18 @@
     ],
     "methods": [
       {
+        "name": "title_template",
+        "generics": "",
+        "args": "template: impl Into<Cow<'static, str>>",
+        "doc": "Sets how a page's title reads in the browser's tab, `{}` standing for the page's own: `\"{} · Kesar\"` makes a page headed \"Deals\" read \"Deals · Kesar\". The heading stays as it is. A template with no `{}` is passed over."
+      },
+      {
+        "name": "document_title",
+        "generics": "",
+        "args": "title: &str",
+        "doc": "`title` as the browser's tab reads it: through the title template, when there is one."
+      },
+      {
         "name": "stylesheet",
         "generics": "",
         "args": "sheet: &AppSheet",
@@ -17211,6 +17331,24 @@
         "doc": "The themes a reader may choose."
       },
       {
+        "name": "stylesheets",
+        "generics": "",
+        "args": "",
+        "doc": "The app's own stylesheets every page of the shell links, in order: what a page drawn outside the shell (a sign-in page) links to look like the app."
+      },
+      {
+        "name": "fonts",
+        "generics": "",
+        "args": "",
+        "doc": "The app's own typefaces every page of the shell links."
+      },
+      {
+        "name": "has_theme_menu",
+        "generics": "",
+        "args": "",
+        "doc": "Whether the top bar holds a `ThemeMenu`."
+      },
+      {
         "name": "toasts",
         "generics": "",
         "args": "position: crate::components::ToastPosition",
@@ -17232,7 +17370,7 @@
         "name": "logo",
         "generics": "",
         "args": "src: impl Into<Href>",
-        "doc": "Draws the picture at `src` as the app's mark, in place of Navree's: a path on the app or an `https://` URL. It is decorative, beside the app's name."
+        "doc": "Draws the picture at `src` as the app's mark, in place of Navree's: a path on the app, an `https://` URL, or an `AppImage` the toolkit serves (`.logo(&MARK)`). It is decorative, beside the app's name."
       },
       {
         "name": "header_slot",
@@ -20625,7 +20763,7 @@
         "name": "new",
         "generics": "",
         "args": "current: &Appearance, themes: &[Theme]",
-        "doc": "A menu showing `current`, offering `themes`."
+        "doc": "A menu showing `current`, offering `themes`. With one theme or none on offer there is nothing to choose, so the menu shows the modes only."
       }
     ],
     "methods": [

@@ -217,6 +217,7 @@ Otherwise it gets a 403 before any handler runs:
 - Requests with an `Authorization: Bearer` token skip the check: they can't be forged by another site.
 - A state-changing request **without** a session cookie has no token to send and passes, unless the browser marks it `Sec-Fetch-Site: cross-site` and its `Origin` isn't in `http.cors.allowed_origins`. That stops a forged form from signing a victim in to the attacker's account (login CSRF).
 - Paths matching `session.csrf_except` skip both checks. Use it for webhooks, which authenticate with signatures instead.
+- A path a module names with `navree::http::csrf::SameOriginOnly` is checked by its origin in place of the token: the browser's `Sec-Fetch-Site` must say `same-origin`, or, from a browser that doesn't send it, the `Origin` must name this host; a client that sends neither passes. It is for a route that changes nothing on the server, only a preference the browser keeps. Navree UI's appearance route (`/_navree/ui/appearance`, which only sets the theme cookie) is one, so a theme toggle on a page cached for everyone, which carries no token, works for a reader with a session too, and a post from another site, a sibling subdomain included, is still refused. Don't add it to `csrf_except`.
 - Tokens are compared in constant time and never logged. Each failure is logged at `WARN` on `navree::security` (`CSRF token mismatch`, with the reason `missing`, `mismatch` or `cross_site`) and, with the audit module, written to the audit trail as `csrf.mismatch`.
 
 ### The CSRF cookie
@@ -268,7 +269,7 @@ pub fn app() -> AppBuilder {
         .module(SessionModule::from_config())
         .module(AuthModule::from_config())
         .module(UiModule)
-        .module(AuthPages::new().app_name("Agra CRM"))
+        .module(AuthPages::new().app_name("Agra CRM").sign_up())
 }
 ```
 
@@ -279,13 +280,33 @@ pub fn app() -> AppBuilder {
 | `GET`, `POST /sign-in/two-factor` | the code from the authenticator app, or a recovery code |
 | `GET`, `POST /forgot-password` | mails a link to choose a new password; the answer is the same for every address |
 | `GET /reset-password?token=&email=`, `POST /reset-password` | sets the new password, which signs every session of the user out |
-| `POST /sign-out` | signs the browser out, then shows the sign-in page |
+| `GET`, `POST /sign-up` | with `AuthPages::sign_up()` and `auth.registration` on: a name, an email address and a password typed twice; makes the account, signs it in on this browser and goes on to `next` |
+| `POST /sign-out` | signs the browser out, then shows the sign-in page, or the page `AuthPages::after_sign_out(path)` names |
 
 - The sign-in page is where Navree UI's [sign-in state and 401 page](/docs/ui/errors-and-states/) send people: it follows `ui.sign_in` (`/sign-in` by default), or `AuthPages::sign_in_path`. After signing in, the browser goes back to `next`, else to `ui.home`. A `next` only ever leads to a page of your site, and never back to the sign-in pages.
 - Every form carries the session's CSRF token in its `_csrf` field, and every page works with JavaScript off.
 - Point `auth.password_reset.url` at the reset page (`https://app.example.com/reset-password`), so the reset mail links to it.
 - Put the sign-out button in the shell's user menu: `UserMenu::action("Sign out", "/sign-out")` posts there with the token.
 - A wrong password shows "These details don't match an account" whether or not the address has an account. After `auth.login_throttle_per_minute` failures the page answers 429 with `Retry-After`.
+- The sign-up page checks the account as `POST /api/auth/register` does: a unique address (case-insensitively), the password policy, the [sign-in policies](/docs/security/authentication/#sign-in-policies). An address that has an account already is named as such, as the JSON route's 409 does; a client may post five sign-ups a minute, then gets a 429. `AuthPages::sign_up_path` moves the page and `AuthPages::after_sign_up` sends a new account to a welcome page.
+
+#### In the app's look
+
+The pages are drawn in the app's own look: the registered [`Shell`](/docs/ui/app-shell/)'s default theme and mode, its stylesheets, its fonts and its title template, with the reader's own choice of theme and mode (the theme cookie, `?mode=`) laid over them. An app with no shell, or pages that look different, set them on the pages:
+
+```rust
+AuthPages::new()
+    .app_name("Kesar")
+    .sign_up()
+    .after_sign_out("/")
+    .appearance(Appearance::new(brand::theme(), Mode::System))
+    .stylesheet(&brand::SHEET)
+    .font(&brand::FONT)
+    .aside(brand::panel())
+    .theme_menu()
+```
+
+`aside` puts the app's panel (its mark, a line about it, a picture) beside the form from 960 px up; on a phone the form stands alone. `theme_menu` puts light, dark and system in the corner (and the themes, when the shell offers more than one), and is on when the shell has a theme menu. `view(fn(View) -> View)` dresses each page last, for what the options don't cover. The layout is navree-ui's [`AuthLayout`](/docs/components/auth-layout/).
 
 ### What a sign-in does
 

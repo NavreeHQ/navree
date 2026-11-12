@@ -1,0 +1,36 @@
+---
+title: "Copy field"
+description: "A value to take elsewhere, such as an invite link or a key, in a read-only field with a Copy button that says when it has copied."
+---
+
+<UiPreview example="copy-field/default" />
+
+`CopyField` shows a value the reader takes somewhere else: an invite link, an API key, a code to type on another device. The value sits in a read-only field, and a Copy button beside it copies it, reads "Copied" for a moment, and tells a screen reader so.
+
+```rust
+use navree::ui::*;
+
+CopyField::new("invite", "Invite link", "https://kesar.example/join/8k2m-q4rt")
+    .help("Anyone with the link can ask to join your family plan.")
+```
+
+The first argument is the field's id, which must be unique on the page; the second is its label. `.labels("कॉपी करें", "कॉपी हो गया")` sets the button's two words in the page's language.
+
+## With and without JavaScript
+
+With the runtime, the button copies through the clipboard, and focusing the field selects the whole value, so a keyboard copies it with one shortcut too. With JavaScript off the button is not drawn, since it could do nothing, and the field stays: read-only, selectable and copied by hand.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The field has its label, and its help line is its description.
+- The Copy button names the field it copies, and "Copied" is announced in the page's live region.
+- Tab reaches the field, which selects its value, then the button.
+- The value is text in a field, never markup: whatever it holds is shown as it is.
+
+</UiA11y>
+
+## API
+
+<UiProps type="CopyField" />
