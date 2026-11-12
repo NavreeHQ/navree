@@ -13,7 +13,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 build="$here/build"
 screens="${OUT:-$build/screens}"
-passes="${PASSES:-light dark light-largest dark-largest rtl}"
+passes="${PASSES:-light dark light-largest dark-largest rtl ipad}"
 mkdir -p "$build/logs" "$build/results" "$screens"
 
 pretty() {
@@ -35,6 +35,10 @@ if [ -z "$udid" ]; then
 fi
 echo "Runtime $runtime, device $(xcrun simctl list devices -j | jq -r --arg u "$udid" '.devices[][] | select(.udid == $u) | .name') ($udid)"
 destination="platform=iOS Simulator,id=$udid"
+# A regular width for the pass named ipad: an iPad Pro, or any iPad.
+ipad="$(xcrun simctl list devices available -j | jq -r --arg rt "$runtime" '
+    (.devices[$rt] // []) | map(select(.name | startswith("iPad"))) as $pads
+    | ($pads | map(select(.name | startswith("iPad Pro 11")))) + $pads | first | .udid // empty')"
 
 cd "$here/Demo"
 xcodegen generate --quiet
@@ -54,22 +58,30 @@ for pass in $passes; do
     appearance=light
     size=large
     rtl=0
+    device="$udid"
     case "$pass" in
         light) ;;
         dark) appearance=dark ;;
         light-largest) size=accessibility-extra-extra-extra-large ;;
         dark-largest) appearance=dark; size=accessibility-extra-extra-extra-large ;;
         rtl) rtl=1 ;;
+        ipad)
+            if [ -z "$ipad" ]; then echo "No iPad simulator on $runtime"; continue; fi
+            device="$ipad"
+            xcrun simctl boot "$device" 2>/dev/null || true
+            xcrun simctl bootstatus "$device" -b >/dev/null
+            xcrun simctl status_bar "$device" override --time "09:41" --wifiBars 3 --batteryState charged --batteryLevel 100 || true
+            ;;
         *) echo "Unknown pass $pass" >&2; exit 1 ;;
     esac
-    xcrun simctl ui "$udid" appearance "$appearance"
-    xcrun simctl ui "$udid" content_size "$size"
+    xcrun simctl ui "$device" appearance "$appearance"
+    xcrun simctl ui "$device" content_size "$size"
     rm -rf "$build/results/$pass.xcresult" "$screens/$pass"
     echo "Pass $pass: $appearance, $size"
     if ! TEST_RUNNER_NAVREE_SHOTS="$screens/$pass" TEST_RUNNER_NAVREE_RTL="$rtl" TEST_RUNNER_NAVREE_PASS="$pass" \
         xcodebuild test-without-building \
             -project NavreeDemo.xcodeproj -scheme NavreeDemo \
-            -destination "$destination" -derivedDataPath "$build/DerivedData" \
+            -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$build/DerivedData" \
             -resultBundlePath "$build/results/$pass.xcresult" \
             2>&1 | tee "$build/logs/test-$pass.log" | pretty; then
         status=1

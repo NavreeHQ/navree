@@ -360,10 +360,12 @@ struct OptionRow: View {
                 }
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.accentColor)
                     .opacity(chosen ? 1 : 0)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(option.disabled)
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
