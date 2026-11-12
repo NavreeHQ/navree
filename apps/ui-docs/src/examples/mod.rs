@@ -20,6 +20,7 @@ mod inputs;
 mod layout;
 mod linear;
 mod markdown;
+mod marketing;
 mod menu_bars;
 mod menus;
 mod navigation;
@@ -75,5 +76,6 @@ pub fn all() -> Vec<Example> {
     all.extend(store::all());
     all.extend(inbox::all());
     all.extend(board::all());
+    all.extend(marketing::all());
     all
 }

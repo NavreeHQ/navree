@@ -1,0 +1,54 @@
+---
+title: "Newsletter"
+description: "A band with a sign-up or contact form beside its words, checked on the server like any Navree form."
+---
+
+<UiPreview example="newsletter/default" />
+
+`Newsletter` puts a form beside a title and a line. The form is a [FormView](/docs/ui/forms/), so its fields, its checks on the server, its errors at each field and its CSRF token are a form's like any other, and it posts with no script. `.inline()` lays a form of one field out in one line, with its label kept for assistive technology.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+#[derive(Deserialize, Validate, Form)]
+struct Subscribe {
+    /// Email
+    #[validate(email)]
+    #[form(placeholder = "you@example.in")]
+    email: String,
+}
+
+Newsletter::new("letter", "A calm letter, once a month")
+    .lead("What changed in Kesar, and one thing worth knowing about sleep.")
+    .form(FormView::<Subscribe>::new().post("/subscribe").submit("Subscribe"))
+    .note("No spam. Leave with one click from any letter.")
+    .inline()
+```
+
+## Errors
+
+Draw the band again with the form `Rejected::respond` hands you, and the value and its error come back at the field, with the page's status 422. With the runtime loaded, the error is shown in place, with no new page. Post to the band's anchor, `.post("/subscribe#letter")`, so that with no script the page comes back scrolled to the band and its error.
+
+## A contact form
+
+Leave out `.inline()` for a form of several fields: its labels show and its fields stack beside the words.
+
+## Anatomy
+
+<UiAnatomy component="newsletter" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The band is a region named by its title.
+- An inline field keeps its `<label>`, out of sight.
+
+</UiA11y>
+
+## API
+
+### Newsletter
+
+<UiProps type="Newsletter" />

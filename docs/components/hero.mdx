@@ -1,0 +1,54 @@
+---
+title: "Hero"
+description: "The top of a page: a small line, the headline as the page's h1, a lead, calls to action, short notes and a picture."
+---
+
+<UiPreview example="hero/default" />
+
+`Hero` opens a page. Its headline is the page's one `h1`. With a picture it lays the words and the picture side by side from 64 rem up, and stacks them on a narrower screen; without one, or with `.centered()`, it centres the words. The picture can be a [Picture](/docs/components/picture/), a [BrowserFrame or PhoneFrame](/docs/components/device-frames/) around the live product, or any node.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+Hero::new(("Know your body, ", accent("one calm score a day.")))
+    .eyebrow("Health, read calmly")
+    .lead("Kesar reads the sleep, heart and step data your phone already keeps.")
+    .action(Button::primary("Start free").href("/signup").icon_end(icons::ARROW_RIGHT))
+    .action(Button::outline("See how it works").href("/#how"))
+    .note(icons::SHIELD_CHECK, "Data stored in India")
+    .media(BrowserFrame::new(today()).address("app.kesar.example/today"))
+```
+
+## Centred, and its backdrop
+
+`.centered()` centres the words with the picture under them. `.backdrop(Backdrop::Glow)` (the default) draws soft light from the theme's accent behind the hero, `Backdrop::Grid` adds a fine grid fading from the middle, and `Backdrop::None` keeps the page's background. Each is drawn by the stylesheet from the theme's tokens and needs no image.
+
+<UiPreview example="hero/centered" />
+
+## The accent
+
+`accent(text)` sets words of a heading in the accent colour: the half of a headline that carries it. A headline takes a tuple of text and nodes.
+
+## Anatomy
+
+<UiAnatomy component="hero" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The headline is the page's only `h1`, and names the hero's region.
+- The notes are a list; their icons are hidden from assistive technology.
+
+</UiA11y>
+
+## API
+
+### Hero
+
+<UiProps type="Hero" />
+
+### Backdrop
+
+<UiProps type="Backdrop" />

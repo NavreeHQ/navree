@@ -1,0 +1,60 @@
+---
+title: "Section"
+description: "A part of a public page with its heading, in the page's width, with the space every section shares."
+---
+
+<UiPreview example="section/default" />
+
+`Section` is a part of a page: an `id` that links name (`/#pricing`), a heading, its content, the page's width and gutters, and the space above and below. Its heading's title names the section for assistive technology.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+Section::new("features")
+    .heading(
+        SectionHeading::new(("Five lenses on one body. ", accent("All from data you have.")))
+            .eyebrow("What it reads")
+            .lead("Every number says how it was worked out, from your own baseline.")
+            .split(),
+    )
+    .child(features())
+```
+
+## Headings
+
+`SectionHeading` has a small line above the title (`.eyebrow`), the title as an `h2`, a lead and an action. It sits at the start, `.center()`s, or `.split()`s the lead beside the title from 64 rem up, for a section whose content runs full width under it.
+
+## Tone, width and space
+
+`.tone(SectionTone::Muted)` raises the section's background one step, with hairlines above and below; cards inside it stand one step out of it. `.narrow()` keeps the content to the width of a column of text, for prose and questions. `.compact()` halves the space above and below, for a row of logos or a band of numbers. Two plain sections in a row are parted by a hairline.
+
+## Anatomy
+
+<UiAnatomy component="section" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A section with a heading is a region named by its title (`aria-labelledby`); one without has no name.
+
+</UiA11y>
+
+## API
+
+### Section
+
+<UiProps type="Section" />
+
+### SectionHeading
+
+<UiProps type="SectionHeading" />
+
+### HeadingAlign
+
+<UiProps type="HeadingAlign" />
+
+### SectionTone
+
+<UiProps type="SectionTone" />

@@ -1,0 +1,37 @@
+---
+title: "LogoCloud"
+description: "A row of the names or marks of those who use the product."
+---
+
+<UiPreview example="logo-cloud/default" />
+
+`LogoCloud` is a line and a row of logos, centred and wrapping. A logo is a [Picture](/docs/components/picture/) with its alt text or an `svg` with a label; `.wordmark(name)` sets a name as a wordmark when there is no file.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+LogoCloud::new()
+    .title("Used by clinics, coaches and running clubs across North India")
+    .wordmark("Sutlej Clinics")
+    .wordmark("Doaba Fitness")
+    .logo(Picture::new("/logos/ambala-runners.svg", "Ambala Runners", 120, 28))
+```
+
+## Anatomy
+
+<UiAnatomy component="logo-cloud" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The logos are a list. A picture logo needs its alt text, the organisation's name.
+
+</UiA11y>
+
+## API
+
+### LogoCloud
+
+<UiProps type="LogoCloud" />

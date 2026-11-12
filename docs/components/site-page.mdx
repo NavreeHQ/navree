@@ -1,0 +1,53 @@
+---
+title: "SitePage"
+description: "A whole public page: a skip link, the header, the main landmark with its sections, and the footer."
+---
+
+<UiPreview example="site-page/default" />
+
+`SitePage` is the frame of a public page. It writes a link that skips to the content, the header, a `<main>` landmark with the page's sections, and the footer, in that order, so every page of a site has the same landmarks and the same first keyboard stop.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+SitePage::new()
+    .header(SiteHeader::new(Brand::new("Kesar", "/").icon(icons::SUN)).link("Pricing", "/pricing/"))
+    .section(Hero::new("Know your body, calmly."))
+    .section(Section::new("features").heading(SectionHeading::new("What it reads")))
+    .footer(SiteFooter::new(Brand::new("Kesar", "/")).legal("© 2026 Kesar Health Pvt. Ltd."))
+```
+
+## The skip link
+
+The skip link is the first thing a keyboard reaches. It is out of sight until it has focus, then shows itself at the top of the page, and Enter moves the focus to `<main>`. `.skip_label(...)` writes it in the page's language.
+
+## Brand
+
+`Brand::new(name, href)` is the site's name and its link home, used by the header and the footer. `.icon(icons::SUN)` or `.mark(node)` adds a mark; the mark is hidden from assistive technology, since the name says the same.
+
+## Anatomy
+
+<UiAnatomy component="site-page" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The skip link is the first focusable element and moves the focus to `<main>`, which takes it with `tabindex="-1"`.
+- `<header>`, `<main>` and `<footer>` are the page's landmarks, once each.
+
+</UiA11y>
+
+## API
+
+### SitePage
+
+<UiProps type="SitePage" />
+
+### Brand
+
+<UiProps type="Brand" />

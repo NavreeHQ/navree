@@ -749,6 +749,12 @@
         "doc": "The text to store for it, in a column or a cookie: `dark.ocean`. `Appearance::parse` reads it back."
       },
       {
+        "name": "for_reader",
+        "generics": "",
+        "args": "headers: &HeaderMap, query: Option<&str>",
+        "doc": "This look with the reader's own choice laid over it: the theme and mode kept in the cookie that the theme menu and the theme toggle set, then `?theme=` and `?mode=` in `query`, which last for this request only. For a page outside the app shell, such as a public site's, whose `AppShell` would do this for it."
+      },
+      {
         "name": "is_default",
         "generics": "",
         "args": "",
@@ -1136,6 +1142,32 @@
       }
     ]
   },
+  "Backdrop": {
+    "name": "Backdrop",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/marketing/hero.rs",
+    "summary": "What is drawn behind a `Hero` or a band: soft light from the theme's accent, a fine grid, or nothing. Each is drawn by the stylesheet from the theme's colours, needs no image and holds still for a reader who asks for less motion.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "None",
+        "doc": "The page's own background.",
+        "default": false
+      },
+      {
+        "name": "Glow",
+        "doc": "Light from the accent, from above. The default.",
+        "default": true
+      },
+      {
+        "name": "Grid",
+        "doc": "A fine grid fading out from the middle, with the glow over it.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Badge": {
     "name": "Badge",
     "kind": "struct",
@@ -1354,6 +1386,36 @@
       }
     ]
   },
+  "Brand": {
+    "name": "Brand",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "What a site's name and mark are: the link home in its header and footer.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "The site `name`, linking to `href`, its home page."
+      }
+    ],
+    "methods": [
+      {
+        "name": "mark",
+        "generics": "",
+        "args": "mark: impl Into<Node>",
+        "doc": "Its mark: a `Picture`, an `svg` of your own, any node. It is hidden from assistive technology, since the name says the same."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Its mark as an icon, in the accent colour."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Breadcrumb": {
     "name": "Breadcrumb",
     "kind": "struct",
@@ -1403,6 +1465,79 @@
         "generics": "",
         "args": "",
         "doc": "Fetches the trail's links when the pointer rests on one or it takes focus, so the page is often there before the click. Off unless asked, as for every link."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "BrowserFrame": {
+    "name": "BrowserFrame",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/frames.rs",
+    "summary": "A browser window around a screenshot or a live part of the product: a bar with its three buttons and an address, and the view under it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "A window showing `content`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "address",
+        "generics": "",
+        "args": "address: impl Into<Cow<'static, str>>",
+        "doc": "The address in its bar, without `https://`."
+      },
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "Draws it, and what it holds, light or dark whatever the page's mode."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: impl Into<Node>",
+        "doc": "A line under it, saying what it shows."
       }
     ],
     "variants": [],
@@ -4761,6 +4896,48 @@
     "variants": [],
     "shared": []
   },
+  "CtaBand": {
+    "name": "CtaBand",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "A band near the end of a page that asks the reader to act: a title (`h2`), a line and the buttons, centred over soft light from the accent.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl IntoNodes",
+        "doc": "A band whose `id` links name, titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "lead",
+        "generics": "",
+        "args": "lead: impl Into<Node>",
+        "doc": "The line under the title."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl IntoNodes",
+        "doc": "Adds a button, the primary one first."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "note: impl Into<Node>",
+        "doc": "A small line under the buttons: \"No card needed\"."
+      },
+      {
+        "name": "backdrop",
+        "generics": "",
+        "args": "backdrop: Backdrop",
+        "doc": "What is drawn behind it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "DataTable": {
     "name": "DataTable",
     "kind": "struct",
@@ -7144,6 +7321,284 @@
       }
     ]
   },
+  "Faq": {
+    "name": "Faq",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/faq.rs",
+    "summary": "Questions and their answers. Each question is a heading (`h3`) in a `<details>`, so it opens with no script and the browser gives it its keyboard and its open or closed state; `exclusive` keeps one open at a time.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Questions named `id`: with `exclusive`, the group's name."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "question: impl Into<String>, answer: impl Into<String>",
+        "doc": "Adds `question`, answered by `answer`, in plain text."
+      },
+      {
+        "name": "exclusive",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps one answer open at a time: opening one closes the one before."
+      },
+      {
+        "name": "open_first",
+        "generics": "",
+        "args": "",
+        "doc": "Opens the first answer."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "",
+        "doc": "The questions and answers."
+      },
+      {
+        "name": "faq_page",
+        "generics": "",
+        "args": "url: impl Into<String>",
+        "doc": "The same questions as `FAQPage` structured data, for the page at `url`: add it to the page's `JsonLd`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Feature": {
+    "name": "Feature",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "One feature in a `FeatureGrid`: an icon, a title (`h3`), a line or two, and a picture when it has one.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>, text: impl Into<Node>",
+        "doc": "A feature titled `title`, described by `text`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Its icon."
+      },
+      {
+        "name": "media",
+        "generics": "",
+        "args": "media: impl Into<Node>",
+        "doc": "A picture under the words: a chart, a screenshot, a part of the product."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Node>, href: impl Into<crate::html::Href>",
+        "doc": "A link under the words: \"Read about sleep\"."
+      },
+      {
+        "name": "wide",
+        "generics": "",
+        "args": "",
+        "doc": "Takes two columns of the grid, from 64 rem up."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "FeatureGrid": {
+    "name": "FeatureGrid",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "Features side by side in cards: two, three or four columns on a wide screen, one on a phone. A `wide` feature with a picture makes it a bento grid.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty grid of three columns."
+      }
+    ],
+    "methods": [
+      {
+        "name": "cols",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Two, three or four columns on a wide screen."
+      },
+      {
+        "name": "feature",
+        "generics": "",
+        "args": "feature: Feature",
+        "doc": "Adds a feature."
+      },
+      {
+        "name": "plain",
+        "generics": "",
+        "args": "",
+        "doc": "Lays the features out without cards, on the section's own background."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FeatureRow": {
+    "name": "FeatureRow",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "One feature told at length, beside its picture: a small line, a title (`h3`), a paragraph, points with ticks and a link.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "A row titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "eyebrow",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "The small line above the title."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Adds a paragraph."
+      },
+      {
+        "name": "point",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Adds a point, with a tick."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "A link or button under the words."
+      },
+      {
+        "name": "media",
+        "generics": "",
+        "args": "media: impl Into<Node>",
+        "doc": "The picture beside the words."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "FeatureRows": {
+    "name": "FeatureRows",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "Features told one after another, each beside its picture, the picture on the right, then the left, in turn. On a phone each picture is under its words.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No rows yet."
+      }
+    ],
+    "methods": [
+      {
+        "name": "row",
+        "generics": "",
+        "args": "row: FeatureRow",
+        "doc": "Adds a row."
+      },
+      {
+        "name": "media_first",
+        "generics": "",
+        "args": "",
+        "doc": "Starts with the picture on the left."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
   "FeedHeight": {
     "name": "FeedHeight",
     "kind": "enum",
@@ -7552,6 +8007,30 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "FooterColumn": {
+    "name": "FooterColumn",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/footer.rs",
+    "summary": "One column of a `SiteFooter`: a title and its links.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Cow<'static, str>>",
+        "doc": "A column titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a link."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Forbidden": {
@@ -8416,6 +8895,32 @@
       }
     ]
   },
+  "HeadingAlign": {
+    "name": "HeadingAlign",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "How a section heading sits over what follows it.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Start",
+        "doc": "From the start, the lead under the title. The default.",
+        "default": true
+      },
+      {
+        "name": "Center",
+        "doc": "Centred.",
+        "default": false
+      },
+      {
+        "name": "Split",
+        "doc": "The title in the wider part and the lead beside it, from 64 rem up: for a section whose content runs the full width under it.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "HeatSteps": {
     "name": "HeatSteps",
     "kind": "enum",
@@ -8447,6 +8952,66 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Hero": {
+    "name": "Hero",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/hero.rs",
+    "summary": "The top of a page: a small line, the headline (the page's `h1`), a lead, the calls to action, a row of short notes, and a picture beside them or under them: a screenshot in a `BrowserFrame`, a `PhoneFrame`, a chart, any node.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl IntoNodes",
+        "doc": "A hero whose headline is `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "eyebrow",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "The small line above the headline."
+      },
+      {
+        "name": "lead",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "The paragraph under the headline: what the product does, for whom."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl IntoNodes",
+        "doc": "Adds a call to action: a `Button` with an `href`, the primary one first."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "glyph: Icon, text: impl Into<Node>",
+        "doc": "Adds a short note under the actions, with an icon: \"No card needed\"."
+      },
+      {
+        "name": "media",
+        "generics": "",
+        "args": "media: impl Into<Node>",
+        "doc": "The picture: beside the words from 64 rem up, under them on a narrower screen, or under them always when the hero is `centered`."
+      },
+      {
+        "name": "centered",
+        "generics": "",
+        "args": "",
+        "doc": "Centres the words, with the picture under them."
+      },
+      {
+        "name": "backdrop",
+        "generics": "",
+        "args": "backdrop: Backdrop",
+        "doc": "What is drawn behind it."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "HoverCard": {
@@ -9501,6 +10066,90 @@
     "variants": [],
     "shared": []
   },
+  "LegalPage": {
+    "name": "LegalPage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/legal.rs",
+    "summary": "A long page of rules: a privacy policy, terms of service, a refund policy. Its title (`h1`), a short introduction and when it last changed, then its parts, with a list of them that links to each: beside the text and held in view on a wide screen, above it on a phone. Lines are kept to a length that reads well.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl IntoNodes",
+        "doc": "A page titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "eyebrow",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "The small line above the title: \"Legal\"."
+      },
+      {
+        "name": "intro",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A paragraph under the title saying what the page covers."
+      },
+      {
+        "name": "updated",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "When it last changed, as the reader reads a date: \"Last updated 5 September 2026\"."
+      },
+      {
+        "name": "section",
+        "generics": "",
+        "args": "section: LegalSection",
+        "doc": "Adds a part."
+      },
+      {
+        "name": "contents_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The contents' name, in the page's language: \"On this page\"."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "LegalSection": {
+    "name": "LegalSection",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/legal.rs",
+    "summary": "One numbered part of a `LegalPage`: its heading (`h2`), which the contents link to, and its text.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Cow<'static, str>>",
+        "doc": "A part titled `title`, which links name with `#{id}`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "text",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Adds a paragraph of plain text."
+      },
+      {
+        "name": "points",
+        "generics": "<T: Into<Node>>",
+        "args": "points: impl IntoIterator<Item = T>",
+        "doc": "Adds a list of points."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds any content: a table, a `Markdown` block, a callout."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "LinearLabels": {
     "name": "LinearLabels",
     "kind": "struct",
@@ -9553,6 +10202,79 @@
     ],
     "variants": [],
     "shared": []
+  },
+  "LogoCloud": {
+    "name": "LogoCloud",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "A row of the names or marks of those who use the product.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty row."
+      }
+    ],
+    "methods": [
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "The line above the logos."
+      },
+      {
+        "name": "logo",
+        "generics": "",
+        "args": "logo: impl Into<Node>",
+        "doc": "Adds a logo: a `Picture` with its alt text, or an `svg` with a label."
+      },
+      {
+        "name": "wordmark",
+        "generics": "",
+        "args": "name: impl Into<Cow<'static, str>>",
+        "doc": "Adds a name set as a wordmark, for a logo you have no file of."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
   },
   "Markdown": {
     "name": "Markdown",
@@ -11543,6 +12265,48 @@
     "variants": [],
     "shared": []
   },
+  "Newsletter": {
+    "name": "Newsletter",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/newsletter.rs",
+    "summary": "A band with a form: a title (`h2`), a line, the form and a small note under it. The form is a `FormView`, so its fields, its checks on the server, its errors and its CSRF token are a form's like any other, and it posts with no script.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl IntoNodes",
+        "doc": "A band whose `id` links name, titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "lead",
+        "generics": "",
+        "args": "lead: impl Into<Node>",
+        "doc": "The line under the title."
+      },
+      {
+        "name": "form",
+        "generics": "",
+        "args": "form: impl Into<Node>",
+        "doc": "The form: a `FormView`, drawn with its values and errors when the server sent it back."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "note: impl Into<Node>",
+        "doc": "A small line under the form: how often, how to leave, what happens to the address."
+      },
+      {
+        "name": "inline",
+        "generics": "",
+        "args": "",
+        "doc": "Lays a form of one field out in one line, its button beside the box."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "NotFound": {
     "name": "NotFound",
     "kind": "struct",
@@ -12279,6 +13043,73 @@
     "variants": [],
     "shared": []
   },
+  "PhoneFrame": {
+    "name": "PhoneFrame",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/frames.rs",
+    "summary": "A phone around a screenshot or a live part of the product: its body, the camera at the top of the screen, and the screen at a phone's shape. Like `BrowserFrame` it follows the page's mode unless `mode` fixes it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "content: impl Into<Node>",
+        "doc": "A phone showing `content`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "mode: Mode",
+        "doc": "Draws it, and what it holds, light or dark whatever the page's mode."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: impl Into<Node>",
+        "doc": "A line under it, saying what it shows."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
   "PhoneInput": {
     "name": "PhoneInput",
     "kind": "struct",
@@ -12430,6 +13261,187 @@
     ],
     "shared": []
   },
+  "Picture": {
+    "name": "Picture",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/picture.rs",
+    "summary": "A responsive image: the sizes it comes in (`srcset` and `sizes`), AVIF and WebP for the browsers that read them with the original as the fallback (`<picture>`), its width and height so the page keeps its room while it loads, and lazy loading below the fold.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "src: impl Into<String>, alt: impl Into<String>, width: u32, height: u32",
+        "doc": "The image at `src`, `width` by `height` pixels as drawn at its largest, showing what `alt` says. Write what the image tells a reader who can't see it, not what it is a picture of."
+      },
+      {
+        "name": "decorative",
+        "generics": "",
+        "args": "src: impl Into<String>, width: u32, height: u32",
+        "doc": "An image that only decorates, which assistive technology passes over: its `alt` is empty."
+      }
+    ],
+    "methods": [
+      {
+        "name": "srcset",
+        "generics": "<S: Into<String>>",
+        "args": "candidates: impl IntoIterator<Item =(u32, S)>",
+        "doc": "The original format at other widths: each a width in pixels and its file."
+      },
+      {
+        "name": "avif",
+        "generics": "<S: Into<String>>",
+        "args": "candidates: impl IntoIterator<Item =(u32, S)>",
+        "doc": "The image as AVIF, at the widths given, for the browsers that read it."
+      },
+      {
+        "name": "webp",
+        "generics": "<S: Into<String>>",
+        "args": "candidates: impl IntoIterator<Item =(u32, S)>",
+        "doc": "The image as WebP, at the widths given, for the browsers that read it and not AVIF."
+      },
+      {
+        "name": "sizes",
+        "generics": "",
+        "args": "sizes: impl Into<String>",
+        "doc": "How wide the image is drawn at each screen width, so the browser picks the smallest file that is sharp: `(min-width: 64rem) 40rem, 100vw`. Without it a lazy image is measured where it lands (`auto`), and an eager one is taken as the screen's width."
+      },
+      {
+        "name": "priority",
+        "generics": "",
+        "args": "",
+        "doc": "Loads the image at once and first: for the one large image at the top of a page, its hero or its main screenshot. Every other image loads lazily, as it nears the screen."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the image as wide as its container, at its own shape."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "Plan": {
+    "name": "Plan",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/pricing.rs",
+    "summary": "One plan of a `Pricing` table: its name (`h3`), who it is for, its price monthly and yearly or once for both, what it includes and its call to action.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<Node>",
+        "doc": "A plan called `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Who it is for, in a line."
+      },
+      {
+        "name": "price",
+        "generics": "",
+        "args": "amount: impl Into<Node>, period: impl Into<Node>",
+        "doc": "One price whatever the period: `₹0`, `for ever`; or `Talk to us`, with no period."
+      },
+      {
+        "name": "monthly",
+        "generics": "",
+        "args": "amount: impl Into<Node>, period: impl Into<Node>",
+        "doc": "The price when billed monthly."
+      },
+      {
+        "name": "yearly",
+        "generics": "",
+        "args": "amount: impl Into<Node>, period: impl Into<Node>",
+        "doc": "The price when billed yearly."
+      },
+      {
+        "name": "monthly_note",
+        "generics": "",
+        "args": "note: impl Into<Node>",
+        "doc": "A line under the monthly price."
+      },
+      {
+        "name": "yearly_note",
+        "generics": "",
+        "args": "note: impl Into<Node>",
+        "doc": "A line under the yearly price: what it comes to a month."
+      },
+      {
+        "name": "feature",
+        "generics": "",
+        "args": "feature: impl Into<Node>",
+        "doc": "Adds a thing the plan includes, with a tick."
+      },
+      {
+        "name": "features",
+        "generics": "<T: Into<Node>>",
+        "args": "features: impl IntoIterator<Item = T>",
+        "doc": "Adds things the plan includes."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Its call to action: a `Button` with an `href`."
+      },
+      {
+        "name": "yearly_action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Its call to action while yearly billing is chosen, when it differs: a link that carries the period."
+      },
+      {
+        "name": "featured",
+        "generics": "",
+        "args": "badge: impl Into<Node>",
+        "doc": "Sets it apart from the others, with `badge` beside its name: \"Most popular\"."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "PointSeries": {
     "name": "PointSeries",
     "kind": "struct",
@@ -12575,6 +13587,54 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Pricing": {
+    "name": "Pricing",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/pricing.rs",
+    "summary": "Plans side by side, with a switch between monthly and yearly prices when a plan has both. The switch is a pair of radio buttons and the stylesheet shows the prices of the one chosen, so it works with no script, by keyboard (the arrow keys move between the two) and by touch, and the server can draw either period first.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A pricing table named `id`: the switch's radio buttons are named `{id}-cycle`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "plan",
+        "generics": "",
+        "args": "plan: Plan",
+        "doc": "Adds a plan."
+      },
+      {
+        "name": "yearly",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the yearly prices first: for a link that carries `?billing=yearly`."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "legend: impl Into<Cow<'static, str>>, monthly: impl Into<Cow<'static, str>>, yearly: impl Into<Cow<'static, str>>",
+        "doc": "The switch's words, in the page's language: its name for assistive technology and its two choices."
+      },
+      {
+        "name": "yearly_badge",
+        "generics": "",
+        "args": "badge: impl Into<Node>",
+        "doc": "A short line beside the yearly choice: \"2 months free\"."
+      },
+      {
+        "name": "footnote",
+        "generics": "",
+        "args": "note: impl IntoNodes",
+        "doc": "A line under the plans: taxes, the currency, how to cancel."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Progress": {
@@ -14998,6 +16058,129 @@
     ],
     "shared": []
   },
+  "Section": {
+    "name": "Section",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "A part of a page: its heading, its content, in the page's width, with the space above and below that every section shares. Its `id` is what a link to it names (`/#pricing`), and its heading's title names the section for assistive technology.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A section that links name with `#{id}`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "heading: SectionHeading",
+        "doc": "Its heading."
+      },
+      {
+        "name": "child",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Adds to its content."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: SectionTone",
+        "doc": "Sets its background."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it with less space above and below: for a row of logos or a band of numbers between two full sections."
+      },
+      {
+        "name": "narrow",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps its content to the width of a column of text, for prose and questions."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the section."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SectionHeading": {
+    "name": "SectionHeading",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "A section's heading: a small line above it, the title (`h2`) and a lead paragraph.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl IntoNodes",
+        "doc": "A heading titled `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "eyebrow",
+        "generics": "",
+        "args": "eyebrow: impl Into<Node>",
+        "doc": "The small line above the title, saying what the section is about."
+      },
+      {
+        "name": "lead",
+        "generics": "",
+        "args": "lead: impl Into<Node>",
+        "doc": "The paragraph under the title."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "A link or button beside the lead: \"See every feature\"."
+      },
+      {
+        "name": "center",
+        "generics": "",
+        "args": "",
+        "doc": "Centres it."
+      },
+      {
+        "name": "split",
+        "generics": "",
+        "args": "",
+        "doc": "Puts the lead beside the title on a wide screen."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SectionTone": {
+    "name": "SectionTone",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "The background of a `Section`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Plain",
+        "doc": "The page's own. The default.",
+        "default": true
+      },
+      {
+        "name": "Muted",
+        "doc": "A step raised from the page, to set a section apart.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Segment": {
     "name": "Segment",
     "kind": "struct",
@@ -15742,6 +16925,150 @@
         "generics": "",
         "args": "id: impl Into<String>",
         "doc": "Sets the `id`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SiteFooter": {
+    "name": "SiteFooter",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/footer.rs",
+    "summary": "The foot of every page: the brand and a line about the site, columns of links, its accounts elsewhere, the small print, and a `ThemeToggle`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "brand: Brand",
+        "doc": "A footer with `brand` first."
+      }
+    ],
+    "methods": [
+      {
+        "name": "tagline",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the brand."
+      },
+      {
+        "name": "column",
+        "generics": "",
+        "args": "column: FooterColumn",
+        "doc": "Adds a column of links."
+      },
+      {
+        "name": "social",
+        "generics": "",
+        "args": "glyph: Icon, label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a link to an account elsewhere, drawn as its icon and named `label`."
+      },
+      {
+        "name": "legal",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Adds a line of small print: the company, its address, a registration number."
+      },
+      {
+        "name": "theme_toggle",
+        "generics": "",
+        "args": "toggle: ThemeToggle",
+        "doc": "The light and dark toggle, at the end of the small print."
+      },
+      {
+        "name": "nav_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The links' landmark name, in the page's language: `Footer`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SiteHeader": {
+    "name": "SiteHeader",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/header.rs",
+    "summary": "The header of a public site: the brand on the left, the main links in the middle and the calls to action on the right, held at the top as the page scrolls. Below 64 rem the links and actions fold into a menu behind one button: a `<details>`, so it opens and closes with no script, by keyboard and by touch, and says whether it is open.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "brand: Brand",
+        "doc": "A header with `brand` on the left."
+      }
+    ],
+    "methods": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds a main link."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "Adds the link to the page the reader is on, marked as current."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl IntoNodes",
+        "doc": "Adds a call to action on the right: a `Button` with an `href`, the primary one last."
+      },
+      {
+        "name": "menu_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The menu button's name for assistive technology, in the page's language: `Menu`."
+      },
+      {
+        "name": "nav_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The links' landmark name, in the page's language: `Main`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SitePage": {
+    "name": "SitePage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/mod.rs",
+    "summary": "A whole public page: a link that skips to the content, then the header, the `<main>` landmark with the page's sections, and the footer. The skip link is the first thing a keyboard reaches and shows itself when it has focus.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty page."
+      }
+    ],
+    "methods": [
+      {
+        "name": "skip_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The skip link's words, in the page's language."
+      },
+      {
+        "name": "header",
+        "generics": "",
+        "args": "header: impl Into<Node>",
+        "doc": "The header: a `SiteHeader` or one of your own."
+      },
+      {
+        "name": "section",
+        "generics": "",
+        "args": "section: impl IntoNodes",
+        "doc": "Adds a part of the page's content: a `Hero`, a `Section`, a band."
+      },
+      {
+        "name": "footer",
+        "generics": "",
+        "args": "footer: impl Into<Node>",
+        "doc": "The footer: a `SiteFooter` or one of your own."
       }
     ],
     "variants": [],
@@ -17109,6 +18436,73 @@
       }
     ]
   },
+  "StatBand": {
+    "name": "StatBand",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "A band of a few large numbers, each with what it counts.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No numbers yet."
+      }
+    ],
+    "methods": [
+      {
+        "name": "stat",
+        "generics": "",
+        "args": "value: impl Into<Node>, label: impl Into<Node>",
+        "doc": "Adds `value`, labelled `label`."
+      },
+      {
+        "name": "stat_with",
+        "generics": "",
+        "args": "value: impl Into<Node>, label: impl Into<Node>, detail: impl Into<Node>",
+        "doc": "Adds `value`, labelled `label`, with a line under it saying where it comes from."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
   "State": {
     "name": "State",
     "kind": "struct",
@@ -18224,6 +19618,127 @@
     ],
     "shared": []
   },
+  "Testimonial": {
+    "name": "Testimonial",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "What one person said about the product, with their name and who they are.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "quote: impl Into<Node>",
+        "doc": "The words `quote`, without quotation marks: the card draws them."
+      }
+    ],
+    "methods": [
+      {
+        "name": "author",
+        "generics": "",
+        "args": "name: impl Into<Node>",
+        "doc": "Who said it."
+      },
+      {
+        "name": "role",
+        "generics": "",
+        "args": "role: impl Into<Node>",
+        "doc": "Who they are: a role and a place."
+      },
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "avatar: impl Into<Node>",
+        "doc": "Their picture: an `Avatar` with their photo."
+      },
+      {
+        "name": "initials",
+        "generics": "",
+        "args": "initials: impl Into<Cow<'static, str>>",
+        "doc": "Their initials in place of a picture, in a raised tile. The name beside it says who they are, so assistive technology passes over the tile."
+      },
+      {
+        "name": "rating",
+        "generics": "",
+        "args": "stars: u8",
+        "doc": "The stars they gave, out of five, and the words after the number for assistive technology (`out of 5`)."
+      },
+      {
+        "name": "rating_label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "The words after the number of stars, in the page's language."
+      },
+      {
+        "name": "featured",
+        "generics": "",
+        "args": "",
+        "doc": "A larger quote, in a card set apart from the others."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Testimonials": {
+    "name": "Testimonials",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/blocks.rs",
+    "summary": "Testimonials in columns that fill from the top, as many as the width allows.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "No testimonials yet."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "testimonial: Testimonial",
+        "doc": "Adds one."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "hotkey",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
+      },
+      {
+        "name": "hotkey_within",
+        "generics": "",
+        "args": "key: &str, scope: &str",
+        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
   "Text": {
     "name": "Text",
     "kind": "struct",
@@ -18701,6 +20216,48 @@
         "generics": "",
         "args": "",
         "doc": "Whether every text pair reaches WCAG AA in both palettes: what saving and exporting need."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ThemeToggle": {
+    "name": "ThemeToggle",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/marketing/footer.rs",
+    "summary": "Light, dark or the device's own, as three buttons in a plain form: each posts its mode to the toolkit's appearance route, which keeps it in the reader's cookie and sends them back, so it works with no script. Draw the page with `Appearance::for_reader` and pass its mode here, so the button of the mode in use is pressed.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "current: Mode",
+        "doc": "A toggle with `current` pressed."
+      }
+    ],
+    "methods": [
+      {
+        "name": "back",
+        "generics": "",
+        "args": "path: impl Into<String>",
+        "doc": "Where to come back to: this page's path."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Posts to `href`, where the app keeps the choice with the user, in place of the toolkit's route. The form sends `mode` and `back`."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Adds the session's CSRF token, for an app whose posts need one."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "legend: impl Into<Cow<'static, str>>, light: impl Into<Cow<'static, str>>, dark: impl Into<Cow<'static, str>>, system: impl Into<Cow<'static, str>>",
+        "doc": "The words, in the page's language: the group's name and the three modes."
       }
     ],
     "variants": [],

@@ -61,6 +61,7 @@
         "typography",
         "kbd",
         "attachment",
+        "picture",
         "markdown",
         "code-block",
         "message",
@@ -170,6 +171,28 @@
         "calendar-heatmap",
         "matrix-heatmap",
         "scatter-chart"
+      ]
+    },
+    {
+      "id": "marketing",
+      "title": "Marketing",
+      "components": [
+        "site-page",
+        "site-header",
+        "hero",
+        "section",
+        "logo-cloud",
+        "feature-grid",
+        "feature-rows",
+        "stat-band",
+        "device-frames",
+        "testimonials",
+        "pricing",
+        "faq",
+        "cta-band",
+        "newsletter",
+        "legal-page",
+        "site-footer"
       ]
     },
     {
@@ -2630,6 +2653,280 @@
         "reports/refused",
         "reports/live",
         "reports/grains"
+      ]
+    },
+    {
+      "id": "picture",
+      "name": "Picture",
+      "url": "/docs/components/picture/",
+      "summary": "A responsive image: the sizes it comes in (`srcset` and `sizes`), AVIF and WebP for the browsers that read them with the original as the fallback (`<picture>`), its width and height so the page keeps its room while it loads, and lazy loading below the fold.",
+      "group": "display",
+      "types": [
+        "Picture"
+      ],
+      "thumb": "picture/default",
+      "anatomy": "picture/default",
+      "examples": [
+        "picture/default"
+      ]
+    },
+    {
+      "id": "site-page",
+      "name": "SitePage",
+      "url": "/docs/components/site-page/",
+      "summary": "A whole public page: a link that skips to the content, then the header, the `<main>` landmark with the page's sections, and the footer. The skip link is the first thing a keyboard reaches and shows itself when it has focus.",
+      "group": "marketing",
+      "types": [
+        "SitePage",
+        "Brand"
+      ],
+      "thumb": "site-page/default",
+      "anatomy": "site-page/default",
+      "examples": [
+        "site-page/default"
+      ]
+    },
+    {
+      "id": "site-header",
+      "name": "SiteHeader",
+      "url": "/docs/components/site-header/",
+      "summary": "The header of a public site: the brand on the left, the main links in the middle and the calls to action on the right, held at the top as the page scrolls. Below 64 rem the links and actions fold into a menu behind one button: a `<details>`, so it opens and closes with no script, by keyboard and by touch, and says whether it is open.",
+      "group": "marketing",
+      "types": [
+        "SiteHeader",
+        "Brand"
+      ],
+      "thumb": "site-header/default",
+      "anatomy": "site-header/default",
+      "examples": [
+        "site-header/default",
+        "site-header/phone"
+      ]
+    },
+    {
+      "id": "hero",
+      "name": "Hero",
+      "url": "/docs/components/hero/",
+      "summary": "The top of a page: a small line, the headline (the page's `h1`), a lead, the calls to action, a row of short notes, and a picture beside them or under them: a screenshot in a `BrowserFrame`, a `PhoneFrame`, a chart, any node.",
+      "group": "marketing",
+      "types": [
+        "Hero",
+        "Backdrop"
+      ],
+      "thumb": "hero/default",
+      "anatomy": "hero/default",
+      "examples": [
+        "hero/default",
+        "hero/centered"
+      ]
+    },
+    {
+      "id": "section",
+      "name": "Section",
+      "url": "/docs/components/section/",
+      "summary": "A part of a page: its heading, its content, in the page's width, with the space above and below that every section shares. Its `id` is what a link to it names (`/#pricing`), and its heading's title names the section for assistive technology.",
+      "group": "marketing",
+      "types": [
+        "Section",
+        "SectionHeading",
+        "HeadingAlign",
+        "SectionTone"
+      ],
+      "thumb": "section/default",
+      "anatomy": "section/default",
+      "examples": [
+        "section/default"
+      ]
+    },
+    {
+      "id": "logo-cloud",
+      "name": "LogoCloud",
+      "url": "/docs/components/logo-cloud/",
+      "summary": "A row of the names or marks of those who use the product.",
+      "group": "marketing",
+      "types": [
+        "LogoCloud"
+      ],
+      "thumb": "logo-cloud/default",
+      "anatomy": "logo-cloud/default",
+      "examples": [
+        "logo-cloud/default"
+      ]
+    },
+    {
+      "id": "feature-grid",
+      "name": "FeatureGrid",
+      "url": "/docs/components/feature-grid/",
+      "summary": "Features side by side in cards: two, three or four columns on a wide screen, one on a phone. A `wide` feature with a picture makes it a bento grid.",
+      "group": "marketing",
+      "types": [
+        "FeatureGrid",
+        "Feature"
+      ],
+      "thumb": "feature-grid/default",
+      "anatomy": "feature-grid/default",
+      "examples": [
+        "feature-grid/default",
+        "feature-grid/bento"
+      ]
+    },
+    {
+      "id": "feature-rows",
+      "name": "FeatureRows",
+      "url": "/docs/components/feature-rows/",
+      "summary": "Features told one after another, each beside its picture, the picture on the right, then the left, in turn. On a phone each picture is under its words.",
+      "group": "marketing",
+      "types": [
+        "FeatureRows",
+        "FeatureRow"
+      ],
+      "thumb": "feature-rows/default",
+      "anatomy": "feature-rows/default",
+      "examples": [
+        "feature-rows/default"
+      ]
+    },
+    {
+      "id": "stat-band",
+      "name": "StatBand",
+      "url": "/docs/components/stat-band/",
+      "summary": "A band of a few large numbers, each with what it counts.",
+      "group": "marketing",
+      "types": [
+        "StatBand"
+      ],
+      "thumb": "stat-band/default",
+      "anatomy": "stat-band/default",
+      "examples": [
+        "stat-band/default"
+      ]
+    },
+    {
+      "id": "device-frames",
+      "name": "Device frames",
+      "url": "/docs/components/device-frames/",
+      "summary": "A screenshot or a live part of the product in a browser window or a phone, light or dark.",
+      "group": "marketing",
+      "types": [
+        "BrowserFrame",
+        "PhoneFrame"
+      ],
+      "thumb": "device-frames/default",
+      "anatomy": "device-frames/default",
+      "examples": [
+        "device-frames/default",
+        "device-frames/modes"
+      ]
+    },
+    {
+      "id": "testimonials",
+      "name": "Testimonials",
+      "url": "/docs/components/testimonials/",
+      "summary": "Testimonials in columns that fill from the top, as many as the width allows.",
+      "group": "marketing",
+      "types": [
+        "Testimonials",
+        "Testimonial"
+      ],
+      "thumb": "testimonials/default",
+      "anatomy": "testimonials/default",
+      "examples": [
+        "testimonials/default"
+      ]
+    },
+    {
+      "id": "pricing",
+      "name": "Pricing",
+      "url": "/docs/components/pricing/",
+      "summary": "Plans side by side, with a switch between monthly and yearly prices when a plan has both. The switch is a pair of radio buttons and the stylesheet shows the prices of the one chosen, so it works with no script, by keyboard (the arrow keys move between the two) and by touch, and the server can draw either period first.",
+      "group": "marketing",
+      "types": [
+        "Pricing",
+        "Plan"
+      ],
+      "thumb": "pricing/default",
+      "anatomy": "pricing/default",
+      "examples": [
+        "pricing/default",
+        "pricing/yearly"
+      ]
+    },
+    {
+      "id": "faq",
+      "name": "Faq",
+      "url": "/docs/components/faq/",
+      "summary": "Questions and their answers. Each question is a heading (`h3`) in a `<details>`, so it opens with no script and the browser gives it its keyboard and its open or closed state; `exclusive` keeps one open at a time.",
+      "group": "marketing",
+      "types": [
+        "Faq"
+      ],
+      "thumb": "faq/default",
+      "anatomy": "faq/default",
+      "examples": [
+        "faq/default"
+      ]
+    },
+    {
+      "id": "cta-band",
+      "name": "CtaBand",
+      "url": "/docs/components/cta-band/",
+      "summary": "A band near the end of a page that asks the reader to act: a title (`h2`), a line and the buttons, centred over soft light from the accent.",
+      "group": "marketing",
+      "types": [
+        "CtaBand"
+      ],
+      "thumb": "cta-band/default",
+      "anatomy": "cta-band/default",
+      "examples": [
+        "cta-band/default"
+      ]
+    },
+    {
+      "id": "newsletter",
+      "name": "Newsletter",
+      "url": "/docs/components/newsletter/",
+      "summary": "A band with a form: a title (`h2`), a line, the form and a small note under it. The form is a `FormView`, so its fields, its checks on the server, its errors and its CSRF token are a form's like any other, and it posts with no script.",
+      "group": "marketing",
+      "types": [
+        "Newsletter"
+      ],
+      "thumb": "newsletter/default",
+      "anatomy": "newsletter/default",
+      "examples": [
+        "newsletter/default"
+      ]
+    },
+    {
+      "id": "legal-page",
+      "name": "LegalPage",
+      "url": "/docs/components/legal-page/",
+      "summary": "A long page of rules: a privacy policy, terms of service, a refund policy. Its title (`h1`), a short introduction and when it last changed, then its parts, with a list of them that links to each: beside the text and held in view on a wide screen, above it on a phone. Lines are kept to a length that reads well.",
+      "group": "marketing",
+      "types": [
+        "LegalPage",
+        "LegalSection"
+      ],
+      "thumb": "legal-page/default",
+      "anatomy": "legal-page/default",
+      "examples": [
+        "legal-page/default"
+      ]
+    },
+    {
+      "id": "site-footer",
+      "name": "SiteFooter",
+      "url": "/docs/components/site-footer/",
+      "summary": "The foot of every page: the brand and a line about the site, columns of links, its accounts elsewhere, the small print, and a `ThemeToggle`.",
+      "group": "marketing",
+      "types": [
+        "SiteFooter",
+        "FooterColumn",
+        "ThemeToggle"
+      ],
+      "thumb": "site-footer/default",
+      "anatomy": "site-footer/default",
+      "examples": [
+        "site-footer/default"
       ]
     },
     {
@@ -75015,6 +75312,3407 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "site-page/default",
+      "component": "site-page",
+      "slug": "default",
+      "title": "A whole page",
+      "kind": "single",
+      "code": "SitePage::new()\n    .header(\n        SiteHeader::new(kesar())\n            .link(\"Features\", \"/#features\")\n            .link(\"Pricing\", \"/pricing/\")\n            .action(Button::primary(\"Start free\").href(\"/signup\")),\n    )\n    .section(\n        Hero::new((\"Know your body, \", accent(\"one calm score a day.\")))\n            .lead(\"Sleep, heart and steps from the phone you already carry.\")\n            .action(Button::primary(\"Start free\").href(\"/signup\")),\n    )\n    .section(\n        Section::new(\"features\")\n            .heading(SectionHeading::new(\"What it reads\").center())\n            .child(\n                FeatureGrid::new()\n                    .feature(Feature::new(\"Sleep\", \"Stages, night by night.\").icon(icons::BED))\n                    .feature(Feature::new(\"Heart\", \"Your own baseline.\").icon(icons::HEART))\n                    .feature(\n                        Feature::new(\"Steps\", \"A goal that follows your sleep.\")\n                            .icon(icons::FOOTPRINTS),\n                    ),\n            ),\n    )\n    .footer(SiteFooter::new(kesar()).legal(\"© 2026 Kesar Health Pvt. Ltd., Mohali\"))",
+      "src": "/ui-preview/site-page/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "site",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "skip-link",
+              "tag": "a",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "site-header",
+              "tag": "header",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "site-header-bar",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-brand-mark",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-brand-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-nav",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "site-actions",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-menu",
+                      "tag": "details",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-menu-button",
+                          "tag": "summary",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "site-menu-open",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "site-menu-close",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-menu-panel",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "site-menu-nav",
+                              "tag": "nav",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "site-menu-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "site-main",
+              "tag": "main",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hero",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-container",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "hero-copy",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "hero-title",
+                              "tag": "h1",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "accent",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "hero-lead",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "hero-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "a",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-section",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-container",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "section-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "section-heading-main",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "section-title",
+                                  "tag": "h2",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "section-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "feature-grid",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "feature",
+                                  "tag": "li",
+                                  "count": 3,
+                                  "children": [
+                                    {
+                                      "slot": "feature-icon",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "feature-title",
+                                      "tag": "h3",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "feature-text",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "site-footer",
+              "tag": "footer",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "site-container",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-footer-top",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-footer-brand",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "site-brand",
+                              "tag": "a",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "site-brand-mark",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "site-brand-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-footer-bottom",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-footer-legal",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site-header/default",
+      "component": "site-header",
+      "slug": "default",
+      "title": "Links, actions and a brand",
+      "kind": "single",
+      "code": "SiteHeader::new(kesar())\n    .link(\"Features\", \"/#features\")\n    .link(\"How it works\", \"/#how\")\n    .current(\"Pricing\", \"/pricing/\")\n    .link(\"FAQ\", \"/#faq\")\n    .action(Button::ghost(\"Sign in\").href(\"/login\"))\n    .action(Button::primary(\"Start free\").href(\"/signup\"))",
+      "src": "/ui-preview/site-header/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "site-header",
+          "tag": "header",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-header-bar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "site-brand",
+                  "tag": "a",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-brand-mark",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-brand-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-nav",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "site-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-menu",
+                  "tag": "details",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-menu-button",
+                      "tag": "summary",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-menu-open",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-menu-close",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-menu-panel",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-menu-nav",
+                          "tag": "nav",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "site-menu-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site-header/phone",
+      "component": "site-header",
+      "slug": "phone",
+      "title": "Folded into a menu on a phone",
+      "kind": "single",
+      "code": "SiteHeader::new(kesar())\n    .link(\"Features\", \"/#features\")\n    .link(\"Pricing\", \"/pricing/\")\n    .action(Button::primary(\"Start free\").href(\"/signup\"))\n    .menu_label(\"Menu\")",
+      "src": "/ui-preview/site-header/phone.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 390,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "site-header",
+          "tag": "header",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-header-bar",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "site-brand",
+                  "tag": "a",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-brand-mark",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-brand-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-nav",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "site-actions",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "a",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-menu",
+                  "tag": "details",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-menu-button",
+                      "tag": "summary",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-menu-open",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-menu-close",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-menu-panel",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-menu-nav",
+                          "tag": "nav",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "site-menu-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hero/default",
+      "component": "hero",
+      "slug": "default",
+      "title": "Words beside the product",
+      "kind": "single",
+      "code": "Hero::new((\"Know your body, \", accent(\"one calm score a day.\")))\n    .eyebrow(\"Health, read calmly\")\n    .lead(\"Kesar reads the sleep, heart and step data your phone already keeps, and turns it into one daily score with the reasons behind it.\")\n    .action(Button::primary(\"Start free\").href(\"/signup\").icon_end(icons::ARROW_RIGHT))\n    .action(Button::outline(\"See how it works\").href(\"/#how\"))\n    .note(icons::SHIELD_CHECK, \"Data stored in India\")\n    .note(icons::HEART, \"Free for one person\")\n    .media(BrowserFrame::new(today()).address(\"app.kesar.example/today\"))",
+      "src": "/ui-preview/hero/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "hero",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hero-copy",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "eyebrow",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hero-title",
+                      "tag": "h1",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "accent",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "hero-lead",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hero-actions",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "hero-notes",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "hero-media",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "browser-frame",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "browser-bar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "browser-dots",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "browser-address",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "browser-view",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "grid",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "card",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "card-content",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart",
+                                          "tag": "figure",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "chart-header",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "chart-heading",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "chart-title",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "chart-body",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "radial-size",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "radial-plot",
+                                                      "tag": "svg",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "radial-track",
+                                                          "tag": "circle",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "radial-arc",
+                                                          "tag": "path",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "radial-center",
+                                                      "tag": "div",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "radial-value",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "count-up",
+                                                              "tag": "span",
+                                                              "count": 1,
+                                                              "children": []
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "slot": "radial-label",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "radial-sub",
+                                                          "tag": "span",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "chart-summary",
+                                              "tag": "p",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "chart-data",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "chart-table",
+                                                  "tag": "div",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "stack",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "stat",
+                                      "tag": "div",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "stat-label",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "stat-value",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "stat-trend",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "trend",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "icon",
+                                                  "tag": "svg",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hero/centered",
+      "component": "hero",
+      "slug": "centered",
+      "title": "Centred, over a grid",
+      "kind": "single",
+      "code": "Hero::new(\"Plans in rupees, for one person or five\")\n    .eyebrow(\"Pricing\")\n    .lead(\"Start free, for ever. Plus and Family add a year of trends and help in three languages.\")\n    .action(Button::primary(\"Compare plans\").href(\"/pricing/#plans\"))\n    .centered()\n    .backdrop(Backdrop::Grid)",
+      "src": "/ui-preview/hero/centered.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "hero",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hero-copy",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "eyebrow",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hero-title",
+                      "tag": "h1",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hero-lead",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hero-actions",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "section/default",
+      "component": "section",
+      "slug": "default",
+      "title": "A heading and its content",
+      "kind": "single",
+      "code": "Section::new(\"features\")\n    .heading(\n        SectionHeading::new((\n            \"Five lenses on one body. \",\n            accent(\"All from data you have.\"),\n        ))\n        .eyebrow(\"What it reads\")\n        .lead(\"Every number says how it was worked out, from your own baseline.\")\n        .split(),\n    )\n    .child(\n        FeatureGrid::new()\n            .feature(\n                Feature::new(\n                    \"Sleep in stages\",\n                    \"Deep, REM and light sleep, night by night.\",\n                )\n                .icon(icons::BED),\n            )\n            .feature(\n                Feature::new(\"Resting heart\", \"Against your own two weeks.\").icon(icons::HEART),\n            )\n            .feature(\n                Feature::new(\"Movement\", \"A goal that follows how you slept.\")\n                    .icon(icons::FOOTPRINTS),\n            ),\n    )",
+      "src": "/ui-preview/section/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "site-section",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "section-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "section-heading-main",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "eyebrow",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "section-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "accent",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "section-heading-aside",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "section-lead",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "section-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "feature-grid",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "feature",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "feature-icon",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "feature-title",
+                              "tag": "h3",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "feature-text",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "logo-cloud/default",
+      "component": "logo-cloud",
+      "slug": "default",
+      "title": "Names as wordmarks",
+      "kind": "single",
+      "code": "LogoCloud::new()\n    .title(\"Used by clinics, coaches and running clubs across North India\")\n    .wordmark(\"Sutlej Clinics\")\n    .wordmark(\"Doaba Fitness\")\n    .wordmark(\"Ambala Runners\")\n    .wordmark(\"Shivalik Yoga\")",
+      "src": "/ui-preview/logo-cloud/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1024,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "logo-cloud",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "logo-cloud-title",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "logo-cloud-list",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "logo-wordmark",
+                  "tag": "span",
+                  "count": 4,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feature-grid/default",
+      "component": "feature-grid",
+      "slug": "default",
+      "title": "Six features in three columns",
+      "kind": "single",
+      "code": "FeatureGrid::new()\n    .cols(3)\n    .feature(\n        Feature::new(\n            \"Sleep in stages\",\n            \"Deep, REM and light sleep, with how much sleep you owe.\",\n        )\n        .icon(icons::BED),\n    )\n    .feature(\n        Feature::new(\n            \"Resting heart\",\n            \"Your resting rate against your own two weeks.\",\n        )\n        .icon(icons::HEART),\n    )\n    .feature(\n        Feature::new(\n            \"Movement\",\n            \"Steps and active minutes, with a goal that follows your sleep.\",\n        )\n        .icon(icons::FOOTPRINTS),\n    )\n    .feature(\n        Feature::new(\"Recovery\", \"Six contributors, each shown with its weight.\")\n            .icon(icons::ACTIVITY),\n    )\n    .feature(\n        Feature::new(\n            \"Patterns\",\n            \"Which habits move your numbers, checked for chance.\",\n        )\n        .icon(icons::CHART_LINE),\n    )\n    .feature(\n        Feature::new(\n            \"Private by design\",\n            \"Stored in India, never sold, deleted when you leave.\",\n        )\n        .icon(icons::LOCK)\n        .link(\"Read the privacy policy\", \"/privacy/\"),\n    )",
+      "src": "/ui-preview/feature-grid/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "feature-grid",
+          "tag": "ul",
+          "count": 1,
+          "children": [
+            {
+              "slot": "feature",
+              "tag": "li",
+              "count": 6,
+              "children": [
+                {
+                  "slot": "feature-icon",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "feature-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "feature-text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "feature-link",
+                  "tag": "a",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feature-grid/bento",
+      "component": "feature-grid",
+      "slug": "bento",
+      "title": "A wide feature with a chart",
+      "kind": "single",
+      "code": "FeatureGrid::new()\n    .cols(3)\n    .feature(\n        Feature::new(\n            \"Resting heart, 30 days\",\n            \"A slow fall after two weeks of earlier dinners.\",\n        )\n        .icon(icons::HEART)\n        .wide()\n        .media(\n            Sparkline::new(\n                \"Resting heart rate, last 30 days\",\n                [\n                    64, 63, 63, 62, 64, 62, 61, 61, 60, 61, 60, 59, 60, 59, 58, 59, 58, 58, 57,\n                    58,\n                ],\n            )\n            .id(\"doc-bento-heart\")\n            .area()\n            .smooth()\n            .height(96),\n        ),\n    )\n    .feature(\n        Feature::new(\"Daily score\", \"One number, with its reasons.\")\n            .icon(icons::SUN)\n            .media(Ring::new(\"Daily score\", 82).id(\"doc-bento-score\").size(120)),\n    )",
+      "src": "/ui-preview/feature-grid/bento.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "feature-grid",
+          "tag": "ul",
+          "count": 1,
+          "children": [
+            {
+              "slot": "feature",
+              "tag": "li",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "feature-icon",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "feature-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "feature-text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "feature-media",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-heading",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-value",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "count-up",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-summary",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-data",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-table",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feature-rows/default",
+      "component": "feature-rows",
+      "slug": "default",
+      "title": "Rows that alternate",
+      "kind": "single",
+      "code": "FeatureRows::new()\n    .row(\n        FeatureRow::new(\"Last night, in stages\")\n            .eyebrow(\"Sleep\")\n            .text(\n                \"Kesar splits the night into deep, REM and light sleep and shows what you owe.\",\n            )\n            .point(\"Efficiency, debt and timing\")\n            .point(\"A goal that moves with your week\")\n            .media(\n                Card::titled(\"Last night\").body(\n                    Meter::new(\"Sleep stages\")\n                        .id(\"doc-rows-sleep\")\n                        .minutes()\n                        .segment(Segment::new(\"Deep\", 92).ink(Ink::slot(7)))\n                        .segment(Segment::new(\"REM\", 98).ink(Ink::slot(1)))\n                        .segment(Segment::new(\"Light\", 215).ink(Ink::slot(3)))\n                        .segment(Segment::new(\"Awake\", 31).ink(Ink::slot(4))),\n                ),\n            ),\n    )\n    .row(\n        FeatureRow::new(\"Your heart against your own baseline\")\n            .eyebrow(\"Heart\")\n            .text(\"Kesar compares today's resting rate with your last two weeks.\")\n            .action(Button::outline(\"See the daily score\").href(\"/#score\"))\n            .media(Card::new().body(Stat::new(\"Resting heart\", \"58 bpm\"))),\n    )",
+      "src": "/ui-preview/feature-rows/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "feature-rows",
+          "tag": "ul",
+          "count": 1,
+          "children": [
+            {
+              "slot": "feature-row",
+              "tag": "li",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "feature-row-copy",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "eyebrow",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "feature-row-title",
+                      "tag": "h3",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "feature-row-text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "feature-points",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "feature-row-media",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "card",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "card-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "card-content",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart",
+                              "tag": "figure",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-header",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-heading",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-title",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "chart-body",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "seg-bar",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "seg-track",
+                                          "tag": "rect",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "seg-part",
+                                          "tag": "g",
+                                          "count": 4,
+                                          "children": [
+                                            {
+                                              "slot": "seg",
+                                              "tag": "rect",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "seg-label",
+                                              "tag": "text",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-legend",
+                                      "tag": "ul",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-legend-item",
+                                          "tag": "li",
+                                          "count": 4,
+                                          "children": [
+                                            {
+                                              "slot": "chart-key",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "chart-legend-name",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "chart-legend-value",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-tip",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "chart-summary",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart-announce",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart-data",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-table-switch",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "chart-table-label",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-table",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stat-band/default",
+      "component": "stat-band",
+      "slug": "default",
+      "title": "Four numbers",
+      "kind": "single",
+      "code": "StatBand::new()\n    .stat_with(\"1.2 lakh\", \"nights read last month\", \"Across 9,400 people\")\n    .stat_with(\"20+\", \"measures from one phone\", \"Through Health Connect\")\n    .stat_with(\"6\", \"contributors to recovery\", \"Each with its weight\")\n    .stat_with(\"0\", \"records sold or shared\", \"Ever\")",
+      "src": "/ui-preview/stat-band/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1024,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stat-band",
+          "tag": "dl",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat-band-item",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "stat-band-label",
+                  "tag": "dt",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-band-value",
+                  "tag": "dd",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-band-detail",
+                  "tag": "dd",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "device-frames/default",
+      "component": "device-frames",
+      "slug": "default",
+      "title": "A browser and a phone",
+      "kind": "single",
+      "code": "Grid::cols(3).gap(8).children((\n    BrowserFrame::new(today())\n        .address(\"app.kesar.example/today\")\n        .span(2),\n    PhoneFrame::new(\n        Stack::gap(3).children((\n            Heading::h3(\"Last night\"),\n            Ring::new(\"Sleep score\", 84)\n                .id(\"doc-phone-ring\")\n                .label(\"Sleep\")\n                .size(140),\n        )),\n    ),\n))",
+      "src": "/ui-preview/device-frames/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "browser-frame",
+              "tag": "figure",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "browser-bar",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "browser-dots",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "browser-address",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "browser-view",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "card",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-content",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart",
+                                  "tag": "figure",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-header",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-heading",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "chart-title",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-body",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "radial-size",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "radial-plot",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-track",
+                                                  "tag": "circle",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "radial-arc",
+                                                  "tag": "path",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "radial-center",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-value",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "count-up",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "radial-label",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "radial-sub",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-summary",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "chart-data",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-table",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stat",
+                              "tag": "div",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "stat-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-trend",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "trend",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "phone-frame",
+              "tag": "figure",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "phone-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "phone-screen",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "phone-camera",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "phone-view",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "heading",
+                                  "tag": "h3",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart",
+                                  "tag": "figure",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-header",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-heading",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "chart-title",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-body",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "radial-size",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "radial-plot",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-track",
+                                                  "tag": "circle",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "radial-arc",
+                                                  "tag": "path",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "radial-center",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-value",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "count-up",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "radial-label",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-summary",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "chart-data",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-table",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "device-frames/modes",
+      "component": "device-frames",
+      "slug": "modes",
+      "title": "Dark and light whatever the page",
+      "kind": "single",
+      "code": "Grid::cols(2).gap(8).children((\n    BrowserFrame::new(today())\n        .address(\"app.kesar.example/today\")\n        .mode(Mode::Dark)\n        .caption(\"Always dark\"),\n    BrowserFrame::new(today())\n        .address(\"app.kesar.example/today\")\n        .mode(Mode::Light)\n        .caption(\"Always light\"),\n))",
+      "src": "/ui-preview/device-frames/modes.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "browser-frame",
+              "tag": "figure",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "browser-bar",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "browser-dots",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "browser-address",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "browser-view",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "grid",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "card",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-content",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart",
+                                  "tag": "figure",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-header",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-heading",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "chart-title",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-body",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "radial-size",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "radial-plot",
+                                              "tag": "svg",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-track",
+                                                  "tag": "circle",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "radial-arc",
+                                                  "tag": "path",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "radial-center",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "radial-value",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": [
+                                                    {
+                                                      "slot": "count-up",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "slot": "radial-label",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "radial-sub",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "chart-summary",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "chart-data",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "chart-table",
+                                          "tag": "div",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "stack",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stat",
+                              "tag": "div",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "stat-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "stat-trend",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "trend",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "frame-caption",
+                  "tag": "figcaption",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "testimonials/default",
+      "component": "testimonials",
+      "slug": "default",
+      "title": "Quotes in columns",
+      "kind": "single",
+      "code": "Testimonials::new()\n    .item(\n        Testimonial::new(\"I finally know why Mondays feel heavy: Sunday nights. Two weeks of earlier dinners and my resting heart rate came down by four.\")\n            .author(\"Simran Kaur Gill\")\n            .role(\"Teacher, Ludhiana\")\n            .initials(\"SG\")\n            .rating(5)\n            .featured(),\n    )\n    .item(\n        Testimonial::new(\"No ring, no watch. My old phone does it all, and the score explains itself.\")\n            .author(\"Arjun Malhotra\")\n            .role(\"Software engineer, Gurugram\")\n            .initials(\"AM\")\n            .rating(5),\n    )\n    .item(\n        Testimonial::new(\"Training for my first marathon at fifty-one. Kesar told me when to rest before my knees did.\")\n            .author(\"Harjit Singh Sandhu\")\n            .role(\"Farmer and runner, Moga\")\n            .initials(\"HS\")\n            .rating(4),\n    )",
+      "src": "/ui-preview/testimonials/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "testimonials",
+          "tag": "ul",
+          "count": 1,
+          "children": [
+            {
+              "slot": "testimonial",
+              "tag": "li",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "testimonial-card",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "testimonial-rating",
+                      "tag": "p",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "testimonial-star",
+                          "tag": "span",
+                          "count": 5,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "testimonial-quote",
+                      "tag": "blockquote",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "testimonial-author",
+                      "tag": "figcaption",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "testimonial-initials",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "testimonial-who",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "testimonial-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "testimonial-role",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pricing/default",
+      "component": "pricing",
+      "slug": "default",
+      "title": "Three plans, monthly or yearly",
+      "kind": "single",
+      "code": "plans()",
+      "src": "/ui-preview/pricing/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "pricing",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "pricing-cycle",
+              "tag": "fieldset",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "pricing-choice",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "pricing-save",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "pricing-plans",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "plan",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "plan-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "plan-name",
+                          "tag": "h3",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "plan-badge",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "plan-price",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "plan-amount",
+                          "tag": "p",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "plan-figure",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "plan-period",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "plan-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-action",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-features",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "pricing-footnote",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pricing/yearly",
+      "component": "pricing",
+      "slug": "yearly",
+      "title": "Yearly first",
+      "kind": "single",
+      "code": "plans().yearly()",
+      "src": "/ui-preview/pricing/yearly.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1200,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "pricing",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "pricing-cycle",
+              "tag": "fieldset",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "pricing-choice",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "pricing-save",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "pricing-plans",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "plan",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "plan-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "plan-name",
+                          "tag": "h3",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "plan-badge",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-description",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "plan-price",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "plan-amount",
+                          "tag": "p",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "plan-figure",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "plan-period",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "plan-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-action",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "plan-features",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "pricing-footnote",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "faq/default",
+      "component": "faq",
+      "slug": "default",
+      "title": "Questions, one open at a time",
+      "kind": "single",
+      "code": "Faq::new(\"faq\")\n    .exclusive()\n    .open_first()\n    .item(\n        \"Do I need a smartwatch to use Kesar?\",\n        \"No. Kesar reads the steps, sleep and heart rate your phone already records. A watch adds detail when you have one.\",\n    )\n    .item(\n        \"Is Kesar a medical device?\",\n        \"No. Kesar is a wellness guide. Its scores are estimates from your own data, never a diagnosis.\",\n    )\n    .item(\n        \"How much does Kesar cost?\",\n        \"Free for one person. Plus is ₹299 a month or ₹2,990 a year, and Family is ₹499 a month for five people.\",\n    )",
+      "src": "/ui-preview/faq/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "faq",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "faq-item",
+              "tag": "details",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "faq-question",
+                  "tag": "summary",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "faq-title",
+                      "tag": "h3",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "faq-sign",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "faq-answer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cta-band/default",
+      "component": "cta-band",
+      "slug": "default",
+      "title": "A call to action",
+      "kind": "single",
+      "code": "CtaBand::new(\n    \"start\",\n    (\"Your data is already there. \", accent(\"Start reading it.\")),\n)\n.lead(\"Free for one person, for ever. Two minutes to connect.\")\n.action(\n    Button::primary(\"Build my dashboard\")\n        .href(\"/signup\")\n        .icon_end(icons::ARROW_RIGHT),\n)\n.action(Button::outline(\"Talk to us\").href(\"/contact/\"))\n.note(\"No card needed.\")",
+      "src": "/ui-preview/cta-band/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "cta-band",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "cta-band-panel",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "cta-band-title",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "accent",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "cta-band-lead",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "cta-band-actions",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "a",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "cta-band-note",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "newsletter/default",
+      "component": "newsletter",
+      "slug": "default",
+      "title": "A sign-up in one line",
+      "kind": "single",
+      "code": "Newsletter::new(\"letter\", \"A calm letter, once a month\")\n    .lead(\"What changed in Kesar, and one thing worth knowing about sleep.\")\n    .form(\n        FormView::<Subscribe>::new()\n            .post(\"/subscribe\")\n            .submit(\"Subscribe\"),\n    )\n    .note(\"No spam. Leave with one click from any letter.\")\n    .inline()",
+      "src": "/ui-preview/newsletter/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "newsletter",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "newsletter-panel",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "newsletter-copy",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "newsletter-title",
+                          "tag": "h2",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "newsletter-lead",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "newsletter-form",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "form",
+                          "tag": "form",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "form-grid",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "field",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "label",
+                                      "tag": "label",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "form-actions",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "newsletter-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legal-page/default",
+      "component": "legal-page",
+      "slug": "default",
+      "title": "A policy with its contents",
+      "kind": "single",
+      "code": "LegalPage::new(\"Privacy policy\")\n    .eyebrow(\"Legal\")\n    .intro(\"What Kesar collects, why, where it is kept and how to take it back.\")\n    .updated(\"Last updated 10 November 2026\")\n    .section(\n        LegalSection::new(\"collect\", \"1. What we collect\")\n            .text(\"From your phone, with your permission: steps, sleep and heart rate.\")\n            .points([\n                \"Your name and email address, to sign you in.\",\n                \"Nothing from your contacts, photos or location.\",\n            ]),\n    )\n    .section(\n        LegalSection::new(\"where\", \"2. Where it is kept\")\n            .text(\"On servers in Mumbai, encrypted at rest and in transit.\"),\n    )\n    .section(\n        LegalSection::new(\"rights\", \"3. Your rights\")\n            .text(\"See, export or delete everything from Settings at any time.\"),\n    )",
+      "src": "/ui-preview/legal-page/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "legal",
+          "tag": "article",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "legal-head",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "eyebrow",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "legal-heading",
+                      "tag": "h1",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "legal-intro",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "legal-updated",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "legal-layout",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "legal-contents",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "legal-contents-title",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "legal-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "legal-section",
+                          "tag": "section",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "legal-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site-footer/default",
+      "component": "site-footer",
+      "slug": "default",
+      "title": "Columns and a theme toggle",
+      "kind": "single",
+      "code": "SiteFooter::new(kesar())\n    .tagline(\"Your sleep, heart and steps, read calmly. Made in Mohali.\")\n    .social(icons::GLOBE, \"Kesar on the web\", \"https://kesar.example/\")\n    .social(\n        icons::MAIL,\n        \"Write to Kesar\",\n        \"mailto:namaste@kesar.example\",\n    )\n    .column(\n        FooterColumn::new(\"Product\")\n            .link(\"Features\", \"/#features\")\n            .link(\"Pricing\", \"/pricing/\"),\n    )\n    .column(\n        FooterColumn::new(\"Company\")\n            .link(\"Contact\", \"/contact/\")\n            .link(\"Privacy\", \"/privacy/\"),\n    )\n    .legal(\"© 2026 Kesar Health Pvt. Ltd., Mohali, Punjab.\")\n    .legal(\"Kesar is a wellness guide, not a medical device.\")\n    .theme_toggle(ThemeToggle::new(Mode::System).back(\"/\"))",
+      "src": "/ui-preview/site-footer/default.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1280,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "site-footer",
+          "tag": "footer",
+          "count": 1,
+          "children": [
+            {
+              "slot": "site-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "site-footer-top",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-footer-brand",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "site-brand",
+                          "tag": "a",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "site-brand-mark",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "site-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "site-footer-tagline",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "site-footer-social",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "site-footer-nav",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "footer-column",
+                          "tag": "div",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "footer-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "site-footer-bottom",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "site-footer-legal",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "theme-toggle",
+                      "tag": "form",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "theme-toggle-group",
+                          "tag": "fieldset",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "theme-toggle-button",
+                              "tag": "button",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "picture/default",
+      "component": "picture",
+      "slug": "default",
+      "title": "A responsive image",
+      "kind": "single",
+      "code": "Picture::new(\n    \"../_frame/picture-800.svg\",\n    \"Resting heart rate over 30 days, falling from 64 to 58 beats a minute\",\n    800,\n    450,\n)\n.srcset([\n    (400, \"../_frame/picture-400.svg\"),\n    (800, \"../_frame/picture-800.svg\"),\n])\n.sizes(\"(min-width: 50rem) 50rem, 100vw\")\n.fill()",
+      "src": "/ui-preview/picture/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "picture",
+          "tag": "picture",
+          "count": 1,
+          "children": []
         }
       ]
     }

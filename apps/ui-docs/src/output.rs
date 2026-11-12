@@ -719,6 +719,14 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
         "previews/_frame/preview.js".to_owned(),
         include_str!("../frame/preview.js").replace("\r\n", "\n"),
     );
+    // The picture the responsive image example shows, at the two widths its `srcset` names.
+    let picture = include_str!("../frame/picture.svg").replace("\r\n", "\n");
+    for width in ["400", "800"] {
+        files.insert(
+            format!("previews/_frame/picture-{width}.svg"),
+            picture.clone(),
+        );
+    }
     files
 }
 

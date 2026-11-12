@@ -1,0 +1,51 @@
+---
+title: "LegalPage"
+description: "A privacy policy, terms or any long page of rules, with its contents beside the text and held in view."
+---
+
+<UiPreview example="legal-page/default" />
+
+`LegalPage` draws a long page of rules: its title (`h1`), an introduction and when it last changed, then its parts, each an `h2` that the contents link to. On a wide screen the contents sit beside the text and stay in view; on a phone they come first, in a box.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+LegalPage::new("Privacy policy")
+    .eyebrow("Legal")
+    .intro("What Kesar collects, why, where it is kept and how to take it back.")
+    .updated("Last updated 10 November 2026")
+    .section(
+        LegalSection::new("collect", "1. What we collect")
+            .text("From your phone, with your permission: steps, sleep and heart rate.")
+            .points(["Your name and email address, to sign you in."]),
+    )
+    .section(LegalSection::new("", "2. Where it is kept").text("On servers in Mumbai."))
+```
+
+## Parts
+
+`LegalSection::new(id, title)` names a part; an empty id is made from the title. `.text` adds a paragraph, `.points` a list, and `.body` any content: a table, [Markdown](/docs/components/markdown/), a callout.
+
+## Anatomy
+
+<UiAnatomy component="legal-page" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The contents are a navigation landmark named On this page (`.contents_label` changes it).
+- Each part is a region named by its heading.
+
+</UiA11y>
+
+## API
+
+### LegalPage
+
+<UiProps type="LegalPage" />
+
+### LegalSection
+
+<UiProps type="LegalSection" />
