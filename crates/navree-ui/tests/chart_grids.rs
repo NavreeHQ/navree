@@ -5,7 +5,8 @@
 //! out of the sheet and measured in every built-in theme, both palettes and both surfaces a
 //! chart sits on, for every colour an ink can be:
 //!
-//! - each step is told from the one before it (zero, the faintest step, up to the deepest);
+//! - each step is told from the one before it (a day with no data, which is hollow, then zero,
+//!   the faintest step, up to the deepest);
 //! - the deepest step of the calendar reaches 3:1 on the surface, as any chart mark must;
 //! - a value written in a matrix cell reads at 4.5:1 on every step it can sit on.
 
@@ -85,7 +86,10 @@ const INKS: [Token; 9] = [
 #[test]
 fn the_calendars_steps_are_told_apart_and_the_deepest_reads() {
     let steps = steps("level");
-    assert_eq!(steps.iter().map(|s| s.0).collect::<Vec<_>>(), [1, 2, 3, 4]);
+    assert_eq!(
+        steps.iter().map(|s| s.0).collect::<Vec<_>>(),
+        [0, 1, 2, 3, 4]
+    );
     let mut found = Vec::new();
     for theme in Theme::BUILT_IN {
         for side in Side::BOTH {
@@ -93,23 +97,28 @@ fn the_calendars_steps_are_told_apart_and_the_deepest_reads() {
             for surface in [Token::Ink0, Token::Ink1] {
                 let under = palette.get(surface);
                 for ink in INKS {
-                    let mut ramp = vec![palette.get(Token::Ink3)];
+                    // A day with no data is hollow: the surface itself, before zero.
+                    let mut ramp = vec![under];
                     ramp.extend(steps.iter().map(|s| colour(palette, side, surface, ink, s)));
                     for (at, pair) in ramp.windows(2).enumerate() {
                         let distance = apart(pair[0], pair[1]);
                         if distance < CALENDAR_APART {
                             found.push(format!(
-                                "{} {} {} on {}: step {} to {} is {distance:.1} apart",
+                                "{} {} {} on {}: {} to step {} is {distance:.1} apart",
                                 theme.id(),
                                 side.as_str(),
                                 ink.name(),
                                 surface.name(),
-                                at,
-                                at + 1
+                                if at == 0 {
+                                    "no data".to_owned()
+                                } else {
+                                    format!("step {}", at - 1)
+                                },
+                                at
                             ));
                         }
                     }
-                    let ratio = ramp[4].contrast(under);
+                    let ratio = ramp[5].contrast(under);
                     if ratio < 3.0 {
                         found.push(format!(
                             "{} {} {} on {}: the deepest step is {ratio:.2}:1",
