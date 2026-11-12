@@ -1,11 +1,11 @@
 //! Axes and gridlines: what each axis draws ([`Axis`]), the lines behind the marks
-//! ([`Grid`]), which labels an axis keeps ([`Ticks`]), and the range of the value axis
+//! ([`Gridlines`]), which labels an axis keeps ([`Ticks`]), and the range of the value axis
 //! ([`Domain`]).
 //!
 //! The defaults are the chart as it always was: value labels at the side, x labels
 //! under the plot, solid hairlines across at each value tick, no axis lines and no tick
 //! marks, a value axis that starts at zero. Each option turns one thing on or off, so a
-//! bare hero chart is `.x_axis(Axis::hidden()).y_axis(Axis::hidden()).grid(Grid::none())`.
+//! bare hero chart is `.x_axis(Axis::hidden()).y_axis(Axis::hidden()).grid(Gridlines::none())`.
 
 use super::value::IntoValue;
 
@@ -83,28 +83,28 @@ impl Axis {
 /// down at the x labels, both or none; solid hairlines, or dashed.
 ///
 /// ```
-/// use navree_ui::charts::Grid;
+/// use navree_ui::charts::Gridlines;
 ///
-/// let quiet = Grid::horizontal().dashed();
-/// let none = Grid::none();
-/// let full = Grid::both().dashed();
+/// let quiet = Gridlines::horizontal().dashed();
+/// let none = Gridlines::none();
+/// let full = Gridlines::both().dashed();
 /// # let _ = (quiet, none, full);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[must_use]
-pub struct Grid {
+pub struct Gridlines {
     pub(crate) across: bool,
     pub(crate) down: bool,
     pub(crate) dashed: bool,
 }
 
-impl Default for Grid {
+impl Default for Gridlines {
     fn default() -> Self {
         Self::horizontal()
     }
 }
 
-impl Grid {
+impl Gridlines {
     /// No gridlines. A zero line is still drawn where values cross zero.
     pub const fn none() -> Self {
         Self {
@@ -371,7 +371,7 @@ mod tests {
         assert!(Axis::new().shows() && !Axis::hidden().shows());
         assert!(Axis::hidden().line().shows());
         assert!(!Axis::new().no_labels().labels);
-        assert_eq!(Grid::default(), Grid::horizontal());
-        assert!(Grid::both().dashed().dashed && Grid::both().down);
+        assert_eq!(Gridlines::default(), Gridlines::horizontal());
+        assert!(Gridlines::both().dashed().dashed && Gridlines::both().down);
     }
 }
