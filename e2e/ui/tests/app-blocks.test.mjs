@@ -1,6 +1,8 @@
 // The app blocks in real browsers, against the proof app's /app-blocks: the app's own stylesheet and
 // typeface (linked after the toolkit's, served immutable, applied, no policy report), the figure tile,
-// the info tip, chart skeletons, the breathing guide, the dock, the day pager and a view switcher:
+// the info tip, chart skeletons, the breathing guide, the dock (and one for phones only), the day pager,
+// a view switcher, the copy field, a grid in a ratio, the app's own picture, a region whose answer holds
+// lazy tabs, and a shell of its own (a pager in the middle of the bar, a title template, one theme):
 // every case at 390 and 1440 px in dark and light with axe clean, the keys and the pointer, the guide's
 // phases over time and under less motion, JavaScript off, hostile text.
 // Run with the proof app serving:
@@ -30,7 +32,7 @@ const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
 const reachable = await fetch(`${BASE}/app-blocks?case=tiles`).then((r) => r.ok, () => false);
 
-const CASES = ["tiles", "plain-tiles", "info-tip", "skeletons", "breathing", "dock", "day-pager", "view-switcher", "brand"];
+const CASES = ["tiles", "plain-tiles", "info-tip", "skeletons", "breathing", "dock", "day-pager", "view-switcher", "copy-field", "ratio-grid", "dock-phones", "app-image", "nested-lazy", "brand"];
 
 async function settle(page) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -462,6 +464,158 @@ for (const name of NAMES) {
         await page.waitForLoadState();
         assert.equal(await page.locator("#view-columns").isVisible(), true);
         assert.equal(await page.locator("figure[data-kind=rings]").isVisible(), false);
+      });
+    });
+    describe("the copy field", () => {
+      test("the button copies the value and says so, and focusing the field selects it whole", async () => {
+        const page = await open("/app-blocks?case=copy-field");
+        if (name === "chromium") await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        const field = page.getByLabel("Invite link", { exact: true });
+        assert.equal(await field.getAttribute("readonly"), "");
+        await field.focus();
+        const selected = await field.evaluate((f) => f.value.slice(f.selectionStart, f.selectionEnd));
+        assert.equal(selected, "https://kesar.example/join/8k2m-q4rt", "the whole value is selected");
+        const button = page.locator("[data-case=copy-field] [data-slot=copy-field-button]").first();
+        assert.equal(await button.isVisible(), true);
+        assert.equal(await button.innerText(), "Copy");
+        await button.click();
+        await page.waitForFunction(() => document.querySelector("[data-slot=copy-field-button]").hasAttribute("data-copied"));
+        assert.equal(await button.innerText(), "Copied");
+        if (name === "chromium") assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "https://kesar.example/join/8k2m-q4rt");
+        await page.waitForFunction(() => !document.querySelector("[data-slot=copy-field-button]").hasAttribute("data-copied"), null, { timeout: 4000 });
+        assert.equal(await button.innerText(), "Copy");
+        // Hostile text is a value, never markup.
+        assert.match(await page.locator("#copy-hostile").inputValue(), /^<script>window.__pwned=1<\/script>/);
+        assert.equal(await page.evaluate(() => window.__pwned), undefined);
+        await page.done();
+      });
+
+      test("with JavaScript off the button is not drawn and the value can still be selected", async () => {
+        const page = await open("/app-blocks?case=copy-field", { js: false });
+        assert.equal(await page.locator("[data-slot=copy-field-button]").first().isVisible(), false);
+        const field = page.getByLabel("Invite link", { exact: true });
+        assert.equal(await field.inputValue(), "https://kesar.example/join/8k2m-q4rt");
+        await field.selectText();
+        assert.equal(await field.evaluate((f) => f.selectionEnd - f.selectionStart), "https://kesar.example/join/8k2m-q4rt".length);
+      });
+    });
+
+    describe("a grid in a ratio", () => {
+      test("seven parts beside five from 768 px, one column on a phone", async () => {
+        const widths = async (page) => page.evaluate(() => [...document.querySelectorAll("[data-ratio='2'] > *")].map((el) => Math.round(el.getBoundingClientRect().width)));
+        const wide = await open("/app-blocks?case=ratio-grid", { width: 1440 });
+        const [a, b] = await widths(wide);
+        assert.ok(Math.abs(a / b - 7 / 5) < 0.06, `7:5, not ${a}:${b}`);
+        const thirds = await wide.evaluate(() => [...document.querySelectorAll("[data-ratio='3'] > *")].map((el) => Math.round(el.getBoundingClientRect().width)));
+        assert.ok(Math.abs(thirds[1] / thirds[0] - 2) < 0.08 && Math.abs(thirds[0] - thirds[2]) <= 1, `1:2:1, not ${thirds}`);
+        await wide.done();
+        const phone = await open("/app-blocks?case=ratio-grid", { width: 390 });
+        const tops = await phone.evaluate(() => [...document.querySelectorAll("[data-ratio='2'] > *")].map((el) => Math.round(el.getBoundingClientRect().top)));
+        assert.ok(tops[1] > tops[0], "stacked on a phone");
+        const [c, d] = await widths(phone);
+        assert.equal(c, d, "each the whole width");
+        await phone.done();
+      });
+    });
+
+    describe("a dock for phones only", () => {
+      test("it shows on a phone and is not drawn from 768 px", async () => {
+        const phone = await open("/app-blocks?case=dock-phones", { width: 390 });
+        assert.equal(await phone.getByRole("navigation", { name: "Sections on a phone" }).isVisible(), true);
+        const tablet = await open("/app-blocks?case=dock-phones", { width: 768 });
+        assert.equal(await tablet.locator("[data-slot=dock][data-below=md]").isVisible(), false);
+        assert.equal(await tablet.getByRole("navigation", { name: "Sections on a phone" }).count(), 0, "nor read by a screen reader");
+      });
+    });
+
+    describe("the app's own picture", () => {
+      test("served by its hash, immutable, as SVG under a policy that runs nothing, and drawn", async () => {
+        const page = await open("/app-blocks?case=app-image");
+        const svg = page.responses.find((r) => /\/_navree\/ui\/app\/proof-mark-[0-9a-f]{12}\.svg$/.test(new URL(r.url).pathname));
+        assert.ok(svg, "the picture was fetched");
+        assert.equal(svg.status, 200);
+        assert.equal(svg.headers["content-type"], "image/svg+xml");
+        assert.equal(svg.headers["cache-control"], "public, max-age=31536000, immutable");
+        assert.match(svg.headers["content-security-policy"], /default-src 'none'.*sandbox/);
+        await page.locator("[data-case=app-image] picture img").scrollIntoViewIfNeeded();
+        await page.waitForFunction(() => [...document.querySelectorAll("[data-case=app-image] img")].every((img) => img.complete && img.naturalWidth > 0));
+        assert.equal(await page.locator("[data-case=app-image] img").count(), 2, "an img and a picture, both drawn");
+        // Opened on its own, it runs nothing.
+        const alone = await page.context().newPage();
+        await alone.goto(svg.url);
+        assert.equal(await alone.evaluate(() => typeof window.__pwned), "undefined");
+        await page.done();
+      });
+    });
+
+    describe("a region whose answer holds lazy tabs", () => {
+      test("draws in place, its tabs load their panels, and the page stays where it is", async () => {
+        const page = await open("/app-blocks?case=nested-lazy");
+        const before = page.url();
+        await page.locator("#nested-region [role=tab]").first().waitFor();
+        assert.equal(page.url(), before, "the page is not replaced by the fragment");
+        assert.equal(await page.title(), "App blocks");
+        assert.equal(await page.locator("[data-case=nested-lazy]").count(), 1);
+        await page.getByRole("tab", { name: "30 nights" }).click();
+        await page.getByText("Thirty nights: 7 h 4 min on average.").waitFor();
+        assert.equal(page.url().startsWith(before.split("&")[0]), true);
+        await page.done();
+      });
+
+      test("the server marks it as the region's fragment: without the mark the runtime would leave for it", async () => {
+        const page = await open("/app-blocks?case=nested-lazy&strip=1");
+        const marks = [];
+        await page.route("**/app-blocks/fragment/trends", async (route) => {
+          // Only the region's own fetch: the page the runtime goes to after is a navigation.
+          if (!route.request().headers()["x-navree-region"]) return route.continue();
+          const response = await route.fetch();
+          marks.push(response.headers()["x-navree-fragment"]);
+          const headers = { ...response.headers() };
+          delete headers["x-navree-fragment"];
+          await route.fulfill({ response, headers });
+        });
+        await page.reload();
+        await page.waitForURL(/\/app-blocks\/fragment\/trends$/);
+        assert.deepEqual(marks, ["1"], "a view answered to a region's fetch is marked");
+      });
+    });
+
+    describe("a shell of its own", () => {
+      test("the day pager stands in the middle of the bar, the tab is titled by the page, and one theme leaves the modes only", async () => {
+        const page = await open("/app-blocks/shell", { width: 1440 });
+        assert.equal(await page.title(), "Today · Kesar");
+        assert.equal(await page.locator("h1").innerText(), "Good evening, Simran");
+        const centre = await page.evaluate(() => {
+          const bar = document.querySelector("[data-slot=topbar]").getBoundingClientRect();
+          const pager = document.querySelector("[data-slot=topbar-center] [data-slot=day-pager]").getBoundingClientRect();
+          return { bar: bar.left + bar.width / 2, pager: pager.left + pager.width / 2 };
+        });
+        assert.ok(Math.abs(centre.bar - centre.pager) <= 2, `centred: ${JSON.stringify(centre)}`);
+        await page.getByRole("button", { name: "Appearance" }).click();
+        assert.equal(await page.locator("[data-slot=theme-menu-form] input[name=theme]").count(), 0, "no theme cards");
+        assert.equal(await page.locator("[data-slot=theme-menu-form] input[name=mode]").count(), 3);
+        const logo = await page.locator("[data-slot=topbar-brand] img").getAttribute("src");
+        assert.match(logo, /\/_navree\/ui\/app\/proof-mark-[0-9a-f]{12}\.svg$/);
+        await page.done();
+      });
+
+      test("on a phone the mark stays beside the menu button, the pager stays in the bar, and the dock shows", async () => {
+        const page = await open("/app-blocks/shell", { width: 390 });
+        assert.equal(await page.locator("[data-slot=topbar-brand]").isVisible(), true);
+        assert.equal(await page.locator("[data-slot=topbar-brand] img").isVisible(), true);
+        assert.equal(await page.locator("[data-slot=topbar-center] [data-slot=day-pager]").isVisible(), true);
+        assert.equal(await page.getByRole("navigation", { name: "Sections" }).isVisible(), true);
+        const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(wide <= 0, `no sideways scroll: ${wide}`);
+        for (const theme of ["dark", "light"]) {
+          const shot = await open("/app-blocks/shell", { width: 390, light: theme === "light" });
+          assert.deepEqual(await axe(shot), [], `axe ${theme}`);
+          if (SHOTS) await shot.screenshot({ path: `${SHOTS}/${name}-shell-390-${theme}.png` });
+          const desk = await open("/app-blocks/shell", { width: 1440, light: theme === "light" });
+          assert.deepEqual(await axe(desk), [], `axe ${theme} 1440`);
+          if (SHOTS) await desk.screenshot({ path: `${SHOTS}/${name}-shell-1440-${theme}.png` });
+        }
+        await page.done();
       });
     });
   });
