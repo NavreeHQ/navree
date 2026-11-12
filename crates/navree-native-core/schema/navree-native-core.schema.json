@@ -408,6 +408,9 @@
             },
             "t": {
               "const": "device"
+            },
+            "ticket": {
+              "type": "string"
             }
           },
           "required": [

@@ -122,6 +122,12 @@ pub enum Effect {
         /// Whether the call's result is wanted.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         posts: bool,
+        /// The server's one-time ticket, given only with the one call whose
+        /// client must show it to the server itself before it can prompt:
+        /// `confirm`, which asks the server for a challenge with it. The
+        /// result of every other call is posted with its ticket by the core.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ticket: Option<String>,
     },
     /// Read what the client keeps under a key, and come back with a `cache` event.
     CacheRead {

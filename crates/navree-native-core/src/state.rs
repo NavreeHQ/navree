@@ -654,6 +654,9 @@ pub(crate) struct DeviceCall {
     pub screen: ScreenId,
     /// Where the result is posted, and the server's one-time ticket for it.
     pub then: navree_native::device::Then,
+    /// Whether the client was given the ticket and has spent it, so the
+    /// result is posted without it.
+    pub spent: bool,
 }
 
 /// The numbers the core hands out.

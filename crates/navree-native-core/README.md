@@ -138,7 +138,7 @@ Every event is an object whose `t` names it. A field shown with `?` may be left 
 | `sign_in` | `url`, `callback?`, `ephemeral?` | Opens the system's sign-in session, and answers with `sign_in_done`. With `ephemeral`, the session shares nothing with the system's browser. |
 | `message` | `id`, `tone`, `text?`, `title?`, `notice?`, `action?` | Shows a short message, and answers with `message_shown` when it has gone. `notice` is a message of the core's own, for the client to word. |
 | `haptic` | `kind` | Plays a haptic. |
-| `device` | `call`, `device`, `posts?` | Runs a device call: one a tap started, or one of the few a server's reply may start. `device` is the call as the protocol writes it (`{"f":"share","title":"…"}`). With `posts`, answers with `device_result`, and the core posts the result where the call said, with the server's one-time ticket. |
+| `device` | `call`, `device`, `posts?`, `ticket?` | Runs a device call: one a tap started, or one of the few a server's reply may start. `device` is the call as the protocol writes it (`{"f":"share","title":"…"}`). With `posts`, answers with `device_result`, and the core posts the result where the call said, with the server's one-time ticket. `ticket` comes only with `confirm`: the client shows it to the server to get the challenge the person signs, and the result is then posted without it. |
 | `cache_read` | `key` | Reads what is kept under the key, and answers with `cache`. |
 | `cache_write` | `key`, `value?` | Keeps the value under the key; without a value, takes the key away. |
 | `cache_clear` | | Throws away everything kept. |

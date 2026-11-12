@@ -80,6 +80,23 @@
        "exp": 1794000000
       }
      }
+    },
+    {
+     "t": "button",
+     "label": "Approve the refund",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "confirm",
+       "reason": "Approve refund",
+       "detail": "₹1,499.00 to Tejinder Randhawa"
+      },
+      "then": {
+       "href": "/orders/1/refund/approved",
+       "ticket": "tk_c41d07",
+       "exp": 1794000000
+      }
+     }
     }
    ]
   }

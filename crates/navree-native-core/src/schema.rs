@@ -192,7 +192,7 @@ pub fn schema() -> Value {
         ("sign_in", &[("url", string()), ("callback?", string()), ("ephemeral?", boolean())]),
         ("message", message.as_slice()),
         ("haptic", &[("kind", string())]),
-        ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean())]),
+        ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean()), ("ticket?", string())]),
         ("cache_read", &[("key", string())]),
         ("cache_write", &[("key", string()), ("value?", string())]),
         ("cache_clear", &[]),

@@ -819,11 +819,11 @@ impl Core {
         });
     }
 
-    fn run(&mut self, device: serde_json::Result<Value>, posts: bool) -> u64 {
+    fn run(&mut self, device: serde_json::Result<Value>, posts: bool, ticket: Option<String>) -> u64 {
         self.inner.next.call += 1;
         let call = self.inner.next.call;
         if let Ok(device) = device {
-            self.effects.push(Effect::Device { call, device, posts });
+            self.effects.push(Effect::Device { call, device, posts, ticket });
         }
         call
     }
@@ -835,7 +835,7 @@ impl Core {
             ReplyCall::Haptic(haptic) => self.haptic(haptic.kind),
             ReplyCall::Unknown => self.report("device", "a reply started a call this build does not know".to_owned()),
             call if self.built_with(call.feature()) => {
-                self.run(serde_json::to_value(&call), false);
+                self.run(serde_json::to_value(&call), false, None);
             }
             // A feature the app was not built with is passed over.
             _ => {}
@@ -887,9 +887,14 @@ impl Core {
                 if then.is_some() && !self.may_send(id) {
                     return;
                 }
-                let number = self.run(serde_json::to_value(&call), then.is_some());
+                // A confirmation's ticket is spent where the client asks for
+                // its challenge, so the client is given it and the result is
+                // posted without it. Every other ticket stays in the core.
+                let shown = matches!(call, Call::Confirm(_));
+                let ticket = then.as_ref().filter(|_| shown).map(|then| then.ticket.as_str().to_owned());
+                let number = self.run(serde_json::to_value(&call), then.is_some(), ticket);
                 if let Some(then) = then {
-                    self.inner.calls.insert(number, crate::state::DeviceCall { screen: id, then });
+                    self.inner.calls.insert(number, crate::state::DeviceCall { screen: id, then, spent: shown });
                 }
             }
         }
@@ -913,7 +918,9 @@ impl Core {
             fields.clear();
         }
         let outcome = if ok { OUTCOME_OK.to_owned() } else { refusal.unwrap_or_else(|| "failed".to_owned()) };
-        fields.push(pair(TICKET_FIELD, known.then.ticket.as_str()));
+        if !known.spent {
+            fields.push(pair(TICKET_FIELD, known.then.ticket.as_str()));
+        }
         fields.push(pair(OUTCOME_FIELD, &outcome));
         self.post(screen, known.then.href.as_str(), fields, None);
     }
