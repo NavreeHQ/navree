@@ -1,13 +1,15 @@
 //! The statement guard of `query_database`: a statement is parsed before it
 //! is sent, and only one read-only statement passes.
 //!
-//! The guard is the second layer, not the boundary. The boundary is the
-//! database engine: on SQLite a file opened read-only, where SQLite itself
-//! prepares exactly one read-only statement under an authorizer that allows
-//! only reading; on PostgreSQL a read-only transaction run by a role without
-//! superuser (or a way to become one) or server-file, server-program and
-//! signal privileges (`query_database` refuses such a role unless Navigator
-//! is started with `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`). The guard
+//! The guard is the second layer. The first is the database engine: on
+//! SQLite a file opened read-only, where SQLite itself prepares exactly one
+//! read-only statement under an authorizer that allows only reading; on
+//! PostgreSQL a read-only transaction run by a role without superuser (or a
+//! way to become one), server-file, server-program or signal privileges,
+//! and without functions it may execute that act beyond it
+//! (`query_database` refuses such a role unless Navigator is started with
+//! `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`; see the database module
+//! for what an ordinary role can still reach). The guard
 //! and SQLite do not tokenize alike (SQLite's `$name::x(..)` variables), so
 //! on SQLite the guard's own checks are never what keeps a query read-only.
 //!
@@ -159,6 +161,9 @@ pub enum Refusal {
         MAX_EXPRESSION_DEPTH
     )]
     TooDeep,
+    /// The guard could not run: its thread could not start, or it failed.
+    #[error("the statement could not be checked (the guard's thread failed), so it is not sent")]
+    Unchecked,
     /// A parameter (`$1`, `?`, `:name`, `@name`, `$name`): nothing is bound.
     #[error(
         "parameters ({name}) are not allowed: query_database binds no values; write the value itself"
@@ -183,7 +188,8 @@ pub enum Refusal {
     /// SQLite's authorizer refused something the statement does.
     #[error(
         "not authorized: {reason}. On SQLite only reading tables and calling functions is allowed \
-         (no PRAGMA, ATTACH, VACUUM, writes or transactions, and no pragma table functions)"
+         (no PRAGMA, ATTACH, writes or transactions, no pragma table functions, and no R*Tree tables, \
+         which write when opened)"
     )]
     NotAuthorized {
         /// SQLite's message.
@@ -196,8 +202,9 @@ pub enum Refusal {
 ///
 /// This list is defense in depth and cannot be complete: an extension can
 /// add a function that runs SQL text or reaches a file, a process or the
-/// network under any name. The boundary is the database role (see the
-/// module's documentation), which is why a privileged role is refused.
+/// network under any name. The role and the database's own checks are the
+/// first layer (see the module's documentation), which is why a privileged
+/// role is refused.
 const DENIED_FUNCTIONS: &[&str] = &[
     // PostgreSQL: functions that run SQL text the guard never parses.
     "ts_stat",
@@ -277,9 +284,9 @@ pub fn check(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
         .name("navigator-sql-guard".to_owned())
         .stack_size(GUARD_STACK_BYTES)
         .spawn(move || check_here(&sql, dialect))
-        .map_err(|_| Refusal::TooDeep)?
+        .map_err(|_| Refusal::Unchecked)?
         .join()
-        .unwrap_or(Err(Refusal::TooDeep))
+        .unwrap_or(Err(Refusal::Unchecked))
 }
 
 /// The longest statement `query_database` reads: far more than a hand- or

@@ -265,9 +265,10 @@ sqlx-core = { version = "0.9.0", default-features = false }
 # Navigator's read-only query guard: parses a statement before it is sent.
 sqlparser = { version = "0.63.0", features = ["visitor"] }
 # Navigator's SQLite queries: SQLite itself prepares exactly one statement,
-# says whether it writes, and authorizes each thing it reads (`hooks`). The
-# same libsqlite3-sys as SQLx's, so one bundled SQLite.
-rusqlite = { version = "0.39.0", default-features = false, features = ["hooks"] }
+# says whether it writes, and authorizes each thing it reads (`hooks`), with a
+# cap on how long a value may grow (`limits`). The same libsqlite3-sys as
+# SQLx's, so one bundled SQLite.
+rusqlite = { version = "0.39.0", default-features = false, features = ["hooks", "limits"] }
 
 # ---------------------------------------------------------------------------
 # Security and crypto (RustCrypto 2026 wave: argon2 0.6, hmac 0.13, sha2 0.11)

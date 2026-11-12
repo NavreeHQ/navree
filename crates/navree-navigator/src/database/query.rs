@@ -40,9 +40,77 @@ pub struct QueryResult {
     pub duration_ms: u64,
 }
 
+/// The longest value an answer carries: a longer one is cut to this many
+/// bytes and ends with [`CUT_MARK`].
+pub const MAX_VALUE_BYTES: usize = 4 * 1024;
+
+/// What ends a value cut to [`MAX_VALUE_BYTES`].
+pub const CUT_MARK: &str = "… [cut]";
+
+/// About how much an answer holds: rows stop being collected once their
+/// values pass it, and `truncated` says so.
+pub const MAX_ANSWER_BYTES: usize = 1024 * 1024;
+
+/// The longest string or blob SQLite may make during a query
+/// (`SQLITE_LIMIT_LENGTH`): a statement that would make a longer one fails.
+const SQLITE_MAX_VALUE: i32 = 1024 * 1024;
+
+/// `text` as an answer's value: whole, or cut to [`MAX_VALUE_BYTES`] (at a
+/// character boundary) with [`CUT_MARK`]; and whether it was cut.
+fn cut(text: &str) -> (String, bool) {
+    if text.len() <= MAX_VALUE_BYTES {
+        return (text.to_owned(), false);
+    }
+    let mut end = MAX_VALUE_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (format!("{}{CUT_MARK}", &text[..end]), true)
+}
+
+/// About how many bytes `row` adds to an answer.
+fn row_bytes(row: &[Value]) -> usize {
+    row.iter()
+        .map(|value| match value {
+            Value::String(text) => text.len(),
+            Value::Null => 4,
+            other => other.to_string().len(),
+        })
+        .sum()
+}
+
+/// Rows kept for an answer: at most [`ROW_LIMIT`] + 1 (the extra one says
+/// there are more), and none once [`MAX_ANSWER_BYTES`] is passed.
+#[derive(Default)]
+struct Kept {
+    rows: Vec<Vec<Value>>,
+    bytes: usize,
+    over_budget: bool,
+}
+
+impl Kept {
+    /// Keeps `row`, or says to stop: there are enough rows, or the answer is
+    /// full (the first row is always kept).
+    fn keep(&mut self, row: Vec<Value>) -> bool {
+        let bytes = row_bytes(&row);
+        if !self.rows.is_empty() && self.bytes + bytes > MAX_ANSWER_BYTES {
+            self.over_budget = true;
+            return false;
+        }
+        self.bytes += bytes;
+        self.rows.push(row);
+        self.rows.len() <= ROW_LIMIT
+    }
+}
+
 impl QueryResult {
-    fn new(columns: Vec<String>, mut rows: Vec<Vec<Value>>, started: Instant) -> Self {
-        let truncated = rows.len() > ROW_LIMIT;
+    fn new(columns: Vec<String>, kept: Kept, started: Instant) -> Self {
+        let Kept {
+            mut rows,
+            over_budget,
+            ..
+        } = kept;
+        let truncated = rows.len() > ROW_LIMIT || over_budget;
         rows.truncate(ROW_LIMIT);
         for row in &mut rows {
             for (value, column) in row.iter_mut().zip(&columns) {
@@ -74,16 +142,21 @@ pub(super) enum SqliteFile {
 ///
 /// - the file is opened read-only (`SQLITE_OPEN_READONLY`, which attached
 ///   databases share) with `PRAGMA query_only` on;
+/// - no string or blob may grow past 1 MB (`SQLITE_LIMIT_LENGTH`), and the
+///   text may not pass twice the guard's limit (`SQLITE_LIMIT_SQL_LENGTH`);
 /// - an authorizer, installed before the statement is prepared, allows only
-///   reading a table, `SELECT`, recursive CTEs and functions not in the
-///   guard's deny list; PRAGMA (pragma table functions included), ATTACH,
-///   DETACH, VACUUM, writes, DDL and transactions are refused while SQLite
-///   prepares the text;
+///   reading a table, `SELECT`, recursive CTEs, functions not in the guard's
+///   deny list and reading `PRAGMA data_version` (FTS5 does); other PRAGMAs
+///   (pragma table functions included), ATTACH, DETACH, writes, DDL and
+///   transactions are refused while SQLite prepares the text. R*Tree tables
+///   prepare a write when opened, so they cannot be read;
 /// - SQLite prepares the text: anything but whitespace or comments after
 ///   the first statement, as SQLite's own tokenizer reads it, is refused;
-/// - the statement must be read-only (`sqlite3_stmt_readonly`) and take no
+/// - the statement must be read-only (`sqlite3_stmt_readonly`), which is
+///   what refuses VACUUM (the authorizer has no action for it), and take no
 ///   parameters; then that one statement runs, interrupted after
-///   [`STATEMENT_TIMEOUT`].
+///   [`STATEMENT_TIMEOUT`], each text value cut to [`MAX_VALUE_BYTES`] and
+///   the rows to about [`MAX_ANSWER_BYTES`].
 pub(super) async fn sqlite(
     file: SqliteFile,
     statement: &CheckedStatement,
@@ -111,6 +184,16 @@ pub(super) fn run_sqlite(file: &SqliteFile, sql: &str) -> Result<QueryResult, Da
         .map_err(sqlite_error)?;
     conn.pragma_update(None, "query_only", "ON")
         .map_err(sqlite_error)?;
+    // No value may grow past 1 MB (`printf('%.*c', 400000000, 'x')`, a
+    // recursive `zeroblob(..)`), and no statement past the guard's limit.
+    conn.set_limit(
+        rusqlite::limits::Limit::SQLITE_LIMIT_LENGTH,
+        SQLITE_MAX_VALUE,
+    )
+    .map_err(sqlite_error)?;
+    let sql_limit = i32::try_from(super::MAX_SQL_BYTES * 2).unwrap_or(i32::MAX);
+    conn.set_limit(rusqlite::limits::Limit::SQLITE_LIMIT_SQL_LENGTH, sql_limit)
+        .map_err(sqlite_error)?;
     let deadline = Instant::now() + STATEMENT_TIMEOUT;
     conn.progress_handler(1_000, Some(move || Instant::now() >= deadline))
         .map_err(sqlite_error)?;
@@ -129,6 +212,12 @@ fn authorize(context: rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Auth
         AuthAction::Select | AuthAction::Read { .. } | AuthAction::Recursive => {
             Authorization::Allow
         }
+        // FTS5 reads `PRAGMA data_version` to see whether its index changed:
+        // reading that one pragma, with no value, is all that is allowed.
+        AuthAction::Pragma {
+            pragma_name: "data_version",
+            pragma_value: None,
+        } => Authorization::Allow,
         AuthAction::Function { function_name }
             if !super::guard::is_denied(&function_name.to_ascii_lowercase()) =>
         {
@@ -154,21 +243,20 @@ fn run_prepared(conn: &rusqlite::Connection, sql: &str) -> Result<QueryResult, D
         .collect();
     let started = Instant::now();
     let mut rows = statement.query([]).map_err(sqlite_error)?;
-    let mut values: Vec<Vec<Value>> = Vec::new();
+    let mut kept = Kept::default();
     while let Some(row) = rows.next().map_err(sqlite_error)? {
-        values.push(
-            (0..columns.len())
-                .map(|i| row.get_ref(i).map_or(Value::Null, sqlite_value))
-                .collect(),
-        );
-        if values.len() > ROW_LIMIT {
+        let values = (0..columns.len())
+            .map(|i| row.get_ref(i).map_or(Value::Null, sqlite_value))
+            .collect();
+        if !kept.keep(values) {
             break;
         }
     }
-    Ok(QueryResult::new(columns, values, started))
+    Ok(QueryResult::new(columns, kept, started))
 }
 
-/// A SQLite value as JSON, by its storage class.
+/// A SQLite value as JSON, by its storage class; text cut to
+/// [`MAX_VALUE_BYTES`].
 fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> Value {
     use rusqlite::types::ValueRef;
 
@@ -176,7 +264,10 @@ fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> Value {
         ValueRef::Null => Value::Null,
         ValueRef::Integer(n) => Value::from(n),
         ValueRef::Real(f) => float(f),
-        ValueRef::Text(text) => Value::from(String::from_utf8_lossy(text).into_owned()),
+        ValueRef::Text(text) => {
+            let text = &text[..text.len().min(MAX_VALUE_BYTES + 4)];
+            Value::from(cut(&String::from_utf8_lossy(text)).0)
+        }
         ValueRef::Blob(bytes) => Value::from(hex(bytes)),
     }
 }
@@ -224,6 +315,11 @@ async fn postgres_in_transaction(
     )))
     .await?;
     conn.execute("SET LOCAL lock_timeout = 1000").await?;
+    // Pinned again inside the transaction: behind a pooler in transaction mode
+    // another client's session-level SET could have reached this connection
+    // since the check after connecting.
+    conn.execute("SET LOCAL standard_conforming_strings = on")
+        .await?;
     let started = Instant::now();
     // The checked statement goes to the server as one prepared statement (the
     // extended protocol): a prepared statement holds exactly one command, so
@@ -232,39 +328,93 @@ async fn postgres_in_transaction(
     // over the simple protocol, whose text results give every type a readable
     // form. EXPLAIN and SHOW answer in text-like types (text, json, xml), whose
     // binary form is their text.
-    let rows = match statement.kind {
+    let kept = match statement.kind {
         StatementKind::Query => {
+            // The columns, from the statement as prepared (nothing runs). The
+            // cursor selects each as text cut to MAX_VALUE_BYTES + 1 characters
+            // on the server, so no value larger than that crosses the wire:
+            // the server's own cost is bounded by the statement timeout.
+            use sqlx::SqlSafeStr;
+            let prepared = conn
+                .prepare(AssertSqlSafe(statement.sql.clone()).into_sql_str())
+                .await?;
+            let described: Vec<(String, String)> = sqlx::Statement::columns(&prepared)
+                .iter()
+                .map(|column| {
+                    (
+                        column.name().to_owned(),
+                        column.type_info().name().to_owned(),
+                    )
+                })
+                .collect();
             let declare = format!(
                 "DECLARE navigator_rows NO SCROLL CURSOR FOR {}",
-                statement.sql
+                cut_columns(&statement.sql, described.len())
             );
             conn.execute(sqlx::query(AssertSqlSafe(declare)).persistent(false))
                 .await?;
             let fetch = format!("FETCH FORWARD {} FROM navigator_rows", ROW_LIMIT + 1);
-            with_timeout(collect(conn.fetch(AssertSqlSafe(fetch)))).await?
+            let types: Vec<String> = described.iter().map(|(_, kind)| kind.clone()).collect();
+            let mut kept = with_timeout(keep_rows(
+                conn.fetch(AssertSqlSafe(fetch)),
+                Some(types.as_slice()),
+            ))
+            .await?;
+            kept.columns = described.into_iter().map(|(name, _)| name).collect();
+            kept
         }
         StatementKind::Explain | StatementKind::Show => {
             let prepared = sqlx::query(AssertSqlSafe(statement.sql.clone())).persistent(false);
-            with_timeout(collect(conn.fetch(prepared))).await?
+            with_timeout(keep_rows(conn.fetch(prepared), None)).await?
         }
     };
-    let columns = rows
-        .first()
-        .map(|row| column_names(row.columns()))
-        .unwrap_or_default();
-    let values = rows.iter().map(postgres_values).collect();
-    Ok(QueryResult::new(columns, values, started))
+    let PgKept { columns, kept } = kept;
+    Ok(QueryResult::new(columns, kept, started))
 }
 
-/// Every row of `stream`.
-async fn collect(
-    mut stream: impl futures_util::Stream<Item = Result<PgRow, sqlx::Error>> + Unpin,
-) -> Result<Vec<PgRow>, DatabaseError> {
-    let mut rows: Vec<PgRow> = Vec::new();
-    while let Some(row) = stream.try_next().await? {
-        rows.push(row);
+/// `sql` (a query with `columns` columns) as a query of the same rows whose
+/// every column is its text cut to [`MAX_VALUE_BYTES`] + 1 characters,
+/// named `c1`, `c2`, ... by position (so duplicate names don't matter).
+fn cut_columns(sql: &str, columns: usize) -> String {
+    if columns == 0 {
+        return sql.to_owned();
     }
-    Ok(rows)
+    let limit = MAX_VALUE_BYTES + 1;
+    let picks: Vec<String> = (1..=columns)
+        .map(|i| format!("pg_catalog.left(c{i}::text, {limit})"))
+        .collect();
+    let names: Vec<String> = (1..=columns).map(|i| format!("c{i}")).collect();
+    format!(
+        "SELECT {} FROM ({sql}) AS navigator_rows_source ({})",
+        picks.join(", "),
+        names.join(", ")
+    )
+}
+
+/// Rows read from PostgreSQL, and the names of their columns.
+struct PgKept {
+    columns: Vec<String>,
+    kept: Kept,
+}
+
+/// The rows of `stream` as an answer keeps them: each value cut, typed by
+/// `types` (the columns' own types, when the rows are their text) or by the
+/// rows' own column types, and no more once [`Kept::keep`] says to stop.
+async fn keep_rows(
+    mut stream: impl futures_util::Stream<Item = Result<PgRow, sqlx::Error>> + Unpin,
+    types: Option<&[String]>,
+) -> Result<PgKept, DatabaseError> {
+    let mut kept = Kept::default();
+    let mut columns = Vec::new();
+    while let Some(row) = stream.try_next().await? {
+        if columns.is_empty() {
+            columns = column_names(row.columns());
+        }
+        if !kept.keep(postgres_values(&row, types)) {
+            break;
+        }
+    }
+    Ok(PgKept { columns, kept })
 }
 
 /// A backstop above the database's own timeout.
@@ -281,7 +431,11 @@ fn column_names<C: Column>(columns: &[C]) -> Vec<String> {
 }
 
 /// A PostgreSQL row (text format) as JSON, by each column's type.
-fn postgres_values(row: &PgRow) -> Vec<Value> {
+///
+/// `types` names the columns' own types when the row holds their text (the
+/// cursor's columns are all text); otherwise each column's type is used. A
+/// value longer than [`MAX_VALUE_BYTES`] comes back cut, as text.
+fn postgres_values(row: &PgRow, types: Option<&[String]>) -> Vec<Value> {
     row.columns()
         .iter()
         .enumerate()
@@ -295,7 +449,14 @@ fn postgres_values(row: &PgRow) -> Vec<Value> {
             let Ok(text) = raw.as_str() else {
                 return Value::Null;
             };
-            pg_text_value(column.type_info().name(), text)
+            let (text, was_cut) = cut(text);
+            if was_cut {
+                return Value::from(text);
+            }
+            let type_name = types
+                .and_then(|types| types.get(i))
+                .map_or_else(|| column.type_info().name(), String::as_str);
+            pg_text_value(type_name, &text)
         })
         .collect()
 }
@@ -317,9 +478,10 @@ pub(super) fn pg_text_value(type_name: &str, text: &str) -> Value {
                 .filter(|f| f.is_finite() && format_matches(text, *f))
                 .map_or_else(|| Value::from(text), Value::from),
         },
+        // `t` / `f` as PostgreSQL writes it, `true` / `false` as `bool::text`.
         "BOOL" => match text {
-            "t" => Value::Bool(true),
-            "f" => Value::Bool(false),
+            "t" | "true" => Value::Bool(true),
+            "f" | "false" => Value::Bool(false),
             other => Value::from(other),
         },
         "JSON" | "JSONB" => serde_json::from_str(text).unwrap_or_else(|_| Value::from(text)),
@@ -375,10 +537,10 @@ mod tests {
         }
         let result = QueryResult::new(
             vec!["email".into(), "password_hash".into()],
-            vec![
+            kept(vec![
                 vec![Value::from("anu@example.com"), Value::from("$argon2id$...")],
                 vec![Value::from("bal@example.com"), Value::Null],
-            ],
+            ]),
             Instant::now(),
         );
         assert_eq!(result.rows[0][1], "[redacted]");
@@ -391,11 +553,58 @@ mod tests {
         let rows = (0..=ROW_LIMIT as i64)
             .map(|i| vec![Value::from(i)])
             .collect();
-        let result = QueryResult::new(vec!["n".into()], rows, Instant::now());
+        let result = QueryResult::new(vec!["n".into()], kept(rows), Instant::now());
         assert_eq!(result.rows.len(), ROW_LIMIT);
         assert!(result.truncated);
-        let result = QueryResult::new(vec!["n".into()], vec![vec![Value::from(1)]], Instant::now());
+        let result = QueryResult::new(
+            vec!["n".into()],
+            kept(vec![vec![Value::from(1)]]),
+            Instant::now(),
+        );
         assert!(!result.truncated);
+    }
+
+    /// `rows` kept as an answer keeps them.
+    fn kept(rows: Vec<Vec<Value>>) -> Kept {
+        let mut kept = Kept::default();
+        for row in rows {
+            if !kept.keep(row) {
+                break;
+            }
+        }
+        kept
+    }
+
+    #[test]
+    fn long_values_are_cut_and_a_full_answer_stops() {
+        let (short, was_cut) = cut("abc");
+        assert_eq!((short.as_str(), was_cut), ("abc", false));
+        let long = "é".repeat(MAX_VALUE_BYTES);
+        let (text, was_cut) = cut(&long);
+        assert!(was_cut);
+        assert!(text.ends_with(CUT_MARK), "{text}");
+        assert!(text.len() <= MAX_VALUE_BYTES + CUT_MARK.len());
+        // 100 rows of 30 values of 4 KB each pass 1 MB long before the end.
+        let row = vec![Value::from("x".repeat(MAX_VALUE_BYTES)); 30];
+        let answer = QueryResult::new(vec!["c".into(); 30], kept(vec![row; 100]), Instant::now());
+        assert!(answer.truncated);
+        assert!(answer.rows.len() < 10, "{}", answer.rows.len());
+        assert!(answer.rows.len() * 30 * MAX_VALUE_BYTES <= MAX_ANSWER_BYTES);
+    }
+
+    #[test]
+    fn postgres_columns_are_read_as_cut_text_by_position() {
+        assert_eq!(
+            cut_columns("SELECT 1, 1", 2),
+            format!(
+                "SELECT pg_catalog.left(c1::text, {limit}), pg_catalog.left(c2::text, {limit}) \
+                 FROM (SELECT 1, 1) AS navigator_rows_source (c1, c2)",
+                limit = MAX_VALUE_BYTES + 1
+            )
+        );
+        assert_eq!(cut_columns("SELECT", 0), "SELECT");
+        assert_eq!(pg_text_value("BOOL", "true"), Value::Bool(true));
+        assert_eq!(pg_text_value("BOOL", "f"), Value::Bool(false));
     }
 
     #[test]
@@ -497,6 +706,49 @@ mod tests {
         // Trailing whitespace and comments are not a second statement.
         let ok = run_sqlite(&db, "SELECT email FROM users -- the one user\n /* done */ ").unwrap();
         assert_eq!(ok.columns, ["email"]);
+    }
+
+    /// A statement that would make a huge value fails in SQLite, instead of
+    /// making Navigator hold it; a long value comes back cut.
+    #[test]
+    fn sqlite_values_are_bounded() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = users_db(dir.path());
+        for sql in [
+            "SELECT printf('%.*c', 400000000, 'x') FROM (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3)",
+            "WITH RECURSIVE b(n, z) AS (SELECT 1, zeroblob(300000000) UNION ALL SELECT n + 1, z FROM b WHERE n < 100) \
+             SELECT n FROM b",
+            "SELECT length(zeroblob(2000000))",
+        ] {
+            let failed = run_sqlite(&db, sql).unwrap_err();
+            assert!(failed.to_string().contains("too big"), "{sql}: {failed}");
+        }
+        let long = run_sqlite(&db, "SELECT printf('%.*c', 900000, 'x') AS x").unwrap();
+        let text = long.rows[0][0].as_str().unwrap();
+        assert!(text.ends_with(CUT_MARK), "{}", text.len());
+        assert!(text.len() <= MAX_VALUE_BYTES + CUT_MARK.len());
+    }
+
+    /// FTS5 reads `PRAGMA data_version`, which the authorizer allows, and
+    /// nothing else of the kind.
+    #[test]
+    fn sqlite_fts5_tables_can_be_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docs.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE docs USING fts5(body); \
+             INSERT INTO docs (body) VALUES ('ਸਤ ਸ੍ਰੀ ਅਕਾਲ'), ('the deal was won'), ('a lead');",
+        )
+        .unwrap();
+        drop(conn);
+        let db = SqliteFile::Path(path);
+        let found = run_sqlite(&db, "SELECT body FROM docs WHERE docs MATCH 'deal'").unwrap();
+        assert_eq!(found.rows, vec![vec![Value::from("the deal was won")]]);
+        // Reading that counter is harmless; setting a pragma, or reading another, is not allowed.
+        assert!(run_sqlite(&db, "PRAGMA data_version").is_ok());
+        assert!(run_sqlite(&db, "PRAGMA data_version = 1").is_err());
+        assert!(run_sqlite(&db, "PRAGMA user_version").is_err());
     }
 
     #[test]

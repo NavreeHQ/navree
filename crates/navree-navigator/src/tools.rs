@@ -2,7 +2,7 @@
 //! [`Navigator::call`], which answers them. The MCP server
 //! ([`crate::server`]) only adapts this to the protocol.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -97,6 +97,23 @@ impl DatabaseOptions {
             allow_privileged_role: allow,
         }
     }
+}
+
+/// When `url` is the PostgreSQL database the app's `dock.toml` describes
+/// (the URL `navree dock up` writes), the same URL with the user
+/// [`navree_dock::READER_ROLE`], whose password dock sets to the service's.
+fn dock_reader_url(root: &Path, url: &str) -> Option<String> {
+    let dock = navree_dock::app_env(root).ok()?;
+    let (_, dock_url) = dock.iter().find(|(name, _)| name == "APP_DATABASE__URL")?;
+    if dock_url.trim() != url.trim() {
+        return None;
+    }
+    let mut parsed = url::Url::parse(url.trim()).ok()?;
+    if !matches!(parsed.scheme(), "postgres" | "postgresql") {
+        return None;
+    }
+    parsed.set_username(navree_dock::READER_ROLE).ok()?;
+    Some(parsed.to_string())
 }
 
 /// The environment variable naming the database `navree mcp` reads instead
@@ -600,10 +617,32 @@ impl Navigator {
                 .get_string("database.url")
                 .unwrap_or_default(),
         };
+        let (url, hint) = self.through_dock_reader(&project.root, url);
         Ok(
             Target::new(&url, &project.root, self.options.allow_remote_database)?
-                .allow_privileged_role(self.database.allow_privileged_role),
+                .allow_privileged_role(self.database.allow_privileged_role)
+                .connect_hint(hint),
         )
+    }
+
+    /// `url`, or, when it is the database of the app's `dock.toml` and no
+    /// [`DatabaseOptions::url`] is set, the same database through the
+    /// read-only role `navree dock up` keeps ([`navree_dock::READER_ROLE`]),
+    /// with a hint for when that role is missing.
+    fn through_dock_reader(&self, root: &Path, url: String) -> (String, Option<&'static str>) {
+        if self.database.url.is_some() || self.database.allow_privileged_role {
+            return (url, None);
+        }
+        match dock_reader_url(root, &url) {
+            Some(reader) => (
+                reader,
+                Some(
+                    "Navigator reads the dock database as navree_reader, the read-only role \
+                     `navree dock up` creates: run `navree dock up` once to create it",
+                ),
+            ),
+            None => (url, None),
+        }
     }
 
     /// Lighthouse's database: `lighthouse.database_url`, else `database.url`.
@@ -618,6 +657,7 @@ impl Navigator {
             .or_else(|| self.database.url.clone())
             .or_else(|| config.get_string("database.url"))
             .unwrap_or_default();
+        let (url, hint) = self.through_dock_reader(&project.root, url);
         let target = Target::new(&url, &project.root, self.options.allow_remote_database).map_err(
             |error| {
                 let message = error.to_string();
@@ -631,7 +671,9 @@ impl Navigator {
                 }
             },
         )?;
-        let target = target.allow_privileged_role(self.database.allow_privileged_role);
+        let target = target
+            .allow_privileged_role(self.database.allow_privileged_role)
+            .connect_hint(hint);
         Ok(LighthouseDb { target })
     }
 
@@ -1024,6 +1066,39 @@ impl crate::docs::DocsFetcher for FailingFetcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_dock_database_is_read_through_the_reader_role() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"crm\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("dock.toml"), "[services.postgres]\n").unwrap();
+        let dock_url = navree_dock::app_env(dir.path())
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| name == "APP_DATABASE__URL")
+            .unwrap()
+            .1;
+        let reader = dock_reader_url(dir.path(), &dock_url).unwrap();
+        let (dock, reader) = (
+            url::Url::parse(&dock_url).unwrap(),
+            url::Url::parse(&reader).unwrap(),
+        );
+        assert_eq!(reader.username(), navree_dock::READER_ROLE);
+        assert_eq!(reader.password(), dock.password());
+        assert_eq!(
+            (reader.host_str(), reader.port(), reader.path()),
+            (dock.host_str(), dock.port(), dock.path())
+        );
+        // Another database, or an app without a dock.toml, keeps its URL.
+        let other = dock_url.replace("/crm", "/other");
+        assert_eq!(dock_reader_url(dir.path(), &other), None);
+        let bare = tempfile::tempdir().unwrap();
+        assert_eq!(dock_reader_url(bare.path(), &dock_url), None);
+    }
 
     #[test]
     fn database_options_come_from_the_environment() {

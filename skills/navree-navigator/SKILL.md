@@ -138,6 +138,12 @@ cargo test -p navree-navigator
   server-program or signal privileges. Create the read-only role the
   message shows and set `NAVREE_MCP_DATABASE_URL` in the MCP server's
   `env`, or set `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` on purpose.
+  With Dock, run `navree dock up` once: it creates `navree_reader`, which
+  Navigator then uses for the Dock database by itself. A refusal that
+  names functions means the role may execute SECURITY DEFINER, untrusted
+  language or network/file extension functions: revoke EXECUTE on them.
+- **`… [cut]`** at the end of a value: values over 4 KB are cut, and an
+  answer stops at about 1 MB (`truncated` is then true). Select less.
 - **"isn't on this machine"**: `database.url` points at a remote server
   (often a forgotten `.env`). Fix the URL, or start with
   `--allow-remote-database` on purpose.
