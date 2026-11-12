@@ -46,6 +46,7 @@ mod donut;
 mod downsample;
 mod format;
 mod funnel;
+mod grids;
 pub(crate) mod marks;
 pub(crate) mod motion;
 pub(crate) mod paint;
@@ -63,6 +64,9 @@ pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
+pub use grids::{
+    CalendarHeatmap, GridLabels, HeatSteps, MatrixHeatmap, PointSeries, Relation, Scatter,
+};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
 pub use motion::{CountUp, Motion, Speed};
 pub use paint::{ColorScale, Gradient, Ink};

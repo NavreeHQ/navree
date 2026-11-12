@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "b89a942a2062";
+pub const BUILD: &str = "24a91c1443a6";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-d6362b33823e.js";
@@ -69,7 +69,7 @@ pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-1e6ce13f24d3.js";
 pub const MENUBAR_URL: &str = "/_navree/ui/menubar-028fc9f298d6.js";
 
 /// The URL of `charts.js`.
-pub const CHARTS_URL: &str = "/_navree/ui/charts-1faf8299a770.js";
+pub const CHARTS_URL: &str = "/_navree/ui/charts-8f8a213a5e2c.js";
 
 /// The URL of `count-up.js`.
 pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-9e7cfe48a268.js";
@@ -120,6 +120,9 @@ pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-8c2dc9bac340.css"
 
 /// The URL of `chart-paint.css`.
 pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-e4c8ec2ec030.css";
+
+/// The URL of `chart-grids.css`.
+pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-7fff40159363.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
@@ -361,7 +364,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts",
         ext: "js",
-        hash: "1faf8299a770",
+        hash: "8f8a213a5e2c",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/charts.js"),
         gzip: Some(include_bytes!("../dist/charts.js.gz")),
@@ -512,6 +515,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/chart-paint.css"),
         gzip: Some(include_bytes!("../dist/chart-paint.css.gz")),
         brotli: Some(include_bytes!("../dist/chart-paint.css.br")),
+    },
+    Asset {
+        name: "chart-grids",
+        ext: "css",
+        hash: "7fff40159363",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/chart-grids.css"),
+        gzip: Some(include_bytes!("../dist/chart-grids.css.gz")),
+        brotli: Some(include_bytes!("../dist/chart-grids.css.br")),
     },
     Asset {
         name: "parts-styles",

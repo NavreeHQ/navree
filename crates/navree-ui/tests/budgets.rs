@@ -461,6 +461,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "menubar-styles",
         "charts-styles",
         "chart-paint",
+        "chart-grids",
         "select-styles",
         "phone-styles",
         "slider-styles",

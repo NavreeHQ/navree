@@ -307,6 +307,10 @@ impl Uses {
     /// view. The value is written in the page, so it reads the same with no script and
     /// when the reader asks for less motion.
     pub const COUNT_UP: Self = Self(1 << 33);
+    /// The grid charts stylesheet: no script of its own, only the styles of the calendar and
+    /// matrix heat maps and of the scatter plot, linked on a page that draws one. The charts
+    /// module moves between their cells and points.
+    pub const CHART_GRIDS: Self = Self(1 << 36);
 
     /// Both sets together.
     #[must_use]
