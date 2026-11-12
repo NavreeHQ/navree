@@ -22,6 +22,7 @@ mod password_reset;
 mod passwordless;
 mod platform;
 mod profile;
+mod push;
 mod refresh;
 mod register;
 mod session_pages;

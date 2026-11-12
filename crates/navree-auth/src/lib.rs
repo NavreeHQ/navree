@@ -225,6 +225,8 @@ mod passkeys;
 mod passwordless;
 mod platform;
 mod policy;
+#[cfg(feature = "notify")]
+mod push;
 mod resource;
 mod service;
 #[cfg(feature = "session")]
@@ -282,6 +284,8 @@ pub use passkeys::controller::{ConfirmOptionsInput, ConfirmPasskeyInput};
 pub use passkeys::{MAX_PASSKEY_NAME, PasskeyResource};
 pub use platform::PlatformAdmin;
 pub use policy::TwoFactorPolicy;
+#[cfg(feature = "notify")]
+pub use push::AuthLiveSessions;
 pub use resource::{USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, UserResourceExtension};
 pub use service::{AuthService, ClientMeta, NewUser, TokenPair};
 #[cfg(feature = "session")]

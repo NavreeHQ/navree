@@ -203,7 +203,8 @@ access = ["dep:navree-access", "http", "db", "navree-orm?/access", "navree-ui?/a
 ## With `webhooks` on too, the providers' status callbacks and STOP replies
 ## (`/api/webhooks/notify/*`); with `integrations`, bot routes send with a
 ## connection's token; with `settings`, the `notification-templates`
-## settings restyle each workspace's notification mail.
+## settings restyle each workspace's notification mail; with `auth`, a
+## native app's push devices end with the sign-in that registered them.
 notify = [
     "dep:navree-notify",
     "http",
@@ -220,6 +221,7 @@ notify = [
     "navree-webhooks?/notify",
     "navree-integrations?/notify",
     "navree-settings?/notify",
+    "navree-auth?/notify",
 ]
 ## The UI toolkit: typed components rendered to HTML on the server, the app
 ## shell, forms and tables from one struct, embedded CSS, JS and fonts.

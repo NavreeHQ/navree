@@ -180,6 +180,18 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .controller::<AppLinksController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
+    // The push channel of native apps asks which sign-ins are live, so a
+    // signed-out phone gets nothing.
+    #[cfg(feature = "notify")]
+    m.factory(
+        Factory::<dyn navree_notify::LiveSessions>::new(|r: Resolver| async move {
+            let service = r.get::<AuthService>().await?;
+            Ok(Arc::new(crate::AuthLiveSessions::new(service))
+                as Arc<dyn navree_notify::LiveSessions>)
+        })
+        .deps(vec![ProviderKey::of::<AuthService>()]),
+    )
+    .exports::<dyn navree_notify::LiveSessions>();
     // Browsers signed in on the session cookie, after the JWT strategy: a
     // request with a bearer token is the token's.
     #[cfg(feature = "session")]

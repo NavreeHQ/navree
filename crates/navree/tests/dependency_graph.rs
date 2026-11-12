@@ -246,11 +246,15 @@ const HIERARCHY: &[Rule] = &[
     // The auth tables are navree-orm models; users are navree-access's
     // subject `User`. Browsers sign in on navree-session's session (optional
     // feature `session`), and the sign-in, two-factor and password reset
-    // pages are drawn with navree-ui (optional feature `ui`).
+    // pages are drawn with navree-ui (optional feature `ui`). A native app's
+    // push devices end with the sign-in that registered them, and the push
+    // channel asks which sign-ins are live (optional feature `notify`;
+    // navree-notify never depends on navree-auth).
     rule("navree-auth", 5, &["navree-openapi",
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
         "navree-access", "navree-http-client", "navree-orm", "navree-ui", "navree-telemetry",
+        "navree-notify",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5). The nightly demo

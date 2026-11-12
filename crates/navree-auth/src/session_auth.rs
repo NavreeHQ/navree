@@ -655,15 +655,18 @@ impl AuthService {
     /// rows were live.
     async fn end_server_session(&self, user: Uuid, sid: Uuid) -> Result<u64, AuthError> {
         let now = self.clock.now();
-        self.write(Some(user), |uow| async move {
-            Ok(RefreshToken::query()
-                .where_(RefreshToken::FAMILY_ID.eq(sid))
-                .where_(RefreshToken::USER_ID.eq(user))
-                .where_null(RefreshToken::REVOKED_AT)
-                .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
-                .await?)
-        })
-        .await
+        let revoked = self
+            .write(Some(user), |uow| async move {
+                Ok(RefreshToken::query()
+                    .where_(RefreshToken::FAMILY_ID.eq(sid))
+                    .where_(RefreshToken::USER_ID.eq(user))
+                    .where_null(RefreshToken::REVOKED_AT)
+                    .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
+                    .await?)
+            })
+            .await?;
+        self.session_ended(user, Some(sid)).await;
+        Ok(revoked)
     }
 
     /// When the server-side session `sid` of `user` ends, if it is live

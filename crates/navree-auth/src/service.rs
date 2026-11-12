@@ -687,22 +687,28 @@ impl AuthService {
     ) -> Result<(), AuthError> {
         let presented = refresh_token.and_then(RefreshSecret::parse);
         let now = self.clock.now();
-        let revoked = self
+        let (revoked, family) = self
             .write(Some(user_id), |uow| async move {
                 if all {
-                    return revoke_user(&uow, user_id, now).await;
+                    return Ok((revoke_user(&uow, user_id, now).await?, None));
                 }
                 let Some(presented) = presented else {
-                    return Ok(0);
+                    return Ok((0, None));
                 };
                 match RefreshToken::find(&uow, presented.id()).await? {
-                    Some(row) if row.user_id == user_id && same_hash(&row, &presented) => {
-                        revoke_family(&uow, row.family_id, now).await
-                    }
-                    _ => Ok(0),
+                    Some(row) if row.user_id == user_id && same_hash(&row, &presented) => Ok((
+                        revoke_family(&uow, row.family_id, now).await?,
+                        Some(row.family_id),
+                    )),
+                    _ => Ok((0, None)),
                 }
             })
             .await?;
+        if all {
+            self.session_ended(user_id, None).await;
+        } else if let Some(family) = family {
+            self.session_ended(user_id, Some(family)).await;
+        }
         let mut logout = AuditEntry::new(AuditKind::Auth, "auth.logout")
             .actor(user_id)
             .metadata(json!({ "all": all, "revoked": revoked }));

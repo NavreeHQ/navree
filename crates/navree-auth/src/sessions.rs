@@ -144,6 +144,42 @@ impl AuthService {
             .collect())
     }
 
+    /// Of `ids` (session ids of `user_id`), the ones that are live: not
+    /// signed out, not ended, not expired.
+    pub async fn live_sessions(&self, user_id: Uuid, ids: &[Uuid]) -> Result<Vec<Uuid>, AuthError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let now = self.clock.now();
+        let rows = RefreshToken::query()
+            .where_(RefreshToken::USER_ID.eq(user_id))
+            .where_(RefreshToken::FAMILY_ID.is_in(ids.iter().copied()))
+            .where_null(RefreshToken::REVOKED_AT)
+            .where_(RefreshToken::EXPIRES_AT.gt(now))
+            .get(&self.db)
+            .await?;
+        let mut live: Vec<Uuid> = rows.into_models().into_iter().map(|row| row.family_id).collect();
+        live.sort();
+        live.dedup();
+        Ok(live)
+    }
+
+    /// What ends with a session (`Some`) or with every session of `user`
+    /// (`None`) besides its tokens: with the `notify` feature, the push
+    /// devices it registered.
+    pub(crate) async fn session_ended(&self, user: Uuid, session: Option<Uuid>) {
+        #[cfg(feature = "notify")]
+        {
+            let ended = match session {
+                Some(session) => crate::push::Ended::Session(session),
+                None => crate::push::Ended::All,
+            };
+            crate::push::end_devices(self, user, ended).await;
+        }
+        #[cfg(not(feature = "notify"))]
+        let _ = (user, session);
+    }
+
     /// Ends the session `session_id` of `user_id` (`DELETE
     /// /auth/sessions/{id}`): its refresh tokens stop working (its access
     /// tokens live until they expire). [`AuthError::SessionNotFound`] when
@@ -169,6 +205,7 @@ impl AuthService {
         if revoked == 0 {
             return Err(AuthError::SessionNotFound);
         }
+        self.session_ended(user_id, Some(session_id)).await;
         self.audit(
             entry(AuditKind::Auth, "auth.session_revoked", meta)
                 .actor(user_id)
