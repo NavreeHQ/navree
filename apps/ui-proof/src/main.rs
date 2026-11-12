@@ -33,6 +33,7 @@
 //! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
+//! | `/site` | a public website of marketing blocks: home, pricing, privacy, contact, sitemap and robots |
 //! | `/compare/{screen}` | the four screens that measure speed: `table`, `select`, `dates` and `tabs` |
 #![forbid(unsafe_code)]
 
@@ -69,6 +70,7 @@ mod pages;
 mod parts;
 mod phone;
 mod select;
+mod site;
 mod themes;
 mod upload;
 
@@ -159,7 +161,8 @@ impl Module for ProofModule {
             .controller::<grids::GridPages>()
             .controller::<islands::IslandPages>()
             .controller::<compare::ComparePages>()
-            .controller::<parts::PartsPages>();
+            .controller::<parts::PartsPages>()
+            .controller::<site::SitePages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
     }
