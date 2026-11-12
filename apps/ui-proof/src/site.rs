@@ -38,8 +38,8 @@ const SITE: &str = "https://kesar.example";
 /// When the pages last changed.
 const UPDATED: &str = "2026-11-10";
 
-/// The phone screen, at two widths in three formats, made from `/site/screen`.
-const SCREEN: [(&str, &str, &[u8]); 6] = [
+/// The phone screen, dark and light, at two widths in three formats, made from `/site/screen`.
+const SCREEN: [(&str, &str, &[u8]); 12] = [
     (
         "sleep-390.png",
         "image/png",
@@ -69,6 +69,36 @@ const SCREEN: [(&str, &str, &[u8]); 6] = [
         "sleep-780.avif",
         "image/avif",
         include_bytes!("../assets/site/sleep-780.avif"),
+    ),
+    (
+        "sleep-light-390.png",
+        "image/png",
+        include_bytes!("../assets/site/sleep-light-390.png"),
+    ),
+    (
+        "sleep-light-390.webp",
+        "image/webp",
+        include_bytes!("../assets/site/sleep-light-390.webp"),
+    ),
+    (
+        "sleep-light-390.avif",
+        "image/avif",
+        include_bytes!("../assets/site/sleep-light-390.avif"),
+    ),
+    (
+        "sleep-light-780.png",
+        "image/png",
+        include_bytes!("../assets/site/sleep-light-780.png"),
+    ),
+    (
+        "sleep-light-780.webp",
+        "image/webp",
+        include_bytes!("../assets/site/sleep-light-780.webp"),
+    ),
+    (
+        "sleep-light-780.avif",
+        "image/avif",
+        include_bytes!("../assets/site/sleep-light-780.avif"),
     ),
 ];
 
@@ -503,10 +533,18 @@ fn home(look: Appearance, query: &SiteQuery, letter: Option<FormView<Subscribe>>
                                 .point("Efficiency, debt and timing")
                                 .point("A goal that moves with your week")
                                 .media(PhoneFrame::new(
-                                    Picture::new("/site/img/sleep-780.png", "Last night: a sleep score of 84, 7 hours 36 minutes in four stages", 780, 1688)
-                                        .srcset([(390, "/site/img/sleep-390.png"), (780, "/site/img/sleep-780.png")])
-                                        .avif([(390, "/site/img/sleep-390.avif"), (780, "/site/img/sleep-780.avif")])
-                                        .webp([(390, "/site/img/sleep-390.webp"), (780, "/site/img/sleep-780.webp")])
+                                    // The light screenshot, its dark one for a reader in dark mode.
+                                    Picture::new("/site/img/sleep-light-780.png", "Last night: a sleep score of 84, 7 hours 36 minutes in four stages", 780, 1688)
+                                        .srcset([(390, "/site/img/sleep-light-390.png"), (780, "/site/img/sleep-light-780.png")])
+                                        .avif([(390, "/site/img/sleep-light-390.avif"), (780, "/site/img/sleep-light-780.avif")])
+                                        .webp([(390, "/site/img/sleep-light-390.webp"), (780, "/site/img/sleep-light-780.webp")])
+                                        .dark(
+                                            Picture::new("/site/img/sleep-780.png", "", 780, 1688)
+                                                .srcset([(390, "/site/img/sleep-390.png"), (780, "/site/img/sleep-780.png")])
+                                                .avif([(390, "/site/img/sleep-390.avif"), (780, "/site/img/sleep-780.avif")])
+                                                .webp([(390, "/site/img/sleep-390.webp"), (780, "/site/img/sleep-780.webp")]),
+                                        )
+                                        .for_mode(look.mode())
                                         .sizes("18.5rem"),
                                 )),
                         )
