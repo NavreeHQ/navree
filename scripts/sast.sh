@@ -10,12 +10,13 @@
 #   scripts/sast.sh secrets-history   the git history only (every branch)
 #   scripts/sast.sh secrets-tree      the working tree only
 #   scripts/sast.sh all               semgrep-test, semgrep, secrets
-#   scripts/sast.sh nosemgrep-added <base>
-#                                     every `nosemgrep` line added since <base>, as a
-#                                     GitHub warning annotation (needs only git; never fails)
+#   scripts/sast.sh suppressed-warnings
+#                                     each finding the last Semgrep scan saw suppressed in
+#                                     the source, as a GitHub warning annotation (needs
+#                                     Python; never fails)
 #
 # Needs Docker. Every command exits non-zero when it finds something, but
-# nosemgrep-added, which only reports.
+# suppressed-warnings, which only reports.
 #
 # Reports (SARIF and text) land in sast-reports/ (git-ignored); set
 # SAST_REPORTS to put them elsewhere. Other knobs:
@@ -190,36 +191,61 @@ gitleaks_scan() {
 
 # A finding suppressed in the source never reaches code scanning (see
 # drop_suppressed), so a pull request that adds a suppression would hide its
-# finding silently. This lists each added `nosemgrep` line as a warning on
-# the pull request, with its file and line, for the reviewer to read.
-nosemgrep_added() {
-  local base="${1:?usage: scripts/sast.sh nosemgrep-added <base>}"
-  git diff -U0 --no-color --no-ext-diff "$base" HEAD -- . ':(exclude).semgrep' 2>/dev/null |
-    awk '
-      # A workflow command property value: %, CR, LF, colon and comma escaped.
-      function prop(s) { gsub(/%/, "%25", s); gsub(/\r/, "%0D", s); gsub(/\n/, "%0A", s); gsub(/:/, "%3A", s); gsub(/,/, "%2C", s); return s }
-      # A file header runs from "diff --git" to the first hunk; "+++" names the file.
-      /^diff --git / { header = 1; next }
-      header && /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
-      /^@@/ { header = 0; if (match($0, /\+[0-9]+/)) line = substr($0, RSTART + 1, RLENGTH - 1) - 1; next }
-      header { next }
-      /^\+/ {
-        line++
-        # The marker right after a line, hash, block or HTML comment opener.
-        if (file != "/dev/null" && $0 ~ /(\/\/|#|<!--|\/\*)[ \t]*nosemgrep/) {
-          printf "::warning file=%s,line=%d,title=nosemgrep added::A Semgrep finding is suppressed here; check that the reason beside it holds.\n", prop(file), line
-          found++
-        }
-        next
-      }
-      END { printf "%d nosemgrep line(s) added\n", found + 0 }
-    ' || true
+# finding silently. This reads the findings Semgrep marked as suppressed in
+# the source from the last scan's whole report (on a pull request that scan
+# is diff-aware, so these are the ones the change introduces), whatever
+# spelling silenced them (`nosemgrep`, `nosem`, on the line or the line
+# before), and prints each as a warning annotation with its rule, file and
+# line, for the reviewer. It never fails.
+suppressed_warnings() {
+  local full="$reports/semgrep-with-suppressed.sarif"
+  if [ ! -f "$full" ]; then
+    echo "   no $full: run scripts/sast.sh semgrep first"
+    return 0
+  fi
+  local python=""
+  for candidate in python3 python; do
+    if "$candidate" -c "import json" >/dev/null 2>&1; then
+      python="$candidate"
+      break
+    fi
+  done
+  if [ -z "$python" ]; then
+    echo "   no Python found: the suppressed findings are not listed" >&2
+    return 0
+  fi
+  "$python" -I -c '
+import json, sys
+
+def prop(text):
+    for old, new in (("%", "%25"), ("\r", "%0D"), ("\n", "%0A"), (":", "%3A"), (",", "%2C")):
+        text = text.replace(old, new)
+    return text
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    report = json.load(f)
+count = 0
+for run in report.get("runs", []):
+    for result in run.get("results", []):
+        if not any(s.get("kind") == "inSource" for s in result.get("suppressions") or []):
+            continue
+        rule = str(result.get("ruleId", "a rule"))
+        for location in result.get("locations", [])[:1]:
+            physical = location.get("physicalLocation", {})
+            path = str(physical.get("artifactLocation", {}).get("uri", ""))
+            line = int(physical.get("region", {}).get("startLine", 1))
+            text = rule.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            message = text + " is suppressed in the source here; check that the reason beside it holds."
+            print("::warning file={},line={},title=Semgrep finding suppressed::{}".format(prop(path), line, message))
+            count += 1
+print("{} finding(s) suppressed in the source".format(count))
+' "$(host_path "$full")" || true
 }
 
 case "${1:-all}" in
   semgrep) semgrep_scan ;;
   semgrep-test) semgrep_test ;;
-  nosemgrep-added) nosemgrep_added "${2:-}" ;;
+  suppressed-warnings) suppressed_warnings ;;
   secrets | gitleaks) gitleaks_scan both ;;
   secrets-history) gitleaks_scan history ;;
   secrets-tree) gitleaks_scan tree ;;
@@ -231,7 +257,7 @@ case "${1:-all}" in
     exit "$status"
     ;;
   *)
-    echo "usage: scripts/sast.sh [semgrep-test|semgrep|secrets|secrets-history|secrets-tree|all|nosemgrep-added <base>]" >&2
+    echo "usage: scripts/sast.sh [semgrep-test|semgrep|secrets|secrets-history|secrets-tree|all|suppressed-warnings]" >&2
     exit 2
     ;;
 esac
