@@ -57,9 +57,9 @@ mod scale;
 mod sparkline;
 mod value;
 
-pub use axes::{Axis, Domain, Grid, Ticks};
+pub use axes::{Axis, Domain, Gridlines, Ticks};
 pub use cartesian::{Annotation, At, Chart, Merge, Series};
-pub use marks::{ActiveDot, Curve, Dots, Place, Reference, Tooltip, Zone};
+pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
 pub use motion::{CountUp, Motion, Speed};
 pub use paint::{ColorScale, Gradient, Ink};
 pub use donut::Donut;

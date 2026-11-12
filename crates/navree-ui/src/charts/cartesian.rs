@@ -5,11 +5,11 @@ use std::fmt::Write as _;
 
 use chrono::{NaiveDate, NaiveDateTime, Weekday};
 
-use super::axes::{Axis, Domain, Grid, Ticks};
+use super::axes::{Axis, Domain, Gridlines, Ticks};
 use super::downsample::{merge_ranges, rows_to_keep};
 use super::format::NumberFormat;
 use super::marks::{
-    ActiveDot, Curve, Dots, RefAt, Reference, Tooltip, Zone, curve_path, mark_text,
+    ActiveDot, Curve, Dots, RefAt, Reference, TooltipStyle, Zone, curve_path, mark_text,
     reference_line, short, zone_rect,
 };
 use super::motion::{Effect, Motion};
@@ -340,13 +340,13 @@ pub struct Chart {
     drill: Vec<String>,
     x_axis: Axis,
     y_axis: Axis,
-    grid: Grid,
+    grid: Gridlines,
     x_ticks: Ticks,
     domain: Domain,
     references: Vec<Reference>,
     zones: Vec<Zone>,
     y_categories: Option<Vec<String>>,
-    tooltip: Tooltip,
+    tooltip: TooltipStyle,
     details: Vec<(String, Vec<String>)>,
     motion: Motion,
 }
@@ -383,13 +383,13 @@ impl Chart {
             drill: Vec::new(),
             x_axis: Axis::new(),
             y_axis: Axis::new(),
-            grid: Grid::horizontal(),
+            grid: Gridlines::horizontal(),
             x_ticks: Ticks::auto(),
             domain: Domain::auto(),
             references: Vec::new(),
             zones: Vec::new(),
             y_categories: None,
-            tooltip: Tooltip::new(),
+            tooltip: TooltipStyle::new(),
             details: Vec::new(),
             motion: Motion::none(),
         }
@@ -468,7 +468,7 @@ impl Chart {
     }
 
     /// The gridlines behind the marks: across at each value tick by default.
-    pub fn grid(mut self, grid: Grid) -> Self {
+    pub fn grid(mut self, grid: Gridlines) -> Self {
         self.grid = grid;
         self
     }
@@ -508,7 +508,7 @@ impl Chart {
     }
 
     /// What the tooltip shows.
-    pub fn tooltip(mut self, tooltip: Tooltip) -> Self {
+    pub fn tooltip(mut self, tooltip: TooltipStyle) -> Self {
         self.tooltip = tooltip;
         self
     }
