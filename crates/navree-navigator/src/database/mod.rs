@@ -19,12 +19,19 @@
 //!   one of [`PRIVILEGED_ROLES`], unless
 //!   `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` is given: such a role
 //!   reaches the server's files, programs and other sessions from a query,
-//!   which no read-only transaction stops. A plain role can still call
-//!   `SECURITY DEFINER` functions that `PUBLIC` may execute. Each query
-//!   runs inside `BEGIN READ ONLY` with a statement timeout, is sent as one
-//!   prepared statement (the extended protocol takes exactly one), then
-//!   rolls back. Read-only means as far as a role without those privileges
-//!   allows.
+//!   which no read-only transaction stops. It also refuses a role that may
+//!   execute a `SECURITY DEFINER` function, a function in an untrusted
+//!   language, or a function of an extension that reaches files, programs
+//!   or the network (dblink, postgres_fdw, file_fdw, adminpack, http,
+//!   pg_net, ...). Each query runs inside `BEGIN READ ONLY` (which pins
+//!   `standard_conforming_strings` again) with a statement timeout, is sent
+//!   as one prepared statement (the extended protocol takes exactly one),
+//!   reads each value as text cut on the server, then rolls back. What is
+//!   left is what an ordinary role may still do: the C functions of the
+//!   extensions an administrator installed (PostGIS, pgcrypto, TimescaleDB)
+//!   run with their own code, and an extension Navigator doesn't know can
+//!   add a function that reaches out under any name; that, and the checks
+//!   above, are what "read-only" rests on.
 //! - Unless `--allow-remote-database` is given, only SQLite files and
 //!   servers on this machine (`localhost`, a loopback address or a Unix
 //!   socket) are allowed ([`check_local`]).
@@ -176,9 +183,10 @@ pub enum DatabaseError {
          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader;\n\n\
          and start Navigator with `NAVREE_MCP_DATABASE_URL=postgres://navree_reader:...@localhost/your_db navree mcp` \
          (run the last line as the role that creates your tables). The role must be no superuser and \
-         no member of one. Even so it can call any SECURITY DEFINER function that PUBLIC may execute, \
-         with its owner's privileges: check those your database has. To run as `{role}` anyway, start \
-         it with `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp`.",
+         no member of one, and may execute no SECURITY DEFINER function, no function in an untrusted \
+         language and no function of an extension that reaches files, programs or the network \
+         (Navigator checks). To run as `{role}` anyway, start it with \
+         `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp`.",
         .privileges.join(", ")
     )]
     PrivilegedRole {
@@ -188,13 +196,64 @@ pub enum DatabaseError {
         /// is a member of.
         privileges: Vec<String>,
     },
+    /// `query_database` would run as a role that may execute functions that
+    /// act with more than its own privileges, or outside the database,
+    /// without `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`.
+    #[error(
+        "query_database does not run as the PostgreSQL role `{role}`: it may execute {}{}, which run with \
+         their owner's privileges (SECURITY DEFINER), in an untrusted language as the server's operating \
+         system user, or in an extension that reaches files, programs or the network, so a query could \
+         act outside the read-only transaction. Revoke EXECUTE on them from PUBLIC and from the role \
+         (REVOKE EXECUTE ON FUNCTION ... FROM PUBLIC, {role}), or start Navigator with \
+         `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp` to run anyway.",
+        .functions.join(", "),
+        .more.then_some(" and more").unwrap_or_default()
+    )]
+    FunctionsReachOut {
+        /// The session's role.
+        role: String,
+        /// The first of those functions, with their argument types.
+        functions: Vec<String>,
+        /// Whether there are more than listed.
+        more: bool,
+    },
 }
+
+/// The most functions [`DatabaseError::FunctionsReachOut`] names.
+const LISTED_FUNCTIONS: usize = 10;
+
+/// The functions outside `pg_catalog` and `information_schema` the session
+/// may call (EXECUTE on the function, USAGE on its schema) that act beyond
+/// the role: SECURITY DEFINER or untrusted-language functions of its own
+/// database, and the functions of the extensions that reach outside the
+/// database (dblink, postgres_fdw, file_fdw, adminpack, http, pg_net,
+/// pg_background, pg_cron, pgagent and the untrusted languages) or of an
+/// extension written in an untrusted procedural language. The C functions of other
+/// extensions (pgcrypto, PostGIS, TimescaleDB, pgvector) are code the
+/// server's administrator installed and are not counted. The first
+/// [`LISTED_FUNCTIONS`] + 1, so the refusal knows there are more.
+const REACHING_FUNCTIONS: &str = "SELECT p.oid::pg_catalog.regprocedure::text \
+     FROM pg_catalog.pg_proc p \
+     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace \
+     JOIN pg_catalog.pg_language l ON l.oid = p.prolang \
+     LEFT JOIN pg_catalog.pg_depend d ON d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass \
+       AND d.objid = p.oid AND d.deptype = 'e' \
+     LEFT JOIN pg_catalog.pg_extension e ON e.oid = d.refobjid \
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') \
+     AND p.prokind = 'f' \
+     AND CASE WHEN e.oid IS NULL THEN p.prosecdef OR NOT l.lanpltrusted \
+       ELSE e.extname IN ('adminpack', 'dblink', 'file_fdw', 'http', 'pg_background', 'pg_cron', \
+         'pg_net', 'pgagent', 'plperlu', 'plpython3u', 'plpythonu', 'pltclu', 'postgres_fdw') \
+         OR (NOT l.lanpltrusted AND l.lanname NOT IN ('c', 'internal')) END \
+     AND pg_catalog.has_schema_privilege(n.oid, 'USAGE') \
+     AND pg_catalog.has_function_privilege(p.oid, 'EXECUTE') \
+     ORDER BY 1 LIMIT 11";
 
 /// The predefined PostgreSQL roles whose members reach outside the database
 /// from a query: server files, server programs, other sessions.
 /// `pg_signal_autovacuum_worker` exists from PostgreSQL 18; an older server
 /// has none to be a member of.
-pub const PRIVILEGED_ROLES: [&str; 5] = [
+pub const PRIVILEGED_ROLES: &[&str] = &[
     "pg_read_server_files",
     "pg_write_server_files",
     "pg_execute_server_program",
@@ -293,6 +352,9 @@ pub struct Target {
     /// Whether `query_database` may run as a privileged PostgreSQL role
     /// (`NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`).
     allow_privileged: bool,
+    /// Said after a failed connection (the dock's read-only role may not
+    /// exist yet).
+    hint: Option<&'static str>,
 }
 
 impl Target {
@@ -312,6 +374,7 @@ impl Target {
             url: url.to_owned(),
             root: root.to_path_buf(),
             allow_privileged: false,
+            hint: None,
         })
     }
 
@@ -421,17 +484,45 @@ impl Target {
         };
         let role = text(0).unwrap_or_default();
         let privileges = privileges_of(text(1).as_deref() == Some("t"), text(2).as_deref());
-        if privileges.is_empty() {
-            Ok(())
-        } else {
-            Err(DatabaseError::PrivilegedRole { role, privileges })
+        if !privileges.is_empty() {
+            return Err(DatabaseError::PrivilegedRole { role, privileges });
         }
+        let mut functions: Vec<String> = conn
+            .fetch_all(REACHING_FUNCTIONS)
+            .await?
+            .iter()
+            .filter_map(|row| {
+                row.try_get_raw(0)
+                    .ok()
+                    .and_then(|raw| raw.as_str().ok().map(str::to_owned))
+            })
+            .collect();
+        if functions.is_empty() {
+            return Ok(());
+        }
+        let more = functions.len() > LISTED_FUNCTIONS;
+        functions.truncate(LISTED_FUNCTIONS);
+        Err(DatabaseError::FunctionsReachOut {
+            role,
+            functions,
+            more,
+        })
+    }
+
+    /// Adds `hint` to the message of a failed connection.
+    pub(crate) fn connect_hint(mut self, hint: Option<&'static str>) -> Target {
+        self.hint = hint;
+        self
     }
 
     fn connect_error(&self, error: impl std::fmt::Display) -> DatabaseError {
+        let message = match self.hint {
+            Some(hint) => format!("{error}. {hint}"),
+            None => error.to_string(),
+        };
         DatabaseError::Connect {
             url: self.redacted_url(),
-            message: error.to_string(),
+            message,
         }
     }
 }
@@ -542,7 +633,12 @@ pub fn redact_url(url: &str) -> String {
 /// alias (`password_hash AS h`) or `row_to_json` returns them. On
 /// PostgreSQL a privileged role is refused first (see the module).
 pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, DatabaseError> {
-    let checked = check(sql, target.driver.dialect())?;
+    // The guard parses on a thread of its own (see `check`), waited for here
+    // on a blocking thread, not on the async runtime's.
+    let (owned, dialect) = (sql.to_owned(), target.driver.dialect());
+    let checked = tokio::task::spawn_blocking(move || check(&owned, dialect))
+        .await
+        .map_err(|_| Refusal::Unchecked)??;
     match target.driver {
         Driver::Sqlite => query::sqlite(target.sqlite_file()?, &checked).await,
         Driver::Postgres => {

@@ -615,6 +615,108 @@ async fn postgres_a_role_that_can_become_a_superuser_is_refused() {
     db.drop_db().await;
 }
 
+/// A plain role that may execute a SECURITY DEFINER function (here through
+/// PUBLIC, as every new function is) is refused, the function named; with
+/// EXECUTE revoked, it queries.
+#[tokio::test]
+async fn postgres_a_role_with_a_security_definer_function_is_refused() {
+    let Some(db) =
+        Scratch::new("postgres_a_role_with_a_security_definer_function_is_refused").await
+    else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    db.setup(&[
+        "CREATE FUNCTION public.whoami() RETURNS text LANGUAGE sql SECURITY DEFINER \
+         AS $$ SELECT current_user::text $$",
+    ])
+    .await;
+    let fixture = db.fixture();
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("whoami()"), "{message}");
+    assert!(message.contains("SECURITY DEFINER"), "{message}");
+    let allowed = fixture
+        .navigator()
+        .with_database(DatabaseOptions::default().allow_privileged_role(true));
+    let answer = call(
+        &allowed,
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[1]]));
+    db.setup(&["REVOKE EXECUTE ON FUNCTION public.whoami() FROM PUBLIC"])
+        .await;
+    let answer = call(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[1]]));
+    db.drop_db().await;
+}
+
+/// Each value is cut on the server before it is sent, so a query that makes
+/// huge values costs Navigator a few kilobytes per value; the server's own
+/// cost ends with the statement timeout.
+#[tokio::test]
+async fn postgres_long_values_are_cut_on_the_server() {
+    let Some(db) = Scratch::new("postgres_long_values_are_cut_on_the_server").await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    let answer = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SELECT repeat('x', 10000000) AS x, 1 AS n, true AS b FROM generate_series(1, 3)"}),
+    )
+    .await;
+    assert_eq!(answer["columns"], json!(["x", "n", "b"]));
+    assert_eq!(answer["rows"].as_array().map(Vec::len), Some(3));
+    let x = answer["rows"][0][0].as_str().unwrap();
+    assert!(x.ends_with("… [cut]"), "{}", x.len());
+    assert!(x.len() < 5 * 1024, "{}", x.len());
+    assert_eq!(answer["rows"][0][1], 1, "types are kept");
+    assert_eq!(answer["rows"][0][2], true);
+    // Six values of 900 MB: cut on the server, or stopped by the timeout.
+    let huge = navigator
+        .call(
+            "query_database",
+            json!({"sql": "SELECT repeat('x', 900000000) FROM generate_series(1, 6)"}),
+        )
+        .await;
+    match huge {
+        Ok(navree_navigator::ToolOutput::Json(answer)) => {
+            for row in answer["rows"].as_array().unwrap() {
+                assert!(row[0].as_str().unwrap().len() < 5 * 1024);
+            }
+        }
+        Ok(other) => panic!("{other:?}"),
+        Err(error) => assert!(
+            error.0.contains("longer than") || error.0.contains("memory"),
+            "{}",
+            error.0
+        ),
+    }
+    // Duplicate column names are read by position.
+    let answer = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SELECT 1 AS a, 2 AS a"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[1, 2]]));
+    db.drop_db().await;
+}
+
 /// Statements that the SQL renderer would write back as several (hex
 /// strings, custom type modifiers), or that run SQL text of their own
 /// (`ts_stat`), are refused, on a default server, and change nothing.
