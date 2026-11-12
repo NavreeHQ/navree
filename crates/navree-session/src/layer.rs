@@ -7,7 +7,8 @@ use std::sync::Arc;
 use chrono::TimeDelta;
 use cookie::Cookie;
 use http::header::{
-    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT,
+    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HOST, HeaderName, ORIGIN, SET_COOKIE,
+    USER_AGENT,
 };
 use http::{HeaderMap, HeaderValue, Method};
 use navree_contracts::{
@@ -56,6 +57,9 @@ pub(crate) struct SessionManager {
     except: Vec<Glob>,
     /// `http.cors.allowed_origins`: front ends trusted to write cross-site.
     allowed_origins: Vec<String>,
+    /// The paths whose posts are checked by their origin instead of the token
+    /// ([`navree_http::csrf::SameOriginOnly`]).
+    same_origin_only: Vec<&'static str>,
 }
 
 impl Injectable for SessionManager {
@@ -102,7 +106,14 @@ impl Injectable for SessionManager {
                         .collect()
                 })
                 .unwrap_or_default();
+            let same_origin_only = r
+                .app()
+                .contributions::<navree_http::csrf::SameOriginOnly>()
+                .into_iter()
+                .map(|contributed| contributed.value.0)
+                .collect();
             Ok(SessionManager {
+                same_origin_only,
                 cookie_name: options.cookie_name(),
                 options,
                 store: r.get::<dyn SessionStore>().await?,
@@ -169,7 +180,9 @@ impl SessionManager {
             Err(error) => return AppError::internal(error).into_response(),
         };
         if self.needs_csrf_check(&request) {
-            let checked = if cookies.is_empty() {
+            let checked = if self.same_origin_only.contains(&request.uri().path()) {
+                check_same_origin(request.headers())
+            } else if cookies.is_empty() {
                 self.check_cross_site(request.headers())
             } else {
                 match check_csrf(&request, &session) {
@@ -342,6 +355,34 @@ impl SessionManager {
             cookie = cookie.domain(domain.clone());
         }
         cookie.build()
+    }
+}
+
+/// The check of a post to a [`navree_http::csrf::SameOriginOnly`] path, in place of the
+/// token: the browser's `Sec-Fetch-Site` must say `same-origin`; a browser that doesn't
+/// send it must send an `Origin` naming this host; a client that sends neither passes,
+/// since all such a route changes is the client's own preference.
+fn check_same_origin(headers: &HeaderMap) -> Result<(), CsrfFailure> {
+    if let Some(site) = headers.get(&SEC_FETCH_SITE) {
+        return if site.as_bytes().eq_ignore_ascii_case(b"same-origin") {
+            Ok(())
+        } else {
+            Err(CsrfFailure::CrossSite)
+        };
+    }
+    let Some(origin) = headers.get(ORIGIN) else {
+        return Ok(());
+    };
+    let host = headers.get(HOST).and_then(|host| host.to_str().ok());
+    let same = origin
+        .to_str()
+        .ok()
+        .and_then(|origin| origin.split_once("://"))
+        .is_some_and(|(_, rest)| host.is_some_and(|host| host.eq_ignore_ascii_case(rest)));
+    if same {
+        Ok(())
+    } else {
+        Err(CsrfFailure::CrossSite)
     }
 }
 
