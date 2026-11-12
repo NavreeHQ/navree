@@ -507,6 +507,11 @@ impl View {
         }
     }
 
+    /// The token the page's posts carry.
+    pub(crate) fn csrf_token(&self) -> Option<&str> {
+        self.csrf.as_deref()
+    }
+
     pub(crate) fn native_parts(&mut self) -> NativeParts<'_> {
         NativeParts {
             title: &self.title,

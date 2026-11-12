@@ -50,7 +50,7 @@ impl TestNative {
     pub fn of_node(node: impl Into<Node>) -> Self {
         Self {
             client: phone(),
-            page: page::read("", &node.into(), false),
+            page: page::read("", &node.into(), false, None),
         }
     }
 

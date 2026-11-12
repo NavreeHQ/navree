@@ -169,6 +169,9 @@ pub(crate) struct Cx {
     /// The elements of a deep tree read ahead, by address, with the forms
     /// they stand in.
     ahead: std::collections::HashMap<(usize, bool), Ahead>,
+    /// The page's token against forged posts, which the page's one post form
+    /// carries and a post item of a menu names.
+    pub(crate) csrf: Option<String>,
 }
 
 impl Cx {
@@ -181,7 +184,14 @@ impl Cx {
             base: 0,
             forms: 0,
             ahead: std::collections::HashMap::new(),
+            csrf: None,
         }
+    }
+
+    /// This reading, for a page whose posts carry `token`.
+    pub(crate) fn with_csrf(mut self, token: Option<&str>) -> Self {
+        self.csrf = token.map(str::to_owned);
+        self
     }
 
     /// Reads ahead the elements under `top` that stand a whole number of
@@ -305,7 +315,9 @@ impl Cx {
         // Labels that name a control elsewhere: where each stands, the
         // control's id, and its words.
         let mut labels: Vec<(usize, String, String)> = Vec::new();
-        for &node in nodes {
+        // The popups of menus that were read with their buttons.
+        let mut paired: Vec<*const Element> = Vec::new();
+        for (at, &node) in nodes.iter().enumerate() {
             if is_inline(node) {
                 inline(node, Style::default(), None, &mut runs);
                 continue;
@@ -313,6 +325,26 @@ impl Cx {
             flush(&mut runs, &mut out);
             match node {
                 Node::Element(element) => {
+                    if paired.contains(&std::ptr::from_ref(element)) {
+                        continue;
+                    }
+                    if let Some((popup, read)) =
+                        super::slots::menu_of(self, element, &nodes[at + 1..])
+                    {
+                        paired.push(std::ptr::from_ref(popup));
+                        match read {
+                            Ok(menu) => out.push(menu),
+                            Err(fail) => {
+                                let web = self.miss(
+                                    fail.what.unwrap_or_else(|| "slot:dropdown-menu".to_owned()),
+                                    fail.why,
+                                    element,
+                                );
+                                out.push(web);
+                            }
+                        }
+                        continue;
+                    }
                     if let Some(named) = label_for(element) {
                         labels.push((out.len(), named, text_of(element)));
                         out.push(N::text(text_of(element)));
@@ -447,6 +479,12 @@ impl Cx {
     fn special(&mut self, element: &Element) -> Read {
         // Words for a screen reader only are not drawn.
         if has(element, "data-ui-sr") {
+            return Ok(Vec::new());
+        }
+        // What a split of panes shows only while its panes are stacked, or only
+        // while they are side by side: a client moves between panes its own way.
+        if has(element, "data-split-only") {
+            self.dropped.push("split-only".to_owned());
             return Ok(Vec::new());
         }
         if has(element, "data-ui-region") {
@@ -1171,6 +1209,34 @@ impl Cx {
         }
         if element.tag() != "a" {
             match attr(element, "type").as_deref() {
+                // A post that names the page's one post form: that form holds only
+                // the session's token, so the post is a request of its own.
+                Some("submit")
+                    if attr(element, "form").as_deref() == Some(crate::render::POST_FORM) =>
+                {
+                    let Some(href) = attr(element, "formaction") else {
+                        return fail("a post with no address");
+                    };
+                    let mut fields: Vec<Pair> = self
+                        .csrf
+                        .iter()
+                        .map(|token| Pair {
+                            name: crate::form::CSRF_FIELD.to_owned(),
+                            value: token.clone(),
+                        })
+                        .collect();
+                    fields.extend(attr(element, "name").map(|name| Pair {
+                        name: name.into_owned(),
+                        value: attr(element, "value")
+                            .map(Cow::into_owned)
+                            .unwrap_or_default(),
+                    }));
+                    actions.push(Action::Request {
+                        method: n::Method::Post,
+                        href: href.into_owned(),
+                        fields,
+                    });
+                }
                 Some("submit") => actions.push(Action::Submit {
                     form: attr(element, "form").map(Cow::into_owned),
                     href: attr(element, "formaction").map(Cow::into_owned),
@@ -1198,7 +1264,12 @@ fn is_special(element: &Element) -> bool {
     element.attrs().iter().any(|attr| {
         matches!(
             attr.name,
-            "data-ui-sr" | "data-ui-region" | "hidden" | "popover" | "contenteditable"
+            "data-ui-sr"
+                | "data-ui-region"
+                | "hidden"
+                | "popover"
+                | "contenteditable"
+                | "data-split-only"
         ) || (attr.name == "data-ui-click" && !matches!(element.tag(), "a" | "button"))
     })
 }
@@ -1703,8 +1774,10 @@ pub(crate) fn is_inline(node: &Node) -> bool {
         Node::Element(element) => {
             inline_tag(element.tag())
                 && element.attrs().iter().all(|attr| {
-                    !matches!(attr.name, "data-slot" | "id" | "hidden" | "popover")
-                        && !attr.name.starts_with("data-ui-")
+                    !matches!(
+                        attr.name,
+                        "data-slot" | "id" | "hidden" | "popover" | "data-split-only"
+                    ) && !attr.name.starts_with("data-ui-")
                 })
                 && (element.tag() != "a" || has(element, "href"))
                 && element.child_nodes().iter().all(is_inline)

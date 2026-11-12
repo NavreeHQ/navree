@@ -6,6 +6,17 @@
 //! of stops being read, and the test beside the reader, which builds the real
 //! component, fails in the same crate.
 
+mod chat;
+mod date;
+mod feed;
+mod fold;
+mod menu;
+mod select;
+mod split;
+mod tabs;
+#[cfg(test)]
+mod testing;
+
 use std::borrow::Cow;
 
 use navree_native::action::{Action, Command, Pair};
@@ -27,7 +38,10 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "container" | "item-media" | "form-stack" | "form-grid" | "scroll-area" => (inside, &[]),
         "text" | "heading" | "code" | "kbd" => (text, &[]),
         "badge" => (badge, &[]),
-        "button" => (button, &["data-ui-click", "data-ui-refresh"]),
+        "button" => (
+            button,
+            &["data-ui-click", "data-ui-refresh", "data-ui-split-toggle"],
+        ),
         "icon" => (
             |_, element| icon(element).map(|icon| vec![N::Icon(icon)]),
             &[],
@@ -93,6 +107,14 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
                 "data-ui-live-src",
                 "data-ui-live-event",
                 "data-ui-live-catch-up",
+                // A feed asks only for what is newer than a cursor, instead of the
+                // whole region again; a client asks for the whole region.
+                "data-ui-feed",
+                "data-ui-after",
+                "data-ui-feed-empty",
+                "data-ui-feed-max",
+                "data-ui-feed-say",
+                "data-ui-feed-say-one",
             ],
         ),
         "skeleton" | "spinner" => (
@@ -108,9 +130,32 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         // The page's own toasts are sent as ops; the place they are drawn in is the browser's.
         "toaster" => (|_, _| Ok(Vec::new()), &["data-ui-toaster"]),
         "data-table" => (super::table::data_table, super::table::HOOKS),
+        "dropdown-menu" => (menu::alone, menu::HOOKS),
+        "select" | "combobox" | "multiselect" => (select::picker, select::HOOKS),
+        "date-picker" | "time-picker" | "date-time-picker" => (date::picker, date::HOOKS),
+        "date-range-picker" => (date::range, date::HOOKS),
+        "tabs" => (tabs::tabs, tabs::HOOKS),
+        "accordion" => (fold::accordion, &[]),
+        "collapsible" => (fold::collapsible, &[]),
+        "split" => (split::split, split::HOOKS),
+        "activity-feed" => (feed::feed, &[]),
+        "message" => (chat::message, &[]),
+        "bubble" => (chat::bubble, &[]),
+        "attachment" => (chat::attachment, &[]),
+        "marker" => (chat::marker, &[]),
         _ => return None,
     };
     Some(hooks(element, known).and_then(|()| reader(cx, element)))
+}
+
+/// A menu's button read together with the popup it opens, when `element` is
+/// the button and the popup is among `rest`, the siblings after it.
+pub(crate) fn menu_of<'a>(
+    cx: &mut Cx,
+    element: &Element,
+    rest: &[&'a Node],
+) -> Option<(&'a Element, Read<N>)> {
+    menu::paired(cx, element, rest)
 }
 
 /// A component that only wraps what it holds.
@@ -250,6 +295,12 @@ fn screen_reader_only(node: &Node) -> bool {
 
 /// `Button`.
 fn button(cx: &mut Cx, element: &Element) -> Read {
+    // The button that moves between the panes of a split is the client's own
+    // way between them.
+    if has(element, "data-ui-split-toggle") {
+        cx.dropped.push("split-toggle".to_owned());
+        return Ok(Vec::new());
+    }
     cx.button(element).map(|button| vec![N::Button(button)])
 }
 
@@ -724,9 +775,12 @@ fn field(cx: &mut Cx, element: &Element) -> Read {
         return Ok(read);
     }
     if !matches!(inner.tag(), "input" | "select" | "textarea") {
-        return match slot(inner) {
-            Some(slot) => fail_on(format!("slot:{slot}"), "a control no reader here knows"),
-            None => fail(format!("a field around a <{}>", inner.tag())),
+        let Some(name) = slot(inner) else {
+            return fail(format!("a field around a <{}>", inner.tag()));
+        };
+        return match read(cx, &name, inner) {
+            Some(read) => named(read?, label, help, error),
+            None => fail_on(format!("slot:{name}"), "a control no reader here knows"),
         };
     }
     hooks(inner, &["data-ui-value"])?;
@@ -739,6 +793,50 @@ fn field(cx: &mut Cx, element: &Element) -> Read {
     field.help = help;
     field.error = error;
     Ok(vec![N::Field(*field)])
+}
+
+/// What a field's wrapper says of the control a component read: its label, a
+/// line of help and what is wrong with it.
+fn named(
+    mut read: Vec<N>,
+    label: Option<String>,
+    help: Option<String>,
+    error: Option<String>,
+) -> Read {
+    let label = label.map(|label| label.trim_end_matches('*').trim().to_owned());
+    match read.as_mut_slice() {
+        [N::Field(field)] => {
+            if label.is_some() {
+                field.label = label;
+            }
+            field.help = help.or_else(|| field.help.take());
+            field.error = error;
+        }
+        // Two fields that are one choice, a range of dates: the words that name
+        // it stand over them.
+        [N::Stack(stack)] if stack.children.iter().all(|child| matches!(child, N::Field(_))) => {
+            let words = |value: String, tone| {
+                N::Text(n::Text {
+                    value,
+                    style: n::TextStyle::Caption,
+                    tone,
+                    muted: tone.is_none(),
+                    ..n::Text::default()
+                })
+            };
+            if let Some(label) = label {
+                stack.children.insert(0, words(label, None));
+            }
+            if let Some(help) = help {
+                stack.children.push(words(help, None));
+            }
+            if let Some(error) = error {
+                stack.children.push(words(error, Some(n::Tone::Danger)));
+            }
+        }
+        _ => return fail("a field around a control that is not one field"),
+    }
+    Ok(read)
 }
 
 /// A box or a switch in its label, with a line under the label when there is one.

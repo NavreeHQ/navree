@@ -74,18 +74,23 @@ pub(crate) fn find<'a>(nodes: &'a [Node], name: &str) -> Option<&'a Element> {
 /// Reads a page: from the note of the page in the app's shell it was made
 /// from, when a native client asked while it was built, or else from its tree.
 pub(crate) fn of_view(view: &mut crate::view::View, keep_markup: bool) -> Page {
+    let csrf = view.csrf_token().map(str::to_owned);
     if let Some(note) = view.note() {
-        return read_note(note, keep_markup);
+        return read_note(note, keep_markup, csrf.as_deref());
     }
     let parts = view.native_parts();
-    read(parts.title, parts.body, keep_markup)
+    read(parts.title, parts.body, keep_markup, csrf.as_deref())
 }
 
 /// Reads a page in the app's shell from its note: the title, the way back
 /// from its steps, the destination it belongs to, the actions beside its
 /// heading and its content. The shell itself is never built.
-pub(crate) fn read_note(note: &crate::shell::PageNote, keep_markup: bool) -> Page {
-    let mut cx = Cx::new(keep_markup);
+pub(crate) fn read_note(
+    note: &crate::shell::PageNote,
+    keep_markup: bool,
+    csrf: Option<&str>,
+) -> Page {
+    let mut cx = Cx::new(keep_markup).with_csrf(csrf);
     let mut screen = Screen::new(note.title(), N::Stack(n::Stack::default()));
     screen.nav = note.nav();
     let steps: Vec<navree_native::Back> = note
@@ -136,14 +141,18 @@ pub(crate) fn icon_of(glyph: crate::icons::Icon) -> Option<n::Icon> {
 }
 
 /// Reads a page titled `title` whose content is `body`.
-pub(crate) fn read(title: &str, body: &Node, keep_markup: bool) -> Page {
-    let mut cx = Cx::new(keep_markup);
+pub(crate) fn read(title: &str, body: &Node, keep_markup: bool, csrf: Option<&str>) -> Page {
+    let mut cx = Cx::new(keep_markup).with_csrf(csrf);
     let mut screen = Screen::new(title, N::Stack(n::Stack::default()));
     let mut ops = Vec::new();
     let mut content: Vec<N> = Vec::new();
+    // The parts read together, since a menu's button and its popup are two
+    // siblings that are read as one.
+    let mut plain: Vec<&Node> = Vec::new();
     for node in flat(std::slice::from_ref(body)) {
         match node {
             Node::Element(element) if slot(element).as_deref() == Some("sidebar-wrapper") => {
+                content.extend(cx.flat_sequence(&std::mem::take(&mut plain)));
                 in_shell(&mut cx, element, &mut screen, &mut content);
             }
             Node::Element(element) if slot(element).as_deref() == Some("toaster") => {
@@ -151,6 +160,7 @@ pub(crate) fn read(title: &str, body: &Node, keep_markup: bool) -> Page {
             }
             // An error page on its own: the state it says is the screen.
             Node::Element(element) if slot(element).as_deref() == Some("state-page") => {
+                content.extend(cx.flat_sequence(&std::mem::take(&mut plain)));
                 for part in flat(element.child_nodes()) {
                     match part {
                         Node::Element(found) if slot(found).as_deref() == Some("state") => {
@@ -166,9 +176,10 @@ pub(crate) fn read(title: &str, body: &Node, keep_markup: bool) -> Page {
                     }
                 }
             }
-            other => content.extend(cx.flat_sequence(&[other])),
+            other => plain.push(other),
         }
     }
+    content.extend(cx.flat_sequence(&plain));
     // A page that is one part with an id is that part: an op that changes the
     // whole page names it.
     screen.id = match content.as_slice() {
@@ -369,7 +380,7 @@ mod tests {
             .actions(Button::primary("Refund").href("/orders/1/refund"))
             .body(crate::el("div").id("order-page").child(Text::new("Paid")))
             .to_view();
-        let page = read("ignored", view.body_node(), false);
+        let page = read("ignored", view.body_node(), false, None);
         assert!(page.is_native(), "{:?}", page.misses);
         assert_eq!(page.screen.title, "Order CS-20481");
         assert_eq!(page.screen.nav.as_deref(), Some("/orders"));
@@ -418,7 +429,7 @@ mod tests {
             .page("Inventory")
             .body(Text::new("x"))
             .to_view();
-        let page = read("Inventory", view.body_node(), false);
+        let page = read("Inventory", view.body_node(), false, None);
         assert_eq!(
             page.ops,
             [Op::Toast(navree_native::op::Toast {
@@ -432,7 +443,7 @@ mod tests {
     #[test]
     fn a_page_with_no_shell_is_its_title_and_its_content() {
         let view = View::new("Figures").body((Text::new("a"), Text::new("b")));
-        let page = read("Figures", view.body_node(), false);
+        let page = read("Figures", view.body_node(), false, None);
         assert_eq!(page.screen.title, "Figures");
         assert_eq!(page.screen.back, None);
         assert_eq!(page.screen.nav, None);
@@ -451,7 +462,7 @@ mod tests {
             .page("Board", "/board")
             .body(crate::el("canvas"))
             .to_view();
-        let page = read("Board", view.body_node(), false);
+        let page = read("Board", view.body_node(), false, None);
         assert_eq!(page.why(), ["tag:canvas"]);
     }
 
@@ -558,7 +569,7 @@ mod tests {
                 .to_view()
         };
         // Read from the chrome a browser gets, and from the note a native client's view keeps.
-        let from_chrome = read("ignored", build().body_node(), false);
+        let from_chrome = read("ignored", build().body_node(), false, None);
         let page = crate::native::TestNative::build(
             navree_native::Client::new(
                 navree_native::Platform::Ios,
