@@ -528,6 +528,14 @@ impl NumberFormat {
     }
 }
 
+/// A share of a whole as every chart writes one: a whole percentage, past 100% too
+/// (`0.489` is `49%`, `1.267` is `127%`).
+pub(crate) fn share_text(fraction: f64, numbers: &NumberLocale) -> String {
+    NumberFormat::percent()
+        .max_decimals(0)
+        .format(fraction, numbers)
+}
+
 /// `value` rounded to `places` decimals.
 fn round_to(value: f64, places: u8) -> f64 {
     let factor = 10f64.powi(i32::from(places));
@@ -597,6 +605,15 @@ fn group(whole: &str, locale: &NumberLocale) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_share_is_a_whole_percentage_past_the_whole_too() {
+        let en = NumberLocale::of("en");
+        assert_eq!(share_text(0.489, &en), "49%");
+        assert_eq!(share_text(38.0 / 30.0, &en), "127%");
+        assert_eq!(share_text(0.0, &en), "0%");
+        assert_eq!(share_text(1.0, &en), "100%");
+    }
 
     #[test]
     fn locales_write_their_own_marks() {
