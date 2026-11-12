@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-12
+
 ### Security
 
 - Navigator's `query_database` and Lighthouse's tools could be made to run more than the one
@@ -134,6 +136,7 @@ every `@navree/*` package carries the same version.
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.2
 [1.0.1]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.1
 [1.0.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.0
