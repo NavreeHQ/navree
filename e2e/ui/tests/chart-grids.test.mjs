@@ -31,7 +31,7 @@ const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const reachable = await fetch(`${BASE}/charts/grids?case=matrix`).then((r) => r.ok, () => false);
 
-const CASES = ["calendar", "calendar-short", "calendar-year", "matrix", "matrix-full", "scatter", "scatter-axes", "scatter-big", "locale", "motion", "hostile", "states"];
+const CASES = ["calendar", "calendar-short", "calendar-year", "matrix", "matrix-full", "relations", "scatter", "scatter-axes", "scatter-big", "locale", "motion", "hostile", "states"];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Polls `check` until it is true: the wait is for a state, never for a time. */

@@ -139,6 +139,25 @@ fn cases() -> Vec<(&'static str, Node)> {
         ),
         ("matrix", correlations("matrix").lower_triangle().into()),
         (
+            "relations",
+            RelationList::new("What moves together")
+                .id("relations")
+                .relation(
+                    "Sleep",
+                    "Next-day HRV",
+                    Relation::new(0.62).note("30 days, p < 0.001"),
+                )
+                .relation("Steps", "Stress", Relation::new(-0.48).note("28 days"))
+                .relation(
+                    "Caffeine",
+                    "Deep sleep",
+                    Relation::new(-0.22).significant(false),
+                )
+                .relation(NASTY, "Recovery", Relation::untested().note(NASTY))
+                .value_name("Correlation (r)")
+                .into(),
+        ),
+        (
             "matrix-full",
             correlations("matrix-full")
                 .colors(Ink::tone(Tone::Success), Ink::tone(Tone::Danger))
