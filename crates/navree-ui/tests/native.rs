@@ -1501,7 +1501,7 @@ struct PlainCustomerRow {
 
 fn customers() -> Vec<CustomerRow> {
     [
-        (1, "Gurpreet Sandhu", "Amritsar", "Active", 1_24_500),
+        (1, "Gurpreet Sandhu", "Amritsar", "Active", 124_500),
         (2, "Simran Grewal", "Jalandhar", "Paused", 8_400),
     ]
     .into_iter()

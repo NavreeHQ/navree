@@ -251,7 +251,7 @@ impl Answered {
 /// stamped with the app's stamp and `shell`'s, its icon shapes said once each.
 pub(crate) fn finished(envelope: Envelope, request: &scope::Request, shell: &str) -> Envelope {
     let mut envelope = envelope
-        .in_vocab(request.client.vocab.min(navree_native::VOCAB))
+        .in_vocab(vocab_of(request))
         .stamped(request.stamp.as_str(), shell);
     envelope.share_icons();
     envelope
@@ -365,7 +365,7 @@ pub(crate) fn errors(
             fields: fields.clone(),
         }],
     )
-    .in_vocab(request.client.vocab.min(navree_native::VOCAB));
+    .in_vocab(vocab_of(&request));
     Some(respond(
         StatusCode::UNPROCESSABLE_ENTITY,
         "no-store",
@@ -400,8 +400,8 @@ pub(crate) fn ops_for(request: &scope::Request, status: StatusCode, ops: &[Op]) 
         Some(ops) => Envelope::ops(assets::BUILD, ops),
         None => Envelope::ops(assets::BUILD, Vec::new()),
     }
-    .in_vocab(request.client.vocab.min(navree_native::VOCAB));
-    respond(status, "no-store", envelope, &request, "")
+    .in_vocab(vocab_of(request));
+    respond(status, "no-store", envelope, request, "")
 }
 
 /// `ops` for the native client the current request comes from, as an
@@ -468,7 +468,7 @@ fn next_rows(url: &str, dir: &str, cursor: &str) -> String {
 pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Response> {
     let request = scope::native()?;
     let target = request.region.clone().unwrap_or_default();
-    let vocab = request.client.vocab.min(navree_native::VOCAB);
+    let vocab = vocab_of(&request);
     if live {
         let envelope = Envelope::ops(
             assets::BUILD,
@@ -594,11 +594,20 @@ pub(crate) fn choices<'a>(
         None => field,
     };
     let envelope = Envelope::screen(assets::BUILD, navree_native::Screen::new("", body))
-        .in_vocab(request.client.vocab.min(navree_native::VOCAB));
+        .in_vocab(vocab_of(&request));
     Some(kept(
         respond(StatusCode::OK, "no-store", envelope, &request, ""),
         Answered::parts(Vec::new()),
     ))
+}
+
+/// The vocabulary an answer is written in: the client's, no newer than this server's.
+#[allow(
+    clippy::unnecessary_min_or_max,
+    reason = "while the vocabulary is 0 every client's is at least it; the bound is for the day it is not"
+)]
+fn vocab_of(request: &scope::Request) -> u32 {
+    request.client.vocab.min(navree_native::VOCAB)
 }
 
 /// A page as the native client `request` gets it, outside the reply layer.
@@ -610,6 +619,10 @@ pub(crate) fn view_for(view: View, request: &Arc<scope::Request>) -> Response {
 /// the page back for the HTML path, untouched: the request came from a
 /// browser, or from outside any request.
 #[inline]
+#[allow(
+    clippy::result_large_err,
+    reason = "the page is handed back whole, untouched, for the HTML path"
+)]
 pub(crate) fn view(view: View) -> Result<Response, View> {
     match scope::asked() {
         None => Err(view),
@@ -733,6 +746,10 @@ fn take_main(nodes: &mut [Node]) -> Option<crate::node::Element> {
 /// asked. `Err` hands the request back for the web path, untouched: a
 /// browser's at no cost, the runtime's at the cost of reading whether it runs
 /// in a native client's web view.
+#[allow(
+    clippy::result_large_err,
+    reason = "the request is handed back whole, untouched, for the web path"
+)]
 pub(crate) async fn layer(
     asked: WhoAsked,
     request: Request,

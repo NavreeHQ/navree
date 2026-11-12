@@ -230,7 +230,7 @@ impl Cx {
         if found.is_empty() {
             return;
         }
-        found.sort_by(|a, b| b.1.cmp(&a.1));
+        found.sort_by_key(|found| std::cmp::Reverse(found.1));
         let (depth, base, forms) = (self.depth, self.base, self.forms);
         let level = base + usize::from(depth);
         for (element, below, in_form) in found {
@@ -352,17 +352,13 @@ impl Cx {
                     }
                     self.element(element, &mut out);
                 }
-                Node::Raw(html) => {
-                    if !html.as_str().trim().is_empty() {
-                        let web = self.miss_text("raw", "markup written as it is", html.as_str());
-                        out.push(web);
-                    }
+                Node::Raw(html) if !html.as_str().trim().is_empty() => {
+                    let web = self.miss_text("raw", "markup written as it is", html.as_str());
+                    out.push(web);
                 }
-                Node::Static(html) => {
-                    if !html.trim().is_empty() {
-                        let web = self.miss_text("raw", "markup written as it is", html);
-                        out.push(web);
-                    }
+                Node::Static(html) if !html.trim().is_empty() => {
+                    let web = self.miss_text("raw", "markup written as it is", html);
+                    out.push(web);
                 }
                 _ => {}
             }
