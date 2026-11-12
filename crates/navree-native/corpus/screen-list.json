@@ -1,0 +1,206 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "title": "Orders",
+    "back": {
+      "title": "Dashboard",
+      "href": "/"
+    },
+    "nav": "/orders",
+    "actions": [
+      {
+        "t": "button",
+        "label": "New order",
+        "icon": {
+          "name": "plus",
+          "paths": [
+            "M5 12h14M12 5v14"
+          ]
+        },
+        "role": "create",
+        "prominence": "high",
+        "action": {
+          "t": "navigate",
+          "href": "/orders/new",
+          "present": "sheet"
+        }
+      }
+    ],
+    "refresh": true,
+    "body": {
+      "t": "region",
+      "id": "orders-region",
+      "src": "/orders",
+      "live": {
+        "src": "/broadcasting/stream",
+        "event": "orders"
+      },
+      "children": [
+        {
+          "t": "table",
+          "id": "orders",
+          "caption": "Orders",
+          "columns": [
+            {
+              "key": "number",
+              "label": "Order",
+              "sort": {
+                "href": "/orders?sort=number"
+              },
+              "role": "title"
+            },
+            {
+              "key": "status",
+              "label": "Status",
+              "role": "status"
+            },
+            {
+              "key": "total",
+              "label": "Total",
+              "numeric": true,
+              "align": "end",
+              "sort": {
+                "href": "/orders?sort=total"
+              },
+              "role": "trailing"
+            },
+            {
+              "key": "placed_on",
+              "label": "Placed",
+              "sort": {
+                "href": "/orders?sort=placed_on",
+                "dir": "desc"
+              },
+              "secondary": true
+            }
+          ],
+          "rows": [
+            {
+              "id": "1042",
+              "cells": [
+                {
+                  "t": "stack",
+                  "children": [
+                    {
+                      "t": "button",
+                      "label": "CH-1042",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    },
+                    {
+                      "t": "text",
+                      "value": "Harpreet Sandhu",
+                      "muted": true
+                    }
+                  ]
+                },
+                {
+                  "t": "badge",
+                  "text": "Open",
+                  "tone": "info",
+                  "dot": true
+                },
+                {
+                  "t": "text",
+                  "value": "₹1,24,050"
+                },
+                {
+                  "t": "text",
+                  "value": "Today, 09:41"
+                }
+              ],
+              "action": {
+                "t": "navigate",
+                "href": "/orders/1042"
+              }
+            },
+            {
+              "id": "1041",
+              "cells": [
+                {
+                  "t": "stack",
+                  "children": [
+                    {
+                      "t": "button",
+                      "label": "CH-1041",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    },
+                    {
+                      "t": "text",
+                      "value": "Simran Bhatia",
+                      "muted": true
+                    }
+                  ]
+                },
+                {
+                  "t": "badge",
+                  "text": "Delivered",
+                  "tone": "success",
+                  "dot": true
+                },
+                {
+                  "t": "text",
+                  "value": "₹2,499"
+                },
+                {
+                  "t": "text",
+                  "value": "Yesterday, 18:02"
+                }
+              ],
+              "action": {
+                "t": "navigate",
+                "href": "/orders/1041"
+              }
+            }
+          ],
+          "search": {
+            "name": "q",
+            "placeholder": "Search orders",
+            "action": "/orders",
+            "hidden": [
+              {
+                "name": "sort",
+                "value": "-placed_on"
+              }
+            ]
+          },
+          "filters": [
+            {
+              "t": "menu",
+              "label": "Status",
+              "items": [
+                {
+                  "t": "link",
+                  "label": "Open (212)",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders?status=open",
+                    "present": "replace"
+                  }
+                },
+                {
+                  "t": "link",
+                  "label": "Cancelled (9)",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders?status=cancelled",
+                    "present": "replace"
+                  }
+                }
+              ]
+            }
+          ],
+          "more": "/orders?after=eyJpZCI6MTA0MX0",
+          "summary": "1–25 of 1,204"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+[package]
+name = "navree-native"
+description = "Navree Native's protocol: the closed vocabulary of parts, actions and ops a native client draws with its system's own toolkit, the client descriptor, and the example envelopes every client decodes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "native", "protocol", "ui"]
+categories = ["gui", "encoding"]
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

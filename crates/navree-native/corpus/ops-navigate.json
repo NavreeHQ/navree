@@ -1,0 +1,23 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "ops": [
+    {
+      "op": "toast",
+      "tone": "info",
+      "text": "This demo has no accounts to sign out of."
+    },
+    {
+      "op": "navigate",
+      "href": "/"
+    },
+    {
+      "op": "navigate_external",
+      "href": "https://pay.example/session/7"
+    },
+    {
+      "op": "reload"
+    }
+  ]
+}

@@ -5456,6 +5456,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-native"
+version = "1.0.2"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "navree-navigator"
 version = "1.0.2"
 dependencies = [

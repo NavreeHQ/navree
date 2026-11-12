@@ -70,6 +70,7 @@ navree-graphql = { path = "crates/navree-graphql", version = "=1.0.2" }
 navree-billing = { path = "crates/navree-billing", version = "=1.0.2" }
 navree-grpc = { path = "crates/navree-grpc", version = "=1.0.2" }
 navree-ui = { path = "crates/navree-ui", version = "=1.0.2" }
+navree-native = { path = "crates/navree-native", version = "=1.0.2" }
 navree-mcp = { path = "crates/navree-mcp", version = "=1.0.2" }
 navree-ai = { path = "crates/navree-ai", version = "=1.0.2" }
 navree-lighthouse = { path = "crates/navree-lighthouse", version = "=1.0.2" }

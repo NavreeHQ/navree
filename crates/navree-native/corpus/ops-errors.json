@@ -1,0 +1,23 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "ops": [
+    {
+      "op": "errors",
+      "form": "refund-form",
+      "fields": {
+        "amount": [
+          "Enter an amount above zero, like 24.00."
+        ],
+        "reason": [
+          "Choose a reason."
+        ]
+      }
+    },
+    {
+      "op": "focus",
+      "target": "refund-amount"
+    }
+  ]
+}

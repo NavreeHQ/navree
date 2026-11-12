@@ -1,0 +1,21 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "title": "Inventory",
+    "body": {
+      "t": "empty",
+      "title": "No product matches",
+      "text": "Clear a filter, or search for part of a name or a SKU."
+    }
+  },
+  "ops": [
+    {
+      "op": "toast",
+      "tone": "success",
+      "text": "24 units of Brass Kadhai added. 31 on the shelf now.",
+      "title": "Restocked"
+    }
+  ]
+}
