@@ -1,3 +1,4 @@
+import Foundation
 import NavreeProtocol
 import SwiftUI
 
@@ -170,9 +171,9 @@ struct NoticeRow: View {
             } label: {
                 Label("Dismiss", systemImage: "xmark")
                     .labelStyle(.iconOnly)
-                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
+            .tint(.secondary)
         }
         .accessibilityElement(children: .combine)
     }
@@ -190,6 +191,13 @@ struct QueryForm {
     var region: String?
 
     var hasFilters: Bool { !filters.isEmpty }
+
+    /// The query form holding only its filters: what the filters sheet draws.
+    var filtersForm: Node.Form {
+        guard var form = source else { return Node.Form.empty }
+        form.children = filters.map(Node.field)
+        return form
+    }
 
     /// From the screen's own search, or the query form of its table.
     init?(screen: Screen, table: Node.Table?, region: String?) {
@@ -292,7 +300,7 @@ struct FiltersSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(SectionRules.sections(query.filters.map(Node.field)).map(OverlayContent.withoutSubmits)) { section in
+                ForEach(SectionRules.sections(.form(query.filtersForm)).map(OverlayContent.withoutSubmits)) { section in
                     SectionView(section: section)
                 }
             }
@@ -412,4 +420,12 @@ struct ListLook: ViewModifier {
         }
         #endif
     }
+}
+
+extension Node.Form {
+    /// A form with nothing in it.
+    static let empty: Node.Form = {
+        // Decoding is the one way to make a protocol value outside its module.
+        try! WireDecoder.decode(Node.Form.self, from: Data("{}".utf8))
+    }()
 }

@@ -110,12 +110,14 @@ struct DialogButtons: View {
 struct OverlaySheet: View {
     let node: Node
     @Environment(\.navree) private var context
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let parts = Self.parts(of: node)
         NavigationStack {
             OverlayContent(parts: parts)
                 .navigationTitle(parts.title)
+                .modifier(Subtitle(text: parts.subtitle))
                 .navigationBarTitleDisplayModeInline()
                 .toolbar {
                     PlacedActions(actions: parts.actions, depth: .sheet, overlay: parts.id, form: parts.form.map(FormRef.init))
@@ -131,8 +133,8 @@ struct OverlaySheet: View {
                 }
                 .environment(\.navreeOverlay, parts.id)
         }
-        .presentationDetents(parts.detents)
-        .presentationDragIndicator(parts.detents.count > 1 ? .visible : .automatic)
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : parts.detents)
+        .presentationDragIndicator(parts.detents.count > 1 && !typeSize.isAccessibilitySize ? .visible : .automatic)
     }
 
     /// What a sheet is made of, read once.
@@ -146,6 +148,15 @@ struct OverlaySheet: View {
         var form: Node.Form?
         var detents: Set<PresentationDetent>
         var hasCancel: Bool
+    }
+
+    /// The first form in `node` that is not inside another sheet or dialog.
+    static func ownForm(_ node: Node) -> Node.Form? {
+        switch node {
+        case .form(let form): return form
+        case .sheet, .dialog, .popover: return nil
+        default: return node.children.lazy.compactMap(ownForm).first
+        }
     }
 
     /// The parts of a sheet or a form dialog. A form's submit button leaves
@@ -169,16 +180,14 @@ struct OverlaySheet: View {
         default:
             break
         }
-        // A form's submit buttons go to the toolbar, as the confirming action.
-        for child in parts.body {
-            child.walk { inner in
-                guard case .form(let form) = inner, parts.form == nil else { return }
-                parts.form = form
-                form.walkFields { field in
-                    if case .button(var button) = field, case .submit? = button.action {
-                        if button.role == .plain || button.role == .primary { button.role = .confirm }
-                        parts.actions.append(.button(button))
-                    }
+        // The sheet's own form gives its submit buttons to the toolbar, as the
+        // confirming action. A dialog or sheet inside it keeps its own.
+        if let form = parts.body.lazy.compactMap(Self.ownForm).first {
+            parts.form = form
+            form.walkFields { field in
+                if case .button(var button) = field, case .submit? = button.action {
+                    if button.role == .plain || button.role == .primary { button.role = .confirm }
+                    parts.actions.append(.button(button))
                 }
             }
         }
@@ -198,10 +207,9 @@ struct OverlayContent: View {
     var body: some View {
         let sections = SectionRules.sections(parts.body).map(Self.withoutSubmits)
         List {
-            if parts.text != nil || parts.subtitle != nil {
+            if let text = parts.text {
                 Section {
-                    Text(parts.text ?? parts.subtitle ?? "")
-                        .foregroundStyle(.secondary)
+                    Text(text).foregroundStyle(.secondary)
                 }
             }
             ForEach(sections) { section in
@@ -230,20 +238,19 @@ struct FormSheet: View {
     let confirm: Node.Button
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navree) private var context
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let ref = FormRef(form)
         NavigationStack {
             List {
-                if let subtitle {
-                    Section { Text(subtitle).foregroundStyle(.secondary) }
-                }
                 ForEach(SectionRules.sections(.form(form)).map(OverlayContent.withoutSubmits)) { section in
                     SectionView(section: section)
                 }
             }
             .modifier(ListLook(layout: .insetGrouped))
             .navigationTitle(title)
+            .modifier(Subtitle(text: subtitle))
             .navigationBarTitleDisplayModeInline()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -260,7 +267,7 @@ struct FormSheet: View {
             }
             .environment(\.navreeForm, ref)
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
     }
 }

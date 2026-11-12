@@ -19,6 +19,7 @@ struct PageView: View {
                         AccountMenu(user: user)
                             .environment(\.navree, client.context(for: ref))
                     }
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
                 }
                 if ref.index == 0, ref.container == .sheet || ref.container == .cover, !Self.hasCancel(page) {
                     ToolbarItem(placement: .cancellationAction) {
@@ -43,7 +44,7 @@ struct PageView: View {
             WebPageView(url: url, ref: ref, client: client)
                 .ignoresSafeArea(.container, edges: .bottom)
                 .navigationTitle(page?.title ?? "")
-                .modifier(InlineTitle(depth: depth))
+                .modifier(InlineTitle(mode: NavigationRules.webTitleMode(depth)))
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         ShareLink(item: url) {
@@ -74,7 +75,7 @@ struct PageView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(page?.title ?? "")
-                .modifier(InlineTitle(depth: depth))
+                .modifier(InlineTitle(mode: NavigationRules.titleMode(depth)))
         }
     }
 
@@ -96,11 +97,11 @@ struct PageView: View {
 }
 
 struct InlineTitle: ViewModifier {
-    let depth: ScreenDepth
+    let mode: TitleMode
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.navigationBarTitleDisplayMode(NavigationRules.titleMode(depth) == .large ? .large : .inline)
+        content.navigationBarTitleDisplayMode(mode == .large ? .large : .inline)
         #else
         content
         #endif

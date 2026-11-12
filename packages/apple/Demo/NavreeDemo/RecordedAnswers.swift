@@ -64,8 +64,13 @@ nonisolated final class RecordedAnswers: URLProtocol, @unchecked Sendable {
     /// The markup of a page the web view shows, for an address.
     static func page(for address: String) -> String? {
         let path = address.split(separator: "?").first.map(String.init) ?? "/"
-        guard path == "/", let url = resource("index.embed", "html") else { return nil }
-        return try? String(contentsOf: url, encoding: .utf8)
+        guard path == "/", let url = resource("index.embed", "html"),
+            var html = try? String(contentsOf: url, encoding: .utf8)
+        else { return nil }
+        if let css = resource("navree-ui", "css").flatMap({ try? String(contentsOf: $0, encoding: .utf8) }) {
+            html = html.replacingOccurrences(of: "</head>", with: "<style>\(css)</style></head>")
+        }
+        return html.replacingOccurrences(of: "content=\"dark\"", with: "content=\"light dark\"")
     }
 
     static func file(_ name: String) -> Data? {

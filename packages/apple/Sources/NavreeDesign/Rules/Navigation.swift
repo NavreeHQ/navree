@@ -47,6 +47,13 @@ public enum NavigationRules {
         depth == .root ? .large : .inline
     }
 
+    /// A page in the web view has an inline title wherever it stands: the web
+    /// view's own scrolling cannot fold a large title away, which would keep
+    /// its room for ever.
+    public static func webTitleMode(_ depth: ScreenDepth) -> TitleMode {
+        .inline
+    }
+
     /// The title a bar shows. The app's own name never stands as a screen's
     /// title; an empty title stays empty rather than naming the app.
     public static func title(_ title: String, appName: String) -> String {

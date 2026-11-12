@@ -295,25 +295,45 @@ struct ButtonRow: View {
     }
 }
 
-/// A label and its value, as Settings and Contacts show facts.
+/// A label and its value, as Settings shows one; a fact with lines under its
+/// value stacks them under its label, as Contacts shows a contact's details.
 struct FactContent: View {
     let fact: Node.Fact
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var value: String {
+        fact.value.flatMap { RecordRules.words(in: $0) }.joined(separator: " ")
+    }
 
     var body: some View {
-        LabeledContent {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(fact.value.flatMap { RecordRules.words(in: $0) }.joined(separator: " "))
-                    .foregroundStyle(.secondary)
-                ForEach(fact.details, id: \.self) { line in
-                    Text(line).font(.footnote).foregroundStyle(.tertiary)
+        if fact.details.isEmpty && !typeSize.isAccessibilitySize {
+            LabeledContent {
+                Text(value).foregroundStyle(.secondary)
+            } label: {
+                label
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if let icon = fact.icon {
+                    Glyph(icon: icon).foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(fact.label).font(.subheadline).foregroundStyle(.secondary)
+                    Text(value)
+                    ForEach(fact.details, id: \.self) { line in
+                        Text(line).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
             }
-        } label: {
-            if let icon = fact.icon {
-                Label { Text(fact.label) } icon: { Glyph(icon: icon) }
-            } else {
-                Text(fact.label)
-            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    @ViewBuilder private var label: some View {
+        if let icon = fact.icon {
+            Label { Text(fact.label) } icon: { Glyph(icon: icon).foregroundStyle(.secondary) }
+        } else {
+            Text(fact.label)
         }
     }
 }
