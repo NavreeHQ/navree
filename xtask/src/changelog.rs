@@ -56,6 +56,33 @@ pub fn add_section(text: &str, version: &str, date: &str, body: &str) -> String 
     out
 }
 
+/// The body of the section for `version`, without its heading and its
+/// surrounding blank lines: from the heading to the next `## ` heading or
+/// the release links at the end. `None` when there is no such section.
+pub fn section_body(text: &str, version: &str) -> Option<String> {
+    let mut body = String::new();
+    let mut found = false;
+    let mut inside = false;
+    for line in text.split_inclusive('\n') {
+        if let Some(heading) = line.strip_prefix("## ") {
+            if inside {
+                break;
+            }
+            let heading = heading.trim_start_matches('[');
+            inside = heading
+                .strip_prefix(version)
+                .is_some_and(|rest| rest.trim_end().is_empty() || rest.starts_with([']', ' ']));
+            found |= inside;
+        } else if inside {
+            if is_release_link(line.trim_end()) {
+                break;
+            }
+            body.push_str(line);
+        }
+    }
+    found.then(|| body.replace('\r', "").trim().to_owned() + "\n")
+}
+
 /// A line like `[1.2.2]: https://...`.
 fn is_release_link(line: &str) -> bool {
     line.strip_prefix('[')

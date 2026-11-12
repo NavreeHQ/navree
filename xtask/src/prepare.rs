@@ -10,6 +10,8 @@
 //!   `package.json` files that have one;
 //! - a section for the version in `CHANGELOG.md`, drafted from the commit
 //!   subjects since the last release tag;
+//! - the docs that print the version, and a section for it in the release
+//!   notes, written from the changelog section ([`docs`]);
 //! - `Cargo.lock`, for the workspace's own entries.
 
 use std::path::{Path, PathBuf};
@@ -18,6 +20,7 @@ use std::process::Command;
 use toml_edit::{DocumentMut, Item, Value};
 
 use crate::changelog;
+use crate::docs;
 use crate::metadata::{Workspace, cargo};
 use crate::process::git;
 
@@ -224,8 +227,13 @@ pub fn prepare(root: &Path, version: &str, date: &str) -> Result<Vec<PathBuf>, S
             &changelog_file,
             &changelog::add_section(&text, version, date, &body),
         )?;
-        changed.push(changelog_file);
+        changed.push(changelog_file.clone());
     }
+
+    // The docs print the version, and the release notes are written from
+    // the changelog section (the draft above, or the one a person wrote).
+    let text = std::fs::read_to_string(&changelog_file).unwrap_or_default();
+    changed.extend(docs::update(root, version, &text)?);
 
     // The lock file records each workspace crate's version.
     let status = Command::new(cargo())

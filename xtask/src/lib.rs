@@ -8,7 +8,7 @@
 //!
 //! | Command | What it does |
 //! |---|---|
-//! | `prepare <version>` | sets the version everywhere and adds the changelog section ([`prepare`]) |
+//! | `prepare <version>` | sets the version everywhere, adds the changelog section, and sets the version in the docs and adds the release notes ([`prepare`], [`docs`]) |
 //! | `check` | every version equal, every internal requirement exact, no dev-dependency cycle ([`check`]) |
 //! | `order` | prints the publish order ([`order`]) |
 //! | `stage [--clean]` | copies the skills, the docs and the UI catalog into Navigator's crate ([`stage`]) |
@@ -20,6 +20,7 @@
 
 pub mod changelog;
 pub mod check;
+pub mod docs;
 pub mod index;
 pub mod metadata;
 pub mod order;

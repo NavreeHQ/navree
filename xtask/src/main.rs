@@ -85,7 +85,9 @@ fn cmd_prepare(args: &[&str]) -> Result<ExitCode, String> {
     for file in changed {
         println!("  {}", file.strip_prefix(root()).unwrap_or(&file).display());
     }
-    println!("edit the CHANGELOG.md section, then run `cargo xtask release check`");
+    println!(
+        "edit the CHANGELOG.md section and the matching section of docs/prologue/release-notes.mdx, then run `cargo xtask release check`"
+    );
     Ok(ExitCode::SUCCESS)
 }
 
