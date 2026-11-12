@@ -653,6 +653,52 @@ fn a_modules_own_styles_come_with_it_and_only_with_it() {
     assert_eq!(bar, ["navree-ui", "menus-styles", "toolbar-styles"]);
 }
 
+/// The marketing sheet (the blocks of a public site) stays at 6 KB gzip, and a whole public
+/// page of them links the toolkit's sheet and its own and loads no script: the menu, the
+/// questions and the pricing switch need none. Only a part that needs one, a form, brings it.
+#[test]
+fn the_marketing_sheet_is_at_most_6_kb_gzip_and_a_site_page_loads_no_script() {
+    use navree_ui::marketing::{
+        Brand, CtaBand, Faq, Feature, FeatureGrid, Hero, LegalPage, LegalSection, Plan, Pricing,
+        Section, SectionHeading, SiteFooter, SiteHeader, SitePage, ThemeToggle,
+    };
+    use navree_ui::theme::Mode;
+
+    assert!(size("marketing") <= 6 * 1024, "{}", size("marketing"));
+    let page = SitePage::new()
+        .header(
+            SiteHeader::new(Brand::new("Kesar", "/"))
+                .link("Pricing", "/pricing/")
+                .action(Button::primary("Start free").href("/signup")),
+        )
+        .section(Hero::new("Know your body").action(Button::primary("Start").href("/s")))
+        .section(
+            Section::new("features")
+                .heading(SectionHeading::new("Features"))
+                .child(FeatureGrid::new().feature(Feature::new("Sleep", "Stages"))),
+        )
+        .section(
+            Section::new("pricing").child(
+                Pricing::new("plans").plan(
+                    Plan::new("Plus")
+                        .monthly("₹299", "a month")
+                        .yearly("₹2,990", "a year"),
+                ),
+            ),
+        )
+        .section(Section::new("faq").child(Faq::new("faq").item("Free?", "Yes.")))
+        .section(LegalPage::new("Terms").section(LegalSection::new("a", "One").text("x")))
+        .section(CtaBand::new("cta", "Start today"))
+        .footer(
+            SiteFooter::new(Brand::new("Kesar", "/")).theme_toggle(ThemeToggle::new(Mode::System)),
+        );
+    let view = View::new("Kesar").body(page);
+    assert_eq!(view.uses(), Uses::MARKETING);
+    let html = view.to_html();
+    assert_eq!(linked(&html), (vec![], vec!["navree-ui", "marketing"]));
+    assert!(!html.contains("<script"), "{html}");
+}
+
 /// The bits are one each, so a page asks for exactly what it names.
 #[test]
 fn no_two_modules_share_a_bit() {
@@ -690,6 +736,8 @@ fn no_two_modules_share_a_bit() {
         Uses::COUNT_UP,
         Uses::CHART_PAINT,
         Uses::CHART_LINEAR,
+        Uses::CHART_GRIDS,
+        Uses::MARKETING,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

@@ -36,20 +36,20 @@ fn pricing() -> View {
                 .format("text/markdown", format!("{SITE}/pricing.md"))
                 .json_ld(
                     JsonLd::new()
-                        .add(
+                        .node(
                             Organization::new("Kesar", format!("{SITE}/"))
                                 .id(&org)
                                 .logo(format!("{SITE}/logo.png"))
                                 .same_as("https://www.linkedin.com/company/kesar-health")
                                 .slogan("Your health data, read calmly."),
                         )
-                        .add(
+                        .node(
                             WebSite::new("Kesar", format!("{SITE}/"))
                                 .id(&website)
                                 .publisher(&org)
                                 .in_language("en-IN"),
                         )
-                        .add(
+                        .node(
                             WebPage::new(&url, "Pricing", "Plans for one person and for a family.")
                                 .kind(PageKind::ItemPage)
                                 .in_language("en-IN")
@@ -57,7 +57,7 @@ fn pricing() -> View {
                                 .is_part_of(&website)
                                 .breadcrumb(&crumbs),
                         )
-                        .add(
+                        .node(
                             SoftwareApplication::new("Kesar", "HealthApplication")
                                 .description("Sleep, heart and steps in one daily score.")
                                 .operating_system("Web, Android")
@@ -66,7 +66,7 @@ fn pricing() -> View {
                                 .offer(Offer::new("0", "INR").name("Free"))
                                 .offer(Offer::new("299", "INR").name("Plus, monthly")),
                         )
-                        .add(
+                        .node(
                             BreadcrumbList::new()
                                 .id(&crumbs)
                                 .step("Home", format!("{SITE}/"))
@@ -219,7 +219,7 @@ fn hostile_text_is_escaped_in_every_tag() {
                 .twitter_site(nasty)
                 .language(nasty, format!("{SITE}/hi/"))
                 .json_ld(
-                    JsonLd::new().add(FaqPage::new(format!("{SITE}/")).question(nasty, nasty)),
+                    JsonLd::new().node(FaqPage::new(format!("{SITE}/")).question(nasty, nasty)),
                 ),
         )
         .to_html();

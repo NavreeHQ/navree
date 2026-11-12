@@ -319,6 +319,10 @@ impl Uses {
     /// matrix heat maps and of the scatter plot, linked on a page that draws one. The charts
     /// module moves between their cells and points.
     pub const CHART_GRIDS: Self = Self(1 << 36);
+    /// The marketing stylesheet: no script, only the styles of the blocks of a public site,
+    /// its header, hero, sections, pricing, questions, frames and footer, linked on a page
+    /// that draws one. A part of a block that needs a script, such as a form, loads its own.
+    pub const MARKETING: Self = Self(1 << 40);
 
     /// Both sets together.
     #[must_use]

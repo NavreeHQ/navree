@@ -26,6 +26,10 @@
 //!   matrix heat maps and a scatter plot, drawn as SVG or HTML on the server, each
 //!   with its data as a table, and [`charts::Report`] for a date range from the URL
 //!   cut into periods.
+//! - [`marketing`]: the blocks of a public website: a header whose menu needs no
+//!   script, a hero, sections, features, pricing with a monthly or yearly switch,
+//!   questions with their structured data, browser and phone frames, a legal page and a
+//!   footer with a theme toggle. [`Picture`]: a responsive image in every format.
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //! - [`pages`]: what the app shows when a request ends in an error, or a place has
@@ -98,6 +102,7 @@ pub mod icons;
 pub mod island;
 pub mod localize;
 pub mod markdown;
+pub mod marketing;
 mod module;
 pub mod node;
 pub mod op;

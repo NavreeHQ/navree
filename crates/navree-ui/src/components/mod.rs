@@ -18,12 +18,13 @@ mod fact;
 mod flag;
 mod input_otp;
 mod inputs;
-mod layout;
+pub(crate) mod layout;
 mod lazy;
 mod live;
 mod menubar;
 mod navigation_menu;
 mod overlays;
+mod picture;
 mod questionnaire;
 mod split;
 mod tabs;
@@ -69,6 +70,7 @@ pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, ScrollHeight, Sheet, SheetBackdrop, SheetSide, SheetWidth, Side, Tooltip,
 };
+pub use picture::Picture;
 pub use questionnaire::{Question, Questionnaire, QuestionnaireLabels, QuestionnaireMove};
 pub use split::{Pane, SplitHeight, SplitPane, SplitSave, SplitSizes, SplitWidth};
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
