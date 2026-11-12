@@ -58,17 +58,17 @@ jobs:
         run: bash crates/navree-native-core/tests/c/run.sh
 
       # Android: shared libraries with the glue for com.navree.core.Core, linked
-      # with the runner's NDK for API 26 and laid out for 16 KB pages.
+      # with the runner's NDK for API 26, named, and laid out for 16 KB pages.
       - name: Android libraries
         env:
-          PAGES: -C link-arg=-Wl,-z,max-page-size=16384
+          LINK: -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-soname,libnavree_native_core.so
         run: |
           ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ndk/aarch64-linux-android26-clang" \
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="$PAGES" \
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
             cargo rustc -p navree-native-core --release --features jni --target aarch64-linux-android --crate-type cdylib
           CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$ndk/x86_64-linux-android26-clang" \
-          CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="$PAGES" \
+          CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
             cargo rustc -p navree-native-core --release --features jni --target x86_64-linux-android --crate-type cdylib
           for target in aarch64-linux-android x86_64-linux-android; do
             library="target/$target/release/libnavree_native_core.so"
@@ -79,23 +79,33 @@ jobs:
             test "$(grep -c '^Java_com_navree_core_Core_native' "$target.symbols")" -eq 4
             # Every part of the library that is loaded is laid out for 16 KB pages.
             "$ndk/llvm-readelf" -lW "$library" | awk '$1 == "LOAD" && $NF != "0x4000" { print "a part laid out for " $NF; bad = 1 } END { exit bad }'
+            # It says its own name, and needs nothing but the system's own libraries.
+            "$ndk/llvm-readelf" -dW "$library" | grep -E 'SONAME|NEEDED'
+            "$ndk/llvm-readelf" -dW "$library" | grep -q 'SONAME.*libnavree_native_core.so'
           done
 
       # iOS: static libraries for a device and for a simulator on Apple silicon.
       - name: iOS libraries
         run: |
-          cargo rustc -p navree-native-core --release --target aarch64-apple-ios --crate-type staticlib
-          cargo rustc -p navree-native-core --release --target aarch64-apple-ios-sim --crate-type staticlib
+          set -o pipefail
           # The NDK's tools read Apple's object files as well as Android's.
           ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+            library="target/$target/release/libnavree_native_core.a"
+            cargo rustc -p navree-native-core --release --target "$target" --crate-type staticlib -- --print native-static-libs 2>&1 | tee "$target.log"
+            # What an app links beside the library, as the compiler says it.
+            sed 's/\x1b\[[0-9;]*m//g' "$target.log" | grep -o 'native-static-libs: .*' | sed 's/native-static-libs: //' | tail -1 > "$target.needs" || true
             # The five functions of the C interface are in each library.
-            "$ndk/llvm-nm" -g --defined-only "target/$target/release/libnavree_native_core.a" 2>/dev/null | awk '{print $3}' | grep -E '^_navree_' | sort -u | tee "$target.symbols"
+            # (One part of the archive is the compiler's own notes, which the tool can't read.)
+            { "$ndk/llvm-nm" -g --defined-only "$library" 2>/dev/null || true; } | awk '{print $3}' | { grep -E '^_navree_' || true; } | sort -u | tee "$target.symbols"
             test "$(wc -l < "$target.symbols")" -eq 5
+            # Which of Apple's systems each of its parts says it was built for.
+            "$ndk/llvm-objdump" --macho --private-headers "$library" 2>/dev/null | grep -E '^ *(platform|minos) ' | sort | uniq -c || true
           done
 
       # One folder a client's build takes whole: the header, a library for each
-      # system and processor, and a checksum of each.
+      # system and processor, the commit they were built from, what an Apple app
+      # links beside its library, and a checksum of each file.
       - name: Lay the libraries out
         run: |
           out=dist/navree-native-core
@@ -105,7 +115,9 @@ jobs:
           cp target/x86_64-linux-android/release/libnavree_native_core.so "$out/android/x86_64/"
           cp target/aarch64-apple-ios/release/libnavree_native_core.a "$out/ios/device/"
           cp target/aarch64-apple-ios-sim/release/libnavree_native_core.a "$out/ios/simulator/"
-          (cd "$out" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && cat SHA256SUMS && du -ah . | sort -k2)
+          printf 'device: %s\nsimulator: %s\n' "$(cat aarch64-apple-ios.needs)" "$(cat aarch64-apple-ios-sim.needs)" > "$out/ios/links.txt"
+          echo "$GITHUB_SHA" > "$out/COMMIT"
+          (cd "$out" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && cat SHA256SUMS && cat ios/links.txt && du -ah . | sort -k2)
 
       - name: Keep the libraries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
