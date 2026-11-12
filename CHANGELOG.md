@@ -41,21 +41,21 @@ every `@navree/*` package carries the same version.
   table it may `SELECT` from, directly or through views. The refusal names what it found. What
   an ordinary role can still reach is what the other extensions installed in the database give
   it (their C functions, and their own `SECURITY DEFINER` functions: PostGIS, pgcrypto,
-  TimescaleDB, pgvector), a table, including a foreign table, read by a view it may read (the
-  view reads its tables with its owner's rights), and any extension Navigator doesn't know that
-  adds a function reaching the network or a file.
+  TimescaleDB, pgvector), a table read by a view it may read (the view reads its tables with
+  its owner's rights; a foreign table there is refused, as above), and any extension Navigator
+  doesn't know that adds a function reaching the network or a file.
 - A query could make Navigator hold gigabytes: `printf('%.*c', 400000000, 'x')`, a recursive
   `zeroblob(..)` or `json_group_array` on SQLite, `repeat('x', 900000000)` or an `EXPLAIN` plan
-  on PostgreSQL. SQLite now refuses to make a string or blob over 1 MB, and
-  `navree mcp` caps SQLite's heap at 256 MB for its process (code that embeds Navigator sets its
-  own cap with `database::limit_sqlite_heap`). PostgreSQL cuts each value to 4 KB before sending
-  it (its own work ends with the 5 second timeout), and `EXPLAIN` is refused there. A query may
-  answer at most 100 columns; every value over 4 KB comes back cut and ending with `… [cut]`,
-  and an answer stops at about 1 MB of JSON, with `truncated` set (a single row that large keeps
-  its first values and cuts the rest). Error messages are cut to 2 KB in what the tools return
+  on PostgreSQL. SQLite now refuses to make a string or blob over 1 MB, and `navree mcp` caps
+  SQLite's heap at 256 MB for its process (code that embeds Navigator sets its own cap with
+  `database::limit_sqlite_heap`). PostgreSQL cuts each value to 4 KB before sending it (its own
+  work ends with the 5 second timeout), and `EXPLAIN` is refused there. A query may answer at
+  most 100 columns; every value over 4 KB comes back cut and ending with `… [cut]`, and an
+  answer stops at about 1 MB of JSON, with `truncated` set (a single row that large keeps its
+  first values and cuts the rest). Error messages are cut to 2 KB in what the tools return
   (PostgreSQL still sends the whole message, up to its 1 GB limit, and Navigator reads it once
-  before cutting it). Lighthouse's tools
-  read their own tables whole, up to 8 MB a value, so histograms and backtraces stay complete.
+  before cutting it). Lighthouse's tools read their own tables whole, up to 8 MB a value, so
+  histograms and backtraces stay complete.
 - `describe_schema` on PostgreSQL could list every table instead of the one asked for, given a
   table name with a backslash and a quote on a server with `standard_conforming_strings` off.
 - The pgvector store wrote the field name of a comparison filter (`Filter::gt`, `gte`, `lt`,
@@ -74,9 +74,10 @@ every `@navree/*` package carries the same version.
   Navigator. When Dock creates it, it may connect, use `public` and read its tables, now and
   later; Dock never grants it anything again, so a `REVOKE` stays. On every `up` it is made a
   plain login role whose sessions start read-only with a 5 second statement timeout (role
-  defaults a session may change) and may write at most 64 MB of temporary files. Its password is its own, derived from the service's, and Dock
-  sends the server only its SCRAM verifier. Like any role, it also has what PostgreSQL gives
-  `PUBLIC`: `CONNECT`, `TEMP`, and `EXECUTE` on functions, extension C functions included.
+  defaults a session may change) and may write at most 64 MB of temporary files. Its password
+  is its own, derived from the service's, and Dock sends the server only its SCRAM verifier.
+  Like any role, it also has what PostgreSQL gives `PUBLIC`: `CONNECT`, `TEMP`, and `EXECUTE` on
+  functions, extension C functions included.
 - `NAVREE_MCP_DATABASE_URL`: the database `navree mcp` reads instead of the app's
   `database.url`, such as the same database through a read-only role.
 - `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`: lets `navree mcp` query as a refused
