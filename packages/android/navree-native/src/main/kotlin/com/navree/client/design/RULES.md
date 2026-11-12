@@ -75,6 +75,13 @@ times and above, the app bar gives up an action so the title can still be read.
   menu of its choices. Choosing asks for the rows again at once.
 - A screen with no chrome (a sign-in) has no bar.
 
+### Navigation
+
+- Destinations take the Material Symbol their icon's name maps to
+  (`Symbols.kt`), filled when selected and outlined otherwise; an icon whose
+  name maps nowhere keeps the page's own shape.
+- A destination's label is never cut: at large text it takes a second line.
+
 ### The navigation icon
 
 - A first screen: none, or the menu button when destinations did not fit.
@@ -84,8 +91,9 @@ times and above, the app bar gives up an action so the title can still be read.
 
 ### Actions, by role
 
-- **Create** is the floating action button: the first `create` action of a
-  screen in a stack.
+- **Create** is the floating action button: the first `create` action (or
+  standard `add`) of a screen in a stack. There is at most one, and none on a
+  screen with a floating toolbar: then creation is an icon in the bar.
   - On a first screen it carries its label, and gives the label up when the
     list scrolls and at the largest text sizes.
   - On a deeper screen it is the icon alone.
@@ -102,11 +110,19 @@ times and above, the app bar gives up an action so the title can still be read.
   icon may be a text button in the bar.
 - A menu with an icon is an icon button that opens it. A menu without one is a
   headed group in the overflow.
-- **Destructive** actions are never in the bar. They end the overflow menu,
-  under a divider, in the error colour.
-- A destructive action that reaches the server asks first, in an alert dialog
-  whose affirming button repeats the action's own label. One that opens the
-  page's own dialog is not asked about twice.
+- **Destructive** actions (role `destructive` or standard `delete`) are never
+  the floating action button, never in the bar and never a filled button.
+  They end the overflow menu, under a divider, in the error colour.
+- A destructive action that writes asks first, in an alert dialog whose
+  headline is the action's own words as a question ("Cancel order?") and
+  whose affirming button repeats them in the error colour. One that can be
+  undone (`undoable`) does not ask: Android's way is to do it and offer Undo
+  in the snackbar. One that is a dialog's own answer is not asked twice.
+- **Standard actions** (share, delete, add, edit, search, done, cancel, more)
+  are drawn with the system's Material Symbol whatever icon the page sent.
+- **A toolbar** of the page is Material 3's floating toolbar at the bottom of
+  the content: its items are icon buttons named by their titles (with a
+  tooltip), menus where an item has one.
 - **Cancel** on a presented screen is the X; it is not drawn a second time.
 - A search bar holds two things after its field. The signed-in user's avatar
   is one of them on first screens; the overflow, or one action, is the other.
@@ -131,8 +147,8 @@ times and above, the app bar gives up an action so the title can still be read.
   fills the height.
 - A dialog that is part of the tree is an alert dialog. The buttons that go
   ahead sit at the end; the one that backs out sits before them.
-- Toasts are snackbars, one at a time, above the floating action button. A
-  toast's action is the snackbar's action. Material's snackbar has no tones, so
+- Toasts are snackbars, one at a time, above the floating action button and
+  above the keyboard when it is up. A toast's action is the snackbar's action. Material's snackbar has no tones, so
   a toast's tone changes nothing but how long it stays.
 
 ### Two panes
@@ -140,8 +156,9 @@ times and above, the app bar gives up an action so the title can still be read.
 In an expanded or wider window that is not short, a first screen that is a
 collection (a list or a table) and the screen opened from it are drawn side by
 side: the list pane 360 dp wide (412 dp in a large window), the detail in the
-rest. The row that is open is marked selected. With nothing opened, the list
-has the window.
+rest, in a rounded container of its own on the surface tone. A pane whose role
+is `list` counts as a collection. The row that is open is marked selected.
+With nothing opened, the list has the window.
 
 ### Pull to refresh, loading, failing
 
@@ -160,20 +177,25 @@ has the window.
 ### Lists and tables
 
 - A row is a Material list item: leading avatar, icon or image; title; second
-  line; trailing value with the row's badge under it. With large text the
-  badge moves under the second line.
+  line; trailing value with the row's status under it. At the largest text the
+  value and the status move under the second line, so neither squeezes it.
+- A status in a row is a word after a small dot in its tone's colour, as
+  plain as the row's other lines; a filled label would shout louder than the
+  amount beside it.
 - A row that leads somewhere is one touch target. There is no chevron.
 - A row's menu opens from a button at its end and from a long press. Its swipe
   action runs on a swipe from the end. Both are also offered to TalkBack as
   actions of the row, because a swipe and a long press are not discoverable.
 - Rows of an inset section share one tonal container with rounded ends.
-- Below 600 dp of content a table is a list: each row a list item, the column
-  that names the record as its first line, the other columns a narrow screen
-  keeps under it, badges in a row of their own and the row's number at its
-  end. When the naming cell holds one control and the row has no action of
-  its own, the whole row takes that control's action: a row is one touch
-  target. From 600 dp it is
-  rows of cells under a header row. A table with more columns than fit at
+- Below 600 dp of content a table is a list, each row a list item folded by
+  the role the server gave each column: `title` (or the first column) is the
+  first line, `leading` leads the row, `subtitle` gives the lines under it,
+  `status` goes on a line of its own, `trailing` (or the first numeric
+  column) ends the row, `actions` and the row's own actions are its menu; a
+  `secondary` column is left out. A row opens what the server says it opens;
+  when it says nothing and the naming cell holds one control, the whole row
+  takes that control's action. From 600 dp it is rows of cells under a header
+  row; a sortable heading takes the table's region to its other address. A table with more columns than fit at
   112 dp each is a list at any width.
 - A list asks for its next page when its end is drawn, never before.
 
@@ -184,7 +206,7 @@ has the window.
 | text | outlined text field: label in the outline, help and errors under it, a counter with a most, a show-or-hide button for a password; the keyboard, capitals and autofill follow the kind |
 | switch | a row with the switch at its end; the whole row toggles |
 | checkbox | a row with the checkbox at its start |
-| one of a few, `segmented` | segmented buttons (up to 4 on a compact window, 5 on wider) |
+| one of a few, `segmented` | a connected button group (up to 4 on a compact window, 5 on wider); segmented buttons are no longer Material's |
 | one of a few, `radio` | radio buttons (up to 5) |
 | one of several, `menu` | a field that opens a menu (up to 15) |
 | one of many, or `list` | a dialog with a list of radio buttons |
@@ -220,10 +242,14 @@ has the window.
   make a neon app.
 - Text on every pair of roles has a contrast of at least 4.5 to 1, for any
   seed. A test checks it for seeds from black to white.
-- With dynamic colour allowed, on Android 12 and later the user's wallpaper
-  colours are the scheme.
-- Type, elevation and motion stay the system's. Only a `sharp` corner style
-  changes the shape scale.
+- An app that sets no accent (neither the shell nor its own seed) takes the
+  person's wallpaper colours on Android 12 and later; an app with an accent
+  takes them only when it opts in.
+- Type and elevation stay the system's; motion is Material 3 Expressive's
+  springs, or the standard scheme when animations are off. Only a `sharp`
+  corner style changes the shape scale.
+- Every call to Material 3's Expressive components (a pre-release in the
+  library this builds against) is in `expressive/Expressive.kt`.
 
 ## What every screen does
 

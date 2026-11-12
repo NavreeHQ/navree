@@ -37,15 +37,15 @@
     <string name="navree_web_page">Web page</string>
     <string name="navree_timeout_title">This is taking too long</string>
     <string name="navree_timeout_text">The server did not answer in time. Try again.</string>
-    <string name="navree_notice_offline">You're offline</string>
+    <string name="navree_notice_offline">You\'re offline</string>
     <string name="navree_notice_timeout">That took too long. Try again.</string>
-    <string name="navree_notice_failed">That didn't work. Try again.</string>
-    <string name="navree_notice_unsaved">Your latest change wasn't saved. Check it and save again.</string>
+    <string name="navree_notice_failed">That didn\'t work. Try again.</string>
+    <string name="navree_notice_unsaved">Your latest change wasn\'t saved. Check it and save again.</string>
     <string name="navree_notice_loading">Still loading. Try again in a moment.</string>
     <string name="navree_notice_fields">Some fields need your attention</string>
     <string name="navree_notice_loaded">More loaded</string>
     <string name="navree_copied">Copied</string>
-    <string name="navree_more_failed">Couldn't load more</string>
+    <string name="navree_more_failed">Couldn\'t load more</string>
     <!-- The headline of the question a destructive action asks: the action's own words. -->
     <string name="navree_confirm_question">%1$s?</string>
     <string name="navree_sending">Sending</string>

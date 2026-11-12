@@ -38,7 +38,7 @@ data class NavreeConfig(
     val googleClientId: String? = null,
     /** Where push tokens come from; none means the app receives no notifications. */
     val push: PushProvider? = null,
-    /** The addresses that start a sign-in with another site: `/auth/*/redirect`. */
+    /** The addresses that start a sign-in with another site, where a star stands for one segment. */
     val signInPaths: List<String> = listOf("/auth/*/redirect", "/api/auth/social/*/redirect"),
     /** The scheme a sign-in session comes back on, when it is not a link to the origin. */
     val signInCallback: String? = null,

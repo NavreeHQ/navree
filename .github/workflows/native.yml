@@ -265,9 +265,13 @@ jobs:
         run: |
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
           adb="$ANDROID_HOME/platform-tools/adb"
+          # The tools and the emulator look for the device in one folder only when both are told it.
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           yes | "$sdk/sdkmanager" --licenses > /dev/null
           "$sdk/sdkmanager" --install emulator platform-tools "$IMAGE" > /dev/null
           echo no | "$sdk/avdmanager" create avd -n screens -k "$IMAGE" -d "${{ matrix.profile }}" --force
+          "$ANDROID_HOME/emulator/emulator" -list-avds
           ls -l /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
           "$ANDROID_HOME/emulator/emulator" -avd screens -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
