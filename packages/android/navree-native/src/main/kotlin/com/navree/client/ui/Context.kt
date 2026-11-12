@@ -56,6 +56,8 @@ internal data class Place(
     val selectedUrl: String? = null,
     /** A node that is drawn elsewhere: a form's button that the app bar or a dialog's foot holds. */
     val omit: Navree.Node? = null,
+    /** Drawn in a cell of a wide table, whose column heading already names what is in it. */
+    val inCell: Boolean = false,
 ) {
     val id: Long get() = screen.id
 

@@ -237,9 +237,11 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
             .semantics {
                 if (content != null) contentType = content
                 if (support.isError) error(errorText)
+                if (place.inCell) field.label?.let { contentDescription = it }
             },
         enabled = !field.disabled,
-        label = FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
+        // In a table's cell the column heading names the field; its own label is said to TalkBack only.
+        label = if (place.inCell) null else FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
         placeholder = input.placeholder?.let { placeholder -> { Text(placeholder) } },
         readOnly = input.readonly,
         trailingIcon = if (password) {

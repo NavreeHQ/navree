@@ -454,7 +454,7 @@ private fun TableCell(cell: Navree.Node, end: Boolean, place: Place) {
             overflow = TextOverflow.Ellipsis,
         )
         is Navree.Badge -> StatusView(cell)
-        else -> NodeView(cell, place)
+        else -> NodeView(cell, place.copy(inCell = true))
     }
 }
 
