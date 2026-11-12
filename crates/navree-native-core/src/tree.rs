@@ -177,10 +177,10 @@ pub(crate) fn rewrite(
                     *place = old.and_then(&mut *change).map(Box::new);
                     return true;
                 }
-                if let Some(child) = place.as_deref_mut() {
-                    if rewrite(child, is, change) {
-                        return true;
-                    }
+                if let Some(child) = place.as_deref_mut()
+                    && rewrite(child, is, change)
+                {
+                    return true;
                 }
             }
             Slot::One(child) => {
@@ -337,17 +337,16 @@ pub(crate) fn value_of(input: &Input) -> FieldValue {
 /// Whether a value is of the kind the control holds, so a value typed into a
 /// field is not kept for a control of another kind that took its place.
 pub(crate) fn fits(input: &Input, value: &FieldValue) -> bool {
-    match (input, value) {
+    matches!(
+        (input, value),
         (
             Input::Text(_) | Input::Date(_) | Input::Slider(_) | Input::Colour(_),
             FieldValue::Text { .. },
-        )
-        | (Input::Toggle(_), FieldValue::Flag { .. })
-        | (Input::Choice(_), FieldValue::Text { .. } | FieldValue::None)
-        | (Input::Choices(_), FieldValue::Many { .. })
-        | (Input::File(_), FieldValue::Files { .. }) => true,
-        _ => false,
-    }
+        ) | (Input::Toggle(_), FieldValue::Flag { .. })
+            | (Input::Choice(_), FieldValue::Text { .. } | FieldValue::None)
+            | (Input::Choices(_), FieldValue::Many { .. })
+            | (Input::File(_), FieldValue::Files { .. })
+    )
 }
 
 /// Gives every form and field of arriving nodes an id of its own.
@@ -423,11 +422,11 @@ impl Names<'_> {
         let own = field.id.clone().filter(|id| !self.fields.contains(id));
         let id = own.unwrap_or_else(|| {
             let mut stem = format!("{}.{}", form.unwrap_or(""), field.name);
-            if let Input::Toggle(toggle) = &field.input {
-                if let Some(value) = &toggle.value {
-                    stem.push('=');
-                    stem.push_str(value);
-                }
+            if let Input::Toggle(toggle) = &field.input
+                && let Some(value) = &toggle.value
+            {
+                stem.push('=');
+                stem.push_str(value);
             }
             free(self.fields, stem)
         });

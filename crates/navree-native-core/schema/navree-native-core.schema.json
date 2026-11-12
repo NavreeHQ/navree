@@ -1919,15 +1919,6 @@
           },
           "type": "array"
         },
-        "phase": {
-          "enum": [
-            "starting",
-            "ready",
-            "failed",
-            "upgrade"
-          ],
-          "type": "string"
-        },
         "screens": {
           "additionalProperties": {
             "$ref": "#/$defs/Screen"
@@ -1936,6 +1927,15 @@
         },
         "selected": {
           "type": "integer"
+        },
+        "stage": {
+          "enum": [
+            "starting",
+            "ready",
+            "failed",
+            "upgrade"
+          ],
+          "type": "string"
         },
         "upgrade": {
           "additionalProperties": false,
@@ -1967,7 +1967,7 @@
         }
       },
       "required": [
-        "phase",
+        "stage",
         "destinations",
         "selected",
         "modals",

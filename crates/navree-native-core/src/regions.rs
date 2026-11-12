@@ -241,12 +241,12 @@ impl Core {
             false,
         );
         // A table that is its page's content takes the page's address with it.
-        if let Some(went) = went {
-            if let Some(view) = self.view.screens.get_mut(&id) {
-                if path_of(&view.url) == path_of(went) && view.url != went {
-                    view.url = went.to_owned();
-                }
-            }
+        if let Some(went) = went
+            && let Some(view) = self.view.screens.get_mut(&id)
+            && path_of(&view.url) == path_of(went)
+            && view.url != went
+        {
+            view.url = went.to_owned();
         }
     }
 

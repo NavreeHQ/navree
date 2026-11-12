@@ -35,7 +35,7 @@
         "effects": []
       },
       "check": [
-        {"at":"/phase","is":"upgrade"},
+        {"at":"/stage","is":"upgrade"},
         {"at":"/upgrade/min_app","is":"2.0.0"},
         {"at":"/screens/1/loading","is":false}
       ]

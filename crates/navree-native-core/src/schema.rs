@@ -248,7 +248,7 @@ pub fn schema() -> Value {
         "Width": words(&["compact", "medium", "expanded"]),
         "Message": object(&message),
         "ViewState": object(&[
-            ("phase", words(&["starting", "ready", "failed", "upgrade"])),
+            ("stage", words(&["starting", "ready", "failed", "upgrade"])),
             ("failure?", failure()),
             ("upgrade?", object(&[("min_app", string()), ("url", string())])),
             ("app?", object(&[

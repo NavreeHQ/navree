@@ -61,7 +61,7 @@ pub use config::{CacheConfig, Config, DeepLinks, SignInConfig};
 pub use effect::{Body, Change, Effect, Part, Request, Update};
 pub use event::{Event, FieldValue, FileRef, Response, StreamState, TransportError};
 pub use state::{
-    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal, Notice, Phase,
+    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal, Notice, Stage,
     Query, RegionView, ScreenId, ScreenView, ViewState, Width, Window,
 };
 
@@ -82,13 +82,13 @@ pub struct Core {
 impl Core {
     /// A core for an app built with `config`. Nothing happens until
     /// [`Event::Start`] is sent. A configuration the core can't use (an origin
-    /// that is not `https`) leaves it in [`Phase::Failed`] with
+    /// that is not `https`) leaves it in [`Stage::Failed`] with
     /// [`Failure::Config`], and it does nothing.
     pub fn new(config: Config) -> Self {
         let mut view = ViewState::default();
         let origin = origin::Origin::parse(&config.origin, &config.also, config.loopback_http);
         if origin.is_none() {
-            view.phase = Phase::Failed;
+            view.stage = Stage::Failed;
             view.failure = Some(Failure::Config);
         }
         let inner = state::Inner {
@@ -120,11 +120,11 @@ mod tests {
     fn a_new_core_waits_to_start() {
         let client = Client::new(Platform::Android, FormFactor::Phone);
         let core = Core::new(Config::new("https://shop.example", client.clone()));
-        assert_eq!(core.view().phase, Phase::Starting);
+        assert_eq!(core.view().stage, Stage::Starting);
         assert!(core.view().screens.is_empty());
 
         let mut core = Core::new(Config::new("http://shop.example", client));
-        assert_eq!(core.view().phase, Phase::Failed);
+        assert_eq!(core.view().stage, Stage::Failed);
         assert_eq!(core.view().failure, Some(Failure::Config));
         assert_eq!(core.send(Event::Start), Update::default());
     }

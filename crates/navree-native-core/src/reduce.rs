@@ -23,7 +23,7 @@ use crate::effect::{Body, Change, Effect, Request, Update};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, path_of, route_matches};
 use crate::state::{
-    App, Content, Destination, DeviceCall, Failure, Message, MessageInner, Modal, Notice, Pending, Phase,
+    App, Content, Destination, DeviceCall, Failure, Message, MessageInner, Modal, Notice, Pending, Stage,
     ScreenId, ScreenInner, ScreenView, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
@@ -140,7 +140,7 @@ impl Core {
                 self.inner.user = None;
                 self.view.app = None;
                 self.view.destinations.clear();
-                self.view.phase = Phase::Starting;
+                self.view.stage = Stage::Starting;
                 self.touch(Change::App);
                 self.touch(Change::Nav);
                 self.forget_all();
@@ -171,11 +171,11 @@ impl Core {
             Event::DeviceResult { call, ok, fields } => self.device_result(call, ok, fields),
             Event::SignInDone { url } => self.sign_in_done(url.as_deref()),
             Event::Focused { screen, serial } => {
-                if let Some(view) = self.view.screens.get_mut(&screen) {
-                    if view.focus.as_ref().is_some_and(|focus| focus.serial == serial) {
-                        view.focus = None;
-                        self.touch(Change::Screen { id: screen });
-                    }
+                if let Some(view) = self.view.screens.get_mut(&screen)
+                    && view.focus.as_ref().is_some_and(|focus| focus.serial == serial)
+                {
+                    view.focus = None;
+                    self.touch(Change::Screen { id: screen });
                 }
             }
             Event::OpenUpgrade => {
@@ -385,8 +385,8 @@ impl Core {
         if asking {
             return;
         }
-        if self.view.phase == Phase::Failed {
-            self.view.phase = Phase::Starting;
+        if self.view.stage == Stage::Failed {
+            self.view.stage = Stage::Starting;
             self.view.failure = None;
             self.touch(Change::Nav);
         }
@@ -406,7 +406,7 @@ impl Core {
     fn shell_failed(&mut self, failure: Failure) {
         // A shell that is already drawn stays; only a first load can fail the app.
         if !self.inner.has_shell {
-            self.view.phase = Phase::Failed;
+            self.view.stage = Stage::Failed;
             self.view.failure = Some(failure);
             self.touch(Change::Nav);
         }
@@ -436,7 +436,7 @@ impl Core {
         let value: Value = serde_json::from_str(&response.body).unwrap_or(Value::Null);
         if let Some(upgrade) = value.get("upgrade").cloned().and_then(|upgrade| serde_json::from_value(upgrade).ok()) {
             self.view.upgrade = Some(upgrade);
-            self.view.phase = Phase::Upgrade;
+            self.view.stage = Stage::Upgrade;
             return self.touch(Change::Nav);
         }
         match serde_json::from_value::<Shell>(value) {
@@ -458,11 +458,11 @@ impl Core {
     }
 
     pub(crate) fn shell_from_cache(&mut self, body: &str) {
-        if let Ok(shell) = serde_json::from_str::<Shell>(body) {
-            if shell.navree == MAJOR {
-                self.inner.cache.shell = Some(body.to_owned());
-                self.install(shell);
-            }
+        if let Ok(shell) = serde_json::from_str::<Shell>(body)
+            && shell.navree == MAJOR
+        {
+            self.inner.cache.shell = Some(body.to_owned());
+            self.install(shell);
         }
     }
 
@@ -554,8 +554,8 @@ impl Core {
             theme: shell.theme,
             user: shell.user,
         });
-        if self.view.phase != Phase::Upgrade {
-            self.view.phase = Phase::Ready;
+        if self.view.stage != Stage::Upgrade {
+            self.view.stage = Stage::Ready;
             self.view.failure = None;
         }
         self.touch(Change::App);
@@ -648,7 +648,7 @@ impl Core {
         }
         if let Some(upgrade) = read.envelope.upgrade.take() {
             self.view.upgrade = Some(upgrade);
-            self.view.phase = Phase::Upgrade;
+            self.view.stage = Stage::Upgrade;
             self.touch(Change::Nav);
             return true;
         }
@@ -676,8 +676,8 @@ impl Core {
     // Device calls a reply starts.
 
     fn device(&mut self, call: &Value, screen: Option<ScreenId>) {
-        let spec = call.get("call").unwrap_or(call);
-        let text = |key: &str| spec.get(key).and_then(Value::as_str).map(str::to_owned);
+        let asked = call.get("call").unwrap_or(call);
+        let text = |key: &str| asked.get(key).and_then(Value::as_str).map(str::to_owned);
         let Some(name) = text("name") else {
             return;
         };
@@ -686,7 +686,7 @@ impl Core {
         if !NO_TAP.contains(&name.as_str()) {
             return self.report("device", format!("a reply may not start `{name}`"));
         }
-        let args = spec.get("args").cloned().unwrap_or(Value::Null);
+        let args = asked.get("args").cloned().unwrap_or(Value::Null);
         if name == "haptic" {
             let kind = args.get("kind").and_then(Value::as_str).unwrap_or("success").to_owned();
             return self.effects.push(Effect::Haptic { kind });
@@ -1131,7 +1131,7 @@ impl Core {
 
     /// Makes sure the screen in front exists and is not out of date.
     fn ensure_front(&mut self) {
-        if self.view.phase != Phase::Ready {
+        if self.view.stage != Stage::Ready {
             return;
         }
         match self.front() {

@@ -20,7 +20,7 @@
         "effects": []
       },
       "check": [
-        {"at":"/phase","is":"failed"},
+        {"at":"/stage","is":"failed"},
         {"at":"/failure","is":"offline"}
       ]
     },
@@ -36,7 +36,7 @@
         ]
       },
       "check": [
-        {"at":"/phase","is":"starting"},
+        {"at":"/stage","is":"starting"},
         {"at":"/failure","is":null}
       ]
     },

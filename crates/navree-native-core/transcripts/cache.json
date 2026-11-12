@@ -27,7 +27,7 @@
         ]
       },
       "check": [
-        {"at":"/phase","is":"ready"},
+        {"at":"/stage","is":"ready"},
         {"at":"/destinations/1/label","is":"Orders"},
         {"at":"/screens/1/loading","is":true}
       ]

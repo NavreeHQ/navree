@@ -24,7 +24,7 @@ pub type ScreenId = u64;
 /// How far the app has got in starting.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Phase {
+pub enum Stage {
     /// The shell is not here yet.
     #[default]
     Starting,
@@ -328,7 +328,7 @@ pub struct Message {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ViewState {
     /// How far the app has got in starting.
-    pub phase: Phase,
+    pub stage: Stage,
     /// Why it could not start.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<Failure>,
@@ -399,7 +399,7 @@ pub enum Query {
 
 #[derive(Serialize)]
 struct NavPart<'a> {
-    phase: Phase,
+    stage: Stage,
     #[serde(skip_serializing_if = "Option::is_none")]
     failure: Option<Failure>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -423,7 +423,7 @@ impl ViewState {
             Query::All => json(self),
             Query::App => json(&self.app),
             Query::Nav => json(&NavPart {
-                phase: self.phase,
+                stage: self.stage,
                 failure: self.failure,
                 upgrade: &self.upgrade,
                 destinations: &self.destinations,

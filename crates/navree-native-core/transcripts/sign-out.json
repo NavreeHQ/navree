@@ -215,7 +215,7 @@
         ]
       },
       "check": [
-        {"at":"/phase","is":"starting"},
+        {"at":"/stage","is":"starting"},
         {"at":"/app","is":null},
         {"at":"/destinations","is":[]},
         {"at":"/screens","is":{}}

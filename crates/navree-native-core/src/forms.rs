@@ -237,10 +237,11 @@ impl Core {
                     Node::Table(table) => table.query.as_ref().and_then(|query| query.id.as_deref()),
                     _ => None,
                 };
-                if let Some(handle) = handle {
-                    if found.is_none() && inner.server_ids.get(handle).is_some_and(|server| server.as_deref() == Some(id)) {
-                        found = Some(handle.to_owned());
-                    }
+                if let Some(handle) = handle
+                    && found.is_none()
+                    && inner.server_ids.get(handle).is_some_and(|server| server.as_deref() == Some(id))
+                {
+                    found = Some(handle.to_owned());
                 }
             });
         }
@@ -388,13 +389,13 @@ impl Core {
         let busy = &inner.busy;
         let mut changed = false;
         fn mark(node: &mut Node, busy: &[(String, Action)], changed: &mut bool) {
-            if let Node::Button(button) = node {
-                if matches!(button.action, Some(Action::Request { .. })) {
-                    let waits = button.action.as_ref().is_some_and(|action| busy.iter().any(|(_, sent)| sent == action));
-                    if button.pending != waits {
-                        button.pending = waits;
-                        *changed = true;
-                    }
+            if let Node::Button(button) = node
+                && matches!(button.action, Some(Action::Request { .. }))
+            {
+                let waits = button.action.as_ref().is_some_and(|action| busy.iter().any(|(_, sent)| sent == action));
+                if button.pending != waits {
+                    button.pending = waits;
+                    *changed = true;
                 }
             }
             for slot in crate::tree::slots(node) {

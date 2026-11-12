@@ -320,10 +320,10 @@ mod tests {
 
             let all = text(navree_core_view(core, std::ptr::null(), 0));
             let all: serde_json::Value = serde_json::from_str(&all).unwrap();
-            assert_eq!(all["phase"], "starting");
+            assert_eq!(all["stage"], "starting");
             let query = br#"{"part":"nav"}"#;
             let nav = text(navree_core_view(core, query.as_ptr(), query.len()));
-            assert!(nav.contains(r#""phase":"starting""#), "{nav}");
+            assert!(nav.contains(r#""stage":"starting""#), "{nav}");
             navree_core_free(core);
         }
     }

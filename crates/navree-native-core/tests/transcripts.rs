@@ -152,12 +152,12 @@ fn query_of(change: &Change) -> Query {
     }
 }
 
-const NAV: [&str; 9] = ["phase", "failure", "upgrade", "destinations", "selected", "modals", "front", "can_go_back", "window"];
+const NAV: [&str; 9] = ["stage", "failure", "upgrade", "destinations", "selected", "modals", "front", "can_go_back", "window"];
 
 /// Every part of the view state that differs is named in `changed`.
 fn nothing_changes_unsaid(name: &str, at: usize, before: &Value, after: &Value, update: &Update) {
     let said = |change: &Change| update.changed.contains(change);
-    let place = format!("{name}, step {}", at + 1);
+    let place = format!("{name}, at {}", at + 1);
     if before["app"] != after["app"] {
         assert!(said(&Change::App), "{place}: `app` changed and the update does not say so");
     }
@@ -207,16 +207,16 @@ fn parts_read_alone(name: &str, at: usize, core: &Core, after: &Value, update: &
     for change in &update.changed {
         let alone = core.view().part(&query_of(change));
         if let Some(whole) = part_of(after, change) {
-            assert_eq!(alone, whole, "{name}, step {}: {change:?} read alone differs from the whole", at + 1);
+            assert_eq!(alone, whole, "{name}, at {}: {change:?} read alone differs from the whole", at + 1);
         }
         if *change == Change::Nav {
             for key in NAV {
-                assert_eq!(alone.get(key).unwrap_or(&Value::Null), &after[key], "{name}, step {}: nav.{key}", at + 1);
+                assert_eq!(alone.get(key).unwrap_or(&Value::Null), &after[key], "{name}, at {}: nav.{key}", at + 1);
             }
         }
         if let Change::Rows { count, .. } = change {
             let held = alone.get("nodes").or(alone.get("rows")).and_then(Value::as_array).map(Vec::len);
-            assert_eq!(held, Some(*count), "{name}, step {}: {change:?} read alone", at + 1);
+            assert_eq!(held, Some(*count), "{name}, at {}: {change:?} read alone", at + 1);
         }
     }
 }
@@ -248,31 +248,31 @@ fn replay(name: &str, write: bool, schema: &schema::Schema) -> Result<(), String
             match &mut event {
                 Event::Response(response) => response.body = text,
                 Event::Cache { value, .. } => *value = Some(text),
-                other => return Err(format!("{name}, step {}: `body` is for a response or a cache event, not {other:?}", at + 1)),
+                other => return Err(format!("{name}, at {}: `body` is for a response or a cache event, not {other:?}", at + 1)),
             }
         }
-        schema.check("Event", &serde_json::to_value(&step.send).unwrap()).map_err(|error| format!("{name}, step {}: event: {error}", at + 1))?;
+        schema.check("Event", &serde_json::to_value(&step.send).unwrap()).map_err(|error| format!("{name}, at {}: event: {error}", at + 1))?;
         let before = serde_json::to_value(core.view()).unwrap();
         let update = core.send(event);
         let after = serde_json::to_value(core.view()).unwrap();
-        schema.check("Update", &serde_json::to_value(&update).unwrap()).map_err(|error| format!("{name}, step {}: update: {error}", at + 1))?;
-        schema.check("ViewState", &after).map_err(|error| format!("{name}, step {}: view: {error}", at + 1))?;
+        schema.check("Update", &serde_json::to_value(&update).unwrap()).map_err(|error| format!("{name}, at {}: update: {error}", at + 1))?;
+        schema.check("ViewState", &after).map_err(|error| format!("{name}, at {}: view: {error}", at + 1))?;
         nothing_changes_unsaid(name, at, &before, &after, &update);
         parts_read_alone(name, at, &core, &after, &update);
         // The update and the view state read back as what they were.
         let round: Update = serde_json::from_value(serde_json::to_value(&update).unwrap()).map_err(|error| format!("{name}: {error}"))?;
-        assert_eq!(round, update, "{name}, step {}: the update does not read back", at + 1);
+        assert_eq!(round, update, "{name}, at {}: the update does not read back", at + 1);
         for check in &step.check {
             let held = after.pointer(&check.at).cloned().unwrap_or(Value::Null);
             if held != check.is {
-                failures.push(format!("{name}, step {}: `{}` is {held}, not {}", at + 1, check.at, check.is));
+                failures.push(format!("{name}, at {}: `{}` is {held}, not {}", at + 1, check.at, check.is));
             }
         }
         if write {
             step.expect = Some(update);
         } else if step.expect.as_ref() != Some(&update) {
             failures.push(format!(
-                "{name}, step {}: the update differs\n  expected {}\n  got      {}",
+                "{name}, at {}: the update differs\n  expected {}\n  got      {}",
                 at + 1,
                 step.expect.as_ref().map_or_else(|| "nothing: write it".to_owned(), compact),
                 compact(&update)

@@ -92,17 +92,17 @@ fn tag<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 /// Puts `alt` in place of every node of a kind this build does not know, and
 /// names what has none. `value` stands where a node is expected.
 fn mend_node(value: &mut Value, missing: &mut Vec<String>) {
-    if let Some(kind) = tag(value, "t").map(str::to_owned) {
-        if !known_kind(&kind) {
-            match value.get_mut("alt").map(Value::take) {
-                Some(alt) if alt.is_object() => {
-                    *value = alt;
-                    mend_node(value, missing);
-                }
-                _ => missing.push(format!("kind:{kind}")),
+    if let Some(kind) = tag(value, "t").map(str::to_owned)
+        && !known_kind(&kind)
+    {
+        match value.get_mut("alt").map(Value::take) {
+            Some(alt) if alt.is_object() => {
+                *value = alt;
+                mend_node(value, missing);
             }
-            return;
+            _ => missing.push(format!("kind:{kind}")),
         }
+        return;
     }
     let Some(fields) = value.as_object_mut() else {
         return;
@@ -176,8 +176,7 @@ fn mend(value: &mut Value, missing: &mut Vec<String>, reload: &mut bool, device:
 /// Names what this build can't draw in `node`, and puts `alt` in place of a
 /// plugin view the build does not have.
 fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
-    loop {
-        let Node::Native(view) = node else { break };
+    while let Node::Native(view) = node {
         if config.views.contains(&view.name) {
             break;
         }

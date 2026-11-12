@@ -70,11 +70,11 @@ fn is_open(node: &Node, states: &BTreeMap<String, Vec<State>>) -> bool {
 
 /// Takes the row `id` out of the first table that has it.
 fn remove_row(node: &mut Node, id: &str) -> bool {
-    if let Node::Table(table) = node {
-        if let Some(at) = table.rows.iter().position(|row| row.id.as_deref() == Some(id)) {
-            table.rows.remove(at);
-            return true;
-        }
+    if let Node::Table(table) = node
+        && let Some(at) = table.rows.iter().position(|row| row.id.as_deref() == Some(id))
+    {
+        table.rows.remove(at);
+        return true;
     }
     slots(node).into_iter().any(|slot| match slot {
         Slot::Many(list) => list.iter_mut().any(|child| remove_row(child, id)),
@@ -104,11 +104,11 @@ impl Core {
                 Op::Close { target } => self.set_open(current, &target, false),
                 Op::Focus { target } => self.focus(current, target),
                 Op::Url { href, .. } => {
-                    if let Target::Inside(url) = self.resolve(&href, current) {
-                        if let Some(view) = self.view.screens.get_mut(&current) {
-                            view.url = url;
-                            self.touch_screen(current);
-                        }
+                    if let Target::Inside(url) = self.resolve(&href, current)
+                        && let Some(view) = self.view.screens.get_mut(&current)
+                    {
+                        view.url = url;
+                        self.touch_screen(current);
                     }
                 }
                 Op::Navigate { href } => {

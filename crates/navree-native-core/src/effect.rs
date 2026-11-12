@@ -194,7 +194,7 @@ pub enum Effect {
 pub enum Change {
     /// The app's name, theme or user.
     App,
-    /// Anything about where the person is: the phase, the destinations and
+    /// Anything about where the person is: the stage, the destinations and
     /// their stacks, what is presented over them, the screen in front, the window.
     Nav,
     /// Everything about one screen. A screen no stack holds any more is gone.

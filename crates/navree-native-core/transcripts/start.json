@@ -11,7 +11,7 @@
         ]
       },
       "check": [
-        {"at":"/phase","is":"starting"},
+        {"at":"/stage","is":"starting"},
         {"at":"/destinations","is":[]}
       ]
     },
@@ -38,7 +38,7 @@
         ]
       },
       "check": [
-        {"at":"/phase","is":"ready"},
+        {"at":"/stage","is":"ready"},
         {"at":"/app/name","is":"Charkha Supply Co."},
         {"at":"/app/user/name","is":"Ravneet Kaur"},
         {"at":"/destinations/0/label","is":"Dashboard"},
