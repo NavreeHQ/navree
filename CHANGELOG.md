@@ -17,17 +17,31 @@ every `@navree/*` package carries the same version.
   (`ts_stat`, `query_to_xml`); and on a PostgreSQL server with `standard_conforming_strings` off,
   through a backslash before a quote. The database engine now holds the line. On SQLite the file
   is opened read-only, SQLite itself prepares the text and refuses anything after the first
-  statement or anything that writes, and an authorizer allows only reading (no `PRAGMA`,
-  `ATTACH`, `VACUUM` or transactions). On PostgreSQL each query is a single prepared statement in
-  a read-only transaction, in a session that pins `standard_conforming_strings = on` and checks
-  it. The statement guard also refuses those literals, types, parameters and functions, sends a
+  statement, refuses a statement it says writes (which covers `VACUUM`), and an authorizer allows
+  only reading (no `PRAGMA` but the `data_version` FTS5 reads, no `ATTACH`, no transactions). On
+  PostgreSQL each query is a single prepared statement in a read-only transaction, in a session
+  that pins `standard_conforming_strings = on`, checks it, and pins it again inside the
+  transaction (behind a pooler in transaction mode another client's `SET` could otherwise reach
+  it). The statement guard also refuses those literals, types, parameters and functions, sends a
   statement only when it reads back unchanged, and refuses statements over 64 KB or nested over
   1,000 expressions deep, which could crash Navigator.
 - On PostgreSQL, `query_database` and Lighthouse's tools now refuse to run as a superuser, as a
   role that can become one (a member of a superuser role, or a superuser session with a lesser
   `role`), or as a member of `pg_read_server_files`, `pg_write_server_files`,
   `pg_execute_server_program`, `pg_signal_backend` or `pg_signal_autovacuum_worker`, since such a
-  role reaches the server's files, programs and other sessions from a query.
+  role reaches the server's files, programs and other sessions from a query. They also refuse a
+  role that may execute a `SECURITY DEFINER` function, a function in an untrusted language
+  (`plpython3u`, `plperlu`, `pltclu`, or C outside an extension), or a function of an extension
+  that reaches files, programs or the network (`dblink`, `postgres_fdw`, `file_fdw`, `adminpack`,
+  `http`, `pg_net`, `pg_background`, `pg_cron`); the refusal names the functions. What an
+  ordinary role can still reach is the C code of the other extensions installed in the database
+  (PostGIS, pgcrypto, TimescaleDB, pgvector), and any extension Navigator doesn't know that adds
+  a function reaching the network or a file.
+- A query could make Navigator hold gigabytes: `printf('%.*c', 400000000, 'x')` or a recursive
+  `zeroblob(..)` on SQLite, `repeat('x', 900000000)` on PostgreSQL. SQLite now refuses to make a
+  string or blob over 1 MB, PostgreSQL cuts each value to 4 KB before sending it (its own work
+  ends with the 5 second timeout), every value over 4 KB comes back cut and ending with
+  `… [cut]`, and an answer stops at about 1 MB, with `truncated` set.
 - `describe_schema` on PostgreSQL could list every table instead of the one asked for, given a
   table name with a backslash and a quote on a server with `standard_conforming_strings` off.
 - The pgvector store wrote the field name of a comparison filter (`Filter::gt`, `gte`, `lt`,
@@ -42,24 +56,34 @@ every `@navree/*` package carries the same version.
 
 ### Added
 
+- `navree dock up` keeps a read-only role, `navree_reader`, in the PostgreSQL database, with
+  the service's password: it may log in, use `public` and read its tables, now and later.
+  Navigator reads the Dock database through it.
 - `NAVREE_MCP_DATABASE_URL`: the database `navree mcp` reads instead of the app's
   `database.url`, such as the same database through a read-only role.
-- `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`: lets `navree mcp` query as a privileged
+- `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`: lets `navree mcp` query as a refused
   PostgreSQL role, with a warning each time it starts.
 - `navree_navigator::DatabaseOptions`, `Navigator::with_database` and `run_stdio_with`, which
   carry those two settings for code that embeds Navigator.
 
 ### Changed
 
-- Upgrading: on PostgreSQL, `navree mcp`'s `query_database` and Lighthouse's tools refuse a
-  privileged role, and the development database usually connects as `postgres`, a superuser.
-  Create a read-only role (the refusal prints the SQL; the Navigator docs have it too) and set
+- Upgrading with Dock: run `navree dock up` once. It creates `navree_reader` in your running
+  database (nothing is restarted), and from then on Navigator's `query_database`,
+  `describe_schema` and Lighthouse's tools read the Dock database as that role. Until you do,
+  they fail to connect and say that `navree dock up` creates the role. Dock's own user,
+  `navree`, is a superuser, which `query_database` now refuses.
+- Upgrading without Dock: on PostgreSQL, `navree mcp`'s `query_database` and Lighthouse's tools
+  refuse a privileged role, and a development database often connects as a superuser. Create a
+  read-only role (the refusal prints the SQL; the Navigator docs have it too) and set
   `NAVREE_MCP_DATABASE_URL` to its URL in your agent's MCP configuration, or set
-  `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` to keep querying as before. A plain role can
-  still call any `SECURITY DEFINER` function that `PUBLIC` may execute, with its owner's
-  privileges; check the ones your database defines. `describe_schema` is not affected.
+  `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` to keep querying as before. A role that may
+  execute `SECURITY DEFINER`, untrusted-language or network and file extension functions is
+  refused too: revoke `EXECUTE` on the functions the refusal names. `describe_schema` is not
+  affected.
 - On SQLite, `query_database` no longer reads pragma table functions (`pragma_table_info`):
-  `describe_schema` answers what they would.
+  `describe_schema` answers what they would. R*Tree tables can't be queried through
+  `query_database` either: opening one prepares a write. FTS5 tables can.
 - Navigator's docs and tool descriptions say that hiding columns with secret-looking names in
   query results is a convenience, not a protection: a query can rename or wrap a column.
 
