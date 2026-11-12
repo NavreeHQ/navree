@@ -210,7 +210,7 @@ impl From<Href> for AttrValue {
 /// What a page must load for the elements in it: a small set of bits, so
 /// finding out allocates nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Uses(pub(crate) u32);
+pub struct Uses(pub(crate) u64);
 
 impl Uses {
     /// Nothing: the page ships no script.
@@ -298,6 +298,15 @@ impl Uses {
     /// The conversation module: Enter sends from a composer, and a conversation the
     /// reader is at the end of stays there while an answer grows.
     pub const GENUI: Self = Self(1 << 24);
+    /// The chart paint stylesheet: no script, only the styles that chart marks share
+    /// beyond the plain ones: the colours of gradients, glow, draw and grow motion (off
+    /// when the reader asks for less motion), the points and columns of a sparkline, and
+    /// a progress bar drawn as a meter.
+    pub const CHART_PAINT: Self = Self(1 << 32);
+    /// The count-up module: a number that counts up to its value when it comes into
+    /// view. The value is written in the page, so it reads the same with no script and
+    /// when the reader asks for less motion.
+    pub const COUNT_UP: Self = Self(1 << 33);
 
     /// Both sets together.
     #[must_use]
