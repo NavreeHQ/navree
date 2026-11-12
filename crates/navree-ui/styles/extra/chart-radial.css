@@ -16,10 +16,11 @@
 :is([data-slot=radial-track],[data-slot=radial-arc],[data-slot=radial-lap],[data-slot=radial-halo]){fill:none}
 [data-slot=radial-track]{stroke:color-mix(in oklab,var(--fg) 9%,transparent)}
 [data-slot=radial-track][data-track=tint]{stroke:color-mix(in oklab,var(--c) 18%,transparent)}
+[data-slot=radial-zone]{fill:none;stroke:light-dark(color-mix(in oklab,var(--c) 34%,transparent),color-mix(in oklab,var(--c) 44%,transparent))}
 [data-slot=radial-arc],[data-slot=radial-lap]{stroke-linecap:round}
 [data-slot=radial-arc]:not([stroke]){stroke:var(--c)}
-[data-slot=radial-lap]{stroke:color-mix(in oklab,var(--c) 60%,var(--fg));filter:drop-shadow(0 0 2.5px color-mix(in oklab,var(--surface,var(--ink-0)) 85%,transparent))}
-[data-slot=chart]:is([data-kind=ring],[data-kind=gauge]){container-type:normal;width:max-content;max-width:100%;margin-inline:auto}
+[data-slot=radial-lap]{stroke:var(--c-vivid);filter:drop-shadow(0 0 2.5px color-mix(in oklab,var(--surface,var(--ink-0)) 85%,transparent))}
+[data-slot=chart]:is([data-kind=ring],[data-kind=gauge],[data-kind=rings]){container-type:normal;width:max-content;max-width:100%;margin-inline:auto}
 :is([data-kind=ring],[data-kind=gauge],[data-kind=rings]) [data-slot=chart-state][data-state=loading]>[data-slot=skeleton]{place-self:center;height:100%;aspect-ratio:1;border-radius:50%}
 [data-slot=radial-halo]{stroke-opacity:.35}
 [data-slot=radial-halo]:not([stroke]){stroke:var(--c)}
@@ -47,6 +48,7 @@
 [data-kind=rings] [data-glow]{--g:light-dark(color-mix(in oklab,var(--c) 22%,transparent),color-mix(in oklab,var(--c) 38%,transparent));filter:drop-shadow(0 0 1.5px var(--g)) drop-shadow(0 1px 3px var(--g))}
 [data-slot=radial-row]{display:flex;align-items:baseline;gap:.2em;line-height:1.25;font-size:max(9px,4.6cqi);font-variant-numeric:tabular-nums;white-space:nowrap;& strong{font-size:1.3em;font-weight:700;color:color-mix(in oklab,var(--c) 78%,var(--fg))}& span{color:var(--fg-3)}}
 [data-rows="2"] [data-slot=radial-row]{font-size:max(10px,6cqi)}
+:is([data-rows="5"],[data-rows="6"]) [data-slot=radial-row]{font-size:max(8px,3.8cqi)}
 @container (width<150px){[data-slot=radial-row]{display:none}}
 [data-slot=radial-split]{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:1rem 1.75rem;& > [data-slot=radial]{margin:0}}
 [data-slot=radial-legend]{display:flex;flex-direction:column;gap:.5rem;min-width:12rem;margin:0;padding:0;list-style:none;font-size:13px;& li{display:grid;grid-template-columns:auto 1fr auto;column-gap:.5rem;align-items:baseline}}
@@ -64,6 +66,8 @@
 [data-kind=clock] [data-slot=radial-center] > [data-slot=radial-icon]{width:20cqi;height:20cqi}
 [data-slot=clock-wedge]{fill:var(--c);stroke:var(--c);stroke-opacity:.45;stroke-width:.5px;transition:fill .1s}
 [data-slot=clock-wedge][data-active]{fill:color-mix(in oklab,var(--c) 70%,var(--fg));stroke:var(--fg);stroke-opacity:1;stroke-width:1.5px}
+[data-slot=clock-band]{fill:var(--c);fill-opacity:.72;transition:fill-opacity .1s}
+[data-slot=clock-band][data-active]{fill-opacity:1}
 [data-slot=clock-now]{fill:none;stroke:var(--fg);stroke-opacity:.75;stroke-width:1.5px;stroke-linejoin:round;pointer-events:none}
 [data-slot=clock-anchor]{fill:none;stroke:none;pointer-events:none}
 [data-slot=clock-ring]{fill:none;stroke:var(--line-3);stroke-width:1px;stroke-dasharray:2 4}
@@ -72,4 +76,4 @@
 [data-slot=clock-moment]{cursor:default;& circle{fill:color-mix(in oklab,var(--c) 22%,var(--surface,var(--ink-0)));stroke:var(--c);stroke-width:1.5px}& [data-slot=radial-icon]{stroke:color-mix(in oklab,var(--c) 78%,var(--fg))}}
 @keyframes ui-pulse{50%{stroke-opacity:.2}}
 @media (prefers-reduced-motion:no-preference){[data-slot=clock-now][data-pulse]{animation:ui-pulse 2s ease-in-out infinite}}
-@media (forced-colors:active){[data-slot=radial-arc],[data-slot=radial-lap]{stroke:CanvasText}[data-slot=radial-track]{stroke:GrayText}[data-slot=clock-wedge]{fill:CanvasText}[data-slot=radial-center]{color:CanvasText}}
+@media (forced-colors:active){[data-slot=radial-arc],[data-slot=radial-lap]{stroke:CanvasText}[data-slot=radial-track],[data-slot=radial-zone]{stroke:GrayText}[data-slot=clock-wedge],[data-slot=clock-band]{fill:CanvasText}[data-slot=radial-center]{color:CanvasText}}

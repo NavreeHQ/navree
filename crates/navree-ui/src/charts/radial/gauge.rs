@@ -15,8 +15,14 @@ use crate::node::Node;
 /// band, a glow, the value in the middle with its label, motion, a size per screen
 /// width. It does not lap: a value past the top fills the arc.
 ///
+/// [Zones](Self::zone) lie on its track, each its stretch of the scale in its own
+/// colour, and the arc runs down their middle, half as thick, so every zone shows from
+/// end to end; the arc wears the colour of the zone its value is in. A legend names the
+/// zones, the summary and the table say which one the value is in, and the table's note
+/// gives each zone's ends.
+///
 /// ```
-/// use navree_ui::charts::{Gauge, Gradient, Ink, Motion};
+/// use navree_ui::charts::{Gauge, Gradient, Ink, Motion, Zone};
 ///
 /// let relaxation = Gauge::new("Relaxation", 73)
 ///     .label("Recovery index")
@@ -29,7 +35,16 @@ use crate::node::Node;
 ///     .max(39)
 ///     .unit("°C")
 ///     .sweep(180.0);
+/// // This week's training load against the last four, on its zones.
+/// let load = Gauge::new("Load ratio", 1.12)
+///     .max(2)
+///     .format(navree_ui::charts::NumberFormat::decimals(2).fixed())
+///     .zone(Zone::new(0, 0.8).label("Undertraining").ink(Ink::slot(7)))
+///     .zone(Zone::new(0.8, 1.3).label("Optimal").ink(Ink::slot(3)))
+///     .zone(Zone::new(1.3, 1.5).label("Overreaching").ink(Ink::slot(4)))
+///     .zone(Zone::new(1.5, 2).label("Overuse").ink(Ink::slot(8)));
 /// # let _ = (navree_ui::render(&relaxation.into()), navree_ui::render(&temperature.into()));
+/// # let _ = navree_ui::render(&load.into());
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -68,6 +83,15 @@ impl Gauge {
         if degrees.is_finite() {
             self.one.sweep = degrees.clamp(90.0, 360.0);
         }
+        self
+    }
+
+    /// Adds a zone of the scale, drawn on the track in its colour: from and to in the
+    /// value's units, with a label for the legend, the summary and the table. A zone
+    /// with no ink takes the chart colours in turn. Where zones overlap, the one added
+    /// last is drawn over and names the value.
+    pub fn zone(mut self, zone: super::super::Zone) -> Self {
+        self.one.zones.push(zone);
         self
     }
 
