@@ -4,6 +4,9 @@
 //! | Page | Shows |
 //! |---|---|
 //! | `/app-blocks` | every case; `?case=<name>` draws one alone |
+//! | `/app-blocks/shell` | a shell of its own: the links in the top bar with the app's mark (an [`AppImage`]), a day pager in the middle of the bar, one theme (so the menu has modes only) and a title template |
+//! | `/app-blocks/fragment/trends` | a region's answer that holds lazy tabs |
+//! | `/app-blocks/fragment/trends/{range}` | a lazy tab's panel |
 //!
 //! The people and places are invented: Punjabi and North Indian names and Indian cities.
 
@@ -14,6 +17,7 @@ use navree::http::extract::Query;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::charts::*;
+use navree::ui::theme::{Appearance, Mode, Theme};
 use navree::ui::*;
 use serde::Deserialize;
 
@@ -25,6 +29,9 @@ pub static BRAND: AppSheet = AppSheet::new(
     include_bytes!("../assets/brand.css"),
     8 * 1024,
 );
+
+/// The app's own mark, compiled in and served by the toolkit at a content-hash address.
+pub static MARK: AppImage = AppImage::new("proof-mark", include_bytes!("../assets/mark.svg"), 4 * 1024);
 
 /// The app's own typeface: the toolkit's Geist file under another family name, so the page
 /// shows a font that comes from the app's route and not from the toolkit's.
@@ -297,6 +304,70 @@ fn cases(tab: Option<&str>) -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "copy-field",
+            Stack::gap(4)
+                .children((
+                    CopyField::new("invite-link", "Invite link", "https://kesar.example/join/8k2m-q4rt")
+                        .help("Anyone with the link can ask to join your family plan."),
+                    CopyField::new("copy-hostile", NASTY, NASTY).labels("Copy it", "Done"),
+                ))
+                .into(),
+        ),
+        (
+            "ratio-grid",
+            Stack::gap(4)
+                .children((
+                    Grid::ratio([7, 5]).gap(4).children((
+                        Card::new().title("Trends").body(Text::new("Seven parts of twelve: the wide column.")),
+                        Card::new().title("Notes").body(Text::new("Five parts of twelve.")),
+                    )),
+                    Grid::ratio([1, 2, 1]).gap(4).children((
+                        Card::new().body(Text::new("One")),
+                        Card::new().body(Text::new("Two parts")),
+                        Card::new().body(Text::new("One")),
+                    )),
+                ))
+                .into(),
+        ),
+        (
+            "dock-phones",
+            Stack::gap(3)
+                .children((
+                    Text::muted("This dock shows on phones only: from 768 px the top bar has the sections."),
+                    Dock::new("Sections on a phone")
+                        .below(Screen::Md)
+                        .item(DockItem::new("Sleep", "/app-blocks?case=dock-phones").icon(icons::MOON))
+                        .item(
+                            DockItem::new("Home", "/app-blocks?case=dock-phones")
+                                .icon(icons::HOUSE)
+                                .prominent()
+                                .current(),
+                        )
+                        .item(DockItem::new("Mind", "/app-blocks?case=dock-phones").icon(icons::BRAIN)),
+                ))
+                .into(),
+        ),
+        (
+            "app-image",
+            Row::gap(4)
+                .children((
+                    el("img")
+                        .attr("src", MARK.url())
+                        .attr("alt", "The Kesar mark")
+                        .attr("width", 48_i64)
+                        .attr("height", 48_i64),
+                    Picture::new(&MARK, "The Kesar mark, larger", 96, 96),
+                ))
+                .into(),
+        ),
+        (
+            "nested-lazy",
+            Region::new("nested-region")
+                .src("/app-blocks/fragment/trends")
+                .lazy()
+                .into(),
+        ),
+        (
             "brand",
             el("div")
                 .attr("class", "proof-brand")
@@ -316,6 +387,66 @@ fn scores() -> Rings {
         .ring(RingValue::new("Sleep", 78))
         .size(28)
         .inline()
+}
+
+/// A shell of its own, with its links in the top bar, the app's mark, one theme and a title
+/// template.
+fn own_shell() -> Shell {
+    Shell::new("Kesar")
+        .logo(&MARK)
+        .layout(ShellLayout::Header)
+        .themes([Theme::OCEAN])
+        .appearance(Appearance::new(Theme::OCEAN, Mode::Dark))
+        .theme_menu()
+        .title_template("{} · Kesar")
+        .group(
+            NavGroup::plain()
+                .item(NavItem::new("Today", "/app-blocks/shell").icon(icons::HOUSE))
+                .item(NavItem::new("Sleep", "/app-blocks?case=dock").icon(icons::MOON))
+                .item(NavItem::new("Heart", "/app-blocks?case=tiles").icon(icons::HEART_PULSE)),
+        )
+}
+
+fn shell_page(headers: &http::HeaderMap, query: Option<&str>) -> AppPage {
+    let path = match query {
+        Some(query) => format!("/app-blocks/shell?{query}"),
+        None => "/app-blocks/shell".to_owned(),
+    };
+    own_shell()
+        .for_request(path, headers)
+        .page("Good evening, Simran")
+        .document_title("Today")
+        .topbar(
+            DayPager::new("shell-day", "Today")
+                .previous("/app-blocks/shell?date=2026-11-11")
+                .scores(scores()),
+        )
+        .body((
+            Text::muted("The day pager stands in the middle of the bar; the mark stays on phones."),
+            Grid::ratio([7, 5]).gap(4).children((
+                Card::new().title("Sleep").body(Text::new("7 h 20 min, 88 points.")),
+                Card::new().title("Heart").body(Text::new("Resting 58 bpm.")),
+            )),
+            Dock::new("Sections")
+                .below(Screen::Md)
+                .item(DockItem::new("Today", "/app-blocks/shell").icon(icons::HOUSE).current())
+                .item(DockItem::new("Sleep", "/app-blocks?case=dock").icon(icons::MOON)),
+        ))
+}
+
+/// A region's answer: a card with tabs that load their panels when shown, drawn as a whole
+/// view, as an app answers a fragment.
+fn trends_fragment() -> View {
+    View::new("Trends").body(
+        Tabs::new("trend-range", "Nights to show")
+            .variant(TabsVariant::Segmented)
+            .tab(
+                Tab::new("7", "7 nights")
+                    .panel(Text::new("Seven nights: 7 h 12 min on average."))
+                    .lazy("/app-blocks/fragment/trends/7"),
+            )
+            .tab(Tab::new("30", "30 nights").lazy("/app-blocks/fragment/trends/30")),
+    )
 }
 
 fn gallery(shell: &AppShell, case: &Case) -> AppPage {
@@ -360,6 +491,29 @@ impl Controller for AppBlockPages {
                 Method::GET,
                 "!/app-blocks",
                 |shell: AppShell, Query(case): Query<Case>| async move { gallery(&shell, &case) },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/app-blocks/shell",
+                |parts: http::request::Parts| async move {
+                    shell_page(&parts.headers, parts.uri.query())
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/app-blocks/fragment/trends",
+                || async { trends_fragment() },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/app-blocks/fragment/trends/{range}",
+                |navree::http::extract::Path(range): navree::http::extract::Path<String>| async move {
+                    let nights = if range == "30" { "Thirty nights: 7 h 4 min on average." } else { "Seven nights: 7 h 12 min on average." };
+                    View::new("Trends").body(Text::new(nights))
+                },
             )
             .public(),
         ]

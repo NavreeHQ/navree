@@ -2,7 +2,8 @@
 // and light at 390, 768 and 1440 px with axe clean; their heads read by the rules a search
 // engine and an answer engine apply; the mobile menu, the pricing switch, the questions and
 // the theme toggle by pointer, by keyboard and with JavaScript off; the skip link; the
-// responsive picture; no layout shift; and the sign-up form checked on the server.
+// responsive picture, its light and dark versions by the page's mode and the device's, below the
+// phone's camera; labels in the text face; no layout shift; and the sign-up form checked on the server.
 // Run with the proof app serving:
 //
 //   PORT=8147 cargo run --release -p ui-proof -- serve
@@ -448,6 +449,64 @@ for (const name of NAMES) {
         }
         await page.done();
       }
+    });
+
+    // ---- The picture in light and dark, under the camera ----------------------------------------
+    test("the phone's screenshot follows the page's mode, chosen or the device's, and starts below the camera", async () => {
+      const loaded = async (page) => {
+        const img = page.locator("[data-slot=phone-view] img");
+        await img.scrollIntoViewIfNeeded();
+        await page.waitForFunction(() => document.querySelector("[data-slot=phone-view] img").complete);
+        return img.evaluate((i) => i.currentSrc);
+      };
+      // The reader chose a mode on the site: that version alone is in the page.
+      for (const mode of ["light", "dark"]) {
+        const page = await open("/site", { width: 1440, mode });
+        const src = await loaded(page);
+        assert.equal(/sleep-light-/.test(src), mode === "light", `${mode}: ${src}`);
+        const other = mode === "light" ? "/site/img/sleep-780" : "/site/img/sleep-light-";
+        assert.equal(await page.locator(`[data-slot=phone-view] [srcset*="${other}"]`).count(), 0, `${mode}: only one version is drawn`);
+        await shot(page, `phone-picture-${mode}`);
+        await page.done();
+      }
+      // The site's own mode is the device's: the device picks, with no script.
+      for (const scheme of ["light", "dark"]) {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, javaScriptEnabled: false });
+        contexts.push(context);
+        const page = await context.newPage();
+        await page.goto(`${BASE}/site`, { waitUntil: "networkidle" });
+        assert.equal(await page.locator("html").getAttribute("data-mode"), "system");
+        const src = await loaded(page);
+        assert.equal(/sleep-light-/.test(src), scheme === "light", `system on a ${scheme} device: ${src}`);
+      }
+      // The camera stands over the strip above the screenshot, never over the screenshot.
+      const page = await open("/site", { width: 1440, mode: "light" });
+      await loaded(page);
+      const { camera, picture } = await page.evaluate(() => {
+        const img = document.querySelector("[data-slot=phone-view] img");
+        const screen = img.closest("[data-slot=phone-screen]");
+        return {
+          camera: screen.querySelector("[data-slot=phone-camera]").getBoundingClientRect().bottom,
+          picture: img.getBoundingClientRect().top,
+        };
+      });
+      assert.ok(picture >= camera, `the picture starts at ${picture}, below the camera's ${camera}`);
+      await page.done();
+    });
+
+    // ---- Labels in the text face ---------------------------------------------------------------
+    test("an eyebrow and the legal page's date are set in the site's text face, not its code face", async () => {
+      const page = await open("/site/privacy", { width: 1440 });
+      const faces = await page.evaluate(() => ({
+        text: getComputedStyle(document.body).fontFamily,
+        eyebrow: getComputedStyle(document.querySelector("[data-slot=eyebrow]") || document.body).fontFamily,
+        updated: getComputedStyle(document.querySelector("[data-slot=legal-updated]")).fontFamily,
+        mono: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim(),
+      }));
+      assert.equal(faces.updated, faces.text, JSON.stringify(faces));
+      assert.equal(faces.eyebrow, faces.text, JSON.stringify(faces));
+      assert.notEqual(faces.updated, faces.mono);
+      await page.done();
     });
 
     // ---- The sign-up form ----------------------------------------------------------------------

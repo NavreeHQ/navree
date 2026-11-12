@@ -172,6 +172,7 @@ impl Module for ProofModule {
         // The app's own stylesheet and typeface, served by the toolkit.
         m.contribute(app_blocks::BRAND);
         m.contribute(app_blocks::FONT);
+        m.contribute(app_blocks::MARK);
     }
 }
 
