@@ -127,7 +127,7 @@ fn link_request_page(
             .children((
                 sent,
                 refused,
-                Node::from(form.submit("Send the link")),
+                Node::from(form.one_column().submit("Send the link")),
                 link("Sign in with a password", &paths.sign_in),
             ))
             .into(),
@@ -156,7 +156,7 @@ fn link_confirm_page(
             .children((
                 expired,
                 refused,
-                Node::from(form.submit("Sign in")),
+                Node::from(form.one_column().submit("Sign in")),
                 link("Ask for a new link", &paths.magic_link),
             ))
             .into(),
@@ -176,7 +176,7 @@ fn code_request_page(
         Stack::gap(4)
             .children((
                 refused,
-                Node::from(form.submit("Send the code")),
+                Node::from(form.one_column().submit("Send the code")),
                 link("Sign in with a password", &paths.sign_in),
             ))
             .into(),
@@ -196,7 +196,7 @@ fn code_page(paths: &Paths, form: FormView<CodeForm>, sent: bool) -> navree_ui::
         Stack::gap(4)
             .children((
                 sent,
-                Node::from(form.submit("Sign in")),
+                Node::from(form.one_column().submit("Sign in")),
                 link("Ask for a new code", &paths.code),
             ))
             .into(),

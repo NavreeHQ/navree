@@ -78,7 +78,7 @@ fn status_page(paths: &Paths, enabled: bool, form: FormView<SetupStartForm>) -> 
         "Signing in will ask for a code from an authenticator app on your phone, as well as your password.",
         Stack::gap(4)
             .children((
-                Node::from(form.submit("Set it up")),
+                Node::from(form.one_column().submit("Set it up")),
                 link("Not now", &paths.home),
             ))
             .into(),
@@ -127,7 +127,7 @@ fn setup_page(
                     .child(SafeHtml::trusted(setup.qr_svg.clone())),
                 Text::muted("Or type this key into the app:"),
                 Text::code(setup.secret.clone()),
-                Node::from(form.submit("Turn it on")),
+                Node::from(form.one_column().submit("Turn it on")),
             ))
             .into(),
     )

@@ -716,7 +716,7 @@ fn sign_in_page(
         Stack::gap(4)
             .children((
                 notice,
-                Node::from(form.submit("Sign in")),
+                Node::from(form.one_column().submit("Sign in")),
                 Node::from(Stack::gap(2).children(others)),
             ))
             .into(),
@@ -757,7 +757,7 @@ fn sign_up_page(paths: &Paths, form: FormView<SignUpForm>, next: Option<&str>) -
         "Your name, your email address and a password.",
         Stack::gap(4)
             .children((
-                Node::from(form.submit("Create the account")),
+                Node::from(form.one_column().submit("Create the account")),
                 link(
                     "Already have an account? Sign in",
                     paths.with_next(&paths.sign_in, next).as_str(),
@@ -774,7 +774,7 @@ fn two_factor_page(paths: &Paths, form: FormView<TwoFactorForm>) -> View {
         "Enter the code your authenticator app shows now, or one of your recovery codes.",
         Stack::gap(4)
             .children((
-                Node::from(form.submit("Continue")),
+                Node::from(form.one_column().submit("Continue")),
                 link("Sign in as someone else", &paths.sign_in),
             ))
             .into(),
@@ -794,7 +794,7 @@ fn forgot_page(paths: &Paths, form: FormView<ForgotForm>, sent: bool) -> View {
         Stack::gap(4)
             .children((
                 sent,
-                Node::from(form.submit("Send the link")),
+                Node::from(form.one_column().submit("Send the link")),
                 link("Back to sign in", &paths.sign_in),
             ))
             .into(),
@@ -816,7 +816,7 @@ fn reset_page(paths: &Paths, form: FormView<ResetForm>, refused: bool) -> View {
         Stack::gap(4)
             .children((
                 refused,
-                Node::from(form.submit("Change the password")),
+                Node::from(form.one_column().submit("Change the password")),
                 link("Ask for a new link", &paths.forgot),
             ))
             .into(),
@@ -1572,7 +1572,13 @@ impl PagesController {
                         // The new account signs in as the sign-in page does: a policy
                         // may still ask for a second factor first.
                         match service
-                            .sign_in_session(&session, &input.email, &input.password, false, &meta)
+                            .sign_in_session(
+                                &session,
+                                input.email.trim(),
+                                &input.password,
+                                false,
+                                &meta,
+                            )
                             .await
                         {
                             Ok(SessionSignIn::SignedIn(_)) => {

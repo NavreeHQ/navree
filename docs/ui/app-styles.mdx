@@ -48,8 +48,31 @@ Each file is named by its content hash and served from the toolkit's mount, unde
 | A stylesheet | `/_navree/ui/app/brand-3f9a1c07b2de.css` |
 | A font | `/_navree/ui/app/display-81d0a6c2e4f7.woff2` |
 | A font's `@font-face` rule | `/_navree/ui/app/display.face-5b7e22a91c40.css` |
+| A picture | `/_navree/ui/app/mark-7c1e90d4a2b6.svg` |
 
 They are cached for good (`immutable`) under the current hash, and an older hash still gets the file, uncached, so a page that stays open across a deploy keeps working. A stylesheet comes with its brotli form. A name that the app didn't contribute is a 404, and a path can't reach out of the mount.
+
+## Pictures
+
+The app's mark, its logo or an illustration every page shows is an `AppImage`: an SVG, PNG, WebP, JPEG, AVIF, GIF or ICO file compiled in, told apart by its first bytes, and contributed like a sheet. It is served under its hash and cached for good, with a content security policy that runs nothing and loads nothing (`default-src 'none'; style-src 'unsafe-inline'; sandbox`), so a picture opened on its own is as inert as one in an `<img>`. An SVG file that holds a script, a `<foreignObject>` or a `javascript:` address fails the build.
+
+```rust
+use navree::ui::*;
+
+/// The mark, compiled in: an app writes `include_bytes!("../assets/mark.svg")`.
+static MARK: AppImage = AppImage::new(
+    "mark",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15"/></svg>"#,
+    8 * 1024,
+);
+
+// In one of the app's modules: m.contribute(MARK);
+fn branded() -> (Shell, Picture) {
+    let shell = Shell::new("Kesar").logo(&MARK);
+    let hero = Picture::new(&MARK, "The Kesar mark", 96, 96);
+    (shell, hero)
+}
+```
 
 ## Stylesheets
 

@@ -1,5 +1,6 @@
 //! An app's own stylesheet and brand theme, the figure tile, the info tip, chart skeletons,
-//! the breathing guide, the dock, the day pager and a view switcher.
+//! the breathing guide, the dock, the day pager, a view switcher, the copy field and the page
+//! of a sign-in form.
 //!
 //! The people and places are invented: Punjabi and North Indian names, Indian cities, rupees in
 //! lakh grouping and IST.
@@ -102,6 +103,34 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(420)
         .height(300),
+        // Copy field
+        single!("copy-field", "thumb", "A copy field", copy_field_thumb)
+            .start()
+            .width(360)
+            .height(120),
+        single!(
+            "copy-field",
+            "default",
+            "An invite link",
+            copy_field_default
+        )
+        .start()
+        .width(520)
+        .height(160),
+        // Auth layout
+        single!("auth-layout", "thumb", "A sign-in page", auth_layout_thumb)
+            .fill()
+            .width(1100)
+            .height(640),
+        single!(
+            "auth-layout",
+            "default",
+            "A sign-in page with the app's panel",
+            auth_layout_default
+        )
+        .fill()
+        .width(1100)
+        .height(640),
         // A view switcher
         single!("tabs", "view-switcher", "A view switcher", view_switcher)
             .start()
@@ -482,4 +511,73 @@ fn view_switcher() -> Tabs {
             ),
         )
         .active("radial")
+}
+
+// ---------------------------------------------------------------------------------------
+// Copy field
+// ---------------------------------------------------------------------------------------
+
+fn copy_field_thumb() -> CopyField {
+    CopyField::new(
+        "thumb-invite",
+        "Invite link",
+        "https://kesar.example/join/8k2m",
+    )
+}
+
+fn copy_field_default() -> CopyField {
+    CopyField::new(
+        "invite",
+        "Invite link",
+        "https://kesar.example/join/8k2m-q4rt",
+    )
+    .help("Anyone with the link can ask to join your family plan.")
+}
+
+// ---------------------------------------------------------------------------------------
+// Auth layout
+// ---------------------------------------------------------------------------------------
+
+/// The card of a sign-in page, as navree-auth's pages draw it.
+fn sign_in_card() -> Node {
+    Stack::gap(4)
+        .children((
+            Text::muted("Kesar"),
+            Heading::h1("Sign in"),
+            Card::new()
+                .description("Use the email address and password of your account.")
+                .body(
+                    Stack::gap(4).children((
+                        Field::new("auth-email", "Email")
+                            .control(Input::email("email").autocomplete("email")),
+                        Field::new("auth-password", "Password")
+                            .control(Input::password("password")),
+                        Button::primary("Sign in"),
+                        el("a")
+                            .href("/forgot-password")
+                            .child("Forgot your password?"),
+                    )),
+                ),
+        ))
+        .into()
+}
+
+fn auth_layout_thumb() -> AuthLayout {
+    AuthLayout::new(sign_in_card())
+}
+
+fn auth_layout_default() -> AuthLayout {
+    AuthLayout::new(sign_in_card())
+        .aside(Stack::gap(4).children((
+            Heading::h2("Your health, clearly understood."),
+            Text::new("Sleep, heart, recovery and movement, scored every day from the phone and watch you already have."),
+            Rings::new("An example day: movement 64, recovery 82, sleep 88")
+                .ring(RingValue::new("Movement", 64))
+                .ring(RingValue::new("Recovery", 82))
+                .ring(RingValue::new("Sleep", 88))
+                .size(180)
+                .legend(),
+            Text::muted("An example day, not real data."),
+        )))
+        .aside_label("About Kesar")
 }
