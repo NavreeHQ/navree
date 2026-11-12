@@ -15,6 +15,10 @@
 //! transaction the toolkit begins, at READ COMMITTED with that lock taken first,
 //! `lock_lists` is the lock, and `renew_ranks` gives a list fresh ranks in one
 //! statement.
+//!
+//! [`SortableGrid`] draws tiles in rows and columns that people put in their own
+//! order and take away; it posts the whole order, which [`GridOrder`] reads and
+//! [`GridOrder::arrange`] puts together with the tiles the server holds.
 
 use std::borrow::Cow;
 
@@ -25,12 +29,16 @@ use crate::icons;
 use crate::node::{IntoNodes, Node, Uses, el, into_node};
 use crate::op::Op;
 
+mod grid;
 mod moves;
+mod order;
 #[cfg(feature = "orm")]
 mod orm;
 mod ranked;
 
+pub use grid::{GridColumns, GridFit, GridTile, SortableGrid, SortableGridLabels};
 pub use moves::{Landing, ListState, Move, MoveError, MoveRejected, Refusal};
+pub use order::{Arranged, GridOrder, OrderError, OrderRejected};
 #[cfg(feature = "orm")]
 pub use orm::{lock_lists, renew_ranks, transaction};
 pub use ranked::{Placement, RANK_GAP, RankedLists, Spot, rank_between};

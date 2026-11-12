@@ -375,6 +375,62 @@ fn a_page_with_a_sortable_loads_the_sortable_module_and_only_then() {
     assert!(!still.to_html().contains(assets::SORTABLE_URL));
 }
 
+/// The sortable grid: pointer, touch and key moves, removal, its announcements and the
+/// pause before the order is posted. The posting itself is the core runtime's.
+#[test]
+fn the_sortable_grid_module_is_at_most_4_kb_gzip() {
+    assert!(
+        size("sortable-grid") <= 4 * 1024,
+        "{}",
+        size("sortable-grid")
+    );
+}
+
+/// A grid whose tiles move loads the core runtime, which posts the order, its own module
+/// and its own sheet; one drawn with nowhere to post links the sheet and loads no script.
+/// A page with a list that sorts never loads the grid's module, nor the grid the list's.
+#[test]
+fn a_page_with_a_sortable_grid_loads_its_module_and_only_then() {
+    use navree_ui::{GridTile, SortItem, SortList, Sortable, SortableGrid};
+
+    let tiles = || {
+        [
+            GridTile::new("sleep", "Sleep"),
+            GridTile::new("recovery", "Recovery"),
+        ]
+    };
+    let moving = View::new("x").body(
+        SortableGrid::new("g", "Tiles")
+            .post("/tiles")
+            .tiles(tiles()),
+    );
+    assert_eq!(
+        moving.uses(),
+        Uses::CORE
+            .with(Uses::SORTABLE_GRID)
+            .with(Uses::SORTABLE_GRID_STYLES)
+    );
+    assert_eq!(
+        linked(&moving.to_html()),
+        (
+            vec!["core", "sortable-grid"],
+            vec!["navree-ui", "sortable-grid-styles"]
+        )
+    );
+    let still = View::new("x").body(SortableGrid::new("g", "Tiles").tiles(tiles()));
+    assert_eq!(still.uses(), Uses::SORTABLE_GRID_STYLES);
+    let html = still.to_html();
+    assert!(!html.contains("<script"), "{html}");
+    assert_eq!(linked(&html).1, ["navree-ui", "sortable-grid-styles"]);
+    let list = View::new("x").body(
+        Sortable::new("s", "Steps")
+            .post("/moves")
+            .list(SortList::new("a", "Steps").item(SortItem::new("1", "Measure"))),
+    );
+    assert!(!list.to_html().contains(assets::SORTABLE_GRID_URL));
+    assert!(!moving.to_html().contains(assets::SORTABLE_URL));
+}
+
 #[test]
 fn the_phone_module_is_at_most_5_kb_gzip() {
     assert!(size("phone") <= 5 * 1024, "{}", size("phone"));
@@ -524,6 +580,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "time-styles",
         "theme-builder",
         "parts-styles",
+        "sortable-grid-styles",
     ] {
         assert!(size(name) <= 3 * 1024, "{name}: {}", size(name));
     }
@@ -740,6 +797,8 @@ fn no_two_modules_share_a_bit() {
         Uses::CHART_GRIDS,
         Uses::APP_BLOCKS,
         Uses::MARKETING,
+        Uses::SORTABLE_GRID,
+        Uses::SORTABLE_GRID_STYLES,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

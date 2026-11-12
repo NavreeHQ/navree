@@ -327,6 +327,13 @@ impl Uses {
     /// its header, hero, sections, pricing, questions, frames and footer, linked on a page
     /// that draws one. A part of a block that needs a script, such as a form, loads its own.
     pub const MARKETING: Self = Self(1 << 40);
+    /// The sortable grid module: tiles that move by pointer, touch or keys and are taken
+    /// away, with the whole order posted a moment after the last change. Its stylesheet is
+    /// [`Uses::SORTABLE_GRID_STYLES`].
+    pub const SORTABLE_GRID: Self = Self(1 << 41);
+    /// The sortable grid's stylesheet: the grid, its tiles and their tools, linked with
+    /// every sortable grid, one that doesn't move too.
+    pub const SORTABLE_GRID_STYLES: Self = Self(1 << 42);
 
     /// Both sets together.
     #[must_use]

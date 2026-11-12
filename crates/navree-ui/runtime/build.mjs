@@ -128,6 +128,7 @@ const FILES = [
   ["keys", "js", "text/javascript; charset=utf-8", await js("keys.js")],
   ["lazy", "js", "text/javascript; charset=utf-8", await js("lazy.js")],
   ["sortable", "js", "text/javascript; charset=utf-8", await js("sortable.js")],
+  ["sortable-grid", "js", "text/javascript; charset=utf-8", await js("sortable-grid.js")],
   ["upload", "js", "text/javascript; charset=utf-8", await js("upload.js")],
   ["otp", "js", "text/javascript; charset=utf-8", await js("otp.js")],
   ["carousel", "js", "text/javascript; charset=utf-8", await js("carousel.js")],
@@ -165,6 +166,8 @@ const FILES = [
   ["app-blocks", "css", "text/css; charset=utf-8", await extraCss(["app-blocks.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
+  // The sortable grid's styles, linked with every sortable grid; its script only where tiles move.
+  ["sortable-grid-styles", "css", "text/css; charset=utf-8", await extraCss(["sortable-grid.css"])],
   // The blocks of a public site: header, hero, sections, pricing, questions, frames, footer. No script.
   ["marketing", "css", "text/css; charset=utf-8", await extraCss(["marketing.css"])],
 ];
