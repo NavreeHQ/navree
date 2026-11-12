@@ -28,6 +28,14 @@ targets:
       path: Generated/NavreeDemo-Info.plist
       properties:
         CFBundleDisplayName: Charkha
+        NavreeOrigin: http://127.0.0.1:8095
+        # Plain http only to this machine, for a store demo run locally; an
+        # app's real origin is https with no exception.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.navree.demo
+            CFBundleURLSchemes: [charkha]
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
