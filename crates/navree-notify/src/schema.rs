@@ -112,7 +112,7 @@ pub(crate) fn push_subscription_schema() -> (String, Value) {
 fn preference_set() -> Value {
     let switches = json!({
         "type": "object",
-        "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+        "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
         "additionalProperties": {"type": "boolean"},
     });
     let digest = json!({"type": "string", "enum": ["off", "hourly", "daily", "weekly"]});
@@ -236,4 +236,53 @@ mod tests {
         required.sort_unstable();
         assert_eq!(fields, required);
     }
+}
+
+/// `NewPushDevice`: what a native app sends to register its device.
+pub(crate) fn new_push_device_schema() -> (String, Value) {
+    let schema = json!({
+        "type": "object",
+        "description": "A native app's push device: the token Apple or Firebase gave the app.",
+        "required": ["platform", "token", "app_id"],
+        "properties": {
+            "platform": {"type": "string", "enum": ["ios", "android"]},
+            "token": {"type": "string", "maxLength": 4096},
+            "app_id": {"type": "string", "description": "The bundle id or package name."},
+            "environment": {"type": "string", "enum": ["sandbox", "production"], "default": "production"},
+        },
+    });
+    ("NewPushDevice".to_owned(), schema)
+}
+
+/// `PushDevice`: a saved device (its token is never returned).
+pub(crate) fn push_device_schema() -> (String, Value) {
+    let schema = json!({
+        "type": "object",
+        "description": "A saved push device.",
+        "required": ["id", "notifiable_type", "notifiable_id", "platform", "app_id", "environment", "created_at", "last_seen_at", "last_used_at"],
+        "properties": {
+            "id": {"type": "string", "format": "uuid"},
+            "notifiable_type": {"type": "string"},
+            "notifiable_id": {"type": "string"},
+            "platform": {"type": "string", "enum": ["ios", "android"]},
+            "app_id": {"type": "string"},
+            "environment": {"type": "string", "enum": ["sandbox", "production"]},
+            "created_at": {"type": "string", "format": "date-time"},
+            "last_seen_at": {"type": "string", "format": "date-time"},
+            "last_used_at": {"type": ["string", "null"], "format": "date-time"},
+        },
+    });
+    ("PushDevice".to_owned(), schema)
+}
+
+/// The body of `DELETE /notifications/push-devices`.
+pub(crate) fn remove_device_schema() -> (String, Value) {
+    let schema = json!({
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+            "token": {"type": "string"},
+        },
+    });
+    ("PushDeviceRemoval".to_owned(), schema)
 }

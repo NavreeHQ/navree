@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
-use navree_contracts::ModuleBuilderJobsExt;
+use navree_contracts::{ModuleBuilderJobsExt, ModuleBuilderRevocationExt};
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
@@ -19,23 +19,29 @@ use navree_view::ModuleBuilderViewExt;
 use crate::catalog::NotificationRegistration;
 use crate::channels::ChannelDrivers;
 use crate::controller::NotificationsController;
+use crate::devices::{DeviceRevoker, RegisteredApps};
 use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
 use crate::{
     DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
-    NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushSubscriptions, Released,
-    SendNotificationJob, commands, migration,
+    NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushDevices, PushOptions,
+    PushSubscriptions, Released, SendNotificationJob, commands, migration,
 };
 
 /// The global notification module: provides and exports [`Notifier`],
-/// [`DeliveryLog`], [`OptOuts`], [`PushSubscriptions`],
+/// [`DeliveryLog`], [`OptOuts`], [`PushSubscriptions`], [`PushDevices`],
 /// [`NotificationPreferences`] and [`NotificationCatalog`], registers job
 /// `notify.send` ([`SendNotificationJob`]), commands `notify:vapid` and
 /// `notify:release` (scheduled every minute), the built-in digest templates
-/// (`notify/digest`), the routes and the `notify` migrations (tables
-/// `notifications`, `notification_deliveries`, `notification_opt_outs`,
-/// `push_subscriptions`, `notification_preferences`,
-/// `notification_deferrals`).
+/// (`notify/digest`), the routes, a `dyn CredentialRevoker` that deletes
+/// the push devices of offboarded users, and the `notify` migrations
+/// (tables `notifications`, `notification_deliveries`,
+/// `notification_opt_outs`, `push_subscriptions`, `push_devices`,
+/// `notification_preferences`, `notification_deferrals`).
+///
+/// The push channel's services are read from section `notify.push`
+/// ([`PushOptions`]) of the app's `Config` at boot, whichever way the module
+/// is configured.
 ///
 /// - [`NotifyModule::for_root`] takes [`NotifyOptions`] in code;
 /// - [`NotifyModule::from_config`] (and a plain `.module(NotifyModule)`)
@@ -137,6 +143,8 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
     if matches!(source, Source::Config) {
         m.config_section::<NotifyOptions>();
     }
+    m.config_section::<PushOptions>();
+    m.credential_revoker::<DeviceRevoker>();
     let deps = source.deps();
     let options_key = || vec![ProviderKey::of::<NotifyOptions>()];
     m.global()
@@ -172,6 +180,25 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
             Ok(Arc::new(PushSubscriptions::new(r.app().downgrade())))
         }))
         .exports::<PushSubscriptions>()
+        .factory(Factory::<PushOptions>::new(|r| async move {
+            let options = match r.app().try_get::<Config>().await {
+                Some(config) => config.typed::<PushOptions>()?,
+                None => PushOptions::default(),
+            };
+            Ok(Arc::new(options))
+        }))
+        .factory(
+            Factory::<PushDevices>::new(|r| async move {
+                let push = r.get::<PushOptions>().await?;
+                let apps = RegisteredApps {
+                    ios: push.apns.bundle_ids.clone(),
+                    android: push.fcm.packages.clone(),
+                };
+                Ok(Arc::new(PushDevices::new(r.app().downgrade(), apps)))
+            })
+            .deps(vec![ProviderKey::of::<PushOptions>()]),
+        )
+        .exports::<PushDevices>()
         .factory(Factory::<NotificationCatalog>::new(|r| async move {
             let registrations = r.app().contributions::<NotificationRegistration>();
             let catalog = NotificationCatalog::new(
@@ -197,8 +224,9 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
         .factory(
             Factory::<Notifier>::new(|r| async move {
                 let options = r.get::<NotifyOptions>().await?;
+                let push = r.get::<PushOptions>().await?;
                 let app = r.app().downgrade();
-                let drivers = ChannelDrivers::from_options(&options, &app)
+                let drivers = ChannelDrivers::from_options(&options, &push, &app)
                     .map_err(|message| format!("notify: {message}"))?;
                 let parts = Parts {
                     telemetry: Telemetry::from_app(&r.app()).await,
@@ -206,6 +234,7 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                     log: r.get::<DeliveryLog>().await?,
                     opt_outs: r.get::<OptOuts>().await?,
                     push: r.get::<PushSubscriptions>().await?,
+                    devices: r.get::<PushDevices>().await?,
                     preferences: r.get::<NotificationPreferences>().await?,
                     app,
                 };
@@ -219,6 +248,8 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                 ProviderKey::of::<DeliveryLog>(),
                 ProviderKey::of::<OptOuts>(),
                 ProviderKey::of::<PushSubscriptions>(),
+                ProviderKey::of::<PushOptions>(),
+                ProviderKey::of::<PushDevices>(),
                 ProviderKey::of::<NotificationPreferences>(),
             ]),
         )
