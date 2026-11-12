@@ -13,6 +13,7 @@ mod dates;
 mod display;
 mod feedback;
 mod flow;
+mod grids;
 mod icons;
 mod inbox;
 mod inputs;
@@ -62,6 +63,7 @@ pub fn all() -> Vec<Example> {
     all.extend(data::all());
     all.extend(sortable::all());
     all.extend(charts::all());
+    all.extend(grids::all());
     all.extend(chat::all());
     all.extend(patterns::all());
     all.extend(themes::all());

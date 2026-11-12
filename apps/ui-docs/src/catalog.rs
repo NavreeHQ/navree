@@ -157,6 +157,9 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "calendar-heatmap",
+            "matrix-heatmap",
+            "scatter-chart",
         ],
     },
     Group {
@@ -751,6 +754,30 @@ pub const COMPONENTS: &[Component] = &[
     component("funnel", "Funnel", &["Funnel", "Stage"], "thumb")
         .about("How many reach each stage of an ordered process, and what share of the first and of the stage before.")
         .parts("default"),
+    component(
+        "calendar-heatmap",
+        "Calendar heat map",
+        &["CalendarHeatmap", "HeatSteps", "GridLabels"],
+        "thumb",
+    )
+    .about("A day per cell in weeks, shaded in five steps: how consistent a habit is over months. A day with no data is hollow, not zero.")
+    .parts("default"),
+    component(
+        "matrix-heatmap",
+        "Matrix heat map",
+        &["MatrixHeatmap", "Relation", "GridLabels"],
+        "thumb",
+    )
+    .about("Every measure against every other, such as a correlation matrix: a tone for the sign, depth for the strength, neutral for chance and blank for untested.")
+    .parts("default"),
+    component(
+        "scatter-chart",
+        "Scatter chart",
+        &["Scatter", "PointSeries", "GridLabels"],
+        "thumb",
+    )
+    .about("A translucent point for each pair of values, in one series or several: a cloud of beats, steps against resting heart rate. Axes can be hidden and both can share a range.")
+    .parts("default"),
     // Assistant
     component(
         "conversation",

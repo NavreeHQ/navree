@@ -7,17 +7,18 @@
 /* The steps. Zero is a filled cell in the track tone; a day with no data is hollow. */
 [data-slot=heat-cell][data-level="0"],[data-slot=heat-key][data-level="0"]{background:var(--ink-3)}
 [data-slot=heat-cell][data-level=none]{background:none;outline:1px dashed var(--line-2);outline-offset:-1px}
-[data-level="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 30%,var(--surface))}
-[data-level="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 52%,var(--surface))}
-[data-level="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 76%,var(--surface))}
-[data-level="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 100%,var(--surface))}
+:is([data-slot=heat-cell],[data-slot=heat-key]){background:var(--bg)}
+[data-level="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 34%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
+[data-level="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 54%,var(--surface)),color-mix(in oklab,var(--c) 60%,var(--surface)))}
+[data-level="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 76%,var(--surface)),color-mix(in oklab,var(--c) 80%,var(--surface)))}
+[data-level="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c)}
 /* A link's strength, six steps. */
-[data-m="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 16%,var(--surface))}
-[data-m="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 30%,var(--surface))}
-[data-m="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 46%,var(--surface))}
-[data-m="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 62%,var(--surface))}
-[data-m="5"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--c) 80%,var(--surface))}
-[data-m="6"]:is([data-slot=heat-cell],[data-slot=heat-key]){background:var(--c)}
+[data-m="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 16%,var(--surface)),color-mix(in oklab,var(--c) 24%,var(--surface)))}
+[data-m="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 30%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
+[data-m="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 46%,var(--surface)),color-mix(in oklab,var(--c) 56%,var(--surface)))}
+[data-m="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 62%,var(--surface)),color-mix(in oklab,var(--c) 72%,var(--surface)))}
+[data-m="5"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 80%,var(--surface)),color-mix(in oklab,var(--c) 88%,var(--surface)))}
+[data-m="6"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c)}
 [data-result=ns]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--fg) 12%,var(--surface))}
 [data-result=none]:is([data-slot=heat-cell],[data-slot=heat-key]){background:none;outline:1px dotted var(--line-2);outline-offset:-1px}
 [data-result=self]{visibility:hidden}
@@ -51,12 +52,13 @@
 [data-slot=heat-colhead]{flex:none;width:var(--cell);font-size:11px;text-align:center;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :is([data-slot=heat-rowhead],[data-slot=heat-colhead])[data-active]{color:var(--fg);font-weight:600}
 [data-slot=heat-matrix] [data-slot=heat-cell]{display:grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;color:var(--fg)}
-[data-slot=heat-matrix] :is([data-m="5"],[data-m="6"]){color:var(--ink-0)}
+/* A value in a cell is black or white, whichever has more contrast with the step: black above a relative luminance of .179. */
+[data-slot=heat-matrix] [data-m]{color:color(from var(--bg) srgb-linear clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1))}
 
 /* The scatter: translucent points that darken where they pile up; the hit area is wider than the dot. */
 [data-slot=chart-points]{fill:var(--c)}
 [data-slot=chart-points] circle{stroke:transparent;stroke-width:8px;pointer-events:all;transition:fill-opacity .1s}
-[data-slot=chart-points] circle[data-active]{fill-opacity:1;stroke:color-mix(in oklab,var(--c) 35%,transparent);stroke-width:6px}
+[data-slot=chart-points] circle[data-active]{fill-opacity:1;stroke:var(--fg);stroke-width:1.5px}
 [data-slot=chart] svg text[data-axis-name]{fill:var(--fg-2);font-weight:500}
 [data-slot=chart-frame][data-square]{width:fit-content;max-width:100%;margin-inline:auto}
 [data-kind=scatter] [data-slot=chart-plot]{max-width:100%}

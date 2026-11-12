@@ -2202,6 +2202,198 @@
     "variants": [],
     "shared": []
   },
+  "CalendarHeatmap": {
+    "name": "CalendarHeatmap",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/calendar.rs",
+    "summary": "A calendar heat map: one cell per day, a column per week, a row per weekday, each cell shaded by its day's value in five steps (nothing, then four). Months are named above the weeks and weekdays beside the rows. A day with no value is a hollow dashed cell, which is not the same as a day of zero.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A calendar called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "day",
+        "generics": "",
+        "args": "date: NaiveDate, value: impl IntoValue",
+        "doc": "Adds a day. A value that is not a finite number, or `None`, is a day with no data. A date given twice keeps the last value."
+      },
+      {
+        "name": "days",
+        "generics": "<V: IntoValue>",
+        "args": "days: impl IntoIterator<Item =(NaiveDate, V)>",
+        "doc": "Adds days: dates with their values. Days between them that are not given have no data."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "first: NaiveDate, last: NaiveDate",
+        "doc": "Draws these dates, first to last, whether or not they have data: a range that starts before the first day given, or ends after the last, shows the days between as empty. Days given outside it are left out."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The first row of the grid (the locale's first day of the week by default)."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour the steps are made of (the accent by default)."
+      },
+      {
+        "name": "steps",
+        "generics": "",
+        "args": "steps: HeatSteps",
+        "doc": "How a value picks its step."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written in the tooltip, the table and the summary."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What the value is called in the tooltip and the table (the title by default)."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the value counts, written after it: `load`, `steps`, `min`."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the weeks come in: they fade in one after another. Off by default."
+      },
+      {
+        "name": "no_weekdays",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the weekday names beside the rows."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "CalendarMode": {
     "name": "CalendarMode",
     "kind": "enum",
@@ -7427,6 +7619,23 @@
       }
     ]
   },
+  "GridLabels": {
+    "name": "GridLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/mod.rs",
+    "summary": "The words the grid charts write, in English by default. Templates name their blanks in braces.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "The English words."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "Heading": {
     "name": "Heading",
     "kind": "struct",
@@ -7510,6 +7719,39 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "HeatSteps": {
+    "name": "HeatSteps",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/charts/grids/calendar.rs",
+    "summary": "How a day's value picks one of the four steps above zero.",
+    "constructors": [
+      {
+        "name": "at",
+        "generics": "",
+        "args": "second: impl IntoValue, third: impl IntoValue, fourth: impl IntoValue",
+        "doc": "The second, third and fourth steps begin at `second`, `third` and `fourth`, in any order."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Even",
+        "doc": "Four equal parts of the range from zero to the highest value: the default. A value above zero is at least the first step.",
+        "default": true
+      },
+      {
+        "name": "Quartiles",
+        "doc": "Quartiles of the values above zero, so every step is used even when a few days stand far above the rest.",
+        "default": false
+      },
+      {
+        "name": "At",
+        "doc": "Where the second, third and fourth steps begin.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "HoverCard": {
     "name": "HoverCard",
@@ -8780,6 +9022,186 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "MatrixHeatmap": {
+    "name": "MatrixHeatmap",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/matrix.rs",
+    "summary": "A matrix heat map: a row and a column for each measure, a cell for each pair. Colour says the sign (one tone for a link that moves together, another for one that moves apart) and the depth of the colour says how strong it is. A pair whose link is not significant is neutral, and a pair never tested is almost blank, so neither is mistaken for no link or for a strong one.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A matrix called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "metrics",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Adds the measures, in the order of the rows and columns."
+      },
+      {
+        "name": "relation",
+        "generics": "",
+        "args": "a: &str, b: &str, relation: Relation",
+        "doc": "How measures `a` and `b` relate. The pair is the same either way round. A name that is not a measure, or the same name twice, is ignored; a pair given twice keeps the last."
+      },
+      {
+        "name": "lower_triangle",
+        "generics": "",
+        "args": "",
+        "doc": "Draws each pair once, below the diagonal, so the matrix is a staircase: the first measure heads the columns and the last heads the rows."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "positive: impl Into<Ink>, negative: impl Into<Ink>",
+        "doc": "The colours of a link that moves together and of one that moves apart: blue and orange by default, which stay apart for every reader. Use tones when the sign means good and bad."
+      },
+      {
+        "name": "peak",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "The value at which the colour is deepest (1 by default, for a correlation). A larger value is as deep as it."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written (two decimals by default)."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What the value is called in the tooltip and the table (`Value` by default)."
+      },
+      {
+        "name": "show_values",
+        "generics": "",
+        "args": "",
+        "doc": "Writes each pair's value in its cell. Meant for a matrix of a few measures; cells are too small for it past eight or so."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the rows come in: they fade in one after another. Off by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "MemoryDrafts": {
@@ -10833,6 +11255,36 @@
     ],
     "shared": []
   },
+  "PointSeries": {
+    "name": "PointSeries",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/scatter.rs",
+    "summary": "One cloud of points: a name, the points, and optionally a name for each point and a colour.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<X: IntoValue, Y: IntoValue>",
+        "args": "name: impl Into<String>, points: impl IntoIterator<Item =(X, Y)>",
+        "doc": "A series called `name`. A pair with a value that is not a finite number is left out."
+      }
+    ],
+    "methods": [
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "The colour of the points (a chart colour in turn by default)."
+      },
+      {
+        "name": "labels",
+        "generics": "<S: Into<String>>",
+        "args": "labels: impl IntoIterator<Item = S>",
+        "doc": "A name for each point, in the order given: the head of its tooltip and the name of its row in the table. Points past the names are numbered."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Popover": {
     "name": "Popover",
     "kind": "struct",
@@ -11628,6 +12080,42 @@
     "variants": [],
     "shared": []
   },
+  "Relation": {
+    "name": "Relation",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/matrix.rs",
+    "summary": "How two measures relate: a signed value, whether it is significant, and a note.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "A pair that came to `value`, significant until told otherwise. A value that is not a finite number is a pair never tested."
+      },
+      {
+        "name": "untested",
+        "generics": "",
+        "args": "",
+        "doc": "A pair never tested: too few paired days, say. Drawn almost blank."
+      }
+    ],
+    "methods": [
+      {
+        "name": "significant",
+        "generics": "",
+        "args": "yes: bool",
+        "doc": "Whether the value is a real link and not chance. A pair that is not significant is drawn in a neutral tone, whatever its value."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Words about the pair, shown in its tooltip and its table row: the days it rests on, the test."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Reply": {
     "name": "Reply",
     "kind": "struct",
@@ -12217,6 +12705,252 @@
         "generics": "",
         "args": "disabled: bool",
         "doc": "Shows it in the menu but doesn't let it be taken: the arrow keys still reach it, and it has no address to go to. The handler checks again: this is courtesy."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Scatter": {
+    "name": "Scatter",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/scatter.rs",
+    "summary": "A scatter plot: a point for each pair of values, in one series or several, with the two axes numeric. Points are translucent, so where they pile up the cloud is darker.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A scatter plot called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "series",
+        "generics": "",
+        "args": "series: PointSeries",
+        "doc": "Adds a cloud of points."
+      },
+      {
+        "name": "series_list",
+        "generics": "",
+        "args": "series: impl IntoIterator<Item = PointSeries>",
+        "doc": "Adds clouds."
+      },
+      {
+        "name": "x_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What x is: the axis name, the tooltip's line and the table's column."
+      },
+      {
+        "name": "y_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What y is."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What x and y count, written after their values: `ms`, `kg`."
+      },
+      {
+        "name": "x_unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What x counts, when it is not what y counts."
+      },
+      {
+        "name": "y_unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What y counts."
+      },
+      {
+        "name": "x_axis",
+        "generics": "",
+        "args": "axis: Axis",
+        "doc": "What the x axis draws: `Axis::hidden` leaves it out, and the plot takes its room."
+      },
+      {
+        "name": "y_axis",
+        "generics": "",
+        "args": "axis: Axis",
+        "doc": "What the y axis draws."
+      },
+      {
+        "name": "grid",
+        "generics": "",
+        "args": "grid: Gridlines",
+        "doc": "The gridlines behind the points (hairlines both ways by default)."
+      },
+      {
+        "name": "x_domain",
+        "generics": "",
+        "args": "domain: Domain",
+        "doc": "The range of x. The default fits the data to nice numbers, not from zero."
+      },
+      {
+        "name": "y_domain",
+        "generics": "",
+        "args": "domain: Domain",
+        "doc": "The range of y."
+      },
+      {
+        "name": "equal_domains",
+        "generics": "",
+        "args": "",
+        "doc": "Gives both axes one range, from the lowest value of either to the highest of either, with the x domain's setting. The plot is drawn square, so the line where x equals y runs corner to corner at 45 degrees."
+      },
+      {
+        "name": "reference",
+        "generics": "",
+        "args": "reference: Reference",
+        "doc": "Draws a reference: `Reference::identity` for the line where x equals y, or a level across at a value of y."
+      },
+      {
+        "name": "point_size",
+        "generics": "",
+        "args": "radius: f64",
+        "doc": "The radius of a point in pixels (3.5 by default, 1 to 12)."
+      },
+      {
+        "name": "opacity",
+        "generics": "",
+        "args": "opacity: f64",
+        "doc": "How opaque a point is, 0.1 to 1 (0.65 by default). Where points overlap they add up."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The height of the plot in pixels (280 by default, 80 to 800)."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values of x and y are written."
+      },
+      {
+        "name": "y_format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values of y are written, when not as x."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the clouds come in: each fades in after the one before. Off by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
       }
     ],
     "variants": [],

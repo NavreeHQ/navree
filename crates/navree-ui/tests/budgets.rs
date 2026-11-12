@@ -168,6 +168,32 @@ fn a_page_with_a_chart_loads_the_charts_module_alone() {
     assert!(!picture.to_html().contains("<script"));
 }
 
+/// The grid charts' own sheet (calendar and matrix heat maps, scatter) stays at 2 KB, and a page
+/// with one loads the charts module and the grids' sheet, not the paint sheet or the core.
+#[test]
+fn the_chart_grids_sheet_is_at_most_2_kb_gzip_and_a_grid_chart_links_it_with_the_charts_module() {
+    use navree_ui::charts::{CalendarHeatmap, MatrixHeatmap, PointSeries, Relation, Scatter};
+    assert!(size("chart-grids") <= 2 * 1024, "{}", size("chart-grids"));
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).unwrap();
+    let pages = [
+        View::new("x").body(CalendarHeatmap::new("Load").day(day, 5)),
+        View::new("x").body(MatrixHeatmap::new("Links").metrics(["a", "b"]).relation(
+            "a",
+            "b",
+            Relation::new(0.5),
+        )),
+        View::new("x").body(Scatter::new("Beats").series(PointSeries::new("a", [(1, 2)]))),
+    ];
+    for page in pages {
+        assert_eq!(page.uses(), Uses::CHARTS.with(Uses::CHART_GRIDS));
+        let html = page.to_html();
+        assert!(html.contains(assets::CHARTS_URL), "{html}");
+        assert!(html.contains(assets::CHART_GRIDS_URL), "{html}");
+        assert!(!html.contains(assets::CORE_URL));
+        assert!(!html.contains(assets::CHART_PAINT_URL));
+    }
+}
+
 #[test]
 fn the_live_module_is_at_most_3_kb_gzip() {
     assert!(size("live") <= 3 * 1024, "{}", size("live"));

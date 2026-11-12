@@ -16,6 +16,8 @@ use crate::node::{AttrValue, Node, Uses, el};
 
 /// The most points a scatter draws: it thins evenly past it, and the page says so.
 const MAX_POINTS: usize = 2_000;
+/// A series as drawn: its place among the series, the points kept, and their names.
+type Kept = (usize, Vec<(f64, f64)>, Vec<Option<String>>);
 /// Room above the plot for the top tick label.
 const TOP: f64 = 10.0;
 /// Room for the y axis name above the top tick label.
@@ -146,7 +148,7 @@ impl Scatter {
             equal: false,
             references: Vec::new(),
             radius: 3.5,
-            opacity: 0.55,
+            opacity: 0.65,
             height: 280,
             x_format: NumberFormat::number(),
             y_format: NumberFormat::number(),
@@ -252,7 +254,7 @@ impl Scatter {
         self
     }
 
-    /// How opaque a point is, 0.1 to 1 (0.55 by default). Where points overlap they add up.
+    /// How opaque a point is, 0.1 to 1 (0.65 by default). Where points overlap they add up.
     pub fn opacity(mut self, opacity: f64) -> Self {
         if opacity.is_finite() {
             self.opacity = opacity.clamp(0.1, 1.0);
@@ -307,7 +309,7 @@ impl Scatter {
         }
         // Thin evenly past the most, series by series, keeping each series' share.
         let stride = total.div_ceil(MAX_POINTS).max(1);
-        let series: Vec<(usize, Vec<(f64, f64)>, Vec<Option<String>>)> = self
+        let series: Vec<Kept> = self
             .series
             .iter()
             .enumerate()
@@ -828,7 +830,7 @@ mod tests {
         );
         assert_eq!(html.matches("<circle").count(), 40, "{html}");
         assert_eq!(html.matches(r#"data-slot="chart-points""#).count(), 1);
-        assert!(html.contains(r#"fill-opacity="0.55""#), "{html}");
+        assert!(html.contains(r#"fill-opacity="0.65""#), "{html}");
         assert!(html.contains(r#"data-rows="40""#));
         assert!(html.contains(r#"data-color="1""#));
         assert!(!html.contains("style="), "no style attribute");
@@ -956,7 +958,7 @@ mod tests {
                 .locale("en-IN")
                 .series(PointSeries::new(
                     "Resting",
-                    [(1000, 1000), (2000, 2100), (3_00_000, 3_10_000)],
+                    [(1000, 1000), (2000, 2100), (300_000, 310_000)],
                 ))
                 .x_name("Interval")
                 .y_name("Next")
