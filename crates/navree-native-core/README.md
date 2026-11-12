@@ -72,10 +72,11 @@ Every event is an object whose `t` names it. A field shown with `?` may be left 
 | `t` | Fields | When |
 |---|---|---|
 | `start` | | The app started, or the person asked to try again after it failed to. |
-| `response` | `request`, `status?`, `url?`, `content_type?`, `body?`, `error?`, `left?` | A `fetch` was answered. `url` is where the answer came from in the end, when a redirect was followed. `error` (`offline`, `timeout`, `other`) when no answer came. `left` when a redirect led to another site, which was not fetched. |
+| `response` | `request`, `status?`, `content_type?`, `location?`, `body?`, `url?`, `error?`, `left?` | A `fetch` was answered. A redirect is handed over as it came, with its `status` and `location`: the core checks where it leads and asks again. `error` (`offline`, `timeout`, `other`) when no answer came. A transport that follows redirects itself gives the last address as `url`, and stops with `left` at one that leaves the app's origins. |
 | `select` | `destination` | The person chose a top-level destination. |
 | `act` | `screen?`, `action`, `form?`, `overlay?`, `text?` | The person tapped something that has an action. `action` is the node's own. `form` and `overlay` are the ids of the form and of the sheet, dialog or popover the control stands in. |
 | `field` | `screen`, `form?`, `field`, `value` | The person changed a field. `value` is `{"t":"text","text":"…"}`, `{"t":"flag","on":true}`, `{"t":"many","values":[…]}`, `{"t":"files","files":[{"token","name","type","size"}]}` or `{"t":"none"}`. |
+| `search` | `screen`, `text` | The person searched with the screen's own search (`screen.search`). |
 | `back` | | The system's back. |
 | `pop_to` | `screen` | The person went back to a screen further down the stack. |
 | `dismissed` | `screen` | The person took a sheet or cover away. |
@@ -130,7 +131,7 @@ Every event is an object whose `t` names it. A field shown with `?` may be left 
 
 | `t` | Fields | What the client does |
 |---|---|---|
-| `fetch` | `request`, `method`, `url`, `headers`, `body?`, `timeout_ms`, `xsrf?` | Sends the request with its cookies, follows redirects that stay on the app's origins, and answers with a `response` event carrying `request`. `body` is `{"t":"form","text":"a=1&b=2"}` (send `text` as it is) or `{"t":"multipart","parts":[…]}` (write the parts, putting in the bytes kept under each `token`). With `xsrf`, the `XSRF-TOKEN` cookie, decoded, also goes in `x-xsrf-token`. |
+| `fetch` | `request`, `method`, `url`, `headers`, `body?`, `timeout_ms`, `xsrf?` | Sends the request with its cookies, follows no redirect, and answers with a `response` event carrying `request`. `body` is `{"t":"form","text":"a=1&b=2"}` (send `text` as it is) or `{"t":"multipart","parts":[…]}` (write the parts, putting in the bytes kept under each `token`). With `xsrf`, the `XSRF-TOKEN` cookie, decoded, also goes in `x-xsrf-token`. |
 | `cancel` | `request` | May drop the request: its answer is no longer wanted. |
 | `open_url` | `url` | Opens the address outside the app. |
 | `sign_in` | `url`, `callback?` | Opens the system's sign-in session, and answers with `sign_in_done`. |

@@ -276,6 +276,35 @@
         {"at":"/destinations/2/stack","is":[7]},
         {"at":"/destinations/1/stack","is":[6]}
       ]
+    },
+    {
+      "note": "A link of the app's own whose page turns out to be elsewhere.",
+      "send": {"t":"act","screen":7,"action":{"t":"navigate","href":"/pay/7"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":8}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/pay/7","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The server redirects to another site. The core does not ask it for anything: it opens outside, and the screen that was made for it goes.",
+      "send": {"t":"response","request":10,"status":302,"location":"https://pay.example/checkout/7"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"open_url","url":"https://pay.example/checkout/7"}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/2/stack","is":[7]},
+        {"at":"/screens/8","is":null}
+      ]
     }
   ]
 }

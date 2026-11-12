@@ -198,8 +198,18 @@
       }
     },
     {
-      "note": "The server answers the post with a redirect, which the transport follows: the answer is the new order's page, from another address. The sheet has done its work and goes; the order is stacked on the orders.",
-      "send": {"t":"response","request":7,"status":200,"url":"https://shop.example/orders/1","content_type":"application/vnd.navree.native+json"},
+      "note": "The server answers the post with a redirect, as it answers a browser without scripts. The transport hands it over as it came; the core sees that it stays inside and asks for where it leads, as a plain get.",
+      "send": {"t":"response","request":7,"status":303,"location":"/orders/1"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      }
+    },
+    {
+      "note": "The new order's page, from another address than the post went to. The sheet has done its work and goes; the order is stacked on the orders.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/order.json",
       "expect": {
         "changed": [

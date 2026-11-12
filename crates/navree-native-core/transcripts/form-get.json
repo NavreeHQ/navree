@@ -209,6 +209,68 @@
         {"at":"/screens/3/loading","is":false},
         {"at":"/screens/3/content/screen/body/children/1/id","is":"found"}
       ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/catalogue"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/catalogue","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A screen that has a search of its own.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/catalogue.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person searches. The words go under the search's name, with what else the search carries, as a query to its address; the screen stays and takes the answer.",
+      "send": {"t":"search","screen":4,"text":"lota"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/catalogue?sort=name&q=lota","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/4/url","is":"/catalogue?sort=name&q=lota"},
+        {"at":"/screens/4/loading","is":true},
+        {"at":"/destinations/1/stack","is":[2,3,4]}
+      ]
+    },
+    {
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/catalogue-lota.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/screen/body/children/1","is":null},
+        {"at":"/screens/4/content/screen/search/value","is":"lota"}
+      ]
+    },
+    {
+      "note": "The same search again asks nothing.",
+      "send": {"t":"search","screen":4,"text":"lota"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
     }
   ]
 }

@@ -655,6 +655,9 @@
             "left": {
               "type": "string"
             },
+            "location": {
+              "type": "string"
+            },
             "request": {
               "type": "integer"
             },
@@ -743,6 +746,26 @@
             "screen",
             "field",
             "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "search"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "text"
           ],
           "type": "object"
         },

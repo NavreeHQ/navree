@@ -69,8 +69,13 @@ pub enum TransportError {
     Other,
 }
 
-/// The answer to a `fetch` effect, after any redirects on the app's origin.
-/// Exactly one of an answer (`status`), `error` or `left` is given.
+/// The answer to a `fetch` effect. Exactly one of an answer (`status`),
+/// `error` or `left` is given.
+///
+/// A redirect is best handed to the core as it came, with its `status` and
+/// `location`: the core checks where it leads and asks again. A transport that
+/// follows redirects itself must stop at the first that leaves the app's
+/// origins and say so with `left`, and gives the last address as `url`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Response {
     /// The number of the request this answers.
@@ -85,6 +90,10 @@ pub struct Response {
     /// The answer's `Content-Type`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
+    /// The answer's `Location`, when the answer is a redirect the client's
+    /// transport did not follow. The core follows it, if it stays inside.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
     /// The answer's body, as text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
@@ -152,6 +161,13 @@ pub enum Event {
         field: String,
         /// What it holds now.
         value: FieldValue,
+    },
+    /// The person searched with the screen's own search.
+    Search {
+        /// The screen.
+        screen: ScreenId,
+        /// The words typed. Empty to clear the search.
+        text: String,
     },
     /// The system's back.
     Back,

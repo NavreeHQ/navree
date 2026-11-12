@@ -522,6 +522,22 @@ pub(crate) enum Pending {
     },
 }
 
+/// A request on its way.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Asked {
+    /// What it is for.
+    pub purpose: Pending,
+    /// The address it went to: an address inside.
+    pub url: String,
+    /// The address that was asked for first, before any redirect was followed.
+    pub first: String,
+    pub method: Method,
+    pub body: Option<crate::effect::Body>,
+    pub limit: u32,
+    /// How many redirects were followed to get here.
+    pub hops: u8,
+}
+
 /// What a timer the core asked for is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TimerFor {
@@ -660,8 +676,8 @@ pub(crate) struct Inner {
     /// Whether the configuration gave an origin the core can use.
     pub usable: bool,
     pub next: Counters,
-    /// The requests on their way: what each was for, and the address it went to.
-    pub pending: BTreeMap<u64, (Pending, String)>,
+    /// The requests on their way.
+    pub pending: BTreeMap<u64, Asked>,
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,

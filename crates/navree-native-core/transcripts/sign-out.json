@@ -68,7 +68,7 @@
       }
     },
     {
-      "note": "The answer came from /sign-in, a cover, with another shell stamp. Something was written, so the pages kept are thrown away; the stamp changed, so the shell is asked for again.",
+      "note": "This client's transport follows redirects itself, and says where the answer came from in the end: /sign-in, a cover, with another shell stamp. Something was written, so the pages kept are thrown away; the stamp changed, so the shell is asked for again.",
       "send": {"t":"response","request":3,"status":200,"url":"https://shop.example/sign-in","content_type":"application/vnd.navree.native+json"},
       "body": "made/sign-in-nobody.json",
       "expect": {

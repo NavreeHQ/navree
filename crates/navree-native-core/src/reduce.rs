@@ -23,7 +23,7 @@ use crate::effect::{Body, Change, Effect, Request, Update};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, path_of, route_matches};
 use crate::state::{
-    App, Content, Destination, DeviceCall, Failure, Message, MessageInner, Modal, Notice, Pending, Stage,
+    App, Asked, Content, Destination, DeviceCall, Failure, Message, MessageInner, Modal, Notice, Pending, Stage,
     ScreenId, ScreenInner, ScreenView, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
@@ -31,6 +31,8 @@ use crate::Core;
 
 /// How long a page may take, in milliseconds.
 const PAGE_LIMIT: u32 = 30_000;
+/// The most redirects followed for one request.
+const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
 
@@ -78,6 +80,7 @@ impl Core {
                 field,
                 value,
             } => self.field_changed(screen, form.as_deref(), &field, value),
+            Event::Search { screen, text } => self.search(screen, &text),
             Event::Back => self.back(),
             Event::PopTo { screen } => self.pop_to(screen),
             Event::Dismissed { screen } => {
@@ -240,24 +243,72 @@ impl Core {
     /// Asks for `url`, an address inside. A post always says it is a form,
     /// even one with nothing in it: without that the server refuses it.
     pub(crate) fn fetch(&mut self, purpose: Pending, method: Method, url: &str, body: Option<Body>, limit: u32) {
-        self.inner.next.request += 1;
-        let request = self.inner.next.request;
-        let post = method == Method::Post;
         let body = match body {
-            None if post => Some(Body::Form { text: String::new() }),
+            None if method == Method::Post => Some(Body::Form { text: String::new() }),
             body => body,
         };
-        let headers = self.headers(matches!(body, Some(Body::Form { .. })));
-        self.inner.pending.insert(request, (purpose, url.to_owned()));
+        self.ask(Asked {
+            purpose,
+            url: url.to_owned(),
+            first: url.to_owned(),
+            method,
+            body,
+            limit,
+            hops: 0,
+        });
+    }
+
+    fn ask(&mut self, asked: Asked) {
+        self.inner.next.request += 1;
+        let request = self.inner.next.request;
+        let headers = self.headers(matches!(asked.body, Some(Body::Form { .. })));
         self.effects.push(Effect::Fetch(Request {
             request,
-            method,
-            url: self.inner.origin.absolute(url),
+            method: asked.method,
+            url: self.inner.origin.absolute(&asked.url),
             headers,
-            body,
-            timeout_ms: limit,
-            xsrf: post,
+            body: asked.body.clone(),
+            timeout_ms: asked.limit,
+            xsrf: asked.method == Method::Post,
         }));
+        self.inner.pending.insert(request, asked);
+    }
+
+    /// Follows a redirect the transport handed over: asks again where it
+    /// leads, for the same purpose, when that is inside. A 307 or a 308 asks
+    /// the same way with the same body; any other becomes a plain `get`.
+    /// Gives back the response to read when there is nothing to follow.
+    fn follow(&mut self, asked: &Asked, mut response: Response) -> Option<Response> {
+        let Some(location) = response.location.take().filter(|_| matches!(response.status, 301 | 302 | 303 | 307 | 308)) else {
+            return Some(response);
+        };
+        match self.inner.origin.resolve(&location, &asked.url) {
+            Target::Inside(url) if asked.hops < MOST_REDIRECTS => {
+                let same = matches!(response.status, 307 | 308);
+                self.ask(Asked {
+                    purpose: asked.purpose.clone(),
+                    url,
+                    first: asked.first.clone(),
+                    method: if same { asked.method } else { Method::Get },
+                    body: asked.body.clone().filter(|_| same),
+                    limit: asked.limit,
+                    hops: asked.hops + 1,
+                });
+                None
+            }
+            // Another site is never asked: where the redirect leads opens outside.
+            Target::Outside(url) => Some(Response {
+                request: response.request,
+                left: Some(url),
+                ..Response::default()
+            }),
+            // A redirect that leads nowhere a client goes, or one too many.
+            _ => Some(Response {
+                request: response.request,
+                status: 502,
+                ..Response::default()
+            }),
+        }
     }
 
     /// Forgets the requests on their way that `is` accepts: their answers are
@@ -267,7 +318,7 @@ impl Core {
             .inner
             .pending
             .iter()
-            .filter(|(_, (purpose, _))| is(purpose))
+            .filter(|(_, asked)| is(&asked.purpose))
             .map(|(request, _)| *request)
             .collect();
         for request in gone {
@@ -381,7 +432,7 @@ impl Core {
     // Starting, and the shell.
 
     fn start(&mut self) {
-        let asking = self.inner.pending.values().any(|(purpose, _)| *purpose == Pending::Shell);
+        let asking = self.inner.pending.values().any(|asked| asked.purpose == Pending::Shell);
         if asking {
             return;
         }
@@ -397,7 +448,7 @@ impl Core {
     }
 
     pub(crate) fn fetch_shell(&mut self) {
-        let asking = self.inner.pending.values().any(|(purpose, _)| *purpose == Pending::Shell);
+        let asking = self.inner.pending.values().any(|asked| asked.purpose == Pending::Shell);
         if !asking {
             self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
         }
@@ -980,13 +1031,18 @@ impl Core {
 
     fn answered(&mut self, response: Response) {
         // An answer nobody waits for any more changes nothing.
-        let Some((purpose, asked)) = self.inner.pending.remove(&response.request) else {
+        let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
-        if purpose == Pending::Shell {
+        let Some(response) = self.follow(&asked, response) else {
+            return;
+        };
+        if asked.purpose == Pending::Shell {
             return self.shell_answered(response);
         }
-        let answer = decode::read(response, &asked, &self.inner.origin, &self.config);
+        let answer = decode::read(response, &asked.url, &self.inner.origin, &self.config);
+        // A redirect is measured against the address that was asked for first.
+        let Asked { purpose, first: asked, .. } = asked;
         match purpose {
             Pending::Shell => {}
             Pending::Page { screen, visit } => self.page_answered(screen, visit, &asked, answer),

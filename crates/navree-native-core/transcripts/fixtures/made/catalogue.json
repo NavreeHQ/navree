@@ -1,0 +1,41 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Catalogue",
+  "search": {
+   "name": "q",
+   "value": "",
+   "placeholder": "Search the catalogue",
+   "action": "/catalogue",
+   "hidden": [
+    {
+     "name": "sort",
+     "value": "name"
+    }
+   ]
+  },
+  "body": {
+   "t": "list",
+   "id": "catalogue",
+   "children": [
+    {
+     "t": "row",
+     "id": "p1",
+     "title": "Brass lota, Moradabad"
+    },
+    {
+     "t": "row",
+     "id": "p2",
+     "title": "Chakla belan, Amritsar"
+    },
+    {
+     "t": "row",
+     "id": "p3",
+     "title": "Phulkari dupatta, Patiala"
+    }
+   ]
+  }
+ }
+}

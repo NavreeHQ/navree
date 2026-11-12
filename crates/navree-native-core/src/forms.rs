@@ -224,6 +224,32 @@ impl Core {
         self.region_go(id, &region, url);
     }
 
+    /// Asks a screen's own search: the words under the search's name, with
+    /// what else the search carries, as a query to its address. The answer
+    /// takes the screen's place.
+    pub(crate) fn search(&mut self, id: ScreenId, words: &str) {
+        let Some(view) = self.view.screens.get(&id) else {
+            return;
+        };
+        let Some(search) = view.screen().and_then(|screen| screen.search.as_ref()) else {
+            return;
+        };
+        let mut said: Vec<Part> = search.hidden.iter().map(|pair| text(&pair.name, &pair.value)).collect();
+        if !words.is_empty() {
+            said.push(text(&search.name, words));
+        }
+        let action = if search.action.is_empty() { view.url.clone() } else { search.action.clone() };
+        let Target::Inside(address) = self.resolve(&action, id) else {
+            return;
+        };
+        let path = address.split('?').next().unwrap_or("/");
+        let query = encode(&said);
+        let url = if query.is_empty() { path.to_owned() } else { format!("{path}?{query}") };
+        if url != view.url {
+            self.replace(id, &url);
+        }
+    }
+
     /// The form the server calls `id`, or the form that goes by it here.
     pub(crate) fn form_named(&self, screen: ScreenId, id: &str) -> Option<String> {
         let inner = self.inner.screens.get(&screen)?;
