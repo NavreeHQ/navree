@@ -264,6 +264,26 @@ fn colours(out: &mut String, spec: &ThemeSpec, base: Option<&ThemeSpec>) {
             out.push(')');
         }
     }
+    // The vivid end of each chart colour, derived from it in each palette: the far stop of
+    // a sheen and a ring's second lap (`--chart-N-vivid`). Written with its chart colour,
+    // so a theme that sets a chart colour by hand gets an end to match.
+    for token in Token::CHARTS {
+        let (light, dark) = (spec.light.get(token), spec.dark.get(token));
+        if base.is_some_and(|base| base.light.get(token) == light && base.dark.get(token) == dark) {
+            continue;
+        }
+        let (light, dark) = (light.vivid(Side::Light), dark.vivid(Side::Dark));
+        let _ = write!(out, ";--{}-vivid:", token.name());
+        if light == dark {
+            dark.write_hex(out);
+        } else {
+            out.push_str("light-dark(");
+            light.write_hex(out);
+            out.push(',');
+            dark.write_hex(out);
+            out.push(')');
+        }
+    }
 }
 
 /// `;--hover-mix:light-dark(light,dark)`: away from the text on the accent.
