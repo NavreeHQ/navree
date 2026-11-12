@@ -64,6 +64,14 @@ pub use routes::{LOWERING, Stamp};
 pub(crate) use routes::{Routes, app_stamp};
 pub(crate) use slots::chart::written as chart_numbers;
 
+/// Keeps the tree of the table rows written as `html` for the native client whose
+/// request is current; a browser's request keeps nothing.
+pub(crate) fn keep_rows(html: &str, rows: Node) {
+    if let Some(request) = scope::native() {
+        request.keep_rows(html, rows);
+    }
+}
+
 /// Keeps the typed values of the chart `id` for the native client whose request
 /// is current; a browser's request keeps nothing.
 pub(crate) fn record_chart(id: &str, values: String) {

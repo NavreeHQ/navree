@@ -19,7 +19,8 @@ use navree_native::input as i;
 use navree_native::node as n;
 
 use super::lower::{
-    Control, Cx, N, Parts, Read, align_of, attr, elements, fail, flat, has, id, one, slot, text_of,
+    Control, Cx, N, Parts, Read, align_of, attr, elements, fail, flat, has, hidden_in, hooks, id,
+    one, slot, text_of,
 };
 use crate::node::{Element, Node};
 
@@ -33,6 +34,10 @@ pub(crate) const HOOKS: &[&str] = &[
     "data-ui-live-catch-up",
     // Arrow keys through the cells: a client has its own way through a list.
     "data-ui-grid",
+    // A table that holds every row sorts them in the browser, and the server's answer to
+    // the same link only confirms the order: a client asks the server.
+    "data-ui-local",
+    "data-ui-sort-default",
 ];
 
 /// The form fields that only arrange the web table: the columns shown and
@@ -54,11 +59,17 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
     // fields of the query say the same.
     let _alert = parts.slot("table-alert");
     let _chips = parts.slot("table-chips");
+    let bulk = parts.slot("table-bulk");
+    // The question a bulk action asks first is a dialog of its own.
+    let confirm = parts.slot("alert-dialog");
     let Some(container) = parts.slot("table-container") else {
         return fail("a table with no table in it");
     };
     let footer = parts.slot("table-footer");
     parts.done()?;
+    if confirm.is_some() {
+        return fail("bulk actions that ask a question first");
+    }
 
     let inside = elements(container)?;
     let [markup] = inside.as_slice() else {
@@ -85,33 +96,53 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
                 table.empty = Some(Box::new(one(cx.of(cell))));
             }
             "tbody" => {
-                for row in flat(part.child_nodes()) {
-                    match row {
-                        Node::Element(row) => {
-                            if slot(row).is_some() {
-                                return fail("a row that is more than a record");
+                // Rows the page keeps as a string are kept as a tree with the request
+                // that built them; rows built any other way have none to read.
+                let mut kept: Vec<Node> = Vec::new();
+                for child in flat(part.child_nodes()) {
+                    match child {
+                        Node::Raw(html) => {
+                            let tree = super::scope::native()
+                                .and_then(|request| request.rows(html.as_str()));
+                            match tree {
+                                Some(rows) => kept.push(rows),
+                                None => {
+                                    return fail("rows written as markup, with no tree to read");
+                                }
                             }
-                            if table.rows.is_empty() {
-                                roles(row, &mut table.columns)?;
-                            }
-                            let mut read = cx.table_row(row)?;
-                            // What the row opens in place comes before where it leads.
-                            read.action = match attr(row, "data-ui-row-opens") {
-                                Some(opens) => Some(Action::Request {
-                                    method: n::Method::Get,
-                                    href: opens.into_owned(),
-                                    fields: Vec::new(),
-                                }),
-                                None => attr(row, "data-ui-row-href")
-                                    .map(|href| Action::navigate(href.into_owned())),
-                            };
-                            table.rows.push(read);
                         }
-                        Node::Raw(_) | Node::Static(_) => {
+                        Node::Static(_) => {
                             return fail("rows written as markup, with no tree to read");
                         }
                         _ => {}
                     }
+                }
+                let mut seen = flat(part.child_nodes());
+                seen.retain(|node| !matches!(node, Node::Raw(_)));
+                seen.extend(flat(&kept));
+                for row in seen {
+                    let Node::Element(row) = row else { continue };
+                    let detail = slot(row).as_deref() == Some("row-detail");
+                    if slot(row).is_some() && !detail {
+                        return fail("a row that is more than a record");
+                    }
+                    if table.rows.is_empty() {
+                        roles(row, &mut table.columns)?;
+                    }
+                    let mut read = data_row(cx, row, table.columns.len())?;
+                    if !detail {
+                        // What the row opens in place comes before where it leads.
+                        read.action = match attr(row, "data-ui-row-opens") {
+                            Some(opens) => Some(Action::Request {
+                                method: n::Method::Get,
+                                href: opens.into_owned(),
+                                fields: Vec::new(),
+                            }),
+                            None => attr(row, "data-ui-row-href")
+                                .map(|href| Action::navigate(href.into_owned())),
+                        };
+                    }
+                    table.rows.push(read);
                 }
             }
             other => return fail(format!("a <{other}> in a data table")),
@@ -149,6 +180,16 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
         }
         footer.done()?;
     }
+    // Rows with a box to select them are fields of the form that applies an action
+    // to the ones selected: the table stands inside it.
+    let children = match bulk {
+        Some(bulk) => {
+            let mut form = bulk_form(cx, bulk)?;
+            form.children.push(N::Table(table));
+            vec![N::Form(form)]
+        }
+        None => vec![N::Table(table)],
+    };
     Ok(vec![N::Region(n::Region {
         id,
         src: src.into_owned(),
@@ -157,8 +198,141 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
             src: live.into_owned(),
             event: attr(element, "data-ui-live-event").map(Cow::into_owned),
         }),
-        children: vec![N::Table(table)],
+        children,
     })])
+}
+
+/// The form that applies an action to the rows selected: where it goes, what it sends
+/// unseen, and the actions. The count and the buttons that select every row or none are
+/// a script's.
+fn bulk_form(cx: &mut Cx, bulk: &Element) -> Read<n::Form> {
+    hooks(bulk, &["data-ui-form", "data-ui-bulk"])?;
+    let mut parts = Parts::of(bulk);
+    let _status = parts.slot("bulk-status");
+    let actions = parts.slot("bulk-actions");
+    for node in parts.left() {
+        match node {
+            Node::Element(input)
+                if input.tag() == "input" && attr(input, "type").as_deref() == Some("hidden") => {}
+            Node::Text(text) if text.trim().is_empty() => {}
+            _ => return fail("a part of the bar over a table no reader here knows"),
+        }
+    }
+    let mut hidden = Vec::new();
+    hidden_in(bulk.child_nodes(), &mut hidden);
+    let children = match actions {
+        Some(actions) => {
+            hooks(actions, &[])?;
+            cx.as_form(|cx| cx.of(actions))
+        }
+        None => Vec::new(),
+    };
+    Ok(n::Form {
+        id: id(bulk),
+        method: n::Method::Post,
+        action: attr(bulk, "action").map(Cow::into_owned).unwrap_or_default(),
+        hidden,
+        children,
+    })
+}
+
+/// One row of the body: its cells in order, a box to select it, the control that
+/// opens its detail, its menu. A row of detail is one cell across the table.
+fn data_row(cx: &mut Cx, row: &Element, columns: usize) -> Read<n::TableRow> {
+    if row.tag() != "tr" {
+        return fail(format!("a <{}> among the rows of a table", row.tag()));
+    }
+    let key = attr(row, "data-key")
+        .or_else(|| attr(row, "id"))
+        .map(Cow::into_owned);
+    let cells = elements(row)?;
+    if slot(row).as_deref() == Some("row-detail") {
+        let [cell] = cells.as_slice() else {
+            return fail("a detail that is not one cell");
+        };
+        let mut shown = vec![one(cx.of(cell))];
+        while shown.len() < columns {
+            shown.push(N::text(""));
+        }
+        return Ok(n::TableRow {
+            id: key,
+            cells: shown,
+            action: None,
+        });
+    }
+    let mut out = Vec::with_capacity(cells.len());
+    for cell in cells {
+        if !matches!(cell.tag(), "td" | "th") {
+            return fail(format!("a <{}> among the cells of a row", cell.tag()));
+        }
+        if has(cell, "colspan") || has(cell, "rowspan") {
+            return fail("a cell that spans rows or columns");
+        }
+        out.push(match slot(cell).as_deref() {
+            Some("cell-select") => select_cell(cx, cell)?,
+            Some("cell-toggle") => toggle_cell(cx, cell)?,
+            _ => {
+                let read = cx.of(cell);
+                if read.is_empty() {
+                    N::text("")
+                } else {
+                    one(read)
+                }
+            }
+        });
+    }
+    Ok(n::TableRow {
+        id: key,
+        cells: out,
+        action: None,
+    })
+}
+
+/// The box that selects a row: a field of the form that applies an action to the
+/// rows selected.
+fn select_cell(cx: &mut Cx, cell: &Element) -> Read<N> {
+    let inside = elements(cell)?;
+    let [input] = inside.as_slice() else {
+        return fail("a cell to select a row that is not one box");
+    };
+    hooks(input, &["data-ui-select-row"])?;
+    let plain = super::slots::without(input, &["data-ui-select-row"]);
+    match cx.as_form(|cx| cx.control(&plain))? {
+        Control::Field(field) => Ok(N::Field(*field)),
+        _ => fail("a cell to select a row whose box is not a field"),
+    }
+}
+
+/// The control that opens a row's detail: a button that fetches the region again with
+/// the row opened or closed.
+fn toggle_cell(cx: &mut Cx, cell: &Element) -> Read<N> {
+    let inside = elements(cell)?;
+    let [link] = inside.as_slice() else {
+        return fail("a cell for a detail that is not one control");
+    };
+    if slot(link).as_deref() != Some("row-toggle") {
+        return fail("a cell for a detail that is not its control");
+    }
+    let action = cx.action_of(link)?;
+    let mut glyph = None;
+    for part in elements(link)? {
+        if slot(part).as_deref() == Some("icon") && glyph.is_none() {
+            glyph = Some(super::slots::icon(part)?);
+        } else {
+            return fail("a part of the control for a detail no reader here knows");
+        }
+    }
+    let Some(label) = attr(link, "aria-label") else {
+        return fail("a control for a detail with no name");
+    };
+    Ok(N::Button(n::Button {
+        id: id(link),
+        label: label.into_owned(),
+        icon: glyph,
+        icon_only: true,
+        action,
+        ..n::Button::default()
+    }))
 }
 
 /// The roles a native client's rows say their columns have: on each cell
@@ -213,13 +387,42 @@ fn head(head: &Element) -> Read<Vec<n::Column>> {
     };
     let mut columns = Vec::new();
     for cell in elements(row)? {
+        // The cells every row has beside its columns: a box, the control for a
+        // detail, a menu. They stand in the same places in the head.
+        match slot(cell).as_deref() {
+            Some("cell-select") => {
+                let mut label = String::new();
+                for part in elements(cell)? {
+                    hooks(part, &["data-ui-select-page"])?;
+                    if let Some(words) = attr(part, "aria-label") {
+                        label = words.into_owned();
+                    }
+                }
+                columns.push(n::Column {
+                    label,
+                    ..n::Column::default()
+                });
+                continue;
+            }
+            Some("cell-toggle") => {
+                columns.push(n::Column::default());
+                continue;
+            }
+            Some("cell-actions") => {
+                let mut label = String::new();
+                for part in elements(cell)? {
+                    label = text_of(part);
+                }
+                columns.push(n::Column {
+                    label,
+                    ..n::Column::default()
+                });
+                continue;
+            }
+            _ => {}
+        }
         if cell.tag() != "th" {
-            return fail(match slot(cell).as_deref() {
-                Some("cell-select") => "rows that are selected for a bulk action",
-                Some("cell-actions") => "rows with a menu of actions",
-                Some("cell-toggle") => "rows that open a detail under them",
-                _ => "a head cell that is not a column",
-            });
+            return fail("a head cell that is not a column");
         }
         let mut label = None;
         let mut sort = None;

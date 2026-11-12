@@ -120,6 +120,7 @@ async fn the_store_answers_a_native_client() {
     assert_eq!(
         native_routes,
         [
+            "/",
             "/orders",
             "/orders?filter[status][in]=open&sort=total",
             "/orders/1",
@@ -129,19 +130,15 @@ async fn the_store_answers_a_native_client() {
             "/inventory",
             "/inventory?page=2",
             "/fragments/figures",
+            "/fragments/sales",
             "/fragments/shelves",
         ],
         "{coverage}"
     );
-    // What keeps the rest in the web view is named.
+    // What keeps the rest in the web view is named: the live feed's rows are
+    // written by the handler itself.
     let reasons = coverage.reasons();
-    assert!(
-        reasons
-            .iter()
-            .any(|(why, pages)| why == "slot:chart" && *pages == 2),
-        "{reasons:?}"
-    );
-    assert!(reasons.iter().any(|(why, _)| why == "html"), "{reasons:?}");
+    assert_eq!(reasons, [("html".to_owned(), 1)], "{reasons:?}");
 }
 
 #[tokio::test]
@@ -457,15 +454,41 @@ async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
 }
 
 #[tokio::test]
-async fn the_dashboard_falls_back_and_its_page_comes_without_the_chrome_for_the_web_view() {
+async fn the_dashboard_gives_its_charts_as_numbers_and_what_it_cannot_say_falls_back_with_why() {
     let (app, _dir) = boot().await;
     let asked = ask(&app, "/").await;
     assert_eq!(asked.status, 200);
     assert_eq!(asked.location, None);
-    let web = envelope(&asked.native).web.expect("the web view");
-    assert_eq!(web.url, "/");
-    assert_eq!(web.title.as_deref(), Some("Dashboard"));
-    assert!(web.why.contains(&"slot:chart".to_owned()), "{:?}", web.why);
+    let screen = envelope(&asked.native).screen.expect("a screen");
+    assert_eq!(screen.title, "Dashboard");
+    // Each chart is the numbers it draws, as numbers, with the words the page shows
+    // them in beside them.
+    let charts: Vec<&n::Chart> = all(&screen.body)
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Chart(chart) => Some(chart),
+            _ => None,
+        })
+        .collect();
+    assert!(!charts.is_empty());
+    for chart in &charts {
+        assert!(!chart.labels.is_empty(), "{:?}", chart.title);
+        for series in &chart.series {
+            assert_eq!(series.values.len(), chart.labels.len());
+            assert!(series.values.iter().flatten().all(|value| value.as_f64().is_some()));
+        }
+    }
+    let sales = charts
+        .iter()
+        .find(|chart| chart.series.iter().any(|series| series.shown.iter().any(|words| words.contains('₹'))))
+        .expect("a chart of rupees");
+    assert!(sales.series[0].values.iter().flatten().count() > 0);
+    // The live feed's rows are written by the handler itself: a client is sent to
+    // the web view for them, with why.
+    let rows = ask(&app, "/fragments/activity").await;
+    let web = envelope(&rows.native).web.expect("the web view");
+    assert_eq!(web.url, "/fragments/activity");
+    assert!(web.why.contains(&"html".to_owned()), "{:?}", web.why);
     let embedded = app
         .client()
         .get("/")

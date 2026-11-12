@@ -1799,4 +1799,166 @@ async fn who_asked_is_current_where_the_handler_runs_even_on_another_task() {
         panic!("not one table");
     };
     assert_eq!(table.rows.len(), 2);
+/// The orders with a box to select each row, a menu of its actions, and a detail
+/// that opens under it.
+fn full_table<'a>(
+    query: &'a TableQuery<OrderRow, NoFilter>,
+    page: &'a TablePage<OrderRow>,
+) -> DataTable<'a, OrderRow, NoFilter> {
+    orders_table(query, page)
+        .csrf("tok-7")
+        .bulk(
+            "/orders/bulk",
+            [navree_ui::table::BulkAction::new("archive", "Archive")],
+        )
+        .row_actions(|row| {
+            vec![
+                navree_ui::RowAction::link("Open", format!("/orders/{}", row.id)),
+                navree_ui::RowAction::post("Cancel", format!("/orders/{}/cancel", row.id))
+                    .destructive(),
+            ]
+        })
+        .detail(|row| Text::new(format!("Notes on {}", row.number)).into())
+}
+
+fn full_view(query: &str) -> View {
+    let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", query);
+    let page = TablePage::new(vec![order(1, "open"), order(2, "completed")], 5);
+    View::new("Orders").body(full_table(&query, &page))
+}
+
+#[test]
+fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
+    let page = TestNative::build(phone(), || full_view("open=1"));
+    assert!(page.is_native(), "{:?}", page.page().misses);
+    let Some(N::Region(region)) = page.find("orders") else {
+        panic!("no table");
+    };
+    // The boxes are fields of the form that applies an action to the rows ticked, and
+    // the table stands inside that form.
+    let [N::Form(bulk)] = region.children.as_slice() else {
+        panic!("not one form: {:?}", region.children);
+    };
+    assert_eq!(bulk.method, n::Method::Post);
+    assert_eq!(bulk.action, "/orders/bulk");
+    assert!(
+        bulk.hidden
+            .iter()
+            .any(|hidden| hidden.name == "_csrf" && hidden.value == "tok-7")
+    );
+    let archive = bulk
+        .children
+        .iter()
+        .find_map(|node| match node {
+            N::Button(button) => Some(button),
+            _ => None,
+        })
+        .expect("the action");
+    assert_eq!(archive.label, "Archive");
+    let Some(N::Table(table)) = bulk.children.last() else {
+        panic!("no table in the form");
+    };
+    // The columns: the box, the control for the detail, the four shown, the menu.
+    let labels: Vec<&str> = table
+        .columns
+        .iter()
+        .map(|column| column.label.as_str())
+        .collect();
+    assert_eq!(
+        labels,
+        ["Select all on this page", "", "Order", "Status", "Total", "Placed", "Actions"]
+    );
+    // Row 1 is open: its detail follows it, across the table.
+    assert_eq!(table.rows.len(), 3);
+    let first = &table.rows[0];
+    assert_eq!(first.cells.len(), 7);
+    let N::Field(tick) = &first.cells[0] else {
+        panic!("not a box: {:?}", first.cells[0]);
+    };
+    assert_eq!((tick.name.as_str(), tick.label.as_deref()), ("ids", Some("Select CS-20481")));
+    assert!(matches!(&tick.input, Input::Toggle(toggle) if toggle.value.as_deref() == Some("1")));
+    let N::Button(open) = &first.cells[1] else {
+        panic!("not a control: {:?}", first.cells[1]);
+    };
+    assert!(open.icon_only);
+    assert_eq!(open.label, "Hide details");
+    assert!(matches!(
+        &open.action,
+        Some(Action::Navigate { present: navree_native::action::Present::Replace, .. })
+    ));
+    // The menu: a link and a post that carries the token the table was given.
+    let N::Menu(menu) = &first.cells[6] else {
+        panic!("not a menu: {:?}", first.cells[6]);
+    };
+    assert_eq!(menu.label, "Actions for CS-20481");
+    let [N::Button(link), N::Button(post)] = menu.items.as_slice() else {
+        panic!("not two items: {:?}", menu.items);
+    };
+    assert_eq!(link.action, Some(Action::navigate("/orders/1")));
+    assert_eq!(post.role, n::Role::Destructive);
+    assert_eq!(
+        post.action,
+        Some(Action::Request {
+            method: n::Method::Post,
+            href: "/orders/1/cancel".into(),
+            fields: vec![navree_native::action::Pair {
+                name: "_csrf".into(),
+                value: "tok-7".into()
+            }],
+        })
+    );
+    let detail = &table.rows[1];
+    assert_eq!(detail.id.as_deref(), Some("1-detail"));
+    assert_eq!(detail.cells[0], N::text("Notes on CS-20481"));
+    // The second row's control opens it.
+    let N::Button(closed) = &table.rows[2].cells[1] else {
+        panic!("not a control");
+    };
+    assert_eq!(closed.label, "Show details");
+}
+
+#[test]
+fn a_table_built_for_a_native_client_and_written_for_a_browser_writes_the_browsers_rows() {
+    let plain = full_view("open=1").to_html();
+    let mut during = String::new();
+    TestNative::build(phone(), || {
+        let view = full_view("open=1");
+        during = view.to_html();
+        view
+    });
+    assert_eq!(plain, during);
+    // Not an attribute for a client, not a row of a tree: the string.
+    assert!(!during.contains("data-role"));
+    assert!(during.contains(r#"data-slot="cell-select""#));
+}
+
+#[test]
+fn rows_a_native_client_was_never_given_are_still_a_miss() {
+    // A table built for a browser and read on its own has no tree to read.
+    let page = TestNative::of(&full_view("open=1"));
+    assert_eq!(page.why(), ["slot:data-table"]);
+}
+
+#[test]
+fn an_action_that_asks_first_and_a_hook_no_reader_knows_are_misses() {
+    let page = TestNative::build(phone(), || {
+        let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
+        let page = TablePage::new(vec![order(1, "open")], 1);
+        View::new("Orders").body(orders_table(&query, &page).bulk(
+            "/orders/bulk",
+            [navree_ui::table::BulkAction::new("delete", "Delete")
+                .destructive()
+                .confirm("Delete these orders?")],
+        ))
+    });
+    assert_eq!(page.why(), ["slot:data-table"]);
+    assert_eq!(
+        page.page().misses[0].why,
+        "bulk actions that ask a question first"
+    );
+    let node: navree_ui::Node = el("div")
+        .slot("data-table")
+        .flag("data-ui-wizard", true)
+        .into();
+    assert_eq!(lower(&node).why(), ["hook:data-ui-wizard"]);
 }

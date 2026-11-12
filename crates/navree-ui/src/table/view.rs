@@ -2843,11 +2843,16 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         }
         let has_rows = !self.data.rows.is_empty() && self.failed.is_none() && !self.loading;
         let body: Element = if has_rows {
-            // A native client can't read rows written as a string: for one, they are a tree.
+            // A native client can't read rows written as a string: for one, they are also
+            // a tree, kept with the request by the string they stand for.
             #[cfg(feature = "native-preview")]
-            let rows = self
-                .native_rows()
-                .unwrap_or_else(|| SafeHtml::trusted(self.body_rows(&sticky)).into());
+            let rows = {
+                let html = self.body_rows(&sticky);
+                if let Some(tree) = self.native_rows() {
+                    crate::native::keep_rows(&html, tree);
+                }
+                SafeHtml::trusted(html)
+            };
             #[cfg(not(feature = "native-preview"))]
             let rows = SafeHtml::trusted(self.body_rows(&sticky));
             el("tbody").child(rows)

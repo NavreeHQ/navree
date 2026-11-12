@@ -2,13 +2,22 @@
 //!
 //! For a browser a table's rows skip the tree: they are the bulk of a page,
 //! and each is written straight to one string. A string can't be read into
-//! native parts, so when a native client asked, the rows are built as a tree
-//! like everything else on the page: each cell is the component its column
-//! draws, or its text.
+//! native parts, so when a native client asked, the rows are also built as a
+//! tree like everything else on the page: each cell is the component its
+//! column draws, or its text; a box to select the row, a menu of its actions
+//! and the control that opens its detail are the same parts the string has.
+//!
+//! The tree is not put in the page. The page keeps the string, so a table built
+//! for a native client and written for a browser is the table it always was; the
+//! tree is kept with the request, by the string it stands for, and the reader of
+//! the table finds it there.
 
 use serde::de::DeserializeOwned;
 
 use super::DataTable;
+use crate::components::icon;
+use crate::html::Href;
+use crate::icons;
 use crate::node::{Node, el};
 use crate::table::{ColumnRole, FilterBar, TableRow};
 
@@ -23,16 +32,9 @@ fn role_name(role: ColumnRole) -> &'static str {
 }
 
 impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F> {
-    /// The rows as a tree, when a native client asked and the table has
-    /// nothing a native row can't hold yet: a checkbox to select it, a menu
-    /// of actions, a detail that opens under it. `None` leaves the rows to
-    /// the string a browser gets.
+    /// The rows as a tree, when a native client asked. `None` for a browser.
     pub(super) fn native_rows(&self) -> Option<Node> {
-        if !crate::native::Client::current().is_native()
-            || self.selectable()
-            || self.has_actions()
-            || self.has_detail()
-        {
+        if !crate::native::Client::current().is_native() {
             return None;
         }
         let state = &self.query.state;
@@ -51,10 +53,36 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             .filter_map(|(name, _)| R::COLUMNS.iter().position(|column| column.name == *name))
             .filter(|at| !state.cols.contains(at))
             .collect();
+        let span = self.span();
         let mut rows = Vec::with_capacity(self.data.rows.len());
         let mut text = String::new();
         for row in self.data.rows {
-            let mut cells = Vec::with_capacity(state.cols.len() + hidden.len());
+            let key = row.key();
+            let is_open = key
+                .as_ref()
+                .is_some_and(|key| state.open.iter().any(|open| open == key));
+            let mut cells: Vec<Node> = Vec::with_capacity(state.cols.len() + hidden.len() + 3);
+            if self.selectable() {
+                text.clear();
+                if let Some(first) = state.cols.first() {
+                    row.write_text(*first, &mut text);
+                }
+                let mut box_ = el("input")
+                    .slot("checkbox")
+                    .attr("type", "checkbox")
+                    .flag("data-ui-select-row", true)
+                    .attr("name", "ids")
+                    .attr("value", key.clone().unwrap_or_default())
+                    .attr("form", self.bulk_id())
+                    .attr("aria-label", self.labels.select_row.replace("{label}", &text));
+                if self.selectable_if.as_ref().is_some_and(|can| !can(row)) {
+                    box_ = box_.flag("disabled", true);
+                }
+                cells.push(el("td").slot("cell-select").child(box_).into());
+            }
+            if self.has_detail() {
+                cells.push(self.native_toggle(key.as_deref().unwrap_or_default(), is_open));
+            }
             for at in &state.cols {
                 let draw = self
                     .cells
@@ -71,8 +99,18 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                                 row.write_text(*at, &mut text);
                                 Node::Text(text.clone().into())
                             }
-                        }),
+                        })
+                        .into(),
                 );
+            }
+            // The menu is the last column of the table; a subtitle the table does not show
+            // comes after it, with the columns that are not drawn.
+            if self.has_actions() {
+                text.clear();
+                if let Some(first) = state.cols.first() {
+                    row.write_text(*first, &mut text);
+                }
+                cells.push(self.native_actions(key.as_deref().unwrap_or_default(), row, &text));
             }
             for at in &hidden {
                 text.clear();
@@ -83,12 +121,13 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                         .attr("data-role", "subtitle")
                         .attr("data-col", column.name)
                         .attr("data-label", column.label)
-                        .child(Node::Text(text.clone().into())),
+                        .child(Node::Text(text.clone().into()))
+                        .into(),
                 );
             }
             rows.push(
                 el("tr")
-                    .attr_opt("data-key", row.key())
+                    .attr_opt("data-key", key.clone())
                     .attr_opt(
                         "data-ui-row-href",
                         self.row_href.as_ref().map(|href| href(row)),
@@ -99,7 +138,90 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                     )
                     .child(cells),
             );
+            if is_open && let Some(detail) = &self.detail {
+                rows.push(
+                    el("tr")
+                        .slot("row-detail")
+                        .attr_opt("data-key", key.as_ref().map(|key| format!("{key}-detail")))
+                        .child(el("td").attr("colspan", span as i64).child(detail(row))),
+                );
+            }
         }
         Some(Node::list(rows))
+    }
+
+    /// The control that opens or closes a row's detail.
+    fn native_toggle(&self, key: &str, open: bool) -> Node {
+        let href = self.query.href_with(|state| {
+            if open {
+                state.open.retain(|other| other != key);
+            } else if state.open.len() < crate::table::MAX_OPEN_ROWS {
+                state.open.push(key.to_owned());
+            }
+        });
+        el("td")
+            .slot("cell-toggle")
+            .child(
+                el("a")
+                    .slot("row-toggle")
+                    .flag("data-ui-in-region", true)
+                    .attr("href", Href::from(href))
+                    .attr("aria-expanded", if open { "true" } else { "false" })
+                    .attr(
+                        "aria-label",
+                        if open {
+                            self.labels.hide_details.to_string()
+                        } else {
+                            self.labels.show_details.to_string()
+                        },
+                    )
+                    .child(icon(if open {
+                        icons::CHEVRON_DOWN
+                    } else {
+                        icons::CHEVRON_RIGHT
+                    })),
+            )
+            .into()
+    }
+
+    /// A row's menu: the button named for the row and the menu it opens.
+    fn native_actions(&self, key: &str, row: &R, label: &str) -> Node {
+        let Some(actions) = &self.row_actions else {
+            return Node::Empty;
+        };
+        let actions = actions(row);
+        let cell = el("td").slot("cell-actions");
+        if actions.is_empty() {
+            return cell.into();
+        }
+        let menu_id = format!("{}-a-{key}", self.id);
+        let trigger_id = format!("{menu_id}-t");
+        let items: Vec<Node> = actions
+            .into_iter()
+            .map(|action| self.action_item(action))
+            .collect();
+        let trigger = el("button")
+            .slot("button")
+            .attr("data-variant", "ghost")
+            .attr("data-size", "sm")
+            .flag("data-icon-only", true)
+            .attr("id", trigger_id.clone())
+            .attr("type", "button")
+            .attr("popovertarget", menu_id.clone())
+            .attr("aria-haspopup", "menu")
+            .attr("aria-expanded", "false")
+            .attr("data-ui-keep-attrs", "aria-expanded")
+            .attr("aria-label", self.labels.row_actions.replace("{label}", label))
+            .child(icon(icons::ELLIPSIS));
+        let menu = crate::components::menu_element(
+            &menu_id,
+            &trigger_id,
+            None,
+            "bottom",
+            crate::components::PopupAlign::End,
+            false,
+        )
+        .child(items);
+        cell.child(Node::list((trigger, menu))).into()
     }
 }

@@ -164,6 +164,14 @@ pub(crate) fn menu_of<'a>(
     menu::paired(cx, element, rest)
 }
 
+/// `element` without the attributes in `names`: a control read as the plain
+/// control it is, without the hooks that only mark it for a script.
+pub(crate) fn without(element: &Element, names: &[&str]) -> Element {
+    let mut copy = element.clone();
+    copy.attrs.retain(|attr| !names.contains(&attr.name));
+    copy
+}
+
 /// A component that only wraps what it holds.
 fn inside(cx: &mut Cx, element: &Element) -> Read {
     let children = cx.of(element);

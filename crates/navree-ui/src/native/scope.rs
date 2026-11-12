@@ -52,6 +52,9 @@ pub(crate) struct Request {
     /// The page's markup carries none of it, so a node built now and written for a
     /// browser later is the markup it always was.
     pub(crate) charts: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// The rows of the data tables built during the request, as trees, by a hash of
+    /// the string the page keeps for them.
+    pub(crate) rows: std::sync::Mutex<std::collections::HashMap<u64, crate::node::Node>>,
 }
 
 impl Request {
@@ -64,6 +67,7 @@ impl Request {
             stamp: super::Stamp::of(None),
             sign_in: None,
             charts: std::sync::Mutex::default(),
+            rows: std::sync::Mutex::default(),
         }
     }
 
@@ -74,10 +78,30 @@ impl Request {
         }
     }
 
+    /// Keeps the tree of the rows written as `html`.
+    pub(crate) fn keep_rows(&self, html: &str, rows: crate::node::Node) {
+        if let Ok(mut kept) = self.rows.lock() {
+            kept.insert(hash(html), rows);
+        }
+    }
+
+    /// The tree of the rows written as `html` during this request.
+    pub(crate) fn rows(&self, html: &str) -> Option<crate::node::Node> {
+        self.rows.lock().ok()?.get(&hash(html)).cloned()
+    }
+
     /// The values the chart `id` wrote during this request.
     pub(crate) fn chart(&self, id: &str) -> Option<String> {
         self.charts.lock().ok()?.get(id).cloned()
     }
+}
+
+/// What identifies a string: its hash.
+fn hash(text: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// What a request's headers ask for, or why they can't be answered.
@@ -117,6 +141,7 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
             stamp: super::Stamp::of(None),
             sign_in: None,
             charts: std::sync::Mutex::default(),
+            rows: std::sync::Mutex::default(),
         }))),
         Err(error) => Reading::Refused(error),
     }

@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use navree_native::node as n;
 
 use super::super::lower::{Control, Cx, N, Parts, Read, attr, elements, fail, has, id, slot, text_of};
+use super::without;
 use crate::node::Element;
 
 /// The hooks the root of a date control carries that this reader answers for.
@@ -68,13 +69,6 @@ fn plain(cx: &mut Cx, native: &Element) -> Read<n::Field> {
         return fail("a date control whose input is not a date");
     }
     Ok(*field)
-}
-
-/// `element` without the attributes in `names`.
-fn without(element: &Element, names: &[&str]) -> Element {
-    let mut copy = element.clone();
-    copy.attrs.retain(|attr| !names.contains(&attr.name));
-    copy
 }
 
 /// Notes the days a calendar switches off, which a client's date field has no
