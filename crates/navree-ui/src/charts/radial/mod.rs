@@ -355,10 +355,7 @@ impl Band<'_> {
                 .slot("radial-track")
                 .attr("stroke-width", width.clone());
             out.push(match self.paint.track {
-                RingTrack::Tinted => self
-                    .ink
-                    .on(track.attr("data-track", "tint"))
-                    .into(),
+                RingTrack::Tinted => self.ink.on(track.attr("data-track", "tint")).into(),
                 _ => track.into(),
             });
         }
@@ -368,9 +365,10 @@ impl Band<'_> {
             0.0
         };
         let first = share.min(1.0);
-        let url = self.paint.fill.as_ref().map(|g| {
-            defs.gradient(&g.clone().across_plot(), self.ink.color(), Some(self.area))
-        });
+        let url =
+            self.paint.fill.as_ref().map(|g| {
+                defs.gradient(&g.clone().across_plot(), self.ink.color(), Some(self.area))
+            });
         if let Some(d) = arc(self.cx, self.cy, self.r, self.from, first * self.sweep) {
             let path = self
                 .ink
@@ -393,7 +391,12 @@ impl Band<'_> {
                     .attr("d", d)
                     .attr("pathLength", 1_i64)
                     .attr("stroke-width", width);
-                out.push(self.motion.after(700).apply(lap, Effect::Draw, self.index).into());
+                out.push(
+                    self.motion
+                        .after(700)
+                        .apply(lap, Effect::Draw, self.index)
+                        .into(),
+                );
             }
         }
         out
@@ -467,7 +470,12 @@ pub(crate) fn glyph(icon: Icon) -> Element {
 
 /// The wrapper every radial drawing is in: its sizers, its plot and its middle. It links
 /// the radial sheet and the paint sheet, which colours the marks.
-pub(crate) fn wrap(kind: &'static str, sizers: Vec<Node>, plot: Element, middle: Option<Element>) -> Element {
+pub(crate) fn wrap(
+    kind: &'static str,
+    sizers: Vec<Node>,
+    plot: Element,
+    middle: Option<Element>,
+) -> Element {
     el("div")
         .slot("radial")
         .attr("data-kind", kind)
@@ -505,7 +513,10 @@ pub(crate) fn finish(
                 .into(),
             None => root
                 .flag("data-empty", true)
-                .attr("aria-label", format!("{}: {}", common.title, common.labels.empty))
+                .attr(
+                    "aria-label",
+                    format!("{}: {}", common.title, common.labels.empty),
+                )
                 .child("\u{2013}")
                 .into(),
         };
@@ -516,8 +527,10 @@ pub(crate) fn finish(
         return node;
     }
     // The frame is always a figure.
-    node.into_element()
-        .map_or_else(|| Node::list(Vec::<Node>::new()), |figure| figure.uses(Uses::CHARTS).into())
+    node.into_element().map_or_else(
+        || Node::list(Vec::<Node>::new()),
+        |figure| figure.uses(Uses::CHARTS).into(),
+    )
 }
 
 /// The summary of one value: `{name}: {value} of {max}, {share}.`, and its band.
@@ -537,7 +550,12 @@ pub(crate) fn summary_of(
         ),
         None => fill(
             &words.summary_ring,
-            &[("name", name), ("value", value), ("max", max), ("share", share)],
+            &[
+                ("name", name),
+                ("value", value),
+                ("max", max),
+                ("share", share),
+            ],
         ),
     };
     if let Some(band) = band {
@@ -568,7 +586,10 @@ mod tests {
             Some("M50 10A40 40 0 0 1 50 90A40 40 0 0 1 50 10")
         );
         // Past a whole turn is a whole turn; nothing, or a turn that is not a number, is no arc.
-        assert_eq!(arc(50.0, 50.0, 40.0, 0.0, 500.0), arc(50.0, 50.0, 40.0, 0.0, 360.0));
+        assert_eq!(
+            arc(50.0, 50.0, 40.0, 0.0, 500.0),
+            arc(50.0, 50.0, 40.0, 0.0, 360.0)
+        );
         assert_eq!(arc(50.0, 50.0, 40.0, 0.0, 0.0), None);
         assert_eq!(arc(50.0, 50.0, 40.0, 0.0, -10.0), None);
         assert_eq!(arc(50.0, 50.0, 40.0, 0.0, f64::NAN), None);
@@ -595,7 +616,10 @@ mod tests {
     #[test]
     fn a_wedge_closes_between_its_radii() {
         let d = wedge(180.0, 180.0, 60.0, 100.0, 0.0, 90.0);
-        assert_eq!(d, "M180 80A100 100 0 0 1 280 180L240 180A60 60 0 0 0 180 120Z");
+        assert_eq!(
+            d,
+            "M180 80A100 100 0 0 1 280 180L240 180A60 60 0 0 0 180 120Z"
+        );
     }
 
     #[test]
@@ -606,8 +630,16 @@ mod tests {
         sizes.set(Screen::Md, 168);
         let out: Vec<String> = sizes.sizers(|w| w).iter().map(render).collect();
         assert_eq!(out.len(), 3);
-        assert!(out[0].contains(r#"data-to="md" width="120" height="120""#), "{}", out[0]);
-        assert!(out[1].contains(r#"data-at="md" data-to="lg" width="168""#), "{}", out[1]);
+        assert!(
+            out[0].contains(r#"data-to="md" width="120" height="120""#),
+            "{}",
+            out[0]
+        );
+        assert!(
+            out[1].contains(r#"data-at="md" data-to="lg" width="168""#),
+            "{}",
+            out[1]
+        );
         assert!(out[2].contains(r#"data-at="lg" width="200""#), "{}", out[2]);
         assert!(!out[2].contains("data-to"));
     }
