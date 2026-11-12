@@ -24,7 +24,7 @@ use http::{HeaderValue, StatusCode};
 use navree_http::extract::Request;
 use navree_http::middleware::Next;
 use navree_http::response::{IntoResponse, Response};
-use navree_native::{CONTENT_TYPE as NATIVE_TYPE, EMBED_HEADER, Envelope, NATIVE_HEADER, Web};
+use navree_native::{CONTENT_TYPE as NATIVE_TYPE, Envelope, NATIVE_HEADER, Web};
 use serde::Serialize;
 
 use super::lower::{Cx, Miss, N};
@@ -32,7 +32,7 @@ use super::page::{self, Page};
 use super::scope::{self, Asked, Reading};
 use crate::asked::{WhoAsked, in_web_view};
 use crate::node::Node;
-use crate::op::{Op, PendingOps, UI_HEADER};
+use crate::op::{OPS_CONTENT_TYPE, Op, PendingOps, UI_HEADER, is_prefetch};
 use crate::view::View;
 use crate::{assets, compress};
 
@@ -335,6 +335,10 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     response
 }
 
+/// What a web view's page varies on: who asked, by the native header, the
+/// first load's header and the user agent's last word.
+const WEB_VIEW_VARY: &str = "x-navree-native, x-navree-embed, user-agent";
+
 /// The page as HTML without the app's chrome: what stands in `<main>`, with
 /// the page's own toasts. Its links are not boosted, so each is a navigation
 /// the client can take back.
@@ -357,7 +361,8 @@ fn embed(mut view: View) -> Response {
                 HeaderValue::from_static(crate::view::PAGE_CSP),
             ),
             (CACHE_CONTROL, HeaderValue::from_static(parts.cache)),
-            (VARY, HeaderValue::from_static(EMBED_HEADER)),
+            // Not the browser's page, and not the native client's envelope.
+            (VARY, HeaderValue::from_static(WEB_VIEW_VARY)),
         ],
         html,
     )
@@ -457,6 +462,22 @@ pub(crate) async fn layer(
     })
 }
 
+/// Says that a browser's page, fragment or ops for a URL are not what a
+/// native client gets for it, so a cache keeps the two apart. One header
+/// lookup, and a header added to such an answer.
+#[inline]
+pub(crate) fn vary_on_native(response: &mut Response) {
+    let differs = response.headers().get(CONTENT_TYPE).is_some_and(|value| {
+        let value = value.as_bytes();
+        value.starts_with(b"text/html") || value.starts_with(OPS_CONTENT_TYPE.as_bytes())
+    });
+    if differs {
+        response
+            .headers_mut()
+            .append(VARY, HeaderValue::from_static(NATIVE_HEADER));
+    }
+}
+
 /// Why a native request was not served, as plain text.
 fn refuse(status: StatusCode, why: &str) -> Response {
     (
@@ -495,7 +516,15 @@ async fn embedded(request: Request, next: Next) -> Response {
 /// whatever it answers leaves as an envelope or as something that is not a page.
 async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Response {
     let accept = compress::accept_of(request.headers());
+    // Recorded as the runtime's requests are: each is an operation of the app.
+    let operation = (!is_prefetch(request.headers()))
+        .then(|| crate::module::operation_kind(request.method(), request.headers()));
+    let started = std::time::Instant::now();
     let mut response = scope::scope(Asked::Native(native.clone()), next.run(request)).await;
+    let pending = response
+        .extensions()
+        .get::<PendingOps>()
+        .map(|pending| pending.0.ops.len());
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
         // Ops that can all be said natively take the fallback's place. When
         // they can't, or there are none (a handler that keeps its ops for the
@@ -550,6 +579,10 @@ async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Re
         wrapped.extensions_mut().insert(answered);
         response = wrapped;
     }
+    if let Some(kind) = operation {
+        let ops = pending.map_or(0, |ops| u32::try_from(ops).unwrap_or(u32::MAX));
+        crate::module::record_operation(kind, &response, ops, started);
+    }
     squeeze(&accept, response).await
 }
 
@@ -595,19 +628,21 @@ mod tests {
     use crate::{Button, Card, Stack, Text};
 
     /// What the web path pays when the feature is on, measured: the reply
-    /// layer's two header lookups, and the one read of the current client that
-    /// a page and a node op each make. Run it with
-    /// `cargo test -p navree-ui --release --lib native::swap::tests::what_a_browser -- --ignored --nocapture`.
+    /// layer's reading of who asked (which it did before for the runtime's
+    /// header alone), the header that says a browser's answer varies on it, and
+    /// the one read of the current client that a page and a node op each make.
+    /// Run it with
+    /// `cargo test -p navree-ui --features native-preview --release --lib native::swap::tests::what_a_browser -- --ignored --nocapture`.
     #[test]
     #[ignore = "a measurement, not a check"]
     fn what_a_browser_pays_for_native_clients() {
         const TIMES: u32 = 2_000_000;
-        let mut headers = HeaderMap::new();
+        let mut page = HeaderMap::new();
         for (name, value) in [
             ("host", "example.in"),
             (
                 "user-agent",
-                "Mozilla/5.0 (Linux; Android 16) Chrome/140 Mobile",
+                "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36",
             ),
             ("accept", "text/html,application/xhtml+xml"),
             ("accept-language", "en-IN,en;q=0.9,pa;q=0.8"),
@@ -615,26 +650,46 @@ mod tests {
             ("cookie", "navree_session=abc; navree_ui_theme=ocean"),
             ("sec-fetch-site", "same-origin"),
             ("sec-fetch-mode", "navigate"),
-            ("x-navree-ui", "1"),
         ] {
-            headers.insert(name, HeaderValue::from_static(value));
+            page.insert(name, HeaderValue::from_static(value));
         }
-        let started = Instant::now();
+        let mut fetch = page.clone();
+        fetch.insert("x-navree-ui", HeaderValue::from_static("1"));
         let mut native = 0_u32;
+        let started = Instant::now();
         for _ in 0..TIMES {
-            let headers = black_box(&headers);
-            native += u32::from(
-                headers.contains_key(NATIVE_HEADER) || headers.contains_key(EMBED_HEADER),
-            );
+            native += u32::from(crate::asked::who_asked(black_box(&page)) != WhoAsked::Browser);
         }
-        let lookups = started.elapsed() / TIMES;
+        let a_page = started.elapsed() / TIMES;
+        let started = Instant::now();
+        for _ in 0..TIMES {
+            let headers = black_box(&fetch);
+            let asked = crate::asked::who_asked(headers);
+            native += u32::from(asked == WhoAsked::Runtime && in_web_view(headers));
+        }
+        let a_fetch = started.elapsed() / TIMES;
         let started = Instant::now();
         for _ in 0..TIMES {
             native += u32::from(black_box(scope::asked()).is_some());
         }
         let ambient = started.elapsed() / TIMES;
+        const RESPONSES: u32 = 200_000;
+        let mut responses: Vec<Response> = (0..RESPONSES)
+            .map(|_| {
+                (
+                    [(CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"))],
+                    "",
+                )
+                    .into_response()
+            })
+            .collect();
+        let started = Instant::now();
+        for response in &mut responses {
+            vary_on_native(black_box(response));
+        }
+        let vary = started.elapsed() / RESPONSES;
         assert_eq!(native, 0);
-
+        let lookups = a_page;
         // Beside one small page drawn for a browser.
         let page = || {
             View::new("Order").body(Stack::gap(4).children((
@@ -648,7 +703,9 @@ mod tests {
             black_box(page().into_response());
         }
         let drawn = started.elapsed() / PAGES;
-        println!("two header lookups: {lookups:?}");
+        println!("who asked, for a page: {lookups:?}");
+        println!("who asked, for the runtime's fetch: {a_fetch:?}");
+        println!("the header that says the answer varies: {vary:?}");
         println!("one read of the current client: {ambient:?}");
         println!("a small page built and drawn: {drawn:?}");
     }

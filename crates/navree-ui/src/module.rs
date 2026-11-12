@@ -286,27 +286,44 @@ async fn reply_layer(request: Request, next: Next) -> Response {
             .headers_mut()
             .append(header::VARY, HeaderValue::from_static(UI_HEADER));
     }
+    // A native client asking the same URL gets another answer.
+    #[cfg(feature = "native-preview")]
+    crate::native::swap::vary_on_native(&mut response);
     if let Some(kind) = operation {
-        navree_telemetry::Telemetry::current().ui_operation(|| {
-            let name = response
-                .extensions()
-                .get::<Arc<navree_http::RouteMeta>>()
-                .map_or_else(|| "unmatched".to_owned(), |route| route.full_path.clone());
-            navree_telemetry::UiOperation::new(
-                name,
-                kind,
-                response.status().as_u16(),
-                ops,
-                started.elapsed(),
-            )
-        });
+        record_operation(kind, &response, ops, started);
     }
     compress::encode(&method, &accept, response).await
 }
 
+/// Records an operation the runtime or a native client asked for, in the
+/// telemetry of the request.
+pub(crate) fn record_operation(
+    kind: navree_telemetry::UiOperationKind,
+    response: &Response,
+    ops: u32,
+    started: std::time::Instant,
+) {
+    navree_telemetry::Telemetry::current().ui_operation(|| {
+        let name = response
+            .extensions()
+            .get::<Arc<navree_http::RouteMeta>>()
+            .map_or_else(|| "unmatched".to_owned(), |route| route.full_path.clone());
+        navree_telemetry::UiOperation::new(
+            name,
+            kind,
+            response.status().as_u16(),
+            ops,
+            started.elapsed(),
+        )
+    });
+}
+
 /// What a request from the runtime is: a region fetched again, a fragment
 /// of a page, a form posted or another action.
-fn operation_kind(method: &Method, headers: &HeaderMap) -> navree_telemetry::UiOperationKind {
+pub(crate) fn operation_kind(
+    method: &Method,
+    headers: &HeaderMap,
+) -> navree_telemetry::UiOperationKind {
     use navree_telemetry::UiOperationKind;
 
     if method == Method::GET || method == Method::HEAD {

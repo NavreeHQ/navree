@@ -596,12 +596,8 @@ async fn a_browser_gets_the_html_it_always_got() {
         response.header("content-type"),
         Some("text/html; charset=utf-8")
     );
-    assert!(
-        !response
-            .header("vary")
-            .unwrap_or_default()
-            .contains("navree")
-    );
+    // A cache keeps it apart from what a native client gets for the same URL.
+    assert_eq!(response.header("vary"), Some("x-navree-native"));
     let expected = order_page(&shell().for_request("/orders/1", &http::HeaderMap::new()))
         .to_view()
         .to_html();
@@ -800,18 +796,33 @@ async fn markup_a_handler_rendered_itself_never_reaches_a_native_client_as_it_is
 #[tokio::test]
 async fn the_web_view_of_a_native_client_gets_the_page_without_the_chrome() {
     let app = app().await;
-    let response = app
+    // The first load may say so with a header; every load ends its user agent with the token.
+    let first = app
         .client()
         .get("/board")
         .header("x-navree-embed", "1")
+        .send()
+        .await
+        .text();
+    let response = app
+        .client()
+        .get("/board")
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/0.1.0",
+        )
         .send()
         .await;
     assert_eq!(
         response.header("content-type"),
         Some("text/html; charset=utf-8")
     );
-    assert_eq!(response.header("vary"), Some("x-navree-embed"));
+    assert_eq!(
+        response.header("vary"),
+        Some("x-navree-native, x-navree-embed, user-agent")
+    );
     let html = response.text();
+    assert_eq!(html, first);
     assert!(html.contains("<canvas></canvas>"), "{html}");
     assert!(html.contains(r#"<main data-slot="page""#), "{html}");
     assert!(html.contains("<title>Board</title>"), "{html}");
@@ -931,4 +942,117 @@ async fn a_big_envelope_goes_out_in_brotli_to_a_client_that_takes_it() {
         .send()
         .await;
     assert_eq!(squeezed.header("content-encoding"), Some("br"));
+}
+
+#[tokio::test]
+async fn both_answers_vary_on_who_asked() {
+    let app = app().await;
+    let client = app.client();
+    let varies = |vary: Option<&str>| {
+        vary.unwrap_or_default()
+            .split(',')
+            .any(|name| name.trim().eq_ignore_ascii_case("x-navree-native"))
+    };
+    for path in ["/orders/1", "/orders", "/fragments/figures", "/fragments/feed"] {
+        let browser = client.get(path).send().await;
+        assert!(
+            browser
+                .header("content-type")
+                .is_some_and(|kind| kind.starts_with("text/html")),
+            "{path}"
+        );
+        let vary: Vec<String> = browser.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+        assert!(vary.iter().any(|v| varies(Some(v))), "{path}: {vary:?}");
+        let native = client
+            .get(path)
+            .header(NATIVE, "1")
+            .header(CLIENT, PHONE)
+            .send()
+            .await;
+        assert_eq!(
+            native.header("content-type"),
+            Some("application/vnd.navree.native+json"),
+            "{path}"
+        );
+        assert!(varies(native.header("vary")), "{path}");
+    }
+    // The runtime's ops, and the native client's, for one action.
+    let runtime = client
+        .post("/orders/1/refund")
+        .header("x-navree-ui", "1")
+        .send()
+        .await;
+    let vary: Vec<String> = runtime.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+    assert!(vary.iter().any(|v| varies(Some(v))), "{vary:?}");
+    // The web view's page is neither.
+    let web_view = client
+        .get("/orders/1")
+        .header("user-agent", "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 NavreeNative/0.1.0")
+        .send()
+        .await;
+    let vary = web_view.header("vary").unwrap_or_default().to_owned();
+    assert!(vary.contains("x-navree-native") && vary.contains("user-agent"), "{vary}");
+    // An error page varies on it too.
+    let missing = client.get("/nowhere").header("accept", "text/html").send().await;
+    let vary: Vec<String> = missing.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+    assert!(vary.iter().any(|v| varies(Some(v))), "{vary:?}");
+}
+
+#[tokio::test]
+async fn a_native_request_is_recorded_as_the_runtime_s_are() {
+    use navree_telemetry::{TelemetryRecorder, UiOperationKind};
+
+    let recorder = TelemetryRecorder::new();
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App)
+        .module(recorder.module())
+        .build()
+        .await;
+    let client = app.client();
+    client
+        .get("/orders/1")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    client
+        .post("/orders/1/refund")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await;
+    client
+        .get("/fragments/figures")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .header("x-navree-region", "figures")
+        .send()
+        .await;
+    // A fetch ahead of a tap is not an operation, nor is a browser's page.
+    client
+        .get("/orders/1")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .header("x-navree-prefetch", "1")
+        .send()
+        .await;
+    client.get("/orders/1").send().await;
+    let operations = recorder.ui_operations();
+    let seen: Vec<(&str, UiOperationKind, u16)> = operations
+        .iter()
+        .map(|op| (op.name.as_str(), op.kind, op.status))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("/orders/{id}", UiOperationKind::Fragment, 200),
+            ("/orders/{id}/refund", UiOperationKind::FormPost, 200),
+            ("/fragments/figures", UiOperationKind::LiveRegion, 200),
+        ]
+    );
+    assert!(operations[1].ops >= 3, "the close, the morph and the toast");
+    app.shutdown().await.unwrap();
 }

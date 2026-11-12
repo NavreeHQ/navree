@@ -181,7 +181,14 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
     for (name, value) in error.headers.iter() {
         headers.insert(name.clone(), value.clone());
     }
+    #[cfg(not(feature = "native-preview"))]
     headers.append(VARY, HeaderValue::from_static("accept, x-navree-ui"));
+    // A native client's answer to the same URL is its own.
+    #[cfg(feature = "native-preview")]
+    headers.append(
+        VARY,
+        HeaderValue::from_static("accept, x-navree-ui, x-navree-native"),
+    );
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Some(response)
 }
