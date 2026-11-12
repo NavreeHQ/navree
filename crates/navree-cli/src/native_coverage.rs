@@ -320,7 +320,7 @@ pub fn render(report: &Report, app: &str) -> String {
         let parts: Vec<String> = report
             .not_pages
             .iter()
-            .map(|n| format!("{} {}", n.count, n.reason))
+            .map(|n| format!("{} ({})", n.reason, n.count))
             .collect();
         out.push_str(&format!(
             "\nNot pages, so not asked: {}.\n",
@@ -497,7 +497,7 @@ Skipped (2):
   /orders/{id}/lines/{line}: needs a value for {line}; add `line = ...` under [coverage.params] in native.toml
   /me: answered 303 to /sign-in: signed out; give a session in `[coverage.headers]`
 
-Not pages, so not asked: 4 not a GET; 2 routes under the API prefix.
+Not pages, so not asked: not a GET (4); routes under the API prefix (2).
 ";
         assert_eq!(out, expected);
     }

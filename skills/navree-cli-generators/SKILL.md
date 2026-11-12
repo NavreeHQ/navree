@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form` and `make:table` for Navree UI), the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form or data table), running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form` and `make:table` for Navree UI), the marker comments, `navree dev`, `navree native:coverage` and `navree native:doctor` for apps that answer native clients, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form or data table), running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -13,7 +13,8 @@ Two command lines:
 - **The app's binary** owns runtime commands (`serve`, `migrate`,
   `queue:work`, ...). `navree <command>` forwards anything the CLI doesn't
   own (`new`, `make:*`, `dev`, `check`, `gate`, `dock*`, the Harbor commands,
-  `mcp`, `skills:install`, `browser:install`, `openapi:client`) as
+  `mcp`, `skills:install`, `browser:install`, `openapi:client`,
+  `native:coverage`, `native:doctor`) as
   `cargo run --quiet -- <command>`. In
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'
@@ -165,6 +166,56 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 - Schedule it with `m.schedule(|s| { s.command("exports:clear", &[]).daily_at("04:00"); })`.
 - Test with `app.run_command("exports:clear", &["--dry-run"]).await`.
 
+## Native apps (preview)
+
+An app built with the `ui-native-preview` feature answers native clients with
+the same pages. Two commands tell an author where the app stands; neither needs
+a browser or a device.
+
+```sh
+navree native:coverage                      # each page route asked as an Android phone: grade and what is missing
+navree native:coverage --platform ios --form tablet
+navree native:coverage --json               # for tools
+navree native:coverage --fail-on web        # a gate: exit 1 when a page is shown in the web view (layout: layout or web)
+navree native:doctor                        # what a native build needs: ready, missing or not applicable, and the next step
+navree native:doctor --platform android --url https://orders.example.com --json
+```
+
+- Grades: `idiom` (the page belongs to the system), `layout` (native parts in a
+  web-shaped layout), `web` (shown in a web view). The table says in words what
+  keeps a page from `idiom`.
+- `native:coverage` builds the app with the app's cargo feature that turns the
+  preview on (a `[features]` entry that lists `navree/ui-native-preview`), or
+  with `--features <name>`. It runs the app's own `native:coverage` command,
+  which `UiModule` registers.
+- Routes with parameters need example values. They go in `native.toml` at the
+  app's root (beside `dock.toml`), never in `config/`:
+
+  ```toml
+  [coverage.params]
+  id = 1                                  # every `{id}` in a route
+
+  [coverage.routes."/orders/{order}/lines/{line}"]
+  line = 2                                # one route's own value
+
+  [coverage]
+  also = ["/orders?filter[status][in]=open"]   # addresses with a query
+  skip = ["/admin/*"]                          # left out on purpose
+
+  [coverage.headers]
+  cookie = "navree_session=${COVERAGE_SESSION}"   # a signed-in person; ${NAME} is an environment variable
+  ```
+
+  A route with a parameter that has no value is listed as skipped, with the line
+  to add. Routes that are not pages by nature (not GET, data routes, event
+  streams, the toolkit's files) are counted, not listed.
+- `native:doctor` never changes anything and never prints a secret. It checks
+  the preview feature, `auth.apps` (Apple team and bundle ids, Android packages
+  and fingerprints), the association files (`--url` asks a running site), passkey
+  origins, `notify.push` keys (presence only), social providers, the JDK, the
+  Android SDK and platform, and Xcode (on a Mac; elsewhere it says Apple builds
+  need a Mac or a cloud build). It exits 1 when anything is missing.
+
 ## Common mistakes
 
 - Deleting or moving the marker comments: generators then only print hints.
@@ -176,6 +227,10 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
   the page then shows no workspace and the generic user menu.
 - `navree new` writes `navree = "1.0.2"` (the CLI's own version) when it
   can't find a checkout: pass `--navree-path`.
+- Putting `native.toml` in `config/`: every file there is read as a section of
+  the app's own settings. It belongs at the app's root.
+- Using `native:coverage --fail-on` in CI without example values: routes with
+  parameters are skipped, and a gate that asked no page fails.
 
 ## Docs
 
