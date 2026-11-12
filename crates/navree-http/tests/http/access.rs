@@ -959,3 +959,63 @@ async fn a_signed_in_readers_answer_is_never_left_to_a_shared_cache() {
     let unstored = app.send(as_user("GET", "/api/unstored", ALICE)).await;
     assert_eq!(unstored.header("cache-control"), Some("no-store"));
 }
+
+// `private="Set-Cookie"` makes only the named field private, so it leaves the page to a
+// shared cache; and a CDN's own caching headers would let it keep the page whatever
+// Cache-Control says. A signed-in reader's answer gets neither through.
+#[tokio::test]
+async fn a_signed_in_answer_loses_partial_privacy_and_cdn_caching_headers() {
+    let page = |cache: &'static str| {
+        move || async move {
+            let mut response = http::Response::new(Body::from("page"));
+            let headers = response.headers_mut();
+            headers.insert(
+                http::header::CACHE_CONTROL,
+                http::HeaderValue::from_static(cache),
+            );
+            for cdn in [
+                "cdn-cache-control",
+                "cloudflare-cdn-cache-control",
+                "surrogate-control",
+            ] {
+                headers.insert(cdn, http::HeaderValue::from_static("max-age=600"));
+            }
+            response
+        }
+    };
+    let app = Setup::new(vec![
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/named",
+            page("public, max-age=60"),
+            page("private=\"Set-Cookie\", max-age=600"),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/kept",
+            page("public, max-age=60"),
+            page("private, max-age=60"),
+        ),
+    ])
+    .authenticated()
+    .boot()
+    .await;
+
+    let named = app.send(as_user("GET", "/api/named", ALICE)).await;
+    assert_eq!(named.header("cache-control"), Some("private, no-store"));
+    let kept = app.send(as_user("GET", "/api/kept", ALICE)).await;
+    assert_eq!(kept.header("cache-control"), Some("private, max-age=60"));
+    for reader in [&named, &kept] {
+        for cdn in [
+            "cdn-cache-control",
+            "cloudflare-cdn-cache-control",
+            "surrogate-control",
+        ] {
+            assert_eq!(reader.header(cdn), None, "{cdn}");
+        }
+    }
+    // A guest's page is the guest handler's, CDN headers and all.
+    let guest = app.get("/api/named").await;
+    assert_eq!(guest.header("cache-control"), Some("public, max-age=60"));
+    assert_eq!(guest.header("surrogate-control"), Some("max-age=600"));
+}
