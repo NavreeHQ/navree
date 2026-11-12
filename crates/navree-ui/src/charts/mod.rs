@@ -49,6 +49,7 @@ mod funnel;
 pub(crate) mod marks;
 pub(crate) mod motion;
 pub(crate) mod paint;
+pub(crate) mod radial;
 mod report;
 mod report_export;
 #[cfg(feature = "orm")]
@@ -66,6 +67,9 @@ pub use funnel::{Funnel, MAX_STAGES, Stage};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
 pub use motion::{CountUp, Motion, Speed};
 pub use paint::{ColorScale, Gradient, Ink};
+pub use radial::{
+    DayClock, Gauge, Moment, RadialLabels, Ring, RingTrack, RingValue, Rings, Screen,
+};
 pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
 pub use report_export::ReportTable;
 #[cfg(feature = "orm")]

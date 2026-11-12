@@ -302,6 +302,20 @@ impl Gradient {
         self
     }
 
+    /// The ink of its first stop, unmixed, unless that stop is the mark's own colour: the
+    /// colour a mark painted with this gradient wears for what goes with it (its glow,
+    /// the words beside it).
+    pub(crate) fn lead(&self) -> Option<Ink> {
+        self.stops
+            .iter()
+            .min_by(|a, b| a.offset.total_cmp(&b.offset))
+            .filter(|s| s.ink.base != Base::Own)
+            .map(|s| Ink {
+                base: s.ink.base,
+                mix: Mix::None,
+            })
+    }
+
     /// The gradient's element, called `id`, its own colour stops resolved to `color`.
     /// `area` is the drawing's box in user units (x, y, width, height): used when the
     /// gradient spans the plot, and always for a stroke, whose box can have no height.
@@ -551,6 +565,17 @@ mod tests {
         let g = Gradient::angle(90.0);
         let out = render(&g.element("z", Color::Slot(1), None).into());
         assert!(out.contains(r#"x1="0.5" y1="0" x2="0.5" y2="1""#), "{out}");
+    }
+
+    #[test]
+    fn a_gradient_leads_with_its_first_stop_unless_it_is_the_marks_own() {
+        assert_eq!(Gradient::sheen(Ink::slot(7)).lead(), Some(Ink::slot(7)));
+        let late = Gradient::horizontal()
+            .stop(1.0, Ink::slot(2))
+            .stop(0.0, Ink::slot(3).vivid());
+        assert_eq!(late.lead(), Some(Ink::slot(3)));
+        assert_eq!(Gradient::sheen(Ink::own()).lead(), None);
+        assert_eq!(Gradient::radial().lead(), None);
     }
 
     #[test]

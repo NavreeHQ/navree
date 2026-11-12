@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "3caea7f48289";
+pub const BUILD: &str = "62a71822b5f2";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-97b1dcae61e2.js";
@@ -120,6 +120,9 @@ pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-8c2dc9bac340.css"
 
 /// The URL of `chart-paint.css`.
 pub const CHART_PAINT_URL: &str = "/_navree/ui/chart-paint-e4c8ec2ec030.css";
+
+/// The URL of `chart-radial.css`.
+pub const CHART_RADIAL_URL: &str = "/_navree/ui/chart-radial-35a015241db1.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
@@ -512,6 +515,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/chart-paint.css"),
         gzip: Some(include_bytes!("../dist/chart-paint.css.gz")),
         brotli: Some(include_bytes!("../dist/chart-paint.css.br")),
+    },
+    Asset {
+        name: "chart-radial",
+        ext: "css",
+        hash: "35a015241db1",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/chart-radial.css"),
+        gzip: Some(include_bytes!("../dist/chart-radial.css.gz")),
+        brotli: Some(include_bytes!("../dist/chart-radial.css.br")),
     },
     Asset {
         name: "parts-styles",
