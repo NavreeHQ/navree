@@ -739,10 +739,13 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
     };
     let _close = parts.slot("dialog-close");
     parts.done()?;
+    // A sheet that holds a form is a task to finish or cancel; any other is a glance.
+    let task = children.iter().any(|child| holds_form(child));
     Ok(vec![N::Sheet(n::Sheet {
         id,
         title,
         subtitle,
+        task,
         size: match attr(element, "data-width").as_deref() {
             Some("sm" | "md") => n::SheetSize::Medium,
             Some("full") => n::SheetSize::Full,
@@ -753,6 +756,19 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
         actions,
         ..n::Sheet::default()
     })])
+}
+
+/// Whether a form stands in `node`, at any depth. Walked with a list of its own, so
+/// a tree of any depth is searched without using up the stack.
+fn holds_form(node: &N) -> bool {
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if matches!(node, N::Form(_)) {
+            return true;
+        }
+        stack.extend(node.children());
+    }
+    false
 }
 
 /// `Popover`'s content.
@@ -1643,6 +1659,23 @@ mod tests {
                 ..n::Sheet::default()
             })
         );
+    }
+
+    #[test]
+    fn a_sheet_that_holds_a_form_is_a_task_and_any_other_is_a_glance() {
+        let form = el("form")
+            .slot("form")
+            .attr("method", "post")
+            .attr("action", "/orders/1/refund")
+            .child(Button::new("Refund").submit());
+        let N::Sheet(task) = read(Sheet::new("refund", "Refund").body(form)) else {
+            panic!("not a sheet");
+        };
+        assert!(task.task);
+        let N::Sheet(glance) = read(Sheet::new("order", "Order").body(Text::new("Inside"))) else {
+            panic!("not a sheet");
+        };
+        assert!(!glance.task);
     }
 
     #[test]

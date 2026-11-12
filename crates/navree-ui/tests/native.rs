@@ -1631,6 +1631,56 @@ fn a_button_says_its_role_only_to_a_native_client() {
 }
 
 #[test]
+fn a_link_is_presented_as_the_shell_decides_unless_the_page_says() {
+    use navree_native::action::Present;
+    use navree_ui::Presented;
+    let build = || {
+        View::new("x").body((
+            Button::new("Orders").href("/orders"),
+            Button::primary("New order")
+                .href("/orders/new")
+                .presented(Presented::Task),
+            Button::outline("Details")
+                .href("/orders/1")
+                .presented(Presented::Sheet),
+            Button::outline("Pay").href("https://pay.example/1"),
+        ))
+    };
+    let page = TestNative::build(phone(), build);
+    assert!(page.is_native(), "{:?}", page.why());
+    let presented: Vec<(String, Present)> = page
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Button(button) => match &button.action {
+                Some(Action::Navigate { present, .. }) => Some((button.label.clone(), *present)),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        presented,
+        [
+            ("Orders".to_owned(), Present::Auto),
+            ("New order".to_owned(), Present::Task),
+            ("Details".to_owned(), Present::Sheet),
+            ("Pay".to_owned(), Present::External),
+        ]
+    );
+    // Built for a browser, the page carries no word of it.
+    let plain = View::new("x").body((
+        Button::new("Orders").href("/orders"),
+        Button::primary("New order").href("/orders/new"),
+        Button::outline("Details").href("/orders/1"),
+        Button::outline("Pay").href("https://pay.example/1"),
+    ));
+    assert_eq!(build().to_html(), plain.to_html());
+}
+
+#[test]
 fn a_table_says_its_column_roles_and_what_a_row_opens() {
     let page = TestNative::build(phone(), || customers_view(true, true));
     assert!(page.is_native(), "{:?}", page.why());

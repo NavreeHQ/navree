@@ -265,6 +265,19 @@ impl Button {
         self
     }
 
+    /// Says how the screen this button leads to is presented by a native client
+    /// when the page knows (a form to fill in is a task, a record to glance at is
+    /// a sheet); the shell's routes decide otherwise. A browser's page does not
+    /// change.
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn presented(mut self, how: crate::Presented) -> Self {
+        #[cfg(feature = "native-preview")]
+        if crate::native::scope::native().is_some() {
+            self.el = self.el.child(crate::hint::presented_mark(how));
+        }
+        self
+    }
+
     fn into_node(self) -> Node {
         let mut root = self.el;
         root.tag = if self.href.is_some() { "a" } else { "button" };

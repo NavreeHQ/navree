@@ -1141,12 +1141,17 @@ impl Cx {
         )?;
         let mut icon = None;
         let mut said = None;
+        let mut presented = None;
         for child in flat(element.child_nodes()) {
-            if let Node::Static(text) = child
-                && let Some(role) = crate::hint::role_of(text)
-            {
-                said = Some(role);
-                continue;
+            if let Node::Static(text) = child {
+                if let Some(role) = crate::hint::role_of(text) {
+                    said = Some(role);
+                    continue;
+                }
+                if let Some(how) = crate::hint::presented_of(text) {
+                    presented = Some(how);
+                    continue;
+                }
             }
             let Node::Element(part) = child else { continue };
             match slot(part).as_deref() {
@@ -1222,7 +1227,23 @@ impl Cx {
             disabled: has(element, "disabled")
                 || attr(element, "aria-disabled").as_deref() == Some("true"),
             pending: has(element, "data-pending"),
-            action: self.action_of(element)?,
+            action: {
+                let mut action = self.action_of(element)?;
+                // What the page said of how the screen it leads to is presented.
+                if let (Some(how), Some(Action::Navigate { present, .. })) =
+                    (presented, action.as_mut())
+                {
+                    *present = match how {
+                        crate::Presented::Push => Present::Push,
+                        crate::Presented::Replace => Present::Replace,
+                        crate::Presented::Root => Present::Root,
+                        crate::Presented::Sheet => Present::Sheet,
+                        crate::Presented::Task => Present::Task,
+                        crate::Presented::Full => Present::Full,
+                    };
+                }
+                action
+            },
             ..n::Button::default()
         })
     }
