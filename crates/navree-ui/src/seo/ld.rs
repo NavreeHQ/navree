@@ -14,8 +14,8 @@ use super::is_absolute_https;
 /// use navree_ui::seo::{BreadcrumbList, JsonLd, Organization};
 ///
 /// let data = JsonLd::new()
-///     .add(Organization::new("Kesar", "https://kesar.example/").id("https://kesar.example/#organization"))
-///     .add(BreadcrumbList::new().step("Home", "https://kesar.example/"));
+///     .node(Organization::new("Kesar", "https://kesar.example/").id("https://kesar.example/#organization"))
+///     .node(BreadcrumbList::new().step("Home", "https://kesar.example/"));
 /// let text = data.to_script();
 /// assert!(text.starts_with(r#"{"@context":"https://schema.org","@graph":["#));
 /// ```
@@ -32,7 +32,7 @@ impl JsonLd {
     }
 
     /// Adds a node.
-    pub fn add(mut self, node: impl Into<Thing>) -> Self {
+    pub fn node(mut self, node: impl Into<Thing>) -> Self {
         self.nodes.push(node.into());
         self
     }
@@ -787,13 +787,13 @@ fn check(
         for item in items {
             match item {
                 Value::Object(_) => check(item, problems, defined, references),
-                Value::String(text) if URL_PROPS.contains(&name.as_str()) => {
-                    if !is_absolute_https(text) {
-                        problems.push(format!(
-                            "{}.{name} is {text}, not an absolute https URL",
-                            kind.unwrap_or("a node")
-                        ));
-                    }
+                Value::String(text)
+                    if URL_PROPS.contains(&name.as_str()) && !is_absolute_https(text) =>
+                {
+                    problems.push(format!(
+                        "{}.{name} is {text}, not an absolute https URL",
+                        kind.unwrap_or("a node")
+                    ));
                 }
                 _ => {}
             }
@@ -812,25 +812,25 @@ mod tests {
         let site = format!("{SITE}/#website");
         let crumbs = format!("{SITE}/pricing/#breadcrumb");
         JsonLd::new()
-            .add(
+            .node(
                 Organization::new("Kesar", format!("{SITE}/"))
                     .id(&org)
                     .logo(format!("{SITE}/logo.png"))
                     .same_as("https://x.com/kesar"),
             )
-            .add(
+            .node(
                 WebSite::new("Kesar", format!("{SITE}/"))
                     .id(&site)
                     .publisher(&org),
             )
-            .add(
+            .node(
                 WebPage::new(format!("{SITE}/pricing/"), "Pricing", "Plans in rupees.")
                     .kind(PageKind::ItemPage)
                     .date_modified("2026-11-12")
                     .is_part_of(&site)
                     .breadcrumb(&crumbs),
             )
-            .add(
+            .node(
                 BreadcrumbList::new()
                     .id(&crumbs)
                     .step("Home", format!("{SITE}/"))
@@ -847,8 +847,8 @@ mod tests {
     #[test]
     fn missing_properties_dangling_references_and_relative_urls_are_problems() {
         let data = JsonLd::new()
-            .add(Organization::new("Kesar", "/"))
-            .add(WebSite::new("Kesar", format!("{SITE}/")).publisher("#nobody"));
+            .node(Organization::new("Kesar", "/"))
+            .node(WebSite::new("Kesar", format!("{SITE}/")).publisher("#nobody"));
         let found = problems(&[data], None);
         let has = |part: &str| found.iter().any(|problem| problem.contains(part));
         assert!(has("Organization needs \"logo\""), "{found:#?}");
@@ -890,7 +890,7 @@ mod tests {
             "पंजाबी ਪੰਜਾਬੀ ₹1,00,000",
         ] {
             let text = JsonLd::new()
-                .add(FaqPage::new(format!("{SITE}/")).question(nasty, nasty))
+                .node(FaqPage::new(format!("{SITE}/")).question(nasty, nasty))
                 .to_script();
             assert!(!text.contains('<'), "{text}");
             assert!(!text.contains('>'), "{text}");
