@@ -1375,6 +1375,8 @@ const QUIET_HOOKS: &[&str] = &[
     // How long a filter waits for typing to stop before it asks; a drag a press may start.
     "data-ui-debounce",
     "data-ui-drag",
+    // The button that clears a field, and the field that has one: a script's.
+    "data-ui-clearable",
 ];
 
 /// The hooks a form control carries: the value a command sets, and what is done

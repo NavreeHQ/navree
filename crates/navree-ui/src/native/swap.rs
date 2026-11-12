@@ -469,24 +469,19 @@ fn next_rows(url: &str, dir: &str, cursor: &str) -> String {
 
 /// A lazy list's page of rows for the native client the current request
 /// comes from: the rows as an `append` (or a `prepend`, for the rows before)
-/// to the list the client named, with the address of the rows after them. A
-/// live ask has no native form yet: the client is told to fetch the list
-/// again, and why is kept. `None` when no native client asked.
-pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Response> {
+/// to the list the client named, with the address of the rows after them (or
+/// before them). A live ask, for what changed since a revision, is a `merge`:
+/// the rows that are new or changed, the keys that left and the revision the
+/// list is at now. `None` when no native client asked.
+pub(crate) fn lazy_page(
+    items: &[Node],
+    more: bool,
+    since: Option<&str>,
+    gone: &[String],
+) -> Option<Response> {
     let request = scope::native()?;
     let target = request.region.clone().unwrap_or_default();
     let vocab = vocab_of(&request);
-    if live {
-        let envelope = Envelope::ops(
-            assets::BUILD,
-            vec![navree_native::Op::Invalidate { target }],
-        )
-        .in_vocab(vocab);
-        return Some(kept(
-            respond(StatusCode::OK, "no-store", envelope, &request, ""),
-            Answered::web(vec!["lazy:live".to_owned()]),
-        ));
-    }
     let query = request.url.split_once('?').map_or("", |(_, query)| query);
     let before = matches!(
         crate::components::LazyQuery::parse(query).ask(),
@@ -494,11 +489,15 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
     );
     let mut cx = Cx::new(false);
     let mut nodes = Vec::with_capacity(items.len());
+    let mut first = None;
     let mut last = None;
     for item in items {
         let Node::Element(item) = item else { continue };
         let key = super::lower::attr(item, "data-key").map(std::borrow::Cow::into_owned);
         last = super::lower::attr(item, "data-cursor").map(std::borrow::Cow::into_owned);
+        if first.is_none() {
+            first.clone_from(&last);
+        }
         let read = cx.of(item);
         nodes.push(super::lower::with_id(super::lower::one(read), key));
     }
@@ -526,11 +525,35 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
             Answered::web(why),
         ));
     }
-    let ops = if before {
+    let ops = if let Some(since) = since {
+        // Where a new row joins is the end the list follows its stream at, which its
+        // address for changes says.
+        let at = query
+            .split('&')
+            .find_map(|pair| pair.strip_prefix("at="))
+            .map_or(navree_native::op::Edge::End, |at| {
+                if at == "start" {
+                    navree_native::op::Edge::Start
+                } else {
+                    navree_native::op::Edge::End
+                }
+            });
+        vec![navree_native::Op::Merge {
+            target,
+            nodes,
+            gone: gone.to_vec(),
+            since: since.to_owned(),
+            at,
+            more,
+        }]
+    } else if before {
+        let rows_before = more
+            .then(|| first.map(|cursor| next_rows(&request.url, "start", &cursor)))
+            .flatten();
         vec![navree_native::Op::Prepend {
             target,
             nodes,
-            before: None,
+            before: rows_before,
         }]
     } else {
         let more = more

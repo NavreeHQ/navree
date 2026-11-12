@@ -1287,8 +1287,7 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
         more.as_deref(),
         Some("/things/rows?view=open&dir=end&cursor=0004")
     );
-    // The rows before go at the start, and a live ask has no native form yet:
-    // the client fetches the list again.
+    // The rows before go at the start; a list with more before them says where.
     let (_, before) = ask_native(
         &app,
         Method::GET,
@@ -1310,8 +1309,35 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
         "",
     )
     .await;
+    // What changed since a revision is a merge: the rows as they are now, the keys that
+    // left, the revision the list is at, and the end new rows join.
+    let [
+        NativeOp::Merge {
+            target,
+            nodes,
+            gone,
+            since,
+            at,
+            more,
+        },
+    ] = live.ops.as_slice()
+    else {
+        panic!("not one merge: {:?}", live.ops);
+    };
+    assert_eq!(target, "orders-items");
+    assert_eq!(nodes.len(), 2);
+    assert_eq!((gone.as_slice(), since.as_str()), (&["7".to_owned()][..], "r9"));
+    assert_eq!((*at, *more), (navree_native::op::Edge::End, false));
+    let (_, live) = ask_native(
+        &app,
+        Method::GET,
+        "/things/rows?dir=live&at=start&since=r1",
+        &region,
+        "",
+    )
+    .await;
     assert!(
-        matches!(live.ops.as_slice(), [NativeOp::Invalidate { target }] if target == "orders-items"),
+        matches!(live.ops.as_slice(), [NativeOp::Merge { at: navree_native::op::Edge::Start, .. }]),
         "{:?}",
         live.ops
     );

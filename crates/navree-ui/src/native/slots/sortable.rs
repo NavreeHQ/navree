@@ -5,16 +5,17 @@
 //! form that posts its move, in the page, for a person with no script: which
 //! list, and which place in it. That form is read as it is, under the item
 //! (`Move`), so an item moves on a client that has no drag. Dragging, with its
-//! handle, its keys and its announcements, is a pointer's and a script's; what a
-//! native drag would need from the vocabulary is written in the notes.
+//! handle, its keys and its announcements, is a pointer's and a script's. A native
+//! client drags the rows itself: each list says where a move is posted, which lists
+//! take its rows and what goes with the post (`reorder`).
 
 use std::borrow::Cow;
 
 use navree_native::node as n;
 
 use super::super::lower::{
-    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hidden_in, hooks, id, slot,
-    text_of,
+    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hidden_in, hooks, id, number,
+    slot, text_of,
 };
 use crate::node::{Element, Node};
 
@@ -38,7 +39,7 @@ pub(crate) fn sortable(cx: &mut Cx, element: &Element) -> Read {
         if slot(list).as_deref() != Some("sortable-list") {
             return fail("something that is not a list in a sortable");
         }
-        sections.push(list_of(cx, list)?);
+        sections.push(list_of(cx, list, id(element).as_deref())?);
     }
     let board = attr(element, "data-layout").as_deref() == Some("board");
     Ok(vec![if board {
@@ -57,7 +58,7 @@ pub(crate) fn sortable(cx: &mut Cx, element: &Element) -> Read {
 }
 
 /// One list: its title and count, its items, what stands under them.
-fn list_of(cx: &mut Cx, list: &Element) -> Read<N> {
+fn list_of(cx: &mut Cx, list: &Element, root: Option<&str>) -> Read<N> {
     hooks(list, &[])?;
     let mut parts = Parts::of(list);
     let header = parts.slot("sortable-list-header");
@@ -86,6 +87,7 @@ fn list_of(cx: &mut Cx, list: &Element) -> Read<N> {
     let mut list_node = n::List {
         id: id(items),
         children: rows,
+        reorder: reorder_of(list, items, root)?,
         ..n::List::default()
     };
     let mut after = Vec::new();
@@ -113,6 +115,71 @@ fn list_of(cx: &mut Cx, list: &Element) -> Read<N> {
         section.footer = cx.of(footer);
     }
     Ok(N::Section(section))
+}
+
+/// The word a move posted by a client carries to say which sortable the ids it
+/// names belong to.
+pub(crate) const SORTABLE_WORD: &str = "_sortable";
+
+/// How the rows of a list are dragged: where a move is posted, which lists take
+/// the rows, how many a list takes and what goes with a move. `None` when no row
+/// of the list moves, or when a key is not what its id says: a move names the
+/// ids of the page, and the server gives each its key back only if the id is
+/// built from it.
+fn reorder_of(
+    list: &Element,
+    items: &Element,
+    root: Option<&str>,
+) -> Read<Option<n::Reorder>> {
+    let (Some(root), Some(key)) = (root, attr(list, "data-list")) else {
+        return Ok(None);
+    };
+    if id(list).as_deref() != Some(format!("{root}-list-{key}").as_str()) {
+        return Ok(None);
+    }
+    let mut found: Option<&Element> = None;
+    for item in elements(items)? {
+        let Some(item_key) = attr(item, "data-key") else {
+            return Ok(None);
+        };
+        if id(item).as_deref() != Some(format!("{root}-item-{item_key}").as_str()) {
+            return Ok(None);
+        }
+        if found.is_none() {
+            for part in elements(item)? {
+                if slot(part).as_deref() == Some("sortable-move") {
+                    found = elements(part)?
+                        .into_iter()
+                        .find(|form| slot(form).as_deref() == Some("sortable-form"));
+                }
+            }
+        }
+    }
+    let Some(form) = found else {
+        return Ok(None);
+    };
+    let mut hidden = Vec::new();
+    hidden_in(form.child_nodes(), &mut hidden);
+    let mut fields: Vec<navree_native::action::Pair> = hidden
+        .into_iter()
+        .filter(|field| !matches!(field.name.as_str(), "item" | "from_list" | "before" | "after"))
+        .map(|field| navree_native::action::Pair {
+            name: field.name,
+            value: field.value,
+        })
+        .collect();
+    fields.push(navree_native::action::Pair {
+        name: SORTABLE_WORD.to_owned(),
+        value: root.to_owned(),
+    });
+    Ok(Some(n::Reorder {
+        href: attr(form, "action")
+            .map(Cow::into_owned)
+            .unwrap_or_default(),
+        group: Some(root.to_owned()),
+        limit: number(list, "data-limit"),
+        fields,
+    }))
 }
 
 /// A list's title, how many it holds, and what the page puts beside the title.
@@ -448,6 +515,81 @@ mod tests {
         assert_eq!(position.name, "position");
         assert_eq!(position.label.as_deref(), Some("Position"));
         assert_eq!(send.action, Some(Action::submit()));
+    }
+
+    fn list_of_section(section: &N) -> &n::List {
+        let N::Section(section) = section else {
+            panic!("not a section");
+        };
+        section
+            .children
+            .iter()
+            .find_map(|node| match node {
+                N::List(list) => Some(list),
+                _ => None,
+            })
+            .expect("a list")
+    }
+
+    #[test]
+    fn a_list_of_rows_that_move_says_where_a_move_is_posted_and_which_lists_take_it() {
+        use navree_native::action::Pair;
+        let node = read(
+            Sortable::new("board", "Cards")
+                .post("/cards/move")
+                .csrf("tok")
+                .list(
+                    SortList::new("todo", "To do")
+                        .limit(2)
+                        .item(SortItem::new("c1", "Fix login")),
+                )
+                .list(SortList::new("done", "Done")),
+        );
+        let [todo, done] = sections(&node) else {
+            panic!("not two lists");
+        };
+        let expected = |limit| {
+            Some(n::Reorder {
+                href: "/cards/move".into(),
+                group: Some("board".into()),
+                limit,
+                fields: vec![
+                    Pair {
+                        name: "_csrf".into(),
+                        value: "tok".into(),
+                    },
+                    Pair {
+                        name: "_sortable".into(),
+                        value: "board".into(),
+                    },
+                ],
+            })
+        };
+        assert_eq!(list_of_section(todo).reorder, expected(Some(2)));
+        // The lists are those of one sortable, the first with an item that can move says how.
+        assert_eq!(list_of_section(todo).id.as_deref(), Some("board-list-todo-items"));
+        // A list with no rows has no form to read it from; a sortable that can't post moves nothing.
+        assert_eq!(list_of_section(done).reorder, None);
+        let node = read(
+            Sortable::new("board", "Cards")
+                .list(SortList::new("todo", "To do").item(SortItem::new("c1", "Fix login"))),
+        );
+        assert_eq!(list_of_section(&sections(&node)[0]).reorder, None);
+    }
+
+    #[test]
+    fn a_key_the_page_cannot_give_back_from_an_id_leaves_the_row_to_its_form() {
+        let node = read(
+            Sortable::new("board", "Cards").post("/cards/move").list(
+                SortList::new("todo", "To do").item(SortItem::new("a card", "Fix login")),
+            ),
+        );
+        let list = list_of_section(&sections(&node)[0]);
+        assert_eq!(list.reorder, None);
+        let [N::Row(row)] = list.children.as_slice() else {
+            panic!("not one row");
+        };
+        assert!(row.detail.iter().any(|part| matches!(part, N::Disclosure(_))));
     }
 
     #[test]

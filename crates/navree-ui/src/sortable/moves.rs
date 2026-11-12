@@ -137,6 +137,11 @@ impl Move {
     /// Reads a move from a urlencoded body. The first value of each field counts;
     /// `before`, `after` and `position` may be empty.
     ///
+    /// A native client posts a move in its own words: `from` and `to` for the lists,
+    /// the ids of the page's nodes for the item, the lists and `before`, a `position`
+    /// counted from 0, and `_sortable` for the sortable the ids belong to. They are
+    /// read back as the keys they were made from.
+    ///
     /// # Errors
     ///
     /// When a field is missing or empty, a key is longer than 256 bytes, the
@@ -148,6 +153,9 @@ impl Move {
         let mut before = None;
         let mut after = None;
         let mut position = None;
+        let mut native_from = None;
+        let mut native_to = None;
+        let mut sortable = None;
         for (count, (name, value)) in urlencoded::parse(body).enumerate() {
             if count >= MAX_PAIRS {
                 return Err(MoveError::TooLarge);
@@ -159,12 +167,52 @@ impl Move {
                 "before" => &mut before,
                 "after" => &mut after,
                 "position" => &mut position,
+                "from" => &mut native_from,
+                "to" => &mut native_to,
+                "_sortable" => &mut sortable,
                 _ => continue,
             };
             if slot.is_none() {
                 *slot = Some(value.into_owned());
             }
         }
+        // The ids a native client names are the page's: `<sortable>-item-<key>`, and
+        // `<sortable>-list-<key>` for a list.
+        let native = sortable.filter(|id| !id.is_empty());
+        let (item, from_list, to_list, before) = match &native {
+            Some(root) => {
+                let of = |value: Option<String>, kind: &str, name: &'static str| match value {
+                    Some(value) if !value.is_empty() => value
+                        .strip_prefix(&format!("{root}-{kind}-"))
+                        // A list is the node of its items.
+                        .map(|key| match kind {
+                            "list" => key.strip_suffix("-items").unwrap_or(key),
+                            _ => key,
+                        })
+                        .map(str::to_owned)
+                        .ok_or(MoveError::Field(name)),
+                    other => Ok(other.unwrap_or_default()),
+                };
+                (
+                    of(item, "item", "item")?,
+                    of(native_from, "list", "from")?,
+                    of(native_to, "list", "to")?,
+                    of(before, "item", "before")?,
+                )
+            }
+            None => (
+                item.unwrap_or_default(),
+                from_list.unwrap_or_default(),
+                to_list.unwrap_or_default(),
+                before.unwrap_or_default(),
+            ),
+        };
+        let (item, from_list, to_list, before) = (
+            Some(item),
+            Some(from_list),
+            Some(to_list),
+            Some(before),
+        );
         let key = |value: Option<String>, name: &'static str| match value {
             Some(value) if !value.is_empty() && value.len() <= MAX_KEY => Ok(value),
             _ => Err(MoveError::Field(name)),
@@ -182,8 +230,10 @@ impl Move {
                 if text.len() > 12 || !text.bytes().all(|b| b.is_ascii_digit()) {
                     return Err(MoveError::Field("position"));
                 }
+                // A native client counts from 0, a form from 1.
+                let shift = u64::from(native.is_some());
                 Some(text.parse::<u64>().map_or(MAX_POSITION, |n| {
-                    u32::try_from(n.min(u64::from(MAX_POSITION))).unwrap_or(MAX_POSITION)
+                    u32::try_from((n + shift).min(u64::from(MAX_POSITION))).unwrap_or(MAX_POSITION)
                 }))
             }
         };

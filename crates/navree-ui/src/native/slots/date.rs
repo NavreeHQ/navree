@@ -169,13 +169,35 @@ pub(crate) fn range(cx: &mut Cx, element: &Element) -> Read {
         field.label = Some(text_of(words));
         fields.push(N::Field(field));
     }
-    if fields.len() != 2 {
+    let [N::Field(from), N::Field(to)] = fields.as_slice() else {
         return fail("a range of dates that is not two dates");
-    }
-    Ok(vec![N::Stack(n::Stack {
+    };
+    let (i::Input::Date(first), i::Input::Date(last)) = (&from.input, &to.input) else {
+        return fail("a range of dates whose ends are not dates");
+    };
+    // The ends are each sent under their own name; an error for the range as a whole
+    // comes under the first's.
+    Ok(vec![N::Field(n::Field {
         id: id(element),
-        children: fields,
-        ..n::Stack::default()
+        name: from.name.clone(),
+        required: from.required || to.required,
+        disabled: from.disabled && to.disabled,
+        input: i::Input::Range(i::RangeInput {
+            kind: first.kind,
+            from: i::RangeEnd {
+                name: from.name.clone(),
+                value: first.value.clone(),
+            },
+            to: i::RangeEnd {
+                name: to.name.clone(),
+                value: last.value.clone(),
+            },
+            min: first.min.clone(),
+            max: first.max.clone(),
+            off_days: first.off_days.clone(),
+            off_weekdays: first.off_weekdays.clone(),
+        }),
+        ..n::Field::default()
     })])
 }
 
@@ -270,20 +292,16 @@ mod tests {
 
     #[test]
     fn a_range_has_the_same_days_off_on_both_ends() {
-        let N::Stack(stack) = read(
+        let N::Field(field) = read(
             DateRangePicker::new("from", "to")
                 .rules(DateRules::new().disable_weekdays([chrono::Weekday::Sun])),
         ) else {
-            panic!("not a stack");
+            panic!("not a field");
         };
-        for field in &stack.children {
-            let N::Field(field) = field else {
-                panic!("not a field");
-            };
-            assert!(
-                matches!(&field.input, i::Input::Date(date) if date.off_weekdays == [i::Weekday::Sunday])
-            );
-        }
+        let i::Input::Range(range) = &field.input else {
+            panic!("not a range");
+        };
+        assert_eq!(range.off_weekdays, [i::Weekday::Sunday]);
     }
 
     #[test]
@@ -326,24 +344,24 @@ mod tests {
     }
 
     #[test]
-    fn a_range_of_dates_is_two_dates_named_from_and_to() {
-        let N::Stack(stack) = read(DateRangePicker::new("from", "to").value(
+    fn a_range_of_dates_is_one_field_whose_ends_are_named_from_and_to() {
+        let N::Field(field) = read(DateRangePicker::new("from", "to").value(
             crate::dates::DateRange::new(day(2026, 11, 1), day(2026, 11, 12)),
         )) else {
-            panic!("not a stack");
+            panic!("not a field");
         };
-        let [N::Field(from), N::Field(to)] = stack.children.as_slice() else {
-            panic!("not two fields");
+        let i::Input::Range(range) = &field.input else {
+            panic!("not a range");
         };
-        assert_eq!((from.name.as_str(), to.name.as_str()), ("from", "to"));
-        assert_eq!(from.label.as_deref(), Some("From"));
-        assert_eq!(to.label.as_deref(), Some("To"));
-        let (i::Input::Date(first), i::Input::Date(last)) = (&from.input, &to.input) else {
-            panic!("not dates");
-        };
+        assert_eq!(field.name, "from");
+        assert_eq!(range.kind, i::DateKind::Date);
         assert_eq!(
-            (first.value.as_str(), last.value.as_str()),
-            ("2026-11-01", "2026-11-12")
+            (range.from.name.as_str(), range.from.value.as_str()),
+            ("from", "2026-11-01")
+        );
+        assert_eq!(
+            (range.to.name.as_str(), range.to.value.as_str()),
+            ("to", "2026-11-12")
         );
     }
 
@@ -360,26 +378,19 @@ mod tests {
         assert_eq!(field.label.as_deref(), Some("Due on"));
         assert_eq!(field.help.as_deref(), Some("When it is owed"));
         assert_eq!(field.error.as_deref(), Some("Pick a day"));
-        // A range is two fields: the words that name it stand over them and under them.
-        let N::Stack(range) = read(
+        // A range is one field: the words that name it are its own.
+        let N::Field(range) = read(
             crate::Field::new("when", "Placed")
                 .help("Between two days")
+                .error("Pick two days")
                 .control(DateRangePicker::new("from", "to")),
         ) else {
-            panic!("not a stack");
+            panic!("not a field");
         };
-        assert_eq!(range.children.len(), 4);
-        assert_eq!(
-            range.children[0],
-            N::Text(n::Text {
-                value: "Placed".into(),
-                style: n::TextStyle::Caption,
-                muted: true,
-                ..n::Text::default()
-            })
-        );
-        assert!(matches!(range.children[1], N::Field(_)));
-        assert!(matches!(&range.children[3], N::Text(text) if text.value == "Between two days"));
+        assert!(matches!(range.input, i::Input::Range(_)));
+        assert_eq!(range.label.as_deref(), Some("Placed"));
+        assert_eq!(range.help.as_deref(), Some("Between two days"));
+        assert_eq!(range.error.as_deref(), Some("Pick two days"));
     }
 
     #[test]

@@ -4,9 +4,10 @@
 //! A lazy list is its items and, at its end, the address of the next page by
 //! cursor. That is a native list that goes on (`more`); the client asks for the
 //! next rows the way it asks for any list's. When the page keeps it live, a
-//! stream says when to ask again, and the list stands in a region that says so.
-//! What the list does for a browser (the link at the top for newer items, the
-//! window it keeps, the announcements) is the script's.
+//! stream says when to ask again: a list at a revision says where it asks what
+//! changed since, and the stream that nudges it; one with no revision stands in
+//! a region that is fetched again. What the list does for a browser (the window
+//! it keeps, the announcements) is the script's.
 
 use std::borrow::Cow;
 
@@ -72,9 +73,9 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
         rows.push(with_id(one(cx.of(item)), key));
     }
     // The link back to newer items is shown only when there are some to load before.
-    if before.is_some_and(|link| !has(link, "hidden")) {
-        cx.dropped.push("lazy-before".to_owned());
-    }
+    let rows_before = before
+        .filter(|link| !has(link, "hidden"))
+        .and_then(|link| attr(link, "href").map(Cow::into_owned));
     if has(element, "data-ui-current") {
         cx.dropped.push("lazy-current".to_owned());
     }
@@ -82,6 +83,39 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
         .filter(|link| !has(link, "hidden"))
         .and_then(|link| attr(link, "href").map(Cow::into_owned));
     let live = attr(element, "data-ui-live-src");
+    // A list at a revision asks what changed since it, whenever its stream says: new rows
+    // join the end it follows the stream at.
+    let revision = attr(items, "data-ui-since").map(Cow::into_owned);
+    if let (Some(live), Some(since), Some(list_id), Some(src)) = (
+        &live,
+        &revision,
+        id(element),
+        attr(element, "data-ui-src"),
+    ) {
+        let at = if attr(element, "data-ui-live-at").as_deref() == Some("start") {
+            "start"
+        } else {
+            "end"
+        };
+        let joiner = if src.contains('?') { '&' } else { '?' };
+        let mut children = vec![N::List(n::List {
+            id: Some(list_id),
+            children: rows,
+            more,
+            before: rows_before,
+            since: Some(since.clone()),
+            changes: Some(format!("{src}{joiner}dir=live&at={at}")),
+            live: Some(n::Live {
+                src: live.to_string(),
+                event: attr(element, "data-ui-live-event").map(Cow::into_owned),
+            }),
+            ..n::List::default()
+        })];
+        if let Some(empty) = empty {
+            children.extend(cx.of(empty));
+        }
+        return Ok(vec![one(children)]);
+    }
     // The list a client names when it asks for the next rows has the id the page gave
     // the component; inside a region of its own, the list keeps the one of its items.
     let mut children = vec![N::List(n::List {
@@ -92,6 +126,7 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
         },
         children: rows,
         more,
+        before: rows_before,
         ..n::List::default()
     })];
     if let Some(empty) = empty {
@@ -196,17 +231,45 @@ mod tests {
     }
 
     #[test]
+    fn a_list_at_a_revision_asks_what_changed_since_it_when_its_stream_says() {
+        let N::List(list) = read(
+            LazyList::new("convs", "Conversations", "/inbox/rows")
+                .items(items())
+                .since("r7")
+                .more_before("/inbox/rows?dir=start&cursor=c-1")
+                .live_from("/events", Some("conversations"), crate::LazyEnd::Start),
+        ) else {
+            panic!("not a list");
+        };
+        // No region to fetch again: the list itself follows its stream.
+        assert_eq!(list.id.as_deref(), Some("convs"));
+        assert_eq!(list.since.as_deref(), Some("r7"));
+        assert_eq!(
+            list.changes.as_deref(),
+            Some("/inbox/rows?dir=live&at=start")
+        );
+        assert_eq!(
+            list.live,
+            Some(n::Live {
+                src: "/events".into(),
+                event: Some("conversations".into())
+            })
+        );
+        assert_eq!(list.before.as_deref(), Some("/inbox/rows?dir=start&cursor=c-1"));
+        assert_eq!(list.children.len(), 2);
+    }
+
+    #[test]
     fn what_only_a_script_uses_is_left_out_and_said() {
         let node: Node = LazyList::new("convs", "Conversations", "/inbox/rows")
             .items(items())
             .current("1")
-            .more_before("/inbox/rows?before=c-1")
             .into();
         let lowered = crate::native::lower(&node);
         assert!(lowered.is_native(), "{:?}", lowered.misses);
         let mut dropped = lowered.dropped;
         dropped.sort();
-        assert_eq!(dropped, ["lazy-before", "lazy-current"]);
+        assert_eq!(dropped, ["lazy-current"]);
     }
 
     #[test]

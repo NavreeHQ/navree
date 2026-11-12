@@ -571,7 +571,7 @@ impl IntoResponse for LazyPage {
         // A native client gets the rows as parts, to add to the list it named.
         #[cfg(feature = "native-preview")]
         if let Some(response) =
-            crate::native::swap::lazy_page(&self.items, self.more, self.since.is_some())
+            crate::native::swap::lazy_page(&self.items, self.more, self.since.as_deref(), &self.gone)
         {
             return response;
         }

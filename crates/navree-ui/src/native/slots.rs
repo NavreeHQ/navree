@@ -79,6 +79,7 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "input" | "checkbox" | "switch" | "native-select" | "textarea" => {
             (control, CONTROL_HOOKS)
         }
+        "input-group" => (input_group, &[]),
         "fact-grid" => (fact_grid, &[]),
         "fact-card" => (
             |cx, element| {
@@ -862,33 +863,6 @@ fn named(
             field.help = help.or_else(|| field.help.take());
             field.error = error;
         }
-        // Two fields that are one choice, a range of dates: the words that name
-        // it stand over them.
-        [N::Stack(stack)]
-            if stack
-                .children
-                .iter()
-                .all(|child| matches!(child, N::Field(_))) =>
-        {
-            let words = |value: String, tone| {
-                N::Text(n::Text {
-                    value,
-                    style: n::TextStyle::Caption,
-                    tone,
-                    muted: tone.is_none(),
-                    ..n::Text::default()
-                })
-            };
-            if let Some(label) = label {
-                stack.children.insert(0, words(label, None));
-            }
-            if let Some(help) = help {
-                stack.children.push(words(help, None));
-            }
-            if let Some(error) = error {
-                stack.children.push(words(error, Some(n::Tone::Danger)));
-            }
-        }
         _ => return fail("a field around a control that is not one field"),
     }
     Ok(read)
@@ -968,6 +942,61 @@ fn radio_group(_: &mut Cx, element: &Element) -> Read {
         input: navree_native::input::Input::Choice(input),
         ..n::Field::default()
     })])
+}
+
+/// `InputGroup`: typed text with something fixed before or after it (`₹`, `kg`), which
+/// stands beside the text in the field and is not sent with it. The button that
+/// clears the field is a script's.
+fn input_group(cx: &mut Cx, element: &Element) -> Read {
+    let mut before = None;
+    let mut after = None;
+    let mut control = None;
+    for part in elements(element)? {
+        if slot(part).as_deref() == Some("input-group-addon") {
+            hooks(part, &[])?;
+            // Words only: an addon that holds a control or a picture is something else.
+            let words = flat(part.child_nodes())
+                .iter()
+                .all(|node| matches!(node, Node::Text(_)));
+            if !words {
+                return fail("an addon on an input that is more than words");
+            }
+            let words = text_of(part);
+            if control.is_none() {
+                before = Some(words);
+            } else {
+                after = Some(words);
+            }
+        } else if has(part, "data-script-only") {
+            // What shows only where a script runs: here, the button that clears the field.
+            for button in elements(part)? {
+                hooks(button, &["data-ui-clear"])?;
+                if !has(button, "data-ui-clear") {
+                    return fail("a part shown only with a script that clears nothing");
+                }
+            }
+            cx.dropped.push("input-clear".to_owned());
+        } else if control.replace(part).is_some() {
+            return fail("a group of inputs with more than one control");
+        }
+    }
+    let Some(control) = control else {
+        return fail("a group of inputs with no control");
+    };
+    let mut read = Vec::new();
+    cx.element(control, &mut read);
+    match read.as_mut_slice() {
+        [N::Field(field)] => match &mut field.input {
+            navree_native::input::Input::Text(text) => {
+                text.prefix = before.filter(|words| !words.is_empty());
+                text.suffix = after.filter(|words| !words.is_empty());
+            }
+            _ if before.is_none() && after.is_none() => {}
+            _ => return fail("an addon on a field that is not typed text"),
+        },
+        _ => return fail("a group around something that is not one field"),
+    }
+    Ok(read)
 }
 
 /// `FactGrid`: cards of a label, a value and lines of detail.
@@ -1693,6 +1722,38 @@ mod tests {
             panic!("not a field");
         };
         assert_eq!(plain.changed, None);
+    }
+
+    #[test]
+    fn what_stands_before_and_after_typed_text_is_its_prefix_and_suffix() {
+        use navree_native::input as i;
+        let N::Field(amount) = read(
+            crate::InputGroup::new(crate::Input::text("amount"))
+                .start("₹")
+                .end("INR"),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(amount.name, "amount");
+        let i::Input::Text(text) = &amount.input else {
+            panic!("not text");
+        };
+        assert_eq!(
+            (text.prefix.as_deref(), text.suffix.as_deref()),
+            (Some("₹"), Some("INR"))
+        );
+        // A button that clears the field is a script's.
+        let node: Node = crate::Input::search("q").clearable("Clear").into();
+        let lowered = lower(&node);
+        assert!(lowered.is_native(), "{:?}", lowered.misses);
+        assert_eq!(lowered.dropped, ["input-clear"]);
+        // An addon that is not words, and one on a field that is not text, are misses.
+        let picture: Node = crate::InputGroup::new(crate::Input::text("q"))
+            .start(crate::components::icon(crate::icons::SEARCH))
+            .into();
+        assert_eq!(lower(&picture).why(), ["slot:input-group"]);
+        let tick: Node = crate::InputGroup::new(crate::Checkbox::new("a")).end("x").into();
+        assert_eq!(lower(&tick).why(), ["slot:input-group"]);
     }
 
     #[test]
