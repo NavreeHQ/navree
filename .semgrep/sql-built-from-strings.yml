@@ -37,13 +37,15 @@ rules:
       cwe: "CWE-89: SQL Injection"
       confidence: MEDIUM
     pattern-sources:
+      # The template is read from the text of the whole call: `format!($FMT, ...)`
+      # binds nothing when an argument is itself a call (`format!("..{}", f(x))`),
+      # so a metavariable on the template alone would miss those.
       - patterns:
-          - pattern-either:
-              - pattern: format!($FMT, $...ARGS)
-              - pattern: format!($FMT)
+          - pattern: format!(...)
+          - pattern: $SRC
           - metavariable-regex:
-              metavariable: $FMT
-              regex: '(?is)^r?#*"\s*(select|insert|update|delete|with|merge|replace)\b(?-i:.*(?<!\{)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\}))'
+              metavariable: $SRC
+              regex: '(?is)^format!\s*\(\s*r?#*"\s*(select|insert|update|delete|with|merge|replace)\b(?-i:.*(?<!\{)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\}))'
     pattern-sinks:
       - pattern-either:
           - pattern: $CONN.execute_unprepared(...)
