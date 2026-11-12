@@ -142,6 +142,10 @@ pub enum Op {
         /// The region's id.
         target: String,
     },
+    /// An op from a newer server, which this build does not know. A client
+    /// skips it and applies the rest.
+    #[serde(other)]
+    Unknown,
 }
 
 #[cfg(test)]
@@ -208,5 +212,12 @@ mod tests {
             )
         );
         assert_eq!(serde_json::from_str::<Vec<Op>>(&json).unwrap(), ops);
+    }
+
+    #[test]
+    fn an_op_from_a_newer_server_is_read_as_unknown() {
+        let ops: Vec<Op> =
+            serde_json::from_str(r#"[{"op":"confetti","colours":3},{"op":"reload"}]"#).unwrap();
+        assert_eq!(ops, [Op::Unknown, Op::Reload]);
     }
 }

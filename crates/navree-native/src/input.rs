@@ -28,6 +28,10 @@ pub enum Input {
     Colour(ColourInput),
     /// Files, from the device or its camera.
     File(FileInput),
+    /// A control from a newer server, which this build does not know. A client
+    /// leaves the field out; its form still sends the rest.
+    #[serde(other)]
+    Unknown,
 }
 
 /// What typed text is, so a client shows the right keyboard and help.
@@ -287,5 +291,13 @@ mod tests {
             )
         );
         assert_eq!(serde_json::from_str::<Input>(&json).unwrap(), choice);
+    }
+
+    #[test]
+    fn a_control_from_a_newer_server_is_read_as_unknown() {
+        assert_eq!(
+            serde_json::from_str::<Input>(r#"{"t":"signature","pen":"fine"}"#).unwrap(),
+            Input::Unknown
+        );
     }
 }

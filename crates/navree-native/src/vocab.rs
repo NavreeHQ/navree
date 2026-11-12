@@ -4,10 +4,13 @@
 //! answer for the vocabulary the client says it draws. A kind the client is too
 //! old for is found with [`newer_than`] before an answer leaves.
 
-use crate::node::Node;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::node::{self, Node};
 
 macro_rules! kinds {
-    ($($variant:ident => $name:literal since $since:literal,)+) => {
+    ($($variant:ident($ty:ident) => $name:literal since $since:literal,)+) => {
         /// The kind of a node: its `t`.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         #[non_exhaustive]
@@ -16,24 +19,38 @@ macro_rules! kinds {
                 #[doc = concat!("`", $name, "`.")]
                 $variant,
             )+
+            /// A kind this build of the protocol has never heard of, from a
+            /// newer server: [`Node::Unknown`] holds its name.
+            Unknown,
         }
 
         impl Kind {
             /// Every kind of the current vocabulary.
             pub const ALL: &'static [Kind] = &[$(Kind::$variant,)+];
 
-            /// The kind as a node's `t` names it.
+            /// The kind as a node's `t` names it. An unknown kind's own name is
+            /// in its node.
             pub const fn as_str(self) -> &'static str {
                 match self {
                     $(Self::$variant => $name,)+
+                    Self::Unknown => "unknown",
                 }
             }
 
             /// The vocabulary the kind arrived in. A client that draws an older
-            /// one has never heard of it.
+            /// one has never heard of it. No vocabulary holds an unknown kind.
             pub const fn since(self) -> u32 {
                 match self {
                     $(Self::$variant => $since,)+
+                    Self::Unknown => u32::MAX,
+                }
+            }
+
+            /// The kind a node's `t` names, when this build knows it.
+            pub fn parse(name: &str) -> Option<Self> {
+                match name {
+                    $($name => Some(Self::$variant),)+
+                    _ => None,
                 }
             }
         }
@@ -43,6 +60,57 @@ macro_rules! kinds {
             pub const fn kind(&self) -> Kind {
                 match self {
                     $(Self::$variant(_) => Kind::$variant,)+
+                    Self::Unknown(_) => Kind::Unknown,
+                }
+            }
+        }
+
+        /// A node of a known kind as it is written, by reference.
+        #[derive(Serialize)]
+        #[serde(tag = "t")]
+        enum Written<'a> {
+            $(
+                #[serde(rename = $name)]
+                $variant(&'a node::$ty),
+            )+
+        }
+
+        /// A node of a known kind as it is read.
+        #[derive(Deserialize)]
+        #[serde(tag = "t")]
+        enum Read {
+            $(
+                #[serde(rename = $name)]
+                $variant(node::$ty),
+            )+
+        }
+
+        impl Serialize for Node {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                match self {
+                    $(Self::$variant(node) => Written::$variant(node).serialize(serializer),)+
+                    Self::Unknown(node) => node.serialize(serializer),
+                }
+            }
+        }
+
+        /// A node of a kind this build knows is held to that kind's shape; a
+        /// node of any other kind is read as [`Node::Unknown`], keeping its id
+        /// and its `alt`.
+        impl<'de> Deserialize<'de> for Node {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let value = serde_json::Value::deserialize(deserializer)?;
+                let Some(name) = value.get("t").and_then(serde_json::Value::as_str) else {
+                    return Err(D::Error::custom("a node names its kind in `t`"));
+                };
+                if Kind::parse(name).is_none() {
+                    let name = name.to_owned();
+                    return node::Unknown::read(&name, &value)
+                        .map(Node::Unknown)
+                        .map_err(D::Error::custom);
+                }
+                match Read::deserialize(value).map_err(D::Error::custom)? {
+                    $(Read::$variant(node) => Ok(Node::$variant(node)),)+
                 }
             }
         }
@@ -50,40 +118,40 @@ macro_rules! kinds {
 }
 
 kinds! {
-    Stack => "stack" since 0,
-    Grid => "grid" since 0,
-    Section => "section" since 0,
-    List => "list" since 0,
-    Row => "row" since 0,
-    Split => "split" since 0,
-    Tabs => "tabs" since 0,
-    Disclosure => "disclosure" since 0,
-    Divider => "divider" since 0,
-    Spacer => "spacer" since 0,
-    Region => "region" since 0,
-    Text => "text" since 0,
-    Rich => "rich" since 0,
-    Image => "image" since 0,
-    Icon => "icon" since 0,
-    Avatar => "avatar" since 0,
-    Badge => "badge" since 0,
-    Progress => "progress" since 0,
-    Banner => "banner" since 0,
-    Empty => "empty" since 0,
-    Facts => "facts" since 0,
-    Table => "table" since 0,
-    Chart => "chart" since 0,
-    Code => "code" since 0,
-    Button => "button" since 0,
-    Link => "link" since 0,
-    Menu => "menu" since 0,
-    Form => "form" since 0,
-    Field => "field" since 0,
-    Sheet => "sheet" since 0,
-    Dialog => "dialog" since 0,
-    Popover => "popover" since 0,
-    Native => "native" since 0,
-    Web => "web" since 0,
+    Stack(Stack) => "stack" since 0,
+    Grid(Grid) => "grid" since 0,
+    Section(Section) => "section" since 0,
+    List(List) => "list" since 0,
+    Row(Row) => "row" since 0,
+    Split(Split) => "split" since 0,
+    Tabs(Tabs) => "tabs" since 0,
+    Disclosure(Disclosure) => "disclosure" since 0,
+    Divider(Divider) => "divider" since 0,
+    Spacer(Spacer) => "spacer" since 0,
+    Region(Region) => "region" since 0,
+    Text(Text) => "text" since 0,
+    Rich(Rich) => "rich" since 0,
+    Image(Image) => "image" since 0,
+    Icon(Icon) => "icon" since 0,
+    Avatar(Avatar) => "avatar" since 0,
+    Badge(Badge) => "badge" since 0,
+    Progress(Progress) => "progress" since 0,
+    Banner(Banner) => "banner" since 0,
+    Empty(Empty) => "empty" since 0,
+    Facts(Facts) => "facts" since 0,
+    Table(Table) => "table" since 0,
+    Chart(Chart) => "chart" since 0,
+    Code(Code) => "code" since 0,
+    Button(Button) => "button" since 0,
+    Link(Link) => "link" since 0,
+    Menu(Menu) => "menu" since 0,
+    Form(Form) => "form" since 0,
+    Field(Field) => "field" since 0,
+    Sheet(Sheet) => "sheet" since 0,
+    Dialog(Dialog) => "dialog" since 0,
+    Popover(Popover) => "popover" since 0,
+    Native(NativeView) => "native" since 0,
+    Web(WebRegion) => "web" since 0,
 }
 
 /// A field that arrived after its kind did: the kind, the field's name in the

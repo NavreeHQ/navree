@@ -4,8 +4,11 @@
 //! *is* (a list, a field, a button with a role); the client's own design layer
 //! decides where it goes and how it looks on its system. A field left out of the
 //! JSON holds its default, and a client passes over a field it does not know.
+//! A kind it does not know is read as [`Node::Unknown`], which keeps the `alt`
+//! a newer server wrote for it.
 
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 use crate::input::Input;
@@ -22,9 +25,9 @@ pub(crate) fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
 
-/// One part of a screen.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "t", rename_all = "snake_case")]
+/// One part of a screen: `{"t": kind, ...}` in JSON, with the kind's fields
+/// beside `t`.
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Node {
     /// Parts one after another, down or across.
@@ -96,6 +99,54 @@ pub enum Node {
     /// HTML for a small region. A client may refuse it and show the whole page in
     /// its web view.
     Web(WebRegion),
+    /// A kind this build has never heard of, from a newer server. A client
+    /// draws its `alt`, or shows the page in its web view when it has none.
+    Unknown(Unknown),
+}
+
+/// A part of a kind this build of the protocol does not know. It keeps what an
+/// older client can use: the kind's name, the id ops may name it by, and the
+/// part a newer server wrote to stand in its place. It is written back as it
+/// came, with only those.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Unknown {
+    /// The kind, as the part's `t` named it.
+    pub kind: String,
+    /// The part's id.
+    pub id: Option<String>,
+    /// What stands in its place for a client that does not know the kind.
+    pub alt: Option<Box<Node>>,
+}
+
+impl Serialize for Unknown {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("t", &self.kind)?;
+        if let Some(id) = &self.id {
+            map.serialize_entry("id", id)?;
+        }
+        if let Some(alt) = &self.alt {
+            map.serialize_entry("alt", alt)?;
+        }
+        map.end()
+    }
+}
+
+impl Unknown {
+    /// Reads the parts of `value` an older client keeps: its id and its `alt`.
+    pub(crate) fn read(kind: &str, value: &serde_json::Value) -> Result<Self, serde_json::Error> {
+        Ok(Self {
+            kind: kind.to_owned(),
+            id: value
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            alt: match value.get("alt") {
+                Some(alt) => Some(Box::new(Node::deserialize(alt)?)),
+                None => None,
+            },
+        })
+    }
 }
 
 impl Node {
@@ -136,6 +187,7 @@ impl Node {
             Self::Popover(node) => Some(&node.id),
             Self::Native(node) => node.id.as_deref(),
             Self::Web(node) => node.id.as_deref(),
+            Self::Unknown(node) => node.id.as_deref(),
         }
     }
 
@@ -180,6 +232,7 @@ impl Node {
             Self::Dialog(node) => node.children.iter().chain(&node.actions).collect(),
             Self::Popover(node) => node.children.iter().collect(),
             Self::Native(node) => boxed(&node.alt).collect(),
+            Self::Unknown(node) => boxed(&node.alt).collect(),
             Self::Divider(_)
             | Self::Spacer(_)
             | Self::Text(_)
@@ -1310,9 +1363,52 @@ mod tests {
     }
 
     #[test]
-    fn a_kind_outside_the_vocabulary_is_refused() {
-        assert!(serde_json::from_str::<Node>(r#"{"t":"marquee","text":"x"}"#).is_err());
+    fn a_kind_outside_the_vocabulary_is_kept_with_its_alt() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"marquee","id":"news","speed":3,"alt":{"t":"text","value":"Diwali sale","glow":1}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            node,
+            Node::Unknown(Unknown {
+                kind: "marquee".to_owned(),
+                id: Some("news".to_owned()),
+                alt: Some(Box::new(Node::text("Diwali sale"))),
+            })
+        );
+        assert_eq!(node.kind(), crate::Kind::Unknown);
+        assert_eq!(node.id(), Some("news"));
+        assert_eq!(node.children(), vec![&Node::text("Diwali sale")]);
+        let bare: Node = serde_json::from_str(r#"{"t":"marquee"}"#).unwrap();
+        assert_eq!(
+            bare,
+            Node::Unknown(Unknown {
+                kind: "marquee".to_owned(),
+                ..Unknown::default()
+            })
+        );
+    }
+
+    #[test]
+    fn an_unknown_kind_writes_itself_back_as_it_came() {
+        let json = r#"{"t":"marquee","id":"news","alt":{"t":"text","value":"Diwali sale"}}"#;
+        let node: Node = serde_json::from_str(json).unwrap();
+        assert_eq!(serde_json::to_string(&node).unwrap(), json);
+    }
+
+    #[test]
+    fn a_node_that_names_no_kind_is_refused() {
         assert!(serde_json::from_str::<Node>(r#"{"text":"x"}"#).is_err());
+        assert!(serde_json::from_str::<Node>(r#"{"t":7}"#).is_err());
+        assert!(serde_json::from_str::<Node>(r#""text""#).is_err());
+    }
+
+    #[test]
+    fn a_known_kind_that_is_malformed_is_refused() {
+        // A known kind is held to its shape: only a kind this build has never
+        // heard of is read as unknown.
+        assert!(serde_json::from_str::<Node>(r#"{"t":"text"}"#).is_err());
+        assert!(serde_json::from_str::<Node>(r#"{"t":"badge","text":7}"#).is_err());
     }
 
     #[test]

@@ -85,6 +85,10 @@ pub enum Action {
     Refresh,
     /// Closes the sheet or dialog the control stands in.
     Dismiss,
+    /// An action from a newer server, which this build does not know. A client
+    /// draws the control as one that can't be used now.
+    #[serde(other)]
+    Unknown,
 }
 
 impl Action {
@@ -230,6 +234,10 @@ pub enum Command {
         /// What it says.
         text: String,
     },
+    /// A command from a newer server, which this build does not know. A client
+    /// skips it and runs the rest.
+    #[serde(other)]
+    Unknown,
 }
 
 #[cfg(test)]
@@ -279,6 +287,29 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Action::Back).unwrap(),
             r#"{"t":"back"}"#
+        );
+    }
+
+    #[test]
+    fn an_action_or_a_command_from_a_newer_server_is_read_as_unknown() {
+        assert_eq!(
+            serde_json::from_str::<Action>(r#"{"t":"teleport","to":"/orders"}"#).unwrap(),
+            Action::Unknown
+        );
+        let action: Action = serde_json::from_str(
+            r#"{"t":"commands","list":[{"c":"sparkle","id":"x"},{"c":"open","id":"refund"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            action,
+            Action::Commands {
+                list: vec![
+                    Command::Unknown,
+                    Command::Open {
+                        id: "refund".to_owned()
+                    }
+                ]
+            }
         );
     }
 }
