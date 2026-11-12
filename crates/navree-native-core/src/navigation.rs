@@ -70,7 +70,10 @@ impl Core {
         // A link that says nothing more than "go there" is presented as the
         // shell's routes say.
         let how = match present {
-            Present::Push => self.route(url).and_then(|route| route.present).unwrap_or(Present::Push),
+            Present::Auto => match self.route(url).and_then(|route| route.present) {
+                Some(Present::Auto) | None => Present::Push,
+                Some(said) => said,
+            },
             said => said,
         };
         self.go_as(from, url, how)
@@ -86,7 +89,7 @@ impl Core {
         if let Some(from) = from {
             self.close_overlays(from);
         }
-        if let (Some(tab), Present::Push | Present::Root) = (self.destination_at(url), how) {
+        if let (Some(tab), Present::Auto | Present::Push | Present::Root) = (self.destination_at(url), how) {
             // A link to a top-level destination selects it.
             self.dismiss_modals();
             let stack = std::mem::take(&mut self.view.destinations[tab].stack);
@@ -121,7 +124,7 @@ impl Core {
                 self.touch(Change::Nav);
                 Some(id)
             }
-            Present::Sheet | Present::Full => {
+            Present::Sheet | Present::Full | Present::Task => {
                 let id = self.open(url);
                 self.view.modals.push(Modal {
                     present: how,
@@ -307,7 +310,7 @@ impl Core {
             }
             // A link to a destination selects it; anything else is stacked on what was under.
             if self.destination_at(url).is_some() {
-                return self.go(under, url, Present::Push).unwrap_or(id);
+                return self.go(under, url, Present::Auto).unwrap_or(id);
             }
             let new = self.arrived(url, shown);
             let selected = self.view.selected;
@@ -370,10 +373,10 @@ impl Core {
             return;
         }
         if destination.is_some() {
-            self.go(None, &url, Present::Push);
+            self.go(None, &url, Present::Auto);
             return;
         }
-        if let Some(Some(present @ (Present::Sheet | Present::Full))) = route {
+        if let Some(Some(present @ (Present::Sheet | Present::Full | Present::Task))) = route {
             self.go(None, &url, present);
             return;
         }
@@ -414,7 +417,7 @@ impl Core {
             // The page the web view already shows is not a place to go.
             Target::Inside(inside) if self.view.screens.get(&id).is_some_and(|view| view.url == inside) => {}
             Target::Inside(inside) => {
-                self.go(Some(id), &inside, Present::Push);
+                self.go(Some(id), &inside, Present::Auto);
             }
             Target::Outside(url) => self.effects.push(Effect::OpenUrl { url, inside: false }),
             Target::Refused => {}

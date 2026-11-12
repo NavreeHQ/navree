@@ -184,27 +184,38 @@
       }
     },
     {
-      "note": "The person taps Approve. Asking a person to confirm is the one call whose ticket the client is given: it shows the ticket to the server to get the challenge the person signs.",
-      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"confirm","reason":"Approve refund","detail":"₹1,499.00 to Tejinder Randhawa"},"then":{"href":"/orders/1/refund/approved","ticket":"tk_c41d07","exp":1794000000}},"now":1793990000},
+      "note": "The person taps Approve. The core shows the call's ticket to the server's challenge route itself: a post of JSON. Nothing is asked of the client yet.",
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"confirm","reason":"Approve refund","challenge":"/api/auth/confirm/options","detail":"₹1,499.00 to Tejinder Randhawa"},"then":{"href":"/orders/1/refund/approved","ticket":"tk_c41d07","exp":1794000000}},"now":1793990000},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"device","call":3,"device":{"detail":"₹1,499.00 to Tejinder Randhawa","f":"confirm","reason":"Approve refund"},"posts":true,"ticket":"tk_c41d07"}
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/api/auth/confirm/options","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"ticket\":\"tk_c41d07\"}"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
-      "note": "The signature is posted where the call said. The ticket was spent on the challenge, so it is not sent a second time.",
+      "note": "The route answers what the person is to sign. Now the client is told to run the call, with that; it only shows the system's sheet.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/json"},
+      "body": "made/confirm-options.json",
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":3,"device":{"challenge":"/api/auth/confirm/options","detail":"₹1,499.00 to Tejinder Randhawa","f":"confirm","reason":"Approve refund"},"posts":true,"options":{"publicKey":{"allowCredentials":[{"id":"cGstMQ","type":"public-key"}],"challenge":"mC1uY2hhbGxlbmdl","rpId":"shop.example","timeout":120000,"userVerification":"required"}}}
+        ]
+      }
+    },
+    {
+      "note": "The signature is posted where the call said, as a form. The ticket was spent on the challenge, so it is not sent a second time.",
       "send": {"t":"device_result","call":3,"ok":true,"fields":[{"name":"challenge","value":"ch_5b20"},{"name":"method","value":"passkey"},{"name":"credential","value":"{\"id\":\"pk_1\"}"}]},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/orders/1/refund/approved","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"challenge=ch_5b20&method=passkey&credential=%7B%22id%22%3A%22pk_1%22%7D&outcome=ok"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/orders/1/refund/approved","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"challenge=ch_5b20&method=passkey&credential=%7B%22id%22%3A%22pk_1%22%7D&outcome=ok"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
-      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/noted.json",
       "expect": {
         "changed": [
@@ -225,7 +236,7 @@
         ],
         "effects": [
           {"t":"message","id":4,"tone":"neutral","notice":"loading"},
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/1/tools","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/orders/1/tools","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [

@@ -11,6 +11,16 @@
 //! - A `get` form asks, and the answer decides: a screen takes this screen's
 //!   place, ops are applied to it. A table's query form asks by itself as its
 //!   fields change, and the answer takes the table's place.
+//! - A field may say what happens as it changes: its form is sent (at once
+//!   for a tick or a pick, when typing pauses for text), or commands run with
+//!   what it holds (a count of the characters typed).
+//! - The rows chosen in a table go with the form the table names, each by its
+//!   id, after the form's own fields and before the pair of the button.
+//! - A choice whose options are searched on the server asks when typing
+//!   pauses. The answer is matched to the field by the request that asked,
+//!   never by a name in it, and an answer to an older search is dropped.
+//! - A control that asks a question first is held until the person answers:
+//!   yes runs what it was about to do, no lets it go.
 
 use navree_native::action::Pair;
 use navree_native::node::{Field, Form, Method, Node};
@@ -21,7 +31,7 @@ use crate::effect::{Body, Change, Part};
 use crate::event::FieldValue;
 use crate::origin::Target;
 use crate::reduce::SEND_LIMIT;
-use crate::state::{Content, FieldView, FormView, Notice, Pending, ScreenId, TimerFor, Waiting};
+use crate::state::{Content, FieldView, FormView, Held, Notice, Pending, Question, ScreenId, TimerFor, Waiting};
 use crate::tree::{fields_of, find_in, form_of, has_id};
 use crate::Core;
 
@@ -91,6 +101,11 @@ fn field_parts(field: &Field, value: &FieldValue, out: &mut Vec<Part>) {
                 out.push(text(name, toggle.value.as_deref().unwrap_or("on")));
             }
         }
+        // Each end of a range goes under its own name.
+        (Input::Range(range), FieldValue::Range { from, to }) => {
+            out.push(text(&range.from.name, from));
+            out.push(text(&range.to.name, to));
+        }
         (_, FieldValue::Text { text: value }) => out.push(text(name, value)),
         (_, FieldValue::Many { values }) => out.extend(values.iter().map(|value| text(name, value))),
         (_, FieldValue::Files { files }) => out.extend(files.iter().map(|file| Part::File {
@@ -116,7 +131,8 @@ pub(crate) fn parts(form: &Form, state: Option<&FormView>, with: Option<&Pair>) 
         }
     }
     for field in fields_of(form) {
-        if field.disabled || field.name.is_empty() {
+        // A range is sent under the names of its ends, whatever its own is.
+        if field.disabled || (field.name.is_empty() && !matches!(field.input, Input::Range(_))) {
             continue;
         }
         let held = field.id.as_deref().and_then(|id| state?.fields.get(id)).map(|field| &field.value);
@@ -141,10 +157,10 @@ fn body_of(parts: Vec<Part>) -> Body {
 
 /// Whether two values are of one kind, so one can take the other's place.
 fn same_kind(a: &FieldValue, b: &FieldValue) -> bool {
-    use FieldValue::{Files, Flag, Many, None, Text};
+    use FieldValue::{Files, Flag, Many, None, Range, Text};
     matches!(
         (a, b),
-        (Text { .. } | None, Text { .. } | None) | (Flag { .. }, Flag { .. }) | (Many { .. }, Many { .. }) | (Files { .. }, Files { .. })
+        (Text { .. } | None, Text { .. } | None) | (Flag { .. }, Flag { .. }) | (Many { .. }, Many { .. }) | (Files { .. }, Files { .. }) | (Range { .. }, Range { .. })
     )
 }
 
@@ -177,22 +193,282 @@ impl Core {
             screen: id,
             form: handle.clone(),
         });
+        let (typed, changed) = match view.screen().and_then(|screen| find_in(screen, &|node| matches!(node, Node::Field(_)) && has_id(node, field))) {
+            Some(Node::Field(found)) => (matches!(found.input, Input::Text(_)), found.changed.clone()),
+            _ => (false, Option::None),
+        };
         // A table's query asks by itself: at once for a choice, after a pause for typing.
-        if inner.forms.get(&handle).is_none_or(|meta| meta.query_of.is_none()) {
+        let asks = inner.forms.get(&handle).is_some_and(|meta| meta.query_of.is_some());
+        let sends = matches!(changed, Some(Action::Submit { .. }));
+        if asks || sends {
+            let old = inner.query_timers.remove(&handle);
+            if let Some(old) = old {
+                self.cancel_timer(old);
+            }
+        }
+        if asks {
+            if typed {
+                let timer = self.timer(TYPING_PAUSE, TimerFor::Query { screen: id, form: handle.clone() });
+                if let Some(inner) = self.inner.screens.get_mut(&id) {
+                    inner.query_timers.insert(handle, timer);
+                }
+            } else {
+                self.query(id, &handle);
+            }
             return;
         }
-        let typed = view.screen().and_then(|screen| find_in(screen, &|node| matches!(node, Node::Field(_)) && has_id(node, field))).is_some_and(|node| matches!(node, Node::Field(field) if matches!(field.input, Input::Text(_))));
-        let old = inner.query_timers.remove(&handle);
+        // What the field itself says happens as it changes.
+        match changed {
+            Some(Action::Commands { list }) => {
+                let held = self.view.screens.get(&id).and_then(|view| view.forms.get(&handle)).and_then(|form| form.fields.get(field)).and_then(|field| match &field.value {
+                    FieldValue::Text { text } => Some(text.clone()),
+                    _ => Option::None,
+                });
+                self.commands(id, list, held.as_deref());
+            }
+            Some(action @ Action::Submit { .. }) if typed => {
+                let timer = self.timer(
+                    TYPING_PAUSE,
+                    TimerFor::Changed {
+                        screen: id,
+                        form: handle.clone(),
+                        action: Box::new(action),
+                    },
+                );
+                if let Some(inner) = self.inner.screens.get_mut(&id) {
+                    inner.query_timers.insert(handle, timer);
+                }
+            }
+            Some(action @ Action::Submit { .. }) => self.changed_fire(id, &handle, action),
+            _ => {}
+        }
+    }
+
+    /// Sends the form a field stands in, because the field changed and says so.
+    pub(crate) fn changed_fire(&mut self, id: ScreenId, handle: &str, action: Action) {
+        if let Action::Submit { form, href, with } = action {
+            self.submit(id, form.as_deref().unwrap_or(handle), href, with);
+        }
+    }
+
+    // A choice whose options are found on the server.
+
+    /// The control of the field `field`, when it is a choice.
+    fn choice_of(&self, id: ScreenId, field: &str) -> Option<(Option<navree_native::input::ChoiceSearch>, Option<String>)> {
+        let screen = self.view.screens.get(&id)?.screen()?;
+        match find_in(screen, &|node| matches!(node, Node::Field(_)) && has_id(node, field))? {
+            Node::Field(found) => match &found.input {
+                Input::Choice(choice) => Some((choice.search.clone(), choice.more.clone())),
+                Input::Choices(choices) => Some((choices.search.clone(), choices.more.clone())),
+                _ => Option::None,
+            },
+            _ => Option::None,
+        }
+    }
+
+    fn field_state(&mut self, id: ScreenId, form: &str, field: &str) -> Option<&mut FieldView> {
+        self.view.screens.get_mut(&id)?.forms.get_mut(form)?.fields.get_mut(field)
+    }
+
+    /// The person typed in a searched choice, or wants the options after
+    /// those it shows.
+    pub(crate) fn options(&mut self, id: ScreenId, form: Option<&str>, field: &str, words: Option<String>, more: bool) {
+        let Some(view) = self.view.screens.get(&id) else {
+            return;
+        };
+        // The form the client named, or whichever holds the field.
+        let named = form.filter(|form| view.forms.get(*form).is_some_and(|form| form.fields.contains_key(field)));
+        let Some(handle) = named.map(str::to_owned).or_else(|| view.forms.iter().find(|(_, form)| form.fields.contains_key(field)).map(|(handle, _)| handle.clone())) else {
+            return;
+        };
+        let Some((search, own_more)) = self.choice_of(id, field) else {
+            return;
+        };
+        let Some(inner) = self.inner.screens.get_mut(&id) else {
+            return;
+        };
+        if more {
+            // The options after the ones found; or after the control's own, before any search.
+            let ask = inner.options.entry(field.to_owned()).or_default();
+            let Some(next) = ask.more.clone().or(own_more.filter(|_| ask.turn == 0)) else {
+                return;
+            };
+            return self.ask_options(id, &handle, field, &next, true);
+        }
+        let Some(search) = search else {
+            return;
+        };
+        let words = words.unwrap_or_default();
+        let ask = inner.options.entry(field.to_owned()).or_default();
+        let old = ask.timer.take();
+        ask.words.clone_from(&words);
         if let Some(old) = old {
             self.cancel_timer(old);
         }
-        if typed {
-            let timer = self.timer(TYPING_PAUSE, TimerFor::Query { screen: id, form: handle.clone() });
-            if let Some(inner) = self.inner.screens.get_mut(&id) {
-                inner.query_timers.insert(handle, timer);
+        if words.chars().count() < usize::from(search.min) {
+            // Too few characters to search with: the control shows its own options again,
+            // and an answer on its way is for a search that is over.
+            if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) {
+                ask.turn += 1;
+                ask.more = Option::None;
             }
-        } else {
-            self.query(id, &handle);
+            if let Some(state) = self.field_state(id, &handle, field)
+                && (state.options.is_some() || state.searching || state.more)
+            {
+                state.options = Option::None;
+                state.searching = false;
+                state.more = false;
+                self.changed.insert(Change::Form { screen: id, form: handle });
+            }
+            return;
+        }
+        let timer = self.timer(
+            TYPING_PAUSE,
+            TimerFor::Options {
+                screen: id,
+                form: handle,
+                field: field.to_owned(),
+            },
+        );
+        if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) {
+            ask.timer = Some(timer);
+        }
+    }
+
+    /// The typing paused: the search is asked.
+    pub(crate) fn options_fire(&mut self, id: ScreenId, form: &str, field: &str) {
+        let Some((Some(search), _)) = self.choice_of(id, field) else {
+            return;
+        };
+        let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) else {
+            return;
+        };
+        ask.timer = Option::None;
+        let words = ask.words.clone();
+        let mut href = search.href.clone();
+        href.push(if href.contains('?') { '&' } else { '?' });
+        href.push_str(&encode(&[text(&search.name, &words)]));
+        self.ask_options(id, form, field, &href, false);
+    }
+
+    fn ask_options(&mut self, id: ScreenId, form: &str, field: &str, href: &str, more: bool) {
+        let Target::Inside(url) = self.resolve(href, id) else {
+            return;
+        };
+        let Some(inner) = self.inner.screens.get_mut(&id) else {
+            return;
+        };
+        let ask = inner.options.entry(field.to_owned()).or_default();
+        ask.turn += 1;
+        let purpose = Pending::Options {
+            screen: id,
+            visit: inner.visit,
+            form: form.to_owned(),
+            field: field.to_owned(),
+            turn: ask.turn,
+            more,
+        };
+        // A search that began before this one is out of date.
+        self.drop_pending(|purpose| matches!(purpose, Pending::Options { screen, field: other, .. } if *screen == id && other == field));
+        self.fetch(purpose, Method::Get, &url, Option::None, SEND_LIMIT);
+        if let Some(state) = self.field_state(id, form, field)
+            && !state.searching
+        {
+            state.searching = true;
+            self.changed.insert(Change::Form {
+                screen: id,
+                form: form.to_owned(),
+            });
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn options_answered(&mut self, id: ScreenId, visit: u64, form: &str, field: &str, turn: u64, more: bool, answer: Answer) {
+        let Some(inner) = self.inner.screens.get_mut(&id) else {
+            return;
+        };
+        // The answer is this field's because this request asked for it. One
+        // for an older search, or for a screen since asked again, is dropped.
+        if inner.visit != visit || inner.options.get(field).is_none_or(|ask| ask.turn != turn) {
+            return;
+        }
+        let mut found = Option::None;
+        if let Answer::Tree { status, mut read, shell, .. } = answer {
+            if self.note(&mut read, shell) {
+                return;
+            }
+            if let Some(way_in) = Core::way_in(status, &read.envelope.ops) {
+                return self.session_ended(id, &way_in);
+            }
+            // The first field in the answer holds the options, whatever its name.
+            if let Some(screen) = read.envelope.screen.as_ref().filter(|_| status < 400)
+                && let Some(Node::Field(holder)) = find_in(screen, &|node| matches!(node, Node::Field(_)))
+            {
+                found = match &holder.input {
+                    Input::Choice(choice) => Some((choice.options.clone(), choice.more.clone())),
+                    Input::Choices(choices) => Some((choices.options.clone(), choices.more.clone())),
+                    _ => Option::None,
+                };
+            }
+        }
+        if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field))
+            && let Some((_, next)) = &found
+        {
+            ask.more.clone_from(next);
+        }
+        let Some(state) = self.field_state(id, form, field) else {
+            return;
+        };
+        state.searching = false;
+        if let Some((mut options, next)) = found {
+            if more && let Some(held) = state.options.take() {
+                // The next ones join those already found; an option is never there twice.
+                options.retain(|option| !held.iter().any(|other| other.value == option.value));
+                options.splice(0..0, held);
+            }
+            state.options = Some(options);
+            state.more = next.is_some();
+        }
+        self.changed.insert(Change::Form {
+            screen: id,
+            form: form.to_owned(),
+        });
+    }
+
+    // A control that asks first.
+
+    /// Holds what a control was about to do, and shows its question.
+    pub(crate) fn ask_first(&mut self, id: ScreenId, ask: navree_native::node::Question, mut held: Held) {
+        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+            return;
+        };
+        self.inner.next.question += 1;
+        held.question = self.inner.next.question;
+        view.question = Some(Question {
+            id: held.question,
+            title: ask.title,
+            text: ask.text,
+            confirm: ask.confirm,
+            cancel: ask.cancel,
+        });
+        inner.held = Some(held);
+        self.touch_screen(id);
+    }
+
+    /// The person answered a screen's question.
+    pub(crate) fn answer(&mut self, id: ScreenId, question: u64, yes: bool) {
+        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+            return;
+        };
+        // An answer to a question that is no longer asked changes nothing.
+        if view.question.as_ref().is_none_or(|asked| asked.id != question) {
+            return;
+        }
+        view.question = Option::None;
+        let held = inner.held.take();
+        self.touch_screen(id);
+        if let (true, Some(held)) = (yes, held) {
+            self.act(id, held.action, held.form, held.overlay, held.text, held.now);
         }
     }
 
@@ -292,6 +568,7 @@ impl Core {
         if !self.may_send(id) {
             return;
         }
+        let chosen = self.chosen(id, &handle);
         let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
             return;
         };
@@ -302,7 +579,13 @@ impl Core {
             return self.query(id, &handle);
         }
         let method = form.method;
-        let sent = parts(form, view.forms.get(&handle), with.as_ref());
+        // The form's own fields, the rows chosen in the tables that go with
+        // it, and last the pair of the button that sent it.
+        let mut sent = parts(form, view.forms.get(&handle), Option::None);
+        sent.extend(chosen);
+        if let Some(with) = with.as_ref().filter(|with| !with.name.is_empty()) {
+            sent.push(text(&with.name, &with.value));
+        }
         let action = match &href {
             Some(href) => href.clone(),
             None if form.action.is_empty() => view.url.clone(),
@@ -587,7 +870,6 @@ impl Core {
                 let reload = read.reload;
                 let shown = self.shown(&url, status, &mut read, body);
                 let ops = std::mem::take(&mut read.envelope.ops);
-                let presents = std::mem::take(&mut read.presents);
                 let leads = shown.is_some() || ops.iter().any(|op| matches!(op, navree_native::Op::Navigate { .. } | navree_native::Op::NavigateExternal { .. }));
                 if !alive || !front {
                     // The person has moved on: the answer changes its own screen's
@@ -651,7 +933,7 @@ impl Core {
                         self.notice(Notice::Failed, Some(id));
                         told = true;
                     }
-                    let left = self.apply_ops_as(current, ops, &presents, true);
+                    let left = self.apply_ops(current, ops, true);
                     kept = !showed && !left;
                     if reload && !left {
                         // Something in the answer could not be read: the screen is asked for again.
@@ -678,7 +960,7 @@ impl Core {
 /// an address the route does not name, or brings a screen from one.
 fn leaves(pattern: &str, url: &str, showed: bool, ops: &[navree_native::Op]) -> bool {
     let away = ops.iter().any(|op| match op {
-        navree_native::Op::Navigate { href } => !crate::origin::route_matches(pattern, href),
+        navree_native::Op::Navigate { href, .. } => !crate::origin::route_matches(pattern, href),
         navree_native::Op::NavigateExternal { .. } => true,
         _ => false,
     });
@@ -691,6 +973,9 @@ pub(crate) fn field_view(field: &Field) -> FieldView {
         name: field.name.clone(),
         value: crate::tree::value_of(&field.input),
         errors: field.error.iter().cloned().collect(),
+        options: None,
+        more: false,
+        searching: false,
     }
 }
 
@@ -704,12 +989,8 @@ mod tests {
         Node::Field(Field {
             id: Some(id.to_owned()),
             name: name.to_owned(),
-            label: None,
-            help: None,
-            error: None,
-            required: false,
-            disabled: false,
             input,
+            ..Field::default()
         })
     }
 
@@ -751,12 +1032,9 @@ mod tests {
                 Node::Field(Field {
                     id: Some("e".to_owned()),
                     name: "locked".to_owned(),
-                    label: None,
-                    help: None,
-                    error: None,
-                    required: false,
                     disabled: true,
                     input: typed("never sent"),
+                    ..Field::default()
                 }),
             ],
             ..Form::default()
@@ -778,6 +1056,9 @@ mod tests {
                 name: "note".to_owned(),
                 value: FieldValue::Text { text: "a~b*c".to_owned() },
                 errors: Vec::new(),
+                options: None,
+                more: false,
+                searching: false,
             },
         );
         state.fields.insert(
@@ -786,6 +1067,9 @@ mod tests {
                 name: "gift".to_owned(),
                 value: FieldValue::Flag { on: true },
                 errors: Vec::new(),
+                options: None,
+                more: false,
+                searching: false,
             },
         );
         let sent = parts(&form, Some(&state), None);
@@ -813,6 +1097,9 @@ mod tests {
                     }],
                 },
                 errors: Vec::new(),
+                options: None,
+                more: false,
+                searching: false,
             },
         );
         let Body::Multipart { parts } = body_of(parts(&form, Some(&state), None)) else {

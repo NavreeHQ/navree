@@ -1,0 +1,161 @@
+{
+  "about": "A table that changes row by row. Its next rows come as a `rows` op; one row is changed by `row` and taken out by `remove`. The rows the person chose are sent with the form the table names, each by its id, and a row that is changed stays chosen.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/dispatch.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The end of the table is near.",
+      "send": {"t":"more","screen":1,"id":"dispatch"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/dispatch/rows?after=1043","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","dispatch"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "The next records come as rows, and nothing is after them.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/dispatch-rows.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":3,"count":2}
+        ],
+        "effects": [
+          {"t":"announce","notice":"loaded","count":2}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/4/id","is":"1045"},
+        {"at":"/screens/1/content/screen/body/children/1/more","is":null}
+      ]
+    },
+    {
+      "note": "The person ticks two orders.",
+      "send": {"t":"choose","screen":1,"table":"dispatch","row":"1042","on":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":5,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/selected","is":true}
+      ]
+    },
+    {
+      "send": {"t":"choose","screen":1,"table":"dispatch","row":"1041","on":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":5,"count":0}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Ticking a ticked row changes nothing.",
+      "send": {"t":"choose","screen":1,"table":"dispatch","row":"1041","on":true},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Mark packed sends the form the table names. The ids of the rows chosen go with it, in the table's order, before the button's own pair.",
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"packed"}},"form":"bulk"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/dispatch/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=1041&ids%5B%5D=1042&intent=packed"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer changes one row, takes one out and adds a new one at the top. The row that changed is still chosen, and now has something under it.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/dispatch-packed.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"success","text":"CS-1042 is packed. CS-1041 had already left."}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/id","is":"1046"},
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/id","is":"1042"},
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/selected","is":true},
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/cells/2/value","is":"Packed"},
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/detail/0/value","is":"Packed at 14:05 IST by Ravneet Kaur."},
+        {"at":"/screens/1/content/screen/body/children/1/rows/2/id","is":"1043"}
+      ]
+    },
+    {
+      "note": "Clear all.",
+      "send": {"t":"choose","screen":1,"table":"dispatch","on":false},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":5,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/selected","is":null}
+      ]
+    },
+    {
+      "note": "Tick all: every row the table holds.",
+      "send": {"t":"choose","screen":1,"table":"dispatch","on":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":5,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/selected","is":true},
+        {"at":"/screens/1/content/screen/body/children/1/rows/4/selected","is":true}
+      ]
+    }
+  ]
+}

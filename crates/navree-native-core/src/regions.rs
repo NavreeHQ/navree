@@ -25,16 +25,16 @@ use serde_json::{Value, json};
 use crate::decode::Answer;
 use crate::effect::{Change, Effect};
 use crate::origin::{Target, path_of};
-use crate::state::{Content, ListView, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
+use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
 use crate::tree::{Names, Survey, find_in, find_in_mut, has_id, rewrite_in};
 use crate::Core;
 
 /// How long a region may take, in milliseconds.
 const REGION_LIMIT: u32 = 15_000;
 /// How long the next rows of a list may take.
-const MORE_LIMIT: u32 = 10_000;
+pub(crate) const MORE_LIMIT: u32 = 10_000;
 /// Quiet time before a fetch, so a burst of events costs one.
-const QUIET: u32 = 300;
+pub(crate) const QUIET: u32 = 300;
 /// The first and the longest wait before a stream that failed is tried again.
 const FIRST: u32 = 1_000;
 const LONGEST: u32 = 30_000;
@@ -53,7 +53,7 @@ pub(crate) fn table_of(node: &Node) -> Option<&Table> {
     }
 }
 
-fn table_of_mut(node: &mut Node) -> Option<&mut Table> {
+pub(crate) fn table_of_mut(node: &mut Node) -> Option<&mut Table> {
     match node {
         Node::Table(table) => Some(table),
         Node::Region(region) => region.children.iter_mut().find_map(|child| match child {
@@ -64,7 +64,7 @@ fn table_of_mut(node: &mut Node) -> Option<&mut Table> {
     }
 }
 
-fn pages(node: &Node, id: &str) -> bool {
+pub(crate) fn pages(node: &Node, id: &str) -> bool {
     has_id(node, id) && matches!(node, Node::List(_) | Node::Table(_) | Node::Region(_))
 }
 
@@ -92,18 +92,24 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
                 "nodes": nodes,
                 "forms": forms(&mut nodes.iter().copied()),
                 "more": list.more,
+                "before": list.before,
                 "loading": state.loading,
                 "failed": state.failed,
+                "loading_before": state.loading_before,
+                "failed_before": state.failed_before,
             }))
         }
         other => {
             let table = table_of(other)?;
             let rows: Vec<_> = table.rows.iter().skip(from).take(count).collect();
+            // The rows chosen, when the table's rows can be: all of them, not only among these.
+            let selected = table.select.as_ref().map(|_| crate::lists::chosen_in(table));
             Some(json!({
                 "rows": rows,
-                "forms": forms(&mut rows.iter().flat_map(|row| &row.cells)),
+                "forms": forms(&mut rows.iter().flat_map(|row| row.nodes())),
                 "more": table.more,
                 "summary": table.summary,
+                "selected": selected,
                 "loading": state.loading,
                 "failed": state.failed,
             }))
@@ -272,7 +278,9 @@ impl Core {
             return;
         };
         inner.more.insert(list.to_owned(), more.clone());
-        view.lists.insert(list.to_owned(), ListView { loading: true, failed: false });
+        let state = view.lists.entry(list.to_owned()).or_default();
+        state.loading = true;
+        state.failed = false;
         let purpose = Pending::More {
             screen: id,
             visit: inner.visit,
@@ -284,7 +292,7 @@ impl Core {
     }
 
     /// Says that a list's own state changed, and no row of it.
-    fn list_changed(&mut self, id: ScreenId, list: &str) {
+    pub(crate) fn list_changed(&mut self, id: ScreenId, list: &str) {
         let held = self.view.screens.get(&id).and_then(ScreenView::screen).and_then(|screen| find_in(screen, &|node| pages(node, list))).map_or(0, |node| match node {
             Node::List(list) => list.children.len(),
             other => table_of(other).map_or(0, |table| table.rows.len()),
@@ -364,7 +372,7 @@ impl Core {
     }
 
     /// Adds the rows of the next page to a table, and takes the page's `more`.
-    fn add_rows(&mut self, id: ScreenId, list: &str, mut page: Table) {
+    pub(crate) fn add_rows(&mut self, id: ScreenId, list: &str, mut page: Table) {
         let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
             return;
         };
@@ -383,7 +391,10 @@ impl Core {
         };
         for row in &mut page.rows {
             let scope = row.id.clone();
-            names.name(&mut row.cells, scope.as_deref().or(Some(list)));
+            let scope = scope.as_deref().or(Some(list));
+            names.name(&mut row.cells, scope);
+            names.name(&mut row.actions, scope);
+            names.name(&mut row.detail, scope);
         }
         let from = table.rows.len();
         let count = page.rows.len();
@@ -423,6 +434,7 @@ impl Core {
             return Vec::new();
         };
         let mut urls: Vec<String> = inner.regions.values().filter_map(|meta| Some(meta.live.as_ref()?.0.clone())).collect();
+        urls.extend(inner.live_lists.values().filter_map(|sub| Some(sub.live.as_ref()?.0.clone())));
         urls.sort();
         urls.dedup();
         urls
@@ -510,6 +522,7 @@ impl Core {
             for region in self.listeners(&url, None) {
                 self.live_fire(front, &region);
             }
+            self.lists_missed(front, &url);
         }
     }
 
@@ -523,6 +536,7 @@ impl Core {
         let Some(front) = self.front() else {
             return;
         };
+        self.lists_heard(front, &url, name);
         for region in self.listeners(&url, Some(name)) {
             let Some(sub) = self.inner.screens.get_mut(&front).map(|inner| inner.live.entry(region.clone()).or_default()) else {
                 continue;

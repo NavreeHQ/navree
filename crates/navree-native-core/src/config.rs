@@ -55,6 +55,12 @@ pub struct SignInConfig {
     /// app's own origin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callback: Option<String>,
+    /// The providers this build signs in with through the system's own
+    /// sheet, by the protocol's names: `apple` on Apple's systems, `google`
+    /// on Android. A sign-in with any other goes the web's way, in the
+    /// system's sign-in session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native: Vec<String>,
 }
 
 /// What an app's build tells the core once.

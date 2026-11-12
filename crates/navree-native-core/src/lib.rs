@@ -49,6 +49,7 @@ mod event;
 pub mod ffi;
 mod forms;
 mod navigation;
+mod lists;
 mod ops;
 mod origin;
 mod reduce;
@@ -61,8 +62,7 @@ pub use config::{CacheConfig, Config, DeepLinks, SignInConfig};
 pub use effect::{Body, Change, Effect, Part, Request, Update};
 pub use event::{Event, FieldValue, FileRef, Response, StreamState, TransportError};
 pub use state::{
-    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal, Notice, Stage,
-    Query, RegionView, ScreenId, ScreenView, ViewState, Width, Window,
+    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal, Notice, Query, Question, RegionView, ScreenId, ScreenView, Stage, ViewState, Width, Window,
 };
 
 /// The runtime core. One per running app.

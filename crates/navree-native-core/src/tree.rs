@@ -66,13 +66,14 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
             .map(|fact| Slot::Many(&mut fact.value))
             .collect(),
         Node::Table(n) => {
-            let mut out = Vec::with_capacity(n.rows.len() + 2);
+            let mut out = Vec::with_capacity(n.rows.len() * 3 + 2);
             if let Some(query) = &mut n.query {
                 out.push(Slot::Many(&mut query.children));
             }
             for row in &mut n.rows {
                 out.push(Slot::Many(&mut row.cells));
                 out.push(Slot::Many(&mut row.actions));
+                out.push(Slot::Many(&mut row.detail));
             }
             out.push(Slot::Maybe(&mut n.empty));
             out
@@ -352,6 +353,10 @@ pub(crate) fn value_of(input: &Input) -> FieldValue {
         Input::Slider(input) => text(&input.value),
         Input::Colour(input) => text(&input.value),
         Input::File(_) => FieldValue::Files { files: Vec::new() },
+        Input::Range(input) => FieldValue::Range {
+            from: input.from.value.clone(),
+            to: input.to.value.clone(),
+        },
         _ => FieldValue::None,
     }
 }
@@ -368,6 +373,7 @@ pub(crate) fn fits(input: &Input, value: &FieldValue) -> bool {
             | (Input::Choice(_), FieldValue::Text { .. } | FieldValue::None)
             | (Input::Choices(_), FieldValue::Many { .. })
             | (Input::File(_), FieldValue::Files { .. })
+            | (Input::Range(_), FieldValue::Range { .. })
     )
 }
 
@@ -484,8 +490,9 @@ impl Names<'_> {
                     }
                 }
                 for row in &mut table.rows {
-                    let scope = row.id.as_deref().or(scope);
-                    for cell in row.cells.iter_mut().chain(&mut row.actions) {
+                    let own = row.id.clone();
+                    let scope = own.as_deref().or(scope);
+                    for cell in row.nodes_mut() {
                         self.node(cell, scope, form, counts);
                     }
                 }
@@ -553,6 +560,9 @@ pub(crate) struct Survey<'a> {
     pub more: Vec<&'a str>,
     /// The sheets, dialogs and popovers that are open, in document order.
     pub open: Vec<&'a str>,
+    /// The lists that say where to ask what changed in them, each with the
+    /// stream that says when.
+    pub live: Vec<(&'a str, &'a str, Option<&'a navree_native::node::Live>)>,
 }
 
 impl<'a> Survey<'a> {
@@ -612,7 +622,7 @@ impl<'a> Survey<'a> {
                         self.node(child, Some(at), region);
                     }
                 }
-                for cell in table.rows.iter().flat_map(|row| row.cells.iter().chain(&row.actions)) {
+                for cell in table.rows.iter().flat_map(navree_native::node::TableRow::nodes) {
                     self.node(cell, form, region);
                 }
                 if let Some(empty) = table.empty.as_deref() {
@@ -621,8 +631,11 @@ impl<'a> Survey<'a> {
                 return;
             }
             Node::List(list) => {
-                if list.more.is_some() {
+                if list.more.is_some() || list.before.is_some() {
                     self.more.extend(list.id.as_deref());
+                }
+                if let (Some(id), Some(changes)) = (list.id.as_deref(), list.changes.as_deref()) {
+                    self.live.push((id, changes, list.live.as_ref()));
                 }
             }
             Node::Sheet(sheet) if sheet.open => self.open.push(&sheet.id),
@@ -787,12 +800,7 @@ mod tests {
         Node::Field(Field {
             id: id.map(str::to_owned),
             name: name.to_owned(),
-            label: None,
-            help: None,
-            error: None,
-            required: false,
-            disabled: false,
-            input: Input::Text(navree_native::input::TextInput::default()),
+            ..Field::default()
         })
     }
 

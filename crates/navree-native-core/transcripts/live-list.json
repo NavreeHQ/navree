@@ -1,0 +1,223 @@
+{
+  "about": "A list that is kept up to date while the person reads it. The list says the revision its rows are at and where to ask what changed; a stream says when. The answer is a `merge`: a row that changed takes the place of the one with its id, new rows join at the end the op names, rows that left go, and what the person typed into a row that stays is kept. The rows before the first are loaded by cursor, as the ones after the last are.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The inbox. Its list names a stream, so the stream is opened.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/inbox.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=inbox","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"stream","stream":1,"state":"open"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person starts a note on one conversation.",
+      "send": {"t":"field","screen":1,"form":"note-c-88","field":"note-c-88-text","value":{"t":"text","text":"Offer a free return"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"note-c-88"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/forms/note-c-88/fields/note-c-88-text/value/text","is":"Offer a free return"}
+      ]
+    },
+    {
+      "note": "The stream speaks. Nothing in its message is read: it is a nudge, and the ask waits for it to go quiet.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"inbox"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":1,"ms":300}
+        ]
+      }
+    },
+    {
+      "note": "A second message in the same breath costs nothing more.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"inbox"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Quiet: the list asks what changed since its revision.",
+      "send": {"t":"timer","timer":1},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/inbox/changes?since=0000411","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "One conversation changed, one is new, one left; and more changes follow this revision, so the list asks again at once, from the new revision. The note the person was typing is still there.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/inbox-changes-1.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/inbox/changes?since=0000415","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/since","is":"0000415"},
+        {"at":"/screens/1/content/screen/body/children/0/id","is":"c-95"},
+        {"at":"/screens/1/content/screen/body/children/1/id","is":"c-90"},
+        {"at":"/screens/1/content/screen/body/children/2/id","is":"c-88"},
+        {"at":"/screens/1/content/screen/body/children/3","is":null},
+        {"at":"/screens/1/content/screen/body/children/2/subtitle","is":"Can I send it back from Amritsar?"},
+        {"at":"/screens/1/forms/note-c-88/fields/note-c-88-text/value/text","is":"Offer a free return"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/inbox-changes-2.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/since","is":"0000416"},
+        {"at":"/screens/1/content/screen/body/children/0/id","is":"c-96"}
+      ]
+    },
+    {
+      "send": {"t":"stream","stream":1,"state":"event","name":"inbox"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":2,"ms":300}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":2},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/inbox/changes?since=0000416","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "This answer says more follows, but its revision is the one the list is at already: the list does not ask for ever.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/inbox-changes-same.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person scrolls to the top: the rows before the first are asked for.",
+      "send": {"t":"more","screen":1,"id":"inbox","before":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"inbox","from":4,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/inbox/rows?before=c-90","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "Asked once, however often the client says so.",
+      "send": {"t":"more","screen":1,"id":"inbox","before":true},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "They come as a `prepend`, which says nothing is before them.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/inbox-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/id","is":"c-99"},
+        {"at":"/screens/1/content/screen/body/children/1/id","is":"c-98"},
+        {"at":"/screens/1/content/screen/body/children/2/id","is":"c-96"},
+        {"at":"/screens/1/content/screen/body/before","is":null},
+        {"at":"/screens/1/content/screen/body/more","is":"/inbox/rows?after=c-80"}
+      ]
+    },
+    {
+      "note": "The stream fails. It is tried again after a second.",
+      "send": {"t":"stream","stream":1,"state":"closed","status":502},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":3,"ms":1000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":3},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=inbox","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "It is back, and the list may have missed something: it asks now.",
+      "send": {"t":"stream","stream":1,"state":"open"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/inbox/changes?since=0000416","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,234 @@
+{
+  "about": "Signing in with the system's own sheet for a provider. The core asks the server for a nonce, the client only opens the sheet with it, and the core posts the token to the app's sign-in route with the state the nonce came with. A sign-in that needs a second step is not a sign-in. A provider this system has no sheet for goes the web's way.",
+  "config": {"client":{"caps":["platform_sign_in","auth_session"],"form":"phone","platform":"ios","text_percent":100,"vocab":0},"sign_in":{"callback":"shop","native":["apple"]}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ways-in.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Sign in with Apple is tapped. The core asks the nonce route: a post of JSON, with no body.",
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"apple","nonce":"/api/auth/social/apple/native/nonce","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/api/auth/social/apple/native/nonce","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The nonce goes to the client with the call; the state stays here.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
+      "body": "made/nonce.json",
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":1,"device":{"f":"platform_sign_in","nonce":"/api/auth/social/apple/native/nonce","provider":"apple","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"},"posts":true,"options":{"nonce":"n-7f2c91"}}
+        ]
+      }
+    },
+    {
+      "note": "The sheet is done. The token, the code and the name Apple gave go to the sign-in route as JSON, with the state.",
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[{"name":"id_token","value":"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln"},{"name":"authorization_code","value":"c1a2b3"},{"name":"first_name","value":"Ravneet"},{"name":"last_name","value":"Kaur"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/api/auth/social/apple/native/session","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"authorization_code\":\"c1a2b3\",\"id_token\":\"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln\",\"state\":\"nvs1.c2VhbGVk\",\"user\":{\"name\":{\"firstName\":\"Ravneet\",\"lastName\":\"Kaur\"}}}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The route says a second step is still to come. Nobody is signed in: the shell is not asked for, the person is told, and the page is asked again for what it shows now.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/json"},
+      "body": "made/second-step.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"warning","notice":"second_step"},
+          {"t":"report","what":"sign_in","detail":"the sign-in route asks for a second step, which this client can't take the person through"},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/notice","is":"second_step"},
+        {"at":"/screens/1/loading","is":true},
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ways-in.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Again.",
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"apple","nonce":"/api/auth/social/apple/native/nonce","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/auth/social/apple/native/nonce","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/json"},
+      "body": "made/nonce.json",
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":2,"device":{"f":"platform_sign_in","nonce":"/api/auth/social/apple/native/nonce","provider":"apple","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"},"posts":true,"options":{"nonce":"n-7f2c91"}}
+        ]
+      }
+    },
+    {
+      "send": {"t":"device_result","call":2,"ok":true,"fields":[{"name":"id_token","value":"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/api/auth/social/apple/native/session","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"id_token\":\"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln\",\"state\":\"nvs1.c2VhbGVk\"}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "This time the route answers with the person. Who is signed in changed: the shell and the screen are fetched again.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/json"},
+      "body": "made/signed-in-user.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/loading","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ways-in.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"apple","nonce":"/api/auth/social/apple/native/nonce","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":10,"method":"post","url":"https://shop.example/api/auth/social/apple/native/nonce","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/json"},
+      "body": "made/nonce.json",
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":3,"device":{"f":"platform_sign_in","nonce":"/api/auth/social/apple/native/nonce","provider":"apple","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"},"posts":true,"options":{"nonce":"n-7f2c91"}}
+        ]
+      }
+    },
+    {
+      "note": "The person closes the sheet: nothing is sent and nothing changes.",
+      "send": {"t":"device_result","call":3,"ok":false,"refusal":"cancelled","fields":[]},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "This build has no sheet for Google: the web's sign-in with it starts in the system's sign-in session, and no nonce is asked for.",
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"google","nonce":"/api/auth/social/google/native/nonce","sign_in":"/api/auth/social/google/native/session","web":"/api/auth/social/google/redirect"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/api/auth/social/google/redirect","callback":"shop"}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"apple","nonce":"/api/auth/social/apple/native/nonce","sign_in":"/api/auth/social/apple/native/session","web":"/api/auth/social/apple/redirect"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":11,"method":"post","url":"https://shop.example/api/auth/social/apple/native/nonce","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The server has no native sign-in for the provider: the person is told, and nothing is run.",
+      "send": {"t":"response","request":11,"status":404,"content_type":"application/json"},
+      "body": "made/nonce.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"device","detail":"the server answered 404 before a device call could start"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/1/notice","is":"failed"}
+      ]
+    }
+  ]
+}

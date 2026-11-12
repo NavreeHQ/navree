@@ -1,0 +1,72 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Gift options",
+  "body": {
+   "t": "form",
+   "id": "gift",
+   "method": "post",
+   "action": "/orders/1/gift",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "id": "wrap",
+     "name": "wrap",
+     "label": "Gift wrap",
+     "input": {
+      "t": "toggle"
+     },
+     "changed": {
+      "t": "submit"
+     }
+    },
+    {
+     "t": "field",
+     "id": "message",
+     "name": "message",
+     "label": "Message",
+     "input": {
+      "t": "text",
+      "multiline": true
+     },
+     "changed": {
+      "t": "commands",
+      "list": [
+       {
+        "c": "count",
+        "id": "message-count",
+        "max": 160
+       }
+      ]
+     }
+    },
+    {
+     "t": "text",
+     "id": "message-count",
+     "value": "0/160"
+    },
+    {
+     "t": "field",
+     "id": "coupon",
+     "name": "coupon",
+     "label": "Coupon",
+     "input": {
+      "t": "text"
+     },
+     "changed": {
+      "t": "submit",
+      "href": "/orders/1/coupon"
+     }
+    }
+   ]
+  }
+ }
+}

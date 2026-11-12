@@ -1,0 +1,129 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Dispatch",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "bulk",
+     "method": "post",
+     "action": "/dispatch/bulk",
+     "hidden": [
+      {
+       "name": "_csrf",
+       "value": "tk-91c2"
+      }
+     ],
+     "children": [
+      {
+       "t": "button",
+       "label": "Mark packed",
+       "action": {
+        "t": "submit",
+        "with": {
+         "name": "intent",
+         "value": "packed"
+        }
+       }
+      },
+      {
+       "t": "button",
+       "label": "Cancel orders",
+       "action": {
+        "t": "submit",
+        "with": {
+         "name": "intent",
+         "value": "cancel"
+        }
+       },
+       "role": "destructive",
+       "ask": {
+        "title": "Cancel 1 order?",
+        "text": "₹1,499.00 goes back to the customer.",
+        "confirm": "Cancel order",
+        "cancel": "Keep"
+       }
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "id": "dispatch",
+     "select": {
+      "name": "ids[]",
+      "form": "bulk"
+     },
+     "more": "/dispatch/rows?after=1043",
+     "columns": [
+      {
+       "label": "Order"
+      },
+      {
+       "label": "Customer"
+      },
+      {
+       "label": "State"
+      }
+     ],
+     "rows": [
+      {
+       "id": "1041",
+       "cells": [
+        {
+         "t": "text",
+         "value": "CS-1041"
+        },
+        {
+         "t": "text",
+         "value": "Gurpreet Kaur, Ludhiana"
+        },
+        {
+         "t": "text",
+         "value": "Paid"
+        }
+       ]
+      },
+      {
+       "id": "1042",
+       "cells": [
+        {
+         "t": "text",
+         "value": "CS-1042"
+        },
+        {
+         "t": "text",
+         "value": "Amandeep Singh, Jalandhar"
+        },
+        {
+         "t": "text",
+         "value": "Paid"
+        }
+       ]
+      },
+      {
+       "id": "1043",
+       "cells": [
+        {
+         "t": "text",
+         "value": "CS-1043"
+        },
+        {
+         "t": "text",
+         "value": "Kiran Bedi, Patiala"
+        },
+        {
+         "t": "text",
+         "value": "Paid"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

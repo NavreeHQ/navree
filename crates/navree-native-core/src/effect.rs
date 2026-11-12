@@ -46,6 +46,12 @@ pub enum Body {
         /// The parts, in order.
         parts: Vec<Part>,
     },
+    /// `application/json`, already written: send `text` as it is. Empty for a
+    /// post with no body. Only the framework's own routes take it.
+    Json {
+        /// The JSON.
+        text: String,
+    },
 }
 
 /// A request to the app's origin. The client adds its cookies and nothing else.
@@ -122,12 +128,12 @@ pub enum Effect {
         /// Whether the call's result is wanted.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         posts: bool,
-        /// The server's one-time ticket, given only with the one call whose
-        /// client must show it to the server itself before it can prompt:
-        /// `confirm`, which asks the server for a challenge with it. The
-        /// result of every other call is posted with its ticket by the core.
+        /// What the server gave for this call to start with, which the core
+        /// asked for: for `confirm` the passkey request (`{"publicKey": …}`),
+        /// for `platform_sign_in` `{"nonce": "…"}`. The client asks the server
+        /// for nothing itself.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        ticket: Option<String>,
+        options: Option<serde_json::Value>,
     },
     /// Read what the client keeps under a key, and come back with a `cache` event.
     CacheRead {

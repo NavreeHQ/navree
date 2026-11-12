@@ -1,0 +1,41 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Sign in",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "button",
+     "label": "Sign in with Apple",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "platform_sign_in",
+       "provider": "apple",
+       "nonce": "/api/auth/social/apple/native/nonce",
+       "sign_in": "/api/auth/social/apple/native/session",
+       "web": "/api/auth/social/apple/redirect"
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Sign in with Google",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "platform_sign_in",
+       "provider": "google",
+       "nonce": "/api/auth/social/google/native/nonce",
+       "sign_in": "/api/auth/social/google/native/session",
+       "web": "/api/auth/social/google/redirect"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

@@ -24,12 +24,14 @@ use crate::effect::{Body, Change, Effect, Request, Update};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, path_of, route_matches};
 use crate::state::{
-    App, Asked, Content, Destination, Failure, Message, MessageInner, Modal, Notice, Pending, Stage,
+    App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice, Pending, Stage,
     ScreenId, ScreenInner, ScreenView, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
 use crate::Core;
 
+/// What the framework's own routes speak.
+const JSON: &str = "application/json";
 /// How long a page may take, in milliseconds.
 const PAGE_LIMIT: u32 = 30_000;
 /// The request header that names the part of a screen a request is for.
@@ -73,11 +75,43 @@ impl Core {
                 overlay,
                 text,
                 now,
+                ask,
             } => {
                 if let Some(screen) = screen.or(self.front()) {
-                    self.act(screen, action, form, overlay, text, now);
+                    match ask {
+                        // The control asks first: what it does waits for the answer.
+                        Some(ask) => self.ask_first(
+                            screen,
+                            *ask,
+                            Held {
+                                question: 0,
+                                action,
+                                form,
+                                overlay,
+                                text,
+                                now,
+                            },
+                        ),
+                        None => self.act(screen, action, form, overlay, text, now),
+                    }
                 }
             }
+            Event::Answer { screen, question, yes } => self.answer(screen, question, yes),
+            Event::Choose { screen, table, row, on } => self.choose(screen, &table, row.as_deref(), on),
+            Event::Move {
+                screen,
+                item,
+                from,
+                to,
+                before,
+            } => self.moved(screen, &item, &from, &to, before.as_deref()),
+            Event::Options {
+                screen,
+                form,
+                field,
+                text,
+                more,
+            } => self.options(screen, form.as_deref(), &field, text, more),
             Event::Field {
                 screen,
                 form,
@@ -96,7 +130,8 @@ impl Core {
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
             Event::RegionRetry { screen, region } => self.fetch_region(screen, &region, None),
-            Event::More { screen, id } => self.more(screen, &id),
+            Event::More { screen, id, before: false } => self.more(screen, &id),
+            Event::More { screen, id, before: true } => self.rows_before(screen, &id),
             Event::RegionGo { screen, region, href } => {
                 if let Target::Inside(url) = self.resolve(&href, screen) {
                     self.region_go(screen, &region, url);
@@ -161,6 +196,14 @@ impl Core {
                     self.query(screen, &form);
                 }
                 Some(TimerFor::Live { screen, region }) => self.live_fire(screen, &region),
+                Some(TimerFor::Changes { screen, list }) => self.ask_changes(screen, &list),
+                Some(TimerFor::Changed { screen, form, action }) => {
+                    if let Some(inner) = self.inner.screens.get_mut(&screen) {
+                        inner.query_timers.remove(&form);
+                    }
+                    self.changed_fire(screen, &form, *action);
+                }
+                Some(TimerFor::Options { screen, form, field }) => self.options_fire(screen, &form, &field),
                 Some(TimerFor::Reopen { stream }) => self.reopen(stream),
                 None => {}
             },
@@ -221,13 +264,18 @@ impl Core {
         self.inner.routes.iter().find(|route| route_matches(&route.matches, url))
     }
 
-    fn headers(&self, form: bool, region: Option<&str>) -> Vec<(String, String)> {
+    fn headers(&self, body: Option<&Body>, region: Option<&str>) -> Vec<(String, String)> {
         let client = self.config.client.to_header();
+        let (form, json) = (matches!(body, Some(Body::Form { .. })), matches!(body, Some(Body::Json { .. })));
         let mut headers = vec![
             (NATIVE_HEADER.to_owned(), MAJOR.to_string()),
             (CLIENT_HEADER.to_owned(), client),
-            ("accept".to_owned(), CONTENT_TYPE.to_owned()),
+            // The framework's own routes speak JSON; every page speaks the protocol.
+            ("accept".to_owned(), if json { JSON.to_owned() } else { CONTENT_TYPE.to_owned() }),
         ];
+        if json {
+            headers.push(("content-type".to_owned(), JSON.to_owned()));
+        }
         if let Some(region) = region {
             // The part of the screen this asks for, so the server answers that part.
             headers.push((REGION_HEADER.to_owned(), region.to_owned()));
@@ -271,10 +319,29 @@ impl Core {
         });
     }
 
+    /// Posts JSON to one of the framework's own routes, by its path on the
+    /// app's origin. False when the path is not one.
+    fn post_json(&mut self, purpose: Pending, path: &str, text: String) -> bool {
+        let Target::Inside(url) = self.inner.origin.resolve(path, "/") else {
+            return false;
+        };
+        self.ask(Asked {
+            purpose,
+            first: url.clone(),
+            url,
+            method: Method::Post,
+            body: Some(Body::Json { text }),
+            limit: SEND_LIMIT,
+            hops: 0,
+            region: None,
+        });
+        true
+    }
+
     fn ask(&mut self, asked: Asked) {
         self.inner.next.request += 1;
         let request = self.inner.next.request;
-        let headers = self.headers(matches!(asked.body, Some(Body::Form { .. })), asked.region.as_deref());
+        let headers = self.headers(asked.body.as_ref(), asked.region.as_deref());
         self.effects.push(Effect::Fetch(Request {
             request,
             method: asked.method,
@@ -381,7 +448,7 @@ impl Core {
     /// Shows a message of the core's own.
     pub(crate) fn notice(&mut self, notice: Notice, screen: Option<ScreenId>) {
         let tone = match notice {
-            Notice::Unsaved => Tone::Warning,
+            Notice::Unsaved | Notice::SecondStep => Tone::Warning,
             Notice::Loading | Notice::Copied | Notice::Loaded => Tone::Neutral,
             _ => Tone::Danger,
         };
@@ -437,9 +504,9 @@ impl Core {
         };
         let from = about.screen.filter(|screen| self.view.holds(*screen)).or(self.front());
         if !action.post {
-            self.navigate(from, &action.href, Present::Push);
+            self.navigate(from, &action.href, Present::Auto);
         } else if let Some(screen) = from {
-            self.post(screen, &action.href, Vec::new(), None);
+            self.post(screen, &action.href, action.fields, None);
         }
     }
 
@@ -657,10 +724,7 @@ impl Core {
                 stale: true,
                 ..ScreenInner::default()
             };
-            self.drop_pending(|purpose| match purpose {
-                Pending::Page { screen, .. } | Pending::Region { screen, .. } | Pending::More { screen, .. } | Pending::Send { screen, .. } => *screen == id,
-                Pending::Shell => false,
-            });
+            self.drop_pending(|purpose| purpose.screen() == Some(id));
             self.touch_screen(id);
         }
         self.view.messages.clear();
@@ -754,7 +818,7 @@ impl Core {
             return None;
         }
         ops.iter().find_map(|op| match op {
-            Op::Navigate { href } => Some(href.clone()),
+            Op::Navigate { href, .. } => Some(href.clone()),
             _ => None,
         })
     }
@@ -777,7 +841,7 @@ impl Core {
         }
         let route = self.route(&url);
         let present = match route.and_then(|route| route.present) {
-            Some(present @ (Present::Sheet | Present::Full)) => present,
+            Some(present @ (Present::Sheet | Present::Full | Present::Task)) => present,
             _ => Present::Full,
         };
         let chrome = route.is_some_and(|route| route.chrome);
@@ -819,13 +883,19 @@ impl Core {
         });
     }
 
-    fn run(&mut self, device: serde_json::Result<Value>, posts: bool, ticket: Option<String>) -> u64 {
+    fn run(&mut self, device: serde_json::Result<Value>, posts: bool) -> u64 {
         self.inner.next.call += 1;
         let call = self.inner.next.call;
-        if let Ok(device) = device {
-            self.effects.push(Effect::Device { call, device, posts, ticket });
-        }
+        self.run_as(call, device, posts, None);
         call
+    }
+
+    /// Tells the client to run the call numbered `call`, with what the server
+    /// gave for it to start with.
+    fn run_as(&mut self, call: u64, device: serde_json::Result<Value>, posts: bool, options: Option<Value>) {
+        if let Ok(device) = device {
+            self.effects.push(Effect::Device { call, device, posts, options });
+        }
     }
 
     /// A device call a server's reply started: one of the few that need no
@@ -835,7 +905,7 @@ impl Core {
             ReplyCall::Haptic(haptic) => self.haptic(haptic.kind),
             ReplyCall::Unknown => self.report("device", "a reply started a call this build does not know".to_owned()),
             call if self.built_with(call.feature()) => {
-                self.run(serde_json::to_value(&call), false, None);
+                self.run(serde_json::to_value(&call), false);
             }
             // A feature the app was not built with is passed over.
             _ => {}
@@ -852,7 +922,7 @@ impl Core {
             self.notice(Notice::Loading, Some(id));
             return self.fetch_page(id, false);
         }
-        if matches!(device.call, Call::Unknown) || !self.built_with(device.call.feature()) {
+        if !decode::can_start(&self.config, &device.call) {
             // Such a control is not drawn: see `decode`.
             return self.report("device", "a call this build was not built with was tapped".to_owned());
         }
@@ -881,20 +951,80 @@ impl Core {
                     ephemeral: session.ephemeral,
                 });
             }
+            Call::Confirm(confirm) => {
+                // The ticket is spent at the challenge route, which answers
+                // what the person signs: the core asks, the client only prompts.
+                let Some(then) = device.then else {
+                    return self.report("device", "a confirmation with nowhere to post its result".to_owned());
+                };
+                if !self.may_send(id) {
+                    return;
+                }
+                self.inner.next.call += 1;
+                let number = self.inner.next.call;
+                let text = serde_json::json!({ "ticket": then.ticket.as_str() }).to_string();
+                let challenge = confirm.challenge.as_str().to_owned();
+                self.inner.calls.insert(
+                    number,
+                    crate::state::DeviceCall {
+                        screen: id,
+                        call: Call::Confirm(confirm),
+                        goes: Goes::Then { then, spent: true },
+                    },
+                );
+                if !self.post_json(Pending::BeforeCall { call: number }, &challenge, text) {
+                    self.inner.calls.remove(&number);
+                }
+            }
+            Call::PlatformSignIn(sign_in) => {
+                let provider = serde_json::to_value(sign_in.provider).ok().and_then(|provider| provider.as_str().map(str::to_owned)).unwrap_or_default();
+                let web = sign_in.web.as_ref().map(|web| web.as_str().to_owned());
+                let sheet = self.built_with(Some(Feature::PlatformSignIn)) && self.config.sign_in.native.contains(&provider);
+                if !sheet {
+                    // This system has no sheet for the provider: the web's way.
+                    return match web {
+                        Some(web) => self.sign_in_on_the_web(&web),
+                        None => self.report("device", format!("no way to sign in with `{provider}` on this system")),
+                    };
+                }
+                if !self.may_send(id) {
+                    return;
+                }
+                self.inner.next.call += 1;
+                let number = self.inner.next.call;
+                let (nonce, route) = (sign_in.nonce.as_str().to_owned(), sign_in.sign_in.as_str().to_owned());
+                self.inner.calls.insert(
+                    number,
+                    crate::state::DeviceCall {
+                        screen: id,
+                        call: Call::PlatformSignIn(sign_in),
+                        goes: Goes::SignIn {
+                            sign_in: route,
+                            state: String::new(),
+                            web,
+                        },
+                    },
+                );
+                if !self.post_json(Pending::BeforeCall { call: number }, &nonce, String::new()) {
+                    self.inner.calls.remove(&number);
+                }
+            }
             call => {
                 // Nothing is posted from a kept tree: its ticket may be an old one.
                 let then = device.then.filter(|_| call.posts());
                 if then.is_some() && !self.may_send(id) {
                     return;
                 }
-                // A confirmation's ticket is spent where the client asks for
-                // its challenge, so the client is given it and the result is
-                // posted without it. Every other ticket stays in the core.
-                let shown = matches!(call, Call::Confirm(_));
-                let ticket = then.as_ref().filter(|_| shown).map(|then| then.ticket.as_str().to_owned());
-                let number = self.run(serde_json::to_value(&call), then.is_some(), ticket);
+                let number = self.run(serde_json::to_value(&call), then.is_some());
                 if let Some(then) = then {
-                    self.inner.calls.insert(number, crate::state::DeviceCall { screen: id, then, spent: shown });
+                    self.inner.calls.insert(
+                        number,
+                        crate::state::DeviceCall {
+                            screen: id,
+                            call,
+                            goes: Goes::Then { then, spent: false },
+                        },
+                    );
                 }
             }
         }
@@ -913,16 +1043,154 @@ impl Core {
             name: name.to_owned(),
             value: value.to_owned(),
         };
+        let (then, spent) = match known.goes {
+            Goes::Then { then, spent } => (then, spent),
+            Goes::SignIn { sign_in, state, web } => return self.signed_with_provider(screen, ok, refusal.as_deref(), &fields, &sign_in, &state, web.as_deref()),
+        };
         if !ok {
             // A refusal has no result to post.
             fields.clear();
         }
         let outcome = if ok { OUTCOME_OK.to_owned() } else { refusal.unwrap_or_else(|| "failed".to_owned()) };
-        if !known.spent {
-            fields.push(pair(TICKET_FIELD, known.then.ticket.as_str()));
+        if !spent {
+            fields.push(pair(TICKET_FIELD, then.ticket.as_str()));
         }
         fields.push(pair(OUTCOME_FIELD, &outcome));
-        self.post(screen, known.then.href.as_str(), fields, None);
+        self.post(screen, then.href.as_str(), fields, None);
+    }
+
+    /// Starts the web's sign-in with a provider, in the system's sign-in session.
+    fn sign_in_on_the_web(&mut self, web: &str) {
+        if !self.built_with(Some(Feature::AuthSession)) {
+            return self.report("device", "no sign-in session to sign in on the web with".to_owned());
+        }
+        self.inner.signing_in = true;
+        self.effects.push(Effect::SignIn {
+            url: self.inner.origin.absolute(web),
+            callback: self.config.sign_in.callback.clone(),
+            ephemeral: false,
+        });
+    }
+
+    /// What the server gave for a device call to start with came: the
+    /// challenge a confirmation signs, or the nonce a sign-in is made with.
+    /// The client is told to run the call with it.
+    fn before_call_answered(&mut self, call: u64, response: &Response) {
+        let Some(known) = self.inner.calls.get_mut(&call) else {
+            return;
+        };
+        let screen = known.screen;
+        let good = response.error.is_none() && response.left.is_none() && (200..300).contains(&response.status);
+        let answer: Option<Value> = good.then(|| serde_json::from_str(&response.body).ok()).flatten();
+        let options = match (&mut known.goes, answer) {
+            (Goes::Then { .. }, Some(answer)) if answer.get("publicKey").is_some() => Some(answer),
+            (Goes::SignIn { state, .. }, Some(answer)) => match (answer.get("nonce").and_then(Value::as_str), answer.get("state").and_then(Value::as_str)) {
+                (Some(nonce), Some(sealed)) => {
+                    // The state goes back with the token, from here: the client needs only the nonce.
+                    sealed.clone_into(state);
+                    Some(serde_json::json!({ "nonce": nonce }))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(options) = options {
+            let device = serde_json::to_value(&known.call);
+            return self.run_as(call, device, true, Some(options));
+        }
+        let confirms = matches!(known.goes, Goes::Then { .. });
+        self.inner.calls.remove(&call);
+        match response.error {
+            Some(TransportError::Timeout) => self.failed(Failure::Timeout, Some(screen)),
+            Some(_) => self.failed(Failure::Offline, Some(screen)),
+            // The session ended, or the ticket is no longer good: the screen
+            // is fetched again, which says the first and mends the second.
+            None if response.status == 401 || (confirms && response.status == 422) => {
+                self.notice(Notice::Loading, Some(screen));
+                self.fetch_page(screen, false);
+            }
+            None => {
+                self.notice(Notice::Failed, Some(screen));
+                self.report("device", format!("the server answered {} before a device call could start", response.status));
+            }
+        }
+    }
+
+    /// The provider's sheet is done. Its token goes to the app's own sign-in
+    /// route as JSON, with the state the nonce came with; a system with no
+    /// sheet for the provider goes the web's way.
+    #[allow(clippy::too_many_arguments)]
+    fn signed_with_provider(&mut self, screen: ScreenId, ok: bool, refusal: Option<&str>, fields: &[navree_native::Pair], sign_in: &str, state: &str, web: Option<&str>) {
+        let held = |name: &str| fields.iter().find(|pair| pair.name == name).map(|pair| pair.value.as_str()).filter(|value| !value.is_empty());
+        let Some(token) = held("id_token").filter(|_| ok) else {
+            // The person closed the sheet or said no: nothing changed.
+            if let (Some("unsupported" | "not_built" | "unavailable"), Some(web)) = (refusal, web) {
+                self.sign_in_on_the_web(web);
+            }
+            return;
+        };
+        let mut body = serde_json::json!({ "id_token": token, "state": state });
+        if let Some(code) = held("authorization_code") {
+            body["authorization_code"] = Value::from(code);
+        }
+        let (first, last) = (held("first_name"), held("last_name"));
+        if first.is_some() || last.is_some() {
+            // As the provider words a name, the first time it tells it.
+            let mut name = serde_json::Map::new();
+            if let Some(first) = first {
+                name.insert("firstName".to_owned(), Value::from(first));
+            }
+            if let Some(last) = last {
+                name.insert("lastName".to_owned(), Value::from(last));
+            }
+            body["user"] = serde_json::json!({ "name": name });
+        }
+        self.post_json(Pending::SignIn { screen }, sign_in, body.to_string());
+    }
+
+    /// The app's sign-in route answered the provider's token.
+    fn sign_in_answered(&mut self, screen: ScreenId, response: &Response) {
+        let screen = Some(screen).filter(|screen| self.view.holds(*screen)).or(self.front());
+        let good = response.error.is_none() && response.left.is_none() && (200..300).contains(&response.status);
+        let answer: Option<Value> = serde_json::from_str(&response.body).ok();
+        // Anything but a plain yes is not a sign-in. The route says when a
+        // second step is still to come, and until it is done nobody is signed in.
+        let second = answer.as_ref().and_then(|answer| answer.get("two_factor_required")).is_some_and(|needed| needed != &Value::Bool(false) && !needed.is_null());
+        if good && !second && answer.is_some_and(|answer| answer.is_object()) {
+            // Who is signed in changed, and with it everything on screen.
+            self.fetch_shell();
+            for inner in self.inner.screens.values_mut() {
+                inner.stale = true;
+            }
+            self.inner.epoch += 1;
+            self.forget_pages();
+            // A way in that a session's end put up has done its work.
+            if let Some(cover) = self.view.modals.iter().position(|modal| modal.locked) {
+                self.take_modals_from(cover);
+                self.touch(Change::Nav);
+            }
+            if let Some(front) = self.front() {
+                self.fetch_page(front, false);
+            }
+            return;
+        }
+        match response.error {
+            Some(TransportError::Timeout) => self.failed(Failure::Timeout, screen),
+            Some(_) => self.failed(Failure::Offline, screen),
+            None if good && second => {
+                // The protocol has no words for the second step: the person
+                // is told, and the page is asked again for what it shows now.
+                self.notice(Notice::SecondStep, screen);
+                self.report("sign_in", "the sign-in route asks for a second step, which this client can't take the person through".to_owned());
+                if let Some(screen) = screen {
+                    self.fetch_page(screen, false);
+                }
+            }
+            None => {
+                self.notice(Notice::Failed, screen);
+                self.report("sign_in", format!("the sign-in route answered {}", response.status));
+            }
+        }
     }
 
     fn sign_in_done(&mut self, url: Option<&str>) {
@@ -1003,15 +1271,14 @@ impl Core {
     pub(crate) fn close(&mut self, id: ScreenId) {
         self.view.screens.remove(&id);
         if let Some(inner) = self.inner.screens.remove(&id) {
-            for timer in inner.query_timers.into_values().chain(inner.live.into_values().filter_map(|sub| sub.timer)) {
+            let timers = inner.query_timers.into_values().chain(inner.live.into_values().filter_map(|sub| sub.timer));
+            let timers = timers.chain(inner.live_lists.into_values().filter_map(|sub| sub.timer)).chain(inner.options.into_values().filter_map(|ask| ask.timer));
+            for timer in timers {
                 self.cancel_timer(timer);
             }
         }
-        self.drop_pending(|purpose| match purpose {
-            Pending::Page { screen, .. } | Pending::Region { screen, .. } | Pending::More { screen, .. } => *screen == id,
-            // The answer to a write is still wanted: it says whether it worked.
-            Pending::Send { .. } | Pending::Shell => false,
-        });
+        // The answer to a write is still wanted: it says whether it worked.
+        self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
         self.touch(Change::Nav);
     }
 
@@ -1042,6 +1309,9 @@ impl Core {
             return;
         };
         let same = path_of(&view.url) == path_of(url) && view.screen().is_some();
+        // A question the screen asked was about what it showed before.
+        view.question = None;
+        inner.held = None;
         inner.form_ids.clear();
         inner.field_ids.clear();
         inner.server_ids.clear();
@@ -1189,14 +1459,34 @@ impl Core {
         let Some(response) = self.follow(&asked, response) else {
             return;
         };
-        if asked.purpose == Pending::Shell {
-            return self.shell_answered(response);
+        match asked.purpose {
+            Pending::Shell => return self.shell_answered(response),
+            Pending::BeforeCall { call } => return self.before_call_answered(call, &response),
+            Pending::SignIn { screen } => return self.sign_in_answered(screen, &response),
+            _ => {}
         }
         let answer = decode::read(response, &asked.url, &self.inner.origin, &self.config);
         // A redirect is measured against the address that was asked for first.
         let Asked { purpose, first: asked, .. } = asked;
         match purpose {
-            Pending::Shell => {}
+            Pending::Shell | Pending::BeforeCall { .. } | Pending::SignIn { .. } => {}
+            Pending::Before { screen, visit, id, was } => self.before_answered(screen, visit, &id, &was, answer),
+            Pending::Changes { screen, visit, list } => self.changes_answered(screen, visit, &list, answer),
+            Pending::Move {
+                screen,
+                visit,
+                item,
+                from,
+                at,
+            } => self.move_answered(screen, visit, &item, &from, at, answer),
+            Pending::Options {
+                screen,
+                visit,
+                form,
+                field,
+                turn,
+                more,
+            } => self.options_answered(screen, visit, &form, &field, turn, more, answer),
             Pending::Page { screen, visit } => self.page_answered(screen, visit, &asked, answer),
             Pending::Send {
                 screen,
@@ -1229,7 +1519,7 @@ impl Core {
         match route.present {
             // A page that moved to a sheet's address has only moved. A screen
             // with no chrome, presented over the app, is the way in.
-            Some(present @ (Present::Full | Present::Sheet)) if !route.chrome => Some((route.matches.clone(), present)),
+            Some(present @ (Present::Full | Present::Sheet | Present::Task)) if !route.chrome => Some((route.matches.clone(), present)),
             _ => None,
         }
     }
@@ -1324,7 +1614,7 @@ impl Core {
                     Some(shown) => self.show(id, &url, shown),
                     None => settle(self, None),
                 }
-                let left = self.apply_ops_as(id, read.envelope.ops, &read.presents, false);
+                let left = self.apply_ops(id, std::mem::take(&mut read.envelope.ops), false);
                 if nothing && !left && blank {
                     settle(self, Some(Failure::Protocol));
                 }

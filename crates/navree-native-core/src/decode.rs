@@ -7,13 +7,10 @@
 //! does not know is passed over and the screen is fetched again. A tree nested
 //! deeper than the protocol allows is not read at all.
 
-use std::collections::BTreeMap;
-
-use navree_native::action::{Command, Present};
+use navree_native::action::Command;
 use navree_native::device::{Alt, Call, Feature};
-use navree_native::node::{Button, Node, Stack};
+use navree_native::node::{Button, Node, Stack, TableRow};
 use navree_native::{Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_NESTING, Op, Screen};
-use serde::Deserialize;
 use serde_json::Value;
 
 use crate::config::Config;
@@ -35,8 +32,6 @@ pub(crate) struct Read {
     pub missing: Vec<String>,
     /// An op was passed over: what the screen shows may be out of date.
     pub reload: bool,
-    /// How a `navigate` op asks to be presented, by the op's place among the ops.
-    pub presents: BTreeMap<usize, Present>,
 }
 
 /// What a request was answered with.
@@ -70,6 +65,18 @@ fn built_with(config: &Config, feature: Option<Feature>) -> bool {
     }
 }
 
+/// Whether this build can start a device call: it has the call's feature, or,
+/// for a sign-in with a provider, the web's way of it.
+pub(crate) fn can_start(config: &Config, call: &Call) -> bool {
+    if matches!(call, Call::Unknown) {
+        return false;
+    }
+    if built_with(config, call.feature()) {
+        return true;
+    }
+    matches!(call, Call::PlatformSignIn(sign_in) if sign_in.web.is_some()) && built_with(config, Some(Feature::AuthSession))
+}
+
 /// Looks at what a control does. `Err` names what this build can't do with
 /// it. An action that calls a device feature the build lacks becomes what the
 /// call says to do instead: `Ok(Some(text))` puts a line of text in the
@@ -80,7 +87,7 @@ fn settle(action: &mut Option<Action>, config: &Config) -> Result<Option<Option<
         Some(Action::Commands { list }) if list.iter().any(|command| matches!(command, Command::Unknown)) => {
             Err("command:unknown".to_owned())
         }
-        Some(Action::Device(device)) if matches!(device.call, Call::Unknown) || !built_with(config, device.call.feature()) => {
+        Some(Action::Device(device)) if !can_start(config, &device.call) => {
             match device.alt.take() {
                 Some(Alt::Navigate { href }) => {
                     *action = Some(Action::navigate(href.as_str()));
@@ -175,6 +182,7 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
                 Input::Slider(_) => "slider",
                 Input::Colour(_) => "colour",
                 Input::File(_) => "file",
+                Input::Range(_) => "range",
                 _ => "unknown",
             };
             if input == "unknown" {
@@ -203,6 +211,18 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
     }
 }
 
+/// A table row that arrives by itself is looked at as one in a table is.
+fn check_row(row: &mut TableRow, config: &Config, missing: &mut Vec<String>) {
+    if let Err(why) = settle(&mut row.action, config).map(|stand_in| {
+        if stand_in.is_some() {
+            row.action = None;
+        }
+    }) {
+        missing.push(why);
+    }
+    row.nodes_mut().for_each(|node| check(node, config, missing));
+}
+
 fn check_screen(screen: &mut Screen, config: &Config, missing: &mut Vec<String>) {
     for action in &mut screen.actions {
         check(action, config, missing);
@@ -212,18 +232,6 @@ fn check_screen(screen: &mut Screen, config: &Config, missing: &mut Vec<String>)
 
 fn blank() -> Envelope {
     Envelope::ops(String::new(), Vec::new())
-}
-
-#[derive(Deserialize)]
-struct Presents {
-    #[serde(default)]
-    ops: Vec<Presented>,
-}
-
-#[derive(Deserialize)]
-struct Presented {
-    #[serde(default)]
-    present: Option<Present>,
 }
 
 /// How much stack reading an answer is given, in bytes. A tree as deep as the
@@ -258,7 +266,6 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
         envelope: blank(),
         missing: Vec::new(),
         reload: false,
-        presents: BTreeMap::new(),
     };
     match serde_json::from_str::<Envelope>(body) {
         Ok(envelope) => read.envelope = envelope,
@@ -289,22 +296,17 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
     if let Some(screen) = &mut read.envelope.screen {
         check_screen(screen, config, &mut read.missing);
     }
-    let mut navigates = false;
     for op in &mut read.envelope.ops {
         match op {
             Op::Morph { node, .. } | Op::Replace { node, .. } => check(node, config, &mut read.missing),
-            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } => {
+            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
                 nodes.iter_mut().for_each(|node| check(node, config, &mut read.missing));
             }
-            Op::Navigate { .. } => navigates = true,
+            Op::Rows { rows, .. } => rows.iter_mut().for_each(|row| check_row(row, config, &mut read.missing)),
+            Op::Row { row, .. } => check_row(row, config, &mut read.missing),
             Op::Unknown => read.reload = true,
             _ => {}
         }
-    }
-    // How a `navigate` asks to be presented is read by name: the op's own
-    // type has no field for it yet.
-    if navigates && let Ok(presents) = serde_json::from_str::<Presents>(body) {
-        read.presents = presents.ops.into_iter().enumerate().filter_map(|(at, op)| Some((at, op.present?))).collect();
     }
     read.missing.sort();
     read.missing.dedup();
@@ -444,7 +446,7 @@ mod tests {
         .unwrap();
         assert!(read.reload);
         assert_eq!(read.envelope.ops.len(), 4);
-        assert_eq!(read.presents.get(&2), Some(&Present::Sheet));
+        assert!(matches!(read.envelope.ops[2], Op::Navigate { present: navree_native::Present::Sheet, .. }));
         assert_eq!((read.envelope.shell.as_str(), read.envelope.app.as_str()), ("s7", "a4"));
         // A word this build can't read in a closed list is the field's default, and the page is drawn.
         let read = envelope(&body(r#"{"t":"button","label":"Go","role":"teleporter"}"#), &config()).unwrap();

@@ -89,7 +89,8 @@
       "call": {
        "f": "confirm",
        "reason": "Approve refund",
-       "detail": "₹1,499.00 to Tejinder Randhawa"
+       "detail": "₹1,499.00 to Tejinder Randhawa",
+       "challenge": "/api/auth/confirm/options"
       },
       "then": {
        "href": "/orders/1/refund/approved",

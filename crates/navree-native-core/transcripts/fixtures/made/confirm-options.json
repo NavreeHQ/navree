@@ -1,0 +1,1 @@
+{"publicKey":{"challenge":"mC1uY2hhbGxlbmdl","rpId":"shop.example","timeout":120000,"userVerification":"required","allowCredentials":[{"type":"public-key","id":"cGstMQ"}]}}

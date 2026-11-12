@@ -327,6 +327,17 @@ const REQUIRED: &[&str] = &[
     "page-moved",
     "post-landing",
     "device-call",
+    "live-list",
+    "table-rows",
+    "question",
+    "reorder",
+    "field-changed",
+    "date-range",
+    "searched-choice",
+    "menu-checks",
+    "menu-post",
+    "present-task",
+    "platform-sign-in",
 ];
 
 #[test]

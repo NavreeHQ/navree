@@ -1,0 +1,26 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "",
+  "body": {
+   "t": "field",
+   "name": "",
+   "input": {
+    "t": "choice",
+    "options": [
+     {
+      "value": "c-3",
+      "label": "Kaur Logistics, Amritsar"
+     },
+     {
+      "value": "c-4",
+      "label": "Kalsi Couriers, Jalandhar"
+     }
+    ],
+    "more": "/couriers/options?q=ka&after=c-4"
+   }
+  }
+ }
+}

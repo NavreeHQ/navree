@@ -36,6 +36,22 @@
             "parts"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "json"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "text"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -191,6 +207,12 @@
             "callback": {
               "type": "string"
             },
+            "native": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "paths": {
               "items": {
                 "type": "string"
@@ -345,7 +367,8 @@
                 "loading",
                 "copied",
                 "fields_need_attention",
-                "loaded"
+                "loaded",
+                "second_step"
               ],
               "type": "string"
             },
@@ -403,14 +426,14 @@
               "description": "`device::Call` of the protocol: see the schema of `navree-native`.",
               "type": "object"
             },
+            "options": {
+              "type": "object"
+            },
             "posts": {
               "type": "boolean"
             },
             "t": {
               "const": "device"
-            },
-            "ticket": {
-              "type": "string"
             }
           },
           "required": [
@@ -482,7 +505,8 @@
                 "loading",
                 "copied",
                 "fields_need_attention",
-                "loaded"
+                "loaded",
+                "second_step"
               ],
               "type": "string"
             },
@@ -721,6 +745,10 @@
               "description": "`Action` of the protocol: see the schema of `navree-native`.",
               "type": "object"
             },
+            "ask": {
+              "description": "`Question` of the protocol: see the schema of `navree-native`.",
+              "type": "object"
+            },
             "form": {
               "type": "string"
             },
@@ -743,6 +771,117 @@
           "required": [
             "t",
             "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "question": {
+              "type": "integer"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "answer"
+            },
+            "yes": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "question",
+            "yes"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "on": {
+              "type": "boolean"
+            },
+            "row": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "choose"
+            },
+            "table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "table",
+            "on"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "item": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "move"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "item",
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "form": {
+              "type": "string"
+            },
+            "more": {
+              "type": "boolean"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "options"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "field"
           ],
           "type": "object"
         },
@@ -900,6 +1039,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "before": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1359,6 +1501,24 @@
             "t"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "t": {
+              "const": "range"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1375,8 +1535,21 @@
                 },
                 "type": "array"
               },
+              "more": {
+                "type": "boolean"
+              },
               "name": {
                 "type": "string"
+              },
+              "options": {
+                "items": {
+                  "description": "`ChoiceOption` of the protocol: see the schema of `navree-native`.",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "searching": {
+                "type": "boolean"
               },
               "value": {
                 "$ref": "#/$defs/FieldValue"
@@ -1419,7 +1592,8 @@
             "loading",
             "copied",
             "fields_need_attention",
-            "loaded"
+            "loaded",
+            "second_step"
           ],
           "type": "string"
         },
@@ -1729,7 +1903,13 @@
               "failed": {
                 "type": "boolean"
               },
+              "failed_before": {
+                "type": "boolean"
+              },
               "loading": {
+                "type": "boolean"
+              },
+              "loading_before": {
                 "type": "boolean"
               }
             },
@@ -1749,6 +1929,32 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "question": {
+          "additionalProperties": false,
+          "properties": {
+            "cancel": {
+              "type": "string"
+            },
+            "confirm": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "text": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "confirm"
+          ],
+          "type": "object"
         },
         "refreshing": {
           "type": "boolean"
@@ -1949,7 +2155,8 @@
               "present": {
                 "enum": [
                   "sheet",
-                  "full"
+                  "full",
+                  "task"
                 ],
                 "type": "string"
               },

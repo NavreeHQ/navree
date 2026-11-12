@@ -13,6 +13,43 @@ use crate::state::{Content, Notice, ScreenId, ScreenView};
 use crate::tree::{find_in, find_in_mut, has_id, opens};
 use crate::Core;
 
+/// Unticks the items of the menu that holds the item `target` which belong
+/// to the same choice of one. True when one was ticked.
+fn untick_others(node: &mut Node, target: &str, group: &str) -> bool {
+    if let Node::Menu(menu) = node
+        && menu.items.iter().any(|item| has_id(item, target))
+    {
+        let mut changed = false;
+        for item in &mut menu.items {
+            if let Node::Button(button) = item
+                && button.id.as_deref() != Some(target)
+                && button.one_of.as_deref() == Some(group)
+                && button.checked == Some(true)
+            {
+                button.checked = Some(false);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+    let mut changed = false;
+    for slot in crate::tree::slots(node) {
+        changed |= match slot {
+            crate::tree::Slot::Many(list) => {
+                // Every child is looked at: a menu may stand beside another.
+                let mut any = false;
+                for child in list.iter_mut() {
+                    any |= untick_others(child, target, group);
+                }
+                any
+            }
+            crate::tree::Slot::Maybe(child) => child.as_deref_mut().is_some_and(|child| untick_others(child, target, group)),
+            crate::tree::Slot::One(child) => untick_others(child, target, group),
+        };
+    }
+    changed
+}
+
 impl Core {
     /// Runs commands on a screen, in order. `text` is what the control they
     /// run on holds, when it holds text.
@@ -35,6 +72,8 @@ impl Core {
                         count: None,
                     });
                 }
+                // A state from a newer server is not one this build keeps.
+                Command::Set { state: State::Unknown, .. } | Command::Flip { state: State::Unknown, .. } => {}
                 Command::Set { id: target, state, on } => self.put_state(id, &target, state, on),
                 Command::Flip { id: target, state } => {
                     let on = self.has_state(id, &target, state);
@@ -88,6 +127,7 @@ impl Core {
             (Some(Node::Disclosure(disclosure)), State::Open) => disclosure.open,
             (Some(Node::Button(button)), State::Disabled) => button.disabled,
             (Some(Node::Button(button)), State::Pending) => button.pending,
+            (Some(Node::Button(button)), State::Checked) if button.checked.is_some() => button.checked == Some(true),
             (Some(Node::Field(field)), State::Disabled) => field.disabled,
             _ => beside,
         }
@@ -106,6 +146,22 @@ impl Core {
         let Content::Native { screen } = content else {
             return;
         };
+        // A menu item that is ticked says so itself, and one of a choice of one
+        // unticks the others of its menu.
+        if state == State::Checked
+            && let Some(Node::Button(button)) = find_in_mut(screen, &|node| has_id(node, target) && matches!(node, Node::Button(button) if button.checked.is_some()))
+        {
+            let mut changed = button.checked.replace(on) != Some(on);
+            if let Some(group) = button.one_of.clone().filter(|_| on) {
+                for root in screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)) {
+                    changed |= untick_others(root, target, &group);
+                }
+            }
+            if changed {
+                self.touch_screen(id);
+            }
+            return;
+        }
         let Some(node) = find_in_mut(screen, &|node| has_id(node, target)) else {
             return;
         };

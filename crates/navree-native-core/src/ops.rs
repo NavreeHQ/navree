@@ -68,6 +68,15 @@ fn is_open(node: &Node, states: &BTreeMap<String, Vec<State>>) -> bool {
     }
 }
 
+/// Whether a control's options are found by a search on the server.
+fn searched(input: &navree_native::Input) -> bool {
+    match input {
+        navree_native::Input::Choice(choice) => choice.search.is_some() || choice.more.is_some(),
+        navree_native::Input::Choices(choices) => choices.search.is_some() || choices.more.is_some(),
+        _ => false,
+    }
+}
+
 /// Takes the row `id` out of the first table that has it.
 fn remove_row(node: &mut Node, id: &str) -> bool {
     if let Node::Table(table) = node
@@ -87,23 +96,26 @@ impl Core {
     /// Applies ops to a screen, in order. `after_send`: they answer something
     /// the person just sent from it. True when they lead away from the screen.
     pub(crate) fn apply_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
-        self.apply_ops_as(id, ops, &BTreeMap::new(), after_send)
-    }
-
-    /// [`apply_ops`](Self::apply_ops), with how each `navigate` among them asks
-    /// to be presented, by its place in the list. What an op says wins over
-    /// where a post would otherwise lead.
-    pub(crate) fn apply_ops_as(&mut self, id: ScreenId, ops: Vec<Op>, presents: &BTreeMap<usize, Present>, after_send: bool) -> bool {
         let mut current = id;
         let mut left = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
-        for (at, op) in ops.into_iter().enumerate() {
+        for op in ops {
             match op {
                 Op::Morph { target, node } => self.put(current, &target, node, true),
                 Op::Replace { target, node } => self.put(current, &target, node, false),
                 Op::Append { target, nodes, more } => self.add(current, &target, nodes, true, Some(more)),
-                Op::Prepend { target, nodes } => self.add(current, &target, nodes, false, None),
+                Op::Prepend { target, nodes, before } => self.add(current, &target, nodes, false, Some(before)),
                 Op::Remove { target } => self.take_out(current, &target),
+                Op::Merge {
+                    target,
+                    nodes,
+                    gone,
+                    since,
+                    at,
+                    more,
+                } => self.merge(current, &target, nodes, &gone, since, at, more),
+                Op::Rows { target, rows, at, more } => self.table_rows(current, &target, rows, at, more),
+                Op::Row { target, row } => self.table_row(current, &target, row),
                 // Without a focus of the server's own, the first field in error is brought into view.
                 Op::Errors { form, fields } => self.errors(current, &form, &fields, after_send && !focuses),
                 Op::Toast(toast) => self.toast(Some(current), toast),
@@ -118,17 +130,20 @@ impl Core {
                         self.touch_screen(current);
                     }
                 }
-                Op::Navigate { href } => {
+                Op::Navigate { href, present } => {
                     left = true;
                     let blank = self.view.screens.get(&current).is_some_and(|view| matches!(view.content, Content::Blank));
-                    match (self.resolve(&href, current), presents.get(&at)) {
+                    // What the op says of how its screen is presented wins over
+                    // where a post would otherwise lead.
+                    let said = (present != Present::Auto).then_some(present);
+                    match (self.resolve(&href, current), said) {
                         (Target::Outside(url), _) => self.effects.push(Effect::OpenUrl { url, inside: false }),
                         (Target::Refused, _) => {}
-                        (Target::Inside(url), Some(said)) => current = self.go_as(Some(current), &url, *said).unwrap_or(current),
+                        (Target::Inside(url), Some(said)) => current = self.go_as(Some(current), &url, said).unwrap_or(current),
                         // A page that answers only "go there" is that other page.
                         (Target::Inside(url), None) if blank && !after_send => self.replace(current, &url),
                         (Target::Inside(url), None) if after_send => current = self.land(current, &url, None),
-                        (Target::Inside(url), None) => current = self.go(Some(current), &url, Present::Push).unwrap_or(current),
+                        (Target::Inside(url), None) => current = self.go(Some(current), &url, Present::Auto).unwrap_or(current),
                     }
                 }
                 Op::NavigateExternal { href } => {
@@ -160,7 +175,7 @@ impl Core {
         left
     }
 
-    fn too_deep(&mut self, target: &str) {
+    pub(crate) fn too_deep(&mut self, target: &str) {
         self.effects.push(Effect::Report {
             what: "depth".to_owned(),
             detail: format!("an op on `{target}` would nest the screen past {MAX_DEPTH} nodes"),
@@ -245,8 +260,9 @@ impl Core {
         self.touch_screen(id);
     }
 
-    /// Adds nodes to the children of the node `target`. `more` is given for
-    /// an append: the address after these rows, or none when they are the last.
+    /// Adds nodes to the children of the node `target`. `more` is where the
+    /// rows beyond these are: after them for an append, before them for a
+    /// prepend, or none when these are the last that way.
     pub(crate) fn add(&mut self, id: ScreenId, target: &str, nodes: Vec<Node>, at_end: bool, more: Option<Option<String>>) {
         let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
             return;
@@ -283,8 +299,10 @@ impl Core {
         let mut rows = false;
         if let Node::List(list) = parent {
             rows = at_end;
-            if let (true, Some(more)) = (at_end, more) {
-                list.more = more;
+            match (at_end, more) {
+                (true, Some(more)) => list.more = more,
+                (false, Some(before)) => list.before = before,
+                _ => {}
             }
         }
         let Some(children) = main_list(parent) else {
@@ -324,13 +342,13 @@ impl Core {
         let added: Vec<&Node> = match find_in(screen, &|other| has_id(other, target) && matches!(other, Node::List(_) | Node::Table(_) | Node::Region(_))) {
             Some(Node::List(list)) => list.children.iter().skip(from).collect(),
             Some(other) => match crate::regions::table_of(other) {
-                Some(table) => table.rows.iter().skip(from).flat_map(|row| &row.cells).collect(),
+                Some(table) => table.rows.iter().skip(from).flat_map(navree_native::node::TableRow::nodes).collect(),
                 None => return false,
             },
             None => return false,
         };
         let survey = Survey::of(added.into_iter());
-        if !survey.regions.is_empty() || !survey.open.is_empty() || !survey.loose.is_empty() || !survey.more.is_empty() {
+        if !survey.regions.is_empty() || !survey.open.is_empty() || !survey.loose.is_empty() || !survey.more.is_empty() || !survey.live.is_empty() {
             return false;
         }
         for found in survey.forms {
@@ -399,10 +417,15 @@ impl Core {
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;
         };
-        let order: Vec<(String, String)> = view
+        // A range shows the messages for its own name and for either end's.
+        let names = |field: &navree_native::node::Field| match &field.input {
+            navree_native::Input::Range(range) => vec![field.name.clone(), range.from.name.clone(), range.to.name.clone()],
+            _ => vec![field.name.clone()],
+        };
+        let order: Vec<(String, Vec<String>)> = view
             .screen()
             .and_then(|screen| form_of(screen, &handle))
-            .map(|form| fields_of(form).into_iter().filter_map(|field| Some((field.id.clone()?, field.name.clone()))).collect())
+            .map(|form| fields_of(form).into_iter().filter_map(|field| Some((field.id.clone()?, names(field)))).collect())
             .unwrap_or_default();
         let Some(state) = view.forms.get_mut(&handle) else {
             return;
@@ -412,16 +435,22 @@ impl Core {
         }
         let mut first = None;
         let mut placed = BTreeSet::new();
-        for (field_id, name) in &order {
-            let Some(messages) = fields.get(name).filter(|messages| !messages.is_empty()) else {
-                continue;
-            };
-            // Fields that share a name (a group of checkboxes) say it once, at the first.
-            if !placed.insert(name.as_str()) {
+        for (field_id, names) in &order {
+            let mut said = Vec::new();
+            for name in names.iter().filter(|name| !name.is_empty()) {
+                let Some(messages) = fields.get(name).filter(|messages| !messages.is_empty()) else {
+                    continue;
+                };
+                // Fields that share a name (a group of checkboxes) say it once, at the first.
+                if placed.insert(name.as_str()) {
+                    said.extend(messages.iter().cloned());
+                }
+            }
+            if said.is_empty() {
                 continue;
             }
             if let Some(field) = state.fields.get_mut(field_id) {
-                field.errors.clone_from(messages);
+                field.errors = said;
                 first.get_or_insert_with(|| field_id.clone());
             }
         }
@@ -603,6 +632,12 @@ impl Core {
                 };
                 let mut now = field_view(field);
                 if let Some(was) = was.as_ref().and_then(|was| was.fields.get(&field_id)) {
+                    // The options a search found stay while the control is still one that is searched.
+                    if searched(&field.input) {
+                        now.options.clone_from(&was.options);
+                        now.more = was.more;
+                        now.searching = was.searching;
+                    }
                     // What the person typed stays, in a control of the same kind.
                     if inner.dirty.contains(&field_id) && fits(&field.input, &was.value) {
                         now.value = was.value.clone();
@@ -627,16 +662,28 @@ impl Core {
         let mut old = std::mem::take(regions);
         inner.regions.clear();
         let mut wants = Vec::new();
+        let inside = |href: &str| match self.inner.origin.resolve(href, url) {
+            Target::Inside(url) => Some(url),
+            _ => None,
+        };
+        // The lists that ask what changed in them: one that was asking goes on.
+        let mut asking = std::mem::take(&mut inner.live_lists);
+        for (list, changes, live) in &survey.live {
+            let Some(changes) = inside(changes) else {
+                continue;
+            };
+            let mut sub = asking.remove(*list).unwrap_or_default();
+            sub.changes = changes;
+            sub.live = live.and_then(|live| Some((inside(&live.src)?, live.event.clone())));
+            inner.live_lists.insert((*list).to_owned(), sub);
+        }
+        inner.options.retain(|field, _| inner.field_ids.contains(field));
         for found in &survey.regions {
             let state = old.remove(found.id).unwrap_or_default();
             if found.wants && !state.loading && state.failure.is_none() {
                 wants.push(found.id.to_owned());
             }
             regions.insert(found.id.to_owned(), state);
-            let inside = |href: &str| match self.inner.origin.resolve(href, url) {
-                Target::Inside(url) => Some(url),
-                _ => None,
-            };
             if let Some(src) = inside(found.src) {
                 let live = found.live.and_then(|live| Some((inside(&live.src)?, live.event.clone())));
                 inner.regions.insert(found.id.to_owned(), RegionMeta { src, live });
@@ -644,7 +691,7 @@ impl Core {
         }
         inner.live.retain(|region, _| inner.regions.get(region).is_some_and(|meta| meta.live.is_some()));
         inner.turns.retain(|region, _| inner.regions.contains_key(region));
-        lists.retain(|list, _| survey.more.iter().any(|other| other == list) || inner.more.contains_key(list));
+        lists.retain(|list, _| survey.more.iter().any(|other| other == list) || inner.more.contains_key(list) || inner.before.contains_key(list));
 
         if !states.is_empty() {
             states.retain(|id, _| find_in(screen, &|node| has_id(node, id)).is_some());

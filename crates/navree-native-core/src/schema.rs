@@ -79,7 +79,7 @@ fn failure() -> Value {
 }
 
 fn notice() -> Value {
-    words(&["offline", "timeout", "failed", "unsaved", "loading", "copied", "fields_need_attention", "loaded"])
+    words(&["offline", "timeout", "failed", "unsaved", "loading", "copied", "fields_need_attention", "loaded", "second_step"])
 }
 
 fn headers() -> Value {
@@ -128,8 +128,13 @@ pub fn schema() -> Value {
                 ("overlay?", string()),
                 ("text?", string()),
                 ("now?", integer()),
+                ("ask?", protocol("Question")),
             ],
         ),
+        ("answer", &[("screen", screen()), ("question", integer()), ("yes", boolean())]),
+        ("choose", &[("screen", screen()), ("table", string()), ("row?", string()), ("on", boolean())]),
+        ("move", &[("screen", screen()), ("item", string()), ("from", string()), ("to", string()), ("before?", string())]),
+        ("options", &[("screen", screen()), ("form?", string()), ("field", string()), ("text?", string()), ("more?", boolean())]),
         ("field", &[("screen", screen()), ("form?", string()), ("field", string()), ("value", one("FieldValue"))]),
         ("search", &[("screen", screen()), ("text", string())]),
         ("back", &[]),
@@ -138,7 +143,7 @@ pub fn schema() -> Value {
         ("overlay", &[("screen", screen()), ("id", string()), ("open", boolean())]),
         ("refresh", &[("screen", screen())]),
         ("region_retry", &[("screen", screen()), ("region", string())]),
-        ("more", &[("screen", screen()), ("id", string())]),
+        ("more", &[("screen", screen()), ("id", string()), ("before?", boolean())]),
         ("region_go", &[("screen", screen()), ("region", string()), ("href", string())]),
         ("message_shown", &[("id", integer())]),
         ("message_action", &[("id", integer())]),
@@ -192,7 +197,7 @@ pub fn schema() -> Value {
         ("sign_in", &[("url", string()), ("callback?", string()), ("ephemeral?", boolean())]),
         ("message", message.as_slice()),
         ("haptic", &[("kind", string())]),
-        ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean()), ("ticket?", string())]),
+        ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean()), ("options?", json!({"type": "object"}))]),
         ("cache_read", &[("key", string())]),
         ("cache_write", &[("key", string()), ("value?", string())]),
         ("cache_clear", &[]),
@@ -226,7 +231,7 @@ pub fn schema() -> Value {
             ("cache?", object(&[("pages?", integer()), ("persist?", boolean())])),
             ("undrawable?", list(string())),
             ("views?", list(string())),
-            ("sign_in?", object(&[("paths?", list(string())), ("callback?", string())])),
+            ("sign_in?", object(&[("paths?", list(string())), ("callback?", string()), ("native?", list(string()))])),
         ]),
         "Event": forms("t", event),
         "FieldValue": forms("t", &[
@@ -235,6 +240,7 @@ pub fn schema() -> Value {
             ("many", &[("values", list(string()))]),
             ("files", &[("files", list(object(&[("token", string()), ("name", string()), ("type?", string()), ("size?", integer())])))]),
             ("none", &[]),
+            ("range", &[("from?", string()), ("to?", string())]),
         ]),
         "Update": object(&[("changed", list(one("Change"))), ("effects", list(one("Effect")))]),
         "Change": forms("t", &change),
@@ -242,6 +248,7 @@ pub fn schema() -> Value {
         "Body": forms("t", &[
             ("form", &[("text", string())]),
             ("multipart", &[("parts", list(one("Part")))]),
+            ("json", &[("text", string())]),
         ]),
         "Part": forms("t", &[
             ("text", &[("name", string()), ("value", string())]),
@@ -272,7 +279,7 @@ pub fn schema() -> Value {
             ]))),
             ("selected", integer()),
             ("modals", list(object(&[
-                ("present", words(&["sheet", "full"])),
+                ("present", words(&["sheet", "full", "task"])),
                 ("locked", boolean()),
                 ("stack", list(integer())),
             ]))),
@@ -300,12 +307,20 @@ pub fn schema() -> Value {
             ("states", map(list(words(&["open", "hidden", "checked", "selected", "disabled", "active", "invalid", "pending"])))),
             ("forms", map(one("Form"))),
             ("regions", map(object(&[("loading", boolean()), ("failure?", failure())]))),
-            ("lists", map(object(&[("loading", boolean()), ("failed", boolean())]))),
+            ("lists", map(object(&[("loading", boolean()), ("failed", boolean()), ("loading_before?", boolean()), ("failed_before?", boolean())]))),
             ("focus?", object(&[("target", string()), ("serial", integer())])),
+            ("question?", object(&[("id", integer()), ("title", string()), ("text?", string()), ("confirm", string()), ("cancel?", string())])),
         ]),
         "Form": object(&[
             ("pending", boolean()),
-            ("fields", map(object(&[("name", string()), ("value", one("FieldValue")), ("errors", list(string()))]))),
+            ("fields", map(object(&[
+                ("name", string()),
+                ("value", one("FieldValue")),
+                ("errors", list(string())),
+                ("options?", list(protocol("ChoiceOption"))),
+                ("more?", boolean()),
+                ("searching?", boolean()),
+            ]))),
         ]),
     });
     json!({

@@ -51,6 +51,16 @@ pub enum FieldValue {
     },
     /// Nothing is chosen.
     None,
+    /// The two ends of a range, each as a date control sends it; an end that
+    /// is not picked is empty.
+    Range {
+        /// The start.
+        #[serde(default)]
+        from: String,
+        /// The end.
+        #[serde(default)]
+        to: String,
+    },
 }
 
 fn is_zero(value: &u16) -> bool {
@@ -164,6 +174,65 @@ pub enum Event {
         /// device call: a call whose ticket has run out is not started.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         now: Option<i64>,
+        /// The question the control asks first, as the node holds it (`ask`).
+        /// The core holds the action until an `answer` event says yes. A
+        /// client that may skip the question (the control is `undoable`, and
+        /// its system's guidelines say so) leaves it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ask: Option<Box<navree_native::node::Question>>,
+    },
+    /// The person answered the question a screen holds.
+    Answer {
+        /// The screen.
+        screen: ScreenId,
+        /// The question's number.
+        question: u64,
+        /// Whether they went ahead.
+        yes: bool,
+    },
+    /// The person ticked or cleared a table row, or all of them.
+    Choose {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the table, or of the region it stands in.
+        table: String,
+        /// The row's id. Every row the table holds when left out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row: Option<String>,
+        /// Whether it is chosen now.
+        on: bool,
+    },
+    /// The person dragged a row of a list to another place, in it or in
+    /// another list of its group.
+    Move {
+        /// The screen.
+        screen: ScreenId,
+        /// The row's id.
+        item: String,
+        /// The id of the list it was in.
+        from: String,
+        /// The id of the list it is in now.
+        to: String,
+        /// The id of the row it now stands before. Left out at the end.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before: Option<String>,
+    },
+    /// The person typed in a choice that is searched on the server, or came
+    /// near the end of the options it found.
+    Options {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the form the field stands in.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        form: Option<String>,
+        /// The field's id.
+        field: String,
+        /// The words typed. Left out with `more`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        /// Whether the options after those found are wanted.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        more: bool,
     },
     /// The person changed a field.
     Field {
@@ -224,6 +293,10 @@ pub enum Event {
         screen: ScreenId,
         /// The id of the list, of the table, or of the region the table stands in.
         id: String,
+        /// Whether it is the start of a list that came near: the rows before
+        /// its first are wanted (`list.before`).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        before: bool,
     },
     /// A table goes to another address of itself: a column's sort, the page
     /// before, the page after when pages replace each other.

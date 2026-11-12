@@ -73,6 +73,9 @@ pub enum Notice {
     FieldsNeedAttention,
     /// More rows were loaded: `count` says how many.
     Loaded,
+    /// Signing in needs one more step, which this app can't take the person
+    /// through: they finish it another way.
+    SecondStep,
 }
 
 /// The width of the window, by class. Navigation and layout follow it, never
@@ -184,6 +187,16 @@ pub struct FieldView {
     pub value: FieldValue,
     /// What is wrong with it, in the server's words.
     pub errors: Vec<String>,
+    /// The options a search found, for a choice that is searched on the
+    /// server: drawn in place of the control's own while it is there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<navree_native::input::ChoiceOption>>,
+    /// Whether more options than these can be asked for.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
+    /// Whether a search for options is on its way.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub searching: bool,
 }
 
 /// The state of one form.
@@ -213,6 +226,30 @@ pub struct ListView {
     pub loading: bool,
     /// Whether the last try failed. A `more` event tries again.
     pub failed: bool,
+    /// Whether the rows before its first are on their way.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub loading_before: bool,
+    /// Whether the last try for those failed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub failed_before: bool,
+}
+
+/// A question the core holds until the person answers it: what a control
+/// asks before it does what can't be undone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    /// Its number: what the answer names.
+    pub id: u64,
+    /// What is asked: `Cancel order CH-1042?`.
+    pub title: String,
+    /// What follows from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// The words of the button that goes ahead.
+    pub confirm: String,
+    /// The words of the button that goes back, when not the system's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel: Option<String>,
 }
 
 /// A request to move the focus. The client gives it and says so with `focused`.
@@ -264,6 +301,10 @@ pub struct ScreenView {
     /// Where the focus is asked to go.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focus: Option<Focus>,
+    /// The question waiting for the person's answer, in the system's own
+    /// confirmation. An `answer` event takes it away.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<Question>,
 }
 
 impl ScreenView {
@@ -284,6 +325,7 @@ impl ScreenView {
             regions: BTreeMap::new(),
             lists: BTreeMap::new(),
             focus: None,
+            question: None,
         }
     }
 
@@ -520,6 +562,60 @@ pub(crate) enum Pending {
         id: String,
         was: String,
     },
+    /// The rows before a list's first.
+    Before {
+        screen: ScreenId,
+        visit: u64,
+        id: String,
+        was: String,
+    },
+    /// What changed in a list since its revision.
+    Changes { screen: ScreenId, visit: u64, list: String },
+    /// A row's move: where it came from, to put it back if the server refuses.
+    Move {
+        screen: ScreenId,
+        visit: u64,
+        item: String,
+        from: String,
+        at: usize,
+    },
+    /// A search for a choice's options, or the options after those it has.
+    Options {
+        screen: ScreenId,
+        visit: u64,
+        form: String,
+        field: String,
+        turn: u64,
+        more: bool,
+    },
+    /// What a device call needs from the server before the client can run
+    /// it: a confirmation's challenge, a sign-in's nonce.
+    BeforeCall { call: u64 },
+    /// A platform sign-in's token, posted to the app's own sign-in route.
+    SignIn { screen: ScreenId },
+}
+
+impl Pending {
+    /// The screen the request is for, when it is for one's content.
+    pub(crate) fn screen(&self) -> Option<ScreenId> {
+        match self {
+            Self::Page { screen, .. }
+            | Self::Send { screen, .. }
+            | Self::Region { screen, .. }
+            | Self::More { screen, .. }
+            | Self::Before { screen, .. }
+            | Self::Changes { screen, .. }
+            | Self::Move { screen, .. }
+            | Self::Options { screen, .. } => Some(*screen),
+            Self::Shell | Self::BeforeCall { .. } | Self::SignIn { .. } => None,
+        }
+    }
+
+    /// Whether the request may have changed something on the server: its
+    /// answer is wanted even when its screen is gone.
+    pub(crate) fn writes(&self) -> bool {
+        matches!(self, Self::Send { .. } | Self::Move { .. })
+    }
 }
 
 /// A request on its way.
@@ -549,6 +645,52 @@ pub(crate) enum TimerFor {
     Live { screen: ScreenId, region: String },
     /// A stream that failed is tried again.
     Reopen { stream: u64 },
+    /// A stream spoke for a list: ask what changed once it is quiet.
+    Changes { screen: ScreenId, list: String },
+    /// A field that sends its form as it changes was typed in: send when the typing pauses.
+    Changed { screen: ScreenId, form: String, action: Box<Action> },
+    /// A searched choice was typed in: ask for options when the typing pauses.
+    Options { screen: ScreenId, form: String, field: String },
+}
+
+/// A list that asks what changed in it since its revision.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ListLive {
+    /// Where it asks, as an address inside.
+    pub changes: String,
+    /// The stream that says when, and the event that means it.
+    pub live: Option<(String, Option<String>)>,
+    /// An ask is on its way.
+    pub busy: bool,
+    /// The stream spoke while one was: one more follows.
+    pub dirty: bool,
+    /// The answer said more changes follow: the next ask goes at once.
+    pub again: bool,
+    /// The timer that waits for the stream to go quiet.
+    pub timer: Option<u64>,
+}
+
+/// A search for a field's options: the newest, and the timer that waits for
+/// the typing to pause.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct OptionsAsk {
+    pub turn: u64,
+    pub timer: Option<u64>,
+    /// The words to search for when the timer runs out.
+    pub words: String,
+    /// Where the options after those found are.
+    pub more: Option<String>,
+}
+
+/// What a control was about to do when it asked its question.
+#[derive(Clone, Debug)]
+pub(crate) struct Held {
+    pub question: u64,
+    pub action: Action,
+    pub form: Option<String>,
+    pub overlay: Option<String>,
+    pub text: Option<String>,
+    pub now: Option<i64>,
 }
 
 /// A stream of server-sent events the core has asked for.
@@ -637,6 +779,14 @@ pub(crate) struct ScreenInner {
     pub cover: Option<String>,
     /// It held live regions and left the front: they may have missed something.
     pub missed: bool,
+    /// The lists that ask what changed in them, by id.
+    pub live_lists: BTreeMap<String, ListLive>,
+    /// The lists whose rows before the first are on their way, with the address asked.
+    pub before: BTreeMap<String, String>,
+    /// The searches for options, by the field's id.
+    pub options: BTreeMap<String, OptionsAsk>,
+    /// What waits for the answer to the screen's question.
+    pub held: Option<Held>,
 }
 
 /// What the core remembers about a message.
@@ -648,15 +798,26 @@ pub(crate) struct MessageInner {
     pub name: Option<String>,
 }
 
-/// A device call on its way, whose result is posted.
+/// A device call on its way, whose result goes to the server.
 #[derive(Clone, Debug)]
 pub(crate) struct DeviceCall {
     pub screen: ScreenId,
-    /// Where the result is posted, and the server's one-time ticket for it.
-    pub then: navree_native::device::Then,
-    /// Whether the client was given the ticket and has spent it, so the
-    /// result is posted without it.
-    pub spent: bool,
+    /// The call, as the client is told to run it.
+    pub call: navree_native::device::Call,
+    pub goes: Goes,
+}
+
+/// Where a device call's result goes.
+#[derive(Clone, Debug)]
+pub(crate) enum Goes {
+    /// As a form to the call's continuation, with the server's one-time
+    /// ticket; without it when the ticket is `spent` (a confirmation's, at
+    /// its challenge route).
+    Then { then: navree_native::device::Then, spent: bool },
+    /// As JSON to the app's own sign-in route, with the state the nonce route
+    /// gave. `web` is where the web's sign-in starts, for a system with no
+    /// sheet for the provider.
+    SignIn { sign_in: String, state: String, web: Option<String> },
 }
 
 /// The numbers the core hands out.
@@ -670,6 +831,7 @@ pub(crate) struct Counters {
     pub focus: u64,
     pub call: u64,
     pub web: u64,
+    pub question: u64,
 }
 
 /// Everything the core keeps for itself.
