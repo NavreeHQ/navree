@@ -253,6 +253,10 @@ ui = [
 ## draws with its system's own toolkit, and a browser's as before. A preview,
 ## outside the 1.x promise: what it answers may change in a minor release.
 ui-native-preview = ["ui", "navree-ui/native-preview"]
+## UI (opt-in, not in `full`): charts as PNG pictures drawn on the server
+## (`navree::ui::image`), for home-screen widgets, emails and Open Graph
+## cards. resvg on tiny-skia, pure Rust, with the toolkit's typeface built in.
+ui-image = ["ui", "navree-ui/image"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
 ## events and observers, soft deletes, strict modes and pruning (`OrmModule`);

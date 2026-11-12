@@ -6196,6 +6196,7 @@ dependencies = [
  "navree-ui-macros",
  "navree-validation",
  "proptest",
+ "resvg",
  "rust_decimal",
  "serde",
  "serde_json",
