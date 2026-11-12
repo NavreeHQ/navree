@@ -1,6 +1,6 @@
 ---
 title: "Sessions and step-up"
-description: "List and end a user's sessions, and ask for the password or a code again before sensitive actions with `#[recent_auth]`."
+description: "List and end a user's sessions, ask for the password, a code or a passkey again before sensitive actions with `#[recent_auth]`, confirm one action with a passkey, and seal one-time tickets for results posted back."
 ---
 
 Every sign-in starts a session: one device, one browser, one refresh-token family. Users can list their sessions and end the ones they don't recognize. Sensitive routes can also ask for proof that the person at the keyboard is still the account's owner: a recent sign-in, or the password or a code confirmed a moment ago. This page assumes `AuthModule` is set up as described in [Authentication](/docs/security/authentication/).
@@ -165,6 +165,83 @@ Content-Type: application/json
 
 A front end usually handles `reauthentication_required` in one place: show a password prompt, post it to `/api/auth/confirm`, swap in the new access token and repeat the request.
 
+### Confirming with a passkey
+
+With [passkeys](/docs/security/passwordless/#passkeys) on, the same step-up takes a passkey: Face ID, Touch ID, a fingerprint, Windows Hello or the device's PIN, never a bare tap. `POST /api/auth/confirm/options` (with `{}`) answers a challenge, and `POST /api/auth/confirm/passkey` takes the assertion and answers as `POST /api/auth/confirm` does:
+
+```ts title="web/src/confirm.ts"
+const { publicKey } = await api.post("/api/auth/confirm/options", {});
+const assertion = await navigator.credentials.get({
+  publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(publicKey),
+});
+await api.post("/api/auth/confirm/passkey", { credential: assertion.toJSON() });
+```
+
+The options list the user's passkeys in `allowCredentials` and ask for `userVerification: "required"`. The challenge works once, for two minutes (`navree::auth::CONFIRM_TTL_SECS`), for this user and this session. An assertion without user verification, past its time, already used, for another session, or signed by a passkey of another user gets `403 confirmation_refused`, audited as `auth.confirmation_refused` with the reason.
+
+## Confirming an action
+
+A step-up says "the owner was here a moment ago". Approving a payment, a refund or a role change needs more: proof that the owner approved *this* payment. `ConfirmAction` names the action and its details, and a confirmation made for one action never approves another:
+
+```rust title="src/modules/payments/controller.rs"
+use navree::auth::{AccessClaims, AuthService, ClientMeta, ConfirmAction, ConfirmProof};
+use navree::prelude::*;
+use serde_json::Value;
+
+/// The details the person approves: what, which record, how much, to whom.
+fn approval(payment: &Payment) -> ConfirmAction {
+    ConfirmAction::new("payments.approve")
+        .field("payment", &payment.id)
+        .field("amount_paise", payment.amount_paise)
+        .field("payee", &payment.payee)
+}
+
+#[post("/{id}/approve")]
+#[authenticated]
+async fn approve(
+    &self,
+    claims: AccessClaims,
+    meta: ClientMeta,
+    Path(id): Path<String>,
+    Json(input): Json<Value>,
+) -> Result<Json<Value>, AppError> {
+    let payment = Payment::find(&id).await?;
+    let credential = input["credential"].clone();
+    self.auth
+        .confirm_action(&claims, &approval(&payment), ConfirmProof::Passkey(credential), &meta)
+        .await
+        .map_err(|error| error.into_app_error())?;
+    payment.approve().await?;
+    Ok(Json(serde_json::json!({ "approved": id })))
+}
+```
+
+The challenge is `SHA-256("navree-confirm-v1" ‖ nonce ‖ digest)`, where the digest covers the action's name and every field. `confirm_action` computes the digest again from the action the handler built from its own record, so a confirmation of ₹100 posted to the approval of ₹1,00,000 is refused, and so is a confirmation of another payment. Get the challenge for an action with `AuthService::confirmation_options(user_id, session_id, &action)`, or let the page hand the client a ticket for it (below). `confirm_action` also takes `ConfirmProof::Password` and `ConfirmProof::Code`, for clients without passkeys; those prove the person, not the action. A confirmed action is audited as `auth.confirmed` with `metadata.action`, and counts as a step-up.
+
+## Tickets for results posted back
+
+When a page asks the client for something and the answer comes back in a later request (a confirmation, a scanned code, a location), that answer must come from the session the page was for, to the route the page meant, once. A ticket says so. The auth module registers `dyn navree::contracts::CallTickets`, which seals tickets with the application key and remembers used ones in the cache:
+
+```rust
+use navree::contracts::{AuthState, CallTickets, TicketCheck, TicketHolder, TicketRequest};
+
+// While the page is built: a ticket for the request's own session.
+let holder = TicketHolder::of(auth_state.0.as_ref());
+let request = TicketRequest::new(holder, "confirm", "POST", "/payments/PAY-2024/approve")
+    .binding(approval(&payment).digest());
+let issued = tickets.issue(&request)?;   // issued.ticket, issued.expires_at
+
+// In the route the result goes to: redeemed at most once.
+let check = TicketCheck::new(TicketHolder::of(auth_state.0.as_ref()), "scan_code")
+    .at("POST", "/stock/scan");
+let redeemed = tickets.redeem(&ticket, &check).await?;
+```
+
+- Issuing writes nothing; it costs one AES-GCM seal. A ticket lives 5 minutes unless `.ttl(..)` says otherwise (at most an hour).
+- Redeeming refuses a forged or changed ticket, one past its time, one issued to another session or user (a guest's to a guest only), for another call, or for another route, and one already redeemed, even by a request at the same moment. The errors are `TicketError`s; `AuthError::from(error)` answers `422 invalid_ticket`.
+- A `confirm` ticket goes to `POST /api/auth/confirm/options` as `{"ticket": "..."}`: it is used up there, and the challenge is derived from its binding (the action's digest). The assertion then goes to the page's own route, whose handler calls `confirm_action`.
+- Tickets are single use across instances when the cache is shared ([`CacheModule`](/docs/digging-deeper/cache/) with Redis); without `CacheModule` each instance remembers its own.
+
 ## Reading the token's claims
 
 `AccessClaims` gives a handler the verified claims of the request's access token. It answers 401 when the request has none (a guest, or a request authenticated another way); take `Option<AccessClaims>` to make it optional.
@@ -200,7 +277,10 @@ impl SessionInfoController {
 |---|---|
 | `sessions(user_id, current)` | The user's live sessions as `SessionResource`s; the one with id `current` is marked `current` |
 | `revoke_session(user_id, session_id, &meta)` | Ends one session; `AuthError::SessionNotFound` when it isn't the user's |
-| `confirm(&claims, proof, &meta)` | Step-up confirmation with `ConfirmProof::Password(..)` or `ConfirmProof::Code(..)`: a `ConfirmedToken` |
+| `confirm(&claims, proof, &meta)` | Step-up confirmation with `ConfirmProof::Password(..)`, `ConfirmProof::Code(..)` or `ConfirmProof::Passkey(..)`: a `ConfirmedToken` |
+| `confirmation_options(user_id, session_id, &action)` | The `publicKey` request options of a passkey confirmation of `action` |
+| `confirm_action(&claims, &action, proof, &meta)` | Confirms `action` (a passkey bound to it, or the password or a code); the new `auth_time` |
+| `live_sessions(user_id, &ids)` | Which of the session ids are live |
 
 `JwtService::sign_session(user_id, typ, ttl, SessionClaims { session_id, auth_time, impersonator })` signs a token with session claims yourself; `verify_any(token, &[types])` verifies a token of any of several types.
 
@@ -209,7 +289,8 @@ impl SessionInfoController {
 | Action | Kind | When |
 |---|---|---|
 | `auth.session_revoked` | `auth` | A session was ended; `metadata.session_id` |
-| `auth.confirmed` | `auth` | The user confirmed; `metadata.method` (`password` or `totp`) and `metadata.session_id` |
+| `auth.confirmed` | `auth` | The user confirmed; `metadata.method` (`password`, `totp` or `passkey`), `metadata.session_id`, and for an action `metadata.action`; for a passkey `metadata.passkey_id` |
+| `auth.confirmation_refused` | `security` | A passkey confirmation was refused; `metadata.action` and `metadata.reason` |
 
 `auth.refresh` entries carry the session in `metadata.family_id`.
 
@@ -272,7 +353,12 @@ app.client()
 
 - **Access tokens outlive their session.** Ending a session stops its refresh tokens; an access token already issued works until it expires. Keep `auth.jwt.access_ttl_secs` short.
 - **Devices are guesses.** `device` comes from the user agent, which the client chooses.
-- **One second factor for confirmation.** `POST /api/auth/confirm` takes the password or a TOTP code, not a passkey.
+- **A confirmation proves the key, not the screen.** A passkey confirmation proves that a user-verifying authenticator holding the user's passkey approved this action's challenge within two minutes. It doesn't prove what the person saw: the client draws the prompt. Keep the server-side details in the action, and send a receipt (a mail or a push) for every confirmed grant.
+- **Synced passkeys.** A passkey in iCloud Keychain or Google Password Manager confirms from any of the user's devices, not one device.
+
+## Push devices end with their session
+
+With both the `auth` and `notify` features of the facade, a native app's [push devices](/docs/digging-deeper/notification-channels/) belong to the session that registered them. Signing out, `DELETE /api/auth/sessions/{id}` and logging out everywhere delete them at once; before every push, the channel asks `navree::auth::AuthLiveSessions` which of the devices' sessions are live, and deletes the devices of the others (revoked by a password change or reset, offboarded, expired) instead of sending to them. A signed-out phone gets nothing.
 
 <LinkCards>
   <LinkCard href="/docs/security/impersonation/" title="Impersonation">
