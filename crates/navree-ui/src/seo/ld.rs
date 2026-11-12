@@ -228,6 +228,8 @@ impl Organization {
     }
 
     /// One of its profiles elsewhere: a social account, a code host. Call it again for more.
+    /// Search engines use them to tie the organization to its accounts when there are
+    /// some; an organization with none leaves this out, and the checks don't ask for it.
     pub fn same_as(mut self, url: impl Into<String>) -> Self {
         self.0 = self.0.push("sameAs", url.into());
         self
@@ -582,8 +584,10 @@ typed!(
 );
 
 /// The properties a node of each type needs to be of use to a search engine or an answer.
+/// An organization's profiles elsewhere (`sameAs`) are not among them: search engines take
+/// them when there are some, and a young product has none yet.
 const REQUIRED: &[(&str, &[&str])] = &[
-    ("Organization", &["name", "url", "logo", "sameAs"]),
+    ("Organization", &["name", "url", "logo"]),
     ("WebSite", &["name", "url", "publisher", "inLanguage"]),
     (
         "SoftwareApplication",
@@ -852,11 +856,46 @@ mod tests {
         let found = problems(&[data], None);
         let has = |part: &str| found.iter().any(|problem| problem.contains(part));
         assert!(has("Organization needs \"logo\""), "{found:#?}");
-        assert!(has("Organization needs \"sameAs\""), "{found:#?}");
+        assert!(
+            !has("sameAs"),
+            "profiles elsewhere are not required: {found:#?}"
+        );
         assert!(has("Organization.url is /"), "{found:#?}");
         assert!(has("points at #nobody"), "{found:#?}");
         assert!(has("no BreadcrumbList"), "{found:#?}");
         assert!(has("no node for the page"), "{found:#?}");
+    }
+
+    // A young product has no profiles elsewhere yet: its organization is whole without them.
+    #[test]
+    fn an_organization_with_no_profiles_elsewhere_is_whole() {
+        let org = format!("{SITE}/#organization");
+        let site = format!("{SITE}/#website");
+        let crumbs = format!("{SITE}/#breadcrumb");
+        let data = JsonLd::new()
+            .node(
+                Organization::new("Kesar", format!("{SITE}/"))
+                    .id(&org)
+                    .logo(format!("{SITE}/logo.png")),
+            )
+            .node(
+                WebSite::new("Kesar", format!("{SITE}/"))
+                    .id(&site)
+                    .publisher(&org),
+            )
+            .node(
+                WebPage::new(format!("{SITE}/"), "Kesar", "Sleep, heart and steps.")
+                    .date_modified("2026-11-12")
+                    .is_part_of(&site)
+                    .breadcrumb(&crumbs),
+            )
+            .node(
+                BreadcrumbList::new()
+                    .id(&crumbs)
+                    .step("Home", format!("{SITE}/")),
+            );
+        let found = problems(&[data], Some(&format!("{SITE}/")));
+        assert!(found.is_empty(), "{found:#?}");
     }
 
     #[test]

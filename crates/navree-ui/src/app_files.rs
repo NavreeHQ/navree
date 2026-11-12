@@ -1,5 +1,5 @@
-//! [`AppSheet`] and [`AppFont`]: the app's own stylesheet and typefaces, served by the
-//! toolkit the way it serves its own files.
+//! [`AppSheet`], [`AppFont`] and [`AppImage`]: the app's own stylesheet, typefaces and
+//! pictures (a logo, a mark), served by the toolkit the way it serves its own files.
 //!
 //! The page's content security policy lets a page load styles and fonts from its own
 //! origin only, so a brand's art direction (a hero's backdrop, a different typeface,
@@ -46,6 +46,22 @@
 //!
 //! The app hands both to the toolkit from one of its modules, so the toolkit serves them:
 //! `m.contribute(BRAND)` and `m.contribute(DISPLAY)`.
+//!
+//! A picture every page draws, such as the app's mark, is an [`AppImage`] the same way:
+//! compiled in, named by its hash, cached for good, and contributed with `m.contribute(MARK)`.
+//!
+//! ```
+//! use navree_ui::{AppImage, Shell};
+//!
+//! static MARK: AppImage = AppImage::new(
+//!     "mark",
+//!     br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14"/></svg>"#,
+//!     8 * 1024,
+//! );
+//! assert!(MARK.url().ends_with(".svg"));
+//! let html = Shell::new("Kesar").logo(&MARK).page("Today", "/").to_view().to_html();
+//! assert!(html.contains(&format!(r#"<img src="{}""#, MARK.url())));
+//! ```
 
 use bytes::Bytes;
 use http::HeaderMap;
@@ -349,7 +365,214 @@ impl AppFont {
     }
 }
 
-/// One file the toolkit serves for the app: a sheet, a font or a font's rule.
+/// The kind of an [`AppImage`], read from its first bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ImageKind {
+    /// `image/svg+xml`.
+    Svg,
+    /// `image/png`.
+    Png,
+    /// `image/webp`.
+    Webp,
+    /// `image/jpeg`.
+    Jpeg,
+    /// `image/avif`.
+    Avif,
+    /// `image/gif`.
+    Gif,
+    /// `image/x-icon`.
+    Ico,
+}
+
+impl ImageKind {
+    /// The kind `bytes` start as, if they are a picture a page may show.
+    pub const fn of(bytes: &[u8]) -> Option<Self> {
+        let n = bytes.len();
+        if n >= 8 && bytes[0] == 0x89 && bytes[1] == b'P' && bytes[2] == b'N' && bytes[3] == b'G' {
+            return Some(Self::Png);
+        }
+        if n >= 12 && spells(bytes, 0, b"riff") && spells(bytes, 8, b"webp") {
+            return Some(Self::Webp);
+        }
+        if n >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff {
+            return Some(Self::Jpeg);
+        }
+        if n >= 12 && spells(bytes, 4, b"ftypavif") {
+            return Some(Self::Avif);
+        }
+        if n >= 6 && spells(bytes, 0, b"gif8") {
+            return Some(Self::Gif);
+        }
+        if n >= 6 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 1 && bytes[3] == 0 {
+            return Some(Self::Ico);
+        }
+        if is_svg(bytes) {
+            return Some(Self::Svg);
+        }
+        None
+    }
+
+    /// The file's extension.
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Self::Svg => "svg",
+            Self::Png => "png",
+            Self::Webp => "webp",
+            Self::Jpeg => "jpg",
+            Self::Avif => "avif",
+            Self::Gif => "gif",
+            Self::Ico => "ico",
+        }
+    }
+
+    /// The `Content-Type` it is served with.
+    pub const fn content_type(self) -> &'static str {
+        match self {
+            Self::Svg => "image/svg+xml",
+            Self::Png => "image/png",
+            Self::Webp => "image/webp",
+            Self::Jpeg => "image/jpeg",
+            Self::Avif => "image/avif",
+            Self::Gif => "image/gif",
+            Self::Ico => "image/x-icon",
+        }
+    }
+}
+
+/// Whether `bytes` at `at` spell `word` (lowercase), ignoring ASCII case.
+const fn spells(bytes: &[u8], at: usize, word: &[u8]) -> bool {
+    if at + word.len() > bytes.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < word.len() {
+        if bytes[at + i].to_ascii_lowercase() != word[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Whether `bytes` are an SVG document with nothing that runs: an `<svg` element, and no
+/// `<script`, no `<foreignObject` and no `javascript:` anywhere, in any case.
+const fn is_svg(bytes: &[u8]) -> bool {
+    let mut svg = false;
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at] == b'<' {
+            if spells(bytes, at + 1, b"svg") {
+                svg = true;
+            }
+            if spells(bytes, at + 1, b"script") || spells(bytes, at + 1, b"foreignobject") {
+                return false;
+            }
+        }
+        if spells(bytes, at, b"javascript:") {
+            return false;
+        }
+        at += 1;
+    }
+    svg
+}
+
+/// A picture of the app's own (its mark, a logo, an illustration every page shows), compiled
+/// in with `include_bytes!` and served by the toolkit at `/_navree/ui/app/{name}-{hash}.{ext}`
+/// as `immutable`. See [the module](self).
+///
+/// SVG, PNG, WebP, JPEG, AVIF, GIF and ICO files are taken, told apart by their first bytes.
+/// An SVG file that holds a script, a `<foreignObject>` or a `javascript:` address fails the
+/// app's build, and every picture is served under [`IMAGE_CSP`], which runs nothing and loads
+/// nothing, so a picture opened on its own is as inert as one in an `<img>`. Use it wherever
+/// an address goes: `el("img").attr("src", &MARK)`, [`Shell::logo`](crate::Shell::logo),
+/// [`Picture::new`](crate::Picture::new).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AppImage {
+    name: &'static str,
+    bytes: &'static [u8],
+    kind: ImageKind,
+    hash: u64,
+}
+
+impl AppImage {
+    /// The picture `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), at most
+    /// `most` bytes long. A file of another kind, an SVG file with anything that runs, a file
+    /// past its ceiling, or a name of anything else, fails the app's build.
+    pub const fn new(name: &'static str, bytes: &'static [u8], most: usize) -> Self {
+        assert!(
+            is_file_name(name),
+            "a picture's name has 1 to 64 lowercase letters, digits and `-`"
+        );
+        assert!(bytes.len() <= most, "a picture is larger than its ceiling");
+        let Some(kind) = ImageKind::of(bytes) else {
+            panic!(
+                "a picture is an SVG file with nothing that runs, or a PNG, WebP, JPEG, AVIF, GIF or ICO file"
+            )
+        };
+        Self {
+            name,
+            bytes,
+            kind,
+            hash: fnv(FNV_START, bytes),
+        }
+    }
+
+    /// Its name.
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// The file.
+    pub const fn bytes(&self) -> &'static [u8] {
+        self.bytes
+    }
+
+    /// What kind of picture it is.
+    pub const fn kind(&self) -> ImageKind {
+        self.kind
+    }
+
+    /// The first 12 hex digits of its content hash.
+    pub fn hash(&self) -> String {
+        short(self.hash)
+    }
+
+    /// Where it is served: `/_navree/ui/app/{name}-{hash}.{ext}`.
+    pub fn url(&self) -> String {
+        format!(
+            "{APP_PATH}/{}-{}.{}",
+            self.name,
+            self.hash(),
+            self.kind.extension()
+        )
+    }
+}
+
+impl From<&AppImage> for crate::html::Href {
+    fn from(image: &AppImage) -> Self {
+        Self::from(image.url())
+    }
+}
+
+impl From<AppImage> for crate::html::Href {
+    fn from(image: AppImage) -> Self {
+        Self::from(image.url())
+    }
+}
+
+/// Its address, for an API that takes the address as text ([`Picture::new`](crate::Picture::new)).
+impl From<&AppImage> for String {
+    fn from(image: &AppImage) -> Self {
+        image.url()
+    }
+}
+
+/// The content security policy a picture of the app's own is served with: it runs no script,
+/// loads nothing and is drawn in a sandbox when opened on its own.
+pub const IMAGE_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
+/// One file the toolkit serves for the app: a sheet, a font, a font's rule or a picture.
 #[derive(Clone, Debug)]
 pub(crate) struct Served {
     /// The name before the hash (`brand`, `display.face`).
@@ -359,9 +582,25 @@ pub(crate) struct Served {
     hash: String,
     bytes: Bytes,
     brotli: Option<Bytes>,
+    /// Whether it is a picture, served under [`IMAGE_CSP`].
+    image: bool,
 }
 
 impl Served {
+    fn image(image: &AppImage) -> Self {
+        Self {
+            stem: image.name.to_owned(),
+            ext: image.kind.extension(),
+            content_type: image.kind.content_type(),
+            hash: image.hash(),
+            bytes: Bytes::from_static(image.bytes),
+            // Only SVG is text: the others are compressed already.
+            brotli: (image.kind == ImageKind::Svg)
+                .then(|| Bytes::from(crate::compress::brotli(image.bytes))),
+            image: true,
+        }
+    }
+
     fn sheet(sheet: &AppSheet) -> Self {
         Self {
             stem: sheet.name.to_owned(),
@@ -370,6 +609,7 @@ impl Served {
             hash: sheet.hash(),
             bytes: Bytes::from_static(sheet.bytes),
             brotli: Some(Bytes::from(crate::compress::brotli(sheet.bytes))),
+            image: false,
         }
     }
 
@@ -382,6 +622,7 @@ impl Served {
             bytes: Bytes::from_static(font.bytes),
             // A woff2 file is compressed already.
             brotli: None,
+            image: false,
         }
     }
 
@@ -394,6 +635,7 @@ impl Served {
             hash: short(font.face_hash),
             brotli: Some(Bytes::from(crate::compress::brotli(rule.as_bytes()))),
             bytes: Bytes::from(rule.into_bytes()),
+            image: false,
         }
     }
 }
@@ -403,6 +645,7 @@ impl Served {
 pub(crate) fn served(
     sheets: impl IntoIterator<Item = AppSheet>,
     fonts: impl IntoIterator<Item = AppFont>,
+    images: impl IntoIterator<Item = AppImage>,
 ) -> Vec<Served> {
     let mut out: Vec<Served> = Vec::new();
     let mut add = |file: Served| {
@@ -419,6 +662,9 @@ pub(crate) fn served(
     for font in fonts {
         add(Served::font(&font));
         add(Served::face(&font));
+    }
+    for image in images {
+        add(Served::image(&image));
     }
     out
 }
@@ -439,7 +685,7 @@ pub(crate) fn respond(file: &str, request: &HeaderMap, files: &[Served]) -> Resp
     let Some((served, current)) = found else {
         return http::StatusCode::NOT_FOUND.into_response();
     };
-    assets::answer(
+    let mut response = assets::answer(
         &served.hash,
         served.content_type,
         current,
@@ -447,7 +693,14 @@ pub(crate) fn respond(file: &str, request: &HeaderMap, files: &[Served]) -> Resp
         served.bytes.clone(),
         None,
         served.brotli.clone(),
-    )
+    );
+    if served.image {
+        response.headers_mut().insert(
+            http::header::CONTENT_SECURITY_POLICY,
+            http::HeaderValue::from_static(IMAGE_CSP),
+        );
+    }
+    response
 }
 
 #[cfg(test)]
@@ -505,7 +758,7 @@ mod tests {
 
     #[test]
     fn the_files_are_served_by_their_hash_and_an_old_hash_still_gets_them_uncached() {
-        let files = served([BRAND, BRAND], [DISPLAY, DISPLAY]);
+        let files = served([BRAND, BRAND], [DISPLAY, DISPLAY], []);
         assert_eq!(files.len(), 3, "a name once: a sheet, a font, a rule");
         let mut request = HeaderMap::new();
         request.insert(ACCEPT_ENCODING, HeaderValue::from_static("br"));
@@ -550,6 +803,82 @@ mod tests {
                 "{missing}"
             );
         }
+    }
+
+    static MARK: AppImage = AppImage::new(
+        "mark",
+        br#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>"#,
+        1024,
+    );
+    static PHOTO: AppImage = AppImage::new("photo", b"\x89PNG\r\n\x1a\n....", 1024);
+
+    #[test]
+    fn a_picture_is_named_by_its_hash_and_kind_and_served_inert() {
+        assert_eq!(MARK.kind(), ImageKind::Svg);
+        assert_eq!(
+            MARK.url(),
+            format!(
+                "/_navree/ui/app/mark-{}.svg",
+                assets::content_hash(MARK.bytes())
+            )
+        );
+        assert_eq!(PHOTO.kind(), ImageKind::Png);
+        assert!(PHOTO.url().ends_with(".png"));
+        assert_eq!(crate::html::Href::from(&MARK).as_str(), MARK.url());
+
+        let files = served([], [], [MARK, PHOTO, MARK]);
+        assert_eq!(files.len(), 2, "a name once");
+        let mut request = HeaderMap::new();
+        request.insert(ACCEPT_ENCODING, HeaderValue::from_static("br"));
+        let svg = respond(MARK.url().rsplit('/').next().unwrap(), &request, &files);
+        assert_eq!(svg.status(), http::StatusCode::OK);
+        assert_eq!(svg.headers()[CONTENT_TYPE], "image/svg+xml");
+        assert_eq!(
+            svg.headers()[CACHE_CONTROL],
+            "public, max-age=31536000, immutable"
+        );
+        assert_eq!(
+            svg.headers()[http::header::CONTENT_SECURITY_POLICY],
+            IMAGE_CSP
+        );
+        assert_eq!(svg.headers()[CONTENT_ENCODING], "br");
+        let png = respond(PHOTO.url().rsplit('/').next().unwrap(), &request, &files);
+        assert_eq!(png.headers()[CONTENT_TYPE], "image/png");
+        assert!(png.headers().get(CONTENT_ENCODING).is_none());
+        // A picture's name with another extension is nothing.
+        for missing in [
+            format!("mark-{}.png", MARK.hash()),
+            format!("mark-{}.css", MARK.hash()),
+            "mark.svg".to_owned(),
+        ] {
+            assert_eq!(
+                respond(&missing, &request, &files).status(),
+                http::StatusCode::NOT_FOUND,
+                "{missing}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_file_that_could_run_anything_is_no_picture() {
+        for bad in [
+            &b"<svg><script>alert(1)</script></svg>"[..],
+            b"<svg><SCRIPT>alert(1)</SCRIPT></svg>",
+            b"<svg><a href=\"JavaScript:alert(1)\"/></svg>",
+            b"<svg><foreignObject><p>x</p></foreignObject></svg>",
+            b"<html><body>no picture</body></html>",
+            b"GIF",
+            b"",
+        ] {
+            assert_eq!(ImageKind::of(bad), None, "{}", String::from_utf8_lossy(bad));
+        }
+        assert_eq!(
+            ImageKind::of(b"RIFF\0\0\0\0WEBPVP8 "),
+            Some(ImageKind::Webp)
+        );
+        assert_eq!(ImageKind::of(b"\xff\xd8\xff\xe0"), Some(ImageKind::Jpeg));
+        assert_eq!(ImageKind::of(b"\0\0\0\x1cftypavif"), Some(ImageKind::Avif));
+        assert_eq!(ImageKind::of(b"GIF89a"), Some(ImageKind::Gif));
     }
 
     #[test]

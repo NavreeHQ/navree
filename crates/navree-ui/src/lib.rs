@@ -124,7 +124,7 @@ pub mod view;
 #[cfg(feature = "time")]
 mod zone;
 
-pub use app_files::{AppFont, AppSheet, FontDisplay};
+pub use app_files::{AppFont, AppImage, AppSheet, FontDisplay, ImageKind};
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
 /// Country flags under the name the facade documents: `navree::flags` is feature flags,

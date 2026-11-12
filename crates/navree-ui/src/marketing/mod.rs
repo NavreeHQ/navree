@@ -246,7 +246,10 @@ impl SectionHeading {
         }
     }
 
-    /// The small line above the title, saying what the section is about.
+    /// The small line above the title, saying what the section is about. It is set in the
+    /// theme's text face; a site that wants its labels in another face (its code face, a
+    /// display face) sets `--font-label` in its own stylesheet, and the legal page's date
+    /// follows it too.
     pub fn eyebrow(mut self, eyebrow: impl Into<Node>) -> Self {
         self.eyebrow = Some(eyebrow.into());
         self
@@ -438,6 +441,25 @@ pub(crate) fn slug(text: &str) -> String {
 }
 
 into_node!(Brand, SitePage, Section);
+
+#[cfg(test)]
+mod label_font_tests {
+    // Eyebrows and the legal page's date are labels, set in the text face unless the site
+    // names a face for its labels: never the code face by default.
+    #[test]
+    fn labels_take_the_label_face_else_the_text_face() {
+        let css = include_str!("../../styles/extra/marketing.css");
+        for slot in ["[data-slot=eyebrow]{", "[data-slot=legal-updated]{"] {
+            let rule = &css[css.find(slot).expect(slot)..];
+            let rule = &rule[..rule.find('}').unwrap_or(rule.len())];
+            assert!(
+                rule.contains("var(--font-label,var(--font-sans))"),
+                "{slot}: {rule}"
+            );
+            assert!(!rule.contains("--font-mono"), "{slot}: {rule}");
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

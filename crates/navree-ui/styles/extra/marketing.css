@@ -17,7 +17,7 @@
 [data-slot=site-container],[data-slot=site-header-bar]{width:100%;max-width:calc(var(--site-max) + 2 * var(--site-gutter));margin-inline:auto;padding-inline:var(--site-gutter)}
 [data-slot=skip-link]{position:absolute;inset-inline-start:var(--site-gutter);top:.75rem;z-index:60;padding:.5rem .875rem;border-radius:var(--radius);background:var(--accent);color:var(--accent-ink);font-size:.875rem;font-weight:600;text-decoration:none;translate:0 -300%;transition:translate .15s;&:focus{translate:0}}
 [data-slot=accent]{color:var(--accent-text)}
-[data-slot=eyebrow]{display:inline-flex;align-items:center;gap:.5rem;color:var(--accent-text);font:500 .8125rem/1.2 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;&::before{content:"";width:.375rem;height:.375rem;border-radius:1px;background:currentColor}}
+[data-slot=eyebrow]{display:inline-flex;align-items:center;gap:.5rem;color:var(--accent-text);font:500 .8125rem/1.2 var(--font-label,var(--font-sans));letter-spacing:.08em;text-transform:uppercase;&::before{content:"";width:.375rem;height:.375rem;border-radius:1px;background:currentColor}}
 
 /* Buttons read larger on a site than in an app, and the hero's and the call to action's larger still. */
 :is([data-slot=site],[data-slot=site-section],[data-slot=hero],[data-slot=cta-band],[data-slot=newsletter],[data-slot=pricing]) [data-slot=button]:not([data-size]){height:2.5rem;padding-inline:1rem;font-size:.9375rem}
@@ -130,7 +130,10 @@
 [data-slot=phone-body]{padding:.5rem;border:1px solid var(--line-3);border-radius:2.75rem;background:var(--ink-3);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent),0 32px 64px -32px var(--scrim)}
 [data-slot=phone-screen]{position:relative;overflow:hidden;aspect-ratio:9/19.5;border-radius:2.25rem;background:var(--ink-0)}
 [data-slot=phone-camera]{position:absolute;top:.625rem;left:50%;z-index:2;width:5.25rem;height:1.5rem;border-radius:1rem;background:light-dark(var(--fg),var(--ink-0));translate:-50% 0}
-[data-slot=phone-view]{height:100%;overflow:hidden;& > :is(img,[data-slot=picture],[data-slot=picture] > img){width:100%;height:100%;object-fit:cover;object-position:top}}
+[data-slot=phone-frame]{--phone-status:2.75rem}
+[data-slot=phone-view]:has(> :is(img,[data-slot=picture])){padding-top:var(--phone-status)}
+[data-edge] [data-slot=phone-view]{padding-top:0}
+[data-slot=phone-view]{height:100%;overflow:hidden;overflow:clip;& > :is(img,[data-slot=picture]),& > [data-slot=picture] > img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}}
 [data-slot=phone-view]:not(:has(> :is(img,[data-slot=picture]))){padding:2.75rem .875rem 1rem}
 [data-slot=frame-caption]{padding:.75rem 1rem 0;color:var(--fg-3);font-size:.8125rem;text-align:center}
 [data-slot=browser-frame] > [data-slot=frame-caption]{padding-bottom:.75rem;border-top:1px solid var(--line)}
@@ -216,7 +219,7 @@
 [data-slot=legal-head]{display:grid;gap:1rem;& > *{max-width:48rem}margin-bottom:2.5rem;padding-bottom:2.5rem;border-bottom:1px solid var(--line)}
 [data-slot=legal-heading]{color:var(--fg);font-size:clamp(2.25rem,1.75rem + 2vw,3.25rem);font-weight:680;line-height:1.05;letter-spacing:-.03em;text-wrap:balance}
 [data-slot=legal-intro]{max-width:42rem;color:var(--fg-2);font-size:1.125rem;text-wrap:pretty}
-[data-slot=legal-updated]{color:var(--fg-3);font:500 .8125rem/1.4 var(--font-mono)}
+[data-slot=legal-updated]{color:var(--fg-3);font:500 .8125rem/1.4 var(--font-label,var(--font-sans))}
 [data-slot=legal-layout]{display:grid;gap:2.5rem;@media (min-width:64rem){grid-template-columns:15rem minmax(0,1fr);gap:4rem;align-items:start}}
 [data-slot=legal-contents]{padding:1rem 1.25rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1);font-size:.875rem;
   @media (min-width:64rem){position:sticky;top:calc(var(--header-h) + 1.5rem);padding:0;border:0;background:none}
