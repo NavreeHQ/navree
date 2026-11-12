@@ -59,13 +59,13 @@ mod value;
 
 pub use axes::{Axis, Domain, Gridlines, Ticks};
 pub use cartesian::{Annotation, At, Chart, Merge, Series};
-pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
-pub use motion::{CountUp, Motion, Speed};
-pub use paint::{ColorScale, Gradient, Ink};
 pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
+pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};
+pub use motion::{CountUp, Motion, Speed};
+pub use paint::{ColorScale, Gradient, Ink};
 pub use report::{Bucket, MAX_BUCKETS, Report, ReportQuery, ReportZone};
 pub use report_export::ReportTable;
 #[cfg(feature = "orm")]
@@ -863,13 +863,9 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                 body = body.attr(name, value);
             }
             let switch_id = format!("{id}-table-switch");
-            let tip = drawn.interactive.then(|| {
-                tip_node(
-                    drawn
-                        .tip
-                        .unwrap_or_else(|| Tip::of(&drawn.table.head)),
-                )
-            });
+            let tip = drawn
+                .interactive
+                .then(|| tip_node(drawn.tip.unwrap_or_else(|| Tip::of(&drawn.table.head))));
             let table = table_node(&common.title, drawn.table);
             let data = match common.table {
                 TableMode::Switch => el("div").slot("chart-data").children((
