@@ -36,6 +36,7 @@ pub mod client;
 pub mod device;
 pub mod envelope;
 pub mod input;
+mod lenient;
 pub mod node;
 pub mod op;
 pub mod schema;

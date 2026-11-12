@@ -684,6 +684,7 @@ pub enum HapticKind {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Haptic {
     /// How it feels.
+    #[serde(deserialize_with = "crate::lenient::or_default")]
     pub kind: HapticKind,
 }
 
@@ -893,7 +894,7 @@ pub enum SettingsPage {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenSettings {
     /// Which page.
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub page: SettingsPage,
 }
 
@@ -956,7 +957,7 @@ pub struct Confirm {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     /// How it is signed.
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub method: ConfirmMethod,
 }
 
@@ -1003,7 +1004,7 @@ pub enum Accuracy {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocateOnce {
     /// How exactly.
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub accuracy: Accuracy,
     /// How old a fix the device already has may be, in seconds.
     #[serde(default, skip_serializing_if = "is_zero_u32")]
@@ -1068,7 +1069,7 @@ pub enum CodeFormat {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanCode {
     /// The kinds it looks for; every kind when empty.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
     pub formats: Vec<CodeFormat>,
     /// What the scanner tells the person: `Scan the SKU on the box`.
     #[serde(default, skip_serializing_if = "Option::is_none")]

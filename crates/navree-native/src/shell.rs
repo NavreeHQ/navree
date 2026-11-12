@@ -73,7 +73,7 @@ pub struct Route {
     #[serde(rename = "match")]
     pub matches: String,
     /// How a link to it is presented.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
     pub present: Option<Present>,
     /// Whether the app's navigation stays around it. A sign-in screen has none.
     #[serde(default = "yes", skip_serializing_if = "is_true")]

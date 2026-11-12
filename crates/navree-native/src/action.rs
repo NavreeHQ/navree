@@ -48,7 +48,7 @@ pub enum Action {
         /// The screen's address.
         href: String,
         /// How it is presented. The shell's routes decide when this is the default.
-        #[serde(default, skip_serializing_if = "is_default")]
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         present: Present,
     },
     /// Sends a form.
@@ -66,7 +66,7 @@ pub enum Action {
     /// Sends a request of its own: a button that posts.
     Request {
         /// `get` or `post`.
-        #[serde(default, skip_serializing_if = "is_default")]
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         method: crate::node::Method,
         /// Where to.
         href: String,
@@ -232,7 +232,7 @@ pub enum Command {
     /// Shows a toast.
     Toast {
         /// What it means.
-        #[serde(default, skip_serializing_if = "is_default")]
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         tone: Tone,
         /// What it says.
         text: String,

@@ -35,7 +35,7 @@ pub struct ToastAction {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Toast {
     /// What it means.
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub tone: Tone,
     /// What it says.
     pub text: String,
@@ -122,7 +122,7 @@ pub enum Op {
         /// The address.
         href: String,
         /// How it enters history.
-        #[serde(default, skip_serializing_if = "is_default")]
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         mode: UrlMode,
     },
     /// Goes to a screen of the app.
