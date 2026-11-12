@@ -265,7 +265,10 @@ fn a_move_a_native_client_posts_is_read_back_as_the_keys_of_the_page() {
     let body = b"_csrf=t&_sortable=board&item=board-item-12&from=board-list-ready-items&to=board-list-review-items&before=board-item-9&position=2";
     let mv = Move::from_form(body).unwrap();
     assert_eq!(mv.item, "12");
-    assert_eq!((mv.from_list.as_str(), mv.to_list.as_str()), ("ready", "review"));
+    assert_eq!(
+        (mv.from_list.as_str(), mv.to_list.as_str()),
+        ("ready", "review")
+    );
     assert_eq!(mv.before.as_deref(), Some("9"));
     // At the end there is no item to go before: the place is the number, which a form counts from 1.
     let body = b"_sortable=board&item=board-item-12&from=board-list-ready-items&to=board-list-ready-items&before=&position=4";

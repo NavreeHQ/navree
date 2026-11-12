@@ -467,7 +467,10 @@ mod tests {
         let [N::Button(done), N::Section(sort)] = menu.items.as_slice() else {
             panic!("not a box and a group: {:?}", menu.items);
         };
-        assert_eq!((done.label.as_str(), done.checked), ("Show done", Some(true)));
+        assert_eq!(
+            (done.label.as_str(), done.checked),
+            ("Show done", Some(true))
+        );
         assert_eq!(done.one_of, None);
         assert_eq!(
             done.action,

@@ -126,11 +126,7 @@ pub(crate) const SORTABLE_WORD: &str = "_sortable";
 /// of the list moves, or when a key is not what its id says: a move names the
 /// ids of the page, and the server gives each its key back only if the id is
 /// built from it.
-fn reorder_of(
-    list: &Element,
-    items: &Element,
-    root: Option<&str>,
-) -> Read<Option<n::Reorder>> {
+fn reorder_of(list: &Element, items: &Element, root: Option<&str>) -> Read<Option<n::Reorder>> {
     let (Some(root), Some(key)) = (root, attr(list, "data-list")) else {
         return Ok(None);
     };
@@ -162,7 +158,12 @@ fn reorder_of(
     hidden_in(form.child_nodes(), &mut hidden);
     let mut fields: Vec<navree_native::action::Pair> = hidden
         .into_iter()
-        .filter(|field| !matches!(field.name.as_str(), "item" | "from_list" | "before" | "after"))
+        .filter(|field| {
+            !matches!(
+                field.name.as_str(),
+                "item" | "from_list" | "before" | "after"
+            )
+        })
         .map(|field| navree_native::action::Pair {
             name: field.name,
             value: field.value,
@@ -567,7 +568,10 @@ mod tests {
         };
         assert_eq!(list_of_section(todo).reorder, expected(Some(2)));
         // The lists are those of one sortable, the first with an item that can move says how.
-        assert_eq!(list_of_section(todo).id.as_deref(), Some("board-list-todo-items"));
+        assert_eq!(
+            list_of_section(todo).id.as_deref(),
+            Some("board-list-todo-items")
+        );
         // A list with no rows has no form to read it from; a sortable that can't post moves nothing.
         assert_eq!(list_of_section(done).reorder, None);
         let node = read(
@@ -580,16 +584,20 @@ mod tests {
     #[test]
     fn a_key_the_page_cannot_give_back_from_an_id_leaves_the_row_to_its_form() {
         let node = read(
-            Sortable::new("board", "Cards").post("/cards/move").list(
-                SortList::new("todo", "To do").item(SortItem::new("a card", "Fix login")),
-            ),
+            Sortable::new("board", "Cards")
+                .post("/cards/move")
+                .list(SortList::new("todo", "To do").item(SortItem::new("a card", "Fix login"))),
         );
         let list = list_of_section(&sections(&node)[0]);
         assert_eq!(list.reorder, None);
         let [N::Row(row)] = list.children.as_slice() else {
             panic!("not one row");
         };
-        assert!(row.detail.iter().any(|part| matches!(part, N::Disclosure(_))));
+        assert!(
+            row.detail
+                .iter()
+                .any(|part| matches!(part, N::Disclosure(_)))
+        );
     }
 
     #[test]

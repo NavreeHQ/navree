@@ -28,8 +28,8 @@ use navree_native::action::{Action, Command, Pair};
 use navree_native::node as n;
 
 use super::lower::{
-    Control, Cx, N, Parts, Read, align_of, attr, elements, fail, fail_on, flat, has, hooks, id,
-    label_of, number, one, slot, text_of, tone, tone_of, with_id, CONTROL_HOOKS,
+    CONTROL_HOOKS, Control, Cx, N, Parts, Read, align_of, attr, elements, fail, fail_on, flat, has,
+    hooks, id, label_of, number, one, slot, text_of, tone, tone_of, with_id,
 };
 use crate::node::{Element, Node};
 
@@ -76,9 +76,7 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "field" => (field, &[]),
         "choice" => (choice, &[]),
         "radio-group" => (radio_group, &[]),
-        "input" | "checkbox" | "switch" | "native-select" | "textarea" => {
-            (control, CONTROL_HOOKS)
-        }
+        "input" | "checkbox" | "switch" | "native-select" | "textarea" => (control, CONTROL_HOOKS),
         "input-group" => (input_group, &[]),
         "fact-grid" => (fact_grid, &[]),
         "fact-card" => (
@@ -740,7 +738,7 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
     let _close = parts.slot("dialog-close");
     parts.done()?;
     // A sheet that holds a form is a task to finish or cancel; any other is a glance.
-    let task = children.iter().any(|child| holds_form(child));
+    let task = children.iter().any(holds_form);
     Ok(vec![N::Sheet(n::Sheet {
         id,
         title,
@@ -754,7 +752,6 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
         open: has(element, "open"),
         children,
         actions,
-        ..n::Sheet::default()
     })])
 }
 
@@ -1756,9 +1753,9 @@ mod tests {
         use crate::{Cmd, Trigger};
         use navree_native::action::{Action, Command};
         // A box that sends its form as it is ticked.
-        let N::Field(ticked) = read(
-            crate::Checkbox::new("done").on(Trigger::Change, Cmd::submit("check-3")),
-        ) else {
+        let N::Field(ticked) =
+            read(crate::Checkbox::new("done").on(Trigger::Change, Cmd::submit("check-3")))
+        else {
             panic!("not a field");
         };
         assert_eq!(
@@ -1770,9 +1767,9 @@ mod tests {
             })
         );
         // A count of what is typed, with a most.
-        let N::Field(typed) = read(
-            crate::Checkbox::new("x").on(Trigger::Input, Cmd::count("bio-count", 160)),
-        ) else {
+        let N::Field(typed) =
+            read(crate::Checkbox::new("x").on(Trigger::Input, Cmd::count("bio-count", 160)))
+        else {
             panic!("not a field");
         };
         assert_eq!(
@@ -1819,7 +1816,9 @@ mod tests {
             .start(crate::components::icon(crate::icons::SEARCH))
             .into();
         assert_eq!(lower(&picture).why(), ["slot:input-group"]);
-        let tick: Node = crate::InputGroup::new(crate::Checkbox::new("a")).end("x").into();
+        let tick: Node = crate::InputGroup::new(crate::Checkbox::new("a"))
+            .end("x")
+            .into();
         assert_eq!(lower(&tick).why(), ["slot:input-group"]);
     }
 

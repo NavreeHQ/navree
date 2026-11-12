@@ -1161,7 +1161,11 @@ mod tests {
             }]
         );
         // A link posts nothing, and a post given no token sends none.
-        assert!(said(ToastAction::link("Open", "/x").csrf("tok")).fields.is_empty());
+        assert!(
+            said(ToastAction::link("Open", "/x").csrf("tok"))
+                .fields
+                .is_empty()
+        );
         assert!(said(ToastAction::post("Undo", "/undo")).fields.is_empty());
     }
 

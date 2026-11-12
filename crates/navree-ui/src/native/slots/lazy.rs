@@ -86,12 +86,9 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
     // A list at a revision asks what changed since it, whenever its stream says: new rows
     // join the end it follows the stream at.
     let revision = attr(items, "data-ui-since").map(Cow::into_owned);
-    if let (Some(live), Some(since), Some(list_id), Some(src)) = (
-        &live,
-        &revision,
-        id(element),
-        attr(element, "data-ui-src"),
-    ) {
+    if let (Some(live), Some(since), Some(list_id), Some(src)) =
+        (&live, &revision, id(element), attr(element, "data-ui-src"))
+    {
         let at = if attr(element, "data-ui-live-at").as_deref() == Some("start") {
             "start"
         } else {
@@ -255,7 +252,10 @@ mod tests {
                 event: Some("conversations".into())
             })
         );
-        assert_eq!(list.before.as_deref(), Some("/inbox/rows?dir=start&cursor=c-1"));
+        assert_eq!(
+            list.before.as_deref(),
+            Some("/inbox/rows?dir=start&cursor=c-1")
+        );
         assert_eq!(list.children.len(), 2);
     }
 

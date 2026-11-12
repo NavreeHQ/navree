@@ -300,7 +300,9 @@ fn bulk_form(cx: &mut Cx, bulk: &Element) -> Read<n::Form> {
 fn asking_of(dialog: &Element) -> Read<Asking> {
     fn buttons<'a>(element: &'a Element, out: &mut Vec<&'a Element>) {
         for child in flat(element.child_nodes()) {
-            let Node::Element(child) = child else { continue };
+            let Node::Element(child) = child else {
+                continue;
+            };
             if child.tag() == "button" {
                 out.push(child);
             } else {
@@ -846,7 +848,10 @@ mod tests {
             rows_href("/orders?page=2".to_owned(), "orders"),
             "/orders?page=2&_rows=orders"
         );
-        assert_eq!(rows_href("/orders".to_owned(), "a b"), "/orders?_rows=a%20b");
+        assert_eq!(
+            rows_href("/orders".to_owned(), "a b"),
+            "/orders?_rows=a%20b"
+        );
         assert_eq!(table_id("orders"), "orders-table");
     }
 }

@@ -682,7 +682,10 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
     // The address of the next rows asks for rows, not a screen: the answer adds them to
     // the table, and says where the ones after them are.
     let more = table.more.clone().expect("more rows");
-    assert!(more.contains("page=2") && more.ends_with("&_rows=orders"), "{more}");
+    assert!(
+        more.contains("page=2") && more.ends_with("&_rows=orders"),
+        "{more}"
+    );
     let response = app
         .client()
         .get(&more)
@@ -706,7 +709,8 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
     assert_eq!((target.as_str(), rows.len()), ("orders-table", 2));
     assert_eq!(*at, navree_native::op::Edge::End);
     assert!(
-        more.as_deref().is_some_and(|more| more.ends_with("&_rows=orders")),
+        more.as_deref()
+            .is_some_and(|more| more.ends_with("&_rows=orders")),
         "{more:?}"
     );
     // Asked as a browser asks, the address is the page it always was.
@@ -1334,7 +1338,10 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
     };
     assert_eq!(target, "orders-items");
     assert_eq!(nodes.len(), 2);
-    assert_eq!((gone.as_slice(), since.as_str()), (&["7".to_owned()][..], "r9"));
+    assert_eq!(
+        (gone.as_slice(), since.as_str()),
+        (&["7".to_owned()][..], "r9")
+    );
     assert_eq!((*at, *more), (navree_native::op::Edge::End, false));
     let (_, live) = ask_native(
         &app,
@@ -1345,7 +1352,13 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
     )
     .await;
     assert!(
-        matches!(live.ops.as_slice(), [NativeOp::Merge { at: navree_native::op::Edge::Start, .. }]),
+        matches!(
+            live.ops.as_slice(),
+            [NativeOp::Merge {
+                at: navree_native::op::Edge::Start,
+                ..
+            }]
+        ),
         "{:?}",
         live.ops
     );
@@ -2014,10 +2027,7 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
         .iter()
         .map(|column| column.label.as_str())
         .collect();
-    assert_eq!(
-        labels,
-        ["Order", "Status", "Total", "Placed"]
-    );
+    assert_eq!(labels, ["Order", "Status", "Total", "Placed"]);
     // Each row opens its detail itself, with no request; the row says whether it is chosen.
     assert_eq!(table.rows.len(), 2);
     let first = &table.rows[0];

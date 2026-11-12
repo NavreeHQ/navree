@@ -245,12 +245,7 @@ mod tests {
             ActivityFeed::new("act", "Recent activity")
                 .live()
                 .item(ActivityItem::new("Manpreet Gill", "replied"))
-                .in_region(
-                    "act-region",
-                    "/fragments/activity",
-                    "/events",
-                    "0009",
-                ),
+                .in_region("act-region", "/fragments/activity", "/events", "0009"),
         ) else {
             panic!("not a section");
         };
@@ -258,7 +253,10 @@ mod tests {
         assert_eq!(list.id.as_deref(), Some("act-list"));
         assert_eq!(list.since.as_deref(), Some("0009"));
         assert_eq!(list.changes.as_deref(), Some("/fragments/activity"));
-        assert_eq!(list.live.as_ref().map(|live| live.src.as_str()), Some("/events"));
+        assert_eq!(
+            list.live.as_ref().map(|live| live.src.as_str()),
+            Some("/events")
+        );
     }
 
     #[test]

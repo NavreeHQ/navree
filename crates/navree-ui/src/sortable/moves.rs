@@ -207,12 +207,8 @@ impl Move {
                 before.unwrap_or_default(),
             ),
         };
-        let (item, from_list, to_list, before) = (
-            Some(item),
-            Some(from_list),
-            Some(to_list),
-            Some(before),
-        );
+        let (item, from_list, to_list, before) =
+            (Some(item), Some(from_list), Some(to_list), Some(before));
         let key = |value: Option<String>, name: &'static str| match value {
             Some(value) if !value.is_empty() && value.len() <= MAX_KEY => Ok(value),
             _ => Err(MoveError::Field(name)),
