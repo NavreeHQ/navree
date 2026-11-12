@@ -212,6 +212,57 @@ async fn postgres_schema_has_columns_indexes_and_foreign_keys() {
     db.drop_db().await;
 }
 
+/// The table asked for is picked from the catalog's list and never written
+/// into the SQL, and the catalog names that are written into it stay string
+/// literals, even where a backslash escapes a quote in a plain string
+/// (`standard_conforming_strings = off`).
+#[tokio::test]
+async fn postgres_schema_table_names_never_become_sql() {
+    let Some(db) = Scratch::new("postgres_schema_table_names_never_become_sql").await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    db.setup(&[r#"CREATE TABLE "it\'s" (id bigint PRIMARY KEY)"#])
+        .await;
+    // New connections to this database read backslashes in plain strings as
+    // escapes. A server that no longer accepts the setting still runs the
+    // rest of the test with standard strings.
+    let mut conn = PgConnection::connect(&db.url).await.unwrap();
+    let off = conn
+        .execute(AssertSqlSafe(format!(
+            "ALTER DATABASE {} SET standard_conforming_strings = off",
+            db.name
+        )))
+        .await;
+    if let Err(error) = off {
+        eprintln!("standard_conforming_strings stays on: {error}");
+    }
+    conn.close().await.unwrap();
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+
+    // Written into the SQL with quotes doubled only, this would close the
+    // string and list every table.
+    let hostile = refused(
+        &navigator,
+        "describe_schema",
+        json!({"table": r"\' OR 1=1 --"}),
+    )
+    .await;
+    assert!(hostile.contains("no table named"), "{hostile}");
+
+    let odd = call(&navigator, "describe_schema", json!({"table": r"it\'s"})).await;
+    assert_eq!(odd["tables"].as_array().map(Vec::len), Some(1), "{odd}");
+    assert_eq!(odd["tables"][0]["name"], r"it\'s");
+    assert_eq!(odd["tables"][0]["columns"][0]["name"], "id");
+    assert_eq!(odd["tables"][0]["columns"][0]["primary_key"], true);
+
+    let all = call(&navigator, "describe_schema", json!({})).await;
+    assert_eq!(all["tables"].as_array().map(Vec::len), Some(5), "{all}");
+    drop(navigator);
+    db.drop_db().await;
+}
+
 /// Lighthouse's tables as its migration creates them on PostgreSQL.
 const LIGHTHOUSE: &[&str] = &[
     "CREATE TABLE lighthouse_issues (id uuid PRIMARY KEY, fingerprint varchar NOT NULL UNIQUE, kind varchar NOT NULL, \
