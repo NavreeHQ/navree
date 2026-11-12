@@ -18,7 +18,10 @@ use navree::browser::{Browser, BrowserError, TestServer};
 use navree::contracts::{Clock, FixedClock};
 use navree::crypto::{CryptoModule, generate_key};
 use navree::db::{DatabaseModule, Db};
-use navree::http::{Controller, RouteDef};
+use navree::http::extract::Request;
+use navree::http::middleware::{self, Next};
+use navree::http::response::Response;
+use navree::http::{Controller, GlobalLayer, LayerSlot, RouteDef};
 use navree::prelude::*;
 use navree::session::{Session, SessionModule, SessionOptions};
 use navree::testing::TestApp;
@@ -78,8 +81,31 @@ struct PagesModule;
 impl Module for PagesModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<Pages>();
+        m.http_layer(GlobalLayer::new(
+            LayerSlot::Edge,
+            "slow-switch",
+            |_ctx, router| Ok(router.layer(middleware::from_fn(slow_switch))),
+        ));
     }
 }
+
+/// How long a workspace switch takes here: as on a busy machine, longer than
+/// opening a page in another tab.
+const SWITCH_TAKES: Duration = Duration::from_secs(1);
+
+/// Holds `POST /workspace/switch` for [`SWITCH_TAKES`]. Pressing a workspace
+/// in the switcher on `/home` posts a form that comes back to `/home`, so the
+/// path says nothing about the switch: a step that goes on before the switcher
+/// names the new workspace races the post, and here it always loses.
+async fn slow_switch(request: Request, next: Next) -> Response {
+    if request.method() == Method::POST && request.uri().path() == "/workspace/switch" {
+        tokio::time::sleep(SWITCH_TAKES).await;
+    }
+    next.run(request).await
+}
+
+/// The switcher's button, which names the workspace the page is in.
+const SWITCHER: &str = "#ui-workspace-switcher-trigger";
 
 /// The TOTP code of `secret` (base32) at `clock`'s time.
 fn totp(secret: &str, clock: &FixedClock) -> String {
@@ -183,12 +209,14 @@ async fn sign_in_two_factor_switch_workspace_and_sign_out() -> Result<(), Browse
     // Switch to Agra, then to Gulati; the page follows.
     page.click("Choose a workspace").await?;
     page.press("Agra").await?;
+    page.assert_see_in(SWITCHER, "Agra").await?;
     page.assert_path_is("/home").await?;
     let deals = browser.visit(server.url("/deals")).await?;
     deals.assert_see("Working in Agra").await?;
     let home = browser.visit(server.url("/home")).await?;
     home.click("Agra").await?;
     home.press("Gulati").await?;
+    home.assert_see_in(SWITCHER, "Gulati").await?;
     home.assert_path_is("/home").await?;
     let deals = browser.visit(server.url("/deals")).await?;
     deals.assert_see("Working in Gulati").await?;
