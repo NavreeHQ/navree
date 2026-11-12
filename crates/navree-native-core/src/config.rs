@@ -64,7 +64,7 @@ pub struct SignInConfig {
 ///
 /// let config: Config = serde_json::from_str(
 ///     r#"{"origin":"https://shop.example",
-///         "client":{"platform":"ios","form":"phone","vocab":1,"text_percent":100}}"#,
+///         "client":{"platform":"ios","form":"phone","vocab":0,"text_percent":100}}"#,
 /// )
 /// .unwrap();
 /// assert!(config.back_to_first);
@@ -83,11 +83,10 @@ pub struct Config {
     /// release build says no.
     #[serde(default)]
     pub loopback_http: bool,
-    /// What the client says about itself on every request.
+    /// What the client says about itself on every request. Its `caps` are
+    /// the device features this build has, by the protocol's names: a control
+    /// that calls one it lacks is drawn as the call's stand-in says.
     pub client: Client,
-    /// The client library's version, sent as `lib` in the descriptor.
-    #[serde(default)]
-    pub lib: String,
     /// Whether the system's back, with nothing left to go back to, leads to the
     /// first destination before it leaves the app. Android's way; Apple's
     /// systems have no such back.
@@ -121,7 +120,6 @@ impl Config {
             also: Vec::new(),
             loopback_http: false,
             client,
-            lib: String::new(),
             back_to_first: true,
             deep_links: DeepLinks::default(),
             cache: CacheConfig::default(),

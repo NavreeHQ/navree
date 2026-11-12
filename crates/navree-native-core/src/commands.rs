@@ -28,7 +28,7 @@ impl Core {
                 Command::Open { id: target } => self.set_open(id, &target, true),
                 Command::Close { id: target } => self.set_open(id, &target, false),
                 Command::Copy { text } => {
-                    self.effects.push(Effect::Copy { text });
+                    self.effects.push(Effect::Copy { text, sensitive: false });
                     self.effects.push(Effect::Announce {
                         text: None,
                         notice: Some(Notice::Copied),

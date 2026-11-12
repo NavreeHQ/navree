@@ -1,0 +1,87 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Order CS-20481",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "button",
+     "label": "Share",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "share",
+       "title": "Order CS-20481",
+       "href": "/orders/1"
+      },
+      "then": {
+       "href": "/orders/1/shared",
+       "ticket": "tk_7f3a9c",
+       "exp": 1794000000
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Copy the tracking number",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "copy",
+       "text": "KL 6392 9508 MH"
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Track with the courier",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "open_url",
+       "url": "https://courier.example/track/KL63929508MH",
+       "inside": true
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Scan the parcel",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "scan_code"
+      },
+      "then": {
+       "href": "/orders/1/shared",
+       "ticket": "tk_7f3a9c",
+       "exp": 1794000000
+      },
+      "alt": {
+       "t": "text",
+       "text": "Type the code on the parcel instead."
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Find my shop",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "locate_once"
+      },
+      "then": {
+       "href": "/orders/1/shared",
+       "ticket": "tk_7f3a9c",
+       "exp": 1794000000
+      }
+     }
+    }
+   ]
+  }
+ }
+}

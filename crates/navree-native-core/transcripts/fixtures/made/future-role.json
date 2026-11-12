@@ -1,13 +1,25 @@
 {
  "navree": 1,
  "build": "152bd84abf4d",
- "vocab": 1,
+ "vocab": 0,
  "screen": {
   "title": "Shawl",
   "body": {
-   "t": "button",
-   "label": "Share",
-   "role": "share"
+   "t": "stack",
+   "children": [
+    {
+     "t": "button",
+     "label": "Share",
+     "role": "share",
+     "prominence": "loudest"
+    },
+    {
+     "t": "text",
+     "value": "Pashmina shawl, Patiala",
+     "style": "marquee",
+     "tone": "festive"
+    }
+   ]
   }
  }
 }

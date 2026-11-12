@@ -31,7 +31,7 @@ impl Core {
         match target {
             Target::Refused => from,
             Target::Outside(url) => {
-                self.effects.push(Effect::OpenUrl { url });
+                self.effects.push(Effect::OpenUrl { url, inside: false });
                 from
             }
             Target::Inside(url) => self.go(from, &url, present),
@@ -63,16 +63,24 @@ impl Core {
             self.effects.push(Effect::SignIn {
                 url: self.inner.origin.absolute(url),
                 callback: self.config.sign_in.callback.clone(),
+                ephemeral: false,
             });
             return from;
         }
+        // A link that says nothing more than "go there" is presented as the
+        // shell's routes say.
         let how = match present {
             Present::Push => self.route(url).and_then(|route| route.present).unwrap_or(Present::Push),
             said => said,
         };
+        self.go_as(from, url, how)
+    }
+
+    /// Goes to `url` presented exactly as `how` says, whatever the routes say.
+    pub(crate) fn go_as(&mut self, from: Option<ScreenId>, url: &str, how: Present) -> Option<ScreenId> {
         if how == Present::External {
             let url = self.inner.origin.absolute(url);
-            self.effects.push(Effect::OpenUrl { url });
+            self.effects.push(Effect::OpenUrl { url, inside: false });
             return from;
         }
         if let Some(from) = from {
@@ -408,7 +416,7 @@ impl Core {
             Target::Inside(inside) => {
                 self.go(Some(id), &inside, Present::Push);
             }
-            Target::Outside(url) => self.effects.push(Effect::OpenUrl { url }),
+            Target::Outside(url) => self.effects.push(Effect::OpenUrl { url, inside: false }),
             Target::Refused => {}
         }
     }

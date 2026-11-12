@@ -94,6 +94,10 @@ pub struct Response {
     /// transport did not follow. The core follows it, if it stays inside.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// The answer's headers whose names start with `x-navree-`, each a name
+    /// and a value. The shell's stamp travels in one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<(String, String)>,
     /// The answer's body, as text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
@@ -103,6 +107,13 @@ pub struct Response {
     /// A redirect led to another site, at this address. Nothing was fetched from it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub left: Option<String>,
+}
+
+impl Response {
+    /// The value of the header `name`, whatever its case.
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
+        self.headers.iter().find(|(other, _)| other.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str())
+    }
 }
 
 /// What a stream of server-sent events did.
@@ -149,6 +160,10 @@ pub enum Event {
         /// What the control holds, when it is one that holds text.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         text: Option<String>,
+        /// The time now, in seconds since 1970 (UTC), when the action is a
+        /// device call: a call whose ticket has run out is not started.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        now: Option<i64>,
     },
     /// The person changed a field.
     Field {
@@ -302,13 +317,17 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<String>,
     },
-    /// A device call finished.
+    /// A device call that posts its result finished.
     DeviceResult {
         /// The call.
         call: u64,
-        /// Whether it did what was asked.
+        /// Whether it produced its result.
         ok: bool,
-        /// What it found, as a form's fields.
+        /// Why it did not, by the protocol's name for the refusal:
+        /// `denied`, `cancelled`, `unsupported`. `failed` when left out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refusal: Option<String>,
+        /// The result, as a form's fields.
         #[serde(default)]
         fields: Vec<Pair>,
     },

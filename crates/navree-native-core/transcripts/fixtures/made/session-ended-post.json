@@ -1,0 +1,16 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "toast",
+   "tone": "warning",
+   "text": "Your session ended. Sign in to continue."
+  },
+  {
+   "op": "navigate",
+   "href": "/sign-in?next=%2Forders%2F1"
+  }
+ ]
+}

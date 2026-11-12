@@ -276,7 +276,7 @@ impl Core {
 
     /// Whether anything may be sent from the screen. A kept tree may hold a
     /// token that is no longer good: it waits for the fresh one.
-    fn may_send(&mut self, id: ScreenId) -> bool {
+    pub(crate) fn may_send(&mut self, id: ScreenId) -> bool {
         let waits = self.view.screens.get(&id).is_some_and(|view| view.cached);
         if waits {
             self.notice(Notice::Loading, Some(id));
@@ -364,7 +364,7 @@ impl Core {
     pub(crate) fn request(&mut self, id: ScreenId, method: Method, href: &str, fields: Vec<Pair>, action: Option<Action>) {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.effects.push(crate::Effect::OpenUrl { url }),
+            Target::Outside(url) => return self.effects.push(crate::Effect::OpenUrl { url, inside: false }),
             Target::Refused => return,
         };
         if !self.may_send(id) {
@@ -446,7 +446,7 @@ impl Core {
     }
 
     /// The action of something the person tapped.
-    pub(crate) fn act(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>) {
+    pub(crate) fn act(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>) {
         if !self.view.holds(id) {
             return;
         }
@@ -471,6 +471,7 @@ impl Core {
             Action::Back => self.back(),
             Action::Refresh => self.fetch_page(id, true),
             Action::Dismiss => self.dismiss(id, overlay.as_deref()),
+            Action::Device(device) => self.device_call(id, device, now),
             // An action this build does not know does nothing.
             _ => {}
         }
@@ -537,7 +538,7 @@ impl Core {
                 self.failed(failure, Some(id));
                 told = true;
             }
-            Answer::Left(url) => self.effects.push(crate::Effect::OpenUrl { url }),
+            Answer::Left(url) => self.effects.push(crate::Effect::OpenUrl { url, inside: false }),
             Answer::Empty => {
                 if write {
                     self.wrote(id);
@@ -557,8 +558,22 @@ impl Core {
                     self.arrive(id, &url, shown);
                 }
             }
-            Answer::Tree { url, status, mut read, body } => {
-                if self.note(&mut read, Some(id)) {
+            Answer::Tree { url, status, mut read, body, shell } => {
+                if self.note(&mut read, shell) {
+                    return;
+                }
+                if let Some(way_in) = Core::way_in(status, &read.envelope.ops) {
+                    // The session ended before this was sent. What the answer
+                    // says is said; the way in is put up; what was typed stays
+                    // where it is for when the person is back.
+                    for op in std::mem::take(&mut read.envelope.ops) {
+                        if let navree_native::Op::Toast(toast) = op {
+                            self.toast(None, toast);
+                        }
+                    }
+                    if let Some(under) = alive.then_some(id).or(self.front()) {
+                        self.session_ended(under, &way_in);
+                    }
                     return;
                 }
                 let worked = status < 400;
@@ -572,6 +587,7 @@ impl Core {
                 let reload = read.reload;
                 let shown = self.shown(&url, status, &mut read, body);
                 let ops = std::mem::take(&mut read.envelope.ops);
+                let presents = std::mem::take(&mut read.presents);
                 let leads = shown.is_some() || ops.iter().any(|op| matches!(op, navree_native::Op::Navigate { .. } | navree_native::Op::NavigateExternal { .. }));
                 if !alive || !front {
                     // The person has moved on: the answer changes its own screen's
@@ -596,8 +612,9 @@ impl Core {
                         }
                     }
                 } else if cover.as_ref().is_some_and(|route| write && worked && leaves(route, &url, shown.is_some(), &ops)) {
-                    // The sign-in the session's end put up has done its work: the
-                    // person is back where they were, and that screen is fetched again.
+                    // The way in the session's end put up has done its work: the
+                    // person is back where they were. Who is signed in may have
+                    // changed, so the shell is asked for again.
                     for op in ops {
                         if let navree_native::Op::Toast(toast) = op {
                             self.toast(None, toast);
@@ -605,6 +622,16 @@ impl Core {
                     }
                     self.dismissed(id);
                     self.fetch_shell();
+                    // The page the sign-in led to is often the very one they
+                    // were on: it is shown there. Otherwise that screen is
+                    // fetched again as it comes to the front.
+                    let under = self.front().filter(|under| self.view.screens.get(under).is_some_and(|view| view.url == url));
+                    if let (Some(under), Some(shown)) = (under, shown) {
+                        self.show(under, &url, shown);
+                        if let Some(inner) = self.inner.screens.get_mut(&under) {
+                            inner.stale = false;
+                        }
+                    }
                 } else if let Some(route) = self.covers(asked, &url).filter(|_| shown.is_some()) {
                     self.cover(id, route, &url, shown);
                     self.apply_ops(self.front().unwrap_or(id), ops, false);
@@ -624,7 +651,7 @@ impl Core {
                         self.notice(Notice::Failed, Some(id));
                         told = true;
                     }
-                    let left = self.apply_ops(current, ops, true);
+                    let left = self.apply_ops_as(current, ops, &presents, true);
                     kept = !showed && !left;
                     if reload && !left {
                         // Something in the answer could not be read: the screen is asked for again.

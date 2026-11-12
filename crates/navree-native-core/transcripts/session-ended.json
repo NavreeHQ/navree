@@ -1,5 +1,5 @@
 {
-  "about": "The session ends while the app is in use. The next request is answered with a redirect to the sign-in page, which the shell's routes say is a cover: it is presented over the app, the person signs in, and they are back where they were.",
+  "about": "The session ends while the app is in use. The server answers 401 and names the way in. It is presented as the shell's routes say (sign-in is a cover with no chrome), the person signs in, and they are back where they were. A post that meets the same answer keeps what was typed.",
   "steps": [
     {
       "note": "The app starts and asks for its shell.",
@@ -7,7 +7,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -22,7 +22,7 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -45,7 +45,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -70,42 +70,44 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_close","stream":1}
         ]
       }
     },
     {
-      "note": "The session has ended: the server answers with a redirect to the sign-in. The core follows it.",
-      "send": {"t":"response","request":4,"status":302,"location":"https://shop.example/sign-in"},
-      "expect": {
-        "changed": [],
-        "effects": [
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
-        ]
-      }
-    },
-    {
-      "note": "The answer came from /sign-in, not from the order's address. The sign-in is put up as a cover the person can't take away. The order's screen stays in its stack, empty, to be fetched again.",
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/sign-in.json",
+      "note": "401, and one op: `navigate` to the sign-in, which remembers where to come back to. The sign-in is put up as a cover the person can't take away, and asked for. The order's screen stays in its stack, empty, to be shown once they are back.",
+      "send": {"t":"response","request":4,"status":401,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/session-ended.json",
       "expect": {
         "changed": [
           {"t":"nav"},
           {"t":"screen","id":3},
           {"t":"screen","id":4}
         ],
-        "effects": []
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/sign-in?next=%2Forders%2F1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       },
       "check": [
         {"at":"/modals","is":[{"locked":true,"present":"full","stack":[4]}]},
-        {"at":"/screens/4/url","is":"/sign-in"},
+        {"at":"/screens/4/url","is":"/sign-in?next=%2Forders%2F1"},
         {"at":"/screens/4/chrome","is":false},
         {"at":"/screens/3/content/t","is":"blank"},
         {"at":"/screens/3/loading","is":false},
         {"at":"/destinations/1/stack","is":[2,3]},
         {"at":"/front","is":4}
       ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/sign-in.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
     },
     {
       "note": "Back has nothing to go back to here: the system takes it.",
@@ -153,7 +155,7 @@
           {"t":"form","screen":4,"form":"sign-in"}
         ],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=wrong"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=wrong"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -189,34 +191,44 @@
           {"t":"form","screen":4,"form":"sign-in"}
         ],
         "effects": [
-          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
-      "note": "Signed in: the answer leads away from the sign-in. The cover goes; who is signed in may have changed, so the shell is asked for again; and the order the person had tapped is fetched.",
-      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/signed-in.json",
+      "note": "Signed in: the server redirects to where the person was going. The core follows it.",
+      "send": {"t":"response","request":7,"status":303,"location":"/orders/1"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      }
+    },
+    {
+      "note": "The answer came from the order's own address, not the sign-in's: the cover has done its work and goes. It is the very page the screen underneath was waiting for, so it is shown there. Who is signed in may have changed, so the shell is asked for again.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
       "expect": {
         "changed": [
           {"t":"nav"},
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
         {"at":"/modals","is":[]},
         {"at":"/front","is":3},
-        {"at":"/screens/3/loading","is":true},
+        {"at":"/screens/3/content/screen/title","is":"Order CS-20481"},
+        {"at":"/screens/3/loading","is":false},
         {"at":"/screens/4","is":null}
       ]
     },
     {
       "note": "The same person as before: everything stays.",
-      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/shell-routes.json",
       "expect": {
         "changed": [
@@ -230,17 +242,56 @@
       ]
     },
     {
-      "note": "They are where they were going.",
-      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "store/order.json",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
       "expect": {
         "changed": [
           {"t":"screen","id":3}
         ],
         "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"10"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Later the session ends again, and this time the person is sending a form.",
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"post","url":"https://shop.example/orders/1/refund","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"amount=10&reason=returned"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "401 again, with a toast beside the way in. The toast is shown, the sign-in is put up, and the form underneath keeps what was typed for when they are back.",
+      "send": {"t":"response","request":10,"status":401,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/session-ended-post.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3},
+          {"t":"screen","id":5},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"warning","text":"Your session ended. Sign in to continue."},
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/sign-in?next=%2Forders%2F1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       },
       "check": [
-        {"at":"/screens/3/content/screen/title","is":"Order CS-20481"}
+        {"at":"/messages/0/text","is":"Your session ended. Sign in to continue."},
+        {"at":"/modals/0/locked","is":true},
+        {"at":"/screens/3/forms/refund/fields/refund-amount/value/text","is":"10"},
+        {"at":"/screens/3/forms/refund/pending","is":false}
       ]
     }
   ]

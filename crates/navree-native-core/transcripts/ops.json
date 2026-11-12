@@ -7,7 +7,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -22,7 +22,7 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -45,7 +45,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -69,7 +69,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/board","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/board","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_close","stream":1}
         ]
       }
@@ -91,7 +91,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -129,7 +129,7 @@
           {"t":"messages"}
         ],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/board/undo","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/board/undo","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
         ]
       },
       "check": [
@@ -145,7 +145,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/board?view=open","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/board?view=open","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
@@ -174,7 +174,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -188,7 +188,7 @@
           {"t":"messages"}
         ],
         "effects": [
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/fragments/totals","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000},
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/fragments/totals","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","totals"]],"timeout_ms":15000},
           {"t":"message","id":2,"tone":"info","text":"Saved again"},
           {"t":"open_url","url":"https://pay.example/invoice/7"}
         ]
@@ -222,7 +222,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":10,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":10,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -236,7 +236,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       },

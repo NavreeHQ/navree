@@ -6,7 +6,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -20,7 +20,7 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -32,7 +32,7 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000},
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","figures"]],"timeout_ms":15000},
           {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }
@@ -43,7 +43,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","figures"]],"timeout_ms":15000}
         ]
       }
     },
@@ -91,7 +91,7 @@
           {"t":"form","screen":2,"form":"sign-in"}
         ],
         "effects": [
-          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -101,7 +101,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/session","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/session","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=an0n&email=ravneet.kaur%40example.com&password=right"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
@@ -111,12 +111,12 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
         ]
       }
     },
     {
-      "note": "The post ended on the first page: signed in. The cover goes, the shell is asked for again, and the screen underneath is fetched again.",
+      "note": "The post ended on the first page: signed in. The cover goes, the shell is asked for again, and the page it ended on is the one the screen underneath shows, so it is shown there.",
       "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/overview.json",
       "expect": {
@@ -125,15 +125,15 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","figures"]],"timeout_ms":15000},
           {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       },
       "check": [
         {"at":"/modals","is":[]},
         {"at":"/front","is":1},
-        {"at":"/screens/1/loading","is":true}
+        {"at":"/screens/1/loading","is":false}
       ]
     },
     {
@@ -149,18 +149,6 @@
     },
     {
       "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/overview.json",
-      "expect": {
-        "changed": [
-          {"t":"screen","id":1}
-        ],
-        "effects": [
-          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
-        ]
-      }
-    },
-    {
-      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/figures.json",
       "expect": {
         "changed": [
@@ -180,59 +168,59 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/round","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/round","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_close","stream":2}
         ]
       }
     },
     {
-      "send": {"t":"response","request":11,"status":302,"location":"/round?n=1"},
+      "send": {"t":"response","request":10,"status":302,"location":"/round?n=1"},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":12,"method":"get","url":"https://shop.example/round?n=1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/round?n=1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
-      "send": {"t":"response","request":12,"status":302,"location":"/round?n=2"},
+      "send": {"t":"response","request":11,"status":302,"location":"/round?n=2"},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":13,"method":"get","url":"https://shop.example/round?n=2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":12,"method":"get","url":"https://shop.example/round?n=2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
-      "send": {"t":"response","request":13,"status":302,"location":"/round?n=3"},
+      "send": {"t":"response","request":12,"status":302,"location":"/round?n=3"},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":14,"method":"get","url":"https://shop.example/round?n=3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":13,"method":"get","url":"https://shop.example/round?n=3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
-      "send": {"t":"response","request":14,"status":302,"location":"/round?n=4"},
+      "send": {"t":"response","request":13,"status":302,"location":"/round?n=4"},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":15,"method":"get","url":"https://shop.example/round?n=4","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":14,"method":"get","url":"https://shop.example/round?n=4","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
-      "send": {"t":"response","request":15,"status":302,"location":"/round?n=5"},
+      "send": {"t":"response","request":14,"status":302,"location":"/round?n=5"},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":16,"method":"get","url":"https://shop.example/round?n=5","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":15,"method":"get","url":"https://shop.example/round?n=5","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
       "note": "A sixth redirect in a row is not followed: the page failed.",
-      "send": {"t":"response","request":16,"status":302,"location":"/round?n=6"},
+      "send": {"t":"response","request":15,"status":302,"location":"/round?n=6"},
       "expect": {
         "changed": [
           {"t":"screen","id":3}
@@ -252,13 +240,13 @@
           {"t":"screen","id":4}
         ],
         "effects": [
-          {"t":"fetch","request":17,"method":"get","url":"https://shop.example/out","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":16,"method":"get","url":"https://shop.example/out","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
       "note": "A redirect that leaves the app's origin is not asked for anything. It opens outside, and the screen made for it goes.",
-      "send": {"t":"response","request":17,"status":302,"location":"//evil.example/steal"},
+      "send": {"t":"response","request":16,"status":302,"location":"//evil.example/steal"},
       "expect": {
         "changed": [
           {"t":"nav"}

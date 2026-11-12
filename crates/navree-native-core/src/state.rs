@@ -536,6 +536,8 @@ pub(crate) struct Asked {
     pub limit: u32,
     /// How many redirects were followed to get here.
     pub hops: u8,
+    /// The part of the screen asked for, by id: a region, or a list's next rows.
+    pub region: Option<String>,
 }
 
 /// What a timer the core asked for is for.
@@ -646,14 +648,12 @@ pub(crate) struct MessageInner {
     pub name: Option<String>,
 }
 
-/// A device call on its way.
+/// A device call on its way, whose result is posted.
 #[derive(Clone, Debug)]
 pub(crate) struct DeviceCall {
-    pub screen: Option<ScreenId>,
-    /// Where the result is posted.
-    pub then: Option<String>,
-    /// The server's one-time ticket for the result.
-    pub ticket: Option<String>,
+    pub screen: ScreenId,
+    /// Where the result is posted, and the server's one-time ticket for it.
+    pub then: navree_native::device::Then,
 }
 
 /// The numbers the core hands out.
@@ -681,9 +681,11 @@ pub(crate) struct Inner {
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,
-    /// The stamps of the app and of the shell, as the last answer gave them.
-    pub app_stamp: Option<String>,
+    /// The stamp of the shell held, when the shell said one; the stamp the
+    /// last answer named; and the stamp the shell was last asked again for.
     pub shell_stamp: Option<String>,
+    pub seen_stamp: Option<String>,
+    pub asked_stamp: Option<String>,
     pub routes: Vec<Route>,
     /// Who the shell is for now, and who was last signed in. When the person
     /// changes, nothing of the one before may show.

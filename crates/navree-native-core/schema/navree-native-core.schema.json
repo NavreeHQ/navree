@@ -169,7 +169,7 @@
           "type": "object"
         },
         "client": {
-          "description": "`Client` of the protocol: see the schema of `navree-native`.",
+          "description": "`ClientDescriptor` of the protocol: see the schema of `navree-native`.",
           "type": "object"
         },
         "deep_links": {
@@ -177,9 +177,6 @@
             "routes",
             "origin"
           ],
-          "type": "string"
-        },
-        "lib": {
           "type": "string"
         },
         "loopback_http": {
@@ -292,6 +289,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "inside": {
+              "type": "boolean"
+            },
             "t": {
               "const": "open_url"
             },
@@ -310,6 +310,9 @@
           "properties": {
             "callback": {
               "type": "string"
+            },
+            "ephemeral": {
+              "type": "boolean"
             },
             "t": {
               "const": "sign_in"
@@ -393,12 +396,15 @@
         {
           "additionalProperties": false,
           "properties": {
-            "args": {},
             "call": {
               "type": "integer"
             },
-            "name": {
-              "type": "string"
+            "device": {
+              "description": "`device::Call` of the protocol: see the schema of `navree-native`.",
+              "type": "object"
+            },
+            "posts": {
+              "type": "boolean"
             },
             "t": {
               "const": "device"
@@ -407,7 +413,7 @@
           "required": [
             "t",
             "call",
-            "name"
+            "device"
           ],
           "type": "object"
         },
@@ -492,6 +498,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "sensitive": {
+              "type": "boolean"
+            },
             "t": {
               "const": "copy"
             },
@@ -652,6 +661,15 @@
               ],
               "type": "string"
             },
+            "headers": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
             "left": {
               "type": "string"
             },
@@ -702,6 +720,9 @@
             },
             "form": {
               "type": "string"
+            },
+            "now": {
+              "type": "integer"
             },
             "overlay": {
               "type": "string"
@@ -1169,6 +1190,9 @@
             },
             "ok": {
               "type": "boolean"
+            },
+            "refusal": {
+              "type": "string"
             },
             "t": {
               "const": "device_result"

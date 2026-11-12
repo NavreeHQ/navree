@@ -18,7 +18,7 @@
 //!   after 1 s, 2 s, 4 s … 30 s, and its regions then fetch once. Only the
 //!   screen in front holds streams, and a hidden app holds none.
 
-use navree_native::node::{Method, Node, Region, Table};
+use navree_native::node::{Node, Region, Table};
 use navree_native::Screen;
 use serde_json::{Value, json};
 
@@ -139,7 +139,7 @@ impl Core {
             go: go.is_some(),
             url: url.clone(),
         };
-        self.fetch(purpose, Method::Get, &url, None, REGION_LIMIT);
+        self.fetch_part(purpose, &url, region, REGION_LIMIT);
         self.touch_screen(id);
     }
 
@@ -176,9 +176,13 @@ impl Core {
             Answer::Failed(failure) => fail(self, failure),
             Answer::Left(_) | Answer::Empty => {}
             Answer::Html { .. } => self.whole_page_to_web(id, vec!["html".to_owned()]),
-            Answer::Tree { url: from, status, mut read, body } => {
-                if self.note(&mut read, Some(id)) {
+            Answer::Tree { url: from, status, mut read, body, shell } => {
+                if self.note(&mut read, shell) {
                     return;
+                }
+                // The session ended: the answer names the way in, not the region.
+                if let Some(way_in) = Self::way_in(status, &read.envelope.ops) {
+                    return self.session_ended(id, &way_in);
                 }
                 // The session ended: the answer is the sign-in, not the region.
                 if let Some(route) = self.covers(url, &from) {
@@ -275,7 +279,7 @@ impl Core {
             id: list.to_owned(),
             was: more,
         };
-        self.fetch(purpose, Method::Get, &url, None, MORE_LIMIT);
+        self.fetch_part(purpose, &url, list, MORE_LIMIT);
         self.list_changed(id, list);
     }
 
@@ -312,9 +316,12 @@ impl Core {
         }
         match answer {
             Answer::Failed(_) | Answer::Html { .. } | Answer::Left(_) | Answer::Empty => return,
-            Answer::Tree { mut read, .. } => {
-                if self.note(&mut read, Some(id)) {
+            Answer::Tree { status, mut read, shell, .. } => {
+                if self.note(&mut read, shell) {
                     return;
+                }
+                if let Some(way_in) = Self::way_in(status, &read.envelope.ops) {
+                    return self.session_ended(id, &way_in);
                 }
                 let ops = std::mem::take(&mut read.envelope.ops);
                 if !ops.is_empty() {

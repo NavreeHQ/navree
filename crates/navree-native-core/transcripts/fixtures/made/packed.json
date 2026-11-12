@@ -1,27 +1,33 @@
 {
  "navree": 1,
  "build": "152bd84abf4d",
- "vocab": 1,
+ "vocab": 0,
  "ops": [
   {
    "op": "device",
-   "name": "haptic",
-   "args": {
+   "call": {
+    "f": "haptic",
     "kind": "success"
    }
   },
   {
    "op": "device",
-   "name": "badge",
-   "args": {
+   "call": {
+    "f": "set_badge",
     "count": 3
-   },
-   "then": "/device/badge",
-   "ticket": "tk_7f3a"
+   }
   },
   {
    "op": "device",
-   "name": "camera"
+   "call": {
+    "f": "request_review"
+   }
+  },
+  {
+   "op": "device",
+   "call": {
+    "f": "scan_code"
+   }
   },
   {
    "op": "toast",

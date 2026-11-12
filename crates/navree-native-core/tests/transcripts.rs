@@ -62,7 +62,7 @@ fn dir() -> PathBuf {
 fn config(over: &Value) -> Config {
     let mut base = json!({
         "origin": "https://shop.example",
-        "client": {"platform": "android", "form": "phone", "vocab": 1, "text_percent": 100},
+        "client": {"platform": "android", "form": "phone", "vocab": 0, "text_percent": 100},
     });
     if let (Some(base), Some(over)) = (base.as_object_mut(), over.as_object()) {
         for (key, value) in over {
@@ -324,6 +324,9 @@ const REQUIRED: &[&str] = &[
     "device-reply",
     "form-file",
     "redirects",
+    "page-moved",
+    "post-landing",
+    "device-call",
 ];
 
 #[test]

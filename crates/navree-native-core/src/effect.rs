@@ -86,6 +86,9 @@ pub enum Effect {
     OpenUrl {
         /// The address.
         url: String,
+        /// Whether the page asked for the system's browser inside the app.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        inside: bool,
     },
     /// Open the system's sign-in session at this address, and come back with
     /// a `sign_in_done` event.
@@ -96,6 +99,9 @@ pub enum Effect {
         /// app's own origin.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         callback: Option<String>,
+        /// Whether the session shares nothing with the system's browser.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        ephemeral: bool,
     },
     /// Show this message, as the system shows short messages, and come back
     /// with `message_shown` when it has gone.
@@ -106,16 +112,16 @@ pub enum Effect {
         /// `medium` or `heavy`.
         kind: String,
     },
-    /// Run a device call the server's reply started, and come back with a
-    /// `device_result` event when the call has a result to send.
+    /// Run a device call: one a tap started, or one of the few a server's
+    /// reply may start. When `posts`, come back with a `device_result` event.
     Device {
         /// The number the result comes back with.
         call: u64,
-        /// The call's name.
-        name: String,
-        /// What the call is given.
-        #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
-        args: serde_json::Value,
+        /// The call, as the protocol writes it: `{"f":"share","title":"…"}`.
+        device: serde_json::Value,
+        /// Whether the call's result is wanted.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        posts: bool,
     },
     /// Read what the client keeps under a key, and come back with a `cache` event.
     CacheRead {
@@ -148,6 +154,9 @@ pub enum Effect {
     Copy {
         /// The text.
         text: String,
+        /// Whether it is a secret the system should not show or sync.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        sensitive: bool,
     },
     /// Come back with a `timer` event after this long.
     Timer {

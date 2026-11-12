@@ -1,0 +1,205 @@
+{
+  "about": "Device calls a tap starts. The client runs the call; a call that has a result posts it where the call said, with the server's one-time ticket and how it went. A control whose call this build was not built with is drawn as the call's stand-in says, or not at all. A call whose ticket has run out is not started: its screen is fetched again.",
+  "config": {"client":{"caps":["share","clipboard","open_url"],"form":"phone","platform":"android","text_percent":100,"vocab":0}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1/tools"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1/tools","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "note": "This build has `share`, `clipboard` and `open_url`. It has no scanner: that button is the line of text its call gave to stand in for it. It has no location either, and that call gave nothing: the button is not drawn.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-tools.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/0/label","is":"Share"},
+        {"at":"/screens/3/content/screen/body/children/3","is":{"t":"text","value":"Type the code on the parcel instead."}},
+        {"at":"/screens/3/content/screen/body/children/4","is":{"hidden":true,"t":"stack"}}
+      ]
+    },
+    {
+      "note": "The person taps Share. The client is asked to run the call, and to come back with its result.",
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"share","title":"Order CS-20481","href":"/orders/1"},"then":{"href":"/orders/1/shared","ticket":"tk_7f3a9c","exp":1794000000}},"now":1793990000},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":1,"device":{"f":"share","href":"/orders/1","title":"Order CS-20481"},"posts":true}
+        ]
+      }
+    },
+    {
+      "note": "The share sheet is done. The result is posted as a form, with the ticket and the outcome beside it.",
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[{"name":"completed","value":"true"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders/1/shared","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"completed=true&_call=tk_7f3a9c&outcome=ok"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/noted.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Noted"}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"share","title":"Order CS-20481","href":"/orders/1"},"then":{"href":"/orders/1/shared","ticket":"tk_7f3a9c","exp":1794000000}},"now":1793990000},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":2,"device":{"f":"share","href":"/orders/1","title":"Order CS-20481"},"posts":true}
+        ]
+      }
+    },
+    {
+      "note": "This time the person closed the sheet. The refusal is posted by name, with the ticket and no result.",
+      "send": {"t":"device_result","call":2,"ok":false,"refusal":"cancelled","fields":[]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/orders/1/shared","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_call=tk_7f3a9c&outcome=cancelled"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/noted.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"neutral","text":"Noted"}
+        ]
+      }
+    },
+    {
+      "note": "Copying has no result to post.",
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"copy","text":"KL 6392 9508 MH"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"copy","text":"KL 6392 9508 MH"},
+          {"t":"announce","notice":"copied"}
+        ]
+      }
+    },
+    {
+      "note": "Nor has opening the courier's page in the system's browser inside the app.",
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"open_url","url":"https://courier.example/track/KL63929508MH","inside":true}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://courier.example/track/KL63929508MH","inside":true}
+        ]
+      }
+    },
+    {
+      "note": "A result for a call that is not waiting changes nothing.",
+      "send": {"t":"device_result","call":9,"ok":true,"fields":[]},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Much later the person taps Share again. The ticket has run out: the call is not started, and the screen is fetched again for a fresh one.",
+      "send": {"t":"act","screen":3,"action":{"t":"device","call":{"f":"share","title":"Order CS-20481","href":"/orders/1"},"then":{"href":"/orders/1/shared","ticket":"tk_7f3a9c","exp":1794000000}},"now":1794000001},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":3,"tone":"neutral","notice":"loading"},
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders/1/tools","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/loading","is":true},
+        {"at":"/messages/2/notice","is":"loading"}
+      ]
+    }
+  ]
+}

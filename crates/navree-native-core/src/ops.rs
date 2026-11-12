@@ -87,10 +87,17 @@ impl Core {
     /// Applies ops to a screen, in order. `after_send`: they answer something
     /// the person just sent from it. True when they lead away from the screen.
     pub(crate) fn apply_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
+        self.apply_ops_as(id, ops, &BTreeMap::new(), after_send)
+    }
+
+    /// [`apply_ops`](Self::apply_ops), with how each `navigate` among them asks
+    /// to be presented, by its place in the list. What an op says wins over
+    /// where a post would otherwise lead.
+    pub(crate) fn apply_ops_as(&mut self, id: ScreenId, ops: Vec<Op>, presents: &BTreeMap<usize, Present>, after_send: bool) -> bool {
         let mut current = id;
         let mut left = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
-        for op in ops {
+        for (at, op) in ops.into_iter().enumerate() {
             match op {
                 Op::Morph { target, node } => self.put(current, &target, node, true),
                 Op::Replace { target, node } => self.put(current, &target, node, false),
@@ -114,22 +121,23 @@ impl Core {
                 Op::Navigate { href } => {
                     left = true;
                     let blank = self.view.screens.get(&current).is_some_and(|view| matches!(view.content, Content::Blank));
-                    match self.resolve(&href, current) {
-                        Target::Outside(url) => self.effects.push(Effect::OpenUrl { url }),
-                        Target::Refused => {}
+                    match (self.resolve(&href, current), presents.get(&at)) {
+                        (Target::Outside(url), _) => self.effects.push(Effect::OpenUrl { url, inside: false }),
+                        (Target::Refused, _) => {}
+                        (Target::Inside(url), Some(said)) => current = self.go_as(Some(current), &url, *said).unwrap_or(current),
                         // A page that answers only "go there" is that other page.
-                        Target::Inside(url) if blank && !after_send => self.replace(current, &url),
-                        Target::Inside(url) if after_send => current = self.land(current, &url, None),
-                        Target::Inside(url) => current = self.go(Some(current), &url, Present::Push).unwrap_or(current),
+                        (Target::Inside(url), None) if blank && !after_send => self.replace(current, &url),
+                        (Target::Inside(url), None) if after_send => current = self.land(current, &url, None),
+                        (Target::Inside(url), None) => current = self.go(Some(current), &url, Present::Push).unwrap_or(current),
                     }
                 }
                 Op::NavigateExternal { href } => {
                     left = true;
                     match self.resolve(&href, current) {
-                        Target::Outside(url) => self.effects.push(Effect::OpenUrl { url }),
+                        Target::Outside(url) => self.effects.push(Effect::OpenUrl { url, inside: false }),
                         Target::Inside(url) => {
                             let url = self.inner.origin.absolute(&url);
-                            self.effects.push(Effect::OpenUrl { url });
+                            self.effects.push(Effect::OpenUrl { url, inside: false });
                         }
                         Target::Refused => {}
                     }
@@ -144,6 +152,7 @@ impl Core {
                         self.fetch_region(current, &target, None);
                     }
                 }
+                Op::Device { call } => self.reply_call(call),
                 // An op this build does not know changes nothing.
                 _ => {}
             }

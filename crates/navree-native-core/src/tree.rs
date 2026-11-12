@@ -18,11 +18,10 @@ use navree_native::node::{Field, Form, Live, Method, Node};
 
 use crate::event::FieldValue;
 
-/// The deepest tree the store holds, in nodes: about what one answer can
-/// hold before its JSON is nested too deep to read. A page is nowhere near
-/// it; an op that would pass it is skipped, so nothing that walks a tree can
-/// run out of stack.
-pub(crate) const MAX_DEPTH: usize = 64;
+/// The deepest tree the store holds, in nodes: the deepest the protocol lets
+/// one answer be. A page is nowhere near it; an op that would nest a screen
+/// past it is skipped, so nothing that walks a tree can run out of stack.
+pub(crate) const MAX_DEPTH: usize = navree_native::MAX_DEPTH;
 
 /// A place in a node that holds nodes.
 pub(crate) enum Slot<'a> {
@@ -73,6 +72,7 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
             }
             for row in &mut n.rows {
                 out.push(Slot::Many(&mut row.cells));
+                out.push(Slot::Many(&mut row.actions));
             }
             out.push(Slot::Maybe(&mut n.empty));
             out
@@ -84,6 +84,12 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
         Node::Dialog(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.actions)],
         Node::Popover(n) => vec![Slot::Many(&mut n.children)],
         Node::Native(n) => vec![Slot::Maybe(&mut n.alt)],
+        Node::Toolbar(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.menu)).collect(),
+        Node::Timeline(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.detail)).collect(),
+        Node::FeedRow(n) => vec![Slot::Many(&mut n.detail)],
+        Node::Message(n) => vec![Slot::Many(&mut n.body)],
+        Node::Pane(n) => vec![Slot::Many(&mut n.children)],
+        Node::Unknown(n) => vec![Slot::Maybe(&mut n.alt)],
         _ => Vec::new(),
     }
 }
@@ -145,6 +151,33 @@ fn nothing() -> Node {
     Node::Stack(navree_native::node::Stack::default())
 }
 
+// A node is half a kilobyte, and a debug build keeps every one it moves in
+// the frame of the function that moves it. So what moves a node is done in
+// these three, which do not call themselves: the walk that finds the place
+// holds only references, and stays small at every level of a deep tree.
+
+#[inline(never)]
+fn change_in_list(list: &mut Vec<Node>, at: usize, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = list.remove(at);
+    if let Some(new) = change(old) {
+        list.insert(at, new);
+    }
+}
+
+#[inline(never)]
+fn change_in_place(place: &mut Option<Box<Node>>, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = place.take().map(|old| *old);
+    *place = old.and_then(change).map(Box::new);
+}
+
+#[inline(never)]
+fn change_where_one_must_be(child: &mut Node, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = std::mem::replace(child, nothing());
+    if let Some(new) = change(old) {
+        *child = new;
+    }
+}
+
 /// Puts the first node inside `node` that `is` accepts through `change`: none
 /// takes it out, one takes its place. A place that must hold a node keeps an
 /// empty stack when it is given none. Returns whether one was found.
@@ -159,10 +192,7 @@ pub(crate) fn rewrite(
                 let mut at = 0;
                 while at < list.len() {
                     if is(&list[at]) {
-                        let old = list.remove(at);
-                        if let Some(new) = change(old) {
-                            list.insert(at, new);
-                        }
+                        change_in_list(list, at, change);
                         return true;
                     }
                     if rewrite(&mut list[at], is, change) {
@@ -173,8 +203,7 @@ pub(crate) fn rewrite(
             }
             Slot::Maybe(place) => {
                 if place.as_deref().is_some_and(is) {
-                    let old = place.take().map(|old| *old);
-                    *place = old.and_then(&mut *change).map(Box::new);
+                    change_in_place(place, change);
                     return true;
                 }
                 if let Some(child) = place.as_deref_mut()
@@ -185,10 +214,7 @@ pub(crate) fn rewrite(
             }
             Slot::One(child) => {
                 if is(child) {
-                    let old = std::mem::replace(child, nothing());
-                    if let Some(new) = change(old) {
-                        *child = new;
-                    }
+                    change_where_one_must_be(child, change);
                     return true;
                 }
                 if rewrite(child, is, change) {
@@ -232,10 +258,7 @@ pub(crate) fn rewrite_in(
     let mut at = 0;
     while at < screen.actions.len() {
         if is(&screen.actions[at]) {
-            let old = screen.actions.remove(at);
-            if let Some(new) = change(old) {
-                screen.actions.insert(at, new);
-            }
+            change_in_list(&mut screen.actions, at, change);
             return true;
         }
         if rewrite(&mut screen.actions[at], is, change) {
@@ -244,10 +267,7 @@ pub(crate) fn rewrite_in(
         at += 1;
     }
     if is(&screen.body) {
-        let old = std::mem::replace(&mut screen.body, nothing());
-        if let Some(new) = change(old) {
-            screen.body = new;
-        }
+        change_where_one_must_be(&mut screen.body, change);
         return true;
     }
     rewrite(&mut screen.body, is, change)
@@ -292,6 +312,7 @@ pub(crate) fn main_list(node: &mut Node) -> Option<&mut Vec<Node>> {
         Node::Dialog(n) => Some(&mut n.children),
         Node::Popover(n) => Some(&mut n.children),
         Node::Menu(n) => Some(&mut n.items),
+        Node::Pane(n) => Some(&mut n.children),
         _ => None,
     }
 }
@@ -311,6 +332,7 @@ pub(crate) fn holds(node: &Node) -> bool {
             | Node::Dialog(_)
             | Node::Popover(_)
             | Node::Menu(_)
+            | Node::Pane(_)
     )
 }
 
@@ -463,7 +485,7 @@ impl Names<'_> {
                 }
                 for row in &mut table.rows {
                     let scope = row.id.as_deref().or(scope);
-                    for cell in &mut row.cells {
+                    for cell in row.cells.iter_mut().chain(&mut row.actions) {
                         self.node(cell, scope, form, counts);
                     }
                 }
@@ -590,7 +612,7 @@ impl<'a> Survey<'a> {
                         self.node(child, Some(at), region);
                     }
                 }
-                for cell in table.rows.iter().flat_map(|row| &row.cells) {
+                for cell in table.rows.iter().flat_map(|row| row.cells.iter().chain(&row.actions)) {
                     self.node(cell, form, region);
                 }
                 if let Some(empty) = table.empty.as_deref() {
@@ -676,16 +698,28 @@ mod tests {
     #[test]
     fn mutable_and_plain_walks_agree_on_the_corpus() {
         let mut seen = BTreeSet::new();
-        for name in ["screen-list", "screen-detail", "screen-form", "screen-kinds", "screen-with-toast"] {
-            let mut screen = corpus(name).screen.unwrap();
-            let mut plain = Vec::new();
-            walk(&screen.body, &mut |node| plain.push(label(node)));
-            let mut changing = Vec::new();
-            walk_mut(&mut screen.body, &mut changing);
-            assert_eq!(plain, changing, "{name}");
-            walk(&screen.body, &mut |node| {
-                seen.insert(node.kind().as_str());
-            });
+        let names = ["screen-list", "screen-detail", "screen-form", "screen-kinds", "screen-with-toast", "screen-dashboard", "screen-inbox", "screen-device", "from-the-future"];
+        for name in names {
+            let screen = corpus(name).screen.unwrap();
+            // What a screen may do with itself is made of nodes too.
+            for mut root in screen.actions.into_iter().chain(std::iter::once(screen.body)) {
+                let mut plain = Vec::new();
+                walk(&root, &mut |node| plain.push(label(node)));
+                let mut changing = Vec::new();
+                walk_mut(&mut root, &mut changing);
+                assert_eq!(plain, changing, "{name}");
+                // The protocol's own walk agrees too.
+                let mut protocol = Vec::new();
+                let mut stack = vec![&mut root];
+                while let Some(node) = stack.pop() {
+                    protocol.push(label(node));
+                    stack.extend(node.children_mut().into_iter().rev());
+                }
+                assert_eq!(plain, protocol, "{name}");
+                walk(&root, &mut |node| {
+                    seen.insert(node.kind().as_str());
+                });
+            }
         }
         // A kind this file has never walked would be a kind whose children it may miss.
         for kind in navree_native::Kind::ALL {

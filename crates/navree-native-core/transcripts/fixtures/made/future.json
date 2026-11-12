@@ -1,7 +1,7 @@
 {
  "navree": 1,
  "build": "152bd84abf4d",
- "vocab": 1,
+ "vocab": 0,
  "later": "a field this build has never seen",
  "screen": {
   "title": "Stock",
@@ -10,7 +10,7 @@
    "t": "stack",
    "children": [
     {
-     "t": "gauge",
+     "t": "orbit",
      "value": 0.7,
      "label": "Shelf 4",
      "alt": {
