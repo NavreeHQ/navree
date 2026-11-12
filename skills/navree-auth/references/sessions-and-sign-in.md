@@ -57,6 +57,22 @@
   `credentials`) serves `/.well-known/apple-app-site-association` and
   `/.well-known/assetlinks.json` (application/json, no redirect, 404 when
   not configured).
+- Sign-in hand-over (feature `session`; an app of `auth.apps` with
+  `callback`, an https universal link or App Link; `custom_scheme = true`
+  for a scheme, which never reuses a browser's sign-in): the app opens the
+  system's sign-in session at `GET /auth/app/sign-in?platform=apple|android
+  &app=<bundle id|package>&code_challenge=<b64url SHA-256(verifier)>
+  &code_challenge_method=S256&state=..`; after the sign-in pages (`next` =
+  `/auth/app/finish`) the browser is sent to `<callback>?code=..&state=..`
+  (60 s, one use); the app posts `{platform, app, code, code_verifier}` to
+  `POST /api/auth/app/exchange` with `X-XSRF-TOKEN` -> 200 user and its own
+  session cookie. Wrong verifier, another app, used, expired, no S256
+  challenge, unknown app or callback: 400 `invalid_hand_over`. The browser
+  is signed out after unless it was signed in before or
+  `auth.apps.keep_browser_signed_in`.
+- A platform sign-in in the app answering `two_factor_required` (navree-social's
+  native session route): finish on `GET /sign-in/two-factor?next=..` inside
+  the app, or `POST /api/auth/session/2fa/verify {code}`.
 - With the facade's `auth` and `notify`: push devices end with their
   session (sign-out, `DELETE /sessions/{id}`, logout all at once; revoked or
   expired sessions before the next push, `AuthLiveSessions`).

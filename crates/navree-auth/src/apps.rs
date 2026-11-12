@@ -219,7 +219,12 @@ impl AppsOptions {
                     "{key}.bundle_id must be a bundle identifier (A-Z, a-z, 0-9, `-` and `.`)"
                 ));
             }
-            check_callback(&key, app.callback.as_deref(), app.custom_scheme, &mut errors);
+            check_callback(
+                &key,
+                app.callback.as_deref(),
+                app.custom_scheme,
+                &mut errors,
+            );
         }
         for (name, app) in &self.android {
             let key = format!("auth.apps.android.{name}");
@@ -239,7 +244,12 @@ impl AppsOptions {
                      (32 hex bytes separated by `:`)"
                 ));
             }
-            check_callback(&key, app.callback.as_deref(), app.custom_scheme, &mut errors);
+            check_callback(
+                &key,
+                app.callback.as_deref(),
+                app.custom_scheme,
+                &mut errors,
+            );
         }
         if errors.is_empty() {
             Ok(())
@@ -343,6 +353,7 @@ impl AppsOptions {
 
 /// An app that can take part in the sign-in hand-over: one of `auth.apps`
 /// with a callback.
+#[cfg_attr(not(feature = "session"), allow(dead_code))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HandOverApp {
     /// `apple` or `android`.
@@ -353,6 +364,7 @@ pub(crate) struct HandOverApp {
     pub(crate) callback: String,
 }
 
+#[cfg_attr(not(feature = "session"), allow(dead_code))]
 impl AppsOptions {
     /// The app `id` (bundle id or package name) of `platform` (`apple` or
     /// `android`), when it has a hand-over callback.

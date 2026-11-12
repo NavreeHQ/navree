@@ -45,9 +45,7 @@ use http::{HeaderValue, Method};
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_http::response::Redirect;
-use navree_http::{
-    ApiMeta, AppError, Controller, IntoResponse, Json, Query, RouteDef, schema_fn,
-};
+use navree_http::{ApiMeta, AppError, Controller, IntoResponse, Json, Query, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_openapi::ToSchema;
 use navree_session::Session;
@@ -272,7 +270,8 @@ impl AuthService {
         if now.timestamp() - pending.started_at > PENDING_TTL_SECS {
             session.remove(PENDING_KEY);
             let error = refused("the app sign-in waited too long");
-            self.hand_over_refused(Some(&pending.app), &error, meta).await;
+            self.hand_over_refused(Some(&pending.app), &error, meta)
+                .await;
             return Err(error);
         }
         let signed_in = match self.session_user(session) {
@@ -288,7 +287,8 @@ impl AuthService {
         if signed_in.impersonator.is_some() {
             session.remove(PENDING_KEY);
             let error = refused("an impersonation is not handed over");
-            self.hand_over_refused(Some(&pending.app), &error, meta).await;
+            self.hand_over_refused(Some(&pending.app), &error, meta)
+                .await;
             return Err(error);
         }
         let code = random_token(43);
@@ -477,7 +477,11 @@ impl Injectable for AppSignInController {
                 .try_get::<navree_config::Config>()
                 .await
                 .and_then(|config| config.get_string("ui.sign_in"))
-                .filter(|path| path.starts_with('/') && !path.starts_with("//") && !path.contains(['\\', '?', '#']))
+                .filter(|path| {
+                    path.starts_with('/')
+                        && !path.starts_with("//")
+                        && !path.contains(['\\', '?', '#'])
+                })
                 .unwrap_or_else(|| "/sign-in".to_owned());
             let api_prefix = match app.try_get::<navree_http::HttpOptions>().await {
                 Some(http) => http.api_prefix.clone(),
@@ -508,17 +512,18 @@ impl Controller for AppSignInController {
 
         let service = self.service.clone();
         let apps = self.apps.clone();
-        let start = move |session: Session, meta: ClientMeta, Query(request): Query<StartRequest>| {
-            let service = service.clone();
-            let apps = apps.clone();
-            async move {
-                service
-                    .start_app_sign_in(&session, &apps, &request, &meta)
-                    .await
-                    .map_err(AuthError::into_app_error)?;
-                Ok::<_, AppError>(Redirect::to(APP_SIGN_IN_FINISH_PATH).into_response())
-            }
-        };
+        let start =
+            move |session: Session, meta: ClientMeta, Query(request): Query<StartRequest>| {
+                let service = service.clone();
+                let apps = apps.clone();
+                async move {
+                    service
+                        .start_app_sign_in(&session, &apps, &request, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(Redirect::to(APP_SIGN_IN_FINISH_PATH).into_response())
+                }
+            };
         routes.push(
             RouteDef::on(Method::GET, format!("!{APP_SIGN_IN_PATH}"), start)
                 .public()
@@ -581,7 +586,9 @@ impl Controller for AppSignInController {
         )
         .replace("//", "/");
         let exchange =
-            move |session: Session, meta: ClientMeta, Valid(Json(input)): Valid<Json<AppExchangeInput>>| {
+            move |session: Session,
+                  meta: ClientMeta,
+                  Valid(Json(input)): Valid<Json<AppExchangeInput>>| {
                 let service = service.clone();
                 async move {
                     let user = service
@@ -636,12 +643,19 @@ mod tests {
         // RFC 7636, appendix B.
         let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         assert!(is_verifier(verifier));
-        assert_eq!(s256(verifier), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        assert_eq!(
+            s256(verifier),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
         assert!(is_challenge(&s256(verifier)));
         for bad in ["short", &"a".repeat(129), &format!("{}!", &verifier[..43])] {
             assert!(!is_verifier(bad), "{bad}");
         }
-        for bad in ["", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-c", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw+cM"] {
+        for bad in [
+            "",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-c",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw+cM",
+        ] {
             assert!(!is_challenge(bad), "{bad}");
         }
     }

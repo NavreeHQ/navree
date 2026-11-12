@@ -35,6 +35,7 @@
 //!   | `POST /auth/otp` `{email}`, `POST /auth/otp/verify` `{email, code}` | public; when `auth.otp.enabled` | 202 `{message}`; 200 like login |
 //!   | `/auth/passkeys/{register/options, register, login/options, login}`, `GET /auth/passkeys`, `DELETE /auth/passkeys/{id}` | when `auth.passkeys.enabled` | WebAuthn ceremonies (ES256, EdDSA) |
 //!   | `POST /auth/session/login` `{email, password, remember?}`, `POST /auth/session/2fa/verify` `{code \| recovery_code}`, and when on `POST /auth/session/magic-link/verify`, `POST /auth/session/otp/verify` (feature `session`) | public; the session's CSRF token | 200 the user, or `{two_factor_required: true}`; the browser keeps the session cookie and gets no token |
+//!   | `GET /auth/app/sign-in`, `GET /auth/app/finish` (outside the API prefix), `POST /auth/app/exchange` `{platform, app, code, code_verifier}` (feature `session`) | public; for apps of `auth.apps` with a `callback` | a sign-in made in the system's sign-in session handed to a native app: a one-time code to the app's callback, exchanged with the app's PKCE verifier for a session of its own |
 //!   | `POST /auth/platform/login`, `POST /auth/platform/2fa/verify` | public; when `auth.platform.enabled` | a challenge; 200 a platform session |
 //!   | `POST /auth/exchange` `{token}` | public; when `auth.trusted_issuers` is set | 200 like login for a trusted issuer's JWT |
 //!
@@ -211,9 +212,9 @@ mod entity;
 mod error;
 mod exchange;
 mod extract;
+mod guards;
 #[cfg(feature = "session")]
 mod hand_over;
-mod guards;
 mod impersonation;
 mod jwt;
 mod mail;
@@ -262,9 +263,11 @@ pub use controller::{
 pub use entity::{Passkey, User, login_token, passkey, password_reset_token, refresh_token, user};
 pub use error::AuthError;
 pub use extract::CurrentUser;
-#[cfg(feature = "session")]
-pub use hand_over::{APP_CODE_TTL_SECS, APP_SIGN_IN_FINISH_PATH, APP_SIGN_IN_PATH, AppExchangeInput};
 pub use guards::{AccessClaims, Actor, not_while_impersonating, platform_session, recent_auth};
+#[cfg(feature = "session")]
+pub use hand_over::{
+    APP_CODE_TTL_SECS, APP_SIGN_IN_FINISH_PATH, APP_SIGN_IN_PATH, AppExchangeInput,
+};
 pub use impersonation::MAX_IMPERSONATION_REASON;
 pub use jwt::{
     ActorClaim, Claims, JwtService, LEEWAY_SECS, MAX_TOKEN_LEN, SessionClaims, TokenType,

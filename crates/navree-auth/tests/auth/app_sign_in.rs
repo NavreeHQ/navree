@@ -11,9 +11,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
-use navree_auth::{
-    APP_CODE_TTL_SECS, AuthPages, AuthService, ClientMeta, SignInMethod, User,
-};
+use navree_auth::{APP_CODE_TTL_SECS, AuthPages, AuthService, ClientMeta, SignInMethod, User};
 use navree_contracts::{AuditSink, FixedClock};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -175,7 +173,10 @@ async fn sheet_sign_in(app: &TestApp, email: &str, challenge: &str) -> (TestClie
     let started = start(&sheet, challenge, "s-1").await.assert_status(303);
     assert_eq!(location(&started), "/auth/app/finish");
     let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
-    assert_eq!(location(&to_sign_in), "/sign-in?next=%2Fauth%2Fapp%2Ffinish");
+    assert_eq!(
+        location(&to_sign_in),
+        "/sign-in?next=%2Fauth%2Fapp%2Ffinish"
+    );
     let signed_in = sign_in_form(&sheet, email, "/auth/app/finish")
         .await
         .assert_status(303);
@@ -189,11 +190,19 @@ fn callback_code(response: &TestResponse, state: &str) -> String {
     assert_eq!(response.status().as_u16(), 303, "{}", response.text());
     let target = url::Url::parse(&location(response)).unwrap();
     assert_eq!(
-        format!("{}://{}{}", target.scheme(), target.host_str().unwrap(), target.path()),
+        format!(
+            "{}://{}{}",
+            target.scheme(),
+            target.host_str().unwrap(),
+            target.path()
+        ),
         CALLBACK
     );
     let pairs: Vec<(String, String)> = target.query_pairs().into_owned().collect();
-    assert!(pairs.contains(&("state".to_owned(), state.to_owned())), "{pairs:?}");
+    assert!(
+        pairs.contains(&("state".to_owned(), state.to_owned())),
+        "{pairs:?}"
+    );
     pairs
         .into_iter()
         .find(|(key, _)| key == "code")
@@ -208,12 +217,7 @@ async fn phone(app: &TestApp) -> TestClient {
     client
 }
 
-async fn exchange(
-    client: &TestClient,
-    platform: &str,
-    code: &str,
-    verifier: &str,
-) -> TestResponse {
+async fn exchange(client: &TestClient, platform: &str, code: &str, verifier: &str) -> TestResponse {
     client
         .post("/api/auth/app/exchange")
         .xsrf()
@@ -287,7 +291,10 @@ async fn two_steps_and_a_browser_signed_in_before_both_hand_over() {
         .await
         .assert_status(303);
     let second_step = location(&first);
-    assert!(second_step.starts_with("/sign-in/two-factor"), "{second_step}");
+    assert!(
+        second_step.starts_with("/sign-in/two-factor"),
+        "{second_step}"
+    );
     let token = csrf(&sheet).await;
     let code = totp_code(&secret, &clock);
     let done = sheet
@@ -409,13 +416,21 @@ async fn a_start_without_an_s256_challenge_or_a_callback_is_refused() {
     for query in [
         // No challenge, a plain one, a short one.
         format!("platform=apple&app={BUNDLE}&state=x"),
-        format!("platform=apple&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=plain"),
+        format!(
+            "platform=apple&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=plain"
+        ),
         format!("platform=apple&app={BUNDLE}&code_challenge={challenge}"),
         format!("platform=apple&app={BUNDLE}&code_challenge=abc&code_challenge_method=S256"),
         // Not an app of auth.apps, an app without a callback, another platform.
-        format!("platform=apple&app=com.evil.app&code_challenge={challenge}&code_challenge_method=S256"),
-        format!("platform=apple&app=com.example.kiosk&code_challenge={challenge}&code_challenge_method=S256"),
-        format!("platform=windows&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=S256"),
+        format!(
+            "platform=apple&app=com.evil.app&code_challenge={challenge}&code_challenge_method=S256"
+        ),
+        format!(
+            "platform=apple&app=com.example.kiosk&code_challenge={challenge}&code_challenge_method=S256"
+        ),
+        format!(
+            "platform=windows&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=S256"
+        ),
         // A callback the request names that is not the app's.
         format!(
             "platform=apple&app={BUNDLE}&code_challenge={challenge}&code_challenge_method=S256\
@@ -427,7 +442,12 @@ async fn a_start_without_an_s256_challenge_or_a_callback_is_refused() {
         ),
     ] {
         let response = get(&client, &format!("/auth/app/sign-in?{query}")).await;
-        assert_eq!(response.status().as_u16(), 400, "{query}: {}", response.text());
+        assert_eq!(
+            response.status().as_u16(),
+            400,
+            "{query}: {}",
+            response.text()
+        );
     }
     // Nothing waits in the session. The sheet shows the error page.
     let finish = get(&client, "/auth/app/finish").await;
@@ -494,7 +514,10 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
     .assert_status(303);
     whoami(&browser).await.assert_status(401);
     let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
-    assert_eq!(location(&to_sign_in), "/sign-in?next=%2Fauth%2Fapp%2Ffinish");
+    assert_eq!(
+        location(&to_sign_in),
+        "/sign-in?next=%2Fauth%2Fapp%2Ffinish"
+    );
     sign_in_form(&browser, "simran@example.com", "/auth/app/finish")
         .await
         .assert_status(303);
@@ -531,7 +554,11 @@ async fn a_platform_sign_in_waiting_for_its_second_step_finishes_on_the_page() {
     let done = phone
         .post("/sign-in/two-factor")
         .header("accept", "text/html")
-        .form(&[("code", code.as_str()), ("next", "/orders"), ("_csrf", token.as_str())])
+        .form(&[
+            ("code", code.as_str()),
+            ("next", "/orders"),
+            ("_csrf", token.as_str()),
+        ])
         .send()
         .await
         .assert_status(303);
