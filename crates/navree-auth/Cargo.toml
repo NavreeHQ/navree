@@ -34,7 +34,7 @@ session = ["dep:navree-session"]
 ## `AuthPages`: the sign-in, two-factor, forgotten and reset password and
 ## sign-out pages, drawn with navree-ui on the session. The facade turns it
 ## on when both its `auth` and `ui` features are on.
-ui = ["session", "dep:navree-ui"]
+ui = ["session", "dep:navree-ui", "dep:tower"]
 
 [dependencies]
 # base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
@@ -62,6 +62,8 @@ navree-openapi = { workspace = true }
 navree-session = { workspace = true, optional = true }
 navree-telemetry = { workspace = true }
 navree-ui = { workspace = true, optional = true }
+# `AuthPages` draws each page in the look of the request it answers (a layer per route).
+tower = { workspace = true, optional = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
 # sign-in tokens, pending resets and passkeys are written through the ORM;
 # `User` is an access subject (`#[model(subject)]`, feature `access`).
