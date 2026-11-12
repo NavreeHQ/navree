@@ -142,6 +142,14 @@ fn the_charts_module_is_at_most_3_kb_gzip() {
     assert!(size("charts") <= 3 * 1024, "{}", size("charts"));
 }
 
+/// The chart paint sheet (gradients, glow, motion, painted sparklines, meters and bars)
+/// and the count-up module stay small: every painted mark on a page links them.
+#[test]
+fn the_chart_paint_sheet_is_at_most_1_5_kb_and_the_count_up_module_1_kb_gzip() {
+    assert!(size("chart-paint") <= 1536, "{}", size("chart-paint"));
+    assert!(size("count-up") <= 1024, "{}", size("count-up"));
+}
+
 /// A page to read with a chart on it loads the charts module and no other.
 #[test]
 fn a_page_with_a_chart_loads_the_charts_module_alone() {
@@ -452,6 +460,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "carousel-styles",
         "menubar-styles",
         "charts-styles",
+        "chart-paint",
         "select-styles",
         "phone-styles",
         "slider-styles",
