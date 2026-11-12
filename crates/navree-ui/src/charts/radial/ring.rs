@@ -1,7 +1,7 @@
 //! [`Ring`]: one value on a ring; [`Rings`]: two to four values on rings inside each
 //! other. The single value's drawing is shared with [`Gauge`](super::Gauge).
 
-use super::super::format::NumberFormat;
+use super::super::format::{NumberFormat, share_text};
 use super::super::motion::{Effect, Motion};
 use super::super::paint::{Defs, Gradient, Ink};
 use super::super::value::{IntoValue, finite};
@@ -215,9 +215,7 @@ impl One {
         let with = |t: &str| with_unit(t, unit);
         let value_text = with(&text);
         let max_text = with(&self.format.format(self.max, numbers));
-        let share_text = NumberFormat::percent()
-            .max_decimals(0)
-            .format(share, numbers);
+        let share_words = share_text(share, numbers);
         let ranged = self.min != 0.0;
         let min_text = ranged.then(|| with(&self.format.format(self.min, numbers)));
         let name = self.name(common);
@@ -227,7 +225,7 @@ impl One {
             &value_text,
             min_text.as_deref(),
             &max_text,
-            &share_text,
+            &share_words,
             band.as_deref(),
         );
         let mut head = vec![
@@ -239,7 +237,7 @@ impl One {
         let mut cells = vec![
             Node::from(value_text),
             Node::from(max_text),
-            Node::from(share_text),
+            Node::from(share_words),
         ];
         if band.is_some() {
             head.push((self.words.status.to_string(), None));
@@ -773,7 +771,6 @@ impl Rings {
         let numbers = &self.common.numbers;
         let labels = &self.common.labels;
         let fmt = |v: f64| self.format.format(v, numbers);
-        let percent = NumberFormat::percent().max_decimals(0);
         // Each ring with its colour, its share and its words.
         struct Ready<'a> {
             ring: &'a RingValue,
@@ -789,7 +786,7 @@ impl Rings {
                 color: ring
                     .ink
                     .or_else(|| ring.fill.as_ref().and_then(Gradient::lead))
-                    .unwrap_or_else(|| Ink::slot(u8::try_from(at % 8 + 1).unwrap_or(1))),
+                    .unwrap_or_else(|| Ink::nth(at)),
                 share: ring
                     .value
                     .filter(|_| ring.max > 0.0 && ring.max.is_finite())
@@ -857,7 +854,7 @@ impl Rings {
             (
                 r.ring.value.map(|v| with_unit(&fmt(v), unit)),
                 with_unit(&fmt(r.ring.max), unit),
-                r.share.map(|s| percent.format(s, numbers)),
+                r.share.map(|s| share_text(s, numbers)),
             )
         };
         let middle = match &self.middle {

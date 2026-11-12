@@ -66,6 +66,12 @@ enum Mix {
 }
 
 impl Ink {
+    /// The colour of the `index`th part (from 0) when none was chosen: the eight
+    /// categorical colours in turn.
+    pub(crate) fn nth(index: usize) -> Self {
+        Self::slot(u8::try_from(index % 8).unwrap_or(0) + 1)
+    }
+
     /// Categorical chart colour `slot`, 1 to 8 (`--chart-1` .. `--chart-8`).
     pub const fn slot(slot: u8) -> Self {
         let slot = if slot < 1 {

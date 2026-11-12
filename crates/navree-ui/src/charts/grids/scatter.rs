@@ -533,7 +533,7 @@ impl Scatter {
         let mut summaries = Vec::new();
         for (at, points, labels) in &series {
             let source = &self.series[*at];
-            let ink = source.ink.unwrap_or_else(|| Ink::slot((*at % 8) as u8 + 1));
+            let ink = source.ink.unwrap_or_else(|| Ink::nth(*at));
             let mut circles: Vec<Node> = Vec::with_capacity(points.len());
             for (point, label) in points.iter().zip(labels) {
                 circles.push(
