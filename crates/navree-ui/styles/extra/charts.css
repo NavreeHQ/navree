@@ -105,8 +105,8 @@
 [data-slot=chart-tip]{position:absolute;z-index:10;top:0;left:0;display:none;min-width:8rem;max-width:min(18rem,90%);padding:.5rem .625rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-2);color:var(--fg);font-size:12px;line-height:1.4;box-shadow:0 6px 20px rgb(0 0 0/.35);pointer-events:none}
 [data-slot=chart-tip][data-open]{display:block}
 [data-tip=head]{margin-bottom:.25rem;color:var(--fg-2)}
-[data-tip=row]{display:flex;align-items:center;gap:.5rem;& strong{font-weight:600;font-variant-numeric:tabular-nums}& em{margin-inline-start:-.25rem;font-style:normal;color:var(--fg-2)}& span:last-child{color:var(--fg-2);overflow-wrap:anywhere}}
-[data-big] [data-tip=head]+[data-tip=row]{align-items:baseline;& strong{font-size:20px;font-weight:700;line-height:1.2;color:var(--c,var(--fg))}& [data-slot=chart-key],& span:last-child{display:none}}
+[data-tip=row]{display:flex;align-items:center;gap:.5rem;& strong{font-weight:600;font-variant-numeric:tabular-nums}& em{display:none;margin-inline-start:-.25rem;font-style:normal;color:var(--fg-2)}& span:last-child{color:var(--fg-2);overflow-wrap:anywhere}}
+[data-big] [data-tip=head]+[data-tip=row]{align-items:baseline;& strong{font-size:20px;font-weight:700;line-height:1.2;color:var(--c,var(--fg))}& em{display:inline}& [data-slot=chart-key],& span:last-child{display:none}}
 
 /* Loading, failed, empty: the chart's place is kept. */
 [data-slot=chart-state]{display:grid;outline:1px dashed var(--line-2);outline-offset:-1px;border-radius:var(--radius-lg);color:var(--fg-2);font-size:13px;text-align:center;& > *{grid-area:1/1}}

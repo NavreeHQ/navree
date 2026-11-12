@@ -8,8 +8,8 @@ use super::super::paint::Ink;
 use super::super::scale::{Linear, nice};
 use super::super::value::{IntoValue, finite};
 use super::super::{
-    Common, Drawn, Key, LegendItem, TableData, Tip, TipLine, common_methods, fill, frame, legend,
-    n, svg,
+    Common, Drawn, Key, LegendItem, TableData, Tip, TipLine, column_name, common_methods, fill,
+    frame, legend, n, svg,
 };
 use super::{GridLabels, count};
 use crate::node::{AttrValue, Node, Uses, el};
@@ -652,24 +652,20 @@ impl Scatter {
             .uses(Uses::CHART_GRIDS)
             .children((y_axis, el("div").slot("chart-plot-wrap").child(plot_svg)));
 
-        let head_name = |name: &str, unit: &Option<String>| match unit {
-            Some(unit) => format!("{name} ({unit})"),
-            None => name.to_owned(),
-        };
         let mut head = vec![
             (words.point.replace("{n}", "").trim().to_owned(), None),
-            (head_name(&self.x_name, &self.x_unit), None),
-            (head_name(&self.y_name, &self.y_unit), None),
+            (column_name(&self.x_name, self.x_unit.as_deref()), None),
+            (column_name(&self.y_name, self.y_unit.as_deref()), None),
         ];
         let mut lines = vec![
             TipLine {
-                name: self.x_name.clone(),
+                name: column_name(&self.x_name, self.x_unit.as_deref()),
                 unit: self.x_unit.clone(),
                 color: None,
                 key: false,
             },
             TipLine {
-                name: self.y_name.clone(),
+                name: column_name(&self.y_name, self.y_unit.as_deref()),
                 unit: self.y_unit.clone(),
                 color: None,
                 key: false,

@@ -385,7 +385,7 @@ fn a_unit_follows_the_value_in_the_tooltip_and_the_name_in_the_table() {
             .series(Series::new("Heart rate", [60, 70]).unit("BPM")),
     );
     assert!(
-        out.contains("<strong></strong><em>BPM</em><span>Heart rate</span>"),
+        out.contains("<strong></strong><em>BPM</em><span>Heart rate (BPM)</span>"),
         "{out}"
     );
     assert!(

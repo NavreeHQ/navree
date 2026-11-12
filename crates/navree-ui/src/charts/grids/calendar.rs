@@ -8,7 +8,9 @@ use super::super::format::NumberFormat;
 use super::super::motion::{Effect, Motion};
 use super::super::paint::Ink;
 use super::super::value::{IntoValue, finite};
-use super::super::{Common, Drawn, TableData, Tip, TipLine, common_methods, fill, frame};
+use super::super::{
+    Common, Drawn, TableData, Tip, TipLine, column_name, common_methods, fill, frame,
+};
 use super::{GridLabels, count, heat_legend};
 use crate::node::{AttrValue, Node, Uses, el};
 
@@ -439,13 +441,7 @@ impl CalendarHeatmap {
         let table = TableData {
             head: vec![
                 (words.date.to_string(), None),
-                (
-                    match &self.unit {
-                        Some(unit) => format!("{name} ({unit})"),
-                        None => name.clone(),
-                    },
-                    None,
-                ),
+                (column_name(&name, self.unit.as_deref()), None),
             ],
             rows,
             links: Vec::new(),
@@ -476,7 +472,7 @@ impl CalendarHeatmap {
             tip: Some(Tip {
                 big: false,
                 lines: vec![TipLine {
-                    name,
+                    name: column_name(&name, self.unit.as_deref()),
                     unit: self.unit.clone(),
                     color: None,
                     key: false,

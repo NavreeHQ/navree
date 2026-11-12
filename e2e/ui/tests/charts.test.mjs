@@ -1259,6 +1259,8 @@ for (const name of NAMES) {
 
       test("the pointer on a wedge or a moment shows that hour", async () => {
         const page = await open("/charts?case=clock");
+        // The wedges pop in one after another: point at one once it is drawn.
+        await settle(page);
         const at = await hitPoint(page, "#clock [data-slot=clock-wedge][data-i='7']");
         await page.mouse.move(at.x, at.y);
         await expectAt(page, "clock", 7, "pointer", { speaks: false });
