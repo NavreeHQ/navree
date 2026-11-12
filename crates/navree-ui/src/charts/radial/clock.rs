@@ -7,8 +7,8 @@ use super::super::motion::{CountUp, Effect, Motion};
 use super::super::paint::{ColorScale, Defs, Gradient, Ink};
 use super::super::value::{IntoValue, clean, finite};
 use super::super::{
-    Color, Common, Drawn, Key, LegendItem, TableData, Tip, TipLine, common_methods, fill,
-    legend, n, value_cell,
+    Color, Common, Drawn, Key, LegendItem, TableData, Tip, TipLine, common_methods, fill, legend,
+    n, value_cell,
 };
 use super::{RadialLabels, Sizes, glyph, polar, wedge, with_unit, wrap};
 use crate::components::Tone;
@@ -340,12 +340,16 @@ impl DayClock {
         if (0..24).all(|h| value(h).is_none()) {
             return None;
         }
-        let top = self.max.unwrap_or_else(|| {
-            (0..24)
-                .filter_map(value)
-                .fold(0.0_f64, |a, v| a.max(v))
-        });
-        let share = |v: f64| if top > 0.0 { (v / top).clamp(0.0, 1.0) } else { 0.0 };
+        let top = self
+            .max
+            .unwrap_or_else(|| (0..24).filter_map(value).fold(0.0_f64, |a, v| a.max(v)));
+        let share = |v: f64| {
+            if top > 0.0 {
+                (v / top).clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         let category = |h: usize| {
             self.of
                 .get(h)
@@ -373,7 +377,12 @@ impl DayClock {
         };
         let level = |h: usize| -> f64 {
             match &self.levels {
-                Some(levels) => levels.get(h).copied().flatten().unwrap_or(0.0).clamp(0.0, 1.0),
+                Some(levels) => levels
+                    .get(h)
+                    .copied()
+                    .flatten()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0),
                 None => value(h).map_or(0.0, share),
             }
         };
@@ -396,7 +405,14 @@ impl DayClock {
             .map(|h| {
                 let v = value(h);
                 let outer = SHORT + (LONG - SHORT) * v.map_or(0.0, share);
-                let d = wedge(C, C, INNER, outer, h as f64 * 15.0 + SPACE / 2.0, 15.0 - SPACE);
+                let d = wedge(
+                    C,
+                    C,
+                    INNER,
+                    outer,
+                    h as f64 * 15.0 + SPACE / 2.0,
+                    15.0 - SPACE,
+                );
                 let strength = if v.is_some_and(|v| v > 0.0) {
                     0.22 + 0.6 * level(h)
                 } else {
@@ -511,9 +527,9 @@ impl DayClock {
         let middle = match &self.hub {
             Hub::Total => el("div").slot("radial-center").children((
                 self.icon.map(glyph),
-                el("span").slot("radial-value").child(
-                    CountUp::new(total, total_text.clone()).motion(self.motion.after(300)),
-                ),
+                el("span")
+                    .slot("radial-value")
+                    .child(CountUp::new(total, total_text.clone()).motion(self.motion.after(300))),
                 label.map(|l| el("span").slot("radial-label").child(l)),
             )),
             Hub::Custom(node) => el("div").slot("radial-center").child(node.clone()),
@@ -555,15 +571,17 @@ impl DayClock {
         // The table: an hour a row, the tooltip's lines its columns.
         let kinds = !self.categories.is_empty() || self.scale.is_some();
         let has_moments = !self.moments.is_empty();
-        let mut head: Vec<(String, Option<Color>)> = vec![
-            (labels.time.to_string(), None),
-            (
-                self.unit.clone().unwrap_or_else(|| labels.value.to_string()),
-                None,
-            ),
-        ];
+        // The value's column is named by the hub's label, the unit, or Value; its tooltip
+        // line by the same words.
+        let value_name = self
+            .label
+            .clone()
+            .or_else(|| self.unit.clone())
+            .unwrap_or_else(|| labels.value.to_string());
+        let mut head: Vec<(String, Option<Color>)> =
+            vec![(labels.time.to_string(), None), (value_name.clone(), None)];
         let mut lines = vec![TipLine {
-            name: labels.value.to_string(),
+            name: value_name,
             unit: self.unit.clone(),
             color: Some(self.ink.color()),
             key: false,
@@ -625,11 +643,12 @@ impl DayClock {
             })
             .collect();
 
-        let (peak_hour, peak) = (0..24)
-            .filter_map(|h| value(h).map(|v| (h, v)))
-            .fold((0, f64::NEG_INFINITY), |best, (h, v)| {
+        let (peak_hour, peak) = (0..24).filter_map(|h| value(h).map(|v| (h, v))).fold(
+            (0, f64::NEG_INFINITY),
+            |best, (h, v)| {
                 if v > best.1 { (h, v) } else { best }
-            });
+            },
+        );
         let mut summary = fill(
             &self.words.summary_clock,
             &[
@@ -703,19 +722,29 @@ mod tests {
         steps[7] = 1_800;
         steps[8] = 900;
         steps[18] = 1_200;
-        DayClock::new("Your day").id("day").values(steps).unit("steps")
+        DayClock::new("Your day")
+            .id("day")
+            .values(steps)
+            .unit("steps")
     }
 
     #[test]
     fn there_are_24_wedges_and_the_busiest_is_the_longest() {
         let out = html(day());
-        assert_eq!(out.matches(r#"data-slot="clock-wedge""#).count(), 24, "{out}");
+        assert_eq!(
+            out.matches(r#"data-slot="clock-wedge""#).count(),
+            24,
+            "{out}"
+        );
         // Seven in the morning, the busiest: from 105.6 degrees to 119.4, out to 114.
         let seven = wedge(C, C, INNER, LONG, 7.0 * 15.0 + SPACE / 2.0, 15.0 - SPACE);
         assert!(out.contains(&seven), "{out}");
         // Midnight, an hour of nothing: a short stub, faint.
         let midnight = wedge(C, C, INNER, SHORT, SPACE / 2.0, 15.0 - SPACE);
-        assert!(out.contains(&format!(r#"d="{midnight}" fill-opacity="0.08""#)), "{out}");
+        assert!(
+            out.contains(&format!(r#"d="{midnight}" fill-opacity="0.08""#)),
+            "{out}"
+        );
     }
 
     #[test]
@@ -723,11 +752,20 @@ mod tests {
         let out = html(day());
         assert!(out.contains("data-ui-chart"), "{out}");
         assert!(out.contains(r#"data-rows="24""#), "{out}");
-        assert_eq!(out.matches("<tr>").count(), 25, "a head and 24 hours: {out}");
+        assert_eq!(
+            out.matches("<tr>").count(),
+            25,
+            "a head and 24 hours: {out}"
+        );
         assert!(out.contains("<th scope=\"row\">7:00 AM</th>"), "{out}");
-        assert!(out.contains("3,900 steps in the day. Busiest at 7:00 AM: 1,800 steps."), "{out}");
+        assert!(
+            out.contains("3,900 steps in the day. Busiest at 7:00 AM: 1,800 steps."),
+            "{out}"
+        );
         // Each hour's anchor comes before its wedge, for the tooltip.
-        let anchor = out.find(r#"data-slot="clock-anchor" data-i="7""#).unwrap_or(usize::MAX);
+        let anchor = out
+            .find(r#"data-slot="clock-anchor" data-i="7""#)
+            .unwrap_or(usize::MAX);
         let wedge = out.find(r#"data-i="7" d="#).unwrap_or(0);
         assert!(anchor < wedge);
     }
@@ -752,20 +790,38 @@ mod tests {
                 .category("Rest", Ink::slot(7))
                 .categories([Some(1), Some(1), None, None, None, None, None, Some(0)]),
         );
-        assert!(out.contains(r#"<path data-slot="clock-wedge" data-color="3" data-i="7""#), "{out}");
-        assert!(out.contains(r#"<path data-slot="clock-wedge" data-color="7" data-i="0""#), "{out}");
-        assert!(out.contains(r#"data-slot="chart-legend""#) && out.contains(">Active<"), "{out}");
-        assert!(out.contains(r#"<span data-color="3">Active</span>"#), "{out}");
+        assert!(
+            out.contains(r#"<path data-slot="clock-wedge" data-color="3" data-i="7""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<path data-slot="clock-wedge" data-color="7" data-i="0""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"data-slot="chart-legend""#) && out.contains(">Active<"),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<span data-color="3">Active</span>"#),
+            "{out}"
+        );
     }
 
     #[test]
     fn moments_are_marked_with_icons_and_listed_in_their_hour() {
         let mut clock = day();
         for k in 0..9 {
-            clock = clock.moment(Moment::new(f64::from(k) * 2.0 + 0.5, format!("M{k}")).icon(crate::icons::HEART));
+            clock = clock.moment(
+                Moment::new(f64::from(k) * 2.0 + 0.5, format!("M{k}")).icon(crate::icons::HEART),
+            );
         }
         let out = html(clock);
-        assert_eq!(out.matches(r#"data-slot="clock-moment""#).count(), MAX_MOMENTS, "{out}");
+        assert_eq!(
+            out.matches(r#"data-slot="clock-moment""#).count(),
+            MAX_MOMENTS,
+            "{out}"
+        );
         assert!(out.contains(r#"data-slot="radial-icon""#), "{out}");
         assert!(out.contains(">M8<"), "the ninth is in the table: {out}");
         assert!(out.contains("9 moments: M0"), "{out}");
@@ -775,8 +831,13 @@ mod tests {
     #[test]
     fn the_hub_holds_the_total_written_for_the_locale() {
         let mut big = [0_u32; 24];
-        big[10] = 1_23_456;
-        let out = html(DayClock::new("Steps").values(big).unit("steps").locale("en-IN"));
+        big[10] = 123_456;
+        let out = html(
+            DayClock::new("Steps")
+                .values(big)
+                .unit("steps")
+                .locale("en-IN"),
+        );
         assert!(out.contains(">1,23,456</span>"), "{out}");
         assert!(out.contains(r#"data-slot="radial-label">steps<"#), "{out}");
     }
@@ -795,6 +856,9 @@ mod tests {
         assert!(out.contains(r#"data-motion="pop""#), "{out}");
         assert!(out.contains("data-pulse"), "{out}");
         let still = html(day().now(9));
-        assert!(!still.contains("data-motion") && !still.contains("data-pulse"), "{still}");
+        assert!(
+            !still.contains("data-motion") && !still.contains("data-pulse"),
+            "{still}"
+        );
     }
 }
