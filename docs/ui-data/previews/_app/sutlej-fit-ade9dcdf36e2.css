@@ -1,0 +1,45 @@
+/* The art direction of a sample app, in its own stylesheet. It keeps to the toolkit's tokens
+   (--accent, --ink-1, --line, --fg), so the same rules follow light and dark and the theme's
+   accent; what it adds is what a theme can't say: a backdrop, a headline, a rhythm. */
+.brand-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.75rem 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in oklab, var(--accent) 20%, transparent), transparent 62%),
+    radial-gradient(90% 120% at 100% 100%, color-mix(in oklab, var(--chart-7) 16%, transparent), transparent 60%),
+    var(--ink-1);
+}
+.brand-hero h2 {
+  margin: 0;
+  max-width: 22ch;
+  color: var(--fg);
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.brand-hero p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--fg-1);
+}
+.brand-hero .brand-kicker {
+  color: var(--accent-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.brand-tiles [data-slot="stat"] {
+  transition: border-color 0.15s;
+}
+.brand-tiles [data-slot="stat"]:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+}

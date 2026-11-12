@@ -87,6 +87,41 @@ Each tab's link is `?tab=key`. `.param("section")` changes the name, which two s
 
 `.findable()` lets the browser's find-in-page search the panels that aren't showing and opens the tab that matches. It works where the browser supports `hidden="until-found"`.
 
+## A view switcher
+
+Two ways to see the same data, such as a day as rings or as a story of columns, are two tabs in the segmented form. The chosen view is in the address, so it survives a reload and a shared link, and with JavaScript off each tab is a link to the page with that view drawn.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Tabs::new("day-view", "Day view")
+    .variant(TabsVariant::Segmented)
+    .tab(Tab::new("radial", "Radial").icon(icons::CHART_PIE).panel(
+        Rings::new("Today's scores")
+            .ring(RingValue::new("Movement", 35))
+            .ring(RingValue::new("Recovery", 72))
+            .ring(RingValue::new("Sleep", 78))
+            .size(160)
+            .center_values()
+            .legend(),
+    ))
+    .tab(Tab::new("story", "Story").icon(icons::LAYOUT_LIST).panel(
+        MiniColumns::new("Workouts this week")
+            .height(120)
+            .column_name("Day")
+            .part("Strength", Ink::slot(2))
+            .part("Running", Ink::slot(1))
+            .column(MiniColumn::new("Mon", [45, 0]))
+            .column(MiniColumn::new("Wed", [50, 20])),
+    ))
+    .active("radial")
+```
+
+<UiPreview example="tabs/view-switcher" />
+
+A metric switcher (Duration, Efficiency, Score) is the same with a chart in each panel, loaded the first time it is shown with `Tab::lazy`. A range switch (7 days, 30 days) is a [Report](/docs/ui/reports/)'s grain links.
+
 ## Keyboard and accessibility
 
 <UiA11y>

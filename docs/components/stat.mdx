@@ -43,11 +43,62 @@ Stat::new("Resting heart rate", "58 bpm").change(Trend::new(3.0).up_is_bad())
 
 <UiPreview example="trend/default" />
 
+## A tile for a dashboard
+
+A dashboard puts more on each figure than a label and a number, and a `Stat` can carry it. Every piece is optional, and a stat that uses none is the plain one above.
+
+```rust
+use navree::ui::charts::Sparkline;
+use navree::ui::*;
+
+Stat::new("Resting heart rate", "58")
+    .icon(icons::HEART_PULSE)
+    .tone(Tone::Danger)
+    .unit("bpm")
+    .status(Badge::new("Athletic").tone(Tone::Success).dot())
+    .change(Trend::new(-3.3).up_is_bad())
+    .caption("vs last week")
+    .chart(Sparkline::new("Resting heart rate, last 7 days", [61, 60, 62, 59, 58, 59, 58]).smooth().height(36))
+```
+
+<UiPreview example="stat/tile" />
+
+- `icon(Icon)` puts an icon in a chip before the label, and `tone(Tone)` colours the chip by what the figure is about. The figure itself stays neutral: a colour on the number would say good or bad, which only a `status` or a `Trend` knows.
+- `unit(...)` writes what the figure counts, smaller, after it: `bpm`, `%`, `h 20 min`.
+- `status(...)` puts a pill, usually a [Badge](/docs/components/badge/), at the end of the label's line.
+- `change(Trend)` and `caption(...)` write how it moved and against what: "+6.1% vs last week".
+- `chart(...)` puts a [Sparkline](/docs/components/sparkline/) under the figure.
+- `aside(...)` puts a small graphic beside it, at the end of the line: a [Ring](/docs/components/ring/) of 48 to 72 pixels toward a goal.
+- `href(...)` makes the whole tile a link, with the label as its name.
+
+<UiPreview example="stat/tile-ring" />
+
+### A row of tiles
+
+`Grid::fit(min)` is a grid of as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20 or 24), so a row of tiles wraps by the room it has, from one column on a phone to six on a wide screen, with no breakpoint to choose.
+
+```rust
+use navree::ui::*;
+
+Grid::fit(14).gap(4).children((
+    Stat::new("Steps", "9,412").icon(icons::FOOTPRINTS).change(Trend::new(12.5)).caption("vs last week"),
+    Stat::new("Sleep", "7").icon(icons::MOON).unit("h 20 min").change(Trend::new(6.1)),
+    Stat::new("Distance", "6.8").icon(icons::MAP_PIN).unit("km"),
+))
+```
+
+<UiPreview example="stat/tiles" />
+
+The tile and the grid use theme tokens only, so they follow light and dark. A tile with an icon, a unit, a status, a caption, an aside or a link loads the app blocks stylesheet (about 2 KB gzip); a plain stat loads nothing more.
+
 ## Keyboard and accessibility
 
 <UiA11y>
 
 - The trend's colour isn't its only sign: write the direction in the text, such as "+3.1%".
+- The icon chip is decoration and is hidden from assistive technology: the label says what the tile is.
+- A tile that is a link has one tab stop, on its label, and the whole tile is the target.
+- A ring beside the figure is a picture named by its own title and described by its summary; the figure is the tile's text.
 - A sparkline is a picture named by its title and described by its summary, with its values in a table that only a screen reader reads.
 - `Bars` has `role="img"` and the description you give it, which is all assistive technology gets: say what the chart shows.
 

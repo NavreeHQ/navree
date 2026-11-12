@@ -568,6 +568,96 @@
     ],
     "shared": []
   },
+  "AppFont": {
+    "name": "AppFont",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/app_files.rs",
+    "summary": "A typeface of the app's own: one woff2 file, compiled in with `include_bytes!`, served at `/_navree/ui/app/{name}-{hash}.woff2` as `immutable`, with the `@font-face` rule that names it. See the module.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: &'static str, family: &'static str, bytes: &'static [u8], most: usize",
+        "doc": "The woff2 file `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), for the CSS family `family` (letters, digits, spaces and `-`, at most 64), at most `most` bytes long. A file that isn't woff2, past its ceiling, or a name or family of anything else, fails the app's build. Regular weight, upright, `font-display: swap` and preloaded until you say otherwise."
+      }
+    ],
+    "methods": [
+      {
+        "name": "weight",
+        "generics": "",
+        "args": "weight: u16",
+        "doc": "Its weight: `600` for a semibold file."
+      },
+      {
+        "name": "weights",
+        "generics": "",
+        "args": "from: u16, to: u16",
+        "doc": "The weights a variable file covers: `weights(100, 900)`."
+      },
+      {
+        "name": "italic",
+        "generics": "",
+        "args": "",
+        "doc": "An italic file."
+      },
+      {
+        "name": "display",
+        "generics": "",
+        "args": "display: FontDisplay",
+        "doc": "What the browser does while the font loads (`swap` by default)."
+      },
+      {
+        "name": "lazy",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the file out of the page's head as a preload: a font only some pages use is fetched when the text that needs it is drawn."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "Its name."
+      },
+      {
+        "name": "family",
+        "generics": "",
+        "args": "",
+        "doc": "The CSS family it is called."
+      },
+      {
+        "name": "bytes",
+        "generics": "",
+        "args": "",
+        "doc": "The font file."
+      },
+      {
+        "name": "preloads",
+        "generics": "",
+        "args": "",
+        "doc": "Whether a page preloads it."
+      },
+      {
+        "name": "url",
+        "generics": "",
+        "args": "",
+        "doc": "Where the file is served: `/_navree/ui/app/{name}-{hash}.woff2`."
+      },
+      {
+        "name": "face_url",
+        "generics": "",
+        "args": "",
+        "doc": "Where its `@font-face` rule is served: `/_navree/ui/app/{name}.face-{hash}.css`."
+      },
+      {
+        "name": "face",
+        "generics": "",
+        "args": "",
+        "doc": "The `@font-face` rule: the family, the file's address, the weights, the style and the display."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "AppPage": {
     "name": "AppPage",
     "kind": "struct",
@@ -598,6 +688,18 @@
         "generics": "",
         "args": "theme: &Theme",
         "doc": "Links the stylesheet of a theme of your own that a part of the page is drawn in. See `View::theme_sheet`."
+      },
+      {
+        "name": "stylesheet",
+        "generics": "",
+        "args": "sheet: &AppSheet",
+        "doc": "Links a stylesheet of the app's own on this page, after the shell's. See `View::stylesheet`."
+      },
+      {
+        "name": "font",
+        "generics": "",
+        "args": "font: &AppFont",
+        "doc": "Links a typeface of the app's own on this page, after the shell's. See `View::font`."
       },
       {
         "name": "current_appearance",
@@ -640,6 +742,48 @@
         "generics": "",
         "args": "",
         "doc": "The whole document."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "AppSheet": {
+    "name": "AppSheet",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/app_files.rs",
+    "summary": "A stylesheet of the app's own, compiled in with `include_bytes!` and served by the toolkit at `/_navree/ui/app/{name}-{hash}.css` as `immutable`. See the module.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: &'static str, bytes: &'static [u8], most: usize",
+        "doc": "The stylesheet `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), at most `most` bytes long. A sheet past its ceiling, or a name of anything else, fails the app's build."
+      }
+    ],
+    "methods": [
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "Its name."
+      },
+      {
+        "name": "bytes",
+        "generics": "",
+        "args": "",
+        "doc": "The stylesheet."
+      },
+      {
+        "name": "hash",
+        "generics": "",
+        "args": "",
+        "doc": "The first 12 hex digits of its content hash, as the toolkit's own files carry."
+      },
+      {
+        "name": "url",
+        "generics": "",
+        "args": "",
+        "doc": "Where it is served: `/_navree/ui/app/{name}-{hash}.css`."
       }
     ],
     "variants": [],
@@ -1444,6 +1588,52 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "BreathingGuide": {
+    "name": "BreathingGuide",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "A paced breathing guide for the 4-7-8 pattern: a circle that grows over four seconds as you breathe in, rests for seven while you hold, and shrinks over eight as you breathe out, with the phase named in its middle and the pattern written under it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Cow<'static, str>>",
+        "doc": "A guide with the id `id`, called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "size",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The circle's size at its largest, in pixels: 120, 160, 200 (the default), 240, 280 or 320. Another number takes the nearest."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the circle (the accent by default)."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: BreathingLabels",
+        "doc": "The words it writes."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "BreathingLabels": {
+    "name": "BreathingLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "The words a `BreathingGuide` writes.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
   },
   "Bubble": {
     "name": "Bubble",
@@ -3049,6 +3239,66 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ChartSkeleton": {
+    "name": "ChartSkeleton",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "A placeholder shaped like the chart that is coming, so a section that loads late doesn't jump: a `ring`, a `gauge`, a `line`, a row of `bars`, a calendar `heat_map`, a `matrix` or a `meter`. It pulses, and holds still when the reader asks for less motion. For a screen reader it is one status that says what is loading; the shapes are hidden. A chart's own `loading()` state keeps the chart's height; use a skeleton where the chart isn't drawn yet at all, such as the first paint of a lazy `Region`.",
+    "constructors": [
+      {
+        "name": "ring",
+        "generics": "",
+        "args": "size: u32",
+        "doc": "A ring, `size` pixels across (48 to 320)."
+      },
+      {
+        "name": "gauge",
+        "generics": "",
+        "args": "size: u32",
+        "doc": "An open arc, `size` pixels across (48 to 320)."
+      },
+      {
+        "name": "line",
+        "generics": "",
+        "args": "height: u32",
+        "doc": "A line over faint gridlines, `height` pixels tall (48 to 480), the width of its place."
+      },
+      {
+        "name": "bars",
+        "generics": "",
+        "args": "count: u32, height: u32",
+        "doc": "`count` bars (1 to 48), `height` pixels tall (48 to 480)."
+      },
+      {
+        "name": "heat_map",
+        "generics": "",
+        "args": "weeks: u32",
+        "doc": "A calendar of `weeks` columns (4 to 53) of seven days."
+      },
+      {
+        "name": "matrix",
+        "generics": "",
+        "args": "size: u32",
+        "doc": "The lower triangle of a square matrix of `size` measures (2 to 12)."
+      },
+      {
+        "name": "meter",
+        "generics": "",
+        "args": "",
+        "doc": "One bar split in parts, with a legend under it."
+      }
+    ],
+    "methods": [
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "What a screen reader hears: \"Loading\" by default, better \"Loading sleep stages\"."
       }
     ],
     "variants": [],
@@ -6079,6 +6329,54 @@
     "variants": [],
     "shared": []
   },
+  "DayPager": {
+    "name": "DayPager",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "Steps through days: a link to the day before, the day shown (which can open a calendar), and a link to the day after. A day with nothing to step to shows the arrow dimmed and unlinked, so the pager never changes width. Both arrows are links, so stepping works with JavaScript off and a step is a page of its own in the history.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, day: impl Into<Node>",
+        "doc": "A pager with the id `id` showing `day`, written as you like it (\"Today\", \"Wed, 11 Nov\")."
+      }
+    ],
+    "methods": [
+      {
+        "name": "previous",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Where the day before is."
+      },
+      {
+        "name": "next",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Where the day after is."
+      },
+      {
+        "name": "scores",
+        "generics": "",
+        "args": "scores: impl Into<Node>",
+        "doc": "A small graphic before the date: the day's scores."
+      },
+      {
+        "name": "picker",
+        "generics": "",
+        "args": "picker: impl IntoNodes",
+        "doc": "Opens `picker` in a popup when the date is pressed."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "previous: impl Into<Cow<'static, str>>, next: impl Into<Cow<'static, str>>, choose: impl Into<Cow<'static, str>>",
+        "doc": "The words: the arrows' names and the picker's."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Density": {
     "name": "Density",
     "kind": "enum",
@@ -6257,6 +6555,72 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Dock": {
+    "name": "Dock",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "A floating row of icon links, pinned bottom centre: the main places of an app on a phone, or beside a content column on a wide screen. The current one is marked with `aria-current=\"page\"` and lit in its tone. Each icon is named by its label for a screen reader and shown as a tooltip; the page keeps room for it with a bottom padding of its own.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "A dock whose navigation is called `label` to a screen reader."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: DockItem",
+        "doc": "Adds a destination."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DockItem": {
+    "name": "DockItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "One destination in a `Dock`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>, href: impl Into<Href>",
+        "doc": "A destination called `label` at `href`. Its label is the link's name, shown as a tooltip and read by a screen reader."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Its icon."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "The colour its icon takes when it is current."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "",
+        "doc": "Marks it as the page the reader is on."
+      },
+      {
+        "name": "prominent",
+        "generics": "",
+        "args": "",
+        "doc": "Draws it larger, between the others: the home destination."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Donut": {
     "name": "Donut",
@@ -7554,6 +7918,44 @@
     ],
     "shared": []
   },
+  "FontDisplay": {
+    "name": "FontDisplay",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/app_files.rs",
+    "summary": "How a browser treats text in a font that hasn't loaded: the `font-display` of its face.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The `font-display` value."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Swap",
+        "doc": "Text shows at once in the fallback and swaps when the font arrives: the default, right for a brand's headings and body text.",
+        "default": true
+      },
+      {
+        "name": "Optional",
+        "doc": "A very short wait for the font, then the fallback for good if it hasn't come: no swap, so the page never jumps. The toolkit's own Geist is drawn this way.",
+        "default": false
+      },
+      {
+        "name": "Fallback",
+        "doc": "A short wait, then the fallback, and a swap if the font arrives soon enough.",
+        "default": false
+      },
+      {
+        "name": "Block",
+        "doc": "Invisible text until the font arrives: only for an icon font.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Forbidden": {
     "name": "Forbidden",
     "kind": "struct",
@@ -8259,6 +8661,12 @@
         "generics": "",
         "args": "columns: u8",
         "doc": "A grid of `columns` columns (1 to 6)."
+      },
+      {
+        "name": "fit",
+        "generics": "",
+        "args": "min: u8",
+        "doc": "A grid of as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20 or 24; another number takes the nearest): a row of figure tiles that wraps by the room it has, from one column on a phone to six on a wide screen, with no breakpoint to choose. The columns share the width equally."
       }
     ],
     "methods": [
@@ -8535,6 +8943,81 @@
         "generics": "",
         "args": "",
         "doc": "The `viewBox` the shapes are drawn in, such as `0 0 24 24`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "InfoMark": {
+    "name": "InfoMark",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "Which mark an `InfoTip` wears.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Question",
+        "doc": "A \"?\" in a circle: the default, for \"how do I read this\".",
+        "default": true
+      },
+      {
+        "name": "Info",
+        "doc": "An \"i\" in a circle: for \"more about this\".",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "InfoTip": {
+    "name": "InfoTip",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/app_blocks.rs",
+    "summary": "A small \"?\" or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of. It is a button that opens a popup (the browser's `popover`), so a click, Enter or Space opens it, Esc and a click outside close it, and it works for a keyboard and a screen reader as well as a mouse. The note can hold any content: a title, text, a short list, a legend.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, about: impl Into<String>",
+        "doc": "A tip with the id `id` about `about`, the name of what it explains."
+      }
+    ],
+    "methods": [
+      {
+        "name": "word",
+        "generics": "",
+        "args": "word: impl Into<Cow<'static, str>>",
+        "doc": "The word before what it is about in the chip's name, \"About\" by default: write it in the page's language."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A heading for the note."
+      },
+      {
+        "name": "body",
+        "generics": "",
+        "args": "body: impl IntoNodes",
+        "doc": "Adds to the note."
+      },
+      {
+        "name": "mark",
+        "generics": "",
+        "args": "mark: InfoMark",
+        "doc": "Which mark the chip wears."
+      },
+      {
+        "name": "side",
+        "generics": "",
+        "args": "side: Side",
+        "doc": "The side it opens on."
+      },
+      {
+        "name": "align",
+        "generics": "",
+        "args": "align: PopupAlign",
+        "doc": "How it lines up along that side."
       }
     ],
     "variants": [],
@@ -15491,6 +15974,18 @@
     ],
     "methods": [
       {
+        "name": "stylesheet",
+        "generics": "",
+        "args": "sheet: &AppSheet",
+        "doc": "Links a stylesheet of the app's own on every page of the shell. See `View::stylesheet`."
+      },
+      {
+        "name": "font",
+        "generics": "",
+        "args": "font: &AppFont",
+        "doc": "Links a typeface of the app's own on every page of the shell. See `View::font`."
+      },
+      {
         "name": "appearance",
         "generics": "",
         "args": "appearance: Appearance",
@@ -17040,7 +17535,7 @@
     "name": "Stat",
     "kind": "struct",
     "file": "crates/navree-ui/src/components/display.rs",
-    "summary": "One figure and what it is.",
+    "summary": "One figure and what it is: a tile for a dashboard.",
     "constructors": [
       {
         "name": "new",
@@ -17067,6 +17562,48 @@
         "generics": "",
         "args": "trend: Trend",
         "doc": "Adds how it's moving as a `Trend`: an arrow, the change with its sign, and a colour for what it means. It replaces `trend`."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "Puts an icon in a chip before the label. It is decoration: the label says what the tile is."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the icon's chip by what the figure is about. The figure itself stays neutral: its colour would say good or bad, which only a `status` or a `Trend` knows."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<Node>",
+        "doc": "What the figure counts, written smaller after it: `bpm`, `%`, `h`."
+      },
+      {
+        "name": "status",
+        "generics": "",
+        "args": "status: impl Into<Node>",
+        "doc": "A pill at the end of the label's line, such as a `Badge` saying \"Athletic\"."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: impl Into<Node>",
+        "doc": "Words after the change: \"vs last week\"."
+      },
+      {
+        "name": "aside",
+        "generics": "",
+        "args": "aside: impl Into<Node>",
+        "doc": "Puts a small graphic beside the figure, at the end of its line: a `Ring` of 48 to 72 pixels, or a few `MiniColumns`."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the whole tile a link to `href`; the label is the link's name."
       }
     ],
     "variants": [],
@@ -18689,6 +19226,12 @@
         "generics": "",
         "args": "side: Side",
         "doc": "The palette for `side`, to change."
+      },
+      {
+        "name": "with_accent",
+        "generics": "",
+        "args": "dark: Rgb, light: Rgb",
+        "doc": "This spec with the brand's accent: `dark` in the dark palette and `light` in the light one, each with what reads on and around it derived (the text on it, the accent as text, the focus ring), so a brand colour that is too pale or too deep to carry text still gives a theme that passes `Theme::custom`'s check."
       },
       {
         "name": "shortfalls",

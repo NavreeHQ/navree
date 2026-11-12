@@ -173,6 +173,17 @@
       ]
     },
     {
+      "id": "app-blocks",
+      "title": "App blocks",
+      "components": [
+        "info-tip",
+        "chart-skeleton",
+        "breathing-guide",
+        "dock",
+        "day-pager"
+      ]
+    },
+    {
       "id": "assistant",
       "title": "Assistant",
       "components": [
@@ -1613,7 +1624,8 @@
         "tabs/vertical",
         "tabs/sizes",
         "tabs/icons",
-        "tabs/manual"
+        "tabs/manual",
+        "tabs/view-switcher"
       ]
     },
     {
@@ -1877,7 +1889,7 @@
       "id": "stat",
       "name": "Stat and Bars",
       "url": "/docs/components/stat/",
-      "summary": "One figure and what it is.",
+      "summary": "One figure and what it is: a tile for a dashboard.",
       "group": "data",
       "types": [
         "Stat",
@@ -1888,7 +1900,10 @@
       "examples": [
         "stat/thumb",
         "stat/default",
-        "stat/bars"
+        "stat/bars",
+        "stat/tile",
+        "stat/tile-ring",
+        "stat/tiles"
       ]
     },
     {
@@ -2288,6 +2303,91 @@
       ]
     },
     {
+      "id": "info-tip",
+      "name": "Info tip",
+      "url": "/docs/components/info-tip/",
+      "summary": "A small \"?\" or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of.",
+      "group": "app-blocks",
+      "types": [
+        "InfoTip",
+        "InfoMark"
+      ],
+      "thumb": "info-tip/thumb",
+      "anatomy": null,
+      "examples": [
+        "info-tip/thumb",
+        "info-tip/default",
+        "info-tip/marks"
+      ]
+    },
+    {
+      "id": "chart-skeleton",
+      "name": "Chart skeleton",
+      "url": "/docs/components/chart-skeleton/",
+      "summary": "A loading placeholder shaped like the chart that is coming: a ring, a gauge, a line, bars, a calendar, a matrix or a meter.",
+      "group": "app-blocks",
+      "types": [
+        "ChartSkeleton"
+      ],
+      "thumb": "chart-skeleton/thumb",
+      "anatomy": null,
+      "examples": [
+        "chart-skeleton/thumb",
+        "chart-skeleton/shapes",
+        "chart-skeleton/region"
+      ]
+    },
+    {
+      "id": "breathing-guide",
+      "name": "Breathing guide",
+      "url": "/docs/components/breathing-guide/",
+      "summary": "A paced 4-7-8 breathing circle that runs from CSS alone and holds still when the reader asks for less motion.",
+      "group": "app-blocks",
+      "types": [
+        "BreathingGuide",
+        "BreathingLabels"
+      ],
+      "thumb": "breathing-guide/thumb",
+      "anatomy": null,
+      "examples": [
+        "breathing-guide/thumb",
+        "breathing-guide/default"
+      ]
+    },
+    {
+      "id": "dock",
+      "name": "Dock",
+      "url": "/docs/components/dock/",
+      "summary": "A floating row of icon links pinned to the bottom of the page: the main places of an app, with the current one lit.",
+      "group": "app-blocks",
+      "types": [
+        "Dock",
+        "DockItem"
+      ],
+      "thumb": "dock/thumb",
+      "anatomy": null,
+      "examples": [
+        "dock/thumb",
+        "dock/default"
+      ]
+    },
+    {
+      "id": "day-pager",
+      "name": "Day pager",
+      "url": "/docs/components/day-pager/",
+      "summary": "The day before, the day shown and the day after, with the day's scores and a calendar behind the date.",
+      "group": "app-blocks",
+      "types": [
+        "DayPager"
+      ],
+      "thumb": "day-pager/thumb",
+      "anatomy": null,
+      "examples": [
+        "day-pager/thumb",
+        "day-pager/default"
+      ]
+    },
+    {
       "id": "conversation",
       "name": "Conversation",
       "url": "/docs/components/conversation/",
@@ -2479,6 +2579,23 @@
         "themes/inset",
         "themes/floating",
         "themes/header"
+      ]
+    },
+    {
+      "id": "app-styles",
+      "name": "App styles",
+      "url": "/docs/ui/app-styles/",
+      "summary": "A stylesheet of the app's own, compiled in with `include_bytes!` and served by the toolkit at `/_navree/ui/app/{name}-{hash}.css` as `immutable`. See the module.",
+      "group": null,
+      "types": [
+        "AppSheet",
+        "AppFont",
+        "FontDisplay"
+      ],
+      "thumb": "app-styles/brand",
+      "anatomy": null,
+      "examples": [
+        "app-styles/brand"
       ]
     },
     {
@@ -62543,6 +62660,1989 @@
           "tag": "section",
           "count": 1,
           "children": []
+        }
+      ]
+    },
+    {
+      "id": "app-styles/brand",
+      "component": "app-styles",
+      "slug": "brand",
+      "title": "A brand theme and its own sheet",
+      "kind": "single",
+      "code": "let shell = Shell::new(\"Sutlej Fit\")\n    .appearance(Appearance::new(brand_theme(), Mode::System))\n    .stylesheet(&BRAND)\n    .group(\n        NavGroup::new(\"Today\")\n            .item(NavItem::new(\"Home\", \"/\").icon(icons::HOUSE))\n            .item(NavItem::new(\"Sleep\", \"/sleep\").icon(icons::MOON))\n            .item(NavItem::new(\"Heart\", \"/heart\").icon(icons::HEART_PULSE))\n            .item(NavItem::new(\"Fitness\", \"/fitness\").icon(icons::ACTIVITY)),\n    )\n    .user(\n        UserMenu::new(\"Gurpreet Kaur\", \"gurpreet@example.com\").action(\"Sign out\", \"/sign-out\"),\n    );\nshell.page(\"Today\", \"/\").body(Stack::gap(5).children((\n    el(\"section\").attr(\"class\", \"brand-hero\").children((\n        el(\"span\")\n            .attr(\"class\", \"brand-kicker\")\n            .child(\"Wednesday, 11 November\"),\n        el(\"h2\").child(\"Good evening, Gurpreet. Your recovery is back on track.\"),\n        el(\"p\").child(\n            \"Seven hours twenty minutes of sleep and a resting heart rate two beats under your week.\",\n        ),\n    )),\n    el(\"div\").attr(\"class\", \"brand-tiles\").child(\n        Grid::fit(10).gap(4).children((\n            Stat::new(\"Steps\", \"9,412\")\n                .icon(icons::FOOTPRINTS)\n                .tone(Tone::named(\"orange\"))\n                .change(Trend::new(12.5))\n                .caption(\"vs last week\"),\n            Stat::new(\"Sleep\", \"7\")\n                .icon(icons::MOON)\n                .tone(Tone::named(\"violet\"))\n                .unit(\"h 20 min\")\n                .change(Trend::new(6.1))\n                .caption(\"vs last week\"),\n            Stat::new(\"Resting heart rate\", \"58\")\n                .icon(icons::HEART_PULSE)\n                .tone(Tone::Danger)\n                .unit(\"bpm\")\n                .change(Trend::new(-3.3).up_is_bad())\n                .caption(\"vs last week\"),\n            Stat::new(\"Recovery\", \"82\")\n                .icon(icons::ACTIVITY)\n                .tone(Tone::Success)\n                .unit(\"%\")\n                .change(Trend::new(4.0))\n                .caption(\"vs yesterday\"),\n        )),\n    ),\n)))",
+      "src": "/ui-preview/app-styles/brand.html",
+      "height": 720,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [
+        "sidebar-4e91853b1fde.js",
+        "overlay-26a5fb54a8b6.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "grid",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stat",
+                              "tag": "div",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "stat-head",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "stat-icon",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "stat-label",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "stat-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "stat-unit",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "stat-trend",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "trend",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "stat-caption",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "stat/tile",
+      "component": "stat",
+      "slug": "tile",
+      "title": "A figure tile",
+      "kind": "single",
+      "code": "Stat::new(\"Resting heart rate\", \"58\")\n    .icon(icons::HEART_PULSE)\n    .tone(Tone::Danger)\n    .unit(\"bpm\")\n    .status(Badge::new(\"Athletic\").tone(Tone::Success).dot())\n    .change(Trend::new(-3.3).up_is_bad())\n    .caption(\"vs last week\")\n    .chart(\n        Sparkline::new(\n            \"Resting heart rate, last 7 days\",\n            [61, 60, 62, 59, 58, 59, 58],\n        )\n        .smooth()\n        .height(36),\n    )",
+      "src": "/ui-preview/stat/tile.html",
+      "height": 210,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 360,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stat",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat-head",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stat-icon",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-status",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "badge",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "badge-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "stat-value",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stat-unit",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "stat-trend",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "trend",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-caption",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "stat-chart",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-line",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-end",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stat/tile-ring",
+      "component": "stat",
+      "slug": "tile-ring",
+      "title": "A ring beside the figure",
+      "kind": "single",
+      "code": "Stat::new(\"Steps\", \"9,412\")\n    .icon(icons::FOOTPRINTS)\n    .tone(Tone::named(\"orange\"))\n    .change(Trend::new(12.5))\n    .caption(\"Goal 10,000\")\n    .aside(\n        Ring::new(\"Steps\", 9_412)\n            .max(10_000)\n            .tone(Tone::named(\"orange\"))\n            .size(64),\n    )",
+      "src": "/ui-preview/stat/tile-ring.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 360,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stat",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat-head",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stat-icon",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "stat-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stat-figure",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stat-value",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "stat-trend",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "trend",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "stat-caption",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-aside",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-heading",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-value",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "count-up",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-summary",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-data",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-table",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stat/tiles",
+      "component": "stat",
+      "slug": "tiles",
+      "title": "A row of tiles",
+      "kind": "single",
+      "code": "Grid::fit(14).gap(4).children((\n    Stat::new(\"Sleep\", \"7\")\n        .icon(icons::MOON)\n        .tone(Tone::named(\"violet\"))\n        .unit(\"h 20 min\")\n        .status(Badge::new(\"Good\").tone(Tone::Success))\n        .change(Trend::new(6.1))\n        .caption(\"vs last week\")\n        .chart(\n            Sparkline::new(\"Sleep, last 7 nights\", [6.6, 7.1, 7.4, 6.9, 7.8, 7.2, 7.3])\n                .area()\n                .smooth()\n                .height(36),\n        ),\n    Stat::new(\"Recovery\", \"82\")\n        .icon(icons::ACTIVITY)\n        .tone(Tone::Success)\n        .unit(\"%\")\n        .change(Trend::new(4.0))\n        .caption(\"vs yesterday\")\n        .aside(Ring::new(\"Recovery\", 82).size(64).glow()),\n    Stat::new(\"Steps\", \"9,412\")\n        .icon(icons::FOOTPRINTS)\n        .tone(Tone::named(\"orange\"))\n        .change(Trend::new(12.5))\n        .caption(\"Goal 10,000\")\n        .aside(\n            Ring::new(\"Steps\", 9_412)\n                .max(10_000)\n                .tone(Tone::named(\"orange\"))\n                .size(64),\n        ),\n    Stat::new(\"Distance\", \"6.8\").icon(icons::MAP_PIN).unit(\"km\"),\n    Stat::new(\"Body temperature\", \"36.6\")\n        .icon(icons::THERMOMETER)\n        .tone(Tone::Warning)\n        .unit(\"°C\")\n        .status(Badge::new(\"Normal\").tone(Tone::Success))\n        .change(Trend::new(0.0)),\n    Stat::new(\"Blood oxygen\", \"–\")\n        .icon(icons::DROPLETS)\n        .tone(Tone::Info)\n        .caption(\"No reading yet today\"),\n))",
+      "src": "/ui-preview/stat/tiles.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1000,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat",
+              "tag": "div",
+              "count": 6,
+              "children": [
+                {
+                  "slot": "stat-head",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stat-icon",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stat-label",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stat-figure",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "stat-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stat-unit",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "stat-trend",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "trend",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "stat-caption",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stat-aside",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart",
+                          "tag": "figure",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-header",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-heading",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-title",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-body",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-size",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-plot",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial-track",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-arc",
+                                          "tag": "path",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "radial-center",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial-value",
+                                          "tag": "span",
+                                          "count": 1,
+                                          "children": [
+                                            {
+                                              "slot": "count-up",
+                                              "tag": "span",
+                                              "count": 1,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-summary",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-data",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-table",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "info-tip/thumb",
+      "component": "info-tip",
+      "slug": "thumb",
+      "title": "An info tip",
+      "kind": "single",
+      "code": "InfoTip::new(\"thumb-tip\", \"Brain age\")\n    .body(\"A wellness estimate from your sleep and heart rate variability.\")",
+      "src": "/ui-preview/info-tip/thumb.html",
+      "height": 150,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-26a5fb54a8b6.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "info-tip",
+          "tag": "button",
+          "count": 1,
+          "children": [
+            {
+              "slot": "icon",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            }
+          ]
+        },
+        {
+          "slot": "info-tip-content",
+          "tag": "div",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "info-tip/default",
+      "component": "info-tip",
+      "slug": "default",
+      "title": "A note on a chart",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Heading::h3(\"Autonomic balance\"),\n    InfoTip::new(\"autonomic-tip\", \"Autonomic balance\")\n        .title(\"How to read this chart\")\n        .align(PopupAlign::Start)\n        .body((\n            Text::new(\n                \"It compares your resting and your active nervous system through the night.\",\n            ),\n            Text::muted(\"A wellness estimate, not a diagnosis.\"),\n        )),\n))",
+      "src": "/ui-preview/info-tip/default.html",
+      "height": 260,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-26a5fb54a8b6.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "heading",
+              "tag": "h3",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "info-tip",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "info-tip-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "info-tip-title",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "info-tip/marks",
+      "component": "info-tip",
+      "slug": "marks",
+      "title": "Marks and sides",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"A question mark\",\n        Row::gap(2).children((\n            Text::muted(\"HRV status\"),\n            InfoTip::new(\"mark-question\", \"HRV status\")\n                .body(\"Your heart rate variability against your own baseline.\"),\n        )),\n    ),\n    (\n        \"An i, opening to the right\",\n        Row::gap(2).children((\n            Text::muted(\"Training status\"),\n            InfoTip::new(\"mark-info\", \"Training status\")\n                .mark(InfoMark::Info)\n                .side(Side::Right)\n                .body(\"Productive, maintaining or detraining, from your last four weeks.\"),\n        )),\n    ),\n]",
+      "src": "/ui-preview/info-tip/marks.html",
+      "height": 220,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "overlay-26a5fb54a8b6.js"
+      ],
+      "captions": [
+        "A question mark",
+        "An i, opening to the right"
+      ],
+      "slots": []
+    },
+    {
+      "id": "chart-skeleton/thumb",
+      "component": "chart-skeleton",
+      "slug": "thumb",
+      "title": "A skeleton",
+      "kind": "single",
+      "code": "ChartSkeleton::ring(96).label(\"Loading recovery\")",
+      "src": "/ui-preview/chart-skeleton/thumb.html",
+      "height": 140,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 160,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart-skeleton",
+          "tag": "div",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "chart-skeleton/shapes",
+      "component": "chart-skeleton",
+      "slug": "shapes",
+      "title": "Every shape",
+      "kind": "gallery",
+      "code": "vec![\n    (\"Ring\", ChartSkeleton::ring(120).label(\"Loading recovery\")),\n    (\"Gauge\", ChartSkeleton::gauge(120).label(\"Loading stress\")),\n    (\"Line\", ChartSkeleton::line(120).label(\"Loading heart rate\")),\n    (\n        \"Bars\",\n        ChartSkeleton::bars(12, 120).label(\"Loading stress by hour\"),\n    ),\n    (\n        \"Heat map\",\n        ChartSkeleton::heat_map(26).label(\"Loading activity\"),\n    ),\n    (\n        \"Matrix\",\n        ChartSkeleton::matrix(6).label(\"Loading correlations\"),\n    ),\n    (\n        \"Meter\",\n        ChartSkeleton::meter().label(\"Loading sleep stages\"),\n    ),\n]",
+      "src": "/ui-preview/chart-skeleton/shapes.html",
+      "height": 420,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Ring",
+        "Gauge",
+        "Line",
+        "Bars",
+        "Heat map",
+        "Matrix",
+        "Meter"
+      ],
+      "slots": []
+    },
+    {
+      "id": "chart-skeleton/region",
+      "component": "chart-skeleton",
+      "slug": "region",
+      "title": "In a region that loads late",
+      "kind": "single",
+      "code": "Card::titled(\"24-hour heart rate\").body(\n    Region::new(\"heart-rate\")\n        .src(\"/fragments/heart-rate\")\n        .lazy()\n        .children(ChartSkeleton::line(160).label(\"Loading heart rate\")),\n)",
+      "src": "/ui-preview/chart-skeleton/region.html",
+      "height": 260,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "region",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-skeleton",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "breathing-guide/thumb",
+      "component": "breathing-guide",
+      "slug": "thumb",
+      "title": "A breathing guide",
+      "kind": "single",
+      "code": "BreathingGuide::new(\"thumb-guide\", \"4-7-8 breathing\").size(160)",
+      "src": "/ui-preview/breathing-guide/thumb.html",
+      "height": 280,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 300,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "breathing",
+          "tag": "section",
+          "count": 1,
+          "children": [
+            {
+              "slot": "breathing-stage",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "breathing-track",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "breathing-orb",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "breathing-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "breathing-run",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "breathing-steps",
+              "tag": "ol",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "breathing-guide/default",
+      "component": "breathing-guide",
+      "slug": "default",
+      "title": "The 4-7-8 guide",
+      "kind": "single",
+      "code": "Card::titled(\"Relax\").description(\"4-7-8 breathing\").body(\n    BreathingGuide::new(\"relax-guide\", \"4-7-8 breathing\")\n        .size(240)\n        .tone(Tone::named(\"cyan\")),\n)",
+      "src": "/ui-preview/breathing-guide/default.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "card-description",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "breathing",
+                  "tag": "section",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "breathing-stage",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "breathing-track",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "breathing-orb",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "breathing-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "breathing-run",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "switch",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "breathing-steps",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dock/thumb",
+      "component": "dock",
+      "slug": "thumb",
+      "title": "A dock",
+      "kind": "single",
+      "code": "Dock::new(\"Sections\")\n    .item(DockItem::new(\"Sleep\", \"/sleep\").icon(icons::MOON))\n    .item(\n        DockItem::new(\"Home\", \"/\")\n            .icon(icons::HOUSE)\n            .prominent()\n            .current(),\n    )\n    .item(DockItem::new(\"Fitness\", \"/fitness\").icon(icons::ACTIVITY))",
+      "src": "/ui-preview/dock/thumb.html",
+      "height": 120,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 360,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "dock",
+          "tag": "nav",
+          "count": 1,
+          "children": [
+            {
+              "slot": "dock-item",
+              "tag": "a",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dock/default",
+      "component": "dock",
+      "slug": "default",
+      "title": "The sections of an app",
+      "kind": "single",
+      "code": "Dock::new(\"Sections\")\n    .item(\n        DockItem::new(\"Sleep\", \"/sleep\")\n            .icon(icons::MOON)\n            .tone(Tone::named(\"violet\")),\n    )\n    .item(\n        DockItem::new(\"Heart\", \"/heart\")\n            .icon(icons::HEART_PULSE)\n            .tone(Tone::Danger),\n    )\n    .item(\n        DockItem::new(\"Home\", \"/\")\n            .icon(icons::HOUSE)\n            .prominent()\n            .current(),\n    )\n    .item(\n        DockItem::new(\"Mind\", \"/mind\")\n            .icon(icons::BRAIN)\n            .tone(Tone::named(\"cyan\")),\n    )\n    .item(\n        DockItem::new(\"Fitness\", \"/fitness\")\n            .icon(icons::ACTIVITY)\n            .tone(Tone::Success),\n    )",
+      "src": "/ui-preview/dock/default.html",
+      "height": 200,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 480,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "dock",
+          "tag": "nav",
+          "count": 1,
+          "children": [
+            {
+              "slot": "dock-item",
+              "tag": "a",
+              "count": 5,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day-pager/thumb",
+      "component": "day-pager",
+      "slug": "thumb",
+      "title": "A day pager",
+      "kind": "single",
+      "code": "DayPager::new(\"thumb-day\", \"Today\").previous(\"/?date=2026-11-11\")",
+      "src": "/ui-preview/day-pager/thumb.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 360,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "day-pager",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "day-pager-previous",
+              "tag": "a",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "day-pager-face",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "day-pager-day",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "day-pager-next",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day-pager/default",
+      "component": "day-pager",
+      "slug": "default",
+      "title": "Scores and a calendar",
+      "kind": "single",
+      "code": "let scores = || {\n    Rings::new(\"Scores for the day\")\n        .ring(RingValue::new(\"Movement\", 35))\n        .ring(RingValue::new(\"Recovery\", 72))\n        .ring(RingValue::new(\"Sleep\", 78))\n        .size(28)\n        .inline()\n};\nStack::gap(4).children((\n    DayPager::new(\"day-recent\", \"Wed, 11 Nov\")\n        .previous(\"/?date=2026-11-10\")\n        .next(\"/?date=2026-11-12\")\n        .scores(scores()),\n    DayPager::new(\"day-picker\", \"Tue, 10 Nov\")\n        .previous(\"/?date=2026-11-09\")\n        .next(\"/?date=2026-11-11\")\n        .scores(scores())\n        .picker((\n            Text::muted(\"Days with data\"),\n            Text::new(\"8 April to 11 November\"),\n        )),\n))",
+      "src": "/ui-preview/day-pager/default.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "overlay-26a5fb54a8b6.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "day-pager",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "day-pager-previous",
+                  "tag": "a",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial-inline",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "day-pager-day",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "day-pager-next",
+                  "tag": "a",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs/view-switcher",
+      "component": "tabs",
+      "slug": "view-switcher",
+      "title": "A view switcher",
+      "kind": "single",
+      "code": "Tabs::new(\"day-view\", \"Day view\")\n    .variant(TabsVariant::Segmented)\n    .tab(\n        Tab::new(\"radial\", \"Radial\").icon(icons::CHART_PIE).panel(\n            Rings::new(\"Today's scores\")\n                .ring(RingValue::new(\"Movement\", 35))\n                .ring(RingValue::new(\"Recovery\", 72))\n                .ring(RingValue::new(\"Sleep\", 78))\n                .size(160)\n                .center_values()\n                .legend(),\n        ),\n    )\n    .tab(\n        Tab::new(\"story\", \"Story\").icon(icons::LAYOUT_LIST).panel(\n            MiniColumns::new(\"Workouts this week\")\n                .id(\"week-columns\")\n                .height(120)\n                .column_name(\"Day\")\n                .part(\"Strength\", Ink::slot(2))\n                .part(\"Running\", Ink::slot(1))\n                .column(MiniColumn::new(\"Mon\", [45, 0]))\n                .column(MiniColumn::new(\"Wed\", [50, 20]))\n                .column(MiniColumn::new(\"Sat\", [30, 60])),\n        ),\n    )\n    .active(\"radial\")",
+      "src": "/ui-preview/tabs/view-switcher.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "menus-ee8886fb1f12.js",
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "tabs",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "tabs-list",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "tab",
+                  "tag": "a",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "tabs-panel",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-split",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-row",
+                                      "tag": "span",
+                                      "count": 3,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-legend",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     },

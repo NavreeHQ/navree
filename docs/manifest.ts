@@ -235,6 +235,7 @@ export const sections: DocsSection[] = [
       "foundations",
       "themes",
       "theme-builder",
+      "app-styles",
       "icons",
       "flags",
       "layout",
@@ -364,6 +365,12 @@ export const sections: DocsSection[] = [
       "color-strip",
       "range-scale",
       "trend",
+      // App blocks
+      "info-tip",
+      "chart-skeleton",
+      "breathing-guide",
+      "dock",
+      "day-pager",
       // Assistant
       "conversation",
       "chat-message",
@@ -387,6 +394,7 @@ export const sections: DocsSection[] = [
       { title: "Steps, ranges and trees", from: "stepper" },
       { title: "Data", from: "table" },
       { title: "Charts", from: "line-chart" },
+      { title: "App blocks", from: "info-tip" },
       { title: "Assistant", from: "conversation" },
     ],
   },

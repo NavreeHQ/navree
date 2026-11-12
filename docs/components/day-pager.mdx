@@ -1,0 +1,37 @@
+---
+title: "Day pager"
+description: "The day before, the day shown and the day after, with the day's scores and a calendar behind the date."
+---
+
+<UiPreview example="day-pager/default" />
+
+`DayPager` steps through days: a link to the day before, the day shown, and a link to the day after. It is the control of a screen that shows one day of data, such as a day's sleep, heart rate and movement.
+
+```rust
+use navree::ui::*;
+
+DayPager::new("day", "Wed, 11 Nov")
+    .previous("/?date=2026-11-10")
+    .next("/?date=2026-11-12")
+```
+
+Both arrows are links, so stepping works with JavaScript off and each day is a page of its own in the history. Write the day as you like it: "Today", "Yesterday", "Wed, 11 Nov". A day with nothing to step to (no day before the first, none after today) shows its arrow dimmed and unlinked, so the pager never changes width.
+
+## Scores and a calendar
+
+`.scores(...)` puts a small graphic before the date: the day's three scores as [Rings](/docs/components/rings/) in their `inline` form, 28 or 36 pixels. `.picker(...)` opens any content in a popup when the date is pressed: a [Calendar](/docs/components/calendar/) that marks the days with data, or a list of recent days.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The arrows are links named "Previous day" and "Next day"; write them in the page's language with `.words(...)`.
+- A dimmed arrow is `aria-disabled` and is not in the tab order.
+- The date opens its popup with Enter or Space, Escape closes it, and focus returns to the date.
+- The rings are described by their own summary, so the scores are read before the date.
+
+</UiA11y>
+
+## API
+
+<UiProps type="DayPager" />

@@ -23,6 +23,8 @@ pub const FILES: &[&str] = &[
     "components/fact.rs",
     "components/tone.rs",
     "components/trend.rs",
+    "components/app_blocks.rs",
+    "app_files.rs",
     "components/overlays.rs",
     "components/layout.rs",
     "components/flag.rs",
