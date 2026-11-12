@@ -810,8 +810,16 @@ mod tests {
              SELECT n FROM b",
             "SELECT length(zeroblob(2000000))",
         ] {
-            let failed = run_sqlite(&db, sql, AGENT_LIMITS).unwrap_err();
-            assert!(failed.to_string().contains("too big"), "{sql}: {failed}");
+            match run_sqlite(&db, sql, AGENT_LIMITS) {
+                Err(failed) => assert!(failed.to_string().contains("too big"), "{sql}: {failed}"),
+                // SQLite's printf gives NULL instead of an error on some
+                // platforms (Windows); the value is never made either way.
+                Ok(answer) if sql.starts_with("SELECT printf") => assert!(
+                    answer.rows.iter().flatten().all(serde_json::Value::is_null),
+                    "{sql}: {answer:?}"
+                ),
+                Ok(answer) => panic!("{sql} was not refused: {answer:?}"),
+            }
         }
         let long =
             run_sqlite(&db, "SELECT printf('%.*c', 900000, 'x') AS x", AGENT_LIMITS).unwrap();
