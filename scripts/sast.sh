@@ -81,7 +81,9 @@ semgrep_scan() {
   local status=0
   docker run --rm "${GIT_SAFE[@]}" -v "$src_mount:/src" -v "$reports_mount:/reports" -w /src \
     "$SEMGREP_IMAGE" semgrep scan "${args[@]}" . || status=$?
-  drop_suppressed "$reports/semgrep.sarif"
+  if ! drop_suppressed "$reports/semgrep.sarif" && [ "$status" -eq 0 ]; then
+    status=1
+  fi
   return "$status"
 }
 
@@ -90,12 +92,22 @@ semgrep_scan() {
 # not read that mark and would show each one as an open alert, so the report
 # for code scanning leaves them out. The whole report stays beside it, as
 # semgrep-with-suppressed.sarif, for reviewing the suppressions.
+#
+# A result is left out only when one of its suppressions is in the source and
+# accepted (SARIF's `status` absent or "accepted"); a run without results is
+# left as it is. The report is replaced only once the filtered copy is whole.
+# This runs where `set -e` may be off (`semgrep_scan || status=1`), so every
+# step is checked by hand.
 drop_suppressed() {
   local sarif="$1"
   [ -f "$sarif" ] || return 0
   local full="${sarif%.sarif}-with-suppressed.sarif"
+  local filtered="$sarif.tmp"
   # The container may own the report; a copy is ours to replace it with.
-  cp "$sarif" "$full"
+  if ! cp "$sarif" "$full"; then
+    echo "   could not copy $sarif; it keeps its suppressed findings" >&2
+    return 1
+  fi
   # The first Python that runs (the Windows Store's python3 stand-in does not).
   local python=""
   for candidate in python3 python; do
@@ -108,17 +120,33 @@ drop_suppressed() {
     echo "   no Python found: $sarif keeps its suppressed findings" >&2
     return 0
   fi
-  "$python" -I -c '
+  if ! "$python" -I -c '
 import json, sys
+
+def accepted_in_source(result):
+    return any(
+        s.get("kind") == "inSource" and s.get("status", "accepted") == "accepted"
+        for s in result.get("suppressions") or []
+    )
+
 with open(sys.argv[1], encoding="utf-8") as f:
     report = json.load(f)
 for run in report.get("runs", []):
-    run["results"] = [r for r in run.get("results", []) if not r.get("suppressions")]
+    if "results" in run:
+        run["results"] = [r for r in run["results"] if not accepted_in_source(r)]
 with open(sys.argv[2], "w", encoding="utf-8") as f:
     json.dump(report, f)
-' "$(host_path "$full")" "$(host_path "$sarif.tmp")"
-  mv -f "$sarif.tmp" "$sarif"
-  echo "   $sarif: findings silenced in the source left out; all of them in $full"
+' "$(host_path "$full")" "$(host_path "$filtered")"; then
+    rm -f "$filtered"
+    echo "   could not filter $sarif; it keeps its suppressed findings" >&2
+    return 1
+  fi
+  if ! mv -f "$filtered" "$sarif"; then
+    rm -f "$filtered"
+    echo "   could not replace $sarif; it keeps its suppressed findings" >&2
+    return 1
+  fi
+  echo "   $sarif: findings suppressed in the source left out; all of them in $full"
 }
 
 # Gitleaks reads history through git, which cannot follow a linked checkout's

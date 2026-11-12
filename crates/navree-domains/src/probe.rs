@@ -201,8 +201,10 @@ pub(crate) fn is_public(ip: IpAddr) -> bool {
     }
 }
 
-/// Accepts any certificate (it is only read) but checks the handshake's
-/// signatures, so the presented certificate is the server's own.
+/// Accepts any certificate chain (it is only read, so that an expired or
+/// self-signed certificate is reported rather than refused) but checks the
+/// handshake's signatures, so the peer holds the key of the certificate it
+/// presents. Nothing checks that the certificate belongs to the host.
 #[derive(Debug)]
 struct ReadOnly(Arc<CryptoProvider>);
 
