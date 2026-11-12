@@ -5987,6 +5987,8 @@ dependencies = [
  "navree-kernel",
  "navree-openapi",
  "navree-orm",
+ "navree-session",
+ "navree-social",
  "navree-testing",
  "ring",
  "serde",

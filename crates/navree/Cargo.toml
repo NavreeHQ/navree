@@ -162,7 +162,8 @@ time = ["dep:navree-time", "http", "db", "navree-validation?/time", "navree-ui?/
 ## L4
 ## With `auth` on too, browsers sign in through `AuthModule` on the session
 ## (`navree::auth::SessionStrategy`: two-factor, throttles, sign-in policies
-## and the audit trail kept); with `workspace`, the `session` workspace
+## and the audit trail kept); with `social`, native apps sign in with Apple
+## and Google on it too; with `workspace`, the `session` workspace
 ## resolver and its switch route.
 session = [
     "dep:navree-session",
@@ -170,6 +171,7 @@ session = [
     "crypto",
     "db",
     "navree-auth?/session",
+    "navree-social?/session",
     "navree-workspace?/session",
 ]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`

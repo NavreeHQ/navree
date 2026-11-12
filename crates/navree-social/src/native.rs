@@ -435,6 +435,71 @@ impl Social {
     }
 }
 
+#[cfg(feature = "session")]
+impl Social {
+    /// Signs `social_user` in on navree-session's session (an app or a
+    /// browser that keeps the session cookie, not tokens), with the same
+    /// steps as [`sign_in`](Social::sign_in): `allowed_email_domains`, the
+    /// sign-in policies, linking or creating the user, then
+    /// `AuthService::sign_in_to_session` (a new session id and CSRF token),
+    /// or, for a user with two-factor authentication
+    /// (`two_factor = "require"`), the challenge waiting in the session for
+    /// `POST /auth/session/2fa/verify`. `remember` keeps the session for
+    /// `auth.session.remember_days`. Audited as `auth.login` (or
+    /// `auth.two_factor_challenge`) with `metadata.provider` and
+    /// `metadata.via = "session"`. Feature `session`.
+    pub async fn sign_in_session(
+        &self,
+        session: &navree_session::Session,
+        social_user: &SocialUser,
+        remember: bool,
+        meta: &navree_auth::ClientMeta,
+    ) -> Result<navree_auth::SessionSignIn, SocialError> {
+        use navree_auth::{SessionSignIn, SignInAttempt, SignInMethod, two_factor_enabled};
+
+        use crate::options::TwoFactorPolicy;
+        use crate::service::{check_email_domains, entry_for};
+
+        let rt = self.rt()?;
+        let entry = rt.provider(&social_user.provider)?;
+        check_email_domains(rt, entry, social_user)?;
+        let method = SignInMethod::social(entry.key.clone());
+        if let Some(email) = &social_user.email {
+            rt.auth
+                .check_sign_in(&SignInAttempt::new(email, method.clone()), meta)
+                .await?;
+        }
+        let user = self
+            .write(rt, meta.request_id.clone(), |uow| async move {
+                self.resolve_user(rt, &uow, entry, social_user).await
+            })
+            .await?;
+        let metadata = json!({ "provider": entry.key, "via": "session", "remember": remember });
+        if two_factor_enabled(&user) && rt.options.two_factor == TwoFactorPolicy::Require {
+            rt.auth
+                .await_two_factor_session(session, &user, method, remember, meta)
+                .await?;
+            rt.audit(
+                entry_for(AuditKind::Auth, "auth.two_factor_challenge", meta)
+                    .actor(user.id)
+                    .metadata(metadata),
+            )
+            .await;
+            return Ok(SessionSignIn::TwoFactorRequired);
+        }
+        rt.auth
+            .sign_in_to_session(session, &user, method, remember, meta)
+            .await?;
+        rt.audit(
+            entry_for(AuditKind::Auth, "auth.login", meta)
+                .actor(user.id)
+                .metadata(metadata),
+        )
+        .await;
+        Ok(SessionSignIn::SignedIn(user))
+    }
+}
+
 /// The audiences a native identity token of `entry` may carry: the bundle
 /// ids of `auth.apps.apple` for Apple, the Google client id for Google.
 fn native_audiences(rt: &Runtime, entry: &ProviderEntry) -> Result<Vec<String>, SocialError> {

@@ -368,6 +368,32 @@ impl AuthService {
         Ok(())
     }
 
+    /// Leaves a sign-in of another flow (a social provider, single sign-on)
+    /// waiting for its second factor in the browser's session: the
+    /// [`SignInPolicy`](crate::SignInPolicy)s are asked about `method`, the
+    /// session gets a new id and keeps the challenge (never the browser),
+    /// and [`verify_two_factor_session`](AuthService::verify_two_factor_session)
+    /// (`POST /auth/session/2fa/verify`) finishes the sign-in. The session
+    /// version of handing out
+    /// [`two_factor_challenge`](AuthService::two_factor_challenge).
+    pub async fn await_two_factor_session(
+        &self,
+        session: &Session,
+        user: &User,
+        method: SignInMethod,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<(), AuthError> {
+        self.check_sign_in(&SignInAttempt::of(user, method.clone()), meta)
+            .await?;
+        let token = self.two_factor_challenge(user, &method)?;
+        session.regenerate();
+        session
+            .insert(SESSION_CHALLENGE_KEY, &Pending { token, remember })
+            .map_err(session_error)?;
+        Ok(())
+    }
+
     /// Binds the browser's session to `user`, whose sign-in was already
     /// checked: starts a server-side session (listed by
     /// [`sessions`](AuthService::sessions), ended by every revocation),

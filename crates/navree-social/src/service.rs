@@ -552,7 +552,7 @@ impl Social {
     }
 
     /// The user `social_user` signs in as, linking or creating one.
-    async fn resolve_user(
+    pub(crate) async fn resolve_user(
         &self,
         rt: &Runtime,
         uow: &Uow,
@@ -848,7 +848,7 @@ pub(crate) fn has_password(hash: &str) -> bool {
 
 /// The `allowed_email_domains` checks (the section's, then the
 /// provider's): a verified address of a listed domain.
-fn check_email_domains(
+pub(crate) fn check_email_domains(
     rt: &Runtime,
     entry: &ProviderEntry,
     social_user: &SocialUser,
@@ -885,7 +885,7 @@ fn linked_account(rt: &Runtime, account: social_account::Model) -> LinkedAccount
 }
 
 /// An audit entry with the client's address, user agent and request id.
-fn entry_for(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
+pub(crate) fn entry_for(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
     let mut entry = AuditEntry::new(kind, action);
     if let Some(ip) = &meta.ip {
         entry = entry.ip(ip.clone());

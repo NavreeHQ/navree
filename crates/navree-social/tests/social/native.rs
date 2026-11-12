@@ -840,3 +840,45 @@ async fn the_fake_answers_native_sign_ins() {
     assert!(social.native_user("google", &post).await.is_err());
     assert!(fake.revocations().is_empty());
 }
+
+#[tokio::test]
+async fn an_app_on_the_session_cookie_is_signed_in_on_its_session() {
+    let native = Native::start(|b| {
+        b.module(navree_session::SessionModule::for_root(
+            navree_session::SessionOptions::default(),
+        ))
+    })
+    .await;
+    let phone = native.app.client();
+    phone.csrf_cookie().await;
+    native.mount_apple_code(APPLE_SUB).await;
+    let body = phone
+        .post("/api/auth/social/apple/native/nonce")
+        .xsrf()
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let nonce = body["nonce"].as_str().unwrap();
+    let body = phone
+        .post("/api/auth/social/apple/native/session")
+        .xsrf()
+        .json(&json!({
+            "id_token": native.idp.es256(&native.apple_claims(nonce)),
+            "state": body["state"],
+            "authorization_code": "c.apple-code",
+            "remember": true,
+        }))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(body["email"], RELAY);
+    assert!(body.get("access_token").is_none(), "no token on a session");
+    phone
+        .get("/api/auth/me")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("email", json!(RELAY));
+}

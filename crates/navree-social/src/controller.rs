@@ -418,6 +418,70 @@ impl SocialController {
                 }),
         );
 
+        #[cfg(feature = "session")]
+        {
+            let social = self.social.clone();
+            let native_session =
+                move |Path(provider): Path<String>,
+                      session: navree_session::Session,
+                      meta: ClientMeta,
+                      Json(post): Json<NativeSignIn>| {
+                    let social = social.clone();
+                    async move {
+                        check_native_post(&post)?;
+                        let throttle = social
+                            .count_callback(meta.ip.as_deref())
+                            .await
+                            .map_err(social_error)?;
+                        let profile = social
+                            .native_user(&provider, &post)
+                            .await
+                            .map_err(social_error)?;
+                        let outcome = social
+                            .sign_in_session(&session, &profile, post.remember, &meta)
+                            .await
+                            .map_err(social_error)?;
+                        social.clear_callback_throttle(throttle).await;
+                        let body = match outcome {
+                            navree_auth::SessionSignIn::SignedIn(user) => social
+                                .auth_service()
+                                .map_err(social_error)?
+                                .present(&user)
+                                .await
+                                .map_err(navree_auth::AuthError::into_app_error)?,
+                            navree_auth::SessionSignIn::TwoFactorRequired => {
+                                json!({ "two_factor_required": true })
+                            }
+                        };
+                        Ok::<_, AppError>(Json(body))
+                    }
+                };
+            routes.push(
+                RouteDef::on(
+                    Method::POST,
+                    path("/{provider}/native/session"),
+                    native_session,
+                )
+                .public()
+                .name("social.native.session")
+                .api(ApiMeta {
+                    description: Some(
+                        "Like `POST .../native`, but the app is signed in on its session \
+                         cookie (no token is issued): the answer is the user, or \
+                         `{\"two_factor_required\": true}`; finish with \
+                         `POST /auth/session/2fa/verify`. The request carries the CSRF token \
+                         of the session as `X-XSRF-TOKEN`."
+                            .to_owned(),
+                    ),
+                    request: Some(schema_fn::<NativeSignIn>),
+                    ..api(
+                        "Sign an app in on its session with an identity token",
+                        &[400, 403, 404, 409, 429, 502],
+                    )
+                }),
+            );
+        }
+
         let social = self.social.clone();
         let notification =
             move |Path(provider): Path<String>, Json(notification): Json<ProviderNotification>| {

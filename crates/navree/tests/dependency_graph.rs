@@ -294,11 +294,12 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6: ecosystem libraries.
     // Social sign-in: links provider accounts to navree-auth users and
-    // issues their tokens. Linked accounts are navree-orm models.
+    // issues their tokens. Linked accounts are navree-orm models. Native
+    // apps may sign in on navree-session's session (feature `session`).
     rule("navree-social", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
-        "navree-auth", "navree-orm",
+        "navree-auth", "navree-orm", "navree-session",
     ]),
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the

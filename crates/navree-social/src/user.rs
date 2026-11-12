@@ -312,6 +312,10 @@ pub struct NativeSignIn {
     #[serde(default)]
     #[schema(value_type = Option<Object>)]
     pub user: Option<Value>,
+    /// On the session cookie (`POST .../native/session`): keep the app
+    /// signed in for `auth.session.remember_days`.
+    #[serde(default)]
+    pub remember: bool,
 }
 
 impl NativeSignIn {
@@ -322,6 +326,7 @@ impl NativeSignIn {
             state: state.into(),
             authorization_code: None,
             user: None,
+            remember: false,
         }
     }
 
@@ -348,6 +353,7 @@ impl fmt::Debug for NativeSignIn {
                 &self.authorization_code.as_ref().map(|_| "[redacted]"),
             )
             .field("user", &self.user.as_ref().map(|_| "[present]"))
+            .field("remember", &self.remember)
             .finish()
     }
 }
