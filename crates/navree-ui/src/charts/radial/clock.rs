@@ -32,6 +32,10 @@ const SHORT: f64 = 54.0;
 const LONG: f64 = RING - MARK - 4.0;
 /// The space between two wedges, in degrees.
 const SPACE: f64 = 1.2;
+/// The band of categories round the hub, when asked for: how thick, and the space
+/// between it and the wedges, which then start further out.
+const BAND: f64 = 7.0;
+const BAND_GAP: f64 = 2.0;
 /// The most moments marked; the table lists every one.
 pub const MAX_MOMENTS: usize = 8;
 
@@ -156,6 +160,7 @@ pub struct DayClock {
     size: Sizes,
     motion: Motion,
     words: RadialLabels,
+    band: bool,
 }
 
 common_methods!(DayClock);
@@ -183,7 +188,17 @@ impl DayClock {
             size: Sizes::new(440),
             motion: Motion::none(),
             words: RadialLabels::english(),
+            band: false,
         }
+    }
+
+    /// Draws a thin band round the hub, under the wedges, in each hour's
+    /// [category](Self::categories): every hour shows its category, an hour with
+    /// nothing in it too (asleep, resting), where its wedge is only a faint stub. An
+    /// hour with no category leaves a gap in the band.
+    pub fn band(mut self) -> Self {
+        self.band = true;
+        self
     }
 
     /// The value of each hour from midnight, 24 of them: what sets a wedge's length.
@@ -403,14 +418,42 @@ impl DayClock {
                     .into()
             })
             .collect();
+        // With a band, the wedges start outside it and their stubs are as long as before.
+        let (inner, short) = if self.band {
+            (INNER + BAND + BAND_GAP, SHORT + BAND + BAND_GAP)
+        } else {
+            (INNER, SHORT)
+        };
+        let band: Vec<Node> = if self.band {
+            (0..24)
+                .filter_map(|h| {
+                    let (_, (_, ink)) = category(h)?;
+                    let d = wedge(
+                        C,
+                        C,
+                        INNER,
+                        INNER + BAND,
+                        h as f64 * 15.0 + SPACE / 2.0,
+                        15.0 - SPACE,
+                    );
+                    let mark = ink
+                        .on(el("path").slot("clock-band"))
+                        .attr("data-i", h as i64)
+                        .attr("d", d);
+                    Some(self.motion.apply(mark, Effect::Fade, 0).into())
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let wedges: Vec<Node> = (0..24)
             .map(|h| {
                 let v = value(h);
-                let outer = SHORT + (LONG - SHORT) * v.map_or(0.0, share);
+                let outer = short + (LONG - short) * v.map_or(0.0, share);
                 let d = wedge(
                     C,
                     C,
-                    INNER,
+                    inner,
                     outer,
                     h as f64 * 15.0 + SPACE / 2.0,
                     15.0 - SPACE,
@@ -472,7 +515,7 @@ impl DayClock {
             .attr("r", n(HUB, 2))
             .attr("fill", wash);
         let now = self.now.map(|h| {
-            let outer = SHORT + (LONG - SHORT) * value(h).map_or(0.0, share);
+            let outer = short + (LONG - short) * value(h).map_or(0.0, share);
             el("path")
                 .slot("clock-now")
                 .attr(
@@ -518,6 +561,7 @@ impl DayClock {
             dial,
             hub,
             el("g").slot("clock-anchors").child(anchors),
+            (!band.is_empty()).then(|| el("g").slot("clock-bands").child(band)),
             el("g").slot("clock-wedges").child(wedges),
             now,
             el("g").slot("clock-moments").child(marked),
@@ -682,7 +726,7 @@ impl DayClock {
         }
         let note = (self.moments.len() > MAX_MOMENTS).then(|| {
             fill(
-                &labels.stages_cut,
+                &self.words.moments_cut,
                 &[
                     ("shown", &MAX_MOMENTS.to_string()),
                     ("total", &self.moments.len().to_string()),
@@ -830,7 +874,7 @@ mod tests {
         assert!(out.contains(r#"data-slot="radial-icon""#), "{out}");
         assert!(out.contains(">M8<"), "the ninth is in the table: {out}");
         assert!(out.contains("9 moments: M0"), "{out}");
-        assert!(out.contains("The first 8 of 9"), "{out}");
+        assert!(out.contains("The first 8 of 9 moments are marked"), "{out}");
     }
 
     #[test]

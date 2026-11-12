@@ -1,4 +1,4 @@
-//! Radial charts: a value on a ring ([`Ring`]), two to four values on rings inside each
+//! Radial charts: a value on a ring ([`Ring`]), two to six values on rings inside each
 //! other ([`Rings`]), a value on an open arc ([`Gauge`]) and a day as 24 wedges round a
 //! clock face ([`DayClock`]).
 //!
@@ -52,9 +52,9 @@ mod clock;
 mod gauge;
 mod ring;
 
-pub use clock::{DayClock, Moment};
+pub use clock::{DayClock, MAX_MOMENTS, Moment};
 pub use gauge::Gauge;
-pub use ring::{Ring, RingValue, Rings};
+pub use ring::{MAX_RINGS, Ring, RingValue, Rings};
 
 /// A screen width from which a radial chart takes another size: [`Ring::size_on`].
 /// The widths are the toolkit's: 640, 768 and 1024 pixels.
@@ -119,6 +119,15 @@ pub struct RadialLabels {
     pub summary_moments: Cow<'static, str>,
     /// The name of the hour that is now: `{time}`.
     pub now: Cow<'static, str>,
+    /// Under rings that draw fewer than they were given: `{shown}`, `{total}`.
+    pub rings_cut: Cow<'static, str>,
+    /// Under a day clock that marks fewer moments than it was given: `{shown}`,
+    /// `{total}`.
+    pub moments_cut: Cow<'static, str>,
+    /// A gauge's zones in its table's note: `{zones}`, each written by `zone`.
+    pub zones: Cow<'static, str>,
+    /// One zone of a gauge: `{name}`, `{from}`, `{to}`.
+    pub zone: Cow<'static, str>,
 }
 
 impl Default for RadialLabels {
@@ -140,6 +149,14 @@ impl RadialLabels {
             summary_clock: Cow::Borrowed("{total} in the day. Busiest at {peak_x}: {peak}."),
             summary_moments: Cow::Borrowed("{count} moments: {names}."),
             now: Cow::Borrowed("{time}, now"),
+            rings_cut: Cow::Borrowed(
+                "The first {shown} of {total} rings are drawn; the table lists every value.",
+            ),
+            moments_cut: Cow::Borrowed(
+                "The first {shown} of {total} moments are marked; the table lists every one.",
+            ),
+            zones: Cow::Borrowed("Zones: {zones}."),
+            zone: Cow::Borrowed("{name} from {from} to {to}"),
         }
     }
 }
@@ -291,12 +308,12 @@ impl Paint {
         }
     }
 
-    /// The ink of a value at `share` percent of the way: its band's, the one asked for,
+    /// The ink of `value`, in the scale's own units: its band's, the one asked for,
     /// the gradient's first colour, or chart colour 1. The glow and the words in the
     /// middle wear it.
-    pub fn ink_at(&self, share: f64) -> Ink {
+    pub fn ink_at(&self, value: f64) -> Ink {
         match &self.scale {
-            Some(scale) => scale.ink_of(share),
+            Some(scale) => scale.ink_of(value),
             None => self
                 .ink
                 .or_else(|| self.fill.as_ref().and_then(Gradient::lead))
@@ -304,11 +321,11 @@ impl Paint {
         }
     }
 
-    /// The label of the band a value at `share` percent is in.
-    pub fn band_at(&self, share: f64) -> Option<String> {
+    /// The label of the band `value` is in, in the scale's own units.
+    pub fn band_at(&self, value: f64) -> Option<String> {
         self.scale
             .as_ref()
-            .and_then(|s| s.band_of(share).1.map(str::to_owned))
+            .and_then(|s| s.band_of(value).1.map(str::to_owned))
     }
 }
 
@@ -317,7 +334,10 @@ pub(crate) struct Band<'a> {
     pub cx: f64,
     pub cy: f64,
     pub r: f64,
+    /// The track's thickness.
     pub thickness: f64,
+    /// The arc's and the lap's: the track's, or less over zones.
+    pub arc_width: f64,
     /// Where the scale starts, in degrees clockwise from twelve.
     pub from: f64,
     /// How far the whole scale sweeps: 360 for a ring.
@@ -365,6 +385,7 @@ impl Band<'_> {
             0.0
         };
         let first = share.min(1.0);
+        let width = n(self.arc_width, 2);
         let url =
             self.paint.fill.as_ref().map(|g| {
                 defs.gradient(&g.clone().across_plot(), self.ink.color(), Some(self.area))
@@ -521,7 +542,10 @@ pub(crate) fn finish(
                 .into(),
         };
     }
-    let plain = common.hide_title && common.table != TableMode::Switch;
+    // A legend (a gauge's zones) is styled by the charts sheet too.
+    let plain = common.hide_title
+        && common.table != TableMode::Switch
+        && drawn.as_ref().is_none_or(|d| d.legend.is_none());
     // The frame is always a figure. It links the radial sheet even with no drawing in
     // it, so a loading ring is a round placeholder.
     frame(common, drawn, kind, height)

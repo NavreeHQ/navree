@@ -1,11 +1,15 @@
-//! [`Ring`]: one value on a ring; [`Rings`]: two to four values on rings inside each
+//! [`Ring`]: one value on a ring; [`Rings`]: two to six values on rings inside each
 //! other. The single value's drawing is shared with [`Gauge`](super::Gauge).
 
 use super::super::format::{NumberFormat, share_text};
+use super::super::marks::Zone;
 use super::super::motion::{Effect, Motion};
 use super::super::paint::{Defs, Gradient, Ink};
 use super::super::value::{IntoValue, finite};
-use super::super::{Common, Drawn, TableData, TableMode, common_methods, fill, n, value_cell};
+use super::super::{
+    Common, Drawn, Key, LegendItem, TableData, TableMode, common_methods, fill, legend, n,
+    value_cell,
+};
 use super::{
     Band, Middle, Paint, RadialLabels, RingTrack, Screen, Sizes, figure, finish, fit, glyph, plot,
     summary_of, thickness_for, with_unit, wrap,
@@ -20,7 +24,7 @@ const LARGEST: u32 = 320;
 /// Below this size the label and sublabel go under the ring, not inside it.
 const ROOMY: u32 = 96;
 /// The most rings drawn inside each other; the table lists every value.
-pub(crate) const MAX_RINGS: usize = 4;
+pub const MAX_RINGS: usize = 6;
 
 fn size_of(px: u32) -> u32 {
     px.clamp(SMALLEST, LARGEST)
@@ -47,6 +51,8 @@ pub(crate) struct One {
     pub words: RadialLabels,
     /// How far the scale sweeps, in degrees: 360 for a ring.
     pub sweep: f64,
+    /// Zones of the scale drawn on the track, in the value's units: a gauge's.
+    pub zones: Vec<Zone>,
 }
 
 impl One {
@@ -68,7 +74,22 @@ impl One {
             inline: false,
             words: RadialLabels::english(),
             sweep,
+            zones: Vec::new(),
         }
+    }
+
+    /// The zone `value` is in, with its ink: the last one that holds it.
+    fn zone_of(&self, value: f64) -> Option<(usize, &Zone)> {
+        self.zones
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, z)| value >= z.from && value <= z.to)
+    }
+
+    /// A zone's ink: its own, or the chart colours in turn.
+    fn zone_ink(at: usize, zone: &Zone) -> Ink {
+        zone.ink.unwrap_or_else(|| Ink::nth(at))
     }
 
     /// The drawing's width and height at `size` pixels wide, and where its centre is.
@@ -101,9 +122,18 @@ impl One {
         let unit = self.unit.as_deref();
         let text = self.format.format(value, numbers);
         let share = (value - self.min) / span;
-        let share_pct = share * 100.0;
-        let ink = self.paint.ink_at(share_pct);
-        let band = self.paint.band_at(share_pct);
+        // With zones and no colour of its own, the arc wears the zone it is in.
+        let zone = self.zone_of(value);
+        let plain =
+            self.paint.ink.is_none() && self.paint.fill.is_none() && self.paint.scale.is_none();
+        let ink = match zone {
+            Some((at, z)) if plain => Self::zone_ink(at, z),
+            _ => self.paint.ink_at(value),
+        };
+        let band = self
+            .paint
+            .band_at(value)
+            .or_else(|| zone.and_then(|(_, z)| z.label.clone()));
 
         // Geometry, in the drawing's own units: one unit is a pixel at the base size.
         let size = f64::from(self.sizes.base);
@@ -140,13 +170,38 @@ impl One {
             };
             self.motion.apply(halo, Effect::Fade, 0)
         });
+        let whole = if open { self.sweep } else { 360.0 };
+        // Zones lie on the track, each its stretch of the scale in its colour; the arc
+        // runs down their middle, half as thick, so every zone shows along its length.
+        let zones: Vec<Node> = self
+            .zones
+            .iter()
+            .enumerate()
+            .filter_map(|(at, z)| {
+                let lo = ((z.from.max(self.min) - self.min) / span).clamp(0.0, 1.0);
+                let hi = ((z.to.min(self.max) - self.min) / span).clamp(0.0, 1.0);
+                let d = super::arc(c, c, r, from + lo * whole, (hi - lo) * whole)?;
+                Some(
+                    Self::zone_ink(at, z)
+                        .on(el("path").slot("radial-zone"))
+                        .attr("d", d)
+                        .attr("stroke-width", n(thickness, 2))
+                        .into(),
+                )
+            })
+            .collect();
         let marks = Band {
             cx: c,
             cy: c,
             r,
             thickness,
+            arc_width: if zones.is_empty() {
+                thickness
+            } else {
+                (thickness * 0.5).max(1.0)
+            },
             from,
-            sweep: if open { self.sweep } else { 360.0 },
+            sweep: whole,
             share,
             laps: !open,
             ink,
@@ -156,7 +211,19 @@ impl One {
             area,
         }
         .nodes(&mut defs);
-        let drawing = plot(size, height).children((defs.node(), halo, marks));
+        let (track, arcs) = match marks.split_first() {
+            Some((first, rest)) if self.paint.track != RingTrack::None => {
+                (Some(first.clone()), rest.to_vec())
+            }
+            _ => (None, marks),
+        };
+        let drawing = plot(size, height).children((
+            defs.node(),
+            halo,
+            track,
+            (!zones.is_empty()).then(|| el("g").slot("radial-zones").child(zones)),
+            arcs,
+        ));
 
         // The middle, and the words under a small ring.
         let roomy = self.sizes.base >= ROOMY;
@@ -239,12 +306,52 @@ impl One {
             Node::from(max_text),
             Node::from(share_words),
         ];
-        if band.is_some() {
+        if band.is_some() || !self.zones.is_empty() {
             head.push((self.words.status.to_string(), None));
             cells.push(value_cell(band.clone(), labels));
         }
+        // The zones: named in a legend, with their ends in the table's note.
+        let (legend_node, zones_note) = if self.zones.is_empty() {
+            (None, None)
+        } else {
+            let items: Vec<LegendItem> = self
+                .zones
+                .iter()
+                .enumerate()
+                .map(|(at, z)| LegendItem {
+                    name: z.label.clone().unwrap_or_else(|| {
+                        format!(
+                            "{}\u{2013}{}",
+                            self.format.format(z.from, numbers),
+                            self.format.format(z.to, numbers)
+                        )
+                    }),
+                    color: Self::zone_ink(at, z).color(),
+                    key: Key::Block,
+                })
+                .collect();
+            let each: Vec<String> = self
+                .zones
+                .iter()
+                .zip(&items)
+                .map(|(z, item)| {
+                    fill(
+                        &self.words.zone,
+                        &[
+                            ("name", item.name.as_str()),
+                            ("from", with(&self.format.format(z.from, numbers)).as_str()),
+                            ("to", with(&self.format.format(z.to, numbers)).as_str()),
+                        ],
+                    )
+                })
+                .collect();
+            (
+                Some(legend(&common.id(), &items, false)),
+                Some(fill(&self.words.zones, &[("zones", &each.join("; "))])),
+            )
+        };
         Some(Drawn {
-            legend: None,
+            legend: legend_node,
             body,
             body_attrs: Vec::new(),
             summary,
@@ -252,7 +359,7 @@ impl One {
                 head,
                 rows: vec![(name.to_owned(), cells)],
                 links: Vec::new(),
-                note: None,
+                note: zones_note,
             },
             height: (f64::from(self.sizes.base) * ratio).round() as u32,
             note: None,
@@ -310,9 +417,10 @@ macro_rules! radial_methods {
                 self
             }
 
-            /// Colours the arc by the band its share of the scale (0 to 100) falls in.
-            /// The band's label is said in the summary and the table, so the colour is
-            /// never alone.
+            /// Colours the arc by the band its value falls in. The thresholds are values
+            /// in the scale's own units, as a chart series reads them: on a gauge from 0
+            /// to 2, `from(1.3, ..)` starts a band at 1.3. The band's label is said in the
+            /// summary and the table, so the colour is never alone.
             pub fn colors(mut self, scale: $crate::charts::ColorScale) -> Self {
                 self.one.paint.scale = Some(scale);
                 self
@@ -586,10 +694,15 @@ enum RingsMiddle {
     Icon(Icon),
 }
 
-/// Two to four values on rings inside each other, the first outside: the day's
-/// movement, exercise and standing; the two branches of the nervous system. Each ring
-/// starts at twelve o'clock, has its own colour or gradient and track, and draws a
-/// second lap past its goal. They come in one after another.
+/// Two to six values on rings inside each other, the first outside: the day's
+/// movement, exercise and standing; the two branches of the nervous system; five
+/// scores of a day. Each ring starts at twelve o'clock, has its own colour or gradient
+/// and track, and draws a second lap past its goal. They come in one after another.
+///
+/// Up to four rings keep the thickness of one; five and six are thinner, so the middle
+/// keeps its room. Past six ([`MAX_RINGS`]), or past what fits at a thickness you set,
+/// the rings drawn stop and a note under the drawing says how many of how many are
+/// shown; the legend and the table still list every value.
 ///
 /// The middle holds each ring's value over its goal, an icon, markup of your own, or
 /// nothing; a legend beside the rings names each with its value and share. Small, it
@@ -658,8 +771,9 @@ impl Rings {
         }
     }
 
-    /// Adds a ring inside the ones before it. Four are drawn at most; the table lists
-    /// every value.
+    /// Adds a ring inside the ones before it. Six are drawn at most ([`MAX_RINGS`]),
+    /// fewer when a thickness you set leaves no room; a note says so, and the legend and
+    /// the table list every value.
     pub fn ring(mut self, ring: RingValue) -> Self {
         self.rings.push(ring);
         self
@@ -683,7 +797,8 @@ impl Rings {
         self
     }
 
-    /// Each ring's thickness in pixels at the base size: in step with the size by default, 12 at 160.
+    /// Each ring's thickness in pixels at the base size: in step with the size by
+    /// default, 12 at 160 for up to four rings, thinner for five or six.
     pub fn thickness(mut self, px: f64) -> Self {
         if px.is_finite() && px > 0.0 {
             self.thickness = Some(px);
@@ -797,9 +912,17 @@ impl Rings {
             return None;
         }
         let size = f64::from(self.sizes.base);
+        let wanted = ready.len().min(MAX_RINGS);
+        // Up to four rings are 7.5% of the size thick; five and six share the same room
+        // as four, so the middle keeps its size.
+        let share = if wanted > 4 {
+            0.3 / (1.3 * wanted as f64)
+        } else {
+            0.075
+        };
         let thickness = self
             .thickness
-            .unwrap_or_else(|| (size * 0.075).max(2.0))
+            .unwrap_or_else(|| (size * share).max(2.0))
             .clamp(1.0, size / 8.0);
         let gap = self
             .gap
@@ -808,13 +931,13 @@ impl Rings {
         let c = size / 2.0;
         let area = [0.0, 0.0, size, size];
         let mut defs = Defs::new(&self.common.id());
-        let drawn_rings = ready.len().min(MAX_RINGS);
+        // The rings that fit: at most six, and none whose radius leaves no hole.
+        let drawn_rings = (0..wanted)
+            .take_while(|at| c - thickness / 2.0 - *at as f64 * (thickness + gap) > thickness / 2.0)
+            .count();
         let mut marks: Vec<Node> = Vec::new();
-        for (at, r) in ready.iter().take(MAX_RINGS).enumerate() {
+        for (at, r) in ready.iter().take(drawn_rings).enumerate() {
             let radius = c - thickness / 2.0 - at as f64 * (thickness + gap);
-            if radius <= thickness / 2.0 {
-                break;
-            }
             let paint = Paint {
                 ink: Some(r.color),
                 fill: r.ring.fill.clone(),
@@ -827,6 +950,7 @@ impl Rings {
                 cy: c,
                 r: radius,
                 thickness,
+                arc_width: thickness,
                 from: 0.0,
                 sweep: 360.0,
                 share: r.share.unwrap_or(0.0),
@@ -866,7 +990,7 @@ impl Rings {
                     .child(
                         ready
                             .iter()
-                            .take(MAX_RINGS)
+                            .take(drawn_rings)
                             .enumerate()
                             .map(|(at, r)| {
                                 let unit = r.ring.unit.as_deref();
@@ -964,11 +1088,11 @@ impl Rings {
                 )
             })
             .collect();
-        let note = (ready.len() > MAX_RINGS).then(|| {
+        let note = (drawn_rings < ready.len()).then(|| {
             fill(
-                &labels.stages_cut,
+                &self.words.rings_cut,
                 &[
-                    ("shown", &MAX_RINGS.to_string()),
+                    ("shown", &drawn_rings.to_string()),
                     ("total", &ready.len().to_string()),
                 ],
             )
@@ -1282,16 +1406,17 @@ mod tests {
     }
 
     #[test]
-    fn rings_with_no_value_are_empty_and_a_fifth_is_listed_not_drawn() {
+    fn rings_with_no_value_are_empty_and_a_seventh_is_listed_not_drawn() {
         let out = html(Rings::new("Activity"));
         assert!(out.contains(r#"data-state="empty""#), "{out}");
-        let mut five = Rings::new("Five");
-        for k in 0..5 {
-            five = five.ring(RingValue::new(format!("R{k}"), 50));
+        let mut seven = Rings::new("Seven");
+        for k in 0..7 {
+            seven = seven.ring(RingValue::new(format!("R{k}"), 50));
         }
-        let out = html(five);
-        assert_eq!(out.matches(r#"data-slot="radial-arc""#).count(), 4, "{out}");
-        assert!(out.contains(">R4<"), "the table lists the fifth: {out}");
+        let out = html(seven);
+        assert_eq!(out.matches(r#"data-slot="radial-arc""#).count(), 6, "{out}");
+        assert!(out.contains(">R6<"), "the table lists the seventh: {out}");
+        assert!(out.contains("The first 6 of 7 rings are drawn"), "{out}");
     }
 
     #[test]
