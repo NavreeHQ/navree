@@ -829,3 +829,88 @@ mod multipart_forms {
         assert_eq!(response.text(), sent);
     }
 }
+
+/// Says `/api/probe/write` checks the origin of its posts in place of the token.
+struct OriginChecked;
+
+impl navree_kernel::Module for OriginChecked {
+    fn register(&self, m: &mut navree_kernel::ModuleBuilder) {
+        m.contribute(navree_http::csrf::SameOriginOnly("/api/probe/write"));
+    }
+}
+
+// A route that changes only a preference the browser keeps (a theme toggle on a page cached
+// for everyone, which carries no token) is posted to without the token by a reader with a
+// session, and still refuses a post from any other site.
+#[tokio::test]
+async fn a_same_origin_only_path_takes_a_post_from_this_site_without_the_token() {
+    let app = support::base()
+        .module(navree_session::SessionModule::for_root(
+            navree_session::SessionOptions::default(),
+        ))
+        .module(OriginChecked)
+        .build()
+        .await;
+    let client = app.client();
+    client.csrf_cookie().await;
+
+    client
+        .post("/api/probe/write")
+        .header("sec-fetch-site", "same-origin")
+        .send()
+        .await
+        .assert_status(200);
+    client
+        .post("/api/probe/write")
+        .header("origin", "https://app.example")
+        .header("host", "app.example")
+        .send()
+        .await
+        .assert_status(200);
+    // A client that says nothing of where it posts from changes only its own preference.
+    client
+        .post("/api/probe/write")
+        .send()
+        .await
+        .assert_status(200);
+
+    // Another site, a sibling subdomain or a navigation typed in is refused.
+    for site in ["cross-site", "same-site", "none"] {
+        client
+            .post("/api/probe/write")
+            .header("sec-fetch-site", site)
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+    }
+    for origin in [
+        "https://evil.example",
+        "https://app.example.evil.example",
+        "null",
+    ] {
+        client
+            .post("/api/probe/write")
+            .header("origin", origin)
+            .header("host", "app.example")
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+    }
+    // Without a session the same check holds.
+    app.client()
+        .post("/api/probe/write")
+        .header("sec-fetch-site", "cross-site")
+        .header("origin", "https://evil.example")
+        .send()
+        .await
+        .assert_error(403, "Invalid CSRF token");
+
+    // Every other path still needs the token.
+    client
+        .post("/api/probe/put")
+        .header("sec-fetch-site", "same-origin")
+        .json(&json!({ "key": "k", "value": 1 }))
+        .send()
+        .await
+        .assert_error(403, "Invalid CSRF token");
+}

@@ -861,3 +861,29 @@ async fn security_events_are_audited() {
     assert_eq!(limited[0].metadata["path"], "/api/guarded");
     assert_eq!(limited[0].ip.as_deref(), Some("0.0.0.0"));
 }
+
+// One address, two answers: a guest gets the public page, a signed-in reader the app's,
+// each handler with its own extractors (the signed-in one's refuses guests, and is never
+// asked for one). The answer varies by what signs a request in.
+#[tokio::test]
+async fn one_address_answers_a_guest_and_a_signed_in_reader_apart() {
+    let app = Setup::new(vec![RouteDef::on_guest_or(
+        Method::GET,
+        "/home",
+        || async { "the public site" },
+        |CurrentPrincipal(who): CurrentPrincipal| async move { format!("desk of {}", who.user_id) },
+    )])
+    .authenticated()
+    .boot()
+    .await;
+
+    let guest = app.get("/api/home").await;
+    assert_eq!(guest.status, StatusCode::OK);
+    assert_eq!(guest.text(), "the public site");
+    assert_eq!(guest.header("vary"), Some("cookie, authorization"));
+
+    let reader = app.send(as_user("GET", "/api/home", ALICE)).await;
+    assert_eq!(reader.status, StatusCode::OK);
+    assert_eq!(reader.text(), format!("desk of {ALICE}"));
+    assert_eq!(reader.header("vary"), Some("cookie, authorization"));
+}

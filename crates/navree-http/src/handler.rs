@@ -145,6 +145,55 @@ impl Endpoint {
     pub(crate) fn into_service(self) -> BoxedService {
         self.service
     }
+
+    /// An endpoint that answers with `guest` when no one is signed in on the request
+    /// and with `signed_in` when someone is: see [`RouteDef::on_guest_or`](crate::RouteDef::on_guest_or).
+    pub fn guest_or(guest: Endpoint, signed_in: Endpoint) -> Self {
+        Self {
+            service: BoxCloneSyncService::new(GuestOr {
+                guest: guest.service,
+                signed_in: signed_in.service,
+            }),
+        }
+    }
+}
+
+/// [`Endpoint::guest_or`] as a service.
+#[derive(Clone)]
+struct GuestOr {
+    guest: BoxedService,
+    signed_in: BoxedService,
+}
+
+impl Service<Request> for GuestOr {
+    type Response = Response;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Response, Infallible>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let signed_in = request
+            .extensions()
+            .get::<navree_contracts::AuthState>()
+            .is_some_and(|state| state.0.is_some());
+        let service = if signed_in {
+            self.signed_in.clone()
+        } else {
+            self.guest.clone()
+        };
+        Box::pin(async move {
+            let mut response = service.oneshot(request).await?;
+            // The same address answers by who is asking: a cache keeps a copy per sign-in.
+            response.headers_mut().append(
+                http::header::VARY,
+                http::HeaderValue::from_static("cookie, authorization"),
+            );
+            Ok(response)
+        })
+    }
 }
 
 impl std::fmt::Debug for Endpoint {

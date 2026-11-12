@@ -16,6 +16,22 @@ pub const CSRF_HEADER: &str = "x-csrf-token";
 /// The field a plain HTML form carries the CSRF token in.
 pub const CSRF_FIELD: &str = "_csrf";
 
+/// A path whose posts the session layer checks by their origin instead of the token: a
+/// route that changes nothing on the server and nothing of the user's, only a preference
+/// the browser keeps for itself (a theme cookie), so that a page cached for everyone,
+/// which carries no token, can post to it. A module contributes one with
+/// `m.contribute(SameOriginOnly("/_navree/ui/appearance"))`; navree-ui's appearance route
+/// is one.
+///
+/// A post to it passes when the browser says it came from this origin
+/// (`Sec-Fetch-Site: same-origin`), or, from a browser that doesn't say, when its `Origin`
+/// is this host; a post from another site, a sibling subdomain included, is refused with a
+/// 403 as a token mismatch is. A client that sends neither header (an old browser, a
+/// script) passes: what it can change is its own preference. The path is matched exactly,
+/// and the route should refuse posts from other sites itself as well.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SameOriginOnly(pub &'static str);
+
 #[cfg(test)]
 mod tests {
     use super::*;
