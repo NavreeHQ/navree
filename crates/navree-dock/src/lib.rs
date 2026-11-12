@@ -73,5 +73,5 @@ pub use runtime::{RUNTIME_VARIABLE, Runtime, RuntimeChoice};
 pub use service::{
     HOST, NATS_BOX_IMAGE, POSTGRES_VERSION, Port, READER_ROLE, Readiness, Service, ServiceOptions,
     ServiceSpec, SetupStep, Shell, TIMESCALEDB_IMAGE, TIMESCALEDB_POSTGRES_VERSIONS,
-    TIMESCALEDB_VERSION,
+    TIMESCALEDB_VERSION, reader_password,
 };
