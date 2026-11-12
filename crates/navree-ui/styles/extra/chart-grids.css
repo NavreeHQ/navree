@@ -4,10 +4,10 @@
    data-tone), --surface the page, so a theme's tokens set both and light and dark have a
    ramp each. Nothing here needs a style attribute. */
 
-/* The steps. Zero is a filled cell in the track tone; a day with no data is hollow. */
-[data-slot=heat-cell][data-level="0"],[data-slot=heat-key][data-level="0"]{background:var(--ink-3)}
+/* The steps. Zero is the ramp's faintest step, a wash of the ink; a day with no data is hollow. */
 [data-slot=heat-cell][data-level=none]{background:none;outline:1px dashed var(--line-2);outline-offset:-1px}
 :is([data-slot=heat-cell],[data-slot=heat-key]){background:var(--bg)}
+[data-level="0"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 16%,var(--surface)),color-mix(in oklab,var(--c) 18%,var(--surface)))}
 [data-level="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 34%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
 [data-level="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 54%,var(--surface)),color-mix(in oklab,var(--c) 60%,var(--surface)))}
 [data-level="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 76%,var(--surface)),color-mix(in oklab,var(--c) 80%,var(--surface)))}
