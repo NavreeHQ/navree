@@ -1810,7 +1810,11 @@ fn screen_dashboard() -> Envelope {
     screen.nav = Some(s("/"));
     screen.refresh = true;
     screen.actions = vec![toolbar];
-    Envelope::screen(BUILD, screen)
+    // Stamped as a server stamps every answer, with its icon shapes sent once.
+    let mut envelope =
+        Envelope::screen(BUILD, screen).stamped("app-7f3a91c2", shell().stamped().stamp);
+    envelope.share_icons();
+    envelope
 }
 
 /// A support inbox: a list of conversations beside the one open, its
@@ -2161,7 +2165,38 @@ fn every_example_is_written_and_reads_back_as_it_was() {
     for (name, envelope) in envelopes() {
         held(name, &envelope);
     }
-    held("shell", &shell());
+    held("shell", &shell().stamped());
+}
+
+/// Whether any icon in `value` still carries its own shapes, outside the
+/// envelope's icon table.
+fn shapes_outside_the_table(value: &serde_json::Value, table: bool) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(key, value)| {
+            (!table && (key == "paths" || key == "fills"))
+                || shapes_outside_the_table(value, table || key == "icons")
+        }),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .any(|item| shapes_outside_the_table(item, table)),
+        _ => false,
+    }
+}
+
+#[test]
+fn every_icon_shape_is_sent_once_and_put_back_where_it_was() {
+    for (name, envelope) in envelopes() {
+        let mut whole = envelope.clone();
+        whole.inline_icons();
+        assert!(whole.icons.is_empty(), "{name}");
+        let mut shared = whole.clone();
+        shared.share_icons();
+        // Every icon of the corpus has a name, and each name one shape.
+        let json = serde_json::to_value(&shared).unwrap();
+        assert!(!shapes_outside_the_table(&json, false), "{name}: {json}");
+        shared.inline_icons();
+        assert_eq!(shared, whole, "{name}");
+    }
 }
 
 #[test]

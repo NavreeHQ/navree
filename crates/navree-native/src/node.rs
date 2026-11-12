@@ -945,6 +945,76 @@ pub struct Icon {
     pub tone: Option<Tone>,
 }
 
+/// The shapes of an icon, without its name: what an envelope's icon table
+/// holds by name, so a shape that recurs is sent once.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IconShape {
+    /// The shapes a client strokes, as an icon's `paths`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<String>,
+    /// The shapes a client fills, as an icon's `fills`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fills: Vec<String>,
+    /// The box they are drawn in, as an icon's `view_box`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_box: Option<String>,
+}
+
+impl Icon {
+    /// The icon's own shapes, when it carries any.
+    pub fn shape(&self) -> Option<IconShape> {
+        (!self.paths.is_empty() || !self.fills.is_empty()).then(|| IconShape {
+            paths: self.paths.clone(),
+            fills: self.fills.clone(),
+            view_box: self.view_box.clone(),
+        })
+    }
+
+    /// Gives the icon these shapes.
+    pub fn set_shape(&mut self, shape: IconShape) {
+        self.paths = shape.paths;
+        self.fills = shape.fills;
+        self.view_box = shape.view_box;
+    }
+
+    /// Takes the icon's shapes away, leaving its name to look them up by.
+    pub fn clear_shape(&mut self) {
+        self.set_shape(IconShape::default());
+    }
+}
+
+impl Node {
+    /// The icons this node holds itself, not those of the nodes inside it.
+    pub fn icons_mut(&mut self) -> Vec<&mut Icon> {
+        match self {
+            Self::Icon(icon) => vec![icon],
+            Self::Tabs(node) => node.items.iter_mut().filter_map(|tab| tab.icon.as_mut()).collect(),
+            Self::Row(node) => node
+                .swipe
+                .iter_mut()
+                .filter_map(|button| button.icon.as_mut())
+                .collect(),
+            Self::Banner(node) => node.icon.iter_mut().collect(),
+            Self::Empty(node) => node.icon.iter_mut().collect(),
+            Self::Facts(node) => node
+                .items
+                .iter_mut()
+                .filter_map(|fact| fact.icon.as_mut())
+                .collect(),
+            Self::Button(node) => node.icon.iter_mut().collect(),
+            Self::Menu(node) => node.icon.iter_mut().collect(),
+            Self::Toolbar(node) => node.items.iter_mut().map(|item| &mut item.icon).collect(),
+            Self::Timeline(node) => node
+                .items
+                .iter_mut()
+                .filter_map(|moment| moment.icon.as_mut())
+                .collect(),
+            Self::FeedRow(node) => node.icon.iter_mut().collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
 /// A person's picture, or their initials when there is none.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Avatar {

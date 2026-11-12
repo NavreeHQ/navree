@@ -125,6 +125,11 @@ pub struct Shell {
     pub navree: u32,
     /// The server's build.
     pub build: String,
+    /// The document's stamp, which every envelope carries as `shell` while
+    /// this document is in force. [`Shell::stamped`] sets it from the rest of
+    /// the document.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stamp: String,
     /// The app's name.
     pub name: String,
     /// A line under the name: the workspace, the environment.
@@ -155,6 +160,7 @@ impl Shell {
         Self {
             navree: crate::MAJOR,
             build: build.into(),
+            stamp: String::new(),
             name: name.into(),
             context: None,
             home: "/".to_owned(),
@@ -164,6 +170,20 @@ impl Shell {
             routes: Vec::new(),
             device: None,
         }
+    }
+
+    /// The same document, stamped by what it holds: a 64-bit FNV-1a hash of
+    /// its JSON without the stamp, as 16 hex digits. The same document always
+    /// gets the same stamp, so a server need not keep it.
+    #[must_use]
+    pub fn stamped(mut self) -> Self {
+        self.stamp.clear();
+        let json = serde_json::to_vec(&self).unwrap_or_default();
+        let hash = json.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+        self.stamp = format!("{hash:016x}");
+        self
     }
 }
 
@@ -184,5 +204,16 @@ mod tests {
             serde_json::to_string(&routes).unwrap(),
             r#"[{"match":"/orders/new","present":"sheet"},{"match":"/sign-in","present":"full","chrome":false}]"#
         );
+    }
+
+    #[test]
+    fn a_shell_is_stamped_by_what_it_holds() {
+        let shell = Shell::new("b1", "Charkha Supply Co.").stamped();
+        assert_eq!(shell.stamp.len(), 16);
+        assert!(shell.stamp.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_eq!(shell.clone().stamped(), shell, "stamping twice changes nothing");
+        let mut renamed = shell.clone();
+        renamed.home = "/orders".to_owned();
+        assert_ne!(renamed.stamped().stamp, shell.stamp);
     }
 }
