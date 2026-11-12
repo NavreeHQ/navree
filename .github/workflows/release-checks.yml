@@ -173,9 +173,27 @@ jobs:
             tar -tzf "$tarball" | sed 's/^/  /'
           done
 
-  semver:
+  # The check is cut into parts that run side by side: each part checks its
+  # share of the published crates against the last release. cargo-semver-checks
+  # builds the documentation of every crate twice (the last release and this
+  # commit), each in a build directory of its own, so the time is the number of
+  # crates times that build, and it divides by the number of parts.
+  #
+  # Every part runs `--workspace` and excludes the crates that belong to the
+  # other parts, so each part picks which crates are checked the way a whole
+  # run does, and every crate is checked by exactly one part.
+  semver-part:
+    name: semver part ${{ matrix.part }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      # A breaking change in one crate does not stop the others reporting theirs.
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    env:
+      PART: ${{ matrix.part }}
+      PARTS: ${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -197,11 +215,49 @@ jobs:
           tool: cargo-semver-checks
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: ${{ steps.baseline.outputs.tag != '' }}
+        with:
+          # The registry and the tool are cached. The build directories are
+          # not: each crate has two of its own under target/semver-checks,
+          # and together they were a ten gigabyte cache that took minutes to
+          # restore.
+          shared-key: semver
+          cache-targets: false
+      - name: This part's crates
+        if: ${{ steps.baseline.outputs.tag != '' }}
+        run: |
+          # The published crates, in name order; this part takes every PARTS-th.
+          cargo metadata --no-deps --format-version 1 \
+            | jq -r '[.packages[] | select(.publish != []) | .name] | sort | .[]' > "$RUNNER_TEMP/published.txt"
+          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts == part' "$RUNNER_TEMP/published.txt" > "$RUNNER_TEMP/mine.txt"
+          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts != part' "$RUNNER_TEMP/published.txt" > "$RUNNER_TEMP/others.txt"
+          echo "part $PART of $PARTS: $(wc -l < "$RUNNER_TEMP/mine.txt") of $(wc -l < "$RUNNER_TEMP/published.txt") published crates"
+          sed 's/^/  /' "$RUNNER_TEMP/mine.txt"
+          if [ ! -s "$RUNNER_TEMP/mine.txt" ]; then
+            echo "::error::this part has no crates"
+            exit 1
+          fi
       - name: cargo semver-checks against the last release
         if: ${{ steps.baseline.outputs.tag != '' }}
         env:
           TAG: ${{ steps.baseline.outputs.tag }}
-        run: cargo semver-checks --workspace --baseline-rev "$TAG"
+        run: |
+          excludes=()
+          while read -r name; do excludes+=(--exclude "$name"); done < "$RUNNER_TEMP/others.txt"
+          cargo semver-checks --workspace "${excludes[@]}" --baseline-rev "$TAG"
+
+  # The check the branch ruleset requires: it passes when every part passed.
+  semver:
+    needs: semver-part
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every part passed
+        env:
+          RESULT: ${{ needs.semver-part.result }}
+        run: |
+          echo "the parts: $RESULT"
+          [ "$RESULT" = success ]
 
   stack:
     if: >-
