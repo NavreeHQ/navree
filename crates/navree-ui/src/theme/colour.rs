@@ -290,6 +290,40 @@ impl Rgb {
             .unwrap_or(toward)
     }
 
+    /// The far end of a chart colour's sheen, and the colour of a ring's second lap,
+    /// on the `side` palette: the same colour deeper on a light page and brighter on a
+    /// dark one. It keeps its colour as it changes: deeper is darker with a little more
+    /// chroma, and a warm hue (orange, amber, yellow) turns a little toward red as it
+    /// darkens, the way pigments deepen, so it never turns brown, as a mix with the
+    /// text's near-black would. Brighter is lighter, a touch less vivid, warm hues a
+    /// touch toward yellow.
+    ///
+    /// ```
+    /// use navree_ui::theme::{Rgb, Side};
+    ///
+    /// let orange = Rgb::hex(0xdc5a24);
+    /// let [l, c, h] = orange.to_oklch();
+    /// let [dl, dc, dh] = orange.vivid(Side::Light).to_oklch();
+    /// assert!(dl < l && dc >= c, "deeper, as vivid");
+    /// assert!(dh < h && h - dh < 20.0, "a little toward red");
+    /// assert!(orange.vivid(Side::Dark).to_oklch()[0] > l);
+    /// ```
+    #[must_use]
+    pub fn vivid(self, side: super::Side) -> Self {
+        let [l, c, h] = self.to_oklch();
+        // How far a warm hue turns, at most 18 degrees for an amber or a yellow; a red,
+        // a pink, a green, a blue or a violet keeps its hue.
+        let warm = if (25.0..110.0).contains(&h) {
+            h - 25.0
+        } else {
+            0.0
+        };
+        match side {
+            super::Side::Light => Self::from_oklch(l - 0.06, c * 1.12, h - (warm * 0.4).min(18.0)),
+            super::Side::Dark => Self::from_oklch(l + 0.10, c * 0.92, h + (warm * 0.15).min(8.0)),
+        }
+    }
+
     /// The text to put on a fill of this colour: white wherever white reaches
     /// 4.5:1, otherwise a deep shade of the fill's own hue, which never reads as
     /// plain black on a bright colour.
