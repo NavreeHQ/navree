@@ -6,6 +6,7 @@ mod servers;
 mod support;
 
 mod access;
+mod app_sign_in;
 mod apps;
 mod confirm;
 mod exchange;

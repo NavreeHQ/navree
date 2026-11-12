@@ -204,6 +204,12 @@ pub enum AuthError {
     /// sent).
     #[error("confirmation refused: {0}")]
     ConfirmationRefused(String),
+    /// A sign-in hand-over to a native app was refused: an unknown app, no
+    /// S256 code challenge, a code used, expired, of another app or with
+    /// the wrong verifier (400 `invalid_hand_over`; the reason is logged and
+    /// audited, never sent).
+    #[error("app sign-in refused: {0}")]
+    HandOverRefused(String),
     /// The browser's session could not hold the sign-in (navree-session).
     #[error("auth session error: {0}")]
     Session(String),
@@ -338,6 +344,10 @@ impl AuthError {
                     "Unprocessable Entity",
                 )
                 .with_detail("Invalid or expired ticket"),
+            ),
+            AuthError::HandOverRefused(_) => Some(
+                AppError::bad_request("Invalid or expired app sign-in")
+                    .with_code("invalid_hand_over"),
             ),
             AuthError::ConfirmationRefused(_) => Some(
                 AppError::new(StatusCode::FORBIDDEN, "confirmation_refused", "Forbidden")

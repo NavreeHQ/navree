@@ -59,6 +59,7 @@ const MAX_PATH_LEN: usize = 1024;
 /// fingerprints = ["14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"]
 /// # links = true                       # handle_all_urls
 /// # credentials = true                 # get_login_creds, and the passkey origin
+/// # callback = "https://example.com/app/signed-in"  # the sign-in hand-over
 /// ```
 ///
 /// An Android app with `credentials` adds its signatures to the passkey
@@ -81,6 +82,11 @@ pub struct AppsOptions {
     pub apple: BTreeMap<String, AppleApp>,
     /// The Android apps, by name.
     pub android: BTreeMap<String, AndroidApp>,
+    /// Whether a browser that signed in only to hand its sign-in over to an
+    /// app stays signed in afterwards (default `false`: it is signed out,
+    /// and only the app holds a session). A browser that was signed in
+    /// before the hand-over always stays signed in.
+    pub keep_browser_signed_in: bool,
 }
 
 /// An Apple app (`auth.apps.apple.<name>`).
@@ -97,6 +103,14 @@ pub struct AppleApp {
     /// Whether the app uses the site's passkeys and passwords
     /// (`webcredentials`).
     pub credentials: bool,
+    /// Where the sign-in hand-over sends the app its one-time code: an
+    /// `https` universal link of the app. Without it the app cannot use the
+    /// hand-over.
+    pub callback: Option<String>,
+    /// Whether [`callback`](Self::callback) may be a custom scheme
+    /// (`com.example.orders:/signed-in`). Any app on the device can claim a
+    /// scheme; leave it off unless the app cannot use a universal link.
+    pub custom_scheme: bool,
 }
 
 impl Default for AppleApp {
@@ -106,6 +120,8 @@ impl Default for AppleApp {
             bundle_id: String::new(),
             links: true,
             credentials: true,
+            callback: None,
+            custom_scheme: false,
         }
     }
 }
@@ -133,6 +149,14 @@ pub struct AndroidApp {
     /// Whether the app uses the site's passkeys and passwords
     /// (`get_login_creds`); its signatures become passkey origins.
     pub credentials: bool,
+    /// Where the sign-in hand-over sends the app its one-time code: an
+    /// `https` App Link of the app. Without it the app cannot use the
+    /// hand-over.
+    pub callback: Option<String>,
+    /// Whether [`callback`](Self::callback) may be a custom scheme. Any app
+    /// on the device can claim a scheme; leave it off unless the app cannot
+    /// use an App Link.
+    pub custom_scheme: bool,
 }
 
 impl Default for AndroidApp {
@@ -142,6 +166,8 @@ impl Default for AndroidApp {
             fingerprints: Vec::new(),
             links: true,
             credentials: true,
+            callback: None,
+            custom_scheme: false,
         }
     }
 }
@@ -193,6 +219,7 @@ impl AppsOptions {
                     "{key}.bundle_id must be a bundle identifier (A-Z, a-z, 0-9, `-` and `.`)"
                 ));
             }
+            check_callback(&key, app.callback.as_deref(), app.custom_scheme, &mut errors);
         }
         for (name, app) in &self.android {
             let key = format!("auth.apps.android.{name}");
@@ -212,6 +239,7 @@ impl AppsOptions {
                      (32 hex bytes separated by `:`)"
                 ));
             }
+            check_callback(&key, app.callback.as_deref(), app.custom_scheme, &mut errors);
         }
         if errors.is_empty() {
             Ok(())
@@ -310,6 +338,82 @@ impl AppsOptions {
             .map(|path| json!({ "/": path, "exclude": true }))
             .chain(self.paths.iter().map(|path| json!({ "/": path })))
             .collect()
+    }
+}
+
+/// An app that can take part in the sign-in hand-over: one of `auth.apps`
+/// with a callback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct HandOverApp {
+    /// `apple` or `android`.
+    pub(crate) platform: &'static str,
+    /// The bundle id or package name.
+    pub(crate) id: String,
+    /// Where its code goes.
+    pub(crate) callback: String,
+}
+
+impl AppsOptions {
+    /// The app `id` (bundle id or package name) of `platform` (`apple` or
+    /// `android`), when it has a hand-over callback.
+    pub(crate) fn hand_over_app(&self, platform: &str, id: &str) -> Option<HandOverApp> {
+        let found = |callback: &Option<String>, app_id: &str, platform: &'static str| {
+            let callback = callback.clone()?;
+            (app_id.trim() == id).then(|| HandOverApp {
+                platform,
+                id: id.to_owned(),
+                callback,
+            })
+        };
+        match platform {
+            "apple" => self
+                .apple
+                .values()
+                .find_map(|app| found(&app.callback, &app.bundle_id, "apple")),
+            "android" => self
+                .android
+                .values()
+                .find_map(|app| found(&app.callback, &app.package, "android")),
+            _ => None,
+        }
+    }
+
+    /// Whether any app has a hand-over callback.
+    pub(crate) fn has_hand_over(&self) -> bool {
+        self.apple.values().any(|app| app.callback.is_some())
+            || self.android.values().any(|app| app.callback.is_some())
+    }
+}
+
+/// Checks an app's hand-over callback: an absolute `https` URL with a host
+/// and no user, password or fragment; a custom scheme only when the app
+/// allows one, and never a scheme a browser loads or runs itself.
+fn check_callback(
+    key: &str,
+    callback: Option<&str>,
+    custom_scheme: bool,
+    errors: &mut Vec<String>,
+) {
+    let Some(callback) = callback else {
+        return;
+    };
+    let fine = url::Url::parse(callback).ok().is_some_and(|url| {
+        let plain = url.username().is_empty()
+            && url.password().is_none()
+            && url.fragment().is_none()
+            && callback.len() <= 2048;
+        match url.scheme() {
+            "https" => plain && url.host_str().is_some_and(|host| !host.is_empty()),
+            "http" | "javascript" | "data" | "file" | "blob" | "about" | "ftp" | "ws" | "wss"
+            | "intent" | "content" | "mailto" | "tel" | "sms" => false,
+            _ => custom_scheme && plain,
+        }
+    });
+    if !fine {
+        errors.push(format!(
+            "{key}.callback must be an https URL of the app (a universal link or an App \
+             Link), or a custom scheme with {key}.custom_scheme = true"
+        ));
     }
 }
 
@@ -630,6 +734,43 @@ mod tests {
             let field = key.rsplit('.').next().unwrap();
             assert!(error.contains(field), "{key} = {value}: {error}");
         }
+    }
+
+    #[test]
+    fn hand_over_callbacks_are_https_unless_a_scheme_is_allowed() {
+        let with = |callback: &str, custom_scheme: bool| {
+            load(
+                ConfigSources::new()
+                    .set("auth.apps.apple.main.team_id", "ABCDE12345")
+                    .set("auth.apps.apple.main.bundle_id", "com.example.orders")
+                    .set("auth.apps.apple.main.callback", callback)
+                    .set("auth.apps.apple.main.custom_scheme", custom_scheme),
+            )
+        };
+        let apps = with("https://example.com/app/signed-in", false).unwrap();
+        assert_eq!(
+            apps.hand_over_app("apple", "com.example.orders")
+                .map(|app| app.callback),
+            Some("https://example.com/app/signed-in".to_owned())
+        );
+        assert!(apps.has_hand_over());
+        assert_eq!(apps.hand_over_app("android", "com.example.orders"), None);
+        assert_eq!(apps.hand_over_app("apple", "com.example.other"), None);
+        for refused in [
+            "http://example.com/app/signed-in",
+            "https://user:pass@example.com/app",
+            "https://example.com/app#code",
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "/app/signed-in",
+            "com.example.orders:/signed-in",
+        ] {
+            let error = with(refused, false).expect_err(refused).to_string();
+            assert!(error.contains("callback"), "{refused}: {error}");
+        }
+        assert!(with("com.example.orders:/signed-in", true).is_ok());
+        assert!(with("javascript:alert(1)", true).is_err());
+        assert!(!configured().has_hand_over());
     }
 
     #[test]

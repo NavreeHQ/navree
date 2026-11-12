@@ -697,7 +697,7 @@ impl AuthService {
 
     /// When the server-side session `sid` of `user` ends, if it is live
     /// (not revoked, not expired).
-    async fn live_session(&self, user: Uuid, sid: Uuid) -> Result<Option<i64>, AuthError> {
+    pub(crate) async fn live_session(&self, user: Uuid, sid: Uuid) -> Result<Option<i64>, AuthError> {
         let now = self.clock.now();
         Ok(RefreshToken::query()
             .where_(RefreshToken::FAMILY_ID.eq(sid))

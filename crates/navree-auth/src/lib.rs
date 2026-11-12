@@ -211,6 +211,8 @@ mod entity;
 mod error;
 mod exchange;
 mod extract;
+#[cfg(feature = "session")]
+mod hand_over;
 mod guards;
 mod impersonation;
 mod jwt;
@@ -260,6 +262,8 @@ pub use controller::{
 pub use entity::{Passkey, User, login_token, passkey, password_reset_token, refresh_token, user};
 pub use error::AuthError;
 pub use extract::CurrentUser;
+#[cfg(feature = "session")]
+pub use hand_over::{APP_CODE_TTL_SECS, APP_SIGN_IN_FINISH_PATH, APP_SIGN_IN_PATH, AppExchangeInput};
 pub use guards::{AccessClaims, Actor, not_while_impersonating, platform_session, recent_auth};
 pub use impersonation::MAX_IMPERSONATION_REASON;
 pub use jwt::{

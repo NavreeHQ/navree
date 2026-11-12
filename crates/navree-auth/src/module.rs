@@ -193,6 +193,9 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .deps(vec![ProviderKey::of::<AuthService>()]),
     )
     .exports::<dyn navree_notify::LiveSessions>();
+    // Native apps take over a sign-in made in the system's sign-in session.
+    #[cfg(feature = "session")]
+    m.controller::<crate::hand_over::AppSignInController>();
     // Browsers signed in on the session cookie, after the JWT strategy: a
     // request with a bearer token is the token's.
     #[cfg(feature = "session")]
