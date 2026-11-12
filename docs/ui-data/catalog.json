@@ -170,6 +170,7 @@
         "trend",
         "calendar-heatmap",
         "matrix-heatmap",
+        "relation-list",
         "scatter-chart"
       ]
     },
@@ -1980,6 +1981,7 @@
         "line-chart/states",
         "line-chart/locales",
         "line-chart/axes",
+        "line-chart/clock",
         "line-chart/table"
       ]
     },
@@ -2003,6 +2005,7 @@
         "area-chart/percent",
         "area-chart/gradient",
         "area-chart/steps",
+        "area-chart/lanes",
         "area-chart/trend"
       ]
     },
@@ -2031,6 +2034,7 @@
         "bar-chart/horizontal-stacked",
         "bar-chart/reference",
         "bar-chart/colors",
+        "bar-chart/baseline",
         "bar-chart/many"
       ]
     },
@@ -2112,6 +2116,7 @@
         "ring/colors",
         "ring/middle",
         "ring/goal",
+        "ring/ends",
         "ring/sizes",
         "ring/states"
       ]
@@ -2120,7 +2125,7 @@
       "id": "rings",
       "name": "Rings",
       "url": "/docs/components/rings/",
-      "summary": "Two to four values on rings inside each other, each against its own goal.",
+      "summary": "Two to six values on rings inside each other, each against its own goal.",
       "group": "charts",
       "types": [
         "Rings",
@@ -2133,6 +2138,8 @@
         "rings/thumb",
         "rings/default",
         "rings/two",
+        "rings/five",
+        "rings/beside",
         "rings/pill"
       ]
     },
@@ -2152,7 +2159,8 @@
       "examples": [
         "gauge/thumb",
         "gauge/default",
-        "gauge/sweeps"
+        "gauge/sweeps",
+        "gauge/zones"
       ]
     },
     {
@@ -2170,7 +2178,8 @@
       "examples": [
         "day-clock/thumb",
         "day-clock/default",
-        "day-clock/scale"
+        "day-clock/scale",
+        "day-clock/band"
       ]
     },
     {
@@ -2190,6 +2199,7 @@
         "meter/thumb",
         "meter/default",
         "meter/zones",
+        "meter/details",
         "meter/compact",
         "meter/rupees",
         "meter/states"
@@ -2303,6 +2313,25 @@
         "matrix-heatmap/default",
         "matrix-heatmap/full",
         "matrix-heatmap/states"
+      ]
+    },
+    {
+      "id": "relation-list",
+      "name": "Relation list",
+      "url": "/docs/components/relation-list/",
+      "summary": "Pairs of measures ranked by how strongly they move together: the signed value, a bar from the centre by sign and a note on each row.",
+      "group": "charts",
+      "types": [
+        "RelationList",
+        "Relation",
+        "GridLabels"
+      ],
+      "thumb": "relation-list/thumb",
+      "anatomy": "relation-list/default",
+      "examples": [
+        "relation-list/thumb",
+        "relation-list/default",
+        "relation-list/significant"
       ]
     },
     {
@@ -39313,6 +39342,222 @@
       ]
     },
     {
+      "id": "line-chart/clock",
+      "component": "line-chart",
+      "slug": "clock",
+      "title": "Times of day, through midnight",
+      "kind": "single",
+      "code": "// Minutes past 6 PM: bedtimes before and after midnight, and waking in the morning.\nlet to_bed = [\n    310, 335, 290, 355, 400, 420, 300, 315, 340, 285, 365, 410, 395, 305,\n];\nlet woke = [\n    755, 760, 745, 770, 800, 850, 750, 755, 765, 740, 775, 820, 845, 750,\n];\nlet first = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap_or_default();\nChart::line(\"Bedtime and waking\")\n    .id(\"line-chart-clock\")\n    .description(\"Amandeep Kahlon, the last 14 nights\")\n    .locale(\"en-IN\")\n    .days((0..14).map(|d| first + Duration::days(d)))\n    .series(Series::new(\"To bed\", to_bed).ink(Ink::slot(7)))\n    .series(Series::new(\"Woke up\", woke).ink(Ink::slot(4)))\n    .format(NumberFormat::clock(18))\n    .dots(Dots::All)\n    .y_ticks(6)\n    .height(240)",
+      "src": "/ui-preview/line-chart/clock.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 7,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-line",
+                                  "tag": "path",
+                                  "count": 2,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-point",
+                              "tag": "circle",
+                              "count": 28,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 2,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "line-chart/table",
       "component": "line-chart",
       "slug": "table",
@@ -40614,6 +40859,222 @@
                           "tag": "svg",
                           "count": 1,
                           "children": [
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "chart-area",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 4,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "area-chart/lanes",
+      "component": "area-chart",
+      "slug": "lanes",
+      "title": "A lane for each level, the lowest filled too",
+      "kind": "single",
+      "code": "// The same night with a lane for each stage: deep sleep fills down to the foot of its\n// lane, like the others.\narea_chart_steps().id(\"area-chart-lanes\").lanes()",
+      "src": "/ui-preview/area-chart/lanes.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
                             {
                               "slot": "chart-x-axis",
                               "tag": "g",
@@ -42720,6 +43181,222 @@
                                   "slot": "chart-bar",
                                   "tag": "rect",
                                   "count": 14,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bar-chart/baseline",
+      "component": "bar-chart",
+      "slug": "baseline",
+      "title": "Bars from a level other than zero",
+      "kind": "single",
+      "code": "Chart::bar(\"Body age by part\")\n    .id(\"bar-chart-baseline\")\n    .description(\"Inderjit Bains, 36: each part's age against his own\")\n    .categories([\"Heart\", \"Lungs\", \"Muscle\", \"Metabolism\", \"Flexibility\"])\n    .series(\n        Series::new(\"Age\", [31, 38, 33, 41, 35])\n            .unit(\"years\")\n            .colors(\n                ColorScale::new(Ink::tone(Tone::Success))\n                    .label(\"Younger\")\n                    .from(36.5, Ink::tone(Tone::Warning))\n                    .label(\"Older\"),\n            ),\n    )\n    .baseline(36)\n    .y_domain(Domain::fixed(26, 46))\n    .reference(Reference::level(36).label(\"Your age\"))",
+      "src": "/ui-preview/bar-chart/baseline.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 4,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bars",
+                              "tag": "g",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-bar",
+                                  "tag": "rect",
+                                  "count": 5,
                                   "children": []
                                 }
                               ]
@@ -46877,6 +47554,35 @@
       ]
     },
     {
+      "id": "ring/ends",
+      "component": "ring",
+      "slug": "ends",
+      "title": "Every chart colour's sheen and second lap",
+      "kind": "gallery",
+      "code": "// Past the goal, so each ring shows its sheen's far end and its second lap: the\n// colour deeper on a light page and brighter on a dark one, never brown.\n(1..=8)\n    .map(|slot: u8| {\n        let caption: &'static str = [\n            \"Chart 1\", \"Chart 2\", \"Chart 3\", \"Chart 4\", \"Chart 5\", \"Chart 6\", \"Chart 7\",\n            \"Chart 8\",\n        ][usize::from(slot - 1)];\n        (\n            caption,\n            Ring::new(caption, 128)\n                .id(format!(\"ring-end-{slot}\"))\n                .unit(\"%\")\n                .fill(Gradient::sheen(Ink::slot(slot)))\n                .size(112)\n                .into(),\n        )\n    })\n    .collect()",
+      "src": "/ui-preview/ring/ends.html",
+      "height": 200,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Chart 1",
+        "Chart 2",
+        "Chart 3",
+        "Chart 4",
+        "Chart 5",
+        "Chart 6",
+        "Chart 7",
+        "Chart 8"
+      ],
+      "slots": []
+    },
+    {
       "id": "ring/sizes",
       "component": "ring",
       "slug": "sizes",
@@ -47731,6 +48437,517 @@
       ]
     },
     {
+      "id": "rings/five",
+      "component": "rings",
+      "slug": "five",
+      "title": "Five scores of a day",
+      "kind": "single",
+      "code": "Card::titled(\"Harleen Sandhu · today\").body(\n    Rings::new(\"Today's scores\")\n        .id(\"rings-five\")\n        .ring(RingValue::new(\"Sleep\", 84).fill(Gradient::sheen(Ink::slot(7))))\n        .ring(RingValue::new(\"Recovery\", 71).fill(Gradient::sheen(Ink::slot(3))))\n        .ring(RingValue::new(\"Movement\", 58).fill(Gradient::sheen(Ink::slot(2))))\n        .ring(RingValue::new(\"Stress\", 36).fill(Gradient::sheen(Ink::slot(4))))\n        .ring(RingValue::new(\"Mind\", 66).fill(Gradient::sheen(Ink::slot(1))))\n        .track(RingTrack::Tinted)\n        .center_values()\n        .legend()\n        .size(220)\n        .motion(Motion::new().delay(150)),\n)",
+      "src": "/ui-preview/rings/five.html",
+      "height": 320,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-split",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-row",
+                                      "tag": "span",
+                                      "count": 5,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-legend",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rings/beside",
+      "component": "rings",
+      "slug": "beside",
+      "title": "Beside their words, in a row that sizes to its content",
+      "kind": "single",
+      "code": "// The row sizes each item to its content: the rings take their drawing's width.\nCard::titled(\"Karan Bedi · this week\").body(\n    Row::gap(6).children((\n        Rings::new(\"This week\")\n            .id(\"rings-beside\")\n            .ring(\n                RingValue::new(\"Move\", 4_820)\n                    .max(4_200)\n                    .unit(\"kcal\")\n                    .ink(Ink::slot(8)),\n            )\n            .ring(\n                RingValue::new(\"Exercise\", 190)\n                    .max(210)\n                    .unit(\"min\")\n                    .ink(Ink::slot(3)),\n            )\n            .ring(\n                RingValue::new(\"Stand\", 72)\n                    .max(84)\n                    .unit(\"hr\")\n                    .ink(Ink::slot(1)),\n            )\n            .size(150),\n        Stack::gap(1).children((\n            Text::new(\"Move goal met on five days\"),\n            Text::muted(\"Exercise 20 minutes short of the week's goal.\"),\n        )),\n    )),\n)",
+      "src": "/ui-preview/rings/beside.html",
+      "height": 240,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "row",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-heading",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-lap",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-summary",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-data",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-table",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "text",
+                          "tag": "p",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "rings/pill",
       "component": "rings",
       "slug": "pill",
@@ -48156,6 +49373,220 @@
         "Small, with a tinted track"
       ],
       "slots": []
+    },
+    {
+      "id": "gauge/zones",
+      "component": "gauge",
+      "slug": "zones",
+      "title": "Zones on the track",
+      "kind": "single",
+      "code": "Card::titled(\"Training load · Gurleen Grewal\").body(\n    Gauge::new(\"Load ratio\", 1.12)\n        .id(\"gauge-zones\")\n        .max(2)\n        .format(NumberFormat::decimals(2).fixed())\n        .label(\"Acute : chronic\")\n        .sublabel(\"Optimal\")\n        .zone(Zone::new(0, 0.8).label(\"Undertraining\").ink(Ink::slot(1)))\n        .zone(Zone::new(0.8, 1.3).label(\"Optimal\").ink(Ink::slot(3)))\n        .zone(Zone::new(1.3, 1.5).label(\"Overreaching\").ink(Ink::slot(4)))\n        .zone(Zone::new(1.5, 2).label(\"Overuse\").ink(Ink::slot(8)))\n        .size(220)\n        .motion(Motion::new()),\n)",
+      "src": "/ui-preview/gauge/zones.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js",
+        "count-up-9e7cfe48a268.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-legend",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-legend-item",
+                          "tag": "li",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-legend-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-zones",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-zone",
+                                      "tag": "path",
+                                      "count": 4,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-sub",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-note",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "day-clock/thumb",
@@ -48955,6 +50386,289 @@
       ]
     },
     {
+      "id": "day-clock/band",
+      "component": "day-clock",
+      "slug": "band",
+      "title": "A band of categories, asleep hours too",
+      "kind": "single",
+      "code": "Card::titled(\"Ravneet Kaur · awake and asleep\").body(\n    DayClock::new(\"Steps by hour, awake and asleep\")\n        .id(\"clock-band\")\n        .hide_title()\n        .values(STEPS)\n        .unit(\"steps\")\n        .category(\"Awake\", Ink::slot(3))\n        .category(\"Asleep\", Ink::slot(7))\n        .categories([\n            1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,\n        ])\n        .band()\n        .label(\"Steps\")\n        .locale(\"en-IN\"),\n)",
+      "src": "/ui-preview/day-clock/band.html",
+      "height": 560,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-legend",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-legend-item",
+                          "tag": "li",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-legend-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "clock-dial",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-ring",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "clock-hour",
+                                      "tag": "text",
+                                      "count": 4,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-hub",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "clock-anchors",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-anchor",
+                                      "tag": "circle",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-bands",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-band",
+                                      "tag": "path",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-wedges",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-wedge",
+                                      "tag": "path",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-moments",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-tip",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-announce",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table-switch",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-table-label",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "meter/thumb",
       "component": "meter",
       "slug": "thumb",
@@ -49382,6 +51096,195 @@
                         },
                         {
                           "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/details",
+      "component": "meter",
+      "slug": "details",
+      "title": "Every zone, with its range",
+      "kind": "single",
+      "code": "// Every zone is given, the empty ones too: the legend lists all five, the empty ones\n// hollow, each with its heart-rate range under its name.\nMeter::new(\"Time in heart rate zones\")\n    .id(\"meter-details\")\n    .description(\"Navjot Cheema, evening walk, 41 minutes\")\n    .minutes()\n    .label_from(12.0)\n    .detail_name(\"Heart rate\")\n    .segment(\n        Segment::new(\"Zone 1 · Easy\", 14)\n            .ink(Ink::tone(Tone::named(\"slate\")))\n            .detail(\"under 109 bpm\"),\n    )\n    .segment(\n        Segment::new(\"Zone 2 · Fat burn\", 19)\n            .ink(Ink::tone(Tone::named(\"cyan\")))\n            .detail(\"109–127 bpm\"),\n    )\n    .segment(\n        Segment::new(\"Zone 3 · Cardio\", 8)\n            .ink(Ink::tone(Tone::Success))\n            .detail(\"127–146 bpm\"),\n    )\n    .segment(\n        Segment::new(\"Zone 4 · Peak\", 0)\n            .ink(Ink::tone(Tone::Warning))\n            .detail(\"146–164 bpm\"),\n    )\n    .segment(\n        Segment::new(\"Zone 5 · Max\", 0)\n            .ink(Ink::tone(Tone::Danger))\n            .detail(\"164 bpm and over\"),\n    )",
+      "src": "/ui-preview/meter/details.html",
+      "height": 190,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "seg-bar",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "seg-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-part",
+                      "tag": "g",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "seg",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "seg-label",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-detail",
                           "tag": "span",
                           "count": 1,
                           "children": []
@@ -52669,6 +54572,495 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relation-list/thumb",
+      "component": "relation-list",
+      "slug": "thumb",
+      "title": "A ranked list of relations",
+      "kind": "single",
+      "code": "found(\"What moves together\")\n    .id(\"relation-list-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .only_significant()",
+      "src": "/ui-preview/relation-list/thumb.html",
+      "height": 240,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "relation-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "relation",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "relation-pair",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "relation-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "relation-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "relation-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-fill",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-centre",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "relation-note",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relation-list/default",
+      "component": "relation-list",
+      "slug": "default",
+      "title": "What moves together, strongest first",
+      "kind": "single",
+      "code": "found(\"What moves together\")\n    .id(\"relation-list-default\")\n    .description(\"Last 30 days, Gurpreet Singh\")\n    .motion(Motion::new())",
+      "src": "/ui-preview/relation-list/default.html",
+      "height": 470,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "heat-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "heat-key",
+                  "tag": "span",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "relation-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "relation",
+                      "tag": "li",
+                      "count": 8,
+                      "children": [
+                        {
+                          "slot": "relation-pair",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "relation-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "relation-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "relation-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-fill",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-centre",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "relation-note",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relation-list/significant",
+      "component": "relation-list",
+      "slug": "significant",
+      "title": "Only the links found, beside the matrix",
+      "kind": "single",
+      "code": "Grid::cols(2).gap(6).children((\n    found(\"Links found\")\n        .id(\"relation-list-found\")\n        .colors(Ink::tone(Tone::Success), Ink::slot(5))\n        .only_significant(),\n    correlations(\"Every pair tested\")\n        .id(\"relation-list-matrix\")\n        .colors(Ink::tone(Tone::Success), Ink::slot(5))\n        .lower_triangle(),\n))",
+      "src": "/ui-preview/relation-list/significant.html",
+      "height": 470,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-fe166b00d7aa.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "heat-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heat-key",
+                      "tag": "span",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "relation-list",
+                      "tag": "ol",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "relation",
+                          "tag": "li",
+                          "count": 4,
+                          "children": [
+                            {
+                              "slot": "relation-pair",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "relation-bar",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "relation-track",
+                                  "tag": "rect",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "relation-fill",
+                                  "tag": "rect",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "relation-centre",
+                                  "tag": "line",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "relation-note",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-data",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-table-switch",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-table-label",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-table",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
                     }
                   ]
                 }

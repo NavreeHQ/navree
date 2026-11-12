@@ -169,6 +169,7 @@ pub const GROUPS: &[Group] = &[
             "trend",
             "calendar-heatmap",
             "matrix-heatmap",
+            "relation-list",
             "scatter-chart",
         ],
     },
@@ -806,7 +807,7 @@ pub const COMPONENTS: &[Component] = &[
     .about("One value on a ring: a score out of 100, steps toward a goal, with the value in the middle.")
     .parts("default"),
     component("rings", "Rings", &["Rings", "RingValue", "RingTrack"], "thumb")
-        .about("Two to four values on rings inside each other, each against its own goal.")
+        .about("Two to six values on rings inside each other, each against its own goal.")
         .parts("default"),
     component("gauge", "Gauge", &["Gauge", "RingTrack", "Screen"], "thumb")
         .about("One value on an open arc, 270 degrees or any sweep, on a scale that may start above zero.")
@@ -849,6 +850,14 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .about("Every measure against every other, such as a correlation matrix: a tone for the sign, depth for the strength, neutral for chance and blank for untested.")
+    .parts("default"),
+    component(
+        "relation-list",
+        "Relation list",
+        &["RelationList", "Relation", "GridLabels"],
+        "thumb",
+    )
+    .about("Pairs of measures ranked by how strongly they move together: the signed value, a bar from the centre by sign and a note on each row.")
     .parts("default"),
     component(
         "scatter-chart",
