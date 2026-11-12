@@ -370,6 +370,9 @@ async fn document(request: &ErrorContext, error: &AppError, options: &PagesOptio
             kind,
             StateKind::SignIn | StateKind::RateLimited | StateKind::Unavailable
         );
+    // A native client's web view draws no chrome: the client draws its own.
+    #[cfg(feature = "native-preview")]
+    let wants_shell = wants_shell && !crate::asked::in_web_view(&request.headers);
     if wants_shell && let Some(shell) = shell_of(request).await {
         let app = shell.for_request(request.uri.path(), &request.headers);
         return page.in_shell(&app).into_response();
