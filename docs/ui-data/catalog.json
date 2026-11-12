@@ -157,7 +157,11 @@
         "bar-chart",
         "donut-chart",
         "sparkline",
-        "funnel"
+        "funnel",
+        "ring",
+        "rings",
+        "gauge",
+        "day-clock"
       ]
     },
     {
@@ -2038,6 +2042,88 @@
         "funnel/default",
         "funnel/rates",
         "funnel/states"
+      ]
+    },
+    {
+      "id": "ring",
+      "name": "Ring",
+      "url": "/docs/components/ring/",
+      "summary": "One value on a ring: a score out of 100, steps toward a goal, with the value in the middle.",
+      "group": "charts",
+      "types": [
+        "Ring",
+        "RingTrack",
+        "Screen",
+        "RadialLabels"
+      ],
+      "thumb": "ring/thumb",
+      "anatomy": "ring/default",
+      "examples": [
+        "ring/thumb",
+        "ring/default",
+        "ring/paint",
+        "ring/colors",
+        "ring/middle",
+        "ring/goal",
+        "ring/sizes",
+        "ring/states"
+      ]
+    },
+    {
+      "id": "rings",
+      "name": "Rings",
+      "url": "/docs/components/rings/",
+      "summary": "Two to four values on rings inside each other, each against its own goal.",
+      "group": "charts",
+      "types": [
+        "Rings",
+        "RingValue",
+        "RingTrack"
+      ],
+      "thumb": "rings/thumb",
+      "anatomy": "rings/default",
+      "examples": [
+        "rings/thumb",
+        "rings/default",
+        "rings/two",
+        "rings/pill"
+      ]
+    },
+    {
+      "id": "gauge",
+      "name": "Gauge",
+      "url": "/docs/components/gauge/",
+      "summary": "One value on an open arc, 270 degrees or any sweep, on a scale that may start above zero.",
+      "group": "charts",
+      "types": [
+        "Gauge",
+        "RingTrack",
+        "Screen"
+      ],
+      "thumb": "gauge/thumb",
+      "anatomy": "gauge/default",
+      "examples": [
+        "gauge/thumb",
+        "gauge/default",
+        "gauge/sweeps"
+      ]
+    },
+    {
+      "id": "day-clock",
+      "name": "Day clock",
+      "url": "/docs/components/day-clock/",
+      "summary": "A day round a clock face: a wedge for each hour, its length the value, its colour a category, with moments marked.",
+      "group": "charts",
+      "types": [
+        "DayClock",
+        "Moment"
+      ],
+      "thumb": "day-clock/thumb",
+      "anatomy": "day-clock/default",
+      "examples": [
+        "day-clock/thumb",
+        "day-clock/default",
+        "day-clock/scale"
       ]
     },
     {
@@ -45556,6 +45642,2742 @@
         "2 years: months"
       ],
       "slots": []
+    },
+    {
+      "id": "ring/thumb",
+      "component": "ring",
+      "slug": "thumb",
+      "title": "Rings for three scores",
+      "kind": "single",
+      "code": "Row::gap(6).children((\n    Ring::new(\"Sleep score\", 82)\n        .id(\"thumb-sleep\")\n        .label(\"Sleep\")\n        .fill(Gradient::sheen(Ink::slot(7)))\n        .size(140),\n    Ring::new(\"Recovery\", 74)\n        .id(\"thumb-recovery\")\n        .label(\"Recovery\")\n        .fill(Gradient::sheen(Ink::slot(3)))\n        .size(140),\n    Ring::new(\"Movement\", 61)\n        .id(\"thumb-movement\")\n        .label(\"Movement\")\n        .fill(Gradient::sheen(Ink::slot(2)))\n        .size(140),\n))",
+      "src": "/ui-preview/ring/thumb.html",
+      "height": 200,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-size",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-center",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "count-up",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-data",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-table",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring/default",
+      "component": "ring",
+      "slug": "default",
+      "title": "A score with its label",
+      "kind": "single",
+      "code": "Card::titled(\"Harleen Kaur · last night\").body(\n    Ring::new(\"Sleep score\", 82)\n        .id(\"ring-sleep\")\n        .label(\"Sleep score\")\n        .sublabel(\"Great recovery\")\n        .fill(Gradient::sheen(Ink::slot(7)))\n        .glow()\n        .size(200)\n        .motion(Motion::new().delay(200)),\n)",
+      "src": "/ui-preview/ring/default.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "count-up-9e7cfe48a268.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-sub",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring/paint",
+      "component": "ring",
+      "slug": "paint",
+      "title": "Solid, gradient, halo and glow",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"Solid\",\n        Ring::new(\"Heart score\", 78)\n            .id(\"paint-solid\")\n            .label(\"Heart\")\n            .ink(Ink::slot(8))\n            .size(150)\n            .into(),\n    ),\n    (\n        \"Two-stop gradient\",\n        Ring::new(\"Mind score\", 69)\n            .id(\"paint-sheen\")\n            .label(\"Mind\")\n            .fill(Gradient::sheen(Ink::tone(Tone::named(\"cyan\"))))\n            .size(150)\n            .into(),\n    ),\n    (\n        \"Five stops, halo, glow\",\n        Ring::new(\"Health score\", 92)\n            .id(\"paint-rainbow\")\n            .label(\"Health\")\n            .fill(\n                Gradient::diagonal()\n                    .stop(0.0, Ink::tone(Tone::named(\"cyan\")))\n                    .stop(0.25, Ink::slot(3))\n                    .stop(0.5, Ink::slot(7))\n                    .stop(0.75, Ink::slot(5))\n                    .stop(1.0, Ink::slot(2)),\n            )\n            .halo()\n            .glow()\n            .size(150)\n            .into(),\n    ),\n    (\n        \"Tinted track\",\n        Ring::new(\"Movement score\", 64)\n            .id(\"paint-tinted\")\n            .label(\"Movement\")\n            .ink(Ink::slot(2))\n            .track(RingTrack::Tinted)\n            .size(150)\n            .into(),\n    ),\n]",
+      "src": "/ui-preview/ring/paint.html",
+      "height": 250,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Solid",
+        "Two-stop gradient",
+        "Five stops, halo, glow",
+        "Tinted track"
+      ],
+      "slots": []
+    },
+    {
+      "id": "ring/colors",
+      "component": "ring",
+      "slug": "colors",
+      "title": "Colour by band",
+      "kind": "single",
+      "code": "let zones = || {\n    ColorScale::new(Ink::tone(Tone::Danger))\n        .label(\"Low\")\n        .from(34, Ink::tone(Tone::Warning))\n        .label(\"Fair\")\n        .from(67, Ink::tone(Tone::Success))\n        .label(\"Recovered\")\n};\nRow::gap(8).wrap().children((\n    Ring::new(\"Recovery, Gurpreet Singh\", 87)\n        .id(\"zone-high\")\n        .label(\"Recovery\")\n        .sublabel(\"Recovered\")\n        .unit(\"%\")\n        .colors(zones())\n        .glow()\n        .size(160),\n    Ring::new(\"Recovery, Simran Kaur\", 52)\n        .id(\"zone-mid\")\n        .label(\"Recovery\")\n        .sublabel(\"Fair\")\n        .unit(\"%\")\n        .colors(zones())\n        .glow()\n        .size(160),\n    Ring::new(\"Recovery, Arjun Sharma\", 23)\n        .id(\"zone-low\")\n        .label(\"Recovery\")\n        .sublabel(\"Low\")\n        .unit(\"%\")\n        .colors(zones())\n        .glow()\n        .size(160),\n))",
+      "src": "/ui-preview/ring/colors.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-size",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-center",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "count-up",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-unit",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-sub",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-data",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-table",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring/middle",
+      "component": "ring",
+      "slug": "middle",
+      "title": "What the middle holds",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"A value with its unit\",\n        Ring::new(\"Blood oxygen\", 97)\n            .id(\"middle-unit\")\n            .unit(\"%\")\n            .label(\"SpO2\")\n            .ink(Ink::tone(Tone::named(\"cyan\")))\n            .size(140)\n            .into(),\n    ),\n    (\n        \"A value toward a goal\",\n        Ring::new(\"Water, goal 2.5 litres\", 1.8)\n            .id(\"middle-scale\")\n            .max(2.5)\n            .unit(\"L\")\n            .label(\"Water\")\n            .ink(Ink::slot(1))\n            .size(140)\n            .into(),\n    ),\n    (\n        \"An icon\",\n        Ring::new(\"Active minutes\", 45)\n            .id(\"middle-icon\")\n            .max(60)\n            .center_icon(icons::FLAME)\n            .ink(Ink::slot(2))\n            .size(140)\n            .into(),\n    ),\n    (\n        \"Your own words\",\n        Ring::new(\"VO2 max 48.2, top 8% for age\", 92)\n            .id(\"middle-own\")\n            .center(Stack::gap(0).align(Align::Center).children((\n                Text::new(\"Top 8%\"),\n                Text::muted(\"for your age\"),\n            )))\n            .ink(Ink::slot(7))\n            .size(140)\n            .into(),\n    ),\n]",
+      "src": "/ui-preview/ring/middle.html",
+      "height": 230,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "A value with its unit",
+        "A value toward a goal",
+        "An icon",
+        "Your own words"
+      ],
+      "slots": []
+    },
+    {
+      "id": "ring/goal",
+      "component": "ring",
+      "slug": "goal",
+      "title": "Toward a goal, and past it",
+      "kind": "single",
+      "code": "Row::gap(8).wrap().children((\n    Ring::new(\"Steps, Rohit Malhotra\", 6_420)\n        .id(\"goal-under\")\n        .max(10_000)\n        .locale(\"en-IN\")\n        .label(\"Steps\")\n        .sublabel(\"Goal 10,000\")\n        .fill(Gradient::sheen(Ink::slot(3)))\n        .size(160),\n    Ring::new(\"Steps, Priya Verma\", 12_450)\n        .id(\"goal-over\")\n        .max(10_000)\n        .locale(\"en-IN\")\n        .label(\"Steps\")\n        .sublabel(\"125% of goal\")\n        .fill(Gradient::sheen(Ink::slot(3)))\n        .size(160),\n    Ring::new(\"Steps this month, Neha Kapoor\", 2_84_500)\n        .id(\"goal-lakh\")\n        .max(3_00_000)\n        .locale(\"en-IN\")\n        .label(\"Steps\")\n        .sublabel(\"This month\")\n        .fill(Gradient::sheen(Ink::slot(3)))\n        .size(160),\n))",
+      "src": "/ui-preview/ring/goal.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-size",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-lap",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-center",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-value",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "count-up",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-sub",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-data",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-table",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring/sizes",
+      "component": "ring",
+      "slug": "sizes",
+      "title": "From 56 to 200 pixels",
+      "kind": "single",
+      "code": "Row::gap(6).wrap().align(Align::Center).children((\n    Ring::new(\"Recovery at 56 pixels\", 72)\n        .id(\"size-56\")\n        .label(\"Recovery\")\n        .ink(Ink::slot(3))\n        .size(56),\n    Ring::new(\"Recovery at 64 pixels\", 72)\n        .id(\"size-64\")\n        .label(\"Recovery\")\n        .ink(Ink::slot(3))\n        .size(64),\n    Ring::new(\"Recovery at 96 pixels\", 72)\n        .id(\"size-96\")\n        .label(\"Recovery\")\n        .ink(Ink::slot(3))\n        .size(96),\n    Ring::new(\"Recovery at 128 pixels, 160 on wider screens\", 72)\n        .id(\"size-128\")\n        .label(\"Recovery\")\n        .ink(Ink::slot(3))\n        .size(128)\n        .size_on(Screen::Lg, 160),\n    Ring::new(\"Recovery at 200 pixels\", 72)\n        .id(\"size-200\")\n        .label(\"Recovery\")\n        .sublabel(\"Good\")\n        .ink(Ink::slot(3))\n        .size(200),\n))",
+      "src": "/ui-preview/ring/sizes.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 5,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial-stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-label",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-data",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-table",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring/states",
+      "component": "ring",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "Row::gap(6).children((\n    Ring::new(\"Sleep score\", 0).id(\"state-loading\").size(140).loading(),\n    Ring::new(\"Sleep score\", 0)\n        .id(\"state-failed\")\n        .size(140)\n        .failed(Some(\"The tracker did not sync\".into())),\n    Ring::new(\"Sleep score\", None::<f64>)\n        .id(\"state-empty\")\n        .size(140)\n        .empty(\"No sleep yet\", Some(\"It shows after the first night.\".into())),\n))",
+      "src": "/ui-preview/ring/states.html",
+      "height": 230,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart",
+              "tag": "figure",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "chart-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-title",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-state",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-spacer",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-state-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rings/thumb",
+      "component": "rings",
+      "slug": "thumb",
+      "title": "Activity rings",
+      "kind": "single",
+      "code": "Rings::new(\"Activity\")\n    .id(\"rings-thumb\")\n    .ring(RingValue::new(\"Move\", 540).max(600).ink(Ink::slot(8)))\n    .ring(RingValue::new(\"Exercise\", 38).max(30).ink(Ink::slot(3)))\n    .ring(RingValue::new(\"Stand\", 9).max(12).ink(Ink::tone(Tone::named(\"cyan\"))))\n    .track(RingTrack::Tinted)\n    .size(180)",
+      "src": "/ui-preview/rings/thumb.html",
+      "height": 220,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "radial",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial-size",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "radial-plot",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-track",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-arc",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-track",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-arc",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-lap",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-track",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-arc",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rings/default",
+      "component": "rings",
+      "slug": "default",
+      "title": "Three rings with a legend",
+      "kind": "single",
+      "code": "Card::titled(\"Manpreet Gill · today\").body(\n    Rings::new(\"Activity\")\n        .id(\"rings-activity\")\n        .ring(\n            RingValue::new(\"Move\", 540)\n                .max(600)\n                .unit(\"kcal\")\n                .fill(Gradient::sheen(Ink::slot(8))),\n        )\n        .ring(\n            RingValue::new(\"Exercise\", 38)\n                .max(30)\n                .unit(\"min\")\n                .fill(Gradient::sheen(Ink::slot(3))),\n        )\n        .ring(\n            RingValue::new(\"Stand\", 9)\n                .max(12)\n                .unit(\"hr\")\n                .fill(Gradient::sheen(Ink::tone(Tone::named(\"cyan\")))),\n        )\n        .track(RingTrack::Tinted)\n        .center_values()\n        .legend()\n        .glow()\n        .size(220)\n        .motion(Motion::new().delay(150)),\n)",
+      "src": "/ui-preview/rings/default.html",
+      "height": 320,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-split",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-lap",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-row",
+                                      "tag": "span",
+                                      "count": 3,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-legend",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rings/two",
+      "component": "rings",
+      "slug": "two",
+      "title": "Two rings and an icon",
+      "kind": "single",
+      "code": "Card::titled(\"Nervous system · Jaspreet Dhillon\").body(\n    Rings::new(\"Autonomic balance\")\n        .id(\"rings-balance\")\n        .ring(\n            RingValue::new(\"Sympathetic\", 42)\n                .unit(\"%\")\n                .fill(Gradient::sheen(Ink::slot(8)))\n                .track(RingTrack::Tinted),\n        )\n        .ring(\n            RingValue::new(\"Parasympathetic\", 68)\n                .unit(\"%\")\n                .fill(Gradient::sheen(Ink::tone(Tone::named(\"cyan\"))))\n                .track(RingTrack::Tinted),\n        )\n        .center_icon(icons::ACTIVITY)\n        .legend()\n        .size(160),\n)",
+      "src": "/ui-preview/rings/two.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-split",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-size",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-plot",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-track",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-arc",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-center",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-legend",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-key",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-name",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-of",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-share",
+                                  "tag": "strong",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rings/pill",
+      "component": "rings",
+      "slug": "pill",
+      "title": "Tiny rings in a date pill",
+      "kind": "single",
+      "code": "let scores = |id: &str, size: u32| {\n    Rings::new(\"Movement 35, recovery 72, sleep 78\")\n        .id(id.to_owned())\n        .ring(RingValue::new(\"Movement\", 35).ink(Ink::slot(2)))\n        .ring(RingValue::new(\"Recovery\", 72).ink(Ink::slot(3)))\n        .ring(RingValue::new(\"Sleep\", 78).ink(Ink::slot(7)))\n        .size(size)\n        .inline()\n};\nRow::gap(4).align(Align::Center).children((\n    Button::outline(Node::list((scores(\"pill-28\", 28), \"Wed, 11 Nov\")))\n        .icon_end(icons::CALENDAR),\n    Button::outline(Node::list((scores(\"pill-36\", 36), \"Yesterday\")))\n        .icon_end(icons::CALENDAR)\n        .size(Size::Lg),\n))",
+      "src": "/ui-preview/rings/pill.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "radial-inline",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-size",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-track",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-arc",
+                              "tag": "path",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gauge/thumb",
+      "component": "gauge",
+      "slug": "thumb",
+      "title": "A gauge",
+      "kind": "single",
+      "code": "Gauge::new(\"Relaxation\", 73)\n    .id(\"gauge-thumb\")\n    .label(\"Recovery index\")\n    .fill(\n        Gradient::horizontal()\n            .stop(0.0, Ink::slot(3))\n            .stop(1.0, Ink::tone(Tone::named(\"cyan\"))),\n    )\n    .size(180)",
+      "src": "/ui-preview/gauge/thumb.html",
+      "height": 220,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "radial",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial-size",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "radial-plot",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-track",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "radial-arc",
+                          "tag": "path",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "radial-center",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "count-up",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gauge/default",
+      "component": "gauge",
+      "slug": "default",
+      "title": "A 270 degree gauge",
+      "kind": "single",
+      "code": "Card::titled(\"Stress rhythm · Kavya Bhatia\").body(\n    Gauge::new(\"Relaxation\", 73)\n        .id(\"gauge-relax\")\n        .label(\"Recovery index\")\n        .sublabel(\"Calm\")\n        .fill(\n            Gradient::horizontal()\n                .stop(0.0, Ink::slot(3))\n                .stop(1.0, Ink::tone(Tone::named(\"cyan\"))),\n        )\n        .glow()\n        .size(200)\n        .motion(Motion::new()),\n)",
+      "src": "/ui-preview/gauge/default.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "count-up-9e7cfe48a268.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-track",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-arc",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-sub",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gauge/sweeps",
+      "component": "gauge",
+      "slug": "sweeps",
+      "title": "Other sweeps and scales",
+      "kind": "gallery",
+      "code": "vec![\n    (\n        \"Half a circle, a scale from 34\",\n        Gauge::new(\"Body temperature\", 36.7)\n            .id(\"sweep-half\")\n            .min(34)\n            .max(39)\n            .format(NumberFormat::decimals(1))\n            .unit(\"°C\")\n            .label(\"Temperature\")\n            .sweep(180.0)\n            .ink(Ink::slot(2))\n            .size(170)\n            .into(),\n    ),\n    (\n        \"240 degrees, colour by band\",\n        Gauge::new(\"Stress\", 64)\n            .id(\"sweep-stress\")\n            .label(\"Stress\")\n            .sublabel(\"Moderate\")\n            .sweep(240.0)\n            .colors(\n                ColorScale::new(Ink::tone(Tone::Success))\n                    .label(\"Relaxed\")\n                    .from(26, Ink::tone(Tone::named(\"cyan\")))\n                    .label(\"Balanced\")\n                    .from(51, Ink::tone(Tone::Warning))\n                    .label(\"Moderate\")\n                    .from(76, Ink::tone(Tone::Danger))\n                    .label(\"Elevated\"),\n            )\n            .size(170)\n            .into(),\n    ),\n    (\n        \"Small, with a tinted track\",\n        Gauge::new(\"Training load\", 1.3)\n            .id(\"sweep-small\")\n            .max(2)\n            .format(NumberFormat::decimals(1))\n            .label(\"Load\")\n            .ink(Ink::slot(4))\n            .track(RingTrack::Tinted)\n            .size(110)\n            .into(),\n    ),\n]",
+      "src": "/ui-preview/gauge/sweeps.html",
+      "height": 240,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Half a circle, a scale from 34",
+        "240 degrees, colour by band",
+        "Small, with a tinted track"
+      ],
+      "slots": []
+    },
+    {
+      "id": "day-clock/thumb",
+      "component": "day-clock",
+      "slug": "thumb",
+      "title": "A day round the clock",
+      "kind": "single",
+      "code": "DayClock::new(\"Steps by hour\")\n    .id(\"clock-thumb\")\n    .values(STEPS)\n    .unit(\"steps\")\n    .locale(\"en-IN\")\n    .size(280)",
+      "src": "/ui-preview/day-clock/thumb.html",
+      "height": 360,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "radial",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "radial-size",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "radial-plot",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "clock-dial",
+                          "tag": "g",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "clock-ring",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "clock-hour",
+                              "tag": "text",
+                              "count": 4,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "clock-hub",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "clock-anchors",
+                          "tag": "g",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "clock-anchor",
+                              "tag": "circle",
+                              "count": 24,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "clock-wedges",
+                          "tag": "g",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "clock-wedge",
+                              "tag": "path",
+                              "count": 24,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "clock-moments",
+                          "tag": "g",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "radial-center",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "count-up",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "radial-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day-clock/default",
+      "component": "day-clock",
+      "slug": "default",
+      "title": "Hours, moods and moments",
+      "kind": "single",
+      "code": "Card::titled(\"Ravneet Kaur · Wednesday\").body(\n    DayClock::new(\"Steps and mood by hour\")\n        .id(\"clock-day\")\n        .hide_title()\n        .values(STEPS)\n        .unit(\"steps\")\n        .category(\"Great\", Ink::slot(3))\n        .category(\"Good\", Ink::tone(Tone::named(\"cyan\")))\n        .category(\"Neutral\", Ink::muted())\n        .category(\"Stressed\", Ink::slot(8))\n        .category(\"Rest\", Ink::slot(7))\n        .categories([\n            4, 4, 4, 4, 4, 4, 1, 0, 0, 1, 2, 1, 1, 3, 3, 2, 1, 0, 0, 1, 2, 4, 4, 4,\n        ])\n        .moment(Moment::new(6.5, \"Woke up\").icon(icons::SUNRISE).ink(Ink::slot(4)))\n        .moment(Moment::new(7.5, \"Morning walk\").icon(icons::FOOTPRINTS).ink(Ink::slot(3)))\n        .moment(Moment::new(13.5, \"Lunch\").icon(icons::UTENSILS).ink(Ink::slot(2)))\n        .moment(Moment::new(14.5, \"Long meeting\").icon(icons::BRAIN).ink(Ink::slot(8)))\n        .moment(Moment::new(17.5, \"Badminton\").icon(icons::FLAME).ink(Ink::slot(2)))\n        .moment(Moment::new(22.5, \"Asleep\").icon(icons::MOON).ink(Ink::slot(7)))\n        .now(15)\n        .label(\"Steps\")\n        .center_icon(icons::FOOTPRINTS)\n        .locale(\"en-IN\")\n        .size(320)\n        .motion(Motion::new()),\n)",
+      "src": "/ui-preview/day-clock/default.html",
+      "height": 560,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js",
+        "count-up-9e7cfe48a268.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-legend",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-legend-item",
+                          "tag": "li",
+                          "count": 5,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-legend-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "clock-dial",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-ring",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "clock-hour",
+                                      "tag": "text",
+                                      "count": 4,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-hub",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "clock-anchors",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-anchor",
+                                      "tag": "circle",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-wedges",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-wedge",
+                                      "tag": "path",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-now",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "clock-moments",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-moment",
+                                      "tag": "g",
+                                      "count": 6,
+                                      "children": [
+                                        {
+                                          "slot": "radial-icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-tip",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-announce",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table-switch",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-table-label",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day-clock/scale",
+      "component": "day-clock",
+      "slug": "scale",
+      "title": "Colour by a scale of values",
+      "kind": "single",
+      "code": "Card::titled(\"Aditya Arora · active minutes\").body(\n    DayClock::new(\"Active minutes by hour\")\n        .id(\"clock-scale\")\n        .hide_title()\n        .values([\n            0, 0, 0, 0, 0, 0, 12, 38, 22, 6, 4, 8, 10, 3, 2, 5, 14, 46, 30, 9, 4, 1, 0, 0,\n        ])\n        .max(60)\n        .unit(\"min\")\n        .colors(\n            ColorScale::new(Ink::slot(1))\n                .label(\"Light\")\n                .from(15, Ink::slot(4))\n                .label(\"Moderate\")\n                .from(30, Ink::slot(8))\n                .label(\"Vigorous\"),\n        )\n        .moment(Moment::new(7.25, \"Cycling\").icon(icons::BIKE).ink(Ink::slot(4)))\n        .moment(Moment::new(17.25, \"Gym\").icon(icons::DUMBBELL).ink(Ink::slot(8)))\n        .now(20)\n        .label(\"Active min\")\n        .hub(Ink::slot(4))\n        .size(300),\n)",
+      "src": "/ui-preview/day-clock/scale.html",
+      "height": 520,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "card-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "card-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "card-content",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-legend",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-legend-item",
+                          "tag": "li",
+                          "count": 3,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-legend-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "radial",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-size",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "radial-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "clock-dial",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-ring",
+                                      "tag": "circle",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "clock-hour",
+                                      "tag": "text",
+                                      "count": 4,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-hub",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "clock-anchors",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-anchor",
+                                      "tag": "circle",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-wedges",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-wedge",
+                                      "tag": "path",
+                                      "count": 24,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "clock-now",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "clock-moments",
+                                  "tag": "g",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "clock-moment",
+                                      "tag": "g",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "radial-icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "radial-center",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial-value",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "count-up",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-tip",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-key",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-announce",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table-switch",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-table-label",
+                          "tag": "label",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "conversation/default",

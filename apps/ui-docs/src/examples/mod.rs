@@ -29,6 +29,7 @@ mod parts;
 mod patterns;
 mod phone;
 mod pickers;
+mod radial;
 mod sortable;
 mod states;
 mod store;
@@ -62,6 +63,7 @@ pub fn all() -> Vec<Example> {
     all.extend(data::all());
     all.extend(sortable::all());
     all.extend(charts::all());
+    all.extend(radial::all());
     all.extend(chat::all());
     all.extend(patterns::all());
     all.extend(themes::all());
