@@ -92,6 +92,10 @@ pub const FILES: &[&str] = &[
     "charts/donut.rs",
     "charts/funnel.rs",
     "charts/sparkline.rs",
+    "charts/radial/mod.rs",
+    "charts/radial/ring.rs",
+    "charts/radial/gauge.rs",
+    "charts/radial/clock.rs",
     "charts/format.rs",
     "charts/scale.rs",
     "charts/report.rs",
@@ -245,7 +249,12 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
 }
 
 /// The macros that write builder methods for several types.
-const SHARED_MACROS: &[&str] = &["picker_methods", "typed_methods", "common_methods"];
+const SHARED_MACROS: &[&str] = &[
+    "picker_methods",
+    "typed_methods",
+    "common_methods",
+    "radial_methods",
+];
 
 /// The public methods of an `impl` block: constructors (no `self`) and builders.
 fn impl_methods(item: &syn::ItemImpl) -> (Vec<Method>, Vec<Method>) {
@@ -309,6 +318,8 @@ fn shared_impl(definition: &str, name: &str) -> Option<syn::ItemImpl> {
             .strip_suffix(')')?
             .replace("$type", name)
             .replace("$crate::charts::", "")
+            .replace("$crate::components::", "")
+            .replace("$crate::icons::", "")
             .replace("$crate::dates::", "")
             .replace("$crate::node::", "")
             .replace("$crate::html::", "")
@@ -522,7 +533,9 @@ mod tests {
     #[test]
     fn every_chart_has_the_builders_all_charts_share() {
         let api = read(|file| crate::read_repo(&format!("crates/navree-ui/src/{file}")));
-        for name in ["Chart", "Donut", "Funnel", "Sparkline"] {
+        for name in [
+            "Chart", "Donut", "Funnel", "Sparkline", "Ring", "Rings", "Gauge", "DayClock",
+        ] {
             let doc = &api[name];
             for method in [
                 "id", "heading", "locale", "table", "loading", "failed", "retry",

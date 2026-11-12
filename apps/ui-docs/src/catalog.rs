@@ -157,6 +157,10 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "ring",
+            "rings",
+            "gauge",
+            "day-clock",
         ],
     },
     Group {
@@ -750,6 +754,23 @@ pub const COMPONENTS: &[Component] = &[
         .parts("default"),
     component("funnel", "Funnel", &["Funnel", "Stage"], "thumb")
         .about("How many reach each stage of an ordered process, and what share of the first and of the stage before.")
+        .parts("default"),
+    component(
+        "ring",
+        "Ring",
+        &["Ring", "RingTrack", "Screen", "RadialLabels"],
+        "thumb",
+    )
+    .about("One value on a ring: a score out of 100, steps toward a goal, with the value in the middle.")
+    .parts("default"),
+    component("rings", "Rings", &["Rings", "RingValue", "RingTrack"], "thumb")
+        .about("Two to four values on rings inside each other, each against its own goal.")
+        .parts("default"),
+    component("gauge", "Gauge", &["Gauge", "RingTrack", "Screen"], "thumb")
+        .about("One value on an open arc, 270 degrees or any sweep, on a scale that may start above zero.")
+        .parts("default"),
+    component("day-clock", "Day clock", &["DayClock", "Moment"], "thumb")
+        .about("A day round a clock face: a wedge for each hour, its length the value, its colour a category, with moments marked.")
         .parts("default"),
     // Assistant
     component(
