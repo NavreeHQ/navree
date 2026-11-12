@@ -267,7 +267,9 @@ impl View {
     /// Adds a request header to `Vary`: the page differs by it, so a cache keeps one copy
     /// per value. A page that is public for a guest and private for a reader who is signed
     /// in varies by `Cookie` (and `Authorization`, for a client that signs in with a token),
-    /// so no cache hands a reader's page to a guest:
+    /// for the caches that honour it. Several CDNs ignore `Vary: Cookie`: in front of one,
+    /// also skip the cache for requests that carry the session cookie, and send a signed-in
+    /// reader's page as `private, no-store`:
     ///
     /// ```
     /// use navree_http::response::IntoResponse;

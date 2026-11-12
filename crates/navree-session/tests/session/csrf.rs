@@ -867,12 +867,25 @@ async fn a_same_origin_only_path_takes_a_post_from_this_site_without_the_token()
         .send()
         .await
         .assert_status(200);
-    // A client that says nothing of where it posts from changes only its own preference.
-    client
+    // A request that says nothing of where it comes from passes only with no session to
+    // ride on (a script); with the session cookie it is refused.
+    app.client()
         .post("/api/probe/write")
         .send()
         .await
         .assert_status(200);
+    client
+        .post("/api/probe/write")
+        .send()
+        .await
+        .assert_error(403, "Invalid CSRF token");
+    // Every state-changing method at the path is checked alike.
+    client
+        .put("/api/probe/write")
+        .header("sec-fetch-site", "cross-site")
+        .send()
+        .await
+        .assert_error(403, "Invalid CSRF token");
 
     // Another site, a sibling subdomain or a navigation typed in is refused.
     for site in ["cross-site", "same-site", "none"] {

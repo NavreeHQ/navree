@@ -186,14 +186,45 @@ impl Service<Request> for GuestOr {
         };
         Box::pin(async move {
             let mut response = service.oneshot(request).await?;
+            let headers = response.headers_mut();
+            // A signed-in reader's page is theirs alone: no shared cache may keep it,
+            // whatever its handler said (or didn't). `Vary: Cookie` is not enough, since
+            // several CDNs ignore it.
+            if signed_in && !kept_private(headers) {
+                headers.insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("private, no-store"),
+                );
+            }
             // The same address answers by who is asking: a cache keeps a copy per sign-in.
-            response.headers_mut().append(
+            headers.append(
                 http::header::VARY,
                 http::HeaderValue::from_static("cookie, authorization"),
             );
             Ok(response)
         })
     }
+}
+
+/// Whether `Cache-Control` keeps a response out of shared caches: it says `private` or
+/// `no-store` and not `public` or `s-maxage`.
+fn kept_private(headers: &http::HeaderMap) -> bool {
+    let directives: Vec<String> = headers
+        .get_all(http::header::CACHE_CONTROL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(|directive| {
+            directive
+                .split('=')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+        })
+        .collect();
+    let has = |name: &str| directives.iter().any(|directive| directive == name);
+    (has("private") || has("no-store")) && !has("public") && !has("s-maxage")
 }
 
 impl std::fmt::Debug for Endpoint {
