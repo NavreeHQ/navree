@@ -339,9 +339,6 @@ jobs:
             tail -100 "$RUNNER_TEMP/emulator.log"
             exit 1
           fi
-          "$adb" root > /dev/null
-          sleep 3
-          "$adb" wait-for-device
           for scale in window_animation_scale transition_animation_scale animator_duration_scale; do
             "$adb" shell settings put global "$scale" 0
           done
