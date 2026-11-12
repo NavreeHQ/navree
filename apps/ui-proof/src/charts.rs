@@ -343,6 +343,51 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "lanes",
+            Chart::area("Sleep stages in lanes")
+                .id("lanes")
+                .times(hours(8))
+                .series(Series::new("Stage", [1, 0, 1, 2, 1, 0, 2, 3]).ink(Ink::slot(7)))
+                .curve(Curve::Step)
+                .y_categories(["Deep", "Light", "REM", "Awake"])
+                .lanes()
+                .dots(Dots::None)
+                .into(),
+        ),
+        (
+            "bar-baseline",
+            Chart::bar("Body age by part")
+                .id("bar-baseline")
+                .categories(["Heart", "Lungs", "Muscle", "Metabolism"])
+                .series(Series::new("Age", [31, 38, 34, 41]).unit("years"))
+                .baseline(36)
+                .y_domain(Domain::fixed(26, 46))
+                .into(),
+        ),
+        (
+            "clock-axis",
+            Chart::line("Bedtime")
+                .id("clock-axis")
+                .categories(["Mon", "Tue", "Wed", "Thu", "Fri"])
+                .series(Series::new("To bed", [310, 340, 385, 290, 420]))
+                .series(Series::new("Woke up", [760, 750, 790, 745, 830]))
+                .format(NumberFormat::clock(18))
+                .into(),
+        ),
+        (
+            "meter-details",
+            Meter::new("Heart rate zones")
+                .id("meter-details")
+                .minutes()
+                .detail_name("Heart rate")
+                .segment(Segment::new("Zone 1", 14).detail("under 109 bpm"))
+                .segment(Segment::new("Zone 2", 19).detail("109–127 bpm"))
+                .segment(Segment::new("Zone 3", 8).detail("127–146 bpm"))
+                .segment(Segment::new("Zone 4", 0).detail("146–164 bpm"))
+                .segment(Segment::new("Zone 5", 0).detail(NASTY))
+                .into(),
+        ),
+        (
             "meter",
             Meter::new("Sleep stages")
                 .id("meter")
@@ -645,6 +690,20 @@ fn cases() -> Vec<(&'static str, Node)> {
                             "Wed, 11 Nov",
                         ))),
                     )),
+                    // Five rings in a row that sizes its items to their content: they keep
+                    // their drawing's width.
+                    Row::gap(4).children((
+                        ["Sleep", "Recovery", "Movement", "Stress", "Mind"]
+                            .iter()
+                            .zip([84, 71, 58, 36, 66])
+                            .fold(
+                                Rings::new("Today's scores").id("rings-3"),
+                                |rings, (name, value)| rings.ring(RingValue::new(*name, value)),
+                            )
+                            .center_values()
+                            .size(160),
+                        Text::new("Five scores of the day"),
+                    )),
                 ))
                 .into(),
         ),
@@ -669,6 +728,15 @@ fn cases() -> Vec<(&'static str, Node)> {
                         .unit("°C")
                         .sweep(180.0)
                         .size(160),
+                    Gauge::new("Load ratio", 1.12)
+                        .id("gauge-3")
+                        .max(2)
+                        .format(NumberFormat::decimals(2).fixed())
+                        .zone(Zone::new(0, 0.8).label("Undertraining"))
+                        .zone(Zone::new(0.8, 1.3).label("Optimal"))
+                        .zone(Zone::new(1.3, 1.5).label("Overreaching"))
+                        .zone(Zone::new(1.5, 2).label(NASTY))
+                        .size(180),
                 ))
                 .into(),
         ),
@@ -695,6 +763,7 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .moment(Moment::new(7.5, "Morning walk").icon(icons::FOOTPRINTS))
                 .moment(Moment::new(13.5, NASTY).icon(icons::UTENSILS))
                 .now(15)
+                .band()
                 .locale("en-IN")
                 .motion(Motion::new())
                 .into(),
