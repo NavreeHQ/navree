@@ -23,6 +23,14 @@ pub fn all() -> Vec<Example> {
         single!("meter", "zones", "Heart rate zones", meter_zones)
             .start()
             .height(150),
+        single!(
+            "meter",
+            "details",
+            "Every zone, with its range",
+            meter_details
+        )
+        .start()
+        .height(190),
         single!("meter", "compact", "The compact form", meter_compact)
             .start()
             .height(270),
@@ -476,4 +484,40 @@ fn badge_status() -> Row {
             .tone(Tone::named("slate"))
             .icon(icons::CIRCLE_MINUS),
     ))
+}
+
+fn meter_details() -> Meter {
+    // Every zone is given, the empty ones too: the legend lists all five, the empty ones
+    // hollow, each with its heart-rate range under its name.
+    Meter::new("Time in heart rate zones")
+        .id("meter-details")
+        .description("Navjot Cheema, evening walk, 41 minutes")
+        .minutes()
+        .label_from(12.0)
+        .detail_name("Heart rate")
+        .segment(
+            Segment::new("Zone 1 · Easy", 14)
+                .ink(Ink::tone(Tone::named("slate")))
+                .detail("under 109 bpm"),
+        )
+        .segment(
+            Segment::new("Zone 2 · Fat burn", 19)
+                .ink(Ink::tone(Tone::named("cyan")))
+                .detail("109–127 bpm"),
+        )
+        .segment(
+            Segment::new("Zone 3 · Cardio", 8)
+                .ink(Ink::tone(Tone::Success))
+                .detail("127–146 bpm"),
+        )
+        .segment(
+            Segment::new("Zone 4 · Peak", 0)
+                .ink(Ink::tone(Tone::Warning))
+                .detail("146–164 bpm"),
+        )
+        .segment(
+            Segment::new("Zone 5 · Max", 0)
+                .ink(Ink::tone(Tone::Danger))
+                .detail("164 bpm and over"),
+        )
 }

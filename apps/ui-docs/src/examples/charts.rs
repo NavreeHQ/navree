@@ -89,6 +89,14 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(300),
+        single!(
+            "line-chart",
+            "clock",
+            "Times of day, through midnight",
+            line_chart_clock
+        )
+        .start()
+        .height(330),
         single!("line-chart", "table", "The table, shown", line_chart_table)
             .start()
             .height(550),
@@ -135,6 +143,14 @@ pub fn all() -> Vec<Example> {
             "steps",
             "Steps between named levels",
             area_chart_steps
+        )
+        .start()
+        .height(330),
+        single!(
+            "area-chart",
+            "lanes",
+            "A lane for each level, the lowest filled too",
+            area_chart_lanes
         )
         .start()
         .height(330),
@@ -217,6 +233,14 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(340),
+        single!(
+            "bar-chart",
+            "baseline",
+            "Bars from a level other than zero",
+            bar_chart_baseline
+        )
+        .start()
+        .height(300),
         single!("bar-chart", "many", "More bars than fit", bar_chart_many)
             .start()
             .width(820)
@@ -1457,4 +1481,52 @@ fn sparkline_painted() -> Grid {
                     .motion(Motion::new().delay(200)),
             ),
     ))
+}
+
+fn area_chart_lanes() -> Chart {
+    // The same night with a lane for each stage: deep sleep fills down to the foot of its
+    // lane, like the others.
+    area_chart_steps().id("area-chart-lanes").lanes()
+}
+
+fn bar_chart_baseline() -> Chart {
+    Chart::bar("Body age by part")
+        .id("bar-chart-baseline")
+        .description("Inderjit Bains, 36: each part's age against his own")
+        .categories(["Heart", "Lungs", "Muscle", "Metabolism", "Flexibility"])
+        .series(
+            Series::new("Age", [31, 38, 33, 41, 35])
+                .unit("years")
+                .colors(
+                    ColorScale::new(Ink::tone(Tone::Success))
+                        .label("Younger")
+                        .from(36.5, Ink::tone(Tone::Warning))
+                        .label("Older"),
+                ),
+        )
+        .baseline(36)
+        .y_domain(Domain::fixed(26, 46))
+        .reference(Reference::level(36).label("Your age"))
+}
+
+fn line_chart_clock() -> Chart {
+    // Minutes past 6 PM: bedtimes before and after midnight, and waking in the morning.
+    let to_bed = [
+        310, 335, 290, 355, 400, 420, 300, 315, 340, 285, 365, 410, 395, 305,
+    ];
+    let woke = [
+        755, 760, 745, 770, 800, 850, 750, 755, 765, 740, 775, 820, 845, 750,
+    ];
+    let first = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap_or_default();
+    Chart::line("Bedtime and waking")
+        .id("line-chart-clock")
+        .description("Amandeep Kahlon, the last 14 nights")
+        .locale("en-IN")
+        .days((0..14).map(|d| first + Duration::days(d)))
+        .series(Series::new("To bed", to_bed).ink(Ink::slot(7)))
+        .series(Series::new("Woke up", woke).ink(Ink::slot(4)))
+        .format(NumberFormat::clock(18))
+        .dots(Dots::All)
+        .y_ticks(6)
+        .height(240)
 }

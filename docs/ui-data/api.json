@@ -3106,6 +3106,18 @@
         "doc": "Names the values of the value axis: value 0 is `names[0]`, 1 is `names[1]`. Each name is a tick, the axis runs from the first to the last, and the table and the tooltip write the name, not the number: for states such as sleep stages, with `Curve::Step`."
       },
       {
+        "name": "lanes",
+        "generics": "",
+        "args": "",
+        "doc": "Gives each of the named values a lane of its own: the axis runs half a step past the first and the last, so each name sits in the middle of its band, and an area fills down to the foot of the lowest lane. A stepped area over sleep stages then shows the lowest stage (deep sleep) as an area like the others, not as a line along the foot of the plot."
+      },
+      {
+        "name": "baseline",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "Bars grow from `value`, up for a value above it and down for one below, rather than from zero: years from an age, degrees from a normal temperature, a score against a reference. A line is drawn at the level, and the value axis holds it and the values without reaching down to zero, so a domain such as `Domain::fixed(18, 60)` is kept. Bars side by side only: a stack still grows from zero. The table and the tooltip say the values as they are."
+      },
+      {
         "name": "reference",
         "generics": "",
         "args": "reference: Reference",
@@ -6287,6 +6299,12 @@
     ],
     "methods": [
       {
+        "name": "band",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a thin band round the hub, under the wedges, in each hour's category: every hour shows its category, an hour with nothing in it too (asleep, resting), where its wedge is only a faint stub. An hour with no category leaves a gap in the band."
+      },
+      {
         "name": "values",
         "generics": "<V: IntoValue>",
         "args": "values: impl IntoIterator<Item = V>",
@@ -8820,6 +8838,12 @@
         "doc": "How far the arc sweeps, in degrees from 90 to 360 (270 by default): 180 is a half circle, open below."
       },
       {
+        "name": "zone",
+        "generics": "",
+        "args": "zone: super::super::Zone",
+        "doc": "Adds a zone of the scale, drawn on the track in its colour: from and to in the value's units, with a label for the legend, the summary and the table. A zone with no ink takes the chart colours in turn. Where zones overlap, the one added last is drawn over and names the value."
+      },
+      {
         "name": "show_title",
         "generics": "",
         "args": "",
@@ -8967,7 +8991,7 @@
         "name": "colors",
         "generics": "",
         "args": "scale: ColorScale",
-        "doc": "Colours the arc by the band its share of the scale (0 to 100) falls in. The band's label is said in the summary and the table, so the colour is never alone."
+        "doc": "Colours the arc by the band its value falls in. The thresholds are values in the scale's own units, as a chart series reads them: on a gauge from 0 to 2, `from(1.3, ..)` starts a band at 1.3. The band's label is said in the summary and the table, so the colour is never alone."
       },
       {
         "name": "track",
@@ -11709,10 +11733,16 @@
         "doc": "The smallest share, in percent, that is written inside its segment (15 by default). A bar under 18 px high writes none."
       },
       {
+        "name": "detail_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What the segments' details are called in the table and the tooltip (`Detail` by default): `Heart rate`."
+      },
+      {
         "name": "legend",
         "generics": "",
         "args": "shown: bool",
-        "doc": "Shows or hides the legend under the bar. It is shown, except on a compact meter."
+        "doc": "Shows or hides the legend under the bar. It is shown, except on a compact meter. It lists every segment, an empty one too, with its key hollow."
       },
       {
         "name": "value_name",
@@ -12903,6 +12933,12 @@
         "generics": "",
         "args": "symbol: impl Into<Cow<'static, str>>",
         "doc": "Money: `symbol` before the number, two decimals at most."
+      },
+      {
+        "name": "clock",
+        "generics": "",
+        "args": "origin_hour: u8",
+        "doc": "Times of day: a value is minutes past `origin_hour` (0 to 23), written as the time it comes to, past midnight too. With an origin of 18, `0` is `6:00 PM`, `340` is `11:40 PM` and `760` is `6:40 AM`, so the nights' bedtimes and waking times sit on one axis that runs through midnight, from the evening to the morning."
       }
     ],
     "methods": [
@@ -15013,6 +15049,174 @@
     "variants": [],
     "shared": []
   },
+  "RelationList": {
+    "name": "RelationList",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/grids/relations.rs",
+    "summary": "A ranked list of how pairs of measures relate: the findings of a set of correlations, strongest first. Each row names the pair, writes its signed value, draws a bar from the centre to the right for a link that moves together and to the left for one that moves apart (longer the stronger, to the value at `peak`), and says its note under it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A list called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "relation",
+        "generics": "",
+        "args": "a: impl Into<String>, b: impl Into<String>, relation: Relation",
+        "doc": "How measures `a` and `b` relate. The rows are ranked by the size of the value, whatever order they are given in."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "positive: impl Into<Ink>, negative: impl Into<Ink>",
+        "doc": "The colours of a link that moves together and of one that moves apart: blue and orange by default, which stay apart for every reader. Use tones when the sign means good and bad."
+      },
+      {
+        "name": "peak",
+        "generics": "",
+        "args": "value: impl IntoValue",
+        "doc": "The value a bar reaches the end at (1 by default, for a correlation). A larger value is as long as it."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written (two decimals by default). A value above zero is written with its `+`."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "What the value is called in the table (`Value` by default)."
+      },
+      {
+        "name": "only_significant",
+        "generics": "",
+        "args": "",
+        "doc": "Lists only the significant pairs. The table still has every pair."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: GridLabels",
+        "doc": "The words the list writes."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the rows come in: each bar grows from the centre, one after another. Off by default."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Reply": {
     "name": "Reply",
     "kind": "struct",
@@ -15471,6 +15675,12 @@
         "doc": "`self` moved toward `toward` in OKLab, in steps of 2 %, until it reaches `ratio` against every colour of `on`. `toward` itself when no step does."
       },
       {
+        "name": "vivid",
+        "generics": "",
+        "args": "side: super::Side",
+        "doc": "The far end of a chart colour's sheen, and the colour of a ring's second lap, on the `side` palette: the same colour deeper on a light page and brighter on a dark one. It keeps its colour as it changes: deeper is darker with a little more chroma, and a warm hue (orange, amber, yellow) turns a little toward red as it darkens, the way pigments deepen, so it never turns brown, as a mix with the text's near-black would. Brighter is lighter, a touch less vivid, warm hues a touch toward yellow."
+      },
+      {
         "name": "ink",
         "generics": "",
         "args": "",
@@ -15642,7 +15852,7 @@
         "name": "colors",
         "generics": "",
         "args": "scale: ColorScale",
-        "doc": "Colours the arc by the band its share of the scale (0 to 100) falls in. The band's label is said in the summary and the table, so the colour is never alone."
+        "doc": "Colours the arc by the band its value falls in. The thresholds are values in the scale's own units, as a chart series reads them: on a gauge from 0 to 2, `from(1.3, ..)` starts a band at 1.3. The band's label is said in the summary and the table, so the colour is never alone."
       },
       {
         "name": "track",
@@ -15816,7 +16026,7 @@
     "name": "Rings",
     "kind": "struct",
     "file": "crates/navree-ui/src/charts/radial/ring.rs",
-    "summary": "Two to four values on rings inside each other, the first outside: the day's movement, exercise and standing; the two branches of the nervous system. Each ring starts at twelve o'clock, has its own colour or gradient and track, and draws a second lap past its goal. They come in one after another.",
+    "summary": "Two to six values on rings inside each other, the first outside: the day's movement, exercise and standing; the two branches of the nervous system; five scores of a day. Each ring starts at twelve o'clock, has its own colour or gradient and track, and draws a second lap past its goal. They come in one after another.",
     "constructors": [
       {
         "name": "new",
@@ -15830,7 +16040,7 @@
         "name": "ring",
         "generics": "",
         "args": "ring: RingValue",
-        "doc": "Adds a ring inside the ones before it. Four are drawn at most; the table lists every value."
+        "doc": "Adds a ring inside the ones before it. Six are drawn at most (`MAX_RINGS`), fewer when a thickness you set leaves no room; a note says so, and the legend and the table list every value."
       },
       {
         "name": "format",
@@ -15854,7 +16064,7 @@
         "name": "thickness",
         "generics": "",
         "args": "px: f64",
-        "doc": "Each ring's thickness in pixels at the base size: in step with the size by default, 12 at 160."
+        "doc": "Each ring's thickness in pixels at the base size: in step with the size by default, 12 at 160 for up to four rings, thinner for five or six."
       },
       {
         "name": "gap",
@@ -16674,10 +16884,16 @@
         "name": "new",
         "generics": "",
         "args": "name: impl Into<String>, value: impl IntoValue",
-        "doc": "A segment called `name` that holds `value`. A value that is missing, zero or below zero draws nothing and stays in the legend and the table."
+        "doc": "A segment called `name` that holds `value`. A value that is missing, zero or below zero draws nothing and stays in the legend, its key hollow, and in the table: give every part, the empty ones too, and the legend lists them all."
       }
     ],
     "methods": [
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "A second line under its name in the legend, such as the range a heart-rate zone covers (`109–127 bpm`). The table gives it a column of its own, named by `Meter::detail_name`, and the tooltip a line."
+      },
       {
         "name": "ink",
         "generics": "",
