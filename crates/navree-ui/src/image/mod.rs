@@ -260,14 +260,33 @@ impl ChartImage {
             .ok_or(ImageError::NoDrawing)
     }
 
-    /// The same document as a node, to put in a page or an email as it is.
+    /// The same document as a node, to put in a page as it is: it fills the width it is
+    /// given and keeps its shape.
     ///
     /// # Errors
     ///
     /// As [`svg`](Self::svg).
     pub fn svg_node(&self, node: &Node) -> Result<Node, ImageError> {
+        let tag = self.etag(node)?;
+        let prefix: String = std::iter::once('i')
+            .chain(tag.chars().filter(char::is_ascii_hexdigit).take(10))
+            .collect();
+        let inks = self.inks();
+        let background = match self.backdrop {
+            Backdrop::Clear => None,
+            _ => Some(inks.surface),
+        };
+        let svg = Writer::new(&inks)
+            .ids(prefix)
+            .document(node, self.width, self.height, background)
+            .ok_or(ImageError::NoDrawing)?;
+        let sized = format!(r#"width="{}" height="{}" "#, self.width, self.height);
         // The document is written by this module alone, every text and value escaped.
-        self.svg(node).map(|svg| Node::Raw(SafeHtml::trusted(svg)))
+        Ok(Node::Raw(SafeHtml::trusted(svg.replacen(
+            &sized,
+            r#"width="100%" "#,
+            1,
+        ))))
     }
 
     /// The tag of the picture of `node`: a hash of the resolved drawing, the size and
