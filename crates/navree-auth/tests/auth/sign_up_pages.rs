@@ -377,3 +377,91 @@ async fn the_theme_menu_posts_from_this_site_without_the_token() {
         .assert_status(403);
     let _: &TestApp = &app;
 }
+
+// Login CSRF: a page on a sibling subdomain, or a browser that says nothing of where it
+// posts from, sends the attacker's details to the sign-in or sign-up form of a reader who
+// has no session yet. Every form of the pages is drawn by a GET that starts the session,
+// so a post without its cookie is refused before anything runs, and nobody is signed in.
+#[tokio::test]
+async fn a_post_with_no_session_cookie_signs_nobody_in() {
+    let app = with(
+        support::mail_builder()
+            .config("auth.magic_link.enabled", true)
+            .config(
+                "auth.magic_link.url",
+                "https://app.example.com/sign-in/link/verify",
+            )
+            .config("auth.otp.enabled", true),
+        AuthPages::new().sign_up(),
+    )
+    .build()
+    .await;
+    create_user(&app, "attacker@example.com").await;
+    let posts: [(&str, Vec<(&str, &str)>); 7] = [
+        (
+            "/sign-in",
+            vec![("email", "attacker@example.com"), ("password", PASSWORD)],
+        ),
+        (
+            "/sign-up",
+            sign_up("mallory@example.com", PASSWORD, PASSWORD),
+        ),
+        ("/forgot-password", vec![("email", "attacker@example.com")]),
+        (
+            "/reset-password",
+            vec![
+                ("email", "attacker@example.com"),
+                ("token", "x"),
+                ("password", PASSWORD),
+                ("password_confirmation", PASSWORD),
+            ],
+        ),
+        ("/sign-in/link", vec![("email", "attacker@example.com")]),
+        ("/sign-in/code", vec![("email", "attacker@example.com")]),
+        (
+            "/sign-in/code/verify",
+            vec![("email", "attacker@example.com"), ("code", "123456")],
+        ),
+    ];
+    for (path, fields) in &posts {
+        for site in [Some("same-site"), Some("none"), None] {
+            let victim = app.client();
+            let mut request = victim.post(path).header("accept", "text/html");
+            if let Some(site) = site {
+                request = request.header("sec-fetch-site", site);
+            }
+            request.form(fields).send().await.assert_status(403);
+            victim
+                .get("/api/probe/whoami")
+                .send()
+                .await
+                .assert_status(401);
+        }
+    }
+    let made = app
+        .get::<navree_auth::AuthService>()
+        .await
+        .find_by_email("mallory@example.com")
+        .await
+        .unwrap();
+    assert!(made.is_none(), "no account was made");
+    assert!(
+        support::sent_mail(&app).await.is_empty(),
+        "no mail was sent"
+    );
+
+    // The same forms, drawn first as a browser does, work.
+    let browser = app.client();
+    post_form(
+        &browser,
+        "/sign-in",
+        &[("email", "attacker@example.com"), ("password", PASSWORD)],
+    )
+    .await
+    .assert_status(303);
+    browser
+        .get("/api/probe/whoami")
+        .send()
+        .await
+        .assert_status(200);
+}
