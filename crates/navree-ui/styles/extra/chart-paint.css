@@ -1,0 +1,56 @@
+/* Chart paint: what chart marks share past the plain ones, linked by a mark that uses it:
+   the colours of gradient stops, glow, motion, a sparkline's points and columns, a
+   progress bar drawn as a meter, a number that counts up. Colours come from tokens by
+   data-color and data-tone; nothing here needs a style attribute. */
+[data-color="1"]{--c:var(--chart-1)}
+[data-color="2"]{--c:var(--chart-2)}
+[data-color="3"]{--c:var(--chart-3)}
+[data-color="4"]{--c:var(--chart-4)}
+[data-color="5"]{--c:var(--chart-5)}
+[data-color="6"]{--c:var(--chart-6)}
+[data-color="7"]{--c:var(--chart-7)}
+[data-color="8"]{--c:var(--chart-8)}
+[data-color=other]{--c:var(--fg-3)}
+[data-color=accent]{--c:var(--accent)}
+[data-tone]{--c:var(--tone,var(--fg-3))}
+
+/* A gradient's stops: the ink, or the ink mixed toward the text (vivid) or the surface (soft). */
+stop{stop-color:var(--c)}
+stop[data-mix=vivid]{stop-color:color-mix(in oklab,var(--c) 62%,var(--fg))}
+stop[data-mix=soft]{stop-color:color-mix(in oklab,var(--c) 30%,var(--surface,var(--ink-0)))}
+
+/* Glow: a soft shadow of the mark's own colour, fainter on a light page. */
+[data-glow]{filter:drop-shadow(0 0 5px light-dark(color-mix(in oklab,var(--c) 30%,transparent),color-mix(in oklab,var(--c) 55%,transparent)))}
+
+/* Motion: a way in, never a state. The marks are drawn where they end; the animations only
+   start them elsewhere, and only for a reader who has not asked for less motion. */
+@keyframes ui-wipe{from{clip-path:inset(-50% 100% -50% -50%)}to{clip-path:inset(-50%)}}
+@keyframes ui-wipe-back{from{clip-path:inset(-50% -50% -50% 100%)}to{clip-path:inset(-50%)}}
+@keyframes ui-draw{from{stroke-dasharray:1 1;stroke-dashoffset:1}to{stroke-dasharray:1 1;stroke-dashoffset:0}}
+@keyframes ui-grow-y{from{transform:scaleY(0)}}
+@keyframes ui-grow-x{from{transform:scaleX(0)}}
+@keyframes ui-fade{from{opacity:0}}
+@keyframes ui-pop{from{opacity:0;transform:scale(0)}}
+@media (prefers-reduced-motion:no-preference){
+  [data-motion]{--t:.7s;animation:calc(var(--t) * var(--k,1)) cubic-bezier(.25,.46,.45,.94) backwards;transform-box:fill-box}
+  [data-motion=wipe]{--t:1.2s;animation-name:ui-wipe}
+  [data-motion=wipe-back]{--t:1.2s;animation-name:ui-wipe-back}
+  [data-motion=draw]{--t:1.2s;animation-name:ui-draw}
+  [data-motion=grow-up]{animation-name:ui-grow-y;transform-origin:50% 100%}
+  [data-motion=grow-down]{animation-name:ui-grow-y;transform-origin:50% 0}
+  [data-motion=grow-right]{animation-name:ui-grow-x;transform-origin:0 50%}
+  [data-motion=grow-left]{animation-name:ui-grow-x;transform-origin:100% 50%}
+  [data-motion=fade]{--t:.5s;animation-name:ui-fade}
+  [data-motion=pop]{--t:.4s;animation-name:ui-pop;transform-origin:center}
+  [data-speed=fast]{--k:.55}
+  [data-speed=slow]{--k:1.5}
+  [data-delay="1"]{animation-delay:50ms}[data-delay="2"]{animation-delay:.1s}[data-delay="3"]{animation-delay:.15s}[data-delay="4"]{animation-delay:.2s}
+  [data-delay="5"]{animation-delay:.25s}[data-delay="6"]{animation-delay:.3s}[data-delay="7"]{animation-delay:.35s}[data-delay="8"]{animation-delay:.4s}
+  [data-delay="9"]{animation-delay:.45s}[data-delay="10"]{animation-delay:.5s}[data-delay="11"]{animation-delay:.55s}[data-delay="12"]{animation-delay:.6s}
+  [data-delay="13"]{animation-delay:.65s}[data-delay="14"]{animation-delay:.7s}[data-delay="15"]{animation-delay:.75s}[data-delay="16"]{animation-delay:.8s}
+  [data-delay="17"]{animation-delay:.85s}[data-delay="18"]{animation-delay:.9s}[data-delay="19"]{animation-delay:.95s}[data-delay="20"]{animation-delay:1s}
+  [data-delay="21"]{animation-delay:1.05s}[data-delay="22"]{animation-delay:1.1s}[data-delay="23"]{animation-delay:1.15s}[data-delay="24"]{animation-delay:1.2s}
+}
+
+/* A number that counts up keeps its width while it does. */
+[data-slot=count-up]{font-variant-numeric:tabular-nums}

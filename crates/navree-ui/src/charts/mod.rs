@@ -40,11 +40,15 @@ use crate::components::Tone;
 use crate::icons;
 use crate::node::{Element, IntoNodes, Node, Uses, el};
 
+pub(crate) mod axes;
 mod cartesian;
 mod donut;
 mod downsample;
 mod format;
 mod funnel;
+pub(crate) mod marks;
+pub(crate) mod motion;
+pub(crate) mod paint;
 mod report;
 mod report_export;
 #[cfg(feature = "orm")]
@@ -53,7 +57,11 @@ mod scale;
 mod sparkline;
 mod value;
 
+pub use axes::{Axis, Domain, Grid, Ticks};
 pub use cartesian::{Annotation, At, Chart, Merge, Series};
+pub use marks::{ActiveDot, Curve, Dots, Place, Reference, Tooltip, Zone};
+pub use motion::{CountUp, Motion, Speed};
+pub use paint::{ColorScale, Gradient, Ink};
 pub use donut::Donut;
 pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
@@ -463,6 +471,8 @@ pub(crate) enum Color {
     Tone(Tone),
     /// The rest, in the quiet ink.
     Other,
+    /// The theme's accent.
+    Accent,
 }
 
 impl Color {
@@ -475,6 +485,7 @@ impl Color {
                 None => element.attr("data-color", "other"),
             },
             Self::Other => element.attr("data-color", "other"),
+            Self::Accent => element.attr("data-color", "accent"),
         }
     }
 
@@ -578,30 +589,74 @@ pub(crate) struct TableData {
     pub note: Option<String>,
 }
 
+/// What a chart's tooltip shows: a line for each column of its table after the first.
+pub(crate) struct Tip {
+    /// The first line's value large, in its colour.
+    pub big: bool,
+    /// The lines, in the order of the table's columns.
+    pub lines: Vec<TipLine>,
+}
+
+/// One line of a tooltip.
+pub(crate) struct TipLine {
+    /// The column's name, without its unit.
+    pub name: String,
+    /// What the value counts, written after it.
+    pub unit: Option<String>,
+    /// The colour of the line's key and its big value.
+    pub color: Option<Color>,
+    /// Whether the line has a key: a series does, a detail doesn't.
+    pub key: bool,
+}
+
+impl Tip {
+    /// The default: a keyed line for each column of `head` after the first.
+    fn of(head: &[(String, Option<Color>)]) -> Self {
+        Self {
+            big: false,
+            lines: head
+                .iter()
+                .skip(1)
+                .map(|(name, color)| TipLine {
+                    name: name.clone(),
+                    unit: None,
+                    color: *color,
+                    key: true,
+                })
+                .collect(),
+        }
+    }
+}
+
 /// The tooltip the module fills in: a head for the row's name, and a line for each column of
-/// the table (a colour key, a value, the column's name). The module writes the values as
-/// text; the legend's switches hide the line of a series they hide.
-fn tip_node(head: &[(String, Option<Color>)]) -> Node {
-    let lines: Vec<Node> = head
-        .iter()
-        .skip(1)
+/// the table (a colour key, a value, its unit, the column's name). The module writes the
+/// values as text, and gives a line the colour of a cell that carries one (a value
+/// coloured by its band); the legend's switches hide the line of a series they hide.
+fn tip_node(tip: Tip) -> Node {
+    let lines: Vec<Node> = tip
+        .lines
+        .into_iter()
         .enumerate()
-        .map(|(at, (name, color))| {
-            let key = el("span").slot("chart-key").attr("data-key", "line");
-            let key = match color {
-                Some(color) => color.on(key),
-                None => key,
+        .map(|(at, line)| {
+            let row = el("div").attr("data-tip", "row").attr("data-s", at as i64);
+            let row = match line.color {
+                Some(color) => color.on(row),
+                None => row,
             };
-            el("div")
-                .attr("data-tip", "row")
-                .attr("data-s", at as i64)
-                .children((key, el("strong"), el("span").child(name.clone())))
-                .into()
+            row.children((
+                line.key
+                    .then(|| el("span").slot("chart-key").attr("data-key", "line")),
+                el("strong"),
+                line.unit.map(|unit| el("em").child(unit)),
+                el("span").child(line.name),
+            ))
+            .into()
         })
         .collect();
     el("div")
         .slot("chart-tip")
         .attr("aria-hidden", "true")
+        .attr_opt("data-big", tip.big.then_some(""))
         .children((el("div").attr("data-tip", "head"), lines))
         .into()
 }
@@ -670,6 +725,8 @@ pub(crate) struct Drawn {
     /// Whether the module makes it a tab stop with tooltips. A sparkline in a row of
     /// figures is not: it is a picture with its summary as its name.
     pub interactive: bool,
+    /// The tooltip's lines, when not one per column of the table with its colour.
+    pub tip: Option<Tip>,
 }
 
 /// The figure every chart is drawn in. `drawn` is `None` when there is nothing to
@@ -806,7 +863,13 @@ pub(crate) fn frame(common: Common, drawn: Option<Drawn>, kind: &'static str, he
                 body = body.attr(name, value);
             }
             let switch_id = format!("{id}-table-switch");
-            let tip = drawn.interactive.then(|| tip_node(&drawn.table.head));
+            let tip = drawn.interactive.then(|| {
+                tip_node(
+                    drawn
+                        .tip
+                        .unwrap_or_else(|| Tip::of(&drawn.table.head)),
+                )
+            });
             let table = table_node(&common.title, drawn.table);
             let data = match common.table {
                 TableMode::Switch => el("div").slot("chart-data").children((

@@ -133,6 +133,7 @@ const FILES = [
   ["carousel", "js", "text/javascript; charset=utf-8", await js("carousel.js")],
   ["menubar", "js", "text/javascript; charset=utf-8", await js("menubar.js")],
   ["charts", "js", "text/javascript; charset=utf-8", await js("charts.js")],
+  ["count-up", "js", "text/javascript; charset=utf-8", await js("count-up.js")],
   ["islands", "js", "text/javascript; charset=utf-8", await js("islands.js")],
   ["parts", "js", "text/javascript; charset=utf-8", await js("parts.js")],
   ["genui", "js", "text/javascript; charset=utf-8", await js("genui.js")],
@@ -152,6 +153,8 @@ const FILES = [
   ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
   ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
   ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
+  // What chart marks share past the plain ones: paint, glow and motion. No script.
+  ["chart-paint", "css", "text/css; charset=utf-8", await extraCss(["chart-paint.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
 ];
