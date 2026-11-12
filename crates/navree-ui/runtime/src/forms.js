@@ -144,6 +144,10 @@ async function send(form, submitter) {
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
     const response = await (method === "GET" ? fetch(url, init) : whileWriting(() => fetch(url, init)));
     answered = true;
+    // A redirect off this site is refused before its body is read: no ops, no page from it.
+    // (The server's own actions answer the runtime with ops; a redirect comes from a handler
+    // without the UI module, which the runtime follows like a boosted link on this site only.)
+    if (response.redirected && !sameOrigin(response.url)) throw new Error("redirected off this site");
     status = response.status;
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);

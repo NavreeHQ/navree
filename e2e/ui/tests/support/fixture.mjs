@@ -57,8 +57,12 @@ export async function start() {
       route(req, res, body, url);
     });
   });
+  /** path -> (req, res) => void: the other origin's own answers, for a test that needs one. */
+  const evilRoutes = new Map();
   const evilServer = createServer((req, res) => {
     evil.push({ method: req.method, url: req.url, headers: req.headers });
+    const own = evilRoutes.get(new URL(req.url, "http://x").pathname);
+    if (own) return own(req, res);
     res.writeHead(200, { "content-type": "text/html", "access-control-allow-origin": "*" });
     res.end("<!doctype html><title>EVIL</title><h1>evil origin</h1>");
   });
@@ -74,5 +78,5 @@ export async function start() {
     res.writeHead(status, { "content-type": "application/vnd.navree.ops+json", "cache-control": "no-store", ...headers });
     res.end(JSON.stringify(envelope));
   };
-  return { log, evil, routes, origin, evilOrigin, html, ops, close: () => { server.close(); evilServer.close(); } };
+  return { log, evil, evilRoutes, routes, origin, evilOrigin, html, ops, close: () => { server.close(); evilServer.close(); } };
 }
