@@ -1,0 +1,92 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "ghost",
+   "node": {
+    "t": "text",
+    "value": "never drawn",
+    "id": "ghost"
+   }
+  },
+  {
+   "op": "replace",
+   "target": "ghost",
+   "node": {
+    "t": "text",
+    "value": "never drawn",
+    "id": "ghost"
+   }
+  },
+  {
+   "op": "append",
+   "target": "ghost",
+   "nodes": [
+    {
+     "t": "text",
+     "value": "never drawn"
+    }
+   ]
+  },
+  {
+   "op": "prepend",
+   "target": "ghost",
+   "nodes": [
+    {
+     "t": "text",
+     "value": "never drawn"
+    }
+   ]
+  },
+  {
+   "op": "append",
+   "target": "headline",
+   "nodes": [
+    {
+     "t": "text",
+     "value": "a text holds no nodes"
+    }
+   ]
+  },
+  {
+   "op": "remove",
+   "target": "ghost"
+  },
+  {
+   "op": "errors",
+   "form": "ghost",
+   "fields": {
+    "name": [
+     "Never shown."
+    ]
+   }
+  },
+  {
+   "op": "open",
+   "target": "ghost"
+  },
+  {
+   "op": "open",
+   "target": "headline"
+  },
+  {
+   "op": "close",
+   "target": "ghost"
+  },
+  {
+   "op": "focus",
+   "target": "ghost"
+  },
+  {
+   "op": "invalidate",
+   "target": "ghost"
+  },
+  {
+   "op": "toast",
+   "text": "Still here"
+  }
+ ]
+}

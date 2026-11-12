@@ -1,0 +1,33 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Activity",
+  "body": {
+   "t": "list",
+   "id": "feed",
+   "more": "/activity?cursor=a3",
+   "children": [
+    {
+     "t": "row",
+     "id": "e1",
+     "title": "CS-220480 was placed",
+     "subtitle": "Tejinder Randhawa, Ludhiana · ₹507"
+    },
+    {
+     "t": "row",
+     "id": "e2",
+     "title": "CS-220479 was packed",
+     "subtitle": "Simran Gill, Amritsar · ₹1,24,050"
+    },
+    {
+     "t": "row",
+     "id": "e3",
+     "title": "CS-220478 was shipped",
+     "subtitle": "Aarav Malhotra, Chandigarh · ₹2,310"
+    }
+   ]
+  }
+ }
+}

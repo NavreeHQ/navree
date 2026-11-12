@@ -1,0 +1,75 @@
+{
+  "about": "Opening the app: the shell is fetched, its destinations become the top-level navigation, and the first destination's page is fetched. Here that page holds a chart, so the server sends it to the web view.",
+  "steps": [
+    {
+      "note": "The app starts. Nothing is drawn yet; the core asks for the shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/phase","is":"starting"},
+        {"at":"/destinations","is":[]}
+      ]
+    },
+    {
+      "note": "Starting twice asks once.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The shell arrives. The store has three destinations; the first is in front and its page is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/phase","is":"ready"},
+        {"at":"/app/name","is":"Charkha Supply Co."},
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/destinations/0/label","is":"Dashboard"},
+        {"at":"/destinations/1/href","is":"/orders"},
+        {"at":"/destinations/2/label","is":"Inventory"},
+        {"at":"/destinations/0/group","is":"Store"},
+        {"at":"/selected","is":0},
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/front","is":1},
+        {"at":"/screens/1/loading","is":true},
+        {"at":"/screens/1/content/t","is":"blank"},
+        {"at":"/can_go_back","is":false}
+      ]
+    },
+    {
+      "note": "The dashboard can't be drawn natively yet: the answer says to show it in the web view, and why.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/t","is":"web"},
+        {"at":"/screens/1/content/url","is":"https://shop.example/"},
+        {"at":"/screens/1/content/title","is":"Dashboard"},
+        {"at":"/screens/1/content/why","is":["slot:chart","hook:data-ui-feed"]},
+        {"at":"/screens/1/loading","is":false}
+      ]
+    }
+  ]
+}

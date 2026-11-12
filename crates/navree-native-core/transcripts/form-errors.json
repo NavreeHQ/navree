@@ -1,0 +1,183 @@
+{
+  "about": "A form the server refuses: each message is shown at its field, and the first field in error is asked to take the focus. Nothing the person typed is lost.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Refund opens the refund dialog.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person types an amount of nothing.",
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"0"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "And picks a reason.",
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-reason","value":{"t":"text","text":"late"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/fields/refund-reason/value/text","is":"late"}
+      ]
+    },
+    {
+      "note": "The dialog's Refund button sends the form it stands in: a post, as a form, with the fields in document order.",
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders/1/refund","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"amount=0&reason=late"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/pending","is":true}
+      ]
+    },
+    {
+      "note": "The server answers 422 with an `errors` op.",
+      "send": {"t":"response","request":5,"status":422,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/refund-refused.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"announce","notice":"fields_need_attention","count":1}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/pending","is":false},
+        {"at":"/screens/3/forms/refund/fields/refund-amount/errors","is":["Enter an amount above zero, like 24.00."]},
+        {"at":"/screens/3/forms/refund/fields/refund-reason/errors","is":[]},
+        {"at":"/screens/3/forms/refund/fields/refund-amount/value/text","is":"0"},
+        {"at":"/screens/3/focus","is":{"serial":1,"target":"refund-amount"}},
+        {"at":"/screens/3/overlays","is":["refund"]}
+      ]
+    },
+    {
+      "note": "The client has moved the focus and says so.",
+      "send": {"t":"focused","screen":3,"serial":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/focus","is":null}
+      ]
+    },
+    {
+      "note": "Typing in the field takes its message away: it was about what the field held before.",
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"10"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/fields/refund-amount/errors","is":[]}
+      ]
+    }
+  ]
+}

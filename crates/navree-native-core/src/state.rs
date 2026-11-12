@@ -142,6 +142,9 @@ pub struct Destination {
 pub struct Modal {
     /// `sheet` or `full`.
     pub present: Present,
+    /// Whether the person can't take it away: the sign-in a session that
+    /// ended is sent to. A back with nothing else to do leaves the app.
+    pub locked: bool,
     /// Its screens, the first at the bottom.
     pub stack: Vec<ScreenId>,
 }
@@ -599,6 +602,9 @@ pub(crate) struct ScreenInner {
     /// The sends on their way, with what each said.
     pub sending: BTreeMap<String, String>,
     pub waiting: BTreeMap<String, Waiting>,
+    /// The forms an op took away or put a new one in place of, since the last
+    /// send was answered: what waited to be sent from one has nowhere to go.
+    pub replaced: BTreeSet<String>,
     /// The newest fetch of each region.
     pub turns: BTreeMap<String, u64>,
     pub regions: BTreeMap<String, RegionMeta>,
@@ -663,8 +669,10 @@ pub(crate) struct Inner {
     pub app_stamp: Option<String>,
     pub shell_stamp: Option<String>,
     pub routes: Vec<Route>,
-    /// Who the shell was for: a change of person empties everything.
+    /// Who the shell is for now, and who was last signed in. When the person
+    /// changes, nothing of the one before may show.
     pub user: Option<(String, Option<String>)>,
+    pub person: Option<(String, Option<String>)>,
     pub has_shell: bool,
     /// An address the app was opened with before the shell had arrived.
     pub launch: Option<String>,

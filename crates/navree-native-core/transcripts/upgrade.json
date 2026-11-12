@@ -1,0 +1,54 @@
+{
+  "about": "The server says the app is too old to serve safely. The app stops and offers the newer one.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/upgrade.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/phase","is":"upgrade"},
+        {"at":"/upgrade/min_app","is":"2.0.0"},
+        {"at":"/screens/1/loading","is":false}
+      ]
+    },
+    {
+      "note": "The person agrees: the one address outside the app's origin that the core asks to open by itself.",
+      "send": {"t":"open_upgrade"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://play.google.com/store/apps/details?id=com.charkha.supply"}
+        ]
+      }
+    }
+  ]
+}

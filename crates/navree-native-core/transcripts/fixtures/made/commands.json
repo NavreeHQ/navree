@@ -1,0 +1,123 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Help",
+  "body": {
+   "t": "stack",
+   "id": "page",
+   "children": [
+    {
+     "t": "stack",
+     "id": "tips",
+     "hidden": true,
+     "children": [
+      {
+       "t": "text",
+       "value": "Pull down to refresh."
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "value": "0/160",
+     "id": "count"
+    },
+    {
+     "t": "text",
+     "value": "Draft",
+     "id": "status"
+    },
+    {
+     "t": "disclosure",
+     "id": "about",
+     "label": "About this app",
+     "children": [
+      {
+       "t": "text",
+       "value": "Charkha Supply Co."
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "id": "panel",
+     "title": "Panel"
+    },
+    {
+     "t": "list",
+     "id": "rows",
+     "children": [
+      {
+       "t": "row",
+       "id": "row-1",
+       "title": "Phulkari dupatta"
+      },
+      {
+       "t": "row",
+       "id": "row-2",
+       "title": "Brass lota"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "id": "save",
+     "label": "Save",
+     "action": {
+      "t": "submit",
+      "form": "note"
+     }
+    },
+    {
+     "t": "form",
+     "id": "note",
+     "method": "post",
+     "action": "/notes",
+     "hidden": [
+      {
+       "name": "mode",
+       "value": "draft",
+       "id": "note-mode"
+      },
+      {
+       "name": "_csrf",
+       "value": "t0k3n"
+      }
+     ],
+     "children": [
+      {
+       "t": "field",
+       "name": "text",
+       "label": "Note",
+       "input": {
+        "t": "text",
+        "kind": "multiline",
+        "max_length": 160
+       },
+       "id": "note-text"
+      }
+     ]
+    },
+    {
+     "t": "sheet",
+     "id": "help",
+     "title": "Help",
+     "children": [
+      {
+       "t": "popover",
+       "id": "hint",
+       "children": [
+        {
+         "t": "text",
+         "value": "Tap a row."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

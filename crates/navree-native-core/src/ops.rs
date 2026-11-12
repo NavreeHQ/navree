@@ -192,6 +192,9 @@ impl Core {
         }
         for form in &survey.forms {
             inner.form_ids.remove(&form.handle);
+            if !morph {
+                inner.replaced.insert(form.handle.clone());
+            }
         }
         let mut was_open = Vec::new();
         let mut ids = Vec::new();
@@ -362,6 +365,7 @@ impl Core {
                         inner.dirty.remove(field);
                     }
                 }
+                inner.replaced.extend(survey.forms.iter().map(|form| form.handle.clone()));
                 let mut ids = Vec::new();
                 walk(old, &mut |other| ids.extend(other.id().map(str::to_owned)));
                 for id in &ids {
@@ -527,6 +531,11 @@ impl Core {
     }
 
     pub(crate) fn focus(&mut self, id: ScreenId, target: String) {
+        // A target that is not on the screen is skipped.
+        let there = self.view.screens.get(&id).and_then(ScreenView::screen).is_some_and(|screen| find_in(screen, &|node| has_id(node, &target)).is_some());
+        if !there {
+            return;
+        }
         if let Some(view) = self.view.screens.get_mut(&id) {
             self.inner.next.focus += 1;
             view.focus = Some(Focus {

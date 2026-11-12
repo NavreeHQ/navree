@@ -1,0 +1,12 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Totals",
+  "body": {
+   "t": "text",
+   "value": "₹33,10,004 today"
+  }
+ }
+}

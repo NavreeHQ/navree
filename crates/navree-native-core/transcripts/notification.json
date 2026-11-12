@@ -1,0 +1,115 @@
+{
+  "about": "The person taps a notification. Its address is read like any link from outside: here it belongs to Orders.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A sheet is open when the notification is tapped.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/orders/new"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The sheet goes (its page is no longer wanted), Orders is selected, and the order is stacked on its first screen.",
+      "send": {"t":"notification","href":"/orders/1"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"cancel","request":3},
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/selected","is":1},
+        {"at":"/destinations/1/stack","is":[3,4]},
+        {"at":"/screens/4/url","is":"/orders/1"},
+        {"at":"/screens/2","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/screen/title","is":"Order CS-20481"}
+      ]
+    },
+    {
+      "note": "Back leads to the orders, which were asked for at the same time.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/front","is":3}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    }
+  ]
+}

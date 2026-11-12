@@ -1,0 +1,65 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Sign in",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "sign-in",
+     "method": "post",
+     "action": "/sign-in",
+     "hidden": [
+      {
+       "name": "_csrf",
+       "value": "an0n"
+      }
+     ],
+     "children": [
+      {
+       "t": "field",
+       "name": "email",
+       "label": "Email",
+       "input": {
+        "t": "text",
+        "kind": "email",
+        "autofill": "email"
+       },
+       "required": true
+      },
+      {
+       "t": "field",
+       "name": "password",
+       "label": "Password",
+       "input": {
+        "t": "text",
+        "kind": "password",
+        "autofill": "current-password"
+       },
+       "required": true
+      },
+      {
+       "t": "button",
+       "label": "Sign in",
+       "role": "primary",
+       "action": {
+        "t": "submit"
+       }
+      }
+     ]
+    },
+    {
+     "t": "link",
+     "label": "Sign in with Google",
+     "action": {
+      "t": "navigate",
+      "href": "/auth/google"
+     }
+    }
+   ]
+  }
+ }
+}

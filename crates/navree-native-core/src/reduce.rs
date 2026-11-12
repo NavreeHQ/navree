@@ -80,7 +80,12 @@ impl Core {
             } => self.field_changed(screen, form.as_deref(), &field, value),
             Event::Back => self.back(),
             Event::PopTo { screen } => self.pop_to(screen),
-            Event::Dismissed { screen } => self.dismissed(screen),
+            Event::Dismissed { screen } => {
+                // The sign-in a session's end put up is not the person's to take away.
+                if !self.view.modals.iter().any(|modal| modal.locked && modal.stack.contains(&screen)) {
+                    self.dismissed(screen);
+                }
+            }
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
             Event::RegionRetry { screen, region } => self.fetch_region(screen, &region, None),
@@ -128,6 +133,8 @@ impl Core {
                 }
             }
             Event::SignedOut => {
+                // A shell asked for before now would be the old session's.
+                self.drop_pending(|_| true);
                 self.wipe();
                 self.inner.has_shell = false;
                 self.inner.user = None;
@@ -436,6 +443,9 @@ impl Core {
             Ok(shell) if shell.navree == MAJOR => {
                 self.install(shell);
                 self.remember_shell(response.body);
+                // This shell is at least as new as any stamp seen before it:
+                // the next envelope says which stamp it goes with.
+                self.inner.shell_stamp = None;
             }
             Ok(_) => self.shell_failed(Failure::Protocol),
             Err(error) => {
@@ -466,10 +476,26 @@ impl Core {
 
     fn install(&mut self, shell: Shell) {
         let user = shell.user.as_ref().map(|user| (user.name.clone(), user.email.clone()));
-        // Another person: nothing of the one before may show.
         if self.inner.has_shell && self.inner.user != user {
-            self.wipe();
-            self.forget_all();
+            match (&user, &self.inner.person) {
+                // Another person: nothing of the one before stays, not even where they were.
+                (Some(new), Some(last)) if new != last => {
+                    self.wipe();
+                    self.forget_all();
+                }
+                // The same person again, or the first to sign in.
+                (Some(_), _) => {}
+                // Nobody is signed in any more: what the screens showed is
+                // thrown away. Their addresses stay, so whoever signs in as
+                // the same person is back where they were.
+                (None, _) => {
+                    self.blank_all();
+                    self.forget_all();
+                }
+            }
+        }
+        if user.is_some() {
+            self.inner.person.clone_from(&user);
         }
         self.inner.user = user;
         self.inner.has_shell = true;
@@ -539,6 +565,40 @@ impl Core {
         }
     }
 
+    /// Empties every screen but the sign-in a session's end put up: what they
+    /// showed and what was typed in them belonged to someone who is gone.
+    fn blank_all(&mut self) {
+        let covers: Vec<ScreenId> = self
+            .view
+            .modals
+            .iter()
+            .filter(|modal| modal.locked)
+            .flat_map(|modal| modal.stack.iter().copied())
+            .collect();
+        let ids: Vec<ScreenId> = self.view.screens.keys().copied().filter(|id| !covers.contains(id)).collect();
+        for id in ids {
+            let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+                continue;
+            };
+            let fresh = ScreenView::new(id, view.url.clone(), view.chrome);
+            *view = fresh;
+            let visit = inner.visit + 1;
+            *inner = ScreenInner {
+                visit,
+                stale: true,
+                ..ScreenInner::default()
+            };
+            self.drop_pending(|purpose| match purpose {
+                Pending::Page { screen, .. } | Pending::Region { screen, .. } | Pending::More { screen, .. } | Pending::Send { screen, .. } => *screen == id,
+                Pending::Shell => false,
+            });
+            self.touch_screen(id);
+        }
+        self.view.messages.clear();
+        self.inner.messages.clear();
+        self.touch(Change::Messages);
+    }
+
     /// Takes every screen, message and request away. The shell stays until a
     /// new one says who is here now.
     pub(crate) fn wipe(&mut self) {
@@ -579,7 +639,12 @@ impl Core {
     /// answer asks for a newer app, and holds nothing else.
     pub(crate) fn note(&mut self, read: &mut Read, screen: Option<ScreenId>) -> bool {
         if !read.missing.is_empty() {
-            self.report("kind", read.missing.join(" "));
+            let what = match read.missing.first().map(String::as_str) {
+                Some("client:decode") => "decode",
+                Some("client:depth") => "depth",
+                _ => "kind",
+            };
+            self.report(what, read.missing.join(" "));
         }
         if let Some(upgrade) = read.envelope.upgrade.take() {
             self.view.upgrade = Some(upgrade);
@@ -661,6 +726,10 @@ impl Core {
         if !std::mem::take(&mut self.inner.signing_in) {
             return;
         }
+        // The person gave up: nothing changed.
+        let Some(url) = url else {
+            return;
+        };
         // Who is signed in may have changed, and with it everything on screen.
         self.fetch_shell();
         for inner in self.inner.screens.values_mut() {
@@ -668,9 +737,7 @@ impl Core {
         }
         self.inner.epoch += 1;
         self.forget_pages();
-        if let Some(url) = url {
-            self.opened(url);
-        }
+        self.opened(url);
     }
 
     // Screens.
@@ -979,10 +1046,13 @@ impl Core {
         }
         self.view.modals.push(Modal {
             present: route.1,
+            locked: true,
             stack: vec![id],
         });
         self.touch(Change::Nav);
         match shown {
+            // The sign-in is nobody's page to come back to: it is shown and not kept.
+            Some(Shown::Native { screen, status, .. }) => self.show_native(id, url, *screen, status, false),
             Some(shown) => self.show(id, url, shown),
             None => self.fetch_page(id, false),
         }
@@ -1102,11 +1172,16 @@ impl Core {
         self.sync_streams();
         let changed = std::mem::take(&mut self.changed);
         let whole = |screen: &ScreenId| changed.contains(&Change::Screen { id: *screen });
+        // A list whose rows were added says so once: the rows say its state too.
+        let grew = |screen: &ScreenId, list: &str| {
+            changed.iter().any(|change| matches!(change, Change::Rows { screen: other, id, count, .. } if other == screen && id == list && *count > 0))
+        };
         let changed = changed
             .iter()
             .filter(|change| match change {
                 Change::Screen { id } => self.view.holds(*id),
-                Change::Form { screen, .. } | Change::Rows { screen, .. } => self.view.holds(*screen) && !whole(screen),
+                Change::Form { screen, .. } => self.view.holds(*screen) && !whole(screen),
+                Change::Rows { screen, id, count, .. } => self.view.holds(*screen) && !whole(screen) && (*count > 0 || !grew(screen, id)),
                 _ => true,
             })
             .cloned()

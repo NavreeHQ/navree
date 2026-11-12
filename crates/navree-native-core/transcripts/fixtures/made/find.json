@@ -1,0 +1,50 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Find",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "find",
+     "action": "/find",
+     "children": [
+      {
+       "t": "field",
+       "name": "q",
+       "label": "Find a product",
+       "input": {
+        "t": "text",
+        "kind": "search",
+        "placeholder": "Shawl, dhurrie, lota"
+       }
+      },
+      {
+       "t": "field",
+       "name": "in_stock",
+       "label": "In stock only",
+       "input": {
+        "t": "toggle",
+        "kind": "checkbox"
+       }
+      },
+      {
+       "t": "button",
+       "label": "Find",
+       "action": {
+        "t": "submit"
+       }
+      }
+     ]
+    },
+    {
+     "t": "empty",
+     "title": "Nothing looked for yet"
+    }
+   ]
+  }
+ }
+}

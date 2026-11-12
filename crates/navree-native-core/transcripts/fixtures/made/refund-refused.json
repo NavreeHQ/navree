@@ -1,0 +1,16 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "ops": [
+  {
+   "op": "errors",
+   "form": "refund",
+   "fields": {
+    "amount": [
+     "Enter an amount above zero, like 24.00."
+    ]
+   }
+  }
+ ]
+}

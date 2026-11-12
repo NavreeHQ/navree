@@ -1,0 +1,26 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Activity",
+  "body": {
+   "t": "list",
+   "id": "feed",
+   "children": [
+    {
+     "t": "row",
+     "id": "e6",
+     "title": "CS-220475 was placed",
+     "subtitle": "Meher Bhatia, Mohali · ₹5,949"
+    },
+    {
+     "t": "row",
+     "id": "e7",
+     "title": "CS-220474 was placed",
+     "subtitle": "Ishaan Kapoor, Delhi · ₹576"
+    }
+   ]
+  }
+ }
+}

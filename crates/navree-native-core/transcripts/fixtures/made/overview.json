@@ -1,0 +1,35 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Overview",
+  "nav": "/",
+  "refresh": true,
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "region",
+     "id": "figures",
+     "src": "/fragments/figures",
+     "lazy": true,
+     "live": {
+      "src": "/broadcasting/stream?topics=stats",
+      "event": "stats"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Count again",
+     "action": {
+      "t": "request",
+      "method": "post",
+      "href": "/recount"
+     }
+    }
+   ]
+  }
+ }
+}

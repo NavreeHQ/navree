@@ -117,6 +117,7 @@ impl Core {
                 let id = self.open(url);
                 self.view.modals.push(Modal {
                     present: how,
+                    locked: false,
                     stack: vec![id],
                 });
                 self.touch(Change::Nav);
@@ -186,6 +187,10 @@ impl Core {
             }
         }
         if let Some(modal) = self.view.modals.last_mut() {
+            // The sign-in a session's end put up can't be backed out of.
+            if modal.locked && modal.stack.len() == 1 {
+                return self.effects.push(Effect::Exit);
+            }
             let gone = if modal.stack.len() > 1 {
                 modal.stack.pop().into_iter().collect()
             } else {
@@ -232,7 +237,11 @@ impl Core {
         let Some(at) = self.view.modals.iter().position(|modal| modal.stack.contains(&id)) else {
             return;
         };
-        // Whatever was presented over it goes with it.
+        self.take_modals_from(at);
+    }
+
+    /// Takes away the sheet or cover at `at` and whatever is presented over it.
+    pub(crate) fn take_modals_from(&mut self, at: usize) {
         let gone: Vec<Modal> = self.view.modals.drain(at..).collect();
         for id in gone.into_iter().flat_map(|modal| modal.stack) {
             self.close(id);

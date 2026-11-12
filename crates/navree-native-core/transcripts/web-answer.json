@@ -1,0 +1,180 @@
+{
+  "about": "A page the server sends to the web view. The client shows it inside its own chrome and hands every link tapped in it back to the core, which decides where it leads.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A link in the web page to a page of the app: pushed as a screen of its own.",
+      "send": {"t":"web_link","screen":1,"url":"https://shop.example/orders/1"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2]}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    },
+    {
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The page the web view already shows is not a place to go.",
+      "send": {"t":"web_link","screen":1,"url":"https://shop.example/"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Another site opens in the system's browser.",
+      "send": {"t":"web_link","screen":1,"url":"https://example.org/docs"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://example.org/docs"}
+        ]
+      }
+    },
+    {
+      "note": "A link to a destination selects it.",
+      "send": {"t":"web_link","screen":1,"url":"https://shop.example/orders"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":1}
+      ]
+    },
+    {
+      "send": {"t":"select","destination":0},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A refresh fetches the page again and tells the web view to load again: its serial moves on.",
+      "send": {"t":"refresh","screen":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/serial","is":2},
+        {"at":"/screens/1/refreshing","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/serial","is":3},
+        {"at":"/screens/1/refreshing","is":false}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/prices/2019"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/prices/2019","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A page that answers a native client with markup is the web view's too.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"text/html; charset=utf-8"},
+      "body": "made/legacy.html",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/t","is":"web"},
+        {"at":"/screens/4/content/url","is":"https://shop.example/prices/2019"},
+        {"at":"/screens/4/content/why","is":["html"]}
+      ]
+    }
+  ]
+}

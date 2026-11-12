@@ -1,0 +1,15 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "ops": [
+  {
+   "op": "confetti",
+   "amount": 200
+  },
+  {
+   "op": "toast",
+   "text": "Saved"
+  }
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "ops": [
+  {
+   "op": "device",
+   "name": "haptic",
+   "args": {
+    "kind": "success"
+   }
+  },
+  {
+   "op": "device",
+   "name": "badge",
+   "args": {
+    "count": 3
+   },
+   "then": "/device/badge",
+   "ticket": "tk_7f3a"
+  },
+  {
+   "op": "device",
+   "name": "camera"
+  },
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "CS-220479 is packed"
+  }
+ ]
+}

@@ -1,0 +1,267 @@
+{
+  "about": "A region that listens to a stream of server-sent events. An event is a nudge: the region fetches its own address again. A burst costs one fetch; events that come while a fetch is out cost one more; a stream that fails comes back after 1 s, 2 s, 4 s and its regions then fetch once; a hidden app holds no stream.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page holds a region that came empty and asks to be fetched once the screen is here, and that listens to a stream. Both are asked for.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/overview.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000},
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/regions/figures/loading","is":true},
+        {"at":"/screens/1/content/screen/body/children/0/children","is":null}
+      ]
+    },
+    {
+      "note": "The region's answer is a screen. No region of that id is in it, so its body becomes what the region holds.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/figures.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/regions/figures/loading","is":false},
+        {"at":"/screens/1/content/screen/body/children/0/children/0/t","is":"grid"},
+        {"at":"/screens/1/content/screen/body/children/0/children/0/children/0/title","is":"Revenue today"}
+      ]
+    },
+    {
+      "note": "The stream opens. The page was just fetched, so there is nothing to catch up on.",
+      "send": {"t":"stream","stream":1,"state":"open"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The region listens for `stats`. The core asks for 300 ms of quiet before it fetches.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"stats"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":1,"ms":300}
+        ]
+      }
+    },
+    {
+      "note": "More of the burst: the same timer covers it.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"stats"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "An event the region does not listen for.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"orders"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Quiet: the region is fetched, once.",
+      "send": {"t":"timer","timer":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/regions/figures/loading","is":true}
+      ]
+    },
+    {
+      "note": "An event while the fetch is out is remembered.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"stats"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The fetch lands, and what was remembered costs one more, after another quiet time.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/figures.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"timer","timer":2,"ms":300}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":2},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/figures.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The connection drops. It is tried again after a second.",
+      "send": {"t":"stream","stream":1,"state":"closed"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":3,"ms":1000}
+        ]
+      }
+    },
+    {
+      "note": "The second is up: the stream is opened again.",
+      "send": {"t":"timer","timer":3},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "It fails again: two seconds this time.",
+      "send": {"t":"stream","stream":1,"state":"closed"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":4,"ms":2000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":4},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "It is back. The region may have missed something while it was away, so it fetches once.",
+      "send": {"t":"stream","stream":1,"state":"open"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/regions/figures/loading","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/figures.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The app leaves the front. A hidden app holds no stream.",
+      "send": {"t":"background"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "note": "It comes back: the stream is opened anew.",
+      "send": {"t":"foreground"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "And the region catches up on what it missed while hidden.",
+      "send": {"t":"stream","stream":2,"state":"open"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":15000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/figures.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A refusal that is final (204, 401, 403) is not knocked on again.",
+      "send": {"t":"stream","stream":2,"state":"closed","status":403},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}

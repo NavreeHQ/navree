@@ -1,0 +1,100 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "headline",
+   "node": {
+    "t": "text",
+    "value": "4 open",
+    "id": "headline"
+   }
+  },
+  {
+   "op": "replace",
+   "target": "rename",
+   "node": {
+    "t": "form",
+    "id": "rename",
+    "method": "post",
+    "action": "/board/rename",
+    "children": [
+     {
+      "t": "field",
+      "name": "name",
+      "label": "Name",
+      "input": {
+       "t": "text",
+       "value": "Diwali orders 2026"
+      },
+      "id": "rename-name"
+     },
+     {
+      "t": "button",
+      "label": "Rename",
+      "action": {
+       "t": "submit"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "op": "append",
+   "target": "feed",
+   "nodes": [
+    {
+     "t": "row",
+     "id": "e2",
+     "title": "CS-220479 was packed"
+    },
+    {
+     "t": "row",
+     "id": "e3",
+     "title": "CS-220478 was shipped"
+    }
+   ]
+  },
+  {
+   "op": "prepend",
+   "target": "feed",
+   "nodes": [
+    {
+     "t": "row",
+     "id": "e0",
+     "title": "CS-220481 was placed"
+    }
+   ]
+  },
+  {
+   "op": "remove",
+   "target": "e1"
+  },
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "Board updated",
+   "id": "board",
+   "action": {
+    "label": "Undo",
+    "href": "/board/undo",
+    "post": true
+   }
+  },
+  {
+   "op": "open",
+   "target": "confirm"
+  },
+  {
+   "op": "focus",
+   "target": "rename-name"
+  },
+  {
+   "op": "url",
+   "href": "/board?view=open",
+   "mode": "replace"
+  }
+ ]
+}

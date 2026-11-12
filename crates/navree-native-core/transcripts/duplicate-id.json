@@ -1,0 +1,193 @@
+{
+  "about": "Ids are not unique in real pages. On the store's order page the refund dialog and the form inside it are both `refund`: an op or a command finds its target among the kinds it can mean. Among nodes of one kind, the first in document order is meant.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "`open refund` means the dialog, not the form.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/overlays","is":["refund"]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders/1/refund","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"amount=7%2C848.00&reason=returned"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "`errors refund` means the form.",
+      "send": {"t":"response","request":5,"status":422,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/refund-refused.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"announce","notice":"fields_need_attention","count":1}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/fields/refund-amount/errors","is":["Enter an amount above zero, like 24.00."]},
+        {"at":"/screens/3/overlays","is":["refund"]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/twins"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/twins","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A page with two texts that share the id `x`.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/twins.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":4,"action":{"t":"request","method":"post","href":"/twins"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/twins","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "`morph x` changes the first.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/twins-ops.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/screen/body/children/0/value","is":"changed"},
+        {"at":"/screens/4/content/screen/body/children/1/value","is":"second"}
+      ]
+    },
+    {
+      "note": "So does a command.",
+      "send": {"t":"act","screen":4,"action":{"t":"commands","list":[{"c":"text","id":"x","text":"by a command"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/screen/body/children/0/value","is":"by a command"},
+        {"at":"/screens/4/content/screen/body/children/1/value","is":"second"}
+      ]
+    }
+  ]
+}

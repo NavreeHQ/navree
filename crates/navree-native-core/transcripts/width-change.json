@@ -1,0 +1,150 @@
+{
+  "about": "The window changes width, and the person's settings change. The core takes note; nothing is fetched, and nothing the person did is lost. Navigation and layout follow the width in the client.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"25"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The phone unfolds, or the window is dragged wide.",
+      "send": {"t":"window","width":"expanded"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/window/width","is":"expanded"},
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/screens/3/overlays","is":["refund"]},
+        {"at":"/screens/3/forms/refund/fields/refund-amount/value/text","is":"25"}
+      ]
+    },
+    {
+      "note": "The same width again changes nothing.",
+      "send": {"t":"window","width":"expanded"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person turns on dark mode and larger text. Nothing is fetched again for it.",
+      "send": {"t":"environment","scheme":"dark","text_percent":130},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The next request says so in its descriptor.",
+      "send": {"t":"refresh","screen":3},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=dark; contrast=normal; text=1.30"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    }
+  ]
+}

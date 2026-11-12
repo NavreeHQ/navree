@@ -1,0 +1,149 @@
+{
+  "about": "Device calls a reply starts. Only calls that need no tap may be started by the server; anything else is refused and reported. A call that has a result posts it where the server said, with the server's one-time ticket.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/board"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/board","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/board.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"request","method":"post","href":"/board/run"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/board/run","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "A haptic is played. A badge is set, and its result is wanted. A camera is not the server's to open.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/packed.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"haptic","kind":"success"},
+          {"t":"device","call":1,"name":"badge","args":{"count":3}},
+          {"t":"report","what":"device","detail":"a reply may not start `camera`"},
+          {"t":"message","id":1,"tone":"success","text":"CS-220479 is packed"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/text","is":"CS-220479 is packed"}
+      ]
+    },
+    {
+      "note": "The badge was set: the result is posted with the ticket.",
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[{"name":"shown","value":"3"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/device/badge","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"shown=3&ok=1&ticket=tk_7f3a"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/resend-done.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"success","text":"The confirmation is on its way to tanvi.sharma36760@example.com"}
+        ]
+      }
+    },
+    {
+      "note": "A result for a call that is not waiting changes nothing.",
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[]},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}

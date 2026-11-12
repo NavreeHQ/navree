@@ -1,0 +1,64 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Find",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "find",
+     "action": "/find",
+     "children": [
+      {
+       "t": "field",
+       "name": "q",
+       "label": "Find a product",
+       "input": {
+        "t": "text",
+        "kind": "search",
+        "placeholder": "Shawl, dhurrie, lota"
+       }
+      },
+      {
+       "t": "field",
+       "name": "in_stock",
+       "label": "In stock only",
+       "input": {
+        "t": "toggle",
+        "kind": "checkbox"
+       }
+      },
+      {
+       "t": "button",
+       "label": "Find",
+       "action": {
+        "t": "submit"
+       }
+      }
+     ]
+    },
+    {
+     "t": "list",
+     "id": "found",
+     "children": [
+      {
+       "t": "row",
+       "id": "p1",
+       "title": "Pashmina shawl, Patiala, small",
+       "subtitle": "CLO-102-021 · ₹5,949"
+      },
+      {
+       "t": "row",
+       "id": "p2",
+       "title": "Phulkari shawl, Amritsar",
+       "subtitle": "CLO-104-007 · ₹3,499"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

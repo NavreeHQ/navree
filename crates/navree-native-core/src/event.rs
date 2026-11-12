@@ -53,6 +53,10 @@ pub enum FieldValue {
     None,
 }
 
+fn is_zero(value: &u16) -> bool {
+    *value == 0
+}
+
 /// Why a request got no answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -72,16 +76,17 @@ pub struct Response {
     /// The number of the request this answers.
     pub request: u64,
     /// The HTTP status.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub status: u16,
-    /// The address the answer came from in the end: the whole address.
-    #[serde(default)]
+    /// The address the answer came from in the end, as a whole address. Left
+    /// out, it is the address that was asked for.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub url: String,
     /// The answer's `Content-Type`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
     /// The answer's body, as text.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
     /// No answer came.
     #[serde(default, skip_serializing_if = "Option::is_none")]

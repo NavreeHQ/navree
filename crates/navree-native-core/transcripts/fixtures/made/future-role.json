@@ -1,0 +1,13 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Shawl",
+  "body": {
+   "t": "button",
+   "label": "Share",
+   "role": "share"
+  }
+ }
+}

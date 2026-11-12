@@ -301,6 +301,11 @@ impl Core {
             form.pending = true;
         }
         let visit = inner.visit;
+        if method == Method::Get {
+            // A form that asks may be answered with a screen: the screen says it is loading.
+            view.loading = true;
+            self.changed.insert(Change::Screen { id });
+        }
         self.changed.insert(Change::Form {
             screen: id,
             form: handle.clone(),
@@ -464,7 +469,7 @@ impl Core {
         });
         match open {
             Some(open) => self.set_open(id, &open, false),
-            None if self.view.in_modal(id) => self.dismissed(id),
+            None if self.view.modals.iter().any(|modal| !modal.locked && modal.stack.contains(&id)) => self.dismissed(id),
             None => {}
         }
     }
@@ -479,6 +484,7 @@ impl Core {
             inner.sending.remove(key);
             inner.busy.retain(|(sent, _)| sent != key);
             waiting = inner.waiting.remove(key);
+            inner.replaced.clear();
             chrome = view.chrome;
             same_visit = inner.visit == visit;
             if let Some(form) = view.forms.get_mut(key) {
@@ -604,7 +610,7 @@ impl Core {
         // it was typed: after ops that left the screen alone, on the same visit,
         // to the same form.
         if let Some(waiting) = waiting {
-            let there = self.inner.screens.get(&id).is_some_and(|inner| inner.visit == visit && inner.forms.contains_key(key));
+            let there = self.inner.screens.get(&id).is_some_and(|inner| inner.visit == visit && inner.forms.contains_key(key) && !inner.replaced.contains(key));
             if kept && there {
                 self.submit(id, key, waiting.href, waiting.with);
             } else if !told {

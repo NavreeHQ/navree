@@ -1,0 +1,250 @@
+{
+  "about": "One send at a time. A second tap that says the same is not a second post. Something new typed while a send is out waits, the latest only, and goes when the first is answered and left the form as it was; if the form was replaced meanwhile, the person is told it was not saved.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "An alert asks whether to send the confirmation again.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"resend"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Its button posts by itself. The alert goes away as a system alert does, the button is marked as waiting, and the post says it is a form though it holds nothing.",
+      "send": {"t":"act","screen":3,"action":{"t":"request","method":"post","href":"/orders/1/resend"},"overlay":"resend"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders/1/resend","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/overlays","is":[]}
+      ]
+    },
+    {
+      "note": "A second tap while the first is out is not a second request.",
+      "send": {"t":"act","screen":3,"action":{"t":"request","method":"post","href":"/orders/1/resend"},"overlay":"resend"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/resend-done.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"success","text":"The confirmation is on its way to tanvi.sharma36760@example.com"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/text","is":"The confirmation is on its way to tanvi.sharma36760@example.com"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"0"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The form is sent.",
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/orders/1/refund","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"amount=0&reason=returned"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/pending","is":true}
+      ]
+    },
+    {
+      "note": "A second tap says the same: dropped.",
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person corrects the amount while the first send is out.",
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"12"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "And sends again. It says something new, so it waits.",
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The first is refused. The form is as it was, so what waited goes now, from the form as it is.",
+      "send": {"t":"response","request":6,"status":422,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/refund-refused.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"announce","notice":"fields_need_attention","count":1},
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/orders/1/refund","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"amount=12&reason=returned"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/pending","is":true}
+      ]
+    },
+    {
+      "note": "The same again: a change and a send while one is out.",
+      "send": {"t":"field","screen":3,"form":"refund","field":"refund-amount","value":{"t":"text","text":"15"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"submit"},"form":"refund","overlay":"refund"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "This time the answer puts a new form in place of the one that was typed in. What waited has nowhere to go: it is dropped, and the person is told.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/refund-done.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"success","text":"Refunded ₹10.00"},
+          {"t":"message","id":3,"tone":"warning","notice":"unsaved"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/forms/refund/pending","is":false},
+        {"at":"/messages/2/notice","is":"unsaved"},
+        {"at":"/messages/2/tone","is":"warning"}
+      ]
+    }
+  ]
+}
