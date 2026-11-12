@@ -479,7 +479,9 @@ let rows = uow.fetch_all(Statement::new(backend, sql, values)).await?;
 In JSX the comment goes between the attributes; in a Dockerfile or a workflow it
 is a `#` comment; in a Vue template it is `<!-- nosemgrep: navree-raw-html-vue -->`.
 Name the rule, not just `nosemgrep`, so one suppression never hides another
-rule's finding.
+rule's finding. A suppressed finding is left out of the report sent to code
+scanning, which would otherwise show it as an open alert; every finding,
+suppressed ones included, stays in `sast-reports/semgrep-with-suppressed.sarif`.
 
 **Suppress a Gitleaks false positive** in `.gitleaks.toml`: add an `[[allowlists]]`
 entry with a `description` that says why the value is fake (a test fixture, a
