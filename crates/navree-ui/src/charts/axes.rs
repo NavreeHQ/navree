@@ -215,14 +215,19 @@ impl Ticks {
         }
         let step = match (self.every, self.most) {
             (Some(every), _) => every.max(1),
-            (None, Some(most)) => count.div_ceil(most.max(2) - usize::from(self.ends && most > 2)).max(1),
+            (None, Some(most)) => count
+                .div_ceil(most.max(2) - usize::from(self.ends && most > 2))
+                .max(1),
             (None, None) => auto.max(1),
         };
         let mut out: Vec<usize> = (0..count).step_by(step).collect();
         if self.ends && count > 1 {
             let last = count - 1;
             // A label too close to the last makes room for it: closer than half a step.
-            while out.last().is_some_and(|i| *i != last && last - *i < step.div_ceil(2)) {
+            while out
+                .last()
+                .is_some_and(|i| *i != last && last - *i < step.div_ceil(2))
+            {
                 out.pop();
             }
             if out.last() != Some(&last) {
@@ -293,7 +298,11 @@ impl Domain {
     /// From the lowest value to the highest, with `share` (0.1 is a tenth) of their
     /// spread added each way, exactly, with the ticks inside it.
     pub fn relative(share: f64) -> Self {
-        let share = if share.is_finite() { share.abs().min(10.0) } else { 0.0 };
+        let share = if share.is_finite() {
+            share.abs().min(10.0)
+        } else {
+            0.0
+        };
         Self {
             kind: DomainKind::Relative(share),
         }

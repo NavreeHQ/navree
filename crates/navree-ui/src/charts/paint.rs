@@ -257,7 +257,13 @@ impl Gradient {
 
     /// Adds a stop of `ink` at `offset` (0 to 1) and `opacity` (0 to 1).
     pub fn stop_with_opacity(mut self, offset: f64, ink: impl Into<Ink>, opacity: f64) -> Self {
-        let clean = |v: f64| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
+        let clean = |v: f64| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         self.stops.push(GradientStop {
             offset: clean(offset),
             ink: ink.into(),
@@ -461,10 +467,14 @@ impl Defs {
     /// Adds `gradient`, its own colour stops in `color`, and returns the paint that
     /// points at it: `url(#{id}-p{n})`. `area` is the drawing's box, for a gradient that
     /// spans the plot or paints a stroke.
-    pub fn gradient(&mut self, gradient: &Gradient, color: Color, area: Option<[f64; 4]>) -> String {
+    pub fn gradient(
+        &mut self,
+        gradient: &Gradient,
+        color: Color,
+        area: Option<[f64; 4]>,
+    ) -> String {
         let id = format!("{}-p{}", self.prefix, self.items.len());
-        self.items
-            .push(gradient.element(&id, color, area).into());
+        self.items.push(gradient.element(&id, color, area).into());
         format!("url(#{id})")
     }
 
@@ -522,7 +532,10 @@ mod tests {
                 .element("c-p1", Color::Slot(1), Some([0.0, 10.0, 1000.0, 200.0]))
                 .into(),
         );
-        assert!(out.contains(r#"gradientUnits="userSpaceOnUse" x1="0" y1="10" x2="0" y2="210""#), "{out}");
+        assert!(
+            out.contains(r#"gradientUnits="userSpaceOnUse" x1="0" y1="10" x2="0" y2="210""#),
+            "{out}"
+        );
         assert!(!out.contains('#') || out.contains("id=\"c-p1\""));
     }
 
@@ -577,7 +590,10 @@ mod tests {
         assert_eq!(fair.band_of(60.0).1, Some("Fair"));
         assert_eq!(fair.band_of(80.0).1, Some("Good"));
         assert_eq!(
-            fair.labelled().iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(),
+            fair.labelled()
+                .iter()
+                .map(|(_, l)| l.as_str())
+                .collect::<Vec<_>>(),
             ["Fair", "Good"]
         );
     }

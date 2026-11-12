@@ -515,7 +515,11 @@ impl Chart {
 
     /// Adds a column of words, one for each x: in the table after the series, and as a
     /// line of the tooltip (`Duration`, `23 min`).
-    pub fn detail<S: Into<String>>(mut self, name: impl Into<String>, texts: impl IntoIterator<Item = S>) -> Self {
+    pub fn detail<S: Into<String>>(
+        mut self,
+        name: impl Into<String>,
+        texts: impl IntoIterator<Item = S>,
+    ) -> Self {
         self.details
             .push((name.into(), texts.into_iter().map(Into::into).collect()));
         self
@@ -949,7 +953,9 @@ impl Chart {
                     .iter()
                     .flatten()
                     .fold((0.0, 0_usize), |(sum, count), v| (sum + v, count + 1));
-                (count > 0).then(|| sum / count as f64).filter(|v| v.is_finite())
+                (count > 0)
+                    .then(|| sum / count as f64)
+                    .filter(|v| v.is_finite())
             })
             .collect();
 
@@ -1391,7 +1397,11 @@ impl Chart {
                     }
                 })
                 .collect();
-            legend(&self.common.id(), &items, self.toggles && !stacked && !banded)
+            legend(
+                &self.common.id(),
+                &items,
+                self.toggles && !stacked && !banded,
+            )
         });
 
         // The tooltip: a line per series with its unit, then the total and the details.
@@ -1799,11 +1809,8 @@ impl Chart {
                         None => bar,
                     };
                     let bar = if ready.paint.glow { glow(bar) } else { bar };
-                    let bar = motion.apply(
-                        bar,
-                        if up { Effect::GrowUp } else { Effect::GrowDown },
-                        i,
-                    );
+                    let bar =
+                        motion.apply(bar, if up { Effect::GrowUp } else { Effect::GrowDown }, i);
                     marks.push(match links.get(i).and_then(Option::as_ref) {
                         Some(href) => el("a")
                             .slot("chart-drill")
@@ -1866,7 +1873,8 @@ impl Chart {
                         let lower: Vec<(f64, f64)> = (start..i)
                             .rev()
                             .filter_map(|j| {
-                                edges[j].map(|(base_v, _)| (rows[j].x, plan.y(base_v).clamp(TOP, base)))
+                                edges[j]
+                                    .map(|(base_v, _)| (rows[j].x, plan.y(base_v).clamp(TOP, base)))
                             })
                             .collect();
                         curve_path(&mut area_d, &upper, self.curve, false, 10.0);
@@ -1880,7 +1888,9 @@ impl Chart {
                         .attr("data-s", s as i64)
                         .attr("d", area_d));
                     let path = match ready.fill(false) {
-                        Some(g) => path.attr("fill", defs.gradient(&g, ready.color, Some(layer_box))),
+                        Some(g) => {
+                            path.attr("fill", defs.gradient(&g, ready.color, Some(layer_box)))
+                        }
                         None => path,
                     };
                     layers.push(path.into());
@@ -1892,18 +1902,16 @@ impl Chart {
                         .attr("d", line_d)
                         .attr("vector-effect", "non-scaling-stroke"));
                     let path = match &ready.paint.stroke {
-                        Some(g) => path.attr("stroke", defs.gradient(g, ready.color, Some(layer_box))),
+                        Some(g) => {
+                            path.attr("stroke", defs.gradient(g, ready.color, Some(layer_box)))
+                        }
                         None => path,
                     };
                     if ready.paint.glow {
                         // A glow on a layer of its own, so the blur is not stretched.
                         glowing.push(
                             motion
-                                .apply(
-                                    glow(ready.color.on(layer(total))).child(path),
-                                    wipe,
-                                    0,
-                                )
+                                .apply(glow(ready.color.on(layer(total))).child(path), wipe, 0)
                                 .into(),
                         );
                     } else {
@@ -1913,7 +1921,11 @@ impl Chart {
                 // The points: every one, or the last, where the series stands now.
                 let points: Vec<usize> = match self.dots {
                     Dots::None => Vec::new(),
-                    Dots::End => (0..m).rev().find(|j| edges[*j].is_some()).into_iter().collect(),
+                    Dots::End => (0..m)
+                        .rev()
+                        .find(|j| edges[*j].is_some())
+                        .into_iter()
+                        .collect(),
                     Dots::All => (0..m).filter(|j| edges[*j].is_some()).collect(),
                 };
                 let slot = if self.dots == Dots::End {
@@ -1932,10 +1944,11 @@ impl Chart {
                     let dot = if ready.paint.glow { glow(dot) } else { dot };
                     // Dots come in after the line has drawn to them.
                     let after = rows[*j].x / 100.0;
-                    let dot = motion
-                        .after((after * 900.0) as u32)
-                        .stagger(0)
-                        .apply(dot, Effect::Pop, at);
+                    let dot =
+                        motion
+                            .after((after * 900.0) as u32)
+                            .stagger(0)
+                            .apply(dot, Effect::Pop, at);
                     dots.push(dot.into());
                 }
             }
@@ -1956,7 +1969,7 @@ impl Chart {
                     .filter(|v| *v >= plan.scale.lo && *v <= plan.scale.hi)
                     .map(|v| {
                         let y = crisp(plan.y(v));
-                        ((("0".to_owned(), y)), ("100%".to_owned(), y), Some(v))
+                        (("0".to_owned(), y), ("100%".to_owned(), y), Some(v))
                     }),
             };
             let Some((from, to, value)) = line else {
@@ -1966,7 +1979,15 @@ impl Chart {
                 Some(v) => fill(label, &[("value", &(plan.fmt)(v))]),
                 None => label.clone(),
             });
-            let mark = reference_line(from, to, label.as_deref(), r.place, r.ink, r.solid, self.rtl);
+            let mark = reference_line(
+                from,
+                to,
+                label.as_deref(),
+                r.place,
+                r.ink,
+                r.solid,
+                self.rtl,
+            );
             plot.push(motion.after(400).apply(mark, Effect::Fade, at).into());
         }
 
@@ -2104,7 +2125,7 @@ impl Chart {
         let (x0, x1) = (*values.first()?, *values.get(rows_n.checked_sub(1)?)?);
         let lo = x0.max(plan.scale.lo);
         let hi = x1.min(plan.scale.hi);
-        if !(hi > lo) {
+        if hi.partial_cmp(&lo) != Some(std::cmp::Ordering::Greater) {
             return None;
         }
         let pos = |v: f64| {
@@ -2171,7 +2192,12 @@ impl Chart {
     /// narrow chart drops it (every other one; on a very narrow one, all but every
     /// other or every third).
     #[allow(clippy::type_complexity)]
-    fn x_label_list(&self, plan: &Plan<'_>, grain: Grain, rows_n: usize) -> Vec<(f64, String, (bool, bool))> {
+    fn x_label_list(
+        &self,
+        plan: &Plan<'_>,
+        grain: Grain,
+        rows_n: usize,
+    ) -> Vec<(f64, String, (bool, bool))> {
         let rows = plan.rows;
         let m = rows.len();
         let mut labels: Vec<(f64, String)> = Vec::new();
@@ -2181,15 +2207,26 @@ impl Chart {
         match &self.x {
             X::Times(times) if !bars => {
                 let (lo, hi) = (times[0], times[rows_n - 1]);
-                let found = time_ticks(lo, hi, ticks.most.unwrap_or(7), &self.common.dates, self.week_start);
+                let found = time_ticks(
+                    lo,
+                    hi,
+                    ticks.most.unwrap_or(7),
+                    &self.common.dates,
+                    self.week_start,
+                );
                 let keep = Ticks::every(ticks.every.unwrap_or(1)).pick(found.len(), 1);
                 for at in keep {
                     let tick = &found[at];
-                    labels.push((mirror(linear_x(tick.at as f64, lo as f64, hi as f64)), tick.label.clone()));
+                    labels.push((
+                        mirror(linear_x(tick.at as f64, lo as f64, hi as f64)),
+                        tick.label.clone(),
+                    ));
                 }
                 if ticks.ends {
                     let name = |t: i64| {
-                        time_of(t).map_or_else(String::new, |t| time_label(t, grain, &self.common.dates, false))
+                        time_of(t).map_or_else(String::new, |t| {
+                            time_label(t, grain, &self.common.dates, false)
+                        })
                     };
                     labels.retain(|(x, _)| (8.0..=92.0).contains(x));
                     labels.insert(0, (mirror(0.0), name(lo)));
@@ -2199,7 +2236,12 @@ impl Chart {
             X::Numbers(values) if !bars => {
                 let (lo, hi) = (values[0], values[rows_n - 1]);
                 let found = nice(lo, hi, ticks.most.unwrap_or(6), false);
-                let inside: Vec<f64> = found.values.iter().copied().filter(|v| (lo..=hi).contains(v)).collect();
+                let inside: Vec<f64> = found
+                    .values
+                    .iter()
+                    .copied()
+                    .filter(|v| (lo..=hi).contains(v))
+                    .collect();
                 let keep = Ticks::every(ticks.every.unwrap_or(1)).pick(inside.len(), 1);
                 let text = |v: f64, places: u8| {
                     NumberFormat::number().format_places(v, &self.common.numbers, places)
@@ -2265,7 +2307,12 @@ impl Chart {
 
     /// The x axis: its labels, its line along the plot's foot and a tick mark at each label.
     #[allow(clippy::type_complexity)]
-    fn x_axis_node(&self, labels: &[(f64, String, (bool, bool))], base: f64, total: f64) -> Element {
+    fn x_axis_node(
+        &self,
+        labels: &[(f64, String, (bool, bool))],
+        base: f64,
+        total: f64,
+    ) -> Element {
         let y = n(total - 6.0, 1);
         let texts: Vec<Node> = if self.x_axis.labels {
             labels
@@ -2403,10 +2450,11 @@ impl Chart {
                     .attr("height", n(thick, 1))
                     .attr("clip-path", clip));
                 let bar = match ready.paint.fill.clone().or_else(|| {
-                    ready
-                        .paint
-                        .fade
-                        .then(|| Gradient::horizontal().stop_with_opacity(0.0, Ink::own(), 0.5).stop(1.0, Ink::own()))
+                    ready.paint.fade.then(|| {
+                        Gradient::horizontal()
+                            .stop_with_opacity(0.0, Ink::own(), 0.5)
+                            .stop(1.0, Ink::own())
+                    })
                 }) {
                     Some(g) => bar.attr("fill", defs.gradient(&g, color, None)),
                     None => bar,
@@ -2442,7 +2490,15 @@ impl Chart {
                     continue;
                 }
                 let x = pct(at(v));
-                let line = reference_line((x.clone(), 0.0), (x, row_h), None, r.place, r.ink, r.solid, self.rtl);
+                let line = reference_line(
+                    (x.clone(), 0.0),
+                    (x, row_h),
+                    None,
+                    r.place,
+                    r.ink,
+                    r.solid,
+                    self.rtl,
+                );
                 marks.push(line.into());
             }
             let value = if single {
@@ -2590,5 +2646,4 @@ mod tests {
             "inset(0 calc(50% - min(70%, 50px) * 0 + 1px) 0 calc(50% - min(70%, 50px) * 0.5 + 0px))"
         );
     }
-
 }

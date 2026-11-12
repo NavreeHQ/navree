@@ -1372,7 +1372,11 @@ fn bar_chart_colors() -> Chart {
             ),
         )
         .grid(Gridlines::none())
-        .reference(Reference::average().label("Avg: {value} ms").place(Place::StartAbove))
+        .reference(
+            Reference::average()
+                .label("Avg: {value} ms")
+                .place(Place::StartAbove),
+        )
 }
 
 fn line_chart_axes() -> Chart {
@@ -1386,17 +1390,23 @@ fn line_chart_axes() -> Chart {
         .format(NumberFormat::decimals(1).suffix(" kg"))
         .series(Series::new(
             "Weight",
-            (0..30).map(|i| {
-                let i = f64::from(i);
-                78.4 - i * 0.14 + (i * 1.7).sin() * 0.35
-            }).collect::<Vec<f64>>(),
+            (0..30)
+                .map(|i| {
+                    let i = f64::from(i);
+                    78.4 - i * 0.14 + (i * 1.7).sin() * 0.35
+                })
+                .collect::<Vec<f64>>(),
         ))
         .y_domain(Domain::data())
         .y_axis(Axis::new().line())
         .x_axis(Axis::new().line().ticks())
         .grid(Gridlines::vertical().dashed())
         .x_ticks(Ticks::most(5).keep_ends())
-        .reference(Reference::level(75).label("Goal {value}").place(Place::StartBelow))
+        .reference(
+            Reference::level(75)
+                .label("Goal {value}")
+                .place(Place::StartBelow),
+        )
 }
 
 fn sparkline_painted() -> Grid {
