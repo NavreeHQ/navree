@@ -159,6 +159,8 @@ const FILES = [
   ["chart-radial", "css", "text/css; charset=utf-8", await extraCss(["chart-radial.css"])],
   // The linear charts: a meter, mini columns, a colour strip, a range scale and a trend. No script.
   ["chart-linear", "css", "text/css; charset=utf-8", await extraCss(["chart-linear.css"])],
+  // The grid charts: calendar and matrix heat maps and the scatter plot. No script.
+  ["chart-grids", "css", "text/css; charset=utf-8", await extraCss(["chart-grids.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
 ];

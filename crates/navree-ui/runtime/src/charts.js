@@ -27,6 +27,8 @@ function enhance() {
   for (const body of /** @type {Iterable<HTMLElement>} */ (every(BODY))) {
     if (body.tabIndex >= 0) continue;
     body.tabIndex = 0;
+    // A calendar that scrolls starts at the latest week.
+    if (body.dataset.end !== undefined) body.scrollLeft = body.scrollWidth;
     const keys = body.dataset.keys;
     if (keys) body.setAttribute("aria-describedby", ((body.getAttribute("aria-describedby") ?? "") + " " + keys).trim());
   }
@@ -54,10 +56,20 @@ function show(body, i, keyed) {
   current.set(body, i);
   hide(body);
   const figure = /** @type {Element} */ (body.parentElement);
-  const box = body.getBoundingClientRect();
   const xs = places(body);
   const marks = $$(body, `[data-i="${i}"]`);
   for (const mark of marks) mark.setAttribute("data-active", "");
+  const cell = /** @type {HTMLElement | undefined} */ (marks[0]);
+  if (cell?.dataset.r) {
+    // A grid names the row and the column of the cell: their headers show it.
+    for (const head of $$(body, `[data-hr="${cell.dataset.r}"],[data-hc="${cell.dataset.c}"]`)) head.setAttribute("data-active", "");
+  }
+  // A grid wider than its chart scrolls the cell the keys reach into view.
+  if (keyed && cell && body.scrollWidth > body.clientWidth) {
+    const m = cell.getBoundingClientRect(), b = body.getBoundingClientRect();
+    body.scrollLeft += m.right > b.right ? m.right - b.right + 8 : m.left < b.left ? m.left - b.left - 8 : 0;
+  }
+  const box = body.getBoundingClientRect();
   let ax = 0, ay = 0;
   if (xs) {
     const plot = $(body, "[data-slot=chart-plot]");
@@ -117,11 +129,11 @@ function show(body, i, keyed) {
     // A value with no mark in the drawing (a part of nothing) is shown over the drawing.
     const anchor = [...marks].find((m) => !closest(m, "[data-slot=chart-legend]")) ?? body.firstElementChild ?? body;
     const r = anchor.getBoundingClientRect();
-    tip.style.left = clamp(0, r.left - box.left + (r.width - w) / 2, box.width - w) + "px";
+    tip.style.left = body.scrollLeft + clamp(0, r.left - box.left + (r.width - w) / 2, box.width - w) + "px";
     tip.style.top = (r.top < h + 12 ? r.bottom - box.top + 6 : r.top - box.top - h - 6) + "px";
   } else {
     if (h > box.height) body.style.minHeight = h + "px";
-    tip.style.left = clamp(0, ax + 12 + w > box.width ? ax - 12 - w : ax + 12, box.width - w) + "px";
+    tip.style.left = body.scrollLeft + clamp(0, ax + 12 + w > box.width ? ax - 12 - w : ax + 12, box.width - w) + "px";
     tip.style.top = clamp(0, ay - h / 2, Math.max(box.height, h) - h) + "px";
   }
   const say = keyed && $(figure, "[data-slot=chart-announce]");
@@ -140,6 +152,28 @@ function under(body, e) {
   const x = ((e.clientX - r.left) / r.width) * 100;
   const gaps = xs.map((at) => Math.abs(at - x));
   return gaps.indexOf(Math.min(...gaps));
+}
+
+/** The keys that move through a grid. */
+const GRID = ["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End", "PageUp", "PageDown"];
+
+/** The value a key reaches in a grid of rows and columns: the nearest cell that way, or the one it is on. @param {HTMLElement} body @param {number} at @param {string} key */
+function across(body, at, key) {
+  const from = /** @type {HTMLElement | null} */ ($(body, `[data-i="${at}"]`));
+  if (!GRID.includes(key) || !from) return;
+  const r = +(from.dataset.r ?? 0), c = +(from.dataset.c ?? 0), way = body.matches(":dir(rtl)") ? -1 : 1;
+  const [dr, dc] = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, way], ArrowLeft: [0, -way] }[key] ?? [0, 0];
+  let to = at, low = Infinity;
+  for (const cell of /** @type {Iterable<HTMLElement>} */ ($$(body, "[data-r][data-c]"))) {
+    const y = +(cell.dataset.r ?? 0), x = +(cell.dataset.c ?? 0);
+    // Down and up land in the next row at the nearest column; Home and End run along the row, Page keys along the column.
+    const cost = dr ? (y === r + dr ? Math.abs(x - c) : Infinity)
+      : dc ? (y === r && (x - c) * dc > 0 ? Math.abs(x - c) : Infinity)
+      : y === r && key === "Home" ? x : y === r && key === "End" ? -x
+      : x === c && key === "PageUp" ? y : x === c && key === "PageDown" ? -y : Infinity;
+    if (cost < low) [low, to] = [cost, +(cell.dataset.i ?? at)];
+  }
+  return to;
 }
 
 /** The last move over a chart, drawn once per frame: moves that arrive faster end where the pointer stopped. @type {PointerEvent | null} */
@@ -179,7 +213,7 @@ const events = {
     if (!body || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === "Escape") return hide(body);
     const n = rows(body), at = current.get(body) ?? 0, step = Math.max(1, Math.round(n / 10)), way = $(body, "[data-rtl]") ? -1 : 1;
-    const to = { ArrowRight: at + way, ArrowLeft: at - way, ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: n - 1, PageDown: at + step, PageUp: at - step }[e.key];
+    const to = body.hasAttribute("data-grid") ? across(body, at, e.key) : { ArrowRight: at + way, ArrowLeft: at - way, ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: n - 1, PageDown: at + step, PageUp: at - step }[e.key];
     if (to === undefined) return;
     e.preventDefault();
     show(body, to, true);
