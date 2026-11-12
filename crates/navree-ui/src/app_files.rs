@@ -455,21 +455,37 @@ const fn spells(bytes: &[u8], at: usize, word: &[u8]) -> bool {
     true
 }
 
-/// Whether `bytes` are an SVG document with nothing that runs: an `<svg` element, and no
-/// `<script`, no `<foreignObject` and no `javascript:` anywhere, in any case.
+/// Whether `bytes` are an SVG document with none of the plainest ways to run something:
+/// an `<svg` element, and no `<script` or `<foreignObject` element (with a namespace prefix
+/// or not), no `on…=` event attribute and no `javascript:`, in any case.
+///
+/// This is a check against mistakes, not a sanitizer: an SVG file can run script in more
+/// ways than it reads (entities, `<set>`, an outside `<use>`, CSS). What keeps a picture
+/// inert is how it is served and drawn: as an `<img>`, or on its own under [`IMAGE_CSP`].
 const fn is_svg(bytes: &[u8]) -> bool {
     let mut svg = false;
     let mut at = 0;
     while at < bytes.len() {
         if bytes[at] == b'<' {
+            // The element's name, after a namespace prefix if it has one.
+            let mut name = at + 1;
+            let mut end = name;
+            while end < bytes.len()
+                && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'-' || bytes[end] == b'_')
+            {
+                end += 1;
+            }
+            if end < bytes.len() && bytes[end] == b':' {
+                name = end + 1;
+            }
             if spells(bytes, at + 1, b"svg") {
                 svg = true;
             }
-            if spells(bytes, at + 1, b"script") || spells(bytes, at + 1, b"foreignobject") {
+            if spells(bytes, name, b"script") || spells(bytes, name, b"foreignobject") {
                 return false;
             }
         }
-        if spells(bytes, at, b"javascript:") {
+        if spells(bytes, at, b"javascript:") || is_event_attribute(bytes, at) {
             return false;
         }
         at += 1;
@@ -477,14 +493,40 @@ const fn is_svg(bytes: &[u8]) -> bool {
     svg
 }
 
+/// Whether an event attribute (`onload=`, ` onclick =`) starts at `at`: a space or a `/`,
+/// `on`, letters, and `=` after any spaces.
+const fn is_event_attribute(bytes: &[u8], at: usize) -> bool {
+    if !matches!(bytes[at], b' ' | b'\t' | b'\n' | b'\r' | b'/') || !spells(bytes, at + 1, b"on") {
+        return false;
+    }
+    let mut end = at + 3;
+    let start = end;
+    while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+        end += 1;
+    }
+    if end == start {
+        return false;
+    }
+    while end < bytes.len() && matches!(bytes[end], b' ' | b'\t' | b'\n' | b'\r') {
+        end += 1;
+    }
+    end < bytes.len() && bytes[end] == b'='
+}
+
 /// A picture of the app's own (its mark, a logo, an illustration every page shows), compiled
 /// in with `include_bytes!` and served by the toolkit at `/_navree/ui/app/{name}-{hash}.{ext}`
 /// as `immutable`. See [the module](self).
 ///
 /// SVG, PNG, WebP, JPEG, AVIF, GIF and ICO files are taken, told apart by their first bytes.
-/// An SVG file that holds a script, a `<foreignObject>` or a `javascript:` address fails the
-/// app's build, and every picture is served under [`IMAGE_CSP`], which runs nothing and loads
-/// nothing, so a picture opened on its own is as inert as one in an `<img>`. Use it wherever
+///
+/// A picture is inert because of how it is used, not because of what it holds: an `<img>`
+/// never runs an SVG's script, and opened on its own every picture is served under
+/// [`IMAGE_CSP`], which runs nothing, loads nothing and sandboxes the document. As a guard
+/// against mistakes, an SVG file with a `<script>` or `<foreignObject>` element, an `on…=`
+/// event attribute or a `javascript:` address fails the app's build; that check can be
+/// got round, and is no reason to trust the file. Never write an `AppImage`'s bytes into a
+/// page (with [`SafeHtml::trusted`](crate::SafeHtml::trusted) or an inline `<svg>`): there,
+/// the page's policy is all that stands between its script and the reader. Use it wherever
 /// an address goes: `el("img").attr("src", &MARK)`, [`Shell::logo`](crate::Shell::logo),
 /// [`Picture::new`](crate::Picture::new).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -860,6 +902,11 @@ mod tests {
             b"<svg><SCRIPT>alert(1)</SCRIPT></svg>",
             b"<svg><a href=\"JavaScript:alert(1)\"/></svg>",
             b"<svg><foreignObject><p>x</p></foreignObject></svg>",
+            b"<svg onload=\"alert(1)\"></svg>",
+            b"<svg><rect\n  OnClick = \"alert(1)\"/></svg>",
+            b"<svg/onload=alert(1)>",
+            b"<svg:svg xmlns:svg=\"http://www.w3.org/2000/svg\"><svg:script>alert(1)</svg:script></svg:svg>",
+            b"<svg><x:foreignObject/></svg>",
             b"<html><body>no picture</body></html>",
             b"GIF",
             b"",
@@ -873,6 +920,11 @@ mod tests {
         assert_eq!(ImageKind::of(b"\xff\xd8\xff\xe0"), Some(ImageKind::Jpeg));
         assert_eq!(ImageKind::of(b"\0\0\0\x1cftypavif"), Some(ImageKind::Avif));
         assert_eq!(ImageKind::of(b"GIF89a"), Some(ImageKind::Gif));
+        // Ordinary attributes that start with the letters o and n are not events.
+        assert_eq!(
+            ImageKind::of(b"<svg viewBox=\"0 0 8 8\"><path opacity=\"1\" d=\"M0 0\"/><text>on time</text></svg>"),
+            Some(ImageKind::Svg)
+        );
     }
 
     #[test]

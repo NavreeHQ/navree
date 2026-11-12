@@ -2,12 +2,11 @@
 //! default, the workspace's, the user's and the URL, in that order.
 
 use http::StatusCode;
-use http::header::{COOKIE, HOST, HeaderMap, HeaderValue, LOCATION, ORIGIN, SET_COOKIE};
+use http::header::{COOKIE, HeaderMap, HeaderValue, LOCATION, ORIGIN, SET_COOKIE};
 use navree_http::extract::urlencoded;
 use navree_http::response::{IntoResponse, Response};
 
 use super::Theme;
-use crate::html::LocalHref;
 
 /// The cookie holding a reader's own theme and mode, when the app keeps them in
 /// the browser: `dark.ocean`, or `light.v1-...` for a theme of the app's own.
@@ -319,14 +318,12 @@ fn same_site(headers: &HeaderMap) -> bool {
     if let Some(site) = headers.get("sec-fetch-site") {
         return matches!(site.to_str(), Ok("same-origin" | "none"));
     }
-    match (headers.get(ORIGIN), headers.get(HOST)) {
-        (Some(origin), Some(host)) => origin
-            .to_str()
-            .ok()
-            .and_then(|origin| origin.split_once("://"))
-            .is_some_and(|(_, rest)| host.to_str().is_ok_and(|host| host == rest)),
-        (Some(_), None) => false,
-        (None, _) => true,
+    match headers.get(ORIGIN) {
+        // The route puts an HTTP/2 request's :authority in `Host` when it has none.
+        Some(origin) => origin.to_str().is_ok_and(|origin| {
+            navree_http::csrf::origin_is_host(origin, headers, &http::Uri::default())
+        }),
+        None => true,
     }
 }
 
@@ -372,13 +369,12 @@ pub(crate) fn decide(
         match &*name {
             "theme" => theme = Some(Theme::from_short_form(&value).ok_or(ChoiceError::Invalid)?),
             "mode" => mode = Some(Mode::from_id(&value).ok_or(ChoiceError::Invalid)?),
-            // A path of this site: a relative address would be read against this route's
-            // own (`/_navree/ui/...`), and an address with a host could be another site.
+            // A path of this site, checked as a sign-in's `next` is: a relative address would
+            // be read against this route's own (`/_navree/ui/...`), and an address with a
+            // host, or dot segments that climb to one, could be another site.
             "back" => {
-                back = LocalHref::parse(value.trim())
-                    .ok()
-                    .map(|href| href.as_str().to_owned())
-                    .filter(|href| href.starts_with('/'))
+                back =
+                    crate::pages::ReturnTo::parse(value.trim()).map(|back| back.as_str().to_owned())
             }
             _ => {}
         }
@@ -545,7 +541,12 @@ mod tests {
             "{cookie}"
         );
         // The page it was given, as it was given: a path with its query and fragment.
-        for back in ["/pricing/", "/", "/deals?page=2#notes", "/blog/naïve-sleep"] {
+        for back in [
+            "/pricing/",
+            "/",
+            "/deals?page=2#notes",
+            "/blog/na%C3%AFve-sleep",
+        ] {
             let body = format!("mode=light&back={}", urlencode(back));
             let response = respond_setting(&headers, body.as_bytes());
             assert_eq!(response.status(), StatusCode::SEE_OTHER, "{back}");
@@ -564,6 +565,10 @@ mod tests {
             "\\\\evil",
             "pricing",
             "?page=2",
+            "/..//evil.example",
+            "/a/../..//evil.example",
+            "/%2F/evil.example",
+            "/blog/naïve",
             "#top",
         ] {
             let body = format!("theme=ocean&back={}", urlencode(back));
@@ -612,7 +617,7 @@ mod tests {
         );
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("https://evil.example"));
-        headers.insert(HOST, HeaderValue::from_static("app.example"));
+        headers.insert(http::header::HOST, HeaderValue::from_static("app.example"));
         assert_eq!(
             respond_setting(&headers, b"theme=ocean").status(),
             StatusCode::FORBIDDEN
@@ -621,6 +626,21 @@ mod tests {
         assert_eq!(
             respond_setting(&headers, b"theme=ocean").status(),
             StatusCode::SEE_OTHER
+        );
+        // Host and Origin are read as a host and a port: a default port written or not,
+        // case aside; another port is another origin.
+        headers.insert(
+            http::header::HOST,
+            HeaderValue::from_static("App.Example:443"),
+        );
+        assert_eq!(
+            respond_setting(&headers, b"theme=ocean").status(),
+            StatusCode::SEE_OTHER
+        );
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example:8443"));
+        assert_eq!(
+            respond_setting(&headers, b"theme=ocean").status(),
+            StatusCode::FORBIDDEN
         );
     }
 

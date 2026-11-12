@@ -54,7 +54,7 @@ They are cached for good (`immutable`) under the current hash, and an older hash
 
 ## Pictures
 
-The app's mark, its logo or an illustration every page shows is an `AppImage`: an SVG, PNG, WebP, JPEG, AVIF, GIF or ICO file compiled in, told apart by its first bytes, and contributed like a sheet. It is served under its hash and cached for good, with a content security policy that runs nothing and loads nothing (`default-src 'none'; style-src 'unsafe-inline'; sandbox`), so a picture opened on its own is as inert as one in an `<img>`. An SVG file that holds a script, a `<foreignObject>` or a `javascript:` address fails the build.
+The app's mark, its logo or an illustration every page shows is an `AppImage`: an SVG, PNG, WebP, JPEG, AVIF, GIF or ICO file compiled in, told apart by its first bytes, and contributed like a sheet. It is served under its hash and cached for good. A picture is inert because of how it is used: an `<img>` never runs an SVG's script, and opened on its own it is served under a content security policy that runs nothing, loads nothing and sandboxes it (`default-src 'none'; style-src 'unsafe-inline'; sandbox`). As a guard against mistakes, an SVG file with a `<script>` or `<foreignObject>` element, an `on…=` event attribute or a `javascript:` address fails the build, but that check can be got round and is not what makes the file safe. Never write an `AppImage`'s bytes into a page, with `SafeHtml::trusted` or as an inline `<svg>`: there only the page's own policy would stand between its script and the reader.
 
 ```rust
 use navree::ui::*;

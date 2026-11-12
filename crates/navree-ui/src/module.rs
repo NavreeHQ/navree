@@ -509,7 +509,15 @@ impl Controller for Assets {
             RouteDef::on(
                 Method::POST,
                 format!("!{}", crate::theme::SETTINGS_PATH),
-                |headers: HeaderMap, body: Bytes| async move {
+                |parts: http::request::Parts, body: Bytes| async move {
+                    let mut headers = parts.headers;
+                    // HTTP/2 and HTTP/3 name the host in `:authority`, and may send no `Host`.
+                    if !headers.contains_key(header::HOST)
+                        && let Some(authority) = parts.uri.authority()
+                        && let Ok(host) = HeaderValue::from_str(authority.as_str())
+                    {
+                        headers.insert(header::HOST, host);
+                    }
                     crate::theme::respond_setting(&headers, &body)
                 },
             )
