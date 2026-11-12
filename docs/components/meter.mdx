@@ -1,0 +1,120 @@
+---
+title: "Meter"
+description: "One bar split into segments that add up to the whole, with the share written inside the wide segments, a legend of values and shares, and a tooltip. Drawn as SVG on the server."
+---
+
+<UiPreview example="meter/default" />
+
+`Meter` shows how one whole divides: a night of sleep into its stages, a workout into heart-rate zones, a quarter's revenue into channels. Each segment is as wide as its share. The segments that are wide enough say their share inside the bar, and the legend under the bar names every segment with its value and its share, so a reader needs no hover to read it.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Meter::new("Sleep stages")
+    .minutes()
+    .gradient()
+    .gloss()
+    .segment(Segment::new("Deep", 92).ink(Ink::slot(7)))
+    .segment(Segment::new("REM", 98).ink(Ink::tone(Tone::named("cyan"))))
+    .segment(Segment::new("Core", 215).ink(Ink::slot(3)))
+    .segment(Segment::new("Awake", 35).ink(Ink::slot(4)))
+```
+
+A segment is a name and a value. `Segment::ink(Ink)` colors it with any color of the theme; without one, segments take the categorical colors in turn. A segment at zero, missing or below zero draws nothing and stays in the legend and the table. A meter with no segment above zero is empty.
+
+## When to use it
+
+Use a meter for the parts of one whole when the whole is the subject and the order of the parts matters: a night, a session, a budget. To compare parts with each other, use ranked [bars](/docs/components/bar-chart/#horizontal-bars). For a whole split into more than a handful of parts, use a [donut](/docs/components/donut-chart/) with a legend, or the table. For one share, use a [Progress](/docs/components/progress/). For many wholes side by side, use [mini columns](/docs/components/mini-columns/) or the compact meter below.
+
+## Anatomy
+
+<UiAnatomy component="meter" />
+
+## Writing values
+
+`.format(NumberFormat)` writes the values and `.locale("en-IN")` groups them in lakh and crore. The shares are always written as percentages in the chart's locale.
+
+```rust
+use navree::ui::charts::*;
+
+Meter::new("Programme revenue by channel")
+    .format(NumberFormat::currency("₹"))
+    .locale("en-IN")
+    .segment(Segment::new("Studio", 12_40_000))
+    .segment(Segment::new("Online", 8_75_000))
+```
+
+`.minutes()` says the values are minutes and writes them as durations: `45 min`, `1 h 23 min`, `2 h`. The words come from `LinearLabels`: set `hours` and `minutes` for another language and pass it with `.words(...)`. `Segment::text("1 h 15 min")` writes one segment's value in your own words, in the legend, the tooltip and the table.
+
+<UiPreview example="meter/rupees" />
+
+## Paint
+
+`.gradient()` paints each segment from a softer shade of its color to the full color. `.fill(Gradient)` paints every segment with a gradient of your own, in which `Ink::own()` is the segment's color, and `Segment::fill(Gradient)` paints one segment. `.gloss()` adds a soft highlight along the top. Corners are 4 px; `.pill()` rounds both ends.
+
+Colors come from theme tokens, so a meter is right in light and dark and in every theme. The share inside a segment is drawn in the page's ink with an outline of the segment's color, so it reads on any segment.
+
+<UiPreview example="meter/zones" />
+
+## Labels inside
+
+A segment that is `15%` or more of the bar writes its share inside it. `.label_from(10.0)` changes the threshold. A bar under 18 px high writes none. The labels are for the eye: the legend and the table say the same in words.
+
+## The compact form
+
+`.compact()` draws the bar 16 px high with no labels and no legend, for a cell of a table or a grid. The title is kept for assistive technology and the table is for screen readers only; `.height(px)`, `.legend(true)` and `.table(TableMode)` after it change that.
+
+<UiPreview example="meter/compact" />
+
+## Motion
+
+`.motion(Motion::new())` grows the segments from the start, one after another, and fades their labels in after them. Motion is only a way in: the bar is drawn finished, so a reader who asks for less motion, a page with no script and an image renderer all see the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty), and keep the height of the bar and its legend.
+
+<UiPreview example="meter/states" />
+
+## The table
+
+The table has a row for each segment: its value and its share. `.value_name("Time asleep")` names the value column. `.table(TableMode)` says where the table sits. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next segment. |
+| `Home`, `End` | Moves to the first or the last segment. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: how many parts, the total, and the largest part with its share.
+- A move by key marks the segment, dims the others and is announced politely: its name, its value and its share. With a pointer the tooltip says the same. The tooltip floats above the segment, or below it when the window has no room above, and never changes the height of the chart.
+- The drawing is hidden from assistive technology. The legend names every segment, its value and its share in text, and the table twin lists every segment, including those that draw nothing.
+- A segment is told apart by its legend entry and its label, never by color alone. A status tone adds an icon to its legend entry. A thin line of the page's color separates segments.
+
+</UiA11y>
+
+## Data rules
+
+- A value is a finite number. NaN and infinity are read as no value: the segment draws nothing and the table shows a dash.
+- Only positive values draw. Shares are worked out against the largest, so values near the largest number a float holds still add up.
+- At most 12 segments: the first 11 keep their places and the rest are added up into Other.
+
+## API
+
+### Meter
+
+<UiProps type="Meter" />
+
+### Segment
+
+<UiProps type="Segment" />
+
+### LinearLabels
+
+<UiProps type="LinearLabels" />

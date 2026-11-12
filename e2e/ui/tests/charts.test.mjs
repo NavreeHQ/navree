@@ -71,15 +71,21 @@ const CASES = {
   rings: ["rings-1", "rings-2"],
   gauge: ["gauge-1", "gauge-2"],
   clock: ["clock"],
+  meter: ["meter"],
+  "meter-compact": ["meter-compact"],
+  "meter-hostile": ["meter-hostile"],
+  "mini-columns": ["mini-columns"],
+  "color-strip": ["color-strip"],
+  "range-scale": ["range-scale"],
   locale: ["locale-de", "locale-in"],
   shown: ["shown"],
 };
 /** The figures with a tab stop, tooltips and keys. */
 const INTERACTIVE = Object.entries(CASES)
-  .filter(([name]) => !["sparkline", "empty", "loading", "failed", "ring", "rings", "gauge"].includes(name))
+  .filter(([name]) => !["sparkline", "empty", "loading", "failed", "ring", "rings", "gauge", "range-scale"].includes(name))
   .flatMap(([name, figures]) => figures.map((fig) => [name, fig]));
 /** The figures with a switch for the table. */
-const SWITCHED = INTERACTIVE.filter(([name]) => name !== "shown");
+const SWITCHED = INTERACTIVE.filter(([name]) => !["shown", "meter-compact"].includes(name));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Polls `check` until it returns something true: the wait is for a state, never for a time. */
@@ -130,7 +136,8 @@ const view = (page, fig) =>
       rows: [...tip.querySelectorAll("[data-tip=row]")].filter((r) => r.checkVisibility()).map((r) => ({ value: r.querySelector("strong").textContent, name: r.lastElementChild.textContent })),
       markup: tip.querySelectorAll("img,script,iframe").length,
       say: f.querySelector("[data-slot=chart-announce]").textContent,
-      inside: !open || (tb.left >= bb.left - 0.5 && tb.right <= bb.right + 0.5 && tb.top >= bb.top - 0.5 && tb.bottom <= bb.bottom + 0.5),
+      // A thin chart floats its tooltip over the page, above the mark or below it: it stays in the window.
+      inside: !open || (body.hasAttribute("data-float") ? tb.left >= -0.5 && tb.right <= innerWidth + 0.5 && tb.top >= -0.5 && tb.bottom <= innerHeight + 0.5 : tb.left >= bb.left - 0.5 && tb.right <= bb.right + 0.5 && tb.top >= bb.top - 0.5 && tb.bottom <= bb.bottom + 0.5),
       geometry: open ? { tip: [tb.left, tb.top, tb.right, tb.bottom].map(Math.round), body: [bb.left, bb.top, bb.right, bb.bottom].map(Math.round) } : null,
       active: [...body.querySelectorAll("[data-active]")].map((e) => e.getAttribute("data-i")),
       marks,
@@ -589,6 +596,79 @@ for (const name of NAMES) {
           if (reduce) assert.equal(running, 0, "nothing moves");
           else assert.ok(running > 0, "the marks come in");
           await page.done();
+        }
+      });
+
+      test("the meter's tooltip floats above its segment and the chart never grows", async () => {
+        const page = await open("/charts?case=meter");
+        const before = await page.locator("#meter [data-slot=chart-body]").evaluate((el) => el.getBoundingClientRect().height);
+        await page.locator("#meter [data-slot=seg-part][data-i='1']").hover();
+        const got = await page.evaluate(() => {
+          const body = document.querySelector("#meter [data-slot=chart-body]");
+          const tip = body.querySelector("[data-slot=chart-tip]");
+          const seg = body.querySelector("[data-slot=seg-part][data-i='1']").getBoundingClientRect();
+          const t = tip.getBoundingClientRect();
+          return { open: tip.hasAttribute("data-open"), height: body.getBoundingClientRect().height, minHeight: body.style.minHeight, centre: Math.abs(t.left + t.width / 2 - (seg.left + seg.width / 2)), above: t.bottom <= seg.top, below: t.top >= seg.bottom };
+        });
+        assert.equal(got.open, true);
+        assert.equal(got.height, before, "the chart keeps its height");
+        assert.equal(got.minHeight, "", "no minimum height was set to hold the tooltip");
+        assert.ok(got.above || got.below, "the tooltip clears the segment");
+        assert.ok(got.centre < 2 || got.above || got.below, "centred on the segment");
+        // The pointer leaving closes it.
+        await page.mouse.move(2, 2);
+        assert.equal(await page.locator("#meter [data-slot=chart-tip]").evaluate((el) => el.hasAttribute("data-open")), false);
+        await page.done();
+      });
+
+      test("the meter writes a share inside the segments of 15% or more, and a compact one none", async () => {
+        const page = await open("/charts?case=meter");
+        const shown = await page.evaluate(() =>
+          [...document.querySelectorAll("#meter [data-slot=seg-part]")].map((g) => ({ label: !!g.querySelector("[data-slot=seg-label]"), width: parseFloat(g.querySelector("rect").getAttribute("width")) / 100 })),
+        );
+        assert.ok(shown.length >= 4);
+        for (const s of shown) assert.equal(s.label, s.width >= 0.15, `a segment ${(s.width * 100).toFixed(1)}% wide ${s.label ? "has" : "has no"} a label`);
+        await page.done();
+        const compact = await open("/charts?case=meter-compact");
+        const m = await compact.evaluate(() => ({ height: document.querySelector("#meter-compact [data-slot=seg-bar]").getBoundingClientRect().height, labels: document.querySelectorAll("#meter-compact [data-slot=seg-label]").length, legend: document.querySelectorAll("#meter-compact [data-slot=chart-legend]").length, switch: document.querySelectorAll("#meter-compact [data-slot=chart-table-switch]").length }));
+        assert.deepEqual(m, { height: 16, labels: 0, legend: 0, switch: 0 });
+        await compact.done();
+      });
+
+      test("the colour strip has a cell for each reading and the keys walk them", async () => {
+        const page = await open("/charts?case=color-strip");
+        assert.equal(await page.locator("#color-strip [data-slot=strip-cell]").count(), 120);
+        await tabTo(page, "#color-strip [data-slot=chart-body]");
+        await page.keyboard.press("End");
+        await expectAt(page, "color-strip", 119, "End");
+        await page.keyboard.press("Home");
+        await expectAt(page, "color-strip", 0, "Home");
+        await page.done();
+      });
+
+      test("the range scale's marker sits at its value, and the scale is a picture, not a tab stop", async () => {
+        const page = await open("/charts?case=range-scale");
+        const got = await page.evaluate(() => {
+          const svg = document.querySelector("#range-scale [data-slot=scale]");
+          const track = svg.querySelector("[data-slot=scale-track]").getBoundingClientRect();
+          const marker = svg.querySelector("[data-slot=scale-marker]").getBoundingClientRect();
+          return { at: (marker.left + marker.width / 2 - track.left) / track.width, tab: document.querySelector("#range-scale [data-slot=chart-body]").tabIndex, interactive: document.querySelector("#range-scale").hasAttribute("data-ui-chart") };
+        });
+        assert.ok(Math.abs(got.at - 0.225) < 0.01, `(58 - 40) / 80 along the track: ${got.at}`);
+        assert.equal(got.tab, -1);
+        assert.equal(got.interactive, false);
+        await page.done();
+      });
+
+      test("the meter, strip and columns come in only for a reader who has not asked for less motion", async () => {
+        for (const kase of ["meter", "color-strip", "mini-columns", "range-scale"]) {
+          for (const reduce of [false, true]) {
+            const page = await open(`/charts?case=${kase}`, { reducedMotion: reduce ? "reduce" : "no-preference" });
+            const running = await page.evaluate(() => document.getAnimations().length);
+            if (reduce) assert.equal(running, 0, `${kase}: nothing moves`);
+            else assert.ok(running > 0, `${kase}: the marks come in`);
+            await page.done();
+          }
         }
       });
 

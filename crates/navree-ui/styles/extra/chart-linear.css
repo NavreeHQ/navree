@@ -8,14 +8,16 @@
 [data-slot=seg-track],[data-slot=cols-track]{fill:var(--ink-3)}
 [data-slot=seg]:not([fill]){fill:var(--c)}
 [data-slot=seg]{stroke:var(--surface);stroke-width:1.5px}
-[data-slot=seg-part],[data-slot=cols-item],[data-slot=strip-cell]{transition:opacity .12s}
+[data-slot=seg-part],[data-slot=cols-bar],[data-slot=strip-cell]{transition:opacity .12s}
 [data-slot=seg-gloss],[data-slot=seg-label]{pointer-events:none}
 [data-slot=seg-gloss-stop]{stop-color:light-dark(var(--ink-0),var(--fg))}
 [data-slot=chart] svg [data-slot=seg-label]{fill:var(--ink-0);font-size:11px;font-weight:600;paint-order:stroke;stroke:color-mix(in oklab,var(--c) 62%,var(--fg));stroke-width:2.5px;stroke-linejoin:round}
+td [data-kind=meter]{min-width:10rem}
 [data-kind=meter] [data-slot=chart-legend],[data-kind=color-strip] [data-slot=chart-legend]{margin-top:.625rem}
-[data-layout=inline] [data-slot=chart-legend-value]{margin:0;padding:0}
+[data-layout=inline] [data-slot=chart-legend-value]{margin:0;padding:0;white-space:normal;overflow-wrap:anywhere}
+[data-layout=inline] > li{max-width:100%}
 [data-kind=meter]:has([data-slot=seg-part][data-active]) [data-slot=seg-part]:not([data-active]),
-[data-kind=mini-columns]:has([data-slot=cols-item][data-active]) [data-slot=cols-item]:not([data-active]),
+[data-kind=mini-columns]:has([data-slot=cols-item][data-active]) [data-slot=cols-item]:not([data-active]) [data-slot=cols-bar],
 [data-kind=color-strip]:has([data-slot=strip-cell][data-active]) [data-slot=strip-cell]:not([data-active]){opacity:.5}
 
 /* Mini columns: small multiples, a label above and a total below. */
@@ -39,4 +41,4 @@
 [data-slot=scale-ends]{display:flex;justify-content:space-between;padding-inline:8px;color:var(--fg-3);font-size:12px;font-variant-numeric:tabular-nums}
 
 /* A trend: an arrow and a signed share, in the colour of what it means. */
-[data-slot=trend]{display:inline-flex;align-items:center;gap:.25rem;color:color-mix(in oklab,var(--tone,var(--fg-3)) 78%,var(--fg));font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;& [data-slot=icon]{width:14px;height:14px;flex:none}}
+[data-slot=trend]{display:inline-flex;align-items:center;gap:.25rem;color:var(--tone,var(--fg-3));font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;& [data-slot=icon]{width:14px;height:14px;flex:none}}

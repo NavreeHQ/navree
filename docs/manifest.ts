@@ -359,6 +359,11 @@ export const sections: DocsSection[] = [
       "donut-chart",
       "sparkline",
       "funnel",
+      "meter",
+      "mini-columns",
+      "color-strip",
+      "range-scale",
+      "trend",
       // Assistant
       "conversation",
       "chat-message",
