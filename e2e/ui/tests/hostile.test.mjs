@@ -473,6 +473,37 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await context.close();
     });
 
+    test(`a form whose answer redirects to another origin applies nothing from it (${engine})`, async () => {
+      f.evil.length = 0;
+      const path = key("redirect-away");
+      // The other origin lets the page read its answer (CORS), and answers ops.
+      f.evilRoutes.set(`/${path}-evil`, (req, res) => {
+        const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
+        if (req.method === "OPTIONS") {
+          res.writeHead(204, cors);
+          return res.end();
+        }
+        res.writeHead(200, { ...cors, "content-type": "application/vnd.navree.ops+json" });
+        res.end(JSON.stringify({ ops: [{ op: "toast", tone: "success", text: "from the other origin" }] }));
+      });
+      const open = { "content-security-policy": "script-src 'self'; style-src 'self'", "set-cookie": "XSRF-TOKEN=tok; Path=/" };
+      route(`/${path}`, doc(`<div id="t">start</div><form id="f" data-ui-form method="post" action="/${path}-post"><button id="go">go</button></form>`), open);
+      f.routes.set(`/${path}-post`, (req, res) => {
+        res.writeHead(307, { location: `${f.evilOrigin}/${path}-evil` });
+        res.end();
+      });
+      const { context, page } = await fresh(`/${path}`);
+      await page.click("#go");
+      await until(() => f.evil.some((hit) => hit.url === `/${path}-evil` && hit.method === "POST"));
+      await sleep(200);
+      assert.ok(f.evil.some((hit) => hit.method === "POST"), "the redirect was followed, so the check is what stopped it");
+      const said = await toasts(page);
+      assert.ok(!said.some((text) => text.includes("from the other origin")), said.join(" | "));
+      assert.ok(page.url().startsWith(f.origin), page.url());
+      assert.equal(await page.evaluate(() => document.querySelector("[data-pending]")), null);
+      await context.close();
+    });
+
     /** Two links, a form; the form's answer changes what `/x-private` shows. */
     function staleScene(answer) {
       const name = key("stale");
