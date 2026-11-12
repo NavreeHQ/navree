@@ -1,0 +1,55 @@
+---
+title: "SiteHeader"
+description: "A public site's header: brand, main links and calls to action, held at the top, with a phone menu that works with no script."
+---
+
+<UiPreview example="site-header/default" />
+
+`SiteHeader` puts the brand on the left, the main links beside it and the calls to action on the right, and stays at the top as the page scrolls. Below 64 rem the links and actions fold into a menu behind one button. The menu is a `<details>`, so it opens and closes with no script, by touch and by keyboard, and the browser says whether it is open.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+SiteHeader::new(Brand::new("Kesar", "/").icon(icons::SUN))
+    .link("Features", "/#features")
+    .link("How it works", "/#how")
+    .current("Pricing", "/pricing/")
+    .link("FAQ", "/#faq")
+    .action(Button::ghost("Sign in").href("/login"))
+    .action(Button::primary("Start free").href("/signup"))
+```
+
+## On a phone
+
+Below 64 rem the bar keeps the brand and the menu button. The menu lists the same links, at least 48 px tall each, and the calls to action at full width under them. `.menu_label("मेन्यू")` names the button in the page's language.
+
+<UiPreview example="site-header/phone" />
+
+## The current page
+
+`.current(label, href)` marks the link of the page the reader is on with `aria-current="page"`, in the bar and in the menu.
+
+## Anatomy
+
+<UiAnatomy component="site-header" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The links are a navigation landmark named Main (`.nav_label` changes it).
+- The menu button is the `<summary>` of a `<details>`: Enter and Space open and close it, and assistive technology hears whether it is expanded.
+- With JavaScript off the menu works the same way.
+
+</UiA11y>
+
+## API
+
+### SiteHeader
+
+<UiProps type="SiteHeader" />
+
+### Brand
+
+<UiProps type="Brand" />

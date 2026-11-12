@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b130e"/>
+      <stop offset="1" stop-color="#0f0c0a"/>
+    </linearGradient>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9a4d" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#ff9a4d" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <g fill="none" stroke="#2b241f" stroke-width="1">
+    <path d="M60 120H740M60 200H740M60 280H740M60 360H740"/>
+  </g>
+  <text x="60" y="74" fill="#f2ece8" font-family="system-ui, sans-serif" font-size="26" font-weight="600">Resting heart rate</text>
+  <text x="740" y="74" fill="#97918d" font-family="system-ui, sans-serif" font-size="18" text-anchor="end">Last 30 days</text>
+  <path d="M60 140 L100 150 L140 152 L180 168 L220 146 L260 176 L300 190 L340 196 L380 214 L420 206 L460 226 L500 240 L540 232 L580 252 L620 262 L660 256 L700 276 L740 270 L740 380 L60 380 Z" fill="url(#area)"/>
+  <path d="M60 140 L100 150 L140 152 L180 168 L220 146 L260 176 L300 190 L340 196 L380 214 L420 206 L460 226 L500 240 L540 232 L580 252 L620 262 L660 256 L700 276 L740 270" fill="none" stroke="#ff9a4d" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="740" cy="270" r="7" fill="#ff9a4d"/>
+  <text x="60" y="420" fill="#97918d" font-family="system-ui, sans-serif" font-size="18">64 bpm</text>
+  <text x="740" y="420" fill="#f2ece8" font-family="system-ui, sans-serif" font-size="18" text-anchor="end">58 bpm today</text>
+</svg>

@@ -1,0 +1,44 @@
+---
+title: "FeatureRows"
+description: "Features told at length, each beside its picture, the picture on the right, then the left, in turn."
+---
+
+<UiPreview example="feature-rows/default" />
+
+`FeatureRows` tells features one after another. Each `FeatureRow` has a small line, a title (`h3`), paragraphs, points with ticks and an action, beside its picture. From 64 rem up the picture is on the right, then the left, in turn; `.media_first()` starts on the left. On a phone each picture is under its words.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+FeatureRows::new()
+    .row(
+        FeatureRow::new("Last night, in stages")
+            .eyebrow("Sleep")
+            .text("Kesar splits the night into deep, REM and light sleep.")
+            .point("Efficiency, debt and timing")
+            .media(PhoneFrame::new(Picture::new("/img/sleep.png", "Last night: a sleep score of 84", 780, 1688))),
+    )
+```
+
+## Anatomy
+
+<UiAnatomy component="feature-rows" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The rows are a list; the words come before the picture in the reading order whichever side the picture is drawn on.
+
+</UiA11y>
+
+## API
+
+### FeatureRows
+
+<UiProps type="FeatureRows" />
+
+### FeatureRow
+
+<UiProps type="FeatureRow" />

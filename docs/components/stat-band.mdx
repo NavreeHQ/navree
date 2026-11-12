@@ -1,0 +1,36 @@
+---
+title: "StatBand"
+description: "A band of a few large numbers, each with what it counts and where it comes from."
+---
+
+<UiPreview example="stat-band/default" />
+
+`StatBand` draws a few large numbers side by side from 64 rem up, two to a row below. Each number has what it counts and, with `.stat_with`, a line saying where it comes from. Write numbers as the reader reads them: `1.2 lakh`, `₹4.6 crore`.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+StatBand::new()
+    .stat_with("1.2 lakh", "nights read last month", "Across 9,400 people")
+    .stat_with("20+", "measures from one phone", "Through Health Connect")
+    .stat("0", "records sold or shared")
+```
+
+## Anatomy
+
+<UiAnatomy component="stat-band" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- It is a description list: each label is a `<dt>` read before its value, though the value is drawn above it.
+
+</UiA11y>
+
+## API
+
+### StatBand
+
+<UiProps type="StatBand" />

@@ -1,0 +1,65 @@
+---
+title: "Pricing"
+description: "Plans side by side, with a monthly or yearly switch that works with no script, by keyboard and by touch."
+---
+
+<UiPreview example="pricing/default" />
+
+`Pricing` lays plans side by side. When a plan has a monthly and a yearly price, a switch shows one or the other. The switch is a pair of radio buttons and the stylesheet shows the prices of the one chosen, so it works with no script, the arrow keys move between the two, and a hidden price is not read out. Write amounts as the reader reads them: `₹2,990`, `₹1,00,000`.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+Pricing::new("plans")
+    .yearly_badge("2 months free")
+    .plan(Plan::new("Free").price("₹0", "for ever").action(Button::outline("Start free").href("/signup")))
+    .plan(
+        Plan::new("Plus")
+            .monthly("₹299", "a month")
+            .yearly("₹2,990", "a year")
+            .yearly_note("₹249 a month, billed once a year")
+            .feature("A year of trends")
+            .action(Button::primary("Start Plus").href("/signup?plan=plus"))
+            .featured("Most popular"),
+    )
+    .footnote("Prices in Indian rupees, including GST.")
+```
+
+## Yearly first
+
+`.yearly()` checks the yearly choice when the page is drawn, for a link that carries `?billing=yearly`.
+
+<UiPreview example="pricing/yearly" />
+
+## A call to action for each period
+
+`.yearly_action(button)` gives a plan a second call to action, shown while yearly is chosen, so each period links to its own checkout.
+
+## Structured data
+
+Give the plans to search engines as `Offer`s on your `SoftwareApplication`, with the amount in digits: `Offer::new("2990", "INR").name("Plus, yearly")`. See [Search, previews and answers](/docs/ui/seo/).
+
+## Anatomy
+
+<UiAnatomy component="pricing" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The switch is a `<fieldset>` of two radio buttons named by a hidden legend (`.labels(...)` sets the words).
+- The prices of the other period are `display: none`, so they are neither seen nor read.
+- Each plan's name is an `h3`.
+
+</UiA11y>
+
+## API
+
+### Pricing
+
+<UiProps type="Pricing" />
+
+### Plan
+
+<UiProps type="Plan" />
