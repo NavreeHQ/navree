@@ -10,8 +10,12 @@
 #   scripts/sast.sh secrets-history   the git history only (every branch)
 #   scripts/sast.sh secrets-tree      the working tree only
 #   scripts/sast.sh all               semgrep-test, semgrep, secrets
+#   scripts/sast.sh nosemgrep-added <base>
+#                                     every `nosemgrep` line added since <base>, as a
+#                                     GitHub warning annotation (needs only git; never fails)
 #
-# Needs Docker. Every command exits non-zero when it finds something.
+# Needs Docker. Every command exits non-zero when it finds something, but
+# nosemgrep-added, which only reports.
 #
 # Reports (SARIF and text) land in sast-reports/ (git-ignored); set
 # SAST_REPORTS to put them elsewhere. Other knobs:
@@ -184,9 +188,38 @@ gitleaks_scan() {
   return $((history | tree))
 }
 
+# A finding suppressed in the source never reaches code scanning (see
+# drop_suppressed), so a pull request that adds a suppression would hide its
+# finding silently. This lists each added `nosemgrep` line as a warning on
+# the pull request, with its file and line, for the reviewer to read.
+nosemgrep_added() {
+  local base="${1:?usage: scripts/sast.sh nosemgrep-added <base>}"
+  git diff -U0 --no-color --no-ext-diff "$base" HEAD -- . ':(exclude).semgrep' 2>/dev/null |
+    awk '
+      # A workflow command property value: %, CR, LF, colon and comma escaped.
+      function prop(s) { gsub(/%/, "%25", s); gsub(/\r/, "%0D", s); gsub(/\n/, "%0A", s); gsub(/:/, "%3A", s); gsub(/,/, "%2C", s); return s }
+      # A file header runs from "diff --git" to the first hunk; "+++" names the file.
+      /^diff --git / { header = 1; next }
+      header && /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
+      /^@@/ { header = 0; if (match($0, /\+[0-9]+/)) line = substr($0, RSTART + 1, RLENGTH - 1) - 1; next }
+      header { next }
+      /^\+/ {
+        line++
+        # The marker right after a line, hash, block or HTML comment opener.
+        if (file != "/dev/null" && $0 ~ /(\/\/|#|<!--|\/\*)[ \t]*nosemgrep/) {
+          printf "::warning file=%s,line=%d,title=nosemgrep added::A Semgrep finding is suppressed here; check that the reason beside it holds.\n", prop(file), line
+          found++
+        }
+        next
+      }
+      END { printf "%d nosemgrep line(s) added\n", found + 0 }
+    ' || true
+}
+
 case "${1:-all}" in
   semgrep) semgrep_scan ;;
   semgrep-test) semgrep_test ;;
+  nosemgrep-added) nosemgrep_added "${2:-}" ;;
   secrets | gitleaks) gitleaks_scan both ;;
   secrets-history) gitleaks_scan history ;;
   secrets-tree) gitleaks_scan tree ;;
@@ -198,7 +231,7 @@ case "${1:-all}" in
     exit "$status"
     ;;
   *)
-    echo "usage: scripts/sast.sh [semgrep-test|semgrep|secrets|secrets-history|secrets-tree|all]" >&2
+    echo "usage: scripts/sast.sh [semgrep-test|semgrep|secrets|secrets-history|secrets-tree|all|nosemgrep-added <base>]" >&2
     exit 2
     ;;
 esac
