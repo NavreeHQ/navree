@@ -23,7 +23,7 @@ include = [
 ]
 
 [package.metadata.docs.rs]
-features = ["access", "orm", "phone", "storage", "time"]
+features = ["access", "image", "orm", "phone", "storage", "time"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lints]
@@ -57,6 +57,11 @@ access = ["dep:navree-access"]
 ## request is answered as before, byte for byte. A preview: what it answers may
 ## change in a minor release, and it is outside the 1.x promise.
 native-preview = ["dep:navree-native"]
+## Charts as PNG pictures, drawn on the server (`navree_ui::image`): a ring, a
+## sparkline or a tile of several at the size of a home-screen widget, for a
+## place that shows only an image. Pure Rust (resvg on tiny-skia), with the
+## toolkit's own typeface built in. The facade's `ui-image` turns it on.
+image = ["dep:resvg"]
 
 [dependencies]
 navree-native = { workspace = true, optional = true }
@@ -69,6 +74,8 @@ chrono-tz = { workspace = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
+# `image`: a drawing's SVG to a PNG, with the fonts given and no file read.
+resvg = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

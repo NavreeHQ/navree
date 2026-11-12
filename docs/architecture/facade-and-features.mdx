@@ -220,6 +220,7 @@ navree = { version = "1", default-features = false, features = ["http", "log"] }
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`, `realtime`; with `webhooks`, `integrations` or `settings` on too, their notification features |
 | `ui` | `http`, `telemetry`, `validation`, `markdown`; with `orm` on too, the data table's backend; with `ai` on too, the assistant's pages (`navree::ai::ui`) |
+| `ui-image` (opt-in, not in `full`) | `ui`, and charts as PNG pictures drawn on the server (`navree::ui::image`): resvg on tiny-skia, with the toolkit's typeface built in |
 | `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
 | `auth` | `http`, `telemetry`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule`, `orm` |

@@ -103,6 +103,8 @@ pub mod form;
 pub mod genui;
 pub mod html;
 pub mod icons;
+#[cfg(feature = "image")]
+pub mod image;
 pub mod island;
 pub mod localize;
 pub mod markdown;
