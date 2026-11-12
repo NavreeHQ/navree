@@ -25,6 +25,25 @@ fn between<'a>(text: &'a str, start: &str, end: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+/// Pages import the toolkit and its charts by glob side by side, so no chart name may be
+/// one the toolkit's root already has: this module would not compile.
+#[allow(unused_imports, dead_code)]
+mod both_globs {
+    use navree_ui::charts::*;
+    use navree_ui::*;
+
+    fn names() {
+        let _ = Grid::cols(2);
+        let _ = Tooltip::new("t", "Trigger", "Words");
+        let _ = Gridlines::none();
+        let _ = TooltipStyle::big();
+        let _ = (Axis::new(), Ticks::auto(), Domain::auto(), Dots::All, Curve::Step);
+        let _ = (Ink::slot(1), Gradient::vertical(), Motion::new(), Place::EndAbove);
+        let _ = (Reference::zero(), Zone::new(0, 1), ActiveDot::Halo, Speed::Fast);
+        let _ = (ColorScale::new(Ink::muted()), CountUp::new(1, "1"));
+    }
+}
+
 #[test]
 fn a_gradient_area_names_its_gradient_after_the_chart_and_paints_with_it() {
     let chart = Chart::area("Heart rate")
@@ -88,7 +107,7 @@ fn axes_and_grid_can_each_be_switched() {
     };
     let plain = html(base());
     assert!(plain.contains("chart-y-axis") && plain.contains("chart-grid"));
-    let bare = html(base().x_axis(Axis::hidden()).y_axis(Axis::hidden()).grid(Grid::none()));
+    let bare = html(base().x_axis(Axis::hidden()).y_axis(Axis::hidden()).grid(Gridlines::none()));
     assert!(!bare.contains("chart-y-axis"), "{bare}");
     assert!(!bare.contains("chart-grid"), "{bare}");
     assert!(bare.contains("data-bare"), "{bare}");
@@ -96,12 +115,12 @@ fn axes_and_grid_can_each_be_switched() {
     // Without the labels' band the drawing is shorter.
     let height = |out: &str| between(out, "data-slot=\"chart-plot\" width=\"100%\" height=\"", "\"").to_owned();
     assert!(height(&bare).parse::<u32>().unwrap() < height(&plain).parse::<u32>().unwrap());
-    let lined = html(base().x_axis(Axis::new().line().ticks()).y_axis(Axis::new().line()).grid(Grid::both().dashed()));
+    let lined = html(base().x_axis(Axis::new().line().ticks()).y_axis(Axis::new().line()).grid(Gridlines::both().dashed()));
     assert_eq!(lined.matches("chart-axis-line").count(), 2, "{lined}");
     assert!(lined.contains("chart-tick"), "{lined}");
     assert!(lined.contains("data-dashed"), "{lined}");
     // Down lines stand at the x labels.
-    let down = html(base().grid(Grid::vertical()));
+    let down = html(base().grid(Gridlines::vertical()));
     assert!(down.contains(r#"data-slot="chart-grid" x1="0%" x2="0%""#) || down.contains(r#"x1="0%""#), "{down}");
 }
 
@@ -209,7 +228,7 @@ fn a_step_curve_over_named_levels_reads_as_names() {
             .curve(Curve::Step)
             .y_categories(["Deep", "Light", "REM", "Awake"])
             .detail("Duration", ["30 min", "50 min", "45 min", "50 min", "5 min"])
-            .tooltip(Tooltip::big()),
+            .tooltip(TooltipStyle::big()),
     );
     let axis = between(&out, "chart-y-axis", "</svg>");
     for name in ["Deep", "Light", "REM", "Awake"] {

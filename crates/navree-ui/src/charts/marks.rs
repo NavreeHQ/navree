@@ -1,6 +1,6 @@
 //! Marks written over or under the data: reference lines ([`Reference`]) and target
 //! bands ([`Zone`]); how a line shows its points ([`Dots`], [`ActiveDot`]) and how it
-//! runs between them ([`Curve`]); and what its tooltip says ([`Tooltip`]).
+//! runs between them ([`Curve`]); and what its tooltip says ([`TooltipStyle`]).
 //!
 //! Inside the crate, [`curve_path`] writes a run of points as a path in any of the
 //! curves, [`reference_line`] draws a labelled line between any two points and
@@ -215,21 +215,21 @@ pub enum Curve {
 /// series with its key, value and name).
 ///
 /// ```
-/// use navree_ui::charts::{Chart, Series, Tooltip};
+/// use navree_ui::charts::{Chart, Series, TooltipStyle};
 ///
 /// let chart = Chart::area("Heart rate")
 ///     .categories(["06:00", "06:05", "06:10"])
 ///     .series(Series::new("Heart rate", [64, 71, 69]).unit("BPM"))
-///     .tooltip(Tooltip::big());
+///     .tooltip(TooltipStyle::big());
 /// # let _ = navree_ui::render(&chart.into());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[must_use]
-pub struct Tooltip {
+pub struct TooltipStyle {
     pub(crate) big: bool,
 }
 
-impl Tooltip {
+impl TooltipStyle {
     /// The default: a line per series.
     pub const fn new() -> Self {
         Self { big: false }
