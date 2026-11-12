@@ -1967,16 +1967,54 @@ impl Text {
     }
 }
 
-/// One figure and what it is.
+/// One figure and what it is: a tile for a dashboard.
+///
+/// A plain stat is a label, a figure and how it moved. The same tile can carry what a
+/// health or finance dashboard puts on each of its figures: an [`icon`](Self::icon) in a
+/// chip, a [`unit`](Self::unit) after the number, a [`status`](Self::status) pill, a
+/// [`change`](Self::change) with a [`caption`](Self::caption) ("vs last week"), a small
+/// [`aside`](Self::aside) such as a [`Ring`](crate::charts::Ring) beside the figure, a
+/// [`chart`](Self::chart) such as a [`Sparkline`](crate::charts::Sparkline) under it, and an
+/// [`href`](Self::href) that makes the whole tile a link. Every piece is optional and a stat
+/// that uses none is the plain one. A row of tiles in a [`Grid::fit`](super::Grid::fit) wraps
+/// by the room it has, and the tile uses theme tokens only, so it follows light and dark.
+///
+/// ```
+/// use navree_ui::charts::{Ring, Sparkline};
+/// use navree_ui::{Badge, Stat, Tone, Trend, icons, render};
+///
+/// let resting = Stat::new("Resting heart rate", "58")
+///     .icon(icons::HEART_PULSE)
+///     .tone(Tone::Danger)
+///     .unit("bpm")
+///     .status(Badge::new("Athletic").tone(Tone::Success))
+///     .change(Trend::new(-3.3).up_is_bad())
+///     .caption("vs last week")
+///     .chart(Sparkline::new("Resting heart rate, 7 days", [61, 60, 62, 59, 58, 59, 58]).cell());
+/// let html = render(&resting.into());
+/// assert!(html.contains(r#"data-slot="stat-unit""#) && html.contains("vs last week"));
+///
+/// let recovery = Stat::new("Recovery", "82")
+///     .unit("%")
+///     .aside(Ring::new("Recovery", 82).size(56));
+/// # let _ = render(&recovery.into());
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Stat {
     el: Element,
     label: Node,
     value: Node,
+    unit: Option<Node>,
+    icon: Option<Icon>,
+    tone: Tone,
+    status: Option<Node>,
     trend: Option<(Node, bool)>,
     change: Option<Node>,
+    caption: Option<Node>,
+    aside: Option<Node>,
     chart: Option<Node>,
+    href: Option<Href>,
 }
 
 impl Stat {
@@ -1986,9 +2024,16 @@ impl Stat {
             el: el("div").slot("stat"),
             label: label.into(),
             value: value.into(),
+            unit: None,
+            icon: None,
+            tone: Tone::Neutral,
+            status: None,
             trend: None,
             change: None,
+            caption: None,
+            aside: None,
             chart: None,
+            href: None,
         }
     }
 
@@ -2012,25 +2057,136 @@ impl Stat {
         self
     }
 
+    /// Puts an icon in a chip before the label. It is decoration: the label says what the
+    /// tile is.
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Colours the icon's chip by what the figure is about. The figure itself stays
+    /// neutral: its colour would say good or bad, which only a [`status`](Self::status) or a
+    /// [`Trend`] knows.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.tone = tone;
+        self
+    }
+
+    /// What the figure counts, written smaller after it: `bpm`, `%`, `h`.
+    pub fn unit(mut self, unit: impl Into<Node>) -> Self {
+        self.unit = Some(unit.into());
+        self
+    }
+
+    /// A pill at the end of the label's line, such as a [`Badge`] saying "Athletic".
+    pub fn status(mut self, status: impl Into<Node>) -> Self {
+        self.status = Some(status.into());
+        self
+    }
+
+    /// Words after the change: "vs last week".
+    pub fn caption(mut self, caption: impl Into<Node>) -> Self {
+        self.caption = Some(caption.into());
+        self
+    }
+
+    /// Puts a small graphic beside the figure, at the end of its line: a
+    /// [`Ring`](crate::charts::Ring) of 48 to 72 pixels, or a few
+    /// [`MiniColumns`](crate::charts::MiniColumns).
+    pub fn aside(mut self, aside: impl Into<Node>) -> Self {
+        self.aside = Some(aside.into());
+        self
+    }
+
+    /// Makes the whole tile a link to `href`; the label is the link's name.
+    pub fn href(mut self, href: impl Into<Href>) -> Self {
+        self.href = Some(href.into());
+        self
+    }
+
     fn into_node(self) -> Node {
-        self.el
-            .children((
-                el("span").slot("stat-label").child(self.label),
-                el("span").slot("stat-value").child(self.value),
-                self.change
-                    .map(|change| el("span").slot("stat-trend").child(change))
-                    .or_else(|| {
-                        self.trend.map(|(text, good)| {
-                            el("span")
-                                .slot("stat-trend")
-                                .attr("data-tone", if good { "up" } else { "down" })
-                                .child(text)
-                        })
+        let rich = self.icon.is_some()
+            || self.unit.is_some()
+            || self.status.is_some()
+            || self.caption.is_some()
+            || self.aside.is_some()
+            || self.href.is_some();
+        let label = match self.href {
+            Some(href) => el("a")
+                .slot("stat-link")
+                .attr("href", href)
+                .child(self.label)
+                .into(),
+            None => self.label,
+        };
+        let label = el("span").slot("stat-label").child(label);
+        let head: Node = if self.icon.is_some() || self.status.is_some() {
+            el("div")
+                .slot("stat-head")
+                .children((
+                    self.icon.map(|glyph| {
+                        el("span")
+                            .slot("stat-icon")
+                            .attr_opt("data-tone", self.tone.value())
+                            .attr("aria-hidden", "true")
+                            .child(icon(glyph))
                     }),
-                self.chart
-                    .map(|chart| el("div").slot("stat-chart").child(chart)),
-            ))
-            .into()
+                    label,
+                    self.status
+                        .map(|status| el("span").slot("stat-status").child(status)),
+                ))
+                .into()
+        } else {
+            label.into()
+        };
+        let value = el("span").slot("stat-value").children((
+            self.value,
+            self.unit
+                .map(|unit| Node::list((" ", el("span").slot("stat-unit").child(unit)))),
+        ));
+        let trend = match (self.change, self.trend, self.caption) {
+            (None, None, None) => None,
+            (Some(change), _, caption) => Some(el("span").slot("stat-trend").children((
+                change,
+                caption.map(|c| el("span").slot("stat-caption").child(c)),
+            ))),
+            (None, Some((text, good)), caption) => Some(
+                el("span")
+                    .slot("stat-trend")
+                    .attr("data-tone", if good { "up" } else { "down" })
+                    .children((
+                        text,
+                        caption.map(|c| el("span").slot("stat-caption").child(c)),
+                    )),
+            ),
+            (None, None, Some(caption)) => Some(
+                el("span")
+                    .slot("stat-trend")
+                    .child(el("span").slot("stat-caption").child(caption)),
+            ),
+        };
+        let figure: Node = match self.aside {
+            Some(aside) => el("div")
+                .slot("stat-body")
+                .children((
+                    el("div").slot("stat-figure").children((value, trend)),
+                    el("div").slot("stat-aside").child(aside),
+                ))
+                .into(),
+            None => Node::list((value, trend)),
+        };
+        let root = if rich {
+            self.el.uses(Uses::APP_BLOCKS)
+        } else {
+            self.el
+        };
+        root.children((
+            head,
+            figure,
+            self.chart
+                .map(|chart| el("div").slot("stat-chart").child(chart)),
+        ))
+        .into()
     }
 }
 

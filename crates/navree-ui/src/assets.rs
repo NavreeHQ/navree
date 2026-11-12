@@ -134,6 +134,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CHART_RADIAL, CHART_RADIAL_URL),
         (Uses::CHART_LINEAR, CHART_LINEAR_URL),
         (Uses::CHART_GRIDS, CHART_GRIDS_URL),
+        (Uses::APP_BLOCKS, APP_BLOCKS_URL),
         (Uses::PARTS_STYLES, PARTS_STYLES_URL),
     ]
     .into_iter()

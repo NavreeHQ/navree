@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "96cb6578522e";
+pub const BUILD: &str = "a1139f72fc71";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-97b1dcae61e2.js";
@@ -92,7 +92,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-2f121df9dd6e.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-b069be8fb0b0.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -129,6 +129,9 @@ pub const CHART_LINEAR_URL: &str = "/_navree/ui/chart-linear-a4308e3546dd.css";
 
 /// The URL of `chart-grids.css`.
 pub const CHART_GRIDS_URL: &str = "/_navree/ui/chart-grids-19e28de744c5.css";
+
+/// The URL of `app-blocks.css`.
+pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-5acfd687d72d.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
@@ -435,7 +438,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "2f121df9dd6e",
+        hash: "b069be8fb0b0",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -548,6 +551,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/chart-grids.css"),
         gzip: Some(include_bytes!("../dist/chart-grids.css.gz")),
         brotli: Some(include_bytes!("../dist/chart-grids.css.br")),
+    },
+    Asset {
+        name: "app-blocks",
+        ext: "css",
+        hash: "5acfd687d72d",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/app-blocks.css"),
+        gzip: Some(include_bytes!("../dist/app-blocks.css.gz")),
+        brotli: Some(include_bytes!("../dist/app-blocks.css.br")),
     },
     Asset {
         name: "parts-styles",
