@@ -218,9 +218,7 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
                 other => {
                     return Err(syn::Error::new_spanned(
                         role,
-                        format!(
-                            "`role = {other}`: expected title, subtitle, status or trailing"
-                        ),
+                        format!("`role = {other}`: expected title, subtitle, status or trailing"),
                     ));
                 }
             };

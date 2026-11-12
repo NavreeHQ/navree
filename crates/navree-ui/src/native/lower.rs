@@ -238,10 +238,8 @@ impl Cx {
                 misses: std::mem::replace(&mut self.misses, misses),
                 dropped: std::mem::replace(&mut self.dropped, dropped),
             };
-            self.ahead.insert(
-                (std::ptr::from_ref(element) as usize, self.forms > 0),
-                read,
-            );
+            self.ahead
+                .insert((std::ptr::from_ref(element) as usize, self.forms > 0), read);
         }
         (self.depth, self.base, self.forms) = (depth, base, forms);
     }

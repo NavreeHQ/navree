@@ -78,8 +78,8 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
                 .find(|(seen, _)| std::ptr::eq(*seen, node))
                 .and_then(|(_, id)| *id)
                 .or(table.caption.as_deref())
-                .unwrap_or("a");
-            missing.extend(table_gaps(name, table));
+                .map_or_else(|| "a table".to_owned(), |name| format!("the {name} table"));
+            missing.extend(table_gaps(&name, table));
         }
     }
     let grade = if missing.is_empty() {
@@ -101,10 +101,10 @@ fn table_gaps(name: &str, table: &n::Table) -> Vec<String> {
         .iter()
         .any(|column| column.role == Some(n::ColumnRole::Title));
     if !titled {
-        gaps.push(format!("the {name} table has no title column"));
+        gaps.push(format!("{name} has no title column"));
     }
     if table.rows.iter().all(|row| row.action.is_none()) {
-        gaps.push(format!("the {name} table's rows open nothing"));
+        gaps.push(format!("{name}'s rows open nothing"));
     }
     gaps
 }
@@ -285,7 +285,11 @@ mod tests {
         );
         assert_eq!(coverage.grade_of("/orders"), Some(Grade::Idiom));
         assert_eq!(coverage.grade_of("/board"), Some(Grade::Web));
-        assert!(coverage.to_string().ends_with("1 of 2 native: 1 idiom, 0 layout, 1 web"));
+        assert!(
+            coverage
+                .to_string()
+                .ends_with("1 of 2 native: 1 idiom, 0 layout, 1 web")
+        );
     }
 
     #[test]
@@ -329,7 +333,10 @@ mod tests {
         );
         // Saying what the action is clears its line.
         let page = TestNative::build(
-            navree_native::Client::new(navree_native::Platform::Ios, navree_native::FormFactor::Phone),
+            navree_native::Client::new(
+                navree_native::Platform::Ios,
+                navree_native::FormFactor::Phone,
+            ),
             || {
                 crate::Shell::new("Store")
                     .page("Orders", "/orders")

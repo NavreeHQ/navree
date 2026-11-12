@@ -10,7 +10,7 @@ use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
 use navree::ui::native::protocol::input::{Input, TextKind};
 use navree::ui::native::protocol::node::{self as n, Node as N};
 use navree::ui::native::protocol::{Action, Command, Envelope, Op};
-use navree::ui::native::{Answered, Coverage};
+use navree::ui::native::{Answered, Coverage, Grade};
 use store_demo::{Settings, app};
 
 const PHONE: &str =
@@ -90,25 +90,15 @@ async fn the_store_answers_a_native_client() {
         let asked = ask(&app, path).await;
         let envelope = envelope(&asked.native);
         assert_eq!(envelope.navree, 1, "{path}");
-        let answered = match (&envelope.screen, &envelope.web) {
-            (Some(_), None) => Answered {
-                native: true,
-                why: Vec::new(),
-                dropped: Vec::new(),
-            },
-            (None, Some(web)) => {
-                assert_eq!(web.url, path, "{path}");
-                Answered {
-                    native: false,
-                    why: web.why.clone(),
-                    dropped: Vec::new(),
-                }
-            }
+        match (&envelope.screen, &envelope.web) {
+            (Some(_), None) => {}
+            (None, Some(web)) => assert_eq!(web.url, path, "{path}"),
             _ => panic!(
                 "{path}: neither a screen nor the web view: {:.300}",
                 asked.native
             ),
-        };
+        }
+        let answered = Answered::of(&envelope);
         if answered.native {
             native_routes.push(path);
         }
@@ -122,6 +112,9 @@ async fn the_store_answers_a_native_client() {
         coverage.add_answer(path, asked.html.len(), asked.native.len(), &answered);
     }
     println!("{coverage}");
+    // Each native screen is graded, and what keeps one from its system is said.
+    assert_eq!(coverage.native(), native_routes.len());
+    assert!(coverage.graded(Grade::Layout) + coverage.graded(Grade::Idiom) == native_routes.len());
     assert_eq!(
         native_routes,
         [

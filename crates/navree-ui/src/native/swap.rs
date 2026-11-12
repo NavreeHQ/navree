@@ -324,7 +324,8 @@ pub(crate) async fn client_of(
 }
 
 /// `ops` as the envelope a native client gets, with `status`. Ops that can't
-/// be said natively leave the client nothing to change, and say why.
+/// be said natively leave the client nothing to change: the status says what
+/// happened.
 pub(crate) fn ops_for(request: &scope::Request, status: StatusCode, ops: &[Op]) -> Response {
     let envelope = match native_ops(ops) {
         Some(ops) => Envelope::ops(request.stamp.as_str(), ops),
@@ -425,11 +426,30 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
         nodes.push(super::lower::with_id(super::lower::one(read), key));
     }
     let misses = std::mem::take(&mut cx.misses);
-    let why: Vec<String> = misses.iter().map(|miss| miss.what.clone()).collect();
-    let ops = if !why.is_empty() {
-        // Rows a client can't draw are not sent: the list stays as it is.
-        Vec::new()
-    } else if before {
+    let mut why: Vec<String> = Vec::new();
+    for miss in misses {
+        if !why.contains(&miss.what) {
+            why.push(miss.what);
+        }
+    }
+    if !why.is_empty() {
+        // Rows a client can't draw are not sent: the list is the web view's,
+        // and the client is told why.
+        let envelope = Envelope::web(
+            request.stamp.as_str(),
+            Web {
+                url: request.url.clone(),
+                title: None,
+                why: why.clone(),
+            },
+        )
+        .in_vocab(vocab);
+        return Some(kept(
+            respond(StatusCode::OK, "no-store", &envelope),
+            Answered::web(why),
+        ));
+    }
+    let ops = if before {
         vec![navree_native::Op::Prepend { target, nodes }]
     } else {
         let more = more
@@ -444,11 +464,7 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
     let envelope = Envelope::ops(request.stamp.as_str(), ops).in_vocab(vocab);
     Some(kept(
         respond(StatusCode::OK, "no-store", &envelope),
-        if why.is_empty() {
-            Answered::parts(std::mem::take(&mut cx.dropped))
-        } else {
-            Answered::web(why)
-        },
+        Answered::parts(std::mem::take(&mut cx.dropped)),
     ))
 }
 

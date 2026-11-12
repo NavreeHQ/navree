@@ -1505,7 +1505,8 @@ fn customers() -> Vec<CustomerRow> {
 fn customers_view(roles: bool, opens: bool) -> View {
     let query: TableQuery<CustomerRow, NoFilter> = TableQuery::parse("/customers", "");
     let page = TablePage::new(customers(), 2);
-    let mut table = DataTable::new("customers", &query, &page).row_href(|row| format!("/customers/{}", row.id));
+    let mut table =
+        DataTable::new("customers", &query, &page).row_href(|row| format!("/customers/{}", row.id));
     if opens {
         table = table.row_opens(|row| format!("/customers/{}/peek", row.id));
     }
@@ -1525,7 +1526,9 @@ fn a_button_says_its_role_only_to_a_native_client() {
             Button::primary("New customer")
                 .href("/customers/new")
                 .role(navree_ui::Role::Create),
-            Button::outline("Back").href("/").role(navree_ui::Role::Navigation),
+            Button::outline("Back")
+                .href("/")
+                .role(navree_ui::Role::Navigation),
             Button::new("Keep"),
         ))
     };
@@ -1627,7 +1630,8 @@ fn hints_never_change_the_html() {
     let plain = View::new("Customers")
         .body((
             Button::primary("New customer").href("/customers/new"),
-            DataTable::new("customers", &query, &page).row_href(|row| format!("/customers/{}", row.id)),
+            DataTable::new("customers", &query, &page)
+                .row_href(|row| format!("/customers/{}", row.id)),
         ))
         .to_html();
     assert_eq!(with, plain);
@@ -1658,7 +1662,9 @@ fn a_reused_node_writes_the_html_it_always_did() {
         render(&Button::primary("Refund").href("/orders/1/refund").into())
     );
     // A part built outside any request is read as markup, and nothing panics.
-    let at_start = Button::primary("Scan").href("/scan").role(navree_ui::Role::Primary);
+    let at_start = Button::primary("Scan")
+        .href("/scan")
+        .role(navree_ui::Role::Primary);
     let page = TestNative::of(&View::new("x").body(at_start));
     assert!(page.is_native());
 }
