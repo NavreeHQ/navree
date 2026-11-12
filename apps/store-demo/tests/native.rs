@@ -93,6 +93,8 @@ async fn the_store_answers_a_native_client() {
         match (&envelope.screen, &envelope.web) {
             (Some(_), None) => {}
             (None, Some(web)) => assert_eq!(web.url, path, "{path}"),
+            // The new rows of the live feed: ops that merge them into its list.
+            (None, None) if !envelope.ops.is_empty() => {}
             _ => panic!(
                 "{path}: neither a screen nor the web view: {:.300}",
                 asked.native
@@ -136,13 +138,13 @@ async fn the_store_answers_a_native_client() {
             "/fragments/figures",
             "/fragments/sales",
             "/fragments/shelves",
+            "/fragments/activity",
         ],
         "{coverage}"
     );
-    // What keeps the rest in the web view is named: the live feed's rows are
-    // written by the handler itself.
+    // Nothing is left to the web view.
     let reasons = coverage.reasons();
-    assert_eq!(reasons, [("html".to_owned(), 1)], "{reasons:?}");
+    assert!(reasons.is_empty(), "{reasons:?}");
 }
 
 #[tokio::test]
@@ -517,12 +519,24 @@ async fn the_dashboard_gives_its_charts_as_numbers_and_what_it_cannot_say_falls_
         })
         .expect("a chart of rupees");
     assert!(sales.series[0].values.iter().flatten().count() > 0);
-    // The live feed's rows are written by the handler itself: a client is sent to
-    // the web view for them, with why.
-    let rows = ask(&app, "/fragments/activity").await;
-    let web = envelope(&rows.native).web.expect("the web view");
-    assert_eq!(web.url, "/fragments/activity");
-    assert!(web.why.contains(&"html".to_owned()), "{:?}", web.why);
+    // The live feed's new rows are the feed's own answer: a client gets them to merge into
+    // its list at the top, with the cursor of the newest as the revision it is at.
+    let rows = ask(&app, "/fragments/activity?since=0-0").await;
+    let rows = envelope(&rows.native);
+    let [
+        Op::Merge {
+            nodes, at, more, ..
+        },
+    ] = rows.ops.as_slice()
+    else {
+        panic!("not a merge: {:?}", rows.ops);
+    };
+    assert!(!nodes.is_empty());
+    assert!(nodes.iter().all(|node| matches!(node, N::FeedRow(_))));
+    assert_eq!(
+        (*at, *more),
+        (navree::ui::native::protocol::op::Edge::Start, false)
+    );
     let embedded = app
         .client()
         .get("/")

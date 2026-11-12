@@ -16,8 +16,7 @@
 use std::sync::Arc;
 
 use chrono::NaiveDate;
-use http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
+use http::{HeaderMap, Method, StatusCode};
 use navree::db::{Db, Uow};
 use navree::http::extract::{Path, Query};
 use navree::http::response::{IntoResponse, Response};
