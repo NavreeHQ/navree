@@ -42,7 +42,9 @@
 [data-slot=radial-stack]{display:flex;flex-direction:column;align-items:center;gap:.375rem}
 [data-slot=radial-caption]{display:flex;flex-direction:column;align-items:center;font-size:11px;line-height:1.3;text-align:center;& [data-slot=radial-label]{margin:0;font-size:10px;color:var(--fg-2)}& [data-slot=radial-sub]{margin:0;font-size:11px}}
 
-/* Rings: each value over its goal in the middle, and a legend beside them. */
+/* Rings: each value over its goal in the middle, and a legend beside them. Rings side by
+   side glow less than a ring alone: a tight lift that keeps each ring crisp. */
+[data-kind=rings] [data-glow]{--g:light-dark(color-mix(in oklab,var(--c) 22%,transparent),color-mix(in oklab,var(--c) 38%,transparent));filter:drop-shadow(0 0 1.5px var(--g)) drop-shadow(0 1px 3px var(--g))}
 [data-slot=radial-row]{display:flex;align-items:baseline;gap:.2em;line-height:1.25;font-size:max(9px,4.6cqi);font-variant-numeric:tabular-nums;white-space:nowrap;& strong{font-size:1.3em;font-weight:700;color:color-mix(in oklab,var(--c) 78%,var(--fg))}& span{color:var(--fg-3)}}
 [data-rows="2"] [data-slot=radial-row]{font-size:max(10px,6cqi)}
 @container (width<150px){[data-slot=radial-row]{display:none}}
