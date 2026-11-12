@@ -677,6 +677,17 @@ impl ThemeSpec {
         }
     }
 
+    /// This spec with the brand's accent: `dark` in the dark palette and `light` in the light
+    /// one, each with what reads on and around it derived (the text on it, the accent as
+    /// text, the focus ring), so a brand colour that is too pale or too deep to carry text
+    /// still gives a theme that passes [`Theme::custom`]'s check.
+    #[must_use]
+    pub fn with_accent(mut self, dark: Rgb, light: Rgb) -> Self {
+        self.dark.derive_accent(dark);
+        self.light.derive_accent(light);
+        self
+    }
+
     /// The pairs that fall short, in both palettes. Empty means every text pair
     /// reaches WCAG AA and every graphic pair 3:1.
     pub fn shortfalls(&self) -> Vec<Shortfall> {

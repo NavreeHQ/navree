@@ -15,6 +15,7 @@ use navree_http::extract::urlencoded;
 use navree_http::extract::{FromRequestParts, Scoped};
 use navree_http::response::{IntoResponse, Response};
 
+use crate::app_files::{AppFont, AppSheet};
 use crate::components::{
     Avatar, Breadcrumb, Button, ButtonVariant, Separator, Size, Toast, Toaster, icon,
 };
@@ -558,6 +559,8 @@ pub struct Shell {
     layout: ShellLayout,
     collapse: Collapse,
     toasts: crate::components::ToastPosition,
+    app_sheets: Vec<AppSheet>,
+    app_fonts: Vec<AppFont>,
 }
 
 impl Shell {
@@ -579,7 +582,28 @@ impl Shell {
             layout: ShellLayout::Sidebar,
             collapse: Collapse::Icons,
             toasts: crate::components::ToastPosition::BottomEnd,
+            app_sheets: Vec::new(),
+            app_fonts: Vec::new(),
         }
+    }
+
+    /// Links a stylesheet of the app's own on every page of the shell. See
+    /// [`View::stylesheet`].
+    #[must_use]
+    pub fn stylesheet(mut self, sheet: &AppSheet) -> Self {
+        if !self.app_sheets.contains(sheet) {
+            self.app_sheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own on every page of the shell. See [`View::font`].
+    #[must_use]
+    pub fn font(mut self, font: &AppFont) -> Self {
+        if !self.app_fonts.contains(font) {
+            self.app_fonts.push(*font);
+        }
+        self
     }
 
     /// Sets how every page looks unless a workspace, the reader or the URL says
@@ -994,6 +1018,8 @@ pub struct AppPage {
     user: Option<UserMenu>,
     /// The request's header slot, in place of the shell's.
     header_slot: Option<Node>,
+    app_sheets: Vec<AppSheet>,
+    app_fonts: Vec<AppFont>,
 }
 
 impl AppPage {
@@ -1024,6 +1050,8 @@ impl AppPage {
             status: StatusCode::OK,
             user: None,
             header_slot: None,
+            app_sheets: shell.app_sheets.clone(),
+            app_fonts: shell.app_fonts.clone(),
             shell,
         }
     }
@@ -1051,6 +1079,24 @@ impl AppPage {
     /// drawn in. See [`View::theme_sheet`].
     pub fn theme_sheet(mut self, theme: &Theme) -> Self {
         self.sheets.push(theme.clone());
+        self
+    }
+
+    /// Links a stylesheet of the app's own on this page, after the shell's. See
+    /// [`View::stylesheet`].
+    pub fn stylesheet(mut self, sheet: &AppSheet) -> Self {
+        if !self.app_sheets.contains(sheet) {
+            self.app_sheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own on this page, after the shell's. See
+    /// [`View::font`].
+    pub fn font(mut self, font: &AppFont) -> Self {
+        if !self.app_fonts.contains(font) {
+            self.app_fonts.push(*font);
+        }
         self
     }
 
@@ -1200,6 +1246,12 @@ impl AppPage {
         }
         for theme in &self.sheets {
             view = view.theme_sheet(theme);
+        }
+        for font in &self.app_fonts {
+            view = view.font(font);
+        }
+        for sheet in &self.app_sheets {
+            view = view.stylesheet(sheet);
         }
         if let Some(token) = &self.csrf {
             view = view.csrf(token.clone());
