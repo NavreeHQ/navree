@@ -31,7 +31,7 @@
 [data-slot=dialog-close]{position:absolute;top:.625rem;inset-inline-end:.625rem;display:flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-2);cursor:pointer;&:hover{background:var(--ink-2);color:var(--fg)}}
 
 /* Popups: the browser's popover. The overlay module places them. */
-[data-slot=popover-content],[data-slot=hover-card-content]{position:fixed;inset:auto;margin:0;padding:.75rem;width:max-content;max-width:min(20rem,calc(100vw - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
+[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content]{position:fixed;inset:auto;margin:0;padding:.75rem;width:max-content;max-width:min(20rem,calc(100vw - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
   &:popover-open{animation:ui-in .1s ease-out}
   &:not([style]){margin:auto;inset:0;height:fit-content}
 }

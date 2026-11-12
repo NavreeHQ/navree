@@ -2,7 +2,7 @@
 //! set, written as attributes the stylesheet already has rules for.
 
 use super::root_methods;
-use crate::node::{Element, IntoNodes, Node, el, into_node};
+use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// A gap's attribute value: the nearest step of the scale (in units of 4px).
 pub(crate) const fn gap_name(gap: u8) -> &'static str {
@@ -191,6 +191,35 @@ impl Grid {
                 .slot("grid")
                 .attr("data-cols", span_name(columns))
                 .attr("data-gap", "4"),
+        }
+    }
+
+    /// A grid of as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20
+    /// or 24; another number takes the nearest): a row of figure tiles that wraps by the room
+    /// it has, from one column on a phone to six on a wide screen, with no breakpoint to
+    /// choose. The columns share the width equally.
+    ///
+    /// ```
+    /// use navree_ui::{Grid, Stat, render};
+    ///
+    /// let tiles = Grid::fit(12).gap(3).children((
+    ///     Stat::new("Steps", "9,412"),
+    ///     Stat::new("Sleep", "7 h 20 min"),
+    ///     Stat::new("Resting heart rate", "58 bpm"),
+    /// ));
+    /// assert!(render(&tiles.into()).contains(r#"data-fit="12""#));
+    /// ```
+    pub fn fit(min: u8) -> Self {
+        let nearest = [8_u8, 10, 12, 14, 16, 20, 24]
+            .into_iter()
+            .min_by_key(|step| step.abs_diff(min))
+            .unwrap_or(12);
+        Self {
+            el: el("div")
+                .slot("grid")
+                .attr("data-fit", nearest.to_string())
+                .attr("data-gap", "4")
+                .uses(Uses::APP_BLOCKS),
         }
     }
 
