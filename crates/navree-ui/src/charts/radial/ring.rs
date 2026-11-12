@@ -5,12 +5,10 @@ use super::super::format::NumberFormat;
 use super::super::motion::{Effect, Motion};
 use super::super::paint::{Defs, Gradient, Ink};
 use super::super::value::{IntoValue, finite};
-use super::super::{
-    Common, Drawn, TableData, TableMode, common_methods, fill, n, value_cell,
-};
+use super::super::{Common, Drawn, TableData, TableMode, common_methods, fill, n, value_cell};
 use super::{
-    Band, Middle, Paint, RadialLabels, RingTrack, Screen, Sizes, figure, finish, fit, glyph,
-    plot, summary_of, thickness_for, with_unit, wrap,
+    Band, Middle, Paint, RadialLabels, RingTrack, Screen, Sizes, figure, finish, fit, glyph, plot,
+    summary_of, thickness_for, with_unit, wrap,
 };
 use crate::components::Tone;
 use crate::icons::Icon;
@@ -191,14 +189,18 @@ impl One {
         let ring = ink
             .on(wrap(
                 kind,
-                self.sizes
-                    .sizers(|w| (f64::from(w) * ratio).round() as u32),
+                self.sizes.sizers(|w| (f64::from(w) * ratio).round() as u32),
                 drawing,
                 middle,
             ))
             .attr_opt("data-glow-room", self.paint.glow.then_some(""));
         let caption = (!roomy && matches!(self.middle, Middle::Value))
-            .then(|| (words("radial-label", &self.label), words("radial-sub", &self.sublabel)))
+            .then(|| {
+                (
+                    words("radial-label", &self.label),
+                    words("radial-sub", &self.sublabel),
+                )
+            })
             .filter(|(a, b)| a.is_some() || b.is_some())
             .map(|(a, b)| el("div").slot("radial-caption").children((a, b)));
         let body: Node = match caption {
@@ -213,7 +215,9 @@ impl One {
         let with = |t: &str| with_unit(t, unit);
         let value_text = with(&text);
         let max_text = with(&self.format.format(self.max, numbers));
-        let share_text = NumberFormat::percent().max_decimals(0).format(share, numbers);
+        let share_text = NumberFormat::percent()
+            .max_decimals(0)
+            .format(share, numbers);
         let ranged = self.min != 0.0;
         let min_text = ranged.then(|| with(&self.format.format(self.min, numbers)));
         let name = self.name(common);
@@ -832,13 +836,19 @@ impl Rings {
                 laps: true,
                 ink: r.color,
                 paint: &paint,
-                motion: self.motion.stagger(0).after(
-                    u32::try_from(at).unwrap_or(0) * self.motion_step(),
-                ),
+                motion: self
+                    .motion
+                    .stagger(0)
+                    .after(u32::try_from(at).unwrap_or(0) * self.motion_step()),
                 index: 0,
                 area,
             };
-            marks.push(el("g").attr("data-ring", at as i64).child(band.nodes(&mut defs)).into());
+            marks.push(
+                el("g")
+                    .attr("data-ring", at as i64)
+                    .child(band.nodes(&mut defs))
+                    .into(),
+            );
         }
         let drawing = super::plot(size, size).children((defs.node(), marks));
 
@@ -853,29 +863,32 @@ impl Rings {
         let middle = match &self.middle {
             RingsMiddle::Nothing => None,
             RingsMiddle::Values => Some(
-                el("div").slot("radial-center").attr("data-rows", drawn_rings as i64).child(
-                    ready
-                        .iter()
-                        .take(MAX_RINGS)
-                        .enumerate()
-                        .map(|(at, r)| {
-                            let unit = r.ring.unit.as_deref();
-                            r.color
-                                .on(el("span").slot("radial-row"))
-                                .children((
-                                    el("strong").child(
-                                        r.ring.value.map_or_else(|| "–".to_owned(), &fmt),
-                                    ),
-                                    el("span").child(format!(
-                                        "/{}",
-                                        with_unit(&fmt(r.ring.max), unit)
-                                    )),
-                                ))
-                                .attr("data-i", at as i64)
-                                .into()
-                        })
-                        .collect::<Vec<Node>>(),
-                ),
+                el("div")
+                    .slot("radial-center")
+                    .attr("data-rows", drawn_rings as i64)
+                    .child(
+                        ready
+                            .iter()
+                            .take(MAX_RINGS)
+                            .enumerate()
+                            .map(|(at, r)| {
+                                let unit = r.ring.unit.as_deref();
+                                r.color
+                                    .on(el("span").slot("radial-row"))
+                                    .children((
+                                        el("strong").child(
+                                            r.ring.value.map_or_else(|| "–".to_owned(), fmt),
+                                        ),
+                                        el("span").child(format!(
+                                            "/{}",
+                                            with_unit(&fmt(r.ring.max), unit)
+                                        )),
+                                    ))
+                                    .attr("data-i", at as i64)
+                                    .into()
+                            })
+                            .collect::<Vec<Node>>(),
+                    ),
             ),
             RingsMiddle::Custom(node) => Some(el("div").slot("radial-center").child(node.clone())),
             // The icon wears the outer ring's colour.
@@ -1031,18 +1044,31 @@ mod tests {
             Some("M50 5A45 45 0 0 1 50 95")
         );
         assert!(out.contains(r#"pathLength="1""#));
-        assert!(out.contains(r#"<circle cx="50" cy="50" r="45" data-slot="radial-track""#), "{out}");
+        assert!(
+            out.contains(r#"<circle cx="50" cy="50" r="45" data-slot="radial-track""#),
+            "{out}"
+        );
     }
 
     #[test]
     fn a_full_ring_is_two_halves_and_past_full_draws_a_lap() {
-        let out = html(Ring::new("Steps", 10_000).max(10_000).size(100).thickness(10.0));
+        let out = html(
+            Ring::new("Steps", 10_000)
+                .max(10_000)
+                .size(100)
+                .thickness(10.0),
+        );
         assert_eq!(
             path_of(&out, "radial-arc").as_deref(),
             Some("M50 5A45 45 0 0 1 50 95A45 45 0 0 1 50 5")
         );
         assert!(!out.contains("radial-lap"), "{out}");
-        let over = html(Ring::new("Steps", 12_500).max(10_000).size(100).thickness(10.0));
+        let over = html(
+            Ring::new("Steps", 12_500)
+                .max(10_000)
+                .size(100)
+                .thickness(10.0),
+        );
         assert_eq!(
             path_of(&over, "radial-arc").as_deref(),
             Some("M50 5A45 45 0 0 1 50 95A45 45 0 0 1 50 5"),
@@ -1064,14 +1090,24 @@ mod tests {
 
     #[test]
     fn a_ring_is_a_named_picture_with_its_value_in_a_table() {
-        let out = html(Ring::new("Sleep score", 82).label("Sleep score").sublabel("Great"));
+        let out = html(
+            Ring::new("Sleep score", 82)
+                .label("Sleep score")
+                .sublabel("Great"),
+        );
         assert!(out.contains(r#"role="img""#), "{out}");
         assert!(out.contains(r#"aria-label="Sleep score, chart""#), "{out}");
         assert!(out.contains("Sleep score: 82 of 100, 82%."), "{out}");
         assert!(out.contains("<table"), "{out}");
-        assert!(!out.contains("chart-table-switch"), "no switch by default: {out}");
+        assert!(
+            !out.contains("chart-table-switch"),
+            "no switch by default: {out}"
+        );
         assert!(!out.contains("data-ui-chart"), "no tooltip: {out}");
-        assert!(out.contains(r#"data-slot="radial-label">Sleep score<"#), "{out}");
+        assert!(
+            out.contains(r#"data-slot="radial-label">Sleep score<"#),
+            "{out}"
+        );
         assert!(out.contains(r#"data-slot="radial-sub">Great<"#), "{out}");
         assert!(!out.contains("style="), "no style attribute: {out}");
     }
@@ -1100,9 +1136,15 @@ mod tests {
         let out = html(Ring::new("Sleep score", f64::NAN));
         assert!(out.contains(r#"data-state="empty""#), "{out}");
         let out = html(Ring::new("Sleep score", 4).max(0));
-        assert!(out.contains(r#"data-state="empty""#), "a scale of nothing: {out}");
+        assert!(
+            out.contains(r#"data-state="empty""#),
+            "a scale of nothing: {out}"
+        );
         let out = html(Ring::new("Sleep score", None::<f64>).inline());
-        assert!(out.contains(r#"data-empty"#) && out.contains("Sleep score: No data"), "{out}");
+        assert!(
+            out.contains(r#"data-empty"#) && out.contains("Sleep score: No data"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -1127,7 +1169,11 @@ mod tests {
         assert!(out.contains(r#"data-color="7" data-mix="vivid""#), "{out}");
         assert!(out.contains(r#"data-slot="radial-halo""#), "{out}");
         // Two rings on a page, two names.
-        let other = html(Ring::new("Sleep score", 82).id("sleep-2").fill(Gradient::sheen(Ink::own())));
+        let other = html(
+            Ring::new("Sleep score", 82)
+                .id("sleep-2")
+                .fill(Gradient::sheen(Ink::own())),
+        );
         assert!(other.contains("sleep-2-p0"));
     }
 
@@ -1138,20 +1184,32 @@ mod tests {
             .from(67, Ink::tone(Tone::Success))
             .label("Recovered");
         let out = html(Ring::new("Recovery", 87).colors(scale.clone()));
-        assert!(out.contains(r#"data-slot="radial" data-kind="ring""#), "{out}");
+        assert!(
+            out.contains(r#"data-slot="radial" data-kind="ring""#),
+            "{out}"
+        );
         assert!(out.contains(r#"data-tone="success""#), "{out}");
         assert!(out.contains("87 of 100, 87%. Recovered."), "{out}");
         let low = html(Ring::new("Recovery", 20).colors(scale));
-        assert!(low.contains(r#"data-tone="danger""#) && low.contains("Low."), "{low}");
+        assert!(
+            low.contains(r#"data-tone="danger""#) && low.contains("Low."),
+            "{low}"
+        );
     }
 
     #[test]
     fn motion_draws_on_and_counts_up_and_still_writes_nothing() {
         let out = html(Ring::new("Sleep score", 82).motion(Motion::new().delay(200)));
-        assert!(out.contains(r#"data-motion="draw" data-delay="4""#), "{out}");
+        assert!(
+            out.contains(r#"data-motion="draw" data-delay="4""#),
+            "{out}"
+        );
         assert!(out.contains(r#"data-to="82""#), "{out}");
         let still = html(Ring::new("Sleep score", 82));
-        assert!(!still.contains("data-motion") && !still.contains("data-to"), "{still}");
+        assert!(
+            !still.contains("data-motion") && !still.contains("data-to"),
+            "{still}"
+        );
     }
 
     #[test]
@@ -1163,8 +1221,14 @@ mod tests {
                 .size_on(Screen::Md, 80),
         );
         assert!(out.contains(r#"data-slot="radial-caption""#), "{out}");
-        assert!(out.contains(r#"data-to="md" width="64" height="64""#), "{out}");
-        assert!(out.contains(r#"data-at="md" width="80" height="80""#), "{out}");
+        assert!(
+            out.contains(r#"data-to="md" width="64" height="64""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"data-at="md" width="80" height="80""#),
+            "{out}"
+        );
         // The drawing keeps the base size's units, and scales.
         assert!(out.contains(r#"viewBox="0 0 64 64""#), "{out}");
     }
@@ -1199,13 +1263,25 @@ mod tests {
                 .motion(Motion::new()),
         );
         // Radii 45, 33, 21: each a thickness and a gap inside the last.
-        assert!(out.contains(r#"r="45""#) && out.contains(r#"r="33""#) && out.contains(r#"r="21""#), "{out}");
-        assert!(out.contains("M50 5A45 45 0 0 1 50 95\""), "move at half: {out}");
+        assert!(
+            out.contains(r#"r="45""#) && out.contains(r#"r="33""#) && out.contains(r#"r="21""#),
+            "{out}"
+        );
+        assert!(
+            out.contains("M50 5A45 45 0 0 1 50 95\""),
+            "move at half: {out}"
+        );
         assert!(out.contains("radial-lap"), "stand is past its goal: {out}");
-        assert!(out.contains(r#"data-delay="3""#), "the second ring waits: {out}");
+        assert!(
+            out.contains(r#"data-delay="3""#),
+            "the second ring waits: {out}"
+        );
         assert!(out.contains("Move: 300 kcal of 600 kcal, 50%."), "{out}");
         assert!(out.contains("Stand: 15 hr of 12 hr, 125%."), "{out}");
-        assert!(out.contains(r#"data-color="1""#) && out.contains(r#"data-color="3""#), "{out}");
+        assert!(
+            out.contains(r#"data-color="1""#) && out.contains(r#"data-color="3""#),
+            "{out}"
+        );
     }
 
     #[test]
@@ -1245,7 +1321,10 @@ mod tests {
                 .center_values()
                 .legend(),
         );
-        assert!(out.contains("<strong>42</strong><span>/100%</span>"), "{out}");
+        assert!(
+            out.contains("<strong>42</strong><span>/100%</span>"),
+            "{out}"
+        );
         assert!(out.contains(r#"data-slot="radial-legend""#), "{out}");
         assert!(out.contains("68% / 100%"), "{out}");
     }

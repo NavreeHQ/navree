@@ -138,14 +138,28 @@ mod tests {
 
     #[test]
     fn a_scale_that_starts_above_zero() {
-        let out = html(Gauge::new("Body temperature", 36.5).min(34).max(39).unit("°C").sweep(180.0).size(200).thickness(20.0));
+        let out = html(
+            Gauge::new("Body temperature", 36.5)
+                .min(34)
+                .max(39)
+                .unit("°C")
+                .sweep(180.0)
+                .size(200)
+                .thickness(20.0),
+        );
         // Half way along a half circle from -90: twelve o'clock.
         assert_eq!(
             path_of(&out, "radial-arc").as_deref(),
             Some("M10 100A90 90 0 0 1 100 10")
         );
-        assert!(out.contains("Body temperature: 36.5°C, on a scale from 34°C to 39°C."), "{out}");
-        assert!(out.contains(r#"data-place="low""#), "the value sits low in a half circle: {out}");
+        assert!(
+            out.contains("Body temperature: 36.5°C, on a scale from 34°C to 39°C."),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"data-place="low""#),
+            "the value sits low in a half circle: {out}"
+        );
         // A half circle is half as tall, and a little more for its thickness.
         assert!(out.contains(r#"viewBox="0 0 200 111""#), "{out}");
     }
