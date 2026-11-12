@@ -67,9 +67,13 @@ const CASES = {
   rtl: ["rtl"],
   paint: ["paint"],
   steps: ["steps"],
+  lanes: ["lanes"],
+  "bar-baseline": ["bar-baseline"],
+  "clock-axis": ["clock-axis"],
+  "meter-details": ["meter-details"],
   ring: ["ring-1", "ring-2", "ring-3"],
-  rings: ["rings-1", "rings-2"],
-  gauge: ["gauge-1", "gauge-2"],
+  rings: ["rings-1", "rings-2", "rings-3"],
+  gauge: ["gauge-1", "gauge-2", "gauge-3"],
   clock: ["clock"],
   meter: ["meter"],
   "meter-compact": ["meter-compact"],
@@ -1193,7 +1197,7 @@ for (const name of NAMES) {
 
     describe("radial charts", () => {
       test("a ring, rings and a gauge are pictures named by their title and described by their summary; tiny rings in a pill are one image", async () => {
-        for (const [kase, figures] of [["ring", ["ring-1", "ring-2", "ring-3"]], ["rings", ["rings-1", "rings-2"]], ["gauge", ["gauge-1", "gauge-2"]]]) {
+        for (const [kase, figures] of [["ring", ["ring-1", "ring-2", "ring-3"]], ["rings", ["rings-1", "rings-2", "rings-3"]], ["gauge", ["gauge-1", "gauge-2", "gauge-3"]]]) {
           const page = await open(`/charts?case=${kase}`);
           for (const fig of figures) {
             const body = page.locator(`#${fig} [data-slot=chart-body]`);
@@ -1212,6 +1216,27 @@ for (const name of NAMES) {
           if (kase === "gauge") assert.match(await page.locator("#gauge-2-summary").textContent(), /36\.7°C, on a scale from 34°C to 39°C/);
           await page.done();
         }
+      });
+
+      test("rings in a row that sizes to its content keep their width; a gauge's zones lie on its track; the clock's band shows every hour's category", async () => {
+        for (const width of [1440, 390]) {
+          const page = await open("/charts?case=rings", { width });
+          const box = await page.locator("#rings-3").boundingBox();
+          // Not drawn zero wide: the row may shrink them a little beside their words, never away.
+          assert.ok(box && box.width > 100, `five rings in a row are ${box?.width} wide at ${width}`);
+          assert.equal(await page.locator("#rings-3 [data-slot=radial-arc]").count(), 5);
+          await page.done();
+        }
+        const gauge = await open("/charts?case=gauge");
+        assert.equal(await gauge.locator("#gauge-3 [data-slot=radial-zone]").count(), 4);
+        assert.match(await gauge.locator("#gauge-3-summary").textContent(), /1\.12 of 2\.00, 56%\. Optimal\./);
+        assert.equal(await gauge.locator("#gauge-3 [data-slot=chart-legend-item]").count(), 4);
+        const legend = await gauge.locator("#gauge-3 [data-slot=chart-legend]").evaluate((el) => getComputedStyle(el).display);
+        assert.equal(legend, "flex", "the legend is styled");
+        await gauge.done();
+        const clock = await open("/charts?case=clock");
+        assert.equal(await clock.locator("#clock [data-slot=clock-band]").count(), 24);
+        await clock.done();
       });
 
       test("the middle counts up to the server's number, and a ring takes its wider size on a wider screen", async () => {
