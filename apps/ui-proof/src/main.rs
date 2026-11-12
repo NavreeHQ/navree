@@ -31,6 +31,7 @@
 //! | `/carousel` | carousels with buttons, pickers, going round, rotation, two in view, vertical and right to left |
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 //! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
+//! | `/app-blocks` | the app's own stylesheet and typeface, figure tiles, an info tip, chart skeletons, a breathing guide, a dock, a day pager and a view switcher |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/compare/{screen}` | the four screens that measure speed: `table`, `select`, `dates` and `tabs` |
@@ -48,6 +49,7 @@ use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, icons};
 
 mod agra_theme;
+mod app_blocks;
 mod bench;
 mod charts;
 mod compare;
@@ -109,7 +111,8 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Upload", "/upload").icon(icons::UPLOAD))
                 .item(NavItem::new("Markdown", "/markdown").icon(icons::FILE))
                 .item(NavItem::new("Charts", "/charts").icon(icons::CHART_LINE))
-                .item(NavItem::new("Report", "/charts/report").icon(icons::CHART_COLUMN)),
+                .item(NavItem::new("Report", "/charts/report").icon(icons::CHART_COLUMN))
+                .item(NavItem::new("App blocks", "/app-blocks").icon(icons::LAYOUT_DASHBOARD)),
         )
         .user(
             UserMenu::new("Anu Lakhotia", "anu@navree.test")
@@ -157,11 +160,15 @@ impl Module for ProofModule {
             .controller::<markdown::MarkdownPages>()
             .controller::<charts::ChartPages>()
             .controller::<grids::GridPages>()
+            .controller::<app_blocks::AppBlockPages>()
             .controller::<islands::IslandPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
+        // The app's own stylesheet and typeface, served by the toolkit.
+        m.contribute(app_blocks::BRAND);
+        m.contribute(app_blocks::FONT);
     }
 }
 
