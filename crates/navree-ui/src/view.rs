@@ -13,6 +13,7 @@ use crate::form::csrf_field;
 use crate::html::escape_into;
 use crate::node::{IntoNodes, Node, Uses, el};
 use crate::render::{Measure, POST_FORM, measure, render_into};
+use crate::seo::Seo;
 use crate::theme::{Appearance, Density, Font, Theme};
 
 /// The content security policy of every page: scripts, styles, fonts and
@@ -25,6 +26,9 @@ const SPECULATION_RULES: HeaderName = HeaderName::from_static("speculation-rules
 
 /// What the document head costs before its title and scripts.
 const HEAD_BYTES: usize = 512;
+
+/// What a page's search and preview tags usually cost, structured data included.
+const SEO_BYTES: usize = 2048;
 
 /// A whole page: `<head>` from the toolkit, `<body>` from you.
 ///
@@ -54,6 +58,7 @@ pub struct View {
     density: Option<Density>,
     sheets: Vec<Theme>,
     mark_build: bool,
+    seo: Option<Box<Seo>>,
 }
 
 impl View {
@@ -71,6 +76,7 @@ impl View {
             density: None,
             sheets: Vec::new(),
             mark_build: false,
+            seo: None,
         }
     }
 
@@ -155,6 +161,44 @@ impl View {
             .map_or("dark", |appearance| appearance.mode().color_scheme())
     }
 
+    /// Says what the page is to search engines, link previews and answer engines: its
+    /// description, canonical address, robots rules, Open Graph and Twitter cards, its other
+    /// languages and its structured data, all written in the head after the title. See
+    /// [`seo`](crate::seo).
+    ///
+    /// ```
+    /// use navree_ui::View;
+    /// use navree_ui::seo::Seo;
+    ///
+    /// let html = View::new("Pricing: Kesar plans in rupees, monthly or yearly")
+    ///     .seo(
+    ///         Seo::new("Three plans for sleep, heart and steps tracking, from free to family.")
+    ///             .canonical("https://kesar.example/pricing/"),
+    ///     )
+    ///     .to_html();
+    /// assert!(html.contains(r#"<meta name="description" content="Three plans"#));
+    /// assert!(html.contains(r#"<meta property="og:title" content="Pricing: Kesar plans"#));
+    /// ```
+    pub fn seo(mut self, seo: Seo) -> Self {
+        self.seo = Some(Box::new(seo));
+        self
+    }
+
+    /// What [`seo`](Self::seo) says about the page, when it was set.
+    pub fn seo_info(&self) -> Option<&Seo> {
+        self.seo.as_deref()
+    }
+
+    /// What a search engine or a link preview would hold against the page: see
+    /// [`Seo::problems`]. A page with no [`seo`](Self::seo) has one problem, that it says
+    /// nothing; a test of a public site's pages asserts this is empty.
+    pub fn seo_problems(&self) -> Vec<String> {
+        match &self.seo {
+            Some(seo) => seo.problems(&self.title),
+            None => vec!["the page says nothing about itself: no `View::seo`".to_owned()],
+        }
+    }
+
     /// Sets the page's language.
     pub fn lang(mut self, lang: &'static str) -> Self {
         self.lang = lang;
@@ -217,7 +261,8 @@ impl View {
     /// The page's HTML.
     pub fn to_html(&self) -> String {
         let found = measure(&self.body);
-        let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES);
+        let seo = if self.seo.is_some() { SEO_BYTES } else { 0 };
+        let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES + seo);
         self.write(&mut out, &found);
         out
     }
@@ -245,6 +290,9 @@ impl View {
         out.push_str("\"><title>");
         escape_into(out, &self.title);
         out.push_str("</title>");
+        if let Some(seo) = &self.seo {
+            seo.write_head(out, &self.title);
+        }
         // Geist is preloaded only for a theme that sets its text in Geist.
         if self
             .appearance
