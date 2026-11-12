@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 use crate::provider::{
     Endpoints, Issuer, Kind, MICROSOFT_CONSUMERS_TENANT, ProfileSource, ProviderEntry,
 };
-use crate::runtime::Runtime;
+use crate::runtime::{Runtime, jwks_lifetime};
 use crate::state::StatePayload;
 use crate::{AuthorizeUrl, ProviderToken, SocialCallback, SocialError, SocialUser};
 
@@ -418,7 +418,26 @@ pub(crate) async fn verify_id_token(
     id_token: &str,
     nonce: &str,
 ) -> Result<Value, SocialError> {
-    let jws = Jws::parse(id_token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    let claims = verify_signature(rt, entry, endpoints, id_token).await?;
+    check_claims(
+        entry,
+        &endpoints.issuer,
+        &claims,
+        nonce,
+        rt.now().timestamp(),
+    )?;
+    Ok(claims)
+}
+
+/// The claims of a JWS signed with a key of the provider's key set (an ID
+/// token, or a notification Apple sends), once the signature verifies.
+pub(crate) async fn verify_signature(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    endpoints: &Endpoints,
+    token: &str,
+) -> Result<Value, SocialError> {
+    let jws = Jws::parse(token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
     let claims: Map<String, Value> = jws.claims().map_err(|_| {
         invalid_id_token(
             entry,
@@ -429,9 +448,24 @@ pub(crate) async fn verify_id_token(
         .jwks
         .as_deref()
         .ok_or_else(|| SocialError::Config(format!("{} has no key set", entry.name)))?;
-    let keys = rt
-        .jwks
-        .get(jwks_url, jws.header().kid.as_deref(), || async {
+    let keys = key_set(rt, entry, jwks_url, jws.header().kid.as_deref()).await?;
+    // RS256/384/512, PS256/384/512, ES256, ES384 or EdDSA: a key set never
+    // verifies `none` or an HMAC token.
+    jws.verify_with(&keys)
+        .map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    Ok(Value::Object(claims))
+}
+
+/// The provider's key set, from the cache or fetched over the client (TLS
+/// to the provider), kept as long as its `Cache-Control` says.
+async fn key_set(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    jwks_url: &str,
+    kid: Option<&str>,
+) -> Result<JwkSet, SocialError> {
+    rt.jwks
+        .get(jwks_url, kid, rt.now(), || async {
             let response = rt
                 .http
                 .get(jwks_url)
@@ -445,27 +479,15 @@ pub(crate) async fn verify_id_token(
                     message: format!("the key set answered {}", response.status().as_u16()),
                 });
             }
-            response
+            let set = response
                 .json::<JwkSet>()
                 .map_err(|_| SocialError::ProviderUnavailable {
                     provider: entry.name.clone(),
                     message: "the key set is not valid".to_owned(),
-                })
+                })?;
+            Ok((set, jwks_lifetime(response.header("cache-control"))))
         })
-        .await?;
-    // RS256/384/512, PS256/384/512, ES256, ES384 or EdDSA: a key set never
-    // verifies `none` or an HMAC token.
-    jws.verify_with(&keys)
-        .map_err(|e| invalid_id_token(entry, e.to_string()))?;
-    let claims = Value::Object(claims);
-    check_claims(
-        entry,
-        &endpoints.issuer,
-        &claims,
-        nonce,
-        rt.now().timestamp(),
-    )?;
-    Ok(claims)
+        .await
 }
 
 /// The issuer, audience, time and nonce checks of an ID token.
