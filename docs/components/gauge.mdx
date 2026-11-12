@@ -1,0 +1,121 @@
+---
+title: "Gauge"
+description: "One value on an open arc, 270 degrees or any sweep from 90 to 360, on a scale that may start above zero, with zones on its track. Drawn as SVG on the server."
+---
+
+<UiPreview example="gauge/default" />
+
+`Gauge` shows one value on an open arc: a stress level, a recovery index, a body temperature on its scale. The arc sweeps 270 degrees by default, open at the bottom, and runs clockwise from its lower left end. It has what a [ring](/docs/components/ring/) has (the value in the middle with its label, paint, sizes and motion) and two things more: a scale that can start above zero, and zones on its track.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Gauge::new("Relaxation", 73)
+    .label("Recovery index")
+    .sublabel("Calm")
+    .fill(
+        Gradient::horizontal()
+            .stop(0.0, Ink::slot(3))
+            .stop(1.0, Ink::tone(Tone::named("cyan"))),
+    )
+    .glow()
+    .size(200)
+    .motion(Motion::new())
+```
+
+As with a ring, the title names the picture for assistive technology and `.show_title()` shows it.
+
+## When to use it
+
+Use a gauge for one value on a scale with a low end and a high end, where it matters how far along the scale it sits. For a value against a goal it can pass, use a [ring](/docs/components/ring/), which draws a second lap. For a value on a scale in a line of text or a table row, use a [range scale](/docs/components/range-scale/). For a value over time, use a [line chart](/docs/components/line-chart/).
+
+## Anatomy
+
+<UiAnatomy component="gauge" />
+
+## Scales and sweeps
+
+The scale runs from 0 to 100 unless `.min(...)` and `.max(...)` say otherwise. A value past the top fills the arc and does not lap; a value below the bottom draws no arc. The summary and the table give the value either way.
+
+`.sweep(degrees)` sets how far the arc runs, from 90 to 360 degrees: 180 is a half circle, open below. In a sweep of 200 degrees or less, the value sits low, on the open side.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Gauge::new("Body temperature", 36.7)
+    .min(34)
+    .max(39)
+    .format(NumberFormat::decimals(1))
+    .unit("°C")
+    .label("Temperature")
+    .sweep(180.0)
+    .ink(Ink::slot(2))
+```
+
+A scale that starts above zero is said so in the summary: "Temperature: 36.7°C, on a scale from 34°C to 39°C."
+
+<UiPreview example="gauge/sweeps" />
+
+## Zones
+
+`.zone(Zone)` lays a stretch of the scale on the track in its own colour: from and to in the value's units, with a label. With zones, the arc runs down their middle, half as thick, so every zone shows from end to end, and the arc wears the colour of the zone its value is in unless you give it a colour of your own.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Gauge::new("Load ratio", 1.12)
+    .max(2)
+    .format(NumberFormat::decimals(2).fixed())
+    .label("Acute : chronic")
+    .sublabel("Optimal")
+    .zone(Zone::new(0, 0.8).label("Undertraining").ink(Ink::slot(1)))
+    .zone(Zone::new(0.8, 1.3).label("Optimal").ink(Ink::slot(3)))
+    .zone(Zone::new(1.3, 1.5).label("Overreaching").ink(Ink::slot(4)))
+    .zone(Zone::new(1.5, 2).label("Overuse").ink(Ink::slot(8)))
+```
+
+A legend names the zones, the summary and the table say which zone the value is in, and the table's note gives each zone's ends. A zone with no ink takes the chart colours in turn, and one with no label is named by its ends. Where zones overlap, the one added last is drawn over and names the value. `Zone` is the same band a [line chart](/docs/components/line-chart/#reference-lines-and-zones) shades behind its data.
+
+<UiPreview example="gauge/zones" />
+
+## Paint, sizes and motion
+
+The arc takes a colour, a tone, a gradient, a [`ColorScale`](/docs/components/ring/#colour-by-band) of bands, a glow, a halo and a track, as a [ring's](/docs/components/ring/#paint) does; a gradient spans the whole drawing, so a horizontal one moves from the low end to the high end. `.size(px)` sets the width, 24 to 320 pixels (160 by default); the drawing stops under the arc's lowest point, so a half circle is about half as tall as it is wide. `.size_on(Screen, px)` and `.thickness(px)` work as on a ring, and so does `.inline()`.
+
+`.motion(Motion::new())` draws the arc on from its lower left end and counts the value up. The gauge is drawn finished, so a reader who asks for less motion sees it in place.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A gauge with no value, or with a scale whose top is not above its bottom, is empty.
+
+## The table
+
+One row: the value, the top of the scale and the share, and, with bands or zones, the one the value is in. With zones, a note under the table gives each zone's ends. The table is for screen readers only by default; `.show_title()` adds the switch that shows it. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The gauge is a picture named by its title and described by its summary. With a band or a zone, the summary ends with its name. It is not a tab stop, because it has one value.
+- The drawing and the middle are hidden from assistive technology: the summary and the table say the same.
+- A zone is told apart by its name in the legend, the summary and the table, never by colour alone.
+- Nothing moves for a reader who asks for less motion.
+
+</UiA11y>
+
+## API
+
+### Gauge
+
+<UiProps type="Gauge" />
+
+### RingTrack
+
+<UiProps type="RingTrack" />
+
+### Screen
+
+<UiProps type="Screen" />

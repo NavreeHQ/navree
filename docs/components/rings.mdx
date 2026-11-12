@@ -1,0 +1,120 @@
+---
+title: "Rings"
+description: "Two to six values on rings inside each other, each against its own goal, with the values in the middle, a legend beside them and a small form for a pill. Drawn as SVG on the server."
+---
+
+<UiPreview example="rings/default" />
+
+`Rings` draws a few values as rings inside each other, the first outside: a day's movement, exercise and standing, each against its own goal; the two branches of the nervous system; five scores of a day. Each ring starts at twelve o'clock and runs clockwise, has its own colour and track, and draws a second lap past its goal.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Rings::new("Activity")
+    .ring(RingValue::new("Move", 540).max(600).unit("kcal").fill(Gradient::sheen(Ink::slot(8))))
+    .ring(RingValue::new("Exercise", 38).max(30).unit("min").fill(Gradient::sheen(Ink::slot(3))))
+    .ring(RingValue::new("Stand", 9).max(12).unit("hr").fill(Gradient::sheen(Ink::tone(Tone::named("cyan")))))
+    .track(RingTrack::Tinted)
+    .center_values()
+    .legend()
+    .glow()
+    .size(220)
+    .motion(Motion::new().delay(150))
+```
+
+A `RingValue` is a name and a value, out of 100 unless `.max(goal)` says otherwise, with `.unit(...)` for what it counts. Rings with no colour of their own take the chart colours in order. As with a [ring](/docs/components/ring/), the title is for assistive technology and `.show_title()` shows it.
+
+## When to use it
+
+Use rings when a few values each have their own goal and belong together, read as one picture. For one value, use a [ring](/docs/components/ring/). To compare values with each other, use [bars](/docs/components/bar-chart/#horizontal-bars): arcs of different radius are hard to compare by length. For the parts of one whole, use a [meter](/docs/components/meter/).
+
+## Anatomy
+
+<UiAnatomy component="rings" />
+
+## Each ring
+
+`RingValue::ink(Ink)` and `.tone(Tone)` colour a ring, and `.fill(Gradient)` paints it with a gradient that spans the drawing. `Rings::track(RingTrack)` gives every ring its track, and `RingValue::track(RingTrack)` gives one ring a track of its own. `Rings::glow()` puts a soft glow of its own colour round each arc.
+
+<UiPreview example="rings/two" />
+
+## The middle and the legend
+
+`.center_values()` writes each ring's value over its goal in the middle, in the ring's colour. `.center_icon(icon)` puts an icon there, and `.center(node)` markup of your own; by default the middle is empty. The middle is hidden from assistive technology, which reads the summary.
+
+`.legend()` names each ring beside the drawing, with its value and its share of its goal.
+
+## How many rings
+
+Up to four rings keep the thickness of one; five and six are thinner, so the middle keeps its room. `.thickness(px)` sets each ring's thickness at the base size, and `.gap(px)` the space between rings, three tenths of the thickness by default.
+
+<UiPreview example="rings/five" />
+
+Six rings are drawn at most. Past six, or past what fits at a thickness you set, the rings drawn stop and a note under the drawing says how many of how many are shown; the legend and the table still list every value.
+
+## Sizes
+
+`.size(px)` sets the drawing's width, 24 to 320 pixels (160 by default), and `.size_on(Screen, px)` another width from a screen width up, as on a [ring](/docs/components/ring/#sizes). In a [Row](/docs/ui/layout/) the rings take their drawing's width, so words sit beside them.
+
+<UiPreview example="rings/beside" />
+
+## In a pill
+
+`.inline()` draws the rings small for a pill, a button or a table row, 28 or 36 pixels across: the picture alone in a span, named by its summary. The [day pager](/docs/components/day-pager/) puts a day's scores before its date this way.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Button::outline(Node::list((
+    Rings::new("Today's scores")
+        .ring(RingValue::new("Movement", 35).ink(Ink::slot(2)))
+        .ring(RingValue::new("Recovery", 72).ink(Ink::slot(3)))
+        .ring(RingValue::new("Sleep", 78).ink(Ink::slot(7)))
+        .size(28)
+        .inline(),
+    "Wed, 11 Nov",
+)))
+.icon_end(icons::CALENDAR)
+```
+
+<UiPreview example="rings/pill" />
+
+## Motion
+
+`.motion(Motion::new())` draws each ring on after the one outside it. The rings are drawn finished, so a reader who asks for less motion sees them in place.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). Rings with no value are empty.
+
+## The table
+
+A row for each ring, including those not drawn: its value, its goal and its share. The table is for screen readers only by default; `.show_title()` adds the switch that shows it. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The rings are a picture named by the title and described by the summary, a sentence for each ring: "Move: 540 kcal of 600 kcal, 90%." They are not a tab stop.
+- The drawing and the middle are hidden from assistive technology. The legend names every ring in text, and the table lists every value.
+- An inline form is a picture named by its summary.
+- Rings are told apart by their place and by name in the legend and the table, never by colour alone.
+- Nothing moves for a reader who asks for less motion.
+
+</UiA11y>
+
+## API
+
+### Rings
+
+<UiProps type="Rings" />
+
+### RingValue
+
+<UiProps type="RingValue" />
+
+### RingTrack
+
+<UiProps type="RingTrack" />

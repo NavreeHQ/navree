@@ -1,0 +1,137 @@
+---
+title: "Calendar heat map"
+description: "A day per cell, a column per week, each cell shaded by its day's value in five steps, with months above and a legend from less to more. A day with no data is hollow, not zero."
+---
+
+<UiPreview example="calendar-heatmap/default" />
+
+`CalendarHeatmap` shows how steady a habit is over weeks and months: training load, steps, minutes of meditation. Each day is a cell, each week a column and each weekday a row, and a cell is shaded by its day's value in five steps: nothing, then four. Months are named above the weeks and weekdays beside the rows. A day with no data is a hollow dashed cell, because a day the watch was off is not a day of zero.
+
+```rust
+use chrono::{Duration, NaiveDate};
+use navree::ui::charts::*;
+use navree::ui::*;
+
+let first = NaiveDate::from_ymd_opt(2026, 5, 16).unwrap_or_default();
+CalendarHeatmap::new("Training consistency")
+    .description("Last 6 months of activity, Harleen Kaur")
+    .locale("en-IN")
+    .days((0..181).map(|d| {
+        let load = if d % 9 == 4 { None } else { Some((d * 37 % 130) as f64) };
+        (first + Duration::days(d), load)
+    }))
+    .ink(Ink::slot(5))
+    .value_name("Training load")
+    .unit("AU")
+```
+
+`.days(...)` takes dates with their values, and `.day(date, value)` adds one. A value that is `None` or not a finite number is a day with no data, and so is a day between the first and the last that you did not give. A date given twice keeps the last value.
+
+## When to use it
+
+Use a calendar heat map to show consistency over many days, where the pattern of weeks and gaps matters more than any one value. To read values over time, use a [line chart](/docs/components/line-chart/) or [bars](/docs/components/bar-chart/). For one day by the hour, use a [day clock](/docs/components/day-clock/). For a short run of states, use a [colour strip](/docs/components/color-strip/).
+
+## Anatomy
+
+<UiAnatomy component="calendar-heatmap" />
+
+## Steps
+
+A day of zero, or less, is the faintest cell. A value above zero takes one of four steps, and `.steps(HeatSteps)` says how:
+
+| Steps | A value above zero takes |
+|---|---|
+| `HeatSteps::Even` | One of four equal parts of the range from zero to the highest value. This is the default. |
+| `HeatSteps::Quartiles` | The quartile of the values above zero it falls in, so every step is used even when a few days stand far above the rest. |
+| `HeatSteps::at(4_000, 8_000, 12_000)` | The first step below 4,000, the second from 4,000, the third from 8,000 and the fourth from 12,000. |
+
+`.ink(Ink)` sets the colour the steps are made of: a chart colour, a tone or the accent (the default). The stylesheet steps it through the page's own surface, with one ramp for the light palette and another for the dark one, so every theme gets a ramp that is right for it.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+CalendarHeatmap::new("Daily steps")
+    .ink(Ink::tone(Tone::Success))
+    .steps(HeatSteps::at(4_000, 8_000, 12_000))
+    .unit("steps")
+    .locale("en-IN")
+    .week_start(chrono::Weekday::Sun)
+```
+
+<UiPreview example="calendar-heatmap/steps" />
+
+## Months, weeks and weekdays
+
+The grid runs from the first date to the last. `.range(first, last)` draws those dates whether or not they have data, so a range that starts before the first day you gave shows the days between as empty, and days outside the range are left out. A month is named above its first week, and above the first week of the grid.
+
+The rows start on the locale's first day of the week; `.week_start(Weekday)` sets another. Monday, Wednesday and Friday are named beside their rows, and `.no_weekdays()` leaves the names out. Month and weekday names come from the chart's locale.
+
+<UiPreview example="calendar-heatmap/short" />
+
+The cells grow with the width of the chart: 12, 16 and 24 pixels. On a narrow screen the weeks scroll sideways, starting at the latest. A calendar draws at most 1,100 days, the latest, and a note under it says so.
+
+## Values and the legend
+
+`.value_name("Training load")` names the value in the tooltip and the table (the title by default), `.unit("AU")` says what it counts, and `.format(NumberFormat)` writes it. `.locale("en-IN")` groups numbers in lakh and crore. The legend runs from "Less" to "More" through the five steps; it is for the eye, since the summary and the table say the same in words.
+
+## Words
+
+The words the chart writes, from the legend's ends to the summary's template, are fields of `GridLabels`: change the ones you need and pass it to `.words(...)`.
+
+```rust
+use navree::ui::charts::*;
+
+let mut words = GridLabels::english();
+words.less = "कम".into();
+words.more = "ज़्यादा".into();
+CalendarHeatmap::new("गतिविधि").locale("hi").words(words)
+```
+
+## Motion
+
+`.motion(Motion::new())` fades the weeks in, one after another. The cells are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A calendar with no day that has a value is empty.
+
+<UiPreview example="calendar-heatmap/states" />
+
+## The table
+
+The table has a row for each day drawn: its date, written in full, and its value, or "No data". See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the calendar, which is one tab stop. |
+| `←`, `→` | Moves to the same weekday of the week before or after. |
+| `↑`, `↓` | Moves to the day before or after, in the same week. |
+| `Home`, `End` | Moves to the same weekday of the first or the last week. |
+| `Page Up`, `Page Down` | Moves to the first or the last day of the week. |
+| `Esc` | Hides the tooltip. |
+
+- The calendar is a group named by its title and described by its summary: how many days from which date to which, how many had activity, the highest day and the total, and how many days have no data.
+- A move by key shows the day's tooltip, scrolls the day into view when the weeks scroll, and is announced politely: the date and its value.
+- A day with no data is hollow and dashed, and says "No data" in the tooltip and the table, so it is never read as zero.
+- The legend is hidden from assistive technology: the summary and the table twin give every value in words. In a right-to-left page, `←` and `→` swap.
+
+</UiA11y>
+
+## API
+
+### CalendarHeatmap
+
+<UiProps type="CalendarHeatmap" />
+
+### HeatSteps
+
+<UiProps type="HeatSteps" />
+
+### GridLabels
+
+<UiProps type="GridLabels" />

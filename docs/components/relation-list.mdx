@@ -1,0 +1,93 @@
+---
+title: "Relation list"
+description: "Pairs of measures ranked by how strongly they move together: the signed value, a bar from the centre by sign, and a note on each row, with chance and untested pairs set apart."
+---
+
+<UiPreview example="relation-list/default" />
+
+`RelationList` shows the findings of a set of correlations as a ranked list, strongest first. Each row names the pair, writes its signed value, draws a bar from the centre (to the right for a link that moves together, to the left for one that moves apart, longer the stronger) and writes its note under it.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+RelationList::new("What moves together")
+    .description("Last 30 days, Harpreet Gill")
+    .relation("Sleep", "Next-day HRV", Relation::new(0.62).note("30 days, p < 0.001"))
+    .relation("Steps", "Stress", Relation::new(-0.48).note("28 days, p = 0.004"))
+    .relation("Screen time", "Sleep", Relation::new(-0.37).note("26 days, p = 0.04"))
+    .relation("Caffeine", "Deep sleep", Relation::new(-0.22).significant(false).note("21 days, could be chance"))
+    .relation("Alcohol", "Recovery", Relation::untested().note("too few days with both"))
+    .value_name("Correlation (r)")
+    .motion(Motion::new())
+```
+
+`.relation(a, b, Relation)` adds a pair, and the rows are ranked by the size of the value, whatever order they are given in; a tie keeps the order given. A [`Relation`](/docs/components/matrix-heatmap/#a-relation) is the same as a matrix's: a signed value, whether it is significant, and a note.
+
+## When to use it
+
+Use a relation list for the links that were found, strongest first, and in place of a [matrix](/docs/components/matrix-heatmap/) when few of the pairs were tested: a matrix of eleven measures with ten pairs tested is mostly blank, and a list of the ten reads better. Beside a matrix, it gives the same pairs in order. To see the points behind one pair, use a [scatter chart](/docs/components/scatter-chart/).
+
+## Anatomy
+
+<UiAnatomy component="relation-list" />
+
+## Significance
+
+A pair that is not significant is drawn in a neutral tone and says so before its note, so a value that could be chance is never read as a link. A pair never tested comes last, with no bar. `.only_significant()` lists only the significant pairs; the table still has every pair.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+RelationList::new("Links found")
+    .relation("Sleep", "Next-day HRV", Relation::new(0.62))
+    .relation("Steps", "Stress", Relation::new(-0.48))
+    .relation("Mood", "Steps", Relation::new(0.18).significant(false))
+    .colors(Ink::tone(Tone::Success), Ink::slot(5))
+    .only_significant()
+```
+
+<UiPreview example="relation-list/significant" />
+
+## Values and bars
+
+A value is written with its sign: a link above zero gets its `+`. `.format(NumberFormat)` writes the values, with two decimals by default, and `.value_name(...)` names them in the table. A bar reaches the end at `.peak(value)`, 1 by default for a correlation; a larger value is as long as it. `.colors(positive, negative)` sets the two colours: blue and orange by default, which stay apart for every reader. Use tones when the sign means good and bad.
+
+A list draws at most 50 rows, the strongest; a note under it says so, and the table has every pair.
+
+## Motion
+
+`.motion(Motion::new())` grows each bar from the centre, one after another. The bars are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A list with no pairs is empty.
+
+## The table
+
+The table has a row for each pair, in the order of the list: the pair, its value, what it came to (positive, negative, not significant or not tested) and its note. See [The table](/docs/components/line-chart/#the-table). The words the list writes are fields of [`GridLabels`](/docs/components/calendar-heatmap/#words), passed to `.words(...)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The list is a picture named by its title and described by its summary: how many pairs, how many are significant, and the strongest. It is not a tab stop, and it has no tooltip: every row writes its pair, its value and its note.
+- The sign is written with the value and shown by the side of the bar, so the colour is never alone. A pair that is not significant or not tested says so in words.
+- The table twin lists every pair, including those the list leaves out.
+
+</UiA11y>
+
+## API
+
+### RelationList
+
+<UiProps type="RelationList" />
+
+### Relation
+
+<UiProps type="Relation" />
+
+### GridLabels
+
+<UiProps type="GridLabels" />
