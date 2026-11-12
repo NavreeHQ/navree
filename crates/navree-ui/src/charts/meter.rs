@@ -183,12 +183,13 @@ impl Meter {
         self
     }
 
-    /// Paints every segment from its colour to a brighter one, left to right.
+    /// Paints every segment from a softer shade of its colour to the full colour, left
+    /// to right.
     pub fn gradient(self) -> Self {
         self.fill(
             Gradient::horizontal()
-                .stop(0.0, Ink::own())
-                .stop(1.0, Ink::own().vivid()),
+                .stop_with_opacity(0.0, Ink::own(), 0.7)
+                .stop(1.0, Ink::own()),
         )
     }
 
@@ -655,11 +656,11 @@ mod tests {
         assert_eq!(count(&out, "<linearGradient"), 4, "{out}");
         assert!(out.contains(r#"fill="url(#chart-sleep-stages-"#), "{out}");
         assert!(
-            out.contains(r#"<stop offset="1" data-color="7" data-mix="vivid">"#),
+            out.contains(r#"<stop offset="0" stop-opacity="0.7" data-color="7">"#),
             "{out}"
         );
         assert!(
-            out.contains(r#"<stop offset="1" data-tone="cyan" data-mix="vivid">"#),
+            out.contains(r#"<stop offset="0" stop-opacity="0.7" data-tone="cyan">"#),
             "{out}"
         );
         let other = html(sleep().gradient().id("night"));

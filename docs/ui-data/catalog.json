@@ -161,7 +161,12 @@
         "ring",
         "rings",
         "gauge",
-        "day-clock"
+        "day-clock",
+        "meter",
+        "mini-columns",
+        "color-strip",
+        "range-scale",
+        "trend"
       ]
     },
     {
@@ -847,7 +852,8 @@
         "badge/icon",
         "badge/dot",
         "badge/tones",
-        "badge/outcome"
+        "badge/outcome",
+        "badge/status"
       ]
     },
     {
@@ -2124,6 +2130,97 @@
         "day-clock/thumb",
         "day-clock/default",
         "day-clock/scale"
+      ]
+    },
+    {
+      "id": "meter",
+      "name": "Meter",
+      "url": "/docs/components/meter/",
+      "summary": "One bar split into segments that add up to the whole, with the share inside the wide ones and a legend of values.",
+      "group": "charts",
+      "types": [
+        "Meter",
+        "Segment",
+        "LinearLabels"
+      ],
+      "thumb": "meter/thumb",
+      "anatomy": "meter/default",
+      "examples": [
+        "meter/thumb",
+        "meter/default",
+        "meter/zones",
+        "meter/compact",
+        "meter/rupees",
+        "meter/states"
+      ]
+    },
+    {
+      "id": "mini-columns",
+      "name": "Mini columns",
+      "url": "/docs/components/mini-columns/",
+      "summary": "Small multiples: one column per item, each split into the same parts and drawn to 100%.",
+      "group": "charts",
+      "types": [
+        "MiniColumns",
+        "MiniColumn"
+      ],
+      "thumb": "mini-columns/thumb",
+      "anatomy": "mini-columns/default",
+      "examples": [
+        "mini-columns/thumb",
+        "mini-columns/default",
+        "mini-columns/week"
+      ]
+    },
+    {
+      "id": "color-strip",
+      "name": "Colour strip",
+      "url": "/docs/components/color-strip/",
+      "summary": "A row of equal cells, each in the colour of its category or of the band its reading falls in.",
+      "group": "charts",
+      "types": [
+        "ColorStrip"
+      ],
+      "thumb": "color-strip/thumb",
+      "anatomy": "color-strip/default",
+      "examples": [
+        "color-strip/thumb",
+        "color-strip/default",
+        "color-strip/stages"
+      ]
+    },
+    {
+      "id": "range-scale",
+      "name": "Range scale",
+      "url": "/docs/components/range-scale/",
+      "summary": "One value on a scale between two ends, with a marker and a track that can be a gradient.",
+      "group": "charts",
+      "types": [
+        "RangeScale"
+      ],
+      "thumb": "range-scale/thumb",
+      "anatomy": "range-scale/default",
+      "examples": [
+        "range-scale/thumb",
+        "range-scale/default",
+        "range-scale/scales"
+      ]
+    },
+    {
+      "id": "trend",
+      "name": "Trend",
+      "url": "/docs/components/trend/",
+      "summary": "Which way something moved and by how much: an arrow, a signed change and a colour for what it means.",
+      "group": "charts",
+      "types": [
+        "Trend"
+      ],
+      "thumb": "trend/thumb",
+      "anatomy": "trend/default",
+      "examples": [
+        "trend/thumb",
+        "trend/default",
+        "trend/words"
       ]
     },
     {
@@ -36778,7 +36875,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -36949,7 +37046,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -37171,7 +37268,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -37367,7 +37464,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -37569,7 +37666,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -37777,7 +37874,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38011,7 +38108,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38239,7 +38336,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38341,7 +38438,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38538,7 +38635,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38754,7 +38851,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -38951,7 +39048,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -39122,7 +39219,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -39324,7 +39421,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -39546,7 +39643,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -39768,7 +39865,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -39952,7 +40049,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -40162,7 +40259,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -40364,7 +40461,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -40517,7 +40614,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -40695,7 +40792,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -40899,7 +40996,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -41103,7 +41200,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -41307,7 +41404,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -41485,7 +41582,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -41656,7 +41753,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -41853,7 +41950,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42037,7 +42134,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42241,7 +42338,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42433,7 +42530,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42599,7 +42696,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42790,7 +42887,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -42969,7 +43066,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -43148,7 +43245,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -43813,7 +43910,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -43941,7 +44038,7 @@
       "width": 520,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -44094,7 +44191,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -44272,7 +44369,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -44450,7 +44547,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -44554,7 +44651,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -44719,7 +44816,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -45077,7 +45174,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -45408,7 +45505,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -45632,7 +45729,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [
         "1 day: hours",
@@ -46471,7 +46568,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -47599,7 +47696,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -47809,7 +47906,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js",
+        "charts-de154b8f71dc.js",
         "count-up-9e7cfe48a268.js"
       ],
       "captions": [],
@@ -48106,7 +48203,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [
@@ -48372,6 +48469,2373 @@
                       ]
                     }
                   ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/thumb",
+      "component": "meter",
+      "slug": "thumb",
+      "title": "A meter",
+      "kind": "single",
+      "code": "Meter::new(\"Sleep stages\")\n    .id(\"meter-thumb\")\n    .hide_title()\n    .legend(false)\n    .minutes()\n    .gradient()\n    .table(TableMode::ScreenReader)\n    .segment(Segment::new(\"Deep\", 92).ink(Ink::slot(7)))\n    .segment(Segment::new(\"REM\", 98).ink(Ink::tone(Tone::named(\"cyan\"))))\n    .segment(Segment::new(\"Core\", 215).ink(Ink::slot(3)))\n    .segment(Segment::new(\"Awake\", 35).ink(Ink::slot(4)))",
+      "src": "/ui-preview/meter/thumb.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "seg-bar",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "seg-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-part",
+                      "tag": "g",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "seg",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "seg-label",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/default",
+      "component": "meter",
+      "slug": "default",
+      "title": "Sleep stages",
+      "kind": "single",
+      "code": "Meter::new(\"Sleep stages\")\n    .id(\"meter-default\")\n    .description(\"Gurpreet Kaur, 11:20 pm to 6:40 am\")\n    .minutes()\n    .gradient()\n    .gloss()\n    .motion(Motion::new())\n    .segment(Segment::new(\"Deep\", 92).ink(Ink::slot(7)))\n    .segment(Segment::new(\"REM\", 98).ink(Ink::tone(Tone::named(\"cyan\"))))\n    .segment(Segment::new(\"Core\", 215).ink(Ink::slot(3)))\n    .segment(Segment::new(\"Awake\", 35).ink(Ink::slot(4)))",
+      "src": "/ui-preview/meter/default.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "seg-bar",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "seg-gloss-stop",
+                      "tag": "stop",
+                      "count": 2,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-part",
+                      "tag": "g",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "seg",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "seg-label",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "seg-gloss",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/zones",
+      "component": "meter",
+      "slug": "zones",
+      "title": "Heart rate zones",
+      "kind": "single",
+      "code": "Meter::new(\"Heart rate zones\")\n    .id(\"meter-zones\")\n    .description(\"Rohan Malhotra, morning run at Sukhna Lake, 52 minutes\")\n    .minutes()\n    .label_from(10.0)\n    .segment(Segment::new(\"Warm-up\", 6).ink(Ink::tone(Tone::named(\"slate\"))))\n    .segment(Segment::new(\"Fat burn\", 14).ink(Ink::tone(Tone::named(\"cyan\"))))\n    .segment(Segment::new(\"Cardio\", 22).ink(Ink::tone(Tone::Success)))\n    .segment(Segment::new(\"Peak\", 8).ink(Ink::tone(Tone::Warning)))\n    .segment(Segment::new(\"Max\", 2).ink(Ink::tone(Tone::Danger)))",
+      "src": "/ui-preview/meter/zones.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "seg-bar",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "seg-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-part",
+                      "tag": "g",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "seg",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "seg-label",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/compact",
+      "component": "meter",
+      "slug": "compact",
+      "title": "The compact form",
+      "kind": "single",
+      "code": "let night = |day: &'static str, total: &'static str, stages: [u32; 4]| {\n    TableRowEl::new((\n        TableCell::new(day),\n        TableCell::new(total).numeric(),\n        TableCell::new(\n            Meter::new(format!(\"Sleep stages, {day}\"))\n                .id(format!(\"meter-compact-{day}\"))\n                .compact()\n                .minutes()\n                .gradient()\n                .segment(Segment::new(\"Deep\", stages[0]).ink(Ink::slot(7)))\n                .segment(Segment::new(\"REM\", stages[1]).ink(Ink::tone(Tone::named(\"cyan\"))))\n                .segment(Segment::new(\"Core\", stages[2]).ink(Ink::slot(3)))\n                .segment(Segment::new(\"Awake\", stages[3]).ink(Ink::slot(4))),\n        ),\n    ))\n};\nTable::new()\n    .head((\n        TableHead::new(\"Night\"),\n        TableHead::new(\"Asleep\").numeric(),\n        TableHead::new(\"Stages\"),\n    ))\n    .rows((\n        night(\"Mon\", \"7 h 20 min\", [88, 92, 210, 30]),\n        night(\"Tue\", \"7 h 5 min\", [74, 101, 198, 52]),\n        night(\"Wed\", \"7 h 31 min\", [96, 87, 224, 24]),\n        night(\"Thu\", \"6 h 27 min\", [61, 79, 187, 66]),\n        night(\"Fri\", \"7 h 24 min\", [90, 104, 219, 31]),\n        night(\"Sat\", \"7 h 37 min\", [112, 96, 231, 18]),\n        night(\"Sun\", \"7 h 14 min\", [99, 90, 205, 40]),\n    ))",
+      "src": "/ui-preview/meter/compact.html",
+      "height": 270,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "table-container",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table",
+              "tag": "table",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table-head",
+                  "tag": "th",
+                  "count": 3,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 7,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "seg-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "seg-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "seg-part",
+                              "tag": "g",
+                              "count": 4,
+                              "children": [
+                                {
+                                  "slot": "seg",
+                                  "tag": "rect",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-tip",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-announce",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-data",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-table",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/rupees",
+      "component": "meter",
+      "slug": "rupees",
+      "title": "Rupees in lakh",
+      "kind": "single",
+      "code": "Meter::new(\"Programme revenue by channel\")\n    .id(\"meter-rupees\")\n    .description(\"Fitness programmes, April to June\")\n    .format(NumberFormat::currency(\"₹\"))\n    .locale(\"en-IN\")\n    .pill()\n    .segment(Segment::new(\"Studio\", 12_40_000).ink(Ink::slot(1)))\n    .segment(Segment::new(\"Online\", 8_75_000).ink(Ink::slot(3)))\n    .segment(Segment::new(\"Corporate\", 4_10_500).ink(Ink::slot(7)))\n    .segment(Segment::new(\"Retail\", 95_000).ink(Ink::slot(4)))",
+      "src": "/ui-preview/meter/rupees.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "seg-bar",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "seg-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "seg-part",
+                      "tag": "g",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "seg",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "seg-label",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meter/states",
+      "component": "meter",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "single",
+      "code": "let state =\n    |caption: &'static str, chart: Meter| Stack::gap(2).children((Text::muted(caption), chart));\nGrid::cols(3).gap(4).children((\n    state(\n        \"Loading\",\n        Meter::new(\"Sleep stages\").id(\"meter-loading\").loading(),\n    ),\n    state(\n        \"Failed\",\n        Meter::new(\"Sleep stages\")\n            .id(\"meter-failed\")\n            .failed(None)\n            .retry(\"/sleep\"),\n    ),\n    state(\"Empty\", Meter::new(\"Sleep stages\").id(\"meter-empty\")),\n))",
+      "src": "/ui-preview/meter/states.html",
+      "height": 150,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stack",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart",
+                  "tag": "figure",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-heading",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-state",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-spacer",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-state-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "button",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mini-columns/thumb",
+      "component": "mini-columns",
+      "slug": "thumb",
+      "title": "Mini columns",
+      "kind": "single",
+      "code": "MiniColumns::new(\"Sleep cycles\")\n    .id(\"mini-columns-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .height(56)\n    .minutes()\n    .part(\"Deep\", Ink::slot(7))\n    .part(\"REM\", Ink::tone(Tone::named(\"cyan\")))\n    .part(\"Core\", Ink::slot(3))\n    .column(MiniColumn::new(\"Cycle 1\", [34, 8, 38]))\n    .column(MiniColumn::new(\"Cycle 2\", [28, 16, 42]))\n    .column(MiniColumn::new(\"Cycle 3\", [18, 24, 45]))\n    .column(MiniColumn::new(\"Cycle 4\", [8, 31, 40]))",
+      "src": "/ui-preview/mini-columns/thumb.html",
+      "height": 130,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "cols",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "cols-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "cols-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "cols-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "cols-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "cols-part",
+                              "tag": "rect",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "cols-total",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mini-columns/default",
+      "component": "mini-columns",
+      "slug": "default",
+      "title": "Sleep cycles",
+      "kind": "single",
+      "code": "MiniColumns::new(\"Sleep cycles\")\n    .id(\"mini-columns-default\")\n    .description(\"Gurpreet Kaur, five cycles\")\n    .minutes()\n    .column_name(\"Cycle\")\n    .motion(Motion::new())\n    .part(\"Deep\", Ink::slot(7))\n    .part(\"REM\", Ink::tone(Tone::named(\"cyan\")))\n    .part(\"Core\", Ink::slot(3))\n    .column(MiniColumn::new(\"Cycle 1\", [34, 8, 38]))\n    .column(MiniColumn::new(\"Cycle 2\", [28, 16, 42]))\n    .column(MiniColumn::new(\"Cycle 3\", [18, 24, 45]))\n    .column(MiniColumn::new(\"Cycle 4\", [8, 31, 40]))\n    .column(MiniColumn::new(\"Cycle 5\", [2, 35, 38]))",
+      "src": "/ui-preview/mini-columns/default.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "cols",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "cols-item",
+                      "tag": "li",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "cols-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "cols-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "cols-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "cols-part",
+                              "tag": "rect",
+                              "count": 3,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "cols-total",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mini-columns/week",
+      "component": "mini-columns",
+      "slug": "week",
+      "title": "A week of workouts",
+      "kind": "single",
+      "code": "MiniColumns::new(\"Workout mix\")\n    .id(\"mini-columns-week\")\n    .description(\"Minutes by kind of workout, Navdeep Bedi\")\n    .height(80)\n    .format(NumberFormat::number().suffix(\" min\"))\n    .column_name(\"Day\")\n    .part(\"Strength\", Ink::slot(2))\n    .part(\"Running\", Ink::slot(1))\n    .part(\"Yoga\", Ink::slot(7))\n    .column(MiniColumn::new(\"Mon\", [45, 0, 20]))\n    .column(MiniColumn::new(\"Tue\", [0, 35, 0]))\n    .column(MiniColumn::new(\"Wed\", [50, 20, 0]))\n    .column(MiniColumn::new(\"Thu\", [0, 0, 40]))\n    .column(MiniColumn::new(\"Fri\", [40, 30, 10]))\n    .column(MiniColumn::new(\"Sat\", [30, 60, 0]))\n    .column(MiniColumn::new(\"Sun\", [0, 25, 45]))",
+      "src": "/ui-preview/mini-columns/week.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "cols",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "cols-item",
+                      "tag": "li",
+                      "count": 7,
+                      "children": [
+                        {
+                          "slot": "cols-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "cols-bar",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "cols-track",
+                              "tag": "rect",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "cols-part",
+                              "tag": "rect",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "cols-total",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 3,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "color-strip/thumb",
+      "component": "color-strip",
+      "slug": "thumb",
+      "title": "A colour strip",
+      "kind": "single",
+      "code": "ColorStrip::new(\"Sleep stages\")\n    .id(\"color-strip-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .category(\"Awake\", Ink::slot(4))\n    .category(\"REM\", Ink::tone(Tone::named(\"cyan\")))\n    .category(\"Core\", Ink::slot(3))\n    .category(\"Deep\", Ink::slot(7))\n    .cells([\n        (\"11:00 pm\", \"Awake\"),\n        (\"11:30 pm\", \"Core\"),\n        (\"12:00 am\", \"Deep\"),\n        (\"12:30 am\", \"Deep\"),\n        (\"1:00 am\", \"Core\"),\n        (\"1:30 am\", \"REM\"),\n        (\"2:00 am\", \"Core\"),\n        (\"2:30 am\", \"Deep\"),\n        (\"3:00 am\", \"Core\"),\n        (\"3:30 am\", \"REM\"),\n        (\"4:00 am\", \"REM\"),\n        (\"4:30 am\", \"Core\"),\n    ])",
+      "src": "/ui-preview/color-strip/thumb.html",
+      "height": 60,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "strip",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "strip-cell",
+                      "tag": "rect",
+                      "count": 12,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "color-strip/default",
+      "component": "color-strip",
+      "slug": "default",
+      "title": "Heart rate zones of a run",
+      "kind": "single",
+      "code": "// One reading a minute for an hour and a half, from a run.\nlet readings = (0..90_u32).map(|minute| {\n    let ramp = 62 + minute.min(12) * 6;\n    let surge = if (30..44).contains(&minute) { 48 } else { 0 };\n    let wobble = (minute * 37 % 11) as i32 - 5;\n    let bpm = (ramp + surge) as i32 + wobble;\n    (\n        format!(\"{}:{:02} pm\", 6 + minute / 60, minute % 60),\n        bpm.clamp(55, 185),\n    )\n});\nColorStrip::new(\"Heart rate zones\")\n    .id(\"color-strip-default\")\n    .description(\"Navdeep Bedi, evening run, one reading a minute\")\n    .cell_name(\"Time\")\n    .value_name(\"Heart rate\")\n    .format(NumberFormat::number().suffix(\" bpm\"))\n    .legend_shares()\n    .motion(Motion::new())\n    .colors(\n        ColorScale::new(Ink::tone(Tone::named(\"slate\")))\n            .label(\"Rest\")\n            .from(100, Ink::tone(Tone::named(\"cyan\")))\n            .label(\"Fat burn\")\n            .from(130, Ink::tone(Tone::Warning))\n            .label(\"Cardio\")\n            .from(160, Ink::tone(Tone::Danger))\n            .label(\"Peak\"),\n    )\n    .readings(readings)",
+      "src": "/ui-preview/color-strip/default.html",
+      "height": 170,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "strip",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "strip-cell",
+                      "tag": "rect",
+                      "count": 90,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "color-strip/stages",
+      "component": "color-strip",
+      "slug": "stages",
+      "title": "Sleep stages, half hour by half hour",
+      "kind": "single",
+      "code": "ColorStrip::new(\"Sleep stages\")\n    .id(\"color-strip-stages\")\n    .description(\"Simran Dhillon, every half hour\")\n    .category(\"Awake\", Ink::slot(4))\n    .category(\"REM\", Ink::tone(Tone::named(\"cyan\")))\n    .category(\"Core\", Ink::slot(3))\n    .category(\"Deep\", Ink::slot(7))\n    .cell_name(\"Half hour\")\n    .cells([\n        (\"11:00 pm\", \"Awake\"),\n        (\"11:30 pm\", \"Core\"),\n        (\"12:00 am\", \"Deep\"),\n        (\"12:30 am\", \"Deep\"),\n        (\"1:00 am\", \"Core\"),\n        (\"1:30 am\", \"REM\"),\n        (\"2:00 am\", \"Core\"),\n        (\"2:30 am\", \"Deep\"),\n        (\"3:00 am\", \"Core\"),\n        (\"3:30 am\", \"REM\"),\n        (\"4:00 am\", \"REM\"),\n        (\"4:30 am\", \"Core\"),\n        (\"5:00 am\", \"REM\"),\n        (\"5:30 am\", \"Core\"),\n        (\"6:00 am\", \"Awake\"),\n    ])",
+      "src": "/ui-preview/color-strip/stages.html",
+      "height": 140,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "strip",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "strip-cell",
+                      "tag": "rect",
+                      "count": 15,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-legend",
+                  "tag": "ul",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-legend-item",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "chart-key",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-legend-name",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "range-scale/thumb",
+      "component": "range-scale",
+      "slug": "thumb",
+      "title": "A range scale",
+      "kind": "single",
+      "code": "RangeScale::new(\"Resting heart rate\", 58)\n    .id(\"range-scale-thumb\")\n    .hide_title()\n    .range(40, 120)\n    .track(\n        Gradient::horizontal()\n            .stop_with_opacity(0.0, Ink::tone(Tone::Success), 0.55)\n            .stop_with_opacity(0.3, Ink::tone(Tone::named(\"cyan\")), 0.55)\n            .stop_with_opacity(0.6, Ink::tone(Tone::named(\"orange\")), 0.55)\n            .stop_with_opacity(1.0, Ink::tone(Tone::Danger), 0.55),\n    )",
+      "src": "/ui-preview/range-scale/thumb.html",
+      "height": 90,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 420,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "scale-wrap",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "scale",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "scale-track",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "scale-fill",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "scale-marker",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "scale-ends",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "range-scale/default",
+      "component": "range-scale",
+      "slug": "default",
+      "title": "Resting heart rate",
+      "kind": "single",
+      "code": "RangeScale::new(\"Resting heart rate\", 58)\n    .id(\"range-scale-default\")\n    .range(40, 120)\n    .format(NumberFormat::number().suffix(\" bpm\"))\n    .show_value()\n    .motion(Motion::new().delay(300))\n    .track(\n        Gradient::horizontal()\n            .stop_with_opacity(0.0, Ink::tone(Tone::Success), 0.55)\n            .stop_with_opacity(0.3, Ink::tone(Tone::named(\"cyan\")), 0.55)\n            .stop_with_opacity(0.6, Ink::tone(Tone::named(\"orange\")), 0.55)\n            .stop_with_opacity(1.0, Ink::tone(Tone::Danger), 0.55),\n    )",
+      "src": "/ui-preview/range-scale/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "scale-wrap",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "scale",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "scale-track",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "scale-fill",
+                          "tag": "rect",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "scale-value",
+                          "tag": "text",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "scale-marker",
+                          "tag": "circle",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "scale-ends",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "range-scale/scales",
+      "component": "range-scale",
+      "slug": "scales",
+      "title": "Other scales",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"Body mass index, with words at the ends\",\n        RangeScale::new(\"Body mass index\", 23.4)\n            .id(\"range-scale-bmi\")\n            .range(15, 40)\n            .ends(\"Underweight\", \"Obese\")\n            .show_value()\n            .track(\n                Gradient::horizontal()\n                    .stop_with_opacity(0.0, Ink::tone(Tone::named(\"cyan\")), 0.55)\n                    .stop_with_opacity(0.14, Ink::tone(Tone::Success), 0.55)\n                    .stop_with_opacity(0.34, Ink::tone(Tone::Success), 0.55)\n                    .stop_with_opacity(0.4, Ink::tone(Tone::Warning), 0.55)\n                    .stop_with_opacity(0.6, Ink::tone(Tone::named(\"orange\")), 0.55)\n                    .stop_with_opacity(1.0, Ink::tone(Tone::Danger), 0.55),\n            ),\n    ),\n    (\n        \"Systolic pressure above the scale, in the quiet track\",\n        RangeScale::new(\"Systolic blood pressure\", 152)\n            .id(\"range-scale-pressure\")\n            .range(90, 140)\n            .format(NumberFormat::number().suffix(\" mmHg\"))\n            .show_value(),\n    ),\n    (\n        \"Balance in rupees\",\n        RangeScale::new(\"Wallet balance\", 4_50_000)\n            .id(\"range-scale-rupees\")\n            .range(0, 10_00_000)\n            .format(NumberFormat::currency(\"₹\"))\n            .locale(\"en-IN\")\n            .show_value()\n            .track(\n                Gradient::horizontal()\n                    .stop_with_opacity(0.0, Ink::accent(), 0.0)\n                    .stop_with_opacity(1.0, Ink::accent(), 0.7),\n            ),\n    ),\n]",
+      "src": "/ui-preview/range-scale/scales.html",
+      "height": 260,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-de154b8f71dc.js"
+      ],
+      "captions": [
+        "Body mass index, with words at the ends",
+        "Systolic pressure above the scale, in the quiet track",
+        "Balance in rupees"
+      ],
+      "slots": []
+    },
+    {
+      "id": "trend/thumb",
+      "component": "trend",
+      "slug": "thumb",
+      "title": "A trend",
+      "kind": "single",
+      "code": "Row::gap(4).wrap().children((\n    Trend::new(12.4),\n    Trend::new(3.0).up_is_bad(),\n    Trend::new(-4.5),\n))",
+      "src": "/ui-preview/trend/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "trend",
+              "tag": "span",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend/default",
+      "component": "trend",
+      "slug": "default",
+      "title": "Trends beside figures",
+      "kind": "single",
+      "code": "Grid::cols(4).gap(4).children((\n    Stat::new(\"Steps\", \"9,412\").change(Trend::new(12.4)),\n    Stat::new(\"Resting heart rate\", \"58 bpm\").change(Trend::new(3.0).up_is_bad()),\n    Stat::new(\"Heart rate variability\", \"52 ms\").change(Trend::new(-4.5)),\n    Stat::new(\"Time asleep\", \"7 h 20 min\").change(Trend::new(0.0)),\n))",
+      "src": "/ui-preview/trend/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-trend",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "trend",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend/words",
+      "component": "trend",
+      "slug": "words",
+      "title": "Another language",
+      "kind": "single",
+      "code": "Row::gap(4).wrap().children((\n    Trend::new(123_456.0)\n        .decimals(0)\n        .suffix(\" कदम\")\n        .locale(\"en-IN\")\n        .words(\"बढ़ा\", \"घटा\", \"कोई बदलाव नहीं\"),\n    Trend::new(-2.5)\n        .up_is_bad()\n        .words(\"बढ़ा\", \"घटा\", \"कोई बदलाव नहीं\"),\n))",
+      "src": "/ui-preview/trend/words.html",
+      "height": 100,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "trend",
+              "tag": "span",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "badge/status",
+      "component": "badge",
+      "slug": "status",
+      "title": "Status badges",
+      "kind": "single",
+      "code": "Row::gap(3).wrap().children((\n    Badge::new(\"Excellent\")\n        .tone(Tone::Success)\n        .icon(icons::SPARKLES),\n    Badge::new(\"Good\")\n        .tone(Tone::named(\"cyan\"))\n        .icon(icons::HEART_PULSE),\n    Badge::new(\"Fair\").tone(Tone::Warning).icon(icons::ACTIVITY),\n    Badge::new(\"Moderate\")\n        .tone(Tone::named(\"orange\"))\n        .icon(icons::BATTERY_LOW),\n    Badge::new(\"Needs attention\")\n        .tone(Tone::Danger)\n        .icon(icons::TRIANGLE_ALERT),\n    Badge::new(\"No data\")\n        .tone(Tone::named(\"slate\"))\n        .icon(icons::CIRCLE_MINUS),\n))",
+      "src": "/ui-preview/badge/status.html",
+      "height": 80,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 6,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
                 }
               ]
             }
@@ -57867,6 +60331,78 @@
                                                       "tag": "span",
                                                       "count": 1,
                                                       "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-sample",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "theme-contrast-ratio",
+                                                      "tag": "td",
+                                                      "count": 1,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "slot": "badge",
+                                                      "tag": "span",
+                                                      "count": 1,
+                                                      "children": []
                                                     }
                                                   ]
                                                 }
@@ -61625,7 +64161,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-26a5fb54a8b6.js",
-        "charts-1faf8299a770.js"
+        "charts-de154b8f71dc.js"
       ],
       "captions": [],
       "slots": [

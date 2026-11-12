@@ -1,0 +1,59 @@
+---
+title: "Trend"
+description: "Which way something moved and by how much: an arrow, the change with its sign, and a colour for what it means, with the option that a rise is bad news."
+---
+
+<UiPreview example="trend/default" />
+
+`Trend` shows how a figure moved: an arrow, the change written with its sign, and a colour for whether that is good or bad. A screen reader hears "Up", "Down" or "No change" before the figure.
+
+```rust
+use navree::ui::*;
+
+Trend::new(12.4)
+```
+
+`Trend::new(12.4)` writes `+12.4%` in green with an upward arrow. A `Stat` can carry one under its figure with `Stat::change(Trend)`:
+
+```rust
+use navree::ui::*;
+
+Stat::new("Steps", "9,412").change(Trend::new(12.4))
+```
+
+## Up is good, or bad
+
+Whether a rise is good news depends on the figure: more steps are good, a higher resting heart rate is not. The arrow always follows the direction; the colour follows the meaning. `.up_is_bad()` makes a rise a warning and a fall good news, and `.tone(Tone)` sets the colour yourself: `Tone::Neutral` shows the direction with no judgement.
+
+```rust
+use navree::ui::*;
+
+Trend::new(3.0).up_is_bad()
+```
+
+A change that rounds to nothing is "No change", with a dash and no colour. A change that is not a number is a dash.
+
+## Number, unit and words
+
+`.decimals(2)` writes more decimals (one by default), `.suffix(" bpm")` writes another unit than `%`, and `.locale("en-IN")` groups the digits as the language does. `.words("बढ़ा", "घटा", "कोई बदलाव नहीं")` sets what a screen reader hears.
+
+<UiPreview example="trend/words" />
+
+## Status badges
+
+A status in a tone, with an icon, is a [Badge](/docs/components/badge/#status): green, cyan, amber, orange, red or slate, with the corners every badge has.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A trend is text in a `<span>`: it is read where it stands and isn't focusable.
+- The arrow is hidden from assistive technology, and the word for the direction is read before the figure, so the direction and the sign are never carried by the arrow or the colour alone.
+
+</UiA11y>
+
+## API
+
+### Trend
+
+<UiProps type="Trend" />

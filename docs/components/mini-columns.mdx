@@ -1,0 +1,78 @@
+---
+title: "Mini columns"
+description: "Small multiples: one column for each item, each split into the same parts and drawn to 100%, with a label above and a total below. Drawn as SVG on the server."
+---
+
+<UiPreview example="mini-columns/default" />
+
+`MiniColumns` compares the makeup of several items at a glance: how each sleep cycle divides into deep, REM and core sleep, how each day's workout divides into strength, running and yoga. Every column is drawn to the same height, so the eye compares proportions and not sizes; the label above each column and the total below it carry the sizes.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+MiniColumns::new("Sleep cycles")
+    .minutes()
+    .part("Deep", Ink::slot(7))
+    .part("REM", Ink::tone(Tone::named("cyan")))
+    .part("Core", Ink::slot(3))
+    .column(MiniColumn::new("Cycle 1", [34, 8, 38]))
+    .column(MiniColumn::new("Cycle 2", [28, 16, 42]))
+```
+
+Parts are added once, in the order they stack from the top, and each `MiniColumn` gives a value for each part in the same order. A value that is missing, zero or below zero draws nothing. `.part_auto(name)` takes the next categorical color.
+
+## When to use it
+
+Use mini columns when the question is "how does the makeup change from one item to the next". To compare totals, use [bars](/docs/components/bar-chart/). For the makeup of a single whole, use a [meter](/docs/components/meter/). For a makeup over time with many points, use a stacked [area](/docs/components/area-chart/).
+
+## Anatomy
+
+<UiAnatomy component="mini-columns" />
+
+## Totals and units
+
+Under each column is the sum of its parts, written in the chart's format. `MiniColumn::total("about half an hour")` writes your own words instead, in the table too, and `.hide_totals()` writes none. `.minutes()` writes values as durations; `.format(NumberFormat)` writes numbers, and `.locale("en-IN")` groups them in lakh and crore.
+
+<UiPreview example="mini-columns/week" />
+
+`.height(px)` sets the columns' height, 24 to 160 (48 by default). Columns share the width, up to 6 rem each, and a chart draws at most 48 of them: the chart says how many are drawn when it cuts.
+
+## Motion
+
+`.motion(Motion::new())` fills each column from the top, one column after another. The columns are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A chart with no parts or no columns is empty.
+
+## The table
+
+The table has a row for each column and a column for each part, then the total. `.column_name("Cycle")` names the first column. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next column. |
+| `Home`, `End` | Moves to the first or the last column. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: how many columns, what they are split into, and the largest total.
+- A move by key marks the column, dims the others and is announced politely: its label, then each part and the total. With a pointer the tooltip says the same, floating above the column.
+- A legend names the parts, and the table twin gives every value, so no part is told apart by color alone.
+
+</UiA11y>
+
+## API
+
+### MiniColumns
+
+<UiProps type="MiniColumns" />
+
+### MiniColumn
+
+<UiProps type="MiniColumn" />

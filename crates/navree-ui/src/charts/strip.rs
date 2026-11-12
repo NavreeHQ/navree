@@ -543,7 +543,7 @@ mod tests {
         );
         assert!(
             out.contains("<span data-color=\"1\">Value</span>")
-                && out.contains("<span data-color=\"2\">Value</span>") == false,
+                && !out.contains("<span data-color=\"2\">Value</span>"),
             "{out}"
         );
     }
