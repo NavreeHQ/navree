@@ -208,7 +208,7 @@ struct OverlayContent: View {
                 SectionView(section: section)
             }
         }
-        .listStyle(.insetGrouped)
+        .modifier(ListLook(layout: .insetGrouped))
     }
 
     static func withoutSubmits(_ section: ListSection) -> ListSection {
@@ -242,7 +242,7 @@ struct FormSheet: View {
                     SectionView(section: section)
                 }
             }
-            .listStyle(.insetGrouped)
+            .modifier(ListLook(layout: .insetGrouped))
             .navigationTitle(title)
             .navigationBarTitleDisplayModeInline()
             .toolbar {

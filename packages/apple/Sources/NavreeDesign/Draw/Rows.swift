@@ -101,7 +101,9 @@ struct RecordRowView: View {
             }
         }
         .sheet(item: $formSheet) { sheet in
-            FormSheet(title: sheet.button.label, subtitle: row.title, form: sheet.form, confirm: sheet.button)
+            if let form = sheet.form {
+                FormSheet(title: sheet.button.label, subtitle: row.title, form: form, confirm: sheet.button)
+            }
         }
     }
 
