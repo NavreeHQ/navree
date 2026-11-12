@@ -20,6 +20,16 @@ Each item is a link, so it works with no script and a boosted link keeps the pag
 
 The dock is fixed to the window, so the page leaves it room with a bottom padding of its own (about 5 rem), and it keeps clear of the home bar on a phone with a notch.
 
+## On phones only
+
+An app whose top bar holds the same places on wider screens wants the dock on a phone only. `.below(Screen::Md)` draws it under 768 px and not at all from there on, so it is neither seen nor read twice; `Screen::Sm` (640 px) and `Screen::Lg` (1024 px) are the other widths.
+
+```rust
+use navree::ui::charts::Screen;
+
+Dock::new("Sections").below(Screen::Md)
+```
+
 ## Keyboard and accessibility
 
 <UiA11y>

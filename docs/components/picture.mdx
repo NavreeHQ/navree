@@ -21,13 +21,32 @@ Picture::new("/img/today-1600.png", "Today's score: a ring at 82, with sleep, he
 
 `.priority()` loads the image at once and first (`loading="eager"`, `fetchpriority="high"`): use it for the one large image at the top of a page. Every other image loads lazily, as it nears the screen; without `.sizes`, a lazy image is measured where it lands (`sizes="auto"`).
 
+## Light and dark
+
+A screenshot of the product has a light and a dark version. `.dark(Picture)` gives the dark one: its file, its sizes and its formats (the alt text and the size stay the light one's). A reader whose device is dark gets it, through `<source media="(prefers-color-scheme: dark)">`, with no script.
+
+A reader who chose light or dark on the site (the theme toggle, the theme cookie) may be on a device that says otherwise, and a media query can't read the page's own choice. `.for_mode(mode)` settles it on the server: pass the mode the page is drawn in (its `Appearance`'s) and a page in light or dark draws that version alone, so only the one the reader sees is fetched; `Mode::System` leaves it to the device.
+
+```rust
+use navree::ui::*;
+use navree::ui::theme::Appearance;
+
+fn hero(look: &Appearance) -> Picture {
+    Picture::new("/img/today-light.png", "Today: a score of 82", 1440, 900)
+        .webp([(1440, "/img/today-light.webp")])
+        .dark(Picture::new("/img/today-dark.png", "", 1440, 900).webp([(1440, "/img/today-dark.webp")]))
+        .for_mode(look.mode())
+        .priority()
+}
+```
+
 ## Alt text
 
 `Picture::new` takes the alt text: write what the image tells a reader who can't see it. `Picture::decorative` writes an empty `alt` for an image that only decorates.
 
 ## Where images come from
 
-The content security policy's `img-src` is `'self'` and `data:`: serve images from the site's own origin. A file whose URL is not a path or an `http` or `https` address, or that holds a space or a comma, is left out of the `srcset`.
+The content security policy's `img-src` is `'self'` and `data:`: serve images from the site's own origin. An [`AppImage`](/docs/ui/app-styles/#pictures) is one: `Picture::new(&MARK, ...)`. A file whose URL is not a path or an `http` or `https` address, or that holds a space or a comma, is left out of the `srcset`.
 
 ## Anatomy
 

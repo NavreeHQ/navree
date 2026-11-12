@@ -91,7 +91,34 @@ fn home(headers: &HeaderMap, query: Option<&str>, seo: Seo, page: SitePage, foot
 }
 ```
 
-A [BrowserFrame](/docs/components/device-frames/) or a [PhoneFrame](/docs/components/device-frames/) can hold its own mode, so a dark screenshot stays dark on a light page.
+A [BrowserFrame](/docs/components/device-frames/) or a [PhoneFrame](/docs/components/device-frames/) can hold its own mode, so a dark screenshot stays dark on a light page. A [Picture](/docs/components/picture/#light-and-dark) can carry a light and a dark version and draw the one the page is in.
+
+The toggle posts to the toolkit's appearance route, which changes only the reader's theme cookie. The session layer checks that route's origin in place of the CSRF token, so a page with no token in it, cached for everyone, works for a reader who has a session too, and a post from another site is still refused. Don't add the route to `session.csrf_except`.
+
+Eyebrows and the legal page's date are labels, set in the theme's text face. A site that sets its labels in another face, its code face or a display face, says so in its own stylesheet: `:root { --font-label: var(--font-mono) }`.
+
+## One address for guests and readers
+
+A site's home page is often the app's home too: the public page for a guest, the reader's own day once they sign in. `RouteDef::on_guest_or` answers one address with two handlers, each with its own extractors, so the signed-in one may take an extractor that refuses guests and the guest one never runs it. The answer varies by `Cookie` and `Authorization`, so no cache hands one reader's page to another.
+
+```rust
+use http::Method;
+use navree::http::{CurrentPrincipal, RouteDef};
+use navree::ui::View;
+
+fn home() -> RouteDef {
+    RouteDef::on_guest_or(
+        Method::GET,
+        "!/",
+        || async { View::new("Kesar: sleep, heart and steps in one daily score") },
+        |CurrentPrincipal(reader): CurrentPrincipal| async move {
+            View::new(format!("Today for {}", reader.user_id))
+        },
+    )
+}
+```
+
+A page that is the same for every guest can be cached as `public` for them, and `View::vary("Cookie")` keeps a cache from giving it to anyone else: `View::cache` sets `Cache-Control`, `View::vary` adds to `Vary`.
 
 ## Accessible by default
 
