@@ -57,25 +57,6 @@ fn steady(html: &str) -> String {
     out
 }
 
-/// `html` with every number written as `#`: what is left when the two runs'
-/// clocks are set aside. The app writes its data and draws its times from
-/// the clock, so two runs a few seconds apart differ in the numbers that
-/// come from it (a time, a chart's points) and in nothing else.
-fn without_numbers(html: &str) -> String {
-    let mut out = String::with_capacity(html.len());
-    let mut in_number = false;
-    for c in html.chars() {
-        let digit = c.is_ascii_digit() || (in_number && c == '.');
-        if digit && !in_number {
-            out.push('#');
-        } else if !digit {
-            out.push(c);
-        }
-        in_number = digit;
-    }
-    out
-}
-
 /// Where the page at `path` is kept.
 fn file(dir: &str, path: &str) -> PathBuf {
     let name: String = path
@@ -93,7 +74,6 @@ async fn every_page_is_the_html_it_was() {
     let (app, _db) = boot().await;
     let mut differ = Vec::new();
     let mut same = 0;
-    let mut clocked = Vec::new();
     for path in PAGES {
         let response = app.client().get(path).send().await;
         let status = response.status().as_u16();
@@ -105,9 +85,6 @@ async fn every_page_is_the_html_it_was() {
             });
             if was == html {
                 same += 1;
-            } else if without_numbers(&was) == without_numbers(&html) {
-                // The same markup; only numbers drawn from the clock moved.
-                clocked.push(*path);
             } else {
                 let at = was
                     .bytes()
@@ -127,11 +104,7 @@ async fn every_page_is_the_html_it_was() {
     }
     assert!(differ.is_empty(), "{}", differ.join("\n"));
     if cfg!(feature = "native-preview") {
-        println!(
-            "{same} of {} pages byte for byte; {} the same but for numbers from the clock: {clocked:?}",
-            PAGES.len(),
-            clocked.len()
-        );
+        println!("{same} of {} pages byte for byte", PAGES.len());
     } else {
         println!("{} pages written", PAGES.len());
     }
