@@ -117,8 +117,8 @@ function show(body, i, keyed) {
       const v = ink.getAttribute(name);
       v ? line.setAttribute(name, v) : line.removeAttribute(name);
     }
-    const unit = $(line, "em")?.textContent;
-    if (line.checkVisibility()) said.push(`${line.lastElementChild?.textContent} ${value.textContent}${unit ? " " + unit : ""}`);
+    // The line's name is its column's header, unit and all: the words are the table row's.
+    if (line.checkVisibility()) said.push(`${line.lastElementChild?.textContent} ${value.textContent}`);
   });
   // Beside the value, on whichever side has room; never past the chart's edges. A chart
   // shorter than its tooltip (a few bars with many series) grows to hold it.

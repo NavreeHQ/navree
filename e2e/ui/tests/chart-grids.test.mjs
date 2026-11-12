@@ -95,7 +95,7 @@ const fromTable = (page, fig, i) =>
       const heads = [...table.querySelectorAll("thead th")];
       const cells = [...table.querySelectorAll("tbody tr")[i].querySelectorAll("th,td")];
       const text = (cell) => (cell.querySelector("[aria-hidden=true]") || cell).textContent.trim();
-      return { head: text(cells[0]), rows: cells.slice(1).map((c, k) => ({ value: text(c), name: heads[k + 1].textContent.trim().replace(/ \([^)]*\)$/, "") })), count: table.querySelectorAll("tbody tr").length };
+      return { head: text(cells[0]), rows: cells.slice(1).map((c, k) => ({ value: text(c), name: heads[k + 1].textContent.trim() })), count: table.querySelectorAll("tbody tr").length };
     },
     { fig, i },
   );
@@ -109,7 +109,7 @@ async function expectAt(page, fig, i, what = "") {
   assert.equal(v.markup, 0, `${label}: no markup from the data in the tooltip`);
   assert.equal(v.head, t.head, `${label}: the head is the row's header`);
   assert.deepEqual(v.rows.map(({ value, name }) => ({ value, name })), t.rows, `${label}: the lines are the row's values`);
-  assert.equal(v.say, [t.head, ...t.rows.map((r, k) => `${r.name} ${r.value}${v.rows[k].unit ? ` ${v.rows[k].unit}` : ""}`)].join(", "), `${label}: the live region says the same words`);
+  assert.equal(v.say, [t.head, ...t.rows.map((r) => `${r.name} ${r.value}`)].join(", "), `${label}: the live region says the same words`);
   assert.equal(v.inside, true, `${label}: the tooltip stays in the visible chart`);
   assert.deepEqual(v.active, [i], `${label}: exactly value ${i} is marked`);
   return v;
@@ -466,7 +466,7 @@ for (const name of NAMES) {
           await page.keyboard.press(key);
           const v = await expectAt(page, "scatter", to, key);
           assert.match(v.head, /^Beat \d+$/);
-          assert.deepEqual(v.rows.map((r) => r.name), ["This beat", "Next beat"]);
+          assert.deepEqual(v.rows.map((r) => r.name), ["This beat (ms)", "Next beat (ms)"]);
         }
         await page.done();
       });

@@ -618,14 +618,24 @@ pub(crate) struct Tip {
 
 /// One line of a tooltip.
 pub(crate) struct TipLine {
-    /// The column's name, without its unit.
+    /// The column's header, exactly as the table writes it ([`column_name`]): the line
+    /// and the live region say what the table row says.
     pub name: String,
-    /// What the value counts, written after it.
+    /// What the value counts: written after the big value, whose name is not shown.
     pub unit: Option<String>,
     /// The colour of the line's key and its big value.
     pub color: Option<Color>,
     /// Whether the line has a key: a series does, a detail doesn't.
     pub key: bool,
+}
+
+/// A column's header for values that count `unit`: `Heart rate (BPM)`. The table and the
+/// tooltip both name the column with it.
+pub(crate) fn column_name(name: &str, unit: Option<&str>) -> String {
+    match unit {
+        Some(unit) => format!("{name} ({unit})"),
+        None => name.to_owned(),
+    }
 }
 
 impl Tip {

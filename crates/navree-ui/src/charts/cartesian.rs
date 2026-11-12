@@ -17,8 +17,8 @@ use super::paint::{ColorScale, Defs, Gradient, Ink, glow};
 use super::scale::{Grain, Linear, nice, seconds_of, time_label, time_name, time_of, time_ticks};
 use super::value::{IntoValue, clean, finite};
 use super::{
-    Color, Common, Drawn, Key, LegendItem, MAX_SERIES, TableData, Tip, TipLine, common_methods,
-    fill, frame, legend, n, nodes, num, pct, svg, value_cell,
+    Color, Common, Drawn, Key, LegendItem, MAX_SERIES, TableData, Tip, TipLine, column_name,
+    common_methods, fill, frame, legend, n, nodes, num, pct, svg, value_cell,
 };
 use crate::components::Tone;
 use crate::node::{AttrValue, Element, Node, el};
@@ -1295,13 +1295,11 @@ impl Chart {
             }),
             None,
         )];
-        head.extend(series.iter().map(|s| {
-            let name = match &s.paint.unit {
-                Some(unit) => format!("{} ({unit})", s.name),
-                None => s.name.clone(),
-            };
-            (name, Some(s.color))
-        }));
+        head.extend(
+            series
+                .iter()
+                .map(|s| (column_name(&s.name, s.paint.unit.as_deref()), Some(s.color))),
+        );
         if stacked {
             head.push((labels.total.to_string(), None));
         }
@@ -1408,7 +1406,7 @@ impl Chart {
         let mut tip_lines: Vec<TipLine> = series
             .iter()
             .map(|s| TipLine {
-                name: s.name.clone(),
+                name: column_name(&s.name, s.paint.unit.as_deref()),
                 unit: s.paint.unit.clone(),
                 color: Some(s.color),
                 key: true,
