@@ -52,8 +52,8 @@ pub const CUT_MARK: &str = "… [cut]";
 /// fit), and `truncated` says so.
 pub const MAX_ANSWER_BYTES: usize = 1024 * 1024;
 
-/// The most columns a query may answer with (`SQLITE_LIMIT_COLUMN` on
-/// SQLite, a refusal on PostgreSQL).
+/// The most columns a query may answer with; a statement with more is
+/// refused once it is prepared, before it runs.
 pub const MAX_COLUMNS: usize = 100;
 
 /// How much a query may make Navigator hold.
@@ -186,9 +186,8 @@ pub(super) enum SqliteFile {
 /// - the file is opened read-only (`SQLITE_OPEN_READONLY`, which attached
 ///   databases share) with `PRAGMA query_only` on;
 /// - no string or blob may grow past `limits` (1 MB for an agent's query,
-///   `SQLITE_LIMIT_LENGTH`), a result may have at most [`MAX_COLUMNS`]
-///   columns (`SQLITE_LIMIT_COLUMN`), and the text may not pass twice the
-///   guard's limit (`SQLITE_LIMIT_SQL_LENGTH`). The heap the whole process
+///   `SQLITE_LIMIT_LENGTH`), and the text may not pass twice the guard's
+///   limit (`SQLITE_LIMIT_SQL_LENGTH`). The heap the whole process
 ///   gives SQLite is capped where Navigator runs as `navree mcp`
 ///   ([`super::limit_sqlite_heap`]); an aggregate such as `json_group_array`
 ///   grows past the value limit before it applies, and that cap stops it;
@@ -201,8 +200,11 @@ pub(super) enum SqliteFile {
 /// - SQLite prepares the text: anything but whitespace or comments after
 ///   the first statement, as SQLite's own tokenizer reads it, is refused;
 /// - the statement must be read-only (`sqlite3_stmt_readonly`), which is
-///   what refuses VACUUM (the authorizer has no action for it), and take no
-///   parameters; then that one statement runs, interrupted after
+///   what refuses VACUUM (the authorizer has no action for it), take no
+///   parameters and answer at most [`MAX_COLUMNS`] columns (counted on the
+///   prepared statement: a column limit on the connection would also apply
+///   to the schema, and refuse a whole database with one wide table); then
+///   that one statement runs, interrupted after
 ///   [`STATEMENT_TIMEOUT`], each text value cut and the rows stopped as
 ///   `limits` says.
 pub(super) async fn sqlite(
@@ -238,17 +240,10 @@ pub(super) fn run_sqlite(
     conn.pragma_update(None, "query_only", "ON")
         .map_err(sqlite_error)?;
     // No value may grow past the limit (`printf('%.*c', 400000000, 'x')`, a
-    // recursive `zeroblob(..)`), no result have more than MAX_COLUMNS
-    // columns (each of them up to the limit), and no statement pass the
-    // guard's limit.
+    // recursive `zeroblob(..)`), and no statement pass the guard's limit.
     use rusqlite::limits::Limit;
     conn.set_limit(Limit::SQLITE_LIMIT_LENGTH, limits.sqlite_value_bytes)
         .map_err(sqlite_error)?;
-    conn.set_limit(
-        Limit::SQLITE_LIMIT_COLUMN,
-        i32::try_from(MAX_COLUMNS).unwrap_or(i32::MAX),
-    )
-    .map_err(sqlite_error)?;
     let sql_limit = i32::try_from(super::MAX_SQL_BYTES * 2).unwrap_or(i32::MAX);
     conn.set_limit(rusqlite::limits::Limit::SQLITE_LIMIT_SQL_LENGTH, sql_limit)
         .map_err(sqlite_error)?;
@@ -297,6 +292,10 @@ fn run_prepared(
     if statement.parameter_count() > 0 {
         let name = statement.parameter_name(1).unwrap_or("?").to_owned();
         return Err(Refusal::Parameter { name }.into());
+    }
+    let count = statement.column_count();
+    if count > MAX_COLUMNS {
+        return Err(Refusal::TooManyColumns { count }.into());
     }
     let columns: Vec<String> = statement
         .column_names()
@@ -821,33 +820,39 @@ mod tests {
         assert!(text.len() <= MAX_VALUE_BYTES + CUT_MARK.len());
     }
 
-    /// A result of more than MAX_COLUMNS columns is refused by SQLite; an
-    /// aggregate that grows past the heap cap fails instead of holding it.
+    /// A statement answering more than MAX_COLUMNS columns is refused
+    /// before it runs, and a database with a wider table is still read.
     #[test]
-    fn sqlite_columns_and_aggregates_are_bounded() {
+    fn sqlite_wide_answers_are_refused_and_wide_tables_read() {
         let dir = tempfile::tempdir().unwrap();
-        let db = users_db(dir.path());
-        let columns: Vec<String> = (0..200)
+        let path = dir.path().join("wide.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let columns: Vec<String> = (1..=120).map(|i| format!("c{i} TEXT")).collect();
+        conn.execute_batch(&format!(
+            "CREATE TABLE wide (id INTEGER PRIMARY KEY, {}); \
+             INSERT INTO wide (id, c1, c120) VALUES (1, 'Ludhiana', 'Amritsar');",
+            columns.join(", ")
+        ))
+        .unwrap();
+        drop(conn);
+        let db = SqliteFile::Path(path);
+        let narrow = run_sqlite(&db, "SELECT id, c1, c120 FROM wide", AGENT_LIMITS).unwrap();
+        assert_eq!(
+            narrow.rows,
+            vec![vec![
+                Value::from(1),
+                Value::from("Ludhiana"),
+                Value::from("Amritsar")
+            ]]
+        );
+        let all = run_sqlite(&db, "SELECT * FROM wide", AGENT_LIMITS).unwrap_err();
+        assert!(all.to_string().contains("121 columns"), "{all}");
+        let computed: Vec<String> = (0..200)
             .map(|i| format!("printf('%.*c', 1000000, 'x') AS c{i}"))
             .collect();
-        let wide = format!("SELECT {}", columns.join(", "));
+        let wide = format!("SELECT {}", computed.join(", "));
         let failed = run_sqlite(&db, &wide, AGENT_LIMITS).unwrap_err();
-        assert!(failed.to_string().contains("too many columns"), "{failed}");
-        // What `navree mcp` sets as it starts; process-wide, as SQLite has it.
-        super::super::limit_sqlite_heap(super::super::SQLITE_HEAP_LIMIT).unwrap();
-        let started = Instant::now();
-        let grown = run_sqlite(
-            &db,
-            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000) \
-             SELECT length(json_group_array(printf('%.*c', 900000, 'x'))) FROM n",
-            AGENT_LIMITS,
-        );
-        let failed = grown.unwrap_err().to_string();
-        assert!(
-            failed.contains("out of memory") || failed.contains("too big"),
-            "{failed}"
-        );
-        assert!(started.elapsed() < STATEMENT_TIMEOUT + Duration::from_secs(5));
+        assert!(failed.to_string().contains("200 columns"), "{failed}");
     }
 
     /// FTS5 reads `PRAGMA data_version`, which the authorizer allows, and

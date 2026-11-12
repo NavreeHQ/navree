@@ -760,6 +760,76 @@ async fn postgres_functions_reached_through_views_and_aggregates_are_refused() {
     )
     .await;
     assert!(message.contains("step(integer,integer)"), "{message}");
+
+    // A plain aggregate with a harmless SQL step function is not a reach.
+    db.setup(&[
+        "DROP AGGREGATE public.total(int)",
+        "DROP FUNCTION public.step(int, int)",
+        "CREATE FUNCTION public.add_up(int, int) RETURNS int LANGUAGE sql IMMUTABLE \
+         AS $$ SELECT $1 + $2 $$",
+        "CREATE AGGREGATE public.total(int) (sfunc = public.add_up, stype = int, initcond = '0')",
+    ])
+    .await;
+    let answer = call(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT public.total(x) AS total FROM generate_series(1, 4) AS x"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[10]]), "{answer}");
+
+    // A foreign table counts when the role may read a column of it, or a
+    // view over it (the view reads it with its owner's privileges). Making
+    // a foreign-data wrapper takes a superuser.
+    if db.admin_is_superuser().await {
+        let reader = &db.roles[0];
+        db.setup(&[
+            "CREATE FOREIGN DATA WRAPPER navree_test_wrapper",
+            "CREATE SERVER navree_test_server FOREIGN DATA WRAPPER navree_test_wrapper",
+            "CREATE FOREIGN TABLE public.remote (city text) SERVER navree_test_server",
+            &format!("REVOKE ALL ON public.remote FROM PUBLIC, {reader}"),
+            &format!("GRANT SELECT (city) ON public.remote TO {reader}"),
+        ])
+        .await;
+        let message = refused(
+            &fixture.navigator(),
+            "query_database",
+            json!({"sql": "SELECT 1 AS one"}),
+        )
+        .await;
+        assert!(message.contains("public.remote"), "{message}");
+
+        db.setup(&[
+            &format!("REVOKE ALL (city) ON public.remote FROM {reader}"),
+            "CREATE VIEW public.cities AS SELECT city FROM public.remote",
+            "CREATE VIEW public.city_names AS SELECT city FROM public.cities",
+            &format!("REVOKE ALL ON public.cities FROM {reader}"),
+        ])
+        .await;
+        let message = refused(
+            &fixture.navigator(),
+            "query_database",
+            json!({"sql": "SELECT 1 AS one"}),
+        )
+        .await;
+        assert!(message.contains("public.remote"), "{message}");
+
+        db.setup(&[
+            "DROP VIEW public.city_names",
+            "DROP VIEW public.cities",
+            "DROP FOREIGN TABLE public.remote",
+            "DROP SERVER navree_test_server",
+            "DROP FOREIGN DATA WRAPPER navree_test_wrapper",
+        ])
+        .await;
+        let answer = call(
+            &fixture.navigator(),
+            "query_database",
+            json!({"sql": "SELECT 1 AS one"}),
+        )
+        .await;
+        assert_eq!(answer["rows"], json!([[1]]), "{answer}");
+    }
     db.drop_db().await;
 }
 
