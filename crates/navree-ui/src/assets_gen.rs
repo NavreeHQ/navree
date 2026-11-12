@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "c48eb855bff8";
+pub const BUILD: &str = "7b10814dbad4";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-3c822350aba2.js";
@@ -57,7 +57,7 @@ pub const LAZY_URL: &str = "/_navree/ui/lazy-6801fc36745c.js";
 pub const SORTABLE_URL: &str = "/_navree/ui/sortable-6ce83eead470.js";
 
 /// The URL of `sortable-grid.js`.
-pub const SORTABLE_GRID_URL: &str = "/_navree/ui/sortable-grid-00e42d13963b.js";
+pub const SORTABLE_GRID_URL: &str = "/_navree/ui/sortable-grid-78436201d178.js";
 
 /// The URL of `upload.js`.
 pub const UPLOAD_URL: &str = "/_navree/ui/upload-52a584cdb2b6.js";
@@ -140,7 +140,7 @@ pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-019da61ba75f.css";
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
 
 /// The URL of `sortable-grid-styles.css`.
-pub const SORTABLE_GRID_STYLES_URL: &str = "/_navree/ui/sortable-grid-styles-fde3fee413ca.css";
+pub const SORTABLE_GRID_STYLES_URL: &str = "/_navree/ui/sortable-grid-styles-c22d032878e6.css";
 
 /// The URL of `marketing.css`.
 pub const MARKETING_URL: &str = "/_navree/ui/marketing-f051192c072e.css";
@@ -346,7 +346,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable-grid",
         ext: "js",
-        hash: "00e42d13963b",
+        hash: "78436201d178",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sortable-grid.js"),
         gzip: Some(include_bytes!("../dist/sortable-grid.js.gz")),
@@ -591,7 +591,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable-grid-styles",
         ext: "css",
-        hash: "fde3fee413ca",
+        hash: "c22d032878e6",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/sortable-grid-styles.css"),
         gzip: Some(include_bytes!("../dist/sortable-grid-styles.css.gz")),
