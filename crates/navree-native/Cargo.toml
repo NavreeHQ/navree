@@ -1,7 +1,9 @@
 [package]
 name = "navree-native"
 description = "Navree Native's protocol: the closed vocabulary of parts, actions and ops a native client draws with its system's own toolkit, the client descriptor, and the example envelopes every client decodes."
-version.workspace = true
+# Its own version: the protocol is 0.x until it is frozen, and it is not
+# published, so the workspace's releases leave it as it is.
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
