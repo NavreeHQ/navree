@@ -524,17 +524,19 @@ pub(crate) fn finish(
     let plain = common.hide_title && common.table != TableMode::Switch;
     // The frame is always a figure. It links the radial sheet even with no drawing in
     // it, so a loading ring is a round placeholder.
-    frame(common, drawn, kind, height).into_element().map_or_else(
-        || Node::list(Vec::<Node>::new()),
-        |figure| {
-            let figure = figure.uses(Uses::CHART_RADIAL);
-            if plain {
-                figure.into()
-            } else {
-                figure.uses(Uses::CHARTS).into()
-            }
-        },
-    )
+    frame(common, drawn, kind, height)
+        .into_element()
+        .map_or_else(
+            || Node::list(Vec::<Node>::new()),
+            |figure| {
+                let figure = figure.uses(Uses::CHART_RADIAL);
+                if plain {
+                    figure.into()
+                } else {
+                    figure.uses(Uses::CHARTS).into()
+                }
+            },
+        )
 }
 
 /// The summary of one value: `{name}: {value} of {max}, {share}.`, and its band.
