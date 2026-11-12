@@ -387,6 +387,17 @@ async fn the_passwordless_pages_ask_for_the_second_factor() {
     let clock = support::clock();
     let app = passwordless_app(&clock, Arc::new(RecordingSink::default())).await;
     let user = create_user(&app, "anu@example.com").await;
+    // A verified owner's second factor: an unverified account's is reset when its
+    // address is first proven.
+    app.get::<navree_auth::AuthService>()
+        .await
+        .verify_email(
+            user.id,
+            &navree_crypto::sha256_hex(user.email.as_bytes()),
+            &navree_auth::ClientMeta::default(),
+        )
+        .await
+        .unwrap();
     let secret = enable_two_factor(&app, &clock, &user).await;
     let browser = app.client();
 
