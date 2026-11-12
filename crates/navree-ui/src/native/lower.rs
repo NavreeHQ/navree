@@ -140,17 +140,35 @@ pub(crate) fn fail_on<T>(what: impl Into<String>, why: impl Into<String>) -> Rea
 }
 
 /// The deepest a tree is read: a page nests a few dozen levels, and a tree
-/// built from data without end must not take the stack with it.
-const DEEPEST: u16 = 120;
+/// built from data without end is not a page.
+const DEEPEST: usize = 4096;
+
+/// How many levels one reading goes down before the levels below it are read
+/// first, from the bottom up. However deep a tree, the stack holds about two
+/// bands of readers at once.
+const BAND: u16 = 16;
+
+/// Parts read ahead of their place, from the bottom of a deep tree up.
+struct Ahead {
+    nodes: Vec<N>,
+    misses: Vec<Miss>,
+    dropped: Vec<String>,
+}
 
 /// One reading of a tree.
 pub(crate) struct Cx {
     pub(crate) misses: Vec<Miss>,
     pub(crate) dropped: Vec<String>,
     keep_markup: bool,
+    /// How many elements are being read around the current one, in this band.
     depth: u16,
+    /// How deep the band starts.
+    base: usize,
     /// How many forms are being read around the current element.
     forms: u16,
+    /// The elements of a deep tree read ahead, by address, with the forms
+    /// they stand in.
+    ahead: std::collections::HashMap<(usize, bool), Ahead>,
 }
 
 impl Cx {
@@ -160,8 +178,72 @@ impl Cx {
             dropped: Vec::new(),
             keep_markup,
             depth: 0,
+            base: 0,
             forms: 0,
+            ahead: std::collections::HashMap::new(),
         }
+    }
+
+    /// Reads ahead the elements under `top` that stand a whole number of
+    /// bands below it, the deepest first, each from a stack of its own size:
+    /// the reading of `top` then stops a band down, where each is waiting.
+    #[inline(never)]
+    fn read_ahead(&mut self, top: &Element) {
+        // Every element under `top`, with how far below it, and whether a
+        // form stands between them.
+        let mut found: Vec<(&Element, usize, bool)> = Vec::new();
+        let mut walk: Vec<(&Node, usize, bool)> = top
+            .child_nodes()
+            .iter()
+            .map(|node| (node, 1, top.tag() == "form"))
+            .collect();
+        while let Some((node, below, in_form)) = walk.pop() {
+            match node {
+                Node::Element(element) => {
+                    if below % usize::from(BAND) == 0 {
+                        found.push((element, below, in_form));
+                    }
+                    let in_form = in_form || element.tag() == "form";
+                    walk.extend(
+                        element
+                            .child_nodes()
+                            .iter()
+                            .map(|child| (child, below + 1, in_form)),
+                    );
+                }
+                Node::Fragment(nodes) => {
+                    walk.extend(nodes.iter().map(|child| (child, below, in_form)));
+                }
+                _ => {}
+            }
+        }
+        if found.is_empty() {
+            return;
+        }
+        found.sort_by(|a, b| b.1.cmp(&a.1));
+        let (depth, base, forms) = (self.depth, self.base, self.forms);
+        let level = base + usize::from(depth);
+        for (element, below, in_form) in found {
+            let (misses, dropped) = (
+                std::mem::take(&mut self.misses),
+                std::mem::take(&mut self.dropped),
+            );
+            self.depth = 0;
+            self.base = level + below;
+            self.forms = forms + u16::from(in_form);
+            let mut nodes = Vec::new();
+            self.read_one(element, &mut nodes);
+            let read = Ahead {
+                nodes,
+                misses: std::mem::replace(&mut self.misses, misses),
+                dropped: std::mem::replace(&mut self.dropped, dropped),
+            };
+            self.ahead.insert(
+                (std::ptr::from_ref(element) as usize, self.forms > 0),
+                read,
+            );
+        }
+        (self.depth, self.base, self.forms) = (depth, base, forms);
     }
 
     /// The reading's result, with `nodes` as one node.
@@ -279,7 +361,25 @@ impl Cx {
 
     /// One element, read by its slot's reader or, with no slot, by its tag.
     pub(crate) fn element(&mut self, element: &Element, out: &mut Vec<N>) {
-        if self.depth >= DEEPEST {
+        if !self.ahead.is_empty()
+            && let Some(read) = self
+                .ahead
+                .remove(&(std::ptr::from_ref(element) as usize, self.forms > 0))
+        {
+            out.extend(read.nodes);
+            self.misses.extend(read.misses);
+            self.dropped.extend(read.dropped);
+            return;
+        }
+        if self.depth == BAND {
+            self.read_ahead(element);
+        }
+        self.read_one(element, out);
+    }
+
+    /// [`element`](Self::element), read where it stands.
+    fn read_one(&mut self, element: &Element, out: &mut Vec<N>) {
+        if self.base + usize::from(self.depth) >= DEEPEST {
             let web = self.miss(
                 "depth".to_owned(),
                 "the tree is deeper than a page is".to_owned(),
@@ -2447,5 +2547,50 @@ mod tests {
             node = el("div").child(node).into();
         }
         assert_eq!(lower(&node).why(), ["depth"]);
+    }
+
+    #[test]
+    fn a_deep_tree_lowers() {
+        // Five hundred levels of parts with ids, read on a thread with a
+        // small stack: the reading never holds more than two bands of readers.
+        let deep = std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut node: Node = crate::Text::new("the bottom").into();
+                for level in 0..500 {
+                    node = el("section")
+                        .children((crate::Text::new(format!("level {level}")), node))
+                        .into();
+                }
+                let mut form: Node = el("input").attr("name", "q").into();
+                for _ in 0..500 {
+                    form = el("div").child(form).into();
+                }
+                let form: Node = el("form").attr("action", "/find").child(form).into();
+                (lower(&node), lower(&form))
+            })
+            .expect("a thread")
+            .join()
+            .expect("no overflow");
+        let (lowered, form) = deep;
+        assert!(lowered.is_native(), "{:?}", lowered.misses);
+        let mut node = &lowered.node;
+        let mut levels = 0;
+        while let N::Stack(stack) = node {
+            let [N::Text(says), inner] = stack.children.as_slice() else {
+                panic!("not a level: {:?}", stack.children);
+            };
+            assert_eq!(says.value, format!("level {}", 499 - levels));
+            node = inner;
+            levels += 1;
+        }
+        assert_eq!(levels, 500);
+        assert!(matches!(node, N::Text(text) if text.value == "the bottom"));
+        // A control deep in a form is read as one of the form's.
+        assert!(form.is_native(), "{:?}", form.misses);
+        let N::Form(read) = &form.node else {
+            panic!("not a form: {:?}", form.node);
+        };
+        assert!(matches!(read.children.as_slice(), [N::Field(field)] if field.name == "q"));
     }
 }
