@@ -131,6 +131,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::MENUBAR, MENUBAR_STYLES_URL),
         (Uses::CHARTS, CHARTS_STYLES_URL),
         (Uses::CHART_PAINT, CHART_PAINT_URL),
+        (Uses::CHART_LINEAR, CHART_LINEAR_URL),
         (Uses::PARTS_STYLES, PARTS_STYLES_URL),
     ]
     .into_iter()

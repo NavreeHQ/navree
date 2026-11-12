@@ -1,0 +1,42 @@
+/* Linear charts: a meter, mini columns, a colour strip, a range scale and a trend, linked by
+   a page that draws one. Colours come from tokens by data-color and data-tone (the paint
+   sheet sets --c); positions are attributes; nothing here needs a style attribute. */
+
+/* A meter: one bar of segments, a surface-coloured line between them, the share inside. */
+[data-slot=seg-bar]{display:block;max-width:100%;clip-path:inset(0 round var(--radius))}
+[data-slot=seg-bar][data-pill]{clip-path:inset(0 round 99px)}
+[data-slot=seg-track],[data-slot=cols-track]{fill:var(--ink-3)}
+[data-slot=seg]:not([fill]){fill:var(--c)}
+[data-slot=seg]{stroke:var(--surface);stroke-width:1.5px}
+[data-slot=seg-part],[data-slot=cols-item],[data-slot=strip-cell]{transition:opacity .12s}
+[data-slot=seg-gloss],[data-slot=seg-label]{pointer-events:none}
+[data-slot=seg-gloss-stop]{stop-color:light-dark(var(--ink-0),var(--fg))}
+[data-slot=chart] svg [data-slot=seg-label]{fill:var(--ink-0);font-size:11px;font-weight:600;paint-order:stroke;stroke:color-mix(in oklab,var(--c) 62%,var(--fg));stroke-width:2.5px;stroke-linejoin:round}
+[data-kind=meter] [data-slot=chart-legend],[data-kind=color-strip] [data-slot=chart-legend]{margin-top:.625rem}
+[data-layout=inline] [data-slot=chart-legend-value]{margin:0;padding:0}
+[data-kind=meter]:has([data-slot=seg-part][data-active]) [data-slot=seg-part]:not([data-active]),
+[data-kind=mini-columns]:has([data-slot=cols-item][data-active]) [data-slot=cols-item]:not([data-active]),
+[data-kind=color-strip]:has([data-slot=strip-cell][data-active]) [data-slot=strip-cell]:not([data-active]){opacity:.5}
+
+/* Mini columns: small multiples, a label above and a total below. */
+[data-slot=cols]{display:flex;gap:.375rem;margin:0;padding:0;list-style:none}
+[data-slot=cols-item]{display:flex;flex:1 1 0;flex-direction:column;gap:.25rem;min-width:0;max-width:6rem;font-size:11px;text-align:center;font-variant-numeric:tabular-nums}
+[data-slot=cols-label],[data-slot=cols-total]{overflow:hidden;color:var(--fg-2);text-overflow:ellipsis;white-space:nowrap}
+[data-slot=cols-total]{color:var(--fg-3)}
+[data-slot=cols-bar]{display:block;clip-path:inset(0 round var(--radius))}
+[data-slot=cols-part]:not([fill]){fill:var(--c)}
+[data-slot=cols-part]{stroke:var(--surface);stroke-width:1px}
+
+/* A colour strip: equal-width cells in a row. */
+[data-slot=strip]{display:block;clip-path:inset(0 round 3px)}
+[data-slot=strip-cell]:not([fill]){fill:var(--c);shape-rendering:crispEdges}
+
+/* A range scale: a track, a marker, the ends under it. */
+[data-slot=scale]{display:block;box-sizing:border-box;width:100%;padding-inline:8px;overflow:visible}
+[data-slot=scale-track]{fill:var(--ink-3)}
+[data-slot=scale-marker]{fill:var(--fg);stroke:var(--surface);stroke-width:2.5px}
+[data-slot=chart] svg [data-slot=scale-value]{fill:var(--fg);font-size:12px;font-weight:600}
+[data-slot=scale-ends]{display:flex;justify-content:space-between;padding-inline:8px;color:var(--fg-3);font-size:12px;font-variant-numeric:tabular-nums}
+
+/* A trend: an arrow and a signed share, in the colour of what it means. */
+[data-slot=trend]{display:inline-flex;align-items:center;gap:.25rem;color:color-mix(in oklab,var(--tone,var(--fg-3)) 78%,var(--fg));font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;& [data-slot=icon]{width:14px;height:14px;flex:none}}

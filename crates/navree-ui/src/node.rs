@@ -307,6 +307,10 @@ impl Uses {
     /// view. The value is written in the page, so it reads the same with no script and
     /// when the reader asks for less motion.
     pub const COUNT_UP: Self = Self(1 << 33);
+    /// The linear chart stylesheet: no script, only the styles of the meter, the mini
+    /// columns, the colour strip, the range scale and the trend indicator. The ones with
+    /// a tooltip link the charts module as well.
+    pub const CHART_LINEAR: Self = Self(1 << 35);
 
     /// Both sets together.
     #[must_use]
