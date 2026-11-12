@@ -258,6 +258,7 @@ impl RangeScale {
             height: 40,
             note: None,
             interactive: false,
+            text: false,
             tip: None,
         })
     }

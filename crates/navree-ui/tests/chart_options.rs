@@ -611,3 +611,71 @@ fn a_relation_list_links_the_grids_sheet_and_writes_no_style() {
     assert!(page.contains(navree_ui::assets::CHARTS_URL), "{page}");
     assert!(!html(found()).contains("style="));
 }
+
+#[test]
+fn a_relation_list_is_a_named_group_of_text_rows_with_hidden_bars() {
+    let out = html(found());
+    // Not a picture: that would hide the rows from assistive technology.
+    assert!(!out.contains(r#"role="img""#), "{out}");
+    assert!(
+        out.contains(
+            r#"<div data-slot="chart-body" role="group" aria-label="What moves together, chart""#
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains(r#"<ol data-slot="relation-list" role="list""#),
+        "{out}"
+    );
+    // Every bar and the legend are decoration: the value and the result are written.
+    let bars = out.matches(r#"data-slot="relation-bar""#).count();
+    let hidden = out
+        .matches(r#"<svg aria-hidden="true" focusable="false" data-slot="relation-bar""#)
+        .count();
+    assert_eq!(bars, 3, "{out}");
+    assert_eq!(hidden, bars, "{out}");
+    assert!(
+        out.contains(r#"data-slot="heat-legend" aria-hidden="true""#),
+        "{out}"
+    );
+}
+
+/// `count` pairs, strongest first; all but the last five are significant.
+fn many(count: usize) -> RelationList {
+    (0..count).fold(RelationList::new("Many pairs").id("many"), |list, i| {
+        list.relation(
+            format!("A{i}"),
+            format!("B{i}"),
+            Relation::new(0.9 - i as f64 * 0.01).significant(i < count - 5),
+        )
+    })
+}
+
+#[test]
+fn a_cut_list_says_so_with_or_without_the_significant_filter() {
+    // 60 pairs, 55 significant: the list draws 50 of either.
+    let all = html(many(60));
+    assert_eq!(all.matches(r#"data-slot="relation""#).count(), 50, "{all}");
+    assert!(
+        all.contains("The strongest 50 of 60 pairs are listed; the table has every one."),
+        "{all}"
+    );
+    let filtered = html(many(60).only_significant());
+    assert_eq!(
+        filtered.matches(r#"data-slot="relation""#).count(),
+        50,
+        "{filtered}"
+    );
+    assert!(
+        filtered.contains("The strongest 50 of 55 pairs are listed; the table has every one."),
+        "{filtered}"
+    );
+    // The filter alone is not a cut: 52 pairs, 47 significant, all 47 listed, no note.
+    let fits = html(many(52).only_significant());
+    assert_eq!(
+        fits.matches(r#"data-slot="relation""#).count(),
+        47,
+        "{fits}"
+    );
+    assert!(!fits.contains("are listed"), "{fits}");
+}

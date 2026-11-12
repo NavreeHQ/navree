@@ -535,6 +535,33 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("relations: the rows are a list a reader can walk, and the bars and the legend are hidden", async () => {
+        const page = await open("/charts/grids?case=relations");
+        const chart = page.locator("#relations [data-slot=chart-body]");
+        assert.equal(await chart.getAttribute("role"), "group", "a named group, not a picture that would hide its rows");
+        // A role locator skips what is hidden from assistive technology, so these are what a reader gets.
+        const rows = chart.getByRole("listitem");
+        assert.equal(await rows.count(), 4, "every pair is a list item");
+        const first = await rows.first().textContent();
+        assert.match(first, /Sleep ↔ Next-day HRV/);
+        assert.match(first, /\+0\.62/);
+        assert.match(first, /30 days, p < 0\.001/);
+        const tree = await chart.ariaSnapshot();
+        assert.match(tree, /list/);
+        assert.match(tree, /Sleep ↔ Next-day HRV/);
+        assert.doesNotMatch(tree, /^\s*- img\b/m, "no picture in the chart's own tree");
+        const shown = await page.evaluate(() => {
+          const fig = document.getElementById("relations");
+          const bars = [...fig.querySelectorAll("[data-slot=relation-bar]")];
+          return { bars: bars.length, hidden: bars.filter((b) => b.closest("[aria-hidden=true]")).length, legend: fig.querySelector("[data-slot=heat-legend]").closest("[aria-hidden=true]") !== null };
+        });
+        assert.ok(shown.bars >= 3, "the bars are drawn");
+        assert.equal(shown.hidden, shown.bars, "every bar is hidden from assistive technology");
+        assert.equal(shown.legend, true, "so is the legend");
+        assert.deepEqual(await axe(page), []);
+        await page.done();
+      });
+
       test("JavaScript off: the points, the table behind its switch and the summary are all in the page", async () => {
         const page = await open("/charts/grids?case=scatter", { js: false });
         const info = await page.evaluate(() => {

@@ -469,6 +469,7 @@ impl CalendarHeatmap {
                 )
             }),
             interactive: true,
+            text: false,
             tip: Some(Tip {
                 big: false,
                 lines: vec![TipLine {

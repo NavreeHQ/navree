@@ -25,7 +25,8 @@ pub const MAX_RELATIONS: usize = 50;
 /// keeps them).
 ///
 /// The sign is written with the value and shown by the side of the bar, so the colour is
-/// never alone. The rows are text in the page; the pairs are also a table (pair, value,
+/// never alone. The rows are text in the page, in a list a screen reader walks (the body is a
+/// group, not a picture, and the bars are hidden from it); the pairs are also a table (pair, value,
 /// result, note), and the summary counts them and names the strongest.
 ///
 /// ```
@@ -263,6 +264,12 @@ impl RelationList {
         }
         let shown = rows.len();
         let total = self.pairs.len();
+        // What the list could have held: with only the significant pairs wanted, those.
+        let listable = if self.only_significant {
+            significant
+        } else {
+            total
+        };
         let mut summary = fill(
             &words.relations_summary,
             &[
@@ -297,12 +304,12 @@ impl RelationList {
                 key(None, "ns", words.not_significant.to_string()),
             ],
         );
-        let note = (shown < total && !self.only_significant).then(|| {
+        let note = (shown < listable).then(|| {
             fill(
                 &words.relations_cut,
                 &[
                     ("shown", &count(shown, numbers)),
-                    ("total", &count(total, numbers)),
+                    ("total", &count(listable, numbers)),
                 ],
             )
         });
@@ -310,6 +317,8 @@ impl RelationList {
             legend: Some(legend),
             body: el("ol")
                 .slot("relation-list")
+                // The rows are text; a reset list style must not drop the list.
+                .attr("role", "list")
                 // The frame, the legend and the table switch are the charts sheet's.
                 .uses(Uses::CHART_GRIDS.with(Uses::CHARTS))
                 .child(rows)
@@ -330,6 +339,7 @@ impl RelationList {
             height: (shown as u32 * 56).max(120),
             note,
             interactive: false,
+            text: true,
             tip: None,
         })
     }

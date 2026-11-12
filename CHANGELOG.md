@@ -70,6 +70,9 @@ every `@navree/*` package carries the same version.
   `Cache-Control`, and with `Vary: Cookie, Authorization`.
 - A `ColorScale` on a `Gauge` or a `Ring` reads its thresholds as values in the chart's own units,
   as every other chart does.
+- A `RelationList` is a named group of list rows a screen reader walks, not a picture; a `Gauge`
+  on a scale that starts above zero says in its summary and table when the value is below or above
+  the scale; a list cut at 50 says so under `only_significant()` too.
 - Warm chart colours keep their hue in light mode: gradients and vivid stops take a deeper end
   per theme (`--chart-N-vivid`), so orange and amber no longer mix toward brown.
 
