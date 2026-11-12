@@ -73,6 +73,8 @@ pub const FILES: &[&str] = &[
     "sortable/mod.rs",
     "sortable/moves.rs",
     "sortable/ranked.rs",
+    "sortable/grid.rs",
+    "sortable/order.rs",
     "cmd.rs",
     "op.rs",
     "theme/mod.rs",
@@ -131,6 +133,8 @@ pub const FILES: &[&str] = &[
     "seo/ld.rs",
     "seo/files.rs",
     "genui/frame.rs",
+    "image/mod.rs",
+    "image/tile.rs",
 ];
 
 /// One constructor or method.

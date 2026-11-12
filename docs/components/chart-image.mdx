@@ -1,0 +1,97 @@
+---
+title: "Chart pictures"
+description: "Charts drawn as PNG pictures on the server, for places that show only an image: a home-screen widget, an email, an Open Graph card. Colours from your theme, light or dark, with an accent of your choice."
+---
+
+<UiPreview example="chart-image/default" />
+
+Some places can't run a page: a home-screen widget, an email, a link preview. They show a picture. `ChartImage` draws a chart of the toolkit as a PNG on the server, at the size you ask for, in your theme's colours. `Tile` lays several small blocks (a ring with its label, a sparkline with its figure, a figure on its own) out in one picture at the size of a home-screen widget.
+
+It is the `ui-image` feature of `navree`, off by default: an app that doesn't draw pictures carries none of it.
+
+```toml
+navree = { version = "1", features = ["ui-image"] }
+```
+
+```rust
+use navree::ui::image::{Block, ChartImage, Tile, TileSize};
+use navree::ui::theme::{Mode, Rgb};
+use navree::ui::Tone;
+
+let tile = Tile::new(TileSize::Medium)
+    .title("Simran's day")
+    .note("Updated 07:30")
+    .block(Block::ring("Recovery", 82, 100).unit("%"))
+    .block(Block::sparkline("Resting HR", [62, 61, 63, 60, 59, 61, 58]).unit("bpm"))
+    .block(Block::stat("Sleep", "7h 42m").note("+18 min vs 7-day avg").tone(Tone::Success));
+let png = ChartImage::for_tile(&tile)
+    .mode(Mode::Dark)
+    .accent(Rgb::hex(0x22d3ee))
+    .png(&tile.into());
+```
+
+## Sizes
+
+`TileSize::Small` is 474 by 474 pixels and draws two blocks, `Medium` 1014 by 474 and draws four side by side, `Large` 1014 by 1014 and draws up to six. `TileSize::Custom(w, h)` takes any size. The blocks are laid out in the grid that keeps each nearest to square. `.scale(2)` draws two pixels for each one, for a screen that packs more.
+
+## Colours
+
+A page colours its charts with its stylesheets: a mark names its colour, and the theme's tokens turn that into a colour, light or dark. A picture has no stylesheet, so `ChartImage` resolves every colour from the theme first and writes it into the drawing. `.theme(&Theme::OCEAN)` picks the theme, `.mode(Mode::Light)` the palette (a picture can't follow a device, so `Mode::System` draws dark), and `.accent(colour)` makes a colour of your own the accent, as the theme builder would. Every block of a tile is drawn in the accent unless it names its own colour with `.ink(...)`.
+
+<UiPreview example="chart-image/modes" />
+
+## Any chart's drawing
+
+`ChartImage::png` takes a ring, rings, a gauge or a sparkline as they are, and draws the chart's own SVG: the same geometry the page shows. The words a page draws around a chart in HTML (a ring's number in the middle, a legend) are not part of the picture; a `Tile` sets its words in the drawing itself. `ChartImage::svg` gives the resolved drawing as an SVG document, and `svg_node` as a node to put in a page.
+
+<UiPreview example="chart-image/ring" />
+
+## Fonts
+
+The words are set in Geist, the toolkit's own typeface, built into the binary with the rupee sign from Noto Sans (both under the SIL Open Font License). No font on the server is read, so the same inputs make the same bytes on every machine that builds the same release.
+
+## Serving a picture
+
+`ChartImage::respond` answers a request for the picture. Its `ETag` is a hash of the resolved drawing, the size and the renderer, made before anything is drawn: a request whose `If-None-Match` holds it gets `304 Not Modified` and no drawing at all. The answer says `Cache-Control: no-cache` unless you set `.cache_control(...)`; a picture of someone's own data should say `private, no-cache`.
+
+```rust
+use navree::ui::image::{ChartImage, Tile};
+
+fn widget_picture(tile: Tile, request: &http::HeaderMap) -> navree::http::response::Response {
+    ChartImage::for_tile(&tile)
+        .cache_control("private, no-cache")
+        .respond(&tile.into(), request)
+}
+```
+
+Put the picture's tag in its address on your own pages (`/widgets/7.png?v=3fa2c1`), so a page drawn again after a change asks for the new one.
+
+## Safety
+
+The drawing is written out by the toolkit: attributes of the page are left out, elements of HTML inside a drawing go, and so do `image`, `foreignObject` and any reference that isn't to an element of the drawing itself. The renderer reads no file and no URL, and pictures are 1 to 4,096 pixels a side.
+
+## API
+
+### ChartImage
+
+<UiProps type="ChartImage" />
+
+### Tile
+
+<UiProps type="Tile" />
+
+### Block
+
+<UiProps type="Block" />
+
+### TileSize
+
+<UiProps type="TileSize" />
+
+### Backdrop
+
+<UiProps type="Backdrop" />
+
+### Png
+
+<UiProps type="Png" />
