@@ -92,6 +92,33 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(820)
         .height(300),
+        // Relation list
+        single!(
+            "relation-list",
+            "thumb",
+            "A ranked list of relations",
+            relation_list_thumb
+        )
+        .start()
+        .width(420)
+        .height(240),
+        single!(
+            "relation-list",
+            "default",
+            "What moves together, strongest first",
+            relation_list_default
+        )
+        .start()
+        .height(470),
+        single!(
+            "relation-list",
+            "significant",
+            "Only the links found, beside the matrix",
+            relation_list_significant
+        )
+        .start()
+        .width(820)
+        .height(470),
         // Scatter chart
         single!(
             "scatter-chart",
@@ -452,5 +479,80 @@ fn scatter_chart_states() -> Grid {
                     Some("They appear here after a resting reading.".to_owned()),
                 ),
         ),
+    ))
+}
+
+/// Pairs tested over 30 days: the coefficient, whether it is significant and its note.
+const FOUND: [(&str, &str, f64, bool, &str); 8] = [
+    ("Sleep", "Next-day HRV", 0.62, true, "30 days, p < 0.001"),
+    ("Steps", "Stress", -0.48, true, "28 days, p = 0.004"),
+    (
+        "Workout load",
+        "Resting HR",
+        0.41,
+        true,
+        "30 days, next day, p = 0.02",
+    ),
+    ("Screen time", "Sleep", -0.37, true, "26 days, p = 0.04"),
+    (
+        "Caffeine",
+        "Deep sleep",
+        -0.22,
+        false,
+        "21 days, could be chance",
+    ),
+    ("Mood", "Steps", 0.18, false, "30 days, could be chance"),
+    ("Water", "HRV", 0.05, false, "17 days, could be chance"),
+    (
+        "Alcohol",
+        "Recovery",
+        f64::NAN,
+        false,
+        "too few days with both",
+    ),
+];
+
+fn found(title: &str) -> RelationList {
+    FOUND
+        .iter()
+        .fold(
+            RelationList::new(title),
+            |list, (a, b, r, significant, note)| {
+                let relation = if r.is_nan() {
+                    Relation::untested().note(*note)
+                } else {
+                    Relation::new(*r).significant(*significant).note(*note)
+                };
+                list.relation(*a, *b, relation)
+            },
+        )
+        .value_name("Correlation (r)")
+}
+
+fn relation_list_thumb() -> RelationList {
+    found("What moves together")
+        .id("relation-list-thumb")
+        .hide_title()
+        .table(TableMode::ScreenReader)
+        .only_significant()
+}
+
+fn relation_list_default() -> RelationList {
+    found("What moves together")
+        .id("relation-list-default")
+        .description("Last 30 days, Gurpreet Singh")
+        .motion(Motion::new())
+}
+
+fn relation_list_significant() -> Grid {
+    Grid::cols(2).gap(6).children((
+        found("Links found")
+            .id("relation-list-found")
+            .colors(Ink::tone(Tone::Success), Ink::slot(5))
+            .only_significant(),
+        correlations("Every pair tested")
+            .id("relation-list-matrix")
+            .colors(Ink::tone(Tone::Success), Ink::slot(5))
+            .lower_triangle(),
     ))
 }

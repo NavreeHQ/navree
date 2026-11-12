@@ -75,6 +75,12 @@ A chart draws at most eight series. When you give more, the first seven keep the
 
 The axis steps by 1, 2, 2.5 or 5 times a power of ten. A line's axis starts at zero. `.y_zero(false)` lets it start near the data, which suits a measure such as a response time that never gets near zero. `.y_min(value)` and `.y_max(value)` widen the axis to include a value, `.y_ticks(n)` asks for about that many ticks (2 to 12), and `.height(px)` sets the plot's height (60 to 800, and 200 by default).
 
+### Times of day
+
+`.format(NumberFormat::clock(18))` makes the values times of day: each value is minutes past 6 PM, written as the time it comes to and wrapping past midnight, so bedtimes before and after midnight and the next morning's waking sit on one axis. The ticks fall on whole hours, the axis starts where the times do rather than at its origin, and the times are written the way the chart's locale writes them (`11:40 PM` in English, `23:40` in German), in the axis, the tooltip and the table.
+
+<UiPreview example="line-chart/clock" />
+
 ## Axes and gridlines
 
 Each axis draws its labels by default, and can draw its line and a tick mark at each label: `.x_axis(Axis::new().line().ticks())`. `Axis::hidden()` draws nothing and gives the plot the room. `.grid(Gridlines)` chooses the lines behind the marks: `Gridlines::horizontal()` (the default) across at each value tick, `Gridlines::vertical()` down at each x label, `Gridlines::both()` or `Gridlines::none()`, each solid or `.dashed()`. A zero line is drawn where values cross zero, whatever the grid.

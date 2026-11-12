@@ -5,7 +5,7 @@ description: "Bars from one baseline to compare amounts: grouped, stacked, negat
 
 <UiPreview example="bar-chart/default" />
 
-`Chart::bar` draws each value as a bar from one baseline. The value axis always starts at zero, so the length of a bar is its amount. Several series sit side by side in each group. A bar is at most 24 px wide, and a group never takes more than 70% of its place, so a chart with few bars doesn't draw slabs.
+`Chart::bar` draws each value as a bar from one baseline. The value axis starts at zero, so the length of a bar is its amount, unless the bars grow from a [baseline of your own](#bars-from-a-level-other-than-zero). Several series sit side by side in each group. A bar is at most 24 px wide, and a group never takes more than 70% of its place, so a chart with few bars doesn't draw slabs.
 
 ```rust
 use navree::ui::charts::*;
@@ -55,6 +55,12 @@ Give a chart several series and its bars sit side by side. `.toggles()` lets a r
 A value below zero hangs below the baseline, and the axis grows to hold it. In a stack, negative values stack downward, away from the positive ones.
 
 <UiPreview example="bar-chart/negative" />
+
+## Bars from a level other than zero
+
+`.baseline(value)` makes bars grow from a level of their own: up for a value above it, down for one below. Use it when the distance from a reference is what matters and zero is far away, such as each part's age against a person's own, or a temperature against the normal. A line marks the level, and the axis holds the level and the values without reaching down to zero, so a domain such as `.y_domain(Domain::fixed(26, 46))` is kept. The table and the tooltip still say the values themselves. A stack always grows from zero.
+
+<UiPreview example="bar-chart/baseline" />
 
 ## Horizontal bars
 

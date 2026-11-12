@@ -49,6 +49,12 @@ Meter::new("Programme revenue by channel")
 
 <UiPreview example="meter/rupees" />
 
+### Every part, and a second line
+
+The legend lists every segment you give, in order, the empty ones too: a segment of zero draws nothing in the bar and stays in the legend with a hollow key, so a reader sees that it is there and empty. `Segment::detail("109–127 bpm")` adds a second line under a segment's name in the legend, such as the range a heart-rate zone covers. The table gives the details a column of their own, named by `.detail_name("Heart rate")`, and the tooltip a line.
+
+<UiPreview example="meter/details" />
+
 ## Paint
 
 `.gradient()` paints each segment from a softer shade of its color to the full color. `.fill(Gradient)` paints every segment with a gradient of your own, in which `Ink::own()` is the segment's color, and `Segment::fill(Gradient)` paints one segment. `.gloss()` adds a soft highlight along the top. Corners are 4 px; `.pill()` rounds both ends.
