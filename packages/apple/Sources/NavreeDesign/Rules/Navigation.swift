@@ -33,6 +33,13 @@ public enum TitleMode: Sendable, Equatable {
 public enum NavigationRules {
     /// The tab bar on a compact width, the sidebar-adaptable tab view on a
     /// regular one; never chosen from the kind of device.
+    /// Whether a wide window shows the shell's groups as sections of the
+    /// sidebar: only when there is more than one, since a lone section would
+    /// stand in the tab bar in place of its destinations.
+    public static func groupsAsSections(_ groups: Int) -> Bool {
+        groups > 1
+    }
+
     public static func structure(destinations: Int, width: WidthClass) -> NavigationStructure {
         guard destinations > 1 else { return .single }
         switch width {

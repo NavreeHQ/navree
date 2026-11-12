@@ -68,6 +68,9 @@ for pass in $passes; do
         ipad)
             if [ -z "$ipad" ]; then echo "No iPad simulator on $runtime"; continue; fi
             device="$ipad"
+            # One simulator at a time: with two booted, xcodebuild has been
+            # seen to list none.
+            xcrun simctl shutdown "$udid" 2>/dev/null || true
             xcrun simctl boot "$device" 2>/dev/null || true
             xcrun simctl bootstatus "$device" -b >/dev/null
             xcrun simctl status_bar "$device" override --time "09:41" --wifiBars 3 --batteryState charged --batteryLevel 100 || true
@@ -78,13 +81,23 @@ for pass in $passes; do
     xcrun simctl ui "$device" content_size "$size"
     rm -rf "$build/results/$pass.xcresult" "$screens/$pass"
     echo "Pass $pass: $appearance, $size"
-    if ! TEST_RUNNER_NAVREE_SHOTS="$screens/$pass" TEST_RUNNER_NAVREE_RTL="$rtl" TEST_RUNNER_NAVREE_PASS="$pass" \
-        xcodebuild test-without-building \
-            -project NavreeDemo.xcodeproj -scheme NavreeDemo \
-            -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$build/DerivedData" \
-            -resultBundlePath "$build/results/$pass.xcresult" \
-            2>&1 | tee "$build/logs/test-$pass.log" | pretty; then
-        status=1
+    run_tests() {
+        rm -rf "$build/results/$pass.xcresult"
+        TEST_RUNNER_NAVREE_SHOTS="$screens/$pass" TEST_RUNNER_NAVREE_RTL="$rtl" TEST_RUNNER_NAVREE_PASS="$pass" \
+            xcodebuild test-without-building \
+                -project NavreeDemo.xcodeproj -scheme NavreeDemo \
+                -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$build/DerivedData" \
+                -resultBundlePath "$build/results/$pass.xcresult" \
+                2>&1 | tee "$build/logs/test-$pass.log" | pretty
+    }
+    if ! run_tests; then
+        if grep -q "Unable to find a device matching" "$build/logs/test-$pass.log"; then
+            echo "The simulator was not listed yet; asking again"
+            sleep 20
+            run_tests || status=1
+        else
+            status=1
+        fi
     fi
     # The test writes its PNGs itself; when it could not, take them from the result.
     if ! ls "$screens/$pass"/*.png >/dev/null 2>&1 && [ -d "$build/results/$pass.xcresult" ]; then
@@ -94,6 +107,6 @@ for pass in $passes; do
     fi
 done
 
-xcrun simctl ui "$udid" appearance light
-xcrun simctl ui "$udid" content_size large
+xcrun simctl ui "$udid" appearance light 2>/dev/null || true
+xcrun simctl ui "$udid" content_size large 2>/dev/null || true
 exit $status

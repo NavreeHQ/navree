@@ -47,6 +47,18 @@ public struct AppShell: View {
                     .badge(item.badge.flatMap { Int($0) } ?? 0)
                 }
             }
+        case .sidebarAdaptable where !NavigationRules.groupsAsSections(state.shell?.nav.groups.count ?? 0):
+            TabView(selection: selection) {
+                ForEach(items, id: \.href) { item in
+                    Tab(value: item.href) {
+                        StackView(container: .destination(item.href), client: client)
+                    } label: {
+                        DestinationLabel(item: item)
+                    }
+                    .badge(item.badge.flatMap { Int($0) } ?? 0)
+                }
+            }
+            .tabViewStyle(.sidebarAdaptable)
         case .sidebarAdaptable:
             TabView(selection: selection) {
                 ForEach(Array((state.shell?.nav.groups ?? []).enumerated()), id: \.offset) { _, group in
