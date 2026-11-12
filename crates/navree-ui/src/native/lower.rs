@@ -553,8 +553,8 @@ impl Cx {
         Ok(vec![N::List(n::List {
             id: id(element),
             children,
-            more: None,
             ordered: element.tag() == "ol",
+            ..n::List::default()
         })])
     }
 
@@ -905,8 +905,7 @@ impl Cx {
                 .or_else(|| attr(row, "id"))
                 .map(Cow::into_owned),
             cells,
-            action: None,
-            actions: Vec::new(),
+            ..n::TableRow::default()
         })
     }
 
@@ -975,6 +974,7 @@ impl Cx {
                     .filter(|fill| fill != "off")
                     .map(Cow::into_owned),
                 readonly: has(element, "readonly"),
+                ..i::TextInput::default()
             })
         };
         let date = |kind: i::DateKind| {
@@ -1097,6 +1097,7 @@ impl Cx {
             required: has(element, "required"),
             disabled: has(element, "disabled"),
             input,
+            ..n::Field::default()
         })))
     }
 
@@ -1202,7 +1203,7 @@ impl Cx {
                 } else if has(element, "data-ui-in-region") {
                     Present::Replace
                 } else {
-                    Present::Push
+                    Present::Auto
                 },
             });
         }
@@ -1955,7 +1956,7 @@ fn flush(runs: &mut Vec<n::Run>, out: &mut Vec<N>) {
                 {
                     Present::External
                 } else {
-                    Present::Push
+                    Present::Auto
                 },
             },
             children: Vec::new(),
@@ -2342,8 +2343,7 @@ mod tests {
                 rows: vec![n::TableRow {
                     id: Some("4".into()),
                     cells: vec![N::text("Phulkari dupatta"), N::text("2"), N::text("")],
-                    action: None,
-                    actions: Vec::new(),
+                    ..n::TableRow::default()
                 }],
                 ..n::Table::default()
             })

@@ -653,6 +653,7 @@ fn filter(
                         required: false,
                         disabled: false,
                         input: i::Input::Choices(i::ChoicesInput::default()),
+                        ..n::Field::default()
                     });
                     boxes.len() - 1
                 }

@@ -98,6 +98,7 @@ pub(crate) fn toggle_group(_: &mut Cx, element: &Element) -> Read {
         required: false,
         disabled: has(element, "data-disabled"),
         input,
+        ..n::Field::default()
     })])
 }
 

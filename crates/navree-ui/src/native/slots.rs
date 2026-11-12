@@ -745,6 +745,7 @@ fn sheet(cx: &mut Cx, element: &Element) -> Read {
         open: has(element, "open"),
         children,
         actions,
+        ..n::Sheet::default()
     })])
 }
 
@@ -960,6 +961,7 @@ fn radio_group(_: &mut Cx, element: &Element) -> Read {
         required,
         disabled: has(element, "disabled"),
         input: navree_native::input::Input::Choice(input),
+        ..n::Field::default()
     })])
 }
 

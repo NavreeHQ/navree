@@ -312,14 +312,8 @@ mod tests {
     fn the_options_a_search_found_are_not_a_page_that_lacks_a_title() {
         use navree_native::input as i;
         let field = N::Field(n::Field {
-            id: None,
-            name: String::new(),
-            label: None,
-            help: None,
-            error: None,
-            required: false,
-            disabled: false,
             input: i::Input::Choice(i::ChoiceInput::default()),
+            ..n::Field::default()
         });
         assert_eq!(graded(&Screen::new("", field.clone())).0, Grade::Idiom);
         // A screen of anything else with no name still lacks one.

@@ -1357,7 +1357,7 @@ async fn an_upload_and_a_bulk_action_answer_a_native_client_with_ops() {
             && upload
                 .ops
                 .iter()
-                .any(|op| matches!(op, NativeOp::Navigate { href } if href == "/files")),
+                .any(|op| matches!(op, NativeOp::Navigate { href, .. } if href == "/files")),
         "{:?}",
         upload.ops
     );
@@ -1402,7 +1402,8 @@ async fn a_signed_out_native_client_is_sent_to_sign_in() {
     assert_eq!(
         answer.ops,
         [NativeOp::Navigate {
-            href: "/sign-in?next=%2Faccount%3Ftab%3Dorders".to_owned()
+            href: "/sign-in?next=%2Faccount%3Ftab%3Dorders".to_owned(),
+            present: navree_native::Present::Auto,
         }]
     );
     assert!(answer.screen.is_none() && answer.web.is_none());

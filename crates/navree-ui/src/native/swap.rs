@@ -131,7 +131,11 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
                         nodes,
                         more: None,
                     },
-                    How::Prepend => O::Prepend { target, nodes },
+                    How::Prepend => O::Prepend {
+                        target,
+                        nodes,
+                        before: None,
+                    },
                 }
             }
             Op::Morph { .. } | Op::Replace { .. } | Op::Append { .. } | Op::Prepend { .. } => {
@@ -166,7 +170,10 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
                     crate::op::UrlMode::Replace => navree_native::op::UrlMode::Replace,
                 },
             },
-            Op::Navigate { href } => O::Navigate { href: href.clone() },
+            Op::Navigate { href } => O::Navigate {
+                href: href.clone(),
+                present: navree_native::Present::Auto,
+            },
             Op::NavigateExternal { href } => O::NavigateExternal { href: href.clone() },
             Op::Reload => O::Reload,
             Op::Invalidate { target } => O::Invalidate {
@@ -513,7 +520,11 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
         ));
     }
     let ops = if before {
-        vec![navree_native::Op::Prepend { target, nodes }]
+        vec![navree_native::Op::Prepend {
+            target,
+            nodes,
+            before: None,
+        }]
     } else {
         let more = more
             .then(|| last.map(|cursor| next_rows(&request.url, "end", &cursor)))
@@ -562,6 +573,7 @@ pub(crate) fn choices<'a>(
             options,
             ..i::ChoiceInput::default()
         }),
+        ..navree_native::node::Field::default()
     });
     let body = match more {
         Some(more) => N::Stack(navree_native::node::Stack {
