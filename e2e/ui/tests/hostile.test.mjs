@@ -473,10 +473,10 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await context.close();
     });
 
-    test(`a form whose answer redirects to another origin applies nothing from it (${engine})`, async () => {
+    /** A form whose same-origin action answers 307 to the other origin, which approves any preflight and answers ops. */
+    function redirectAway(headers) {
       f.evil.length = 0;
       const path = key("redirect-away");
-      // The other origin lets the page read its answer (CORS), and answers ops.
       f.evilRoutes.set(`/${path}-evil`, (req, res) => {
         const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
         if (req.method === "OPTIONS") {
@@ -486,17 +486,37 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
         res.writeHead(200, { ...cors, "content-type": "application/vnd.navree.ops+json" });
         res.end(JSON.stringify({ ops: [{ op: "toast", tone: "success", text: "from the other origin" }] }));
       });
-      const open = { "content-security-policy": "script-src 'self'; style-src 'self'", "set-cookie": "XSRF-TOKEN=tok; Path=/" };
-      route(`/${path}`, doc(`<div id="t">start</div><form id="f" data-ui-form method="post" action="/${path}-post"><button id="go">go</button></form>`), open);
+      route(`/${path}`, doc(`<div id="t">start</div><form id="f" data-ui-form method="post" action="/${path}-post"><button id="go">go</button></form>`), headers);
       f.routes.set(`/${path}-post`, (req, res) => {
         res.writeHead(307, { location: `${f.evilOrigin}/${path}-evil` });
         res.end();
       });
+      return path;
+    }
+
+    test(`under Navree's page policy a form's redirect to another origin never leaves (${engine})`, async () => {
+      // The fixture serves view.rs's PAGE_CSP: `connect-src 'self'` is checked on every hop.
+      const path = redirectAway({ "set-cookie": "XSRF-TOKEN=tok; Path=/" });
       const { context, page } = await fresh(`/${path}`);
       await page.click("#go");
-      await until(() => f.evil.some((hit) => hit.url === `/${path}-evil` && hit.method === "POST"));
-      await sleep(200);
-      assert.ok(f.evil.some((hit) => hit.method === "POST"), "the redirect was followed, so the check is what stopped it");
+      await until(() => hits(`/${path}-post`).length > 0);
+      await sleep(300);
+      assert.equal(hits(`/${path}-post`).length, 1, "the same-origin action was asked");
+      assert.deepEqual(f.evil.filter((hit) => hit.url === `/${path}-evil`), [], "nothing, not a preflight, reached the other origin");
+      const said = await toasts(page);
+      assert.ok(!said.some((text) => text.includes("from the other origin")), said.join(" | "));
+      await context.close();
+    });
+
+    test(`without Navree's page policy a form's redirect to another origin applies nothing from it (${engine})`, async () => {
+      // What is left without the policy: the browser follows the redirect before the runtime
+      // sees it, so the request (its token header, and the body after a 307) may reach the
+      // other origin when it approves the preflight. The runtime then refuses the answer.
+      const path = redirectAway({ "content-security-policy": "script-src 'self'; style-src 'self'", "set-cookie": "XSRF-TOKEN=tok; Path=/" });
+      const { context, page } = await fresh(`/${path}`);
+      await page.click("#go");
+      await until(() => f.evil.some((hit) => hit.url === `/${path}-evil` && hit.method === "POST"), 3000);
+      await sleep(300);
       const said = await toasts(page);
       assert.ok(!said.some((text) => text.includes("from the other origin")), said.join(" | "));
       assert.ok(page.url().startsWith(f.origin), page.url());

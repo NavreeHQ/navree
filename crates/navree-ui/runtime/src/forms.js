@@ -119,9 +119,9 @@ async function send(form, submitter) {
   };
   try {
     const action = actionOf(form, submitter);
-    // Only this site is fetched, as by every other fetch of the runtime: a form aimed at
-    // another origin is refused, so the session token in the header and the ops of an
-    // answer never come from or go to another site, whatever the page's content policy.
+    // Only this site's actions are fetched, as by every other fetch of the runtime: a form
+    // aimed at another origin is refused before anything is sent. A redirect is another
+    // matter (below): fetch follows it before the runtime sees it.
     if (!sameOrigin(action)) {
       pending(form, submitter, false);
       if (over(false)) toast("danger", "That didn't work. Try again.");
@@ -144,9 +144,11 @@ async function send(form, submitter) {
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
     const response = await (method === "GET" ? fetch(url, init) : whileWriting(() => fetch(url, init)));
     answered = true;
-    // A redirect off this site is refused before its body is read: no ops, no page from it.
-    // (The server's own actions answer the runtime with ops; a redirect comes from a handler
-    // without the UI module, which the runtime follows like a boosted link on this site only.)
+    // An answer redirected off this site is refused before its body is read: no ops, no page
+    // from it. The request itself has gone there by then, headers (the session token, the
+    // page's path) and, after a 307 or 308, the body, if that origin answered the browser's
+    // preflight. Navree's page policy (`connect-src 'self'`) stops that hop in the browser;
+    // a page served without it, with a same-origin action that redirects off the site, does not.
     if (response.redirected && !sameOrigin(response.url)) throw new Error("redirected off this site");
     status = response.status;
     const type = response.headers.get("content-type") || "";
