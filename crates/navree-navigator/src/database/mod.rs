@@ -20,18 +20,19 @@
 //!   `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1` is given: such a role
 //!   reaches the server's files, programs and other sessions from a query,
 //!   which no read-only transaction stops. It also refuses a role that may
-//!   execute a `SECURITY DEFINER` function, a function in an untrusted
-//!   language, or a function of an extension that reaches files, programs
-//!   or the network (dblink, postgres_fdw, file_fdw, adminpack, http,
-//!   pg_net, ...). Each query runs inside `BEGIN READ ONLY` (which pins
-//!   `standard_conforming_strings` again) with a statement timeout, is sent
-//!   as one prepared statement (the extended protocol takes exactly one),
-//!   reads each value as text cut on the server, then rolls back. What is
-//!   left is what an ordinary role may still do: the C functions of the
-//!   extensions an administrator installed (PostGIS, pgcrypto, TimescaleDB)
-//!   run with their own code, and an extension Navigator doesn't know can
-//!   add a function that reaches out under any name; that, and the checks
-//!   above, are what "read-only" rests on.
+//!   execute a `SECURITY DEFINER` function that is not an extension's, a
+//!   function in an untrusted language, or a function of an extension that
+//!   reaches files, programs or the network (dblink, postgres_fdw,
+//!   file_fdw, adminpack, http, pg_net, ...). Each query runs inside
+//!   `BEGIN READ ONLY` (which pins `standard_conforming_strings` again)
+//!   with a statement timeout, is sent as one prepared statement (the
+//!   extended protocol takes exactly one), reads each value as text cut on
+//!   the server, then rolls back. What is left is what an ordinary role may
+//!   still do: the functions of the extensions an administrator installed
+//!   (PostGIS, pgcrypto, TimescaleDB), their C code and their own SECURITY
+//!   DEFINER functions, run as written, and an extension Navigator doesn't
+//!   know can add a function that reaches out under any name; that, and the
+//!   checks above, are what "read-only" rests on.
 //! - Unless `--allow-remote-database` is given, only SQLite files and
 //!   servers on this machine (`localhost`, a loopback address or a Unix
 //!   socket) are allowed ([`check_local`]).
@@ -183,7 +184,7 @@ pub enum DatabaseError {
          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader;\n\n\
          and start Navigator with `NAVREE_MCP_DATABASE_URL=postgres://navree_reader:...@localhost/your_db navree mcp` \
          (run the last line as the role that creates your tables). The role must be no superuser and \
-         no member of one, and may execute no SECURITY DEFINER function, no function in an untrusted \
+         no member of one, and may execute no SECURITY DEFINER function of the database's own, no function in an untrusted \
          language and no function of an extension that reaches files, programs or the network \
          (Navigator checks). To run as `{role}` anyway, start it with \
          `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1 navree mcp`.",

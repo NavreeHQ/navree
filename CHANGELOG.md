@@ -30,13 +30,15 @@ every `@navree/*` package carries the same version.
   `role`), or as a member of `pg_read_server_files`, `pg_write_server_files`,
   `pg_execute_server_program`, `pg_signal_backend` or `pg_signal_autovacuum_worker`, since such a
   role reaches the server's files, programs and other sessions from a query. They also refuse a
-  role that may execute a `SECURITY DEFINER` function, a function in an untrusted language
-  (`plpython3u`, `plperlu`, `pltclu`, or C outside an extension), or a function of an extension
+  role that may execute a `SECURITY DEFINER` function of the database's own (not an
+  extension's), a function in an untrusted language (`plpython3u`, `plperlu`, `pltclu`, or C
+  outside an extension), or a function of an extension
   that reaches files, programs or the network (`dblink`, `postgres_fdw`, `file_fdw`, `adminpack`,
   `http`, `pg_net`, `pg_background`, `pg_cron`); the refusal names the functions. What an
-  ordinary role can still reach is the C code of the other extensions installed in the database
-  (PostGIS, pgcrypto, TimescaleDB, pgvector), and any extension Navigator doesn't know that adds
-  a function reaching the network or a file.
+  ordinary role can still reach is what the other extensions installed in the database give it
+  (their C functions, and their own `SECURITY DEFINER` functions: PostGIS, pgcrypto,
+  TimescaleDB, pgvector), and any extension Navigator doesn't know that adds a function reaching
+  the network or a file.
 - A query could make Navigator hold gigabytes: `printf('%.*c', 400000000, 'x')` or a recursive
   `zeroblob(..)` on SQLite, `repeat('x', 900000000)` on PostgreSQL. SQLite now refuses to make a
   string or blob over 1 MB, PostgreSQL cuts each value to 4 KB before sending it (its own work
