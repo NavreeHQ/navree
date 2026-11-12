@@ -53,7 +53,7 @@ public object Navree {
         @Serializable
         public data class Navigate(
             val href: String,
-            val present: Navree.Present = Navree.Present.PUSH,
+            val present: Navree.Present = Navree.Present.AUTO,
         ) : Navree.Action
         /** `Action.Submit`. */
         @Serializable
@@ -314,12 +314,16 @@ public object Navree {
     @Serializable
     public data class Button(
         val action: Navree.Action? = null,
+        val ask: Navree.Question? = null,
+        val checked: Boolean? = null,
         val disabled: Boolean = false,
         val icon: Navree.Icon? = null,
         @SerialName("icon_only")
         val iconOnly: Boolean = false,
         val id: String? = null,
         val label: String,
+        @SerialName("one_of")
+        val oneOf: String? = null,
         val pending: Boolean = false,
         val prominence: Navree.Prominence = Navree.Prominence.MEDIUM,
         val role: Navree.Role = Navree.Role.NONE,
@@ -481,6 +485,7 @@ public object Navree {
     public data class ChoiceInput(
         val create: Navree.ChoiceCreate? = null,
         val kind: Navree.ChoiceKind = Navree.ChoiceKind.MENU,
+        val more: String? = null,
         val options: kotlin.collections.List<Navree.ChoiceOption> = emptyList(),
         val placeholder: String? = null,
         val search: Navree.ChoiceSearch? = null,
@@ -517,6 +522,7 @@ public object Navree {
     @Serializable
     public data class ChoicesInput(
         val create: Navree.ChoiceCreate? = null,
+        val more: String? = null,
         val options: kotlin.collections.List<Navree.ChoiceOption> = emptyList(),
         val search: Navree.ChoiceSearch? = null,
         val values: kotlin.collections.List<String> = emptyList(),
@@ -784,6 +790,7 @@ public object Navree {
     /** `Confirm`. */
     @Serializable
     public data class Confirm(
+        val challenge: String,
         val detail: String? = null,
         val method: Navree.ConfirmMethod = Navree.ConfirmMethod.EITHER,
         val reason: String,
@@ -911,6 +918,13 @@ public object Navree {
         val id: String? = null,
     ) : Navree.Node
 
+    /** `Edge`. */
+    @Serializable
+    public enum class Edge {
+        @SerialName("start") START,
+        @SerialName("end") END,
+    }
+
     /** `Empty`. */
     @Serializable
     public data class Empty(
@@ -982,6 +996,7 @@ public object Navree {
         val detail: kotlin.collections.List<Navree.Node> = emptyList(),
         val icon: Navree.Icon? = null,
         val id: String? = null,
+        val muted: Boolean = false,
         val runs: kotlin.collections.List<Navree.Run> = emptyList(),
         val time: String? = null,
         val tone: Navree.Tone? = null,
@@ -990,6 +1005,7 @@ public object Navree {
     /** `Field`. */
     @Serializable
     public data class Field(
+        val changed: Navree.Action? = null,
         val disabled: Boolean = false,
         val error: String? = null,
         val help: String? = null,
@@ -997,6 +1013,7 @@ public object Navree {
         val input: Navree.Input,
         val label: String? = null,
         val name: String,
+        val purpose: Navree.Purpose? = null,
         val required: Boolean = false,
     ) : Navree.Node
 
@@ -1106,6 +1123,7 @@ public object Navree {
         val label: String? = null,
         val name: String? = null,
         val paths: kotlin.collections.List<String> = emptyList(),
+        val symbol: Navree.SystemSymbol? = null,
         val tone: Navree.Tone? = null,
         @SerialName("view_box")
         val viewBox: String? = null,
@@ -1158,6 +1176,7 @@ public object Navree {
                 "slider" -> input.json.decodeFromJsonElement(Navree.SliderInput.serializer(), body)
                 "colour" -> input.json.decodeFromJsonElement(Navree.ColourInput.serializer(), body)
                 "file" -> input.json.decodeFromJsonElement(Navree.FileInput.serializer(), body)
+                "range" -> input.json.decodeFromJsonElement(Navree.RangeInput.serializer(), body)
                 else -> Navree.Input.Unknown(
                     tag = tag ?: "",
                 )
@@ -1201,6 +1220,10 @@ public object Navree {
                     tag = "file"
                     body = output.json.encodeToJsonElement(Navree.FileInput.serializer(), value) as JsonObject
                 }
+                is Navree.RangeInput -> {
+                    tag = "range"
+                    body = output.json.encodeToJsonElement(Navree.RangeInput.serializer(), value) as JsonObject
+                }
                 is Navree.Input.Unknown -> {
                     tag = value.tag
                     val kept = LinkedHashMap<String, JsonElement>()
@@ -1232,10 +1255,15 @@ public object Navree {
     /** `List`. */
     @Serializable
     public data class List(
+        val before: String? = null,
+        val changes: String? = null,
         val children: kotlin.collections.List<Navree.Node> = emptyList(),
         val id: String? = null,
+        val live: Navree.Live? = null,
         val more: String? = null,
         val ordered: Boolean = false,
+        val reorder: Navree.Reorder? = null,
+        val since: String? = null,
     ) : Navree.Node
 
     /** `Live`. */
@@ -1627,12 +1655,37 @@ public object Navree {
         /** `Op.Prepend`. */
         @Serializable
         public data class Prepend(
+            val before: String? = null,
             val nodes: kotlin.collections.List<Navree.Node>,
             val target: String,
         ) : Navree.Op
         /** `Op.Remove`. */
         @Serializable
         public data class Remove(
+            val target: String,
+        ) : Navree.Op
+        /** `Op.Merge`. */
+        @Serializable
+        public data class Merge(
+            val at: Navree.Edge = Navree.Edge.END,
+            val gone: kotlin.collections.List<String> = emptyList(),
+            val more: Boolean = false,
+            val nodes: kotlin.collections.List<Navree.Node> = emptyList(),
+            val since: String,
+            val target: String,
+        ) : Navree.Op
+        /** `Op.Rows`. */
+        @Serializable
+        public data class Rows(
+            val at: Navree.Edge = Navree.Edge.END,
+            val more: String? = null,
+            val rows: kotlin.collections.List<Navree.TableRow>,
+            val target: String,
+        ) : Navree.Op
+        /** `Op.Row`. */
+        @Serializable
+        public data class Row(
+            val row: Navree.TableRow,
             val target: String,
         ) : Navree.Op
         /** `Op.Errors`. */
@@ -1666,6 +1719,7 @@ public object Navree {
         @Serializable
         public data class Navigate(
             val href: String,
+            val present: Navree.Present = Navree.Present.AUTO,
         ) : Navree.Op
         /** `Op.NavigateExternal`. */
         @Serializable
@@ -1706,6 +1760,9 @@ public object Navree {
                 "append" -> input.json.decodeFromJsonElement(Navree.Op.Append.serializer(), body)
                 "prepend" -> input.json.decodeFromJsonElement(Navree.Op.Prepend.serializer(), body)
                 "remove" -> input.json.decodeFromJsonElement(Navree.Op.Remove.serializer(), body)
+                "merge" -> input.json.decodeFromJsonElement(Navree.Op.Merge.serializer(), body)
+                "rows" -> input.json.decodeFromJsonElement(Navree.Op.Rows.serializer(), body)
+                "row" -> input.json.decodeFromJsonElement(Navree.Op.Row.serializer(), body)
                 "errors" -> input.json.decodeFromJsonElement(Navree.Op.Errors.serializer(), body)
                 "open" -> input.json.decodeFromJsonElement(Navree.Op.Open.serializer(), body)
                 "close" -> input.json.decodeFromJsonElement(Navree.Op.Close.serializer(), body)
@@ -1750,6 +1807,18 @@ public object Navree {
                 is Navree.Op.Remove -> {
                     tag = "remove"
                     body = output.json.encodeToJsonElement(Navree.Op.Remove.serializer(), value) as JsonObject
+                }
+                is Navree.Op.Merge -> {
+                    tag = "merge"
+                    body = output.json.encodeToJsonElement(Navree.Op.Merge.serializer(), value) as JsonObject
+                }
+                is Navree.Op.Rows -> {
+                    tag = "rows"
+                    body = output.json.encodeToJsonElement(Navree.Op.Rows.serializer(), value) as JsonObject
+                }
+                is Navree.Op.Row -> {
+                    tag = "row"
+                    body = output.json.encodeToJsonElement(Navree.Op.Row.serializer(), value) as JsonObject
                 }
                 is Navree.Op.Errors -> {
                     tag = "errors"
@@ -1862,6 +1931,13 @@ public object Navree {
         @SerialName("sign_in") SIGN_IN,
     }
 
+    /** `PersonName`. */
+    @Serializable
+    public data class PersonName(
+        val firstName: String? = null,
+        val lastName: String? = null,
+    )
+
     /** `Platform`. */
     @Serializable
     public enum class Platform {
@@ -1884,6 +1960,9 @@ public object Navree {
         val clientId: String? = null,
         val nonce: String,
         val provider: Navree.SignInProvider,
+        @SerialName("sign_in")
+        val signIn: String,
+        val web: String? = null,
     ) : Navree.Call
 
     /** `Popover`. */
@@ -1896,12 +1975,14 @@ public object Navree {
     /** `Present`. */
     @Serializable
     public enum class Present {
+        @SerialName("auto") AUTO,
         @SerialName("push") PUSH,
         @SerialName("replace") REPLACE,
         @SerialName("root") ROOT,
         @SerialName("sheet") SHEET,
         @SerialName("full") FULL,
         @SerialName("external") EXTERNAL,
+        @SerialName("task") TASK,
     }
 
     /** `Progress`. */
@@ -1918,6 +1999,15 @@ public object Navree {
         @SerialName("high") HIGH,
         @SerialName("medium") MEDIUM,
         @SerialName("low") LOW,
+    }
+
+    /** `Purpose`. */
+    @Serializable
+    public enum class Purpose {
+        @SerialName("search") SEARCH,
+        @SerialName("filter") FILTER,
+        @SerialName("sort") SORT,
+        @SerialName("page_size") PAGE_SIZE,
     }
 
     /** `Push`. */
@@ -1954,6 +2044,36 @@ public object Navree {
         val token: String,
     )
 
+    /** `Question`. */
+    @Serializable
+    public data class Question(
+        val cancel: String? = null,
+        val confirm: String,
+        val text: String? = null,
+        val title: String,
+    )
+
+    /** `RangeEnd`. */
+    @Serializable
+    public data class RangeEnd(
+        val name: String,
+        val value: String = "",
+    )
+
+    /** `RangeInput`. */
+    @Serializable
+    public data class RangeInput(
+        val from: Navree.RangeEnd,
+        val kind: Navree.DateKind = Navree.DateKind.DATE,
+        val max: String? = null,
+        val min: String? = null,
+        @SerialName("off_days")
+        val offDays: kotlin.collections.List<String> = emptyList(),
+        @SerialName("off_weekdays")
+        val offWeekdays: kotlin.collections.List<Navree.Weekday> = emptyList(),
+        val to: Navree.RangeEnd,
+    ) : Navree.Input
+
     /** `Refusal`. */
     @Serializable
     public enum class Refusal {
@@ -1982,6 +2102,15 @@ public object Navree {
     public data class RegisterPush(
         val categories: kotlin.collections.List<String> = emptyList(),
     ) : Navree.Call
+
+    /** `Reorder`. */
+    @Serializable
+    public data class Reorder(
+        val fields: kotlin.collections.List<Navree.Pair> = emptyList(),
+        val group: String? = null,
+        val href: String,
+        val limit: Long? = null,
+    )
 
     /** `ReplyCall`: one of its variants, told apart by `f`. */
     @Serializable(with = Navree.ReplyCallSerializer::class)
@@ -2085,6 +2214,7 @@ public object Navree {
         val id: String? = null,
         val leading: Navree.Node? = null,
         val menu: kotlin.collections.List<Navree.Node> = emptyList(),
+        val muted: Boolean = false,
         val state: Navree.RowState? = null,
         val subtitle: String? = null,
         val swipe: kotlin.collections.List<Navree.Button> = emptyList(),
@@ -2176,6 +2306,13 @@ public object Navree {
         @SerialName("inset") INSET,
     }
 
+    /** `Selection`. */
+    @Serializable
+    public data class Selection(
+        val form: String? = null,
+        val name: String,
+    )
+
     /** `Series`. */
     @Serializable
     public data class Series(
@@ -2222,6 +2359,7 @@ public object Navree {
         val open: Boolean = false,
         val size: Navree.SheetSize = Navree.SheetSize.LARGE,
         val subtitle: String? = null,
+        val task: Boolean = false,
         val title: String? = null,
     ) : Navree.Node
 
@@ -2259,15 +2397,18 @@ public object Navree {
     /** `SignedIn`. */
     @Serializable
     public data class SignedIn(
-        val code: String? = null,
-        val email: String? = null,
-        @SerialName("family_name")
-        val familyName: String? = null,
-        @SerialName("given_name")
-        val givenName: String? = null,
+        @SerialName("authorization_code")
+        val authorizationCode: String? = null,
         @SerialName("id_token")
         val idToken: String,
-        val provider: Navree.SignInProvider,
+        val state: String,
+        val user: Navree.SignedInUser? = null,
+    )
+
+    /** `SignedInUser`. */
+    @Serializable
+    public data class SignedInUser(
+        val name: Navree.PersonName? = null,
     )
 
     /** `SliderInput`. */
@@ -2346,6 +2487,15 @@ public object Navree {
         @SerialName("pending") PENDING,
     }
 
+    /** `SystemSymbol`. */
+    @Serializable
+    public data class SystemSymbol(
+        val apple: String,
+        @SerialName("apple_filled")
+        val appleFilled: String? = null,
+        val material: String,
+    )
+
     /** `Tab`. */
     @Serializable
     public data class Tab(
@@ -2367,6 +2517,7 @@ public object Navree {
         val prev: String? = null,
         val query: Navree.Form? = null,
         val rows: kotlin.collections.List<Navree.TableRow> = emptyList(),
+        val select: Navree.Selection? = null,
         val summary: String? = null,
     ) : Navree.Node
 
@@ -2376,7 +2527,9 @@ public object Navree {
         val action: Navree.Action? = null,
         val actions: kotlin.collections.List<Navree.Node> = emptyList(),
         val cells: kotlin.collections.List<Navree.Node> = emptyList(),
+        val detail: kotlin.collections.List<Navree.Node> = emptyList(),
         val id: String? = null,
+        val selected: Boolean = false,
     )
 
     /** `Tabs`. */
@@ -2408,8 +2561,10 @@ public object Navree {
         val maxLength: Long? = null,
         val min: String? = null,
         val placeholder: String? = null,
+        val prefix: String? = null,
         val readonly: Boolean = false,
         val step: String? = null,
+        val suffix: String? = null,
         val value: String = "",
     ) : Navree.Input
 
@@ -2477,6 +2632,7 @@ public object Navree {
     /** `ToastAction`. */
     @Serializable
     public data class ToastAction(
+        val fields: kotlin.collections.List<Navree.Pair> = emptyList(),
         val href: String,
         val label: String,
         val post: Boolean = false,
@@ -2519,6 +2675,7 @@ public object Navree {
     @Serializable
     public data class ToolbarItem(
         val action: Navree.Action? = null,
+        val ask: Navree.Question? = null,
         val disabled: Boolean = false,
         val icon: Navree.Icon,
         val id: String? = null,
