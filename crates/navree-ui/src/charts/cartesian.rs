@@ -346,6 +346,8 @@ pub struct Chart {
     references: Vec<Reference>,
     zones: Vec<Zone>,
     y_categories: Option<Vec<String>>,
+    lanes: bool,
+    baseline: Option<f64>,
     tooltip: TooltipStyle,
     details: Vec<(String, Vec<String>)>,
     motion: Motion,
@@ -389,6 +391,8 @@ impl Chart {
             references: Vec::new(),
             zones: Vec::new(),
             y_categories: None,
+            lanes: false,
+            baseline: None,
             tooltip: TooltipStyle::new(),
             details: Vec::new(),
             motion: Motion::none(),
@@ -492,6 +496,49 @@ impl Chart {
     pub fn y_categories<S: Into<String>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
         let names: Vec<String> = names.into_iter().map(Into::into).collect();
         self.y_categories = (!names.is_empty()).then_some(names);
+        self
+    }
+
+    /// Gives each of the [named values](Self::y_categories) a lane of its own: the axis
+    /// runs half a step past the first and the last, so each name sits in the middle of
+    /// its band, and an area fills down to the foot of the lowest lane. A stepped area
+    /// over sleep stages then shows the lowest stage (deep sleep) as an area like the
+    /// others, not as a line along the foot of the plot.
+    ///
+    /// ```
+    /// use navree_ui::charts::{Chart, Curve, Series};
+    ///
+    /// let night = Chart::area("Sleep stages")
+    ///     .numbers([0, 30, 60, 90, 120])
+    ///     .series(Series::new("Stage", [3, 1, 0, 2, 0]))
+    ///     .curve(Curve::Step)
+    ///     .y_categories(["Deep", "Core", "REM", "Awake"])
+    ///     .lanes();
+    /// # let _ = navree_ui::render(&night.into());
+    /// ```
+    pub fn lanes(mut self) -> Self {
+        self.lanes = true;
+        self
+    }
+
+    /// Bars grow from `value`, up for a value above it and down for one below, rather
+    /// than from zero: years from an age, degrees from a normal temperature, a score
+    /// against a reference. A line is drawn at the level, and the value axis holds it
+    /// and the values without reaching down to zero, so a [domain](Self::y_domain) such
+    /// as `Domain::fixed(18, 60)` is kept. Bars side by side only: a stack still grows
+    /// from zero. The table and the tooltip say the values as they are.
+    ///
+    /// ```
+    /// use navree_ui::charts::{Chart, Series};
+    ///
+    /// let ages = Chart::bar("Body age by part")
+    ///     .categories(["Heart", "Lungs", "Muscle", "Metabolism"])
+    ///     .series(Series::new("Age", [31, 38, 34, 41]).unit("years"))
+    ///     .baseline(36);
+    /// # let _ = navree_ui::render(&ages.into());
+    /// ```
+    pub fn baseline(mut self, value: impl IntoValue) -> Self {
+        self.baseline = value.into_value().filter(|v| v.is_finite());
         self
     }
 
@@ -928,6 +975,8 @@ impl Chart {
         // x shorter than the values: the extra values have no place.
         let n = n.min(self.x.len());
         self.sort_rows();
+        // A time of day is written as the chart's language writes one.
+        self.format = std::mem::take(&mut self.format).with_dates(&self.common.dates);
         let mut series = self.ready_series(n);
         if series.iter().all(|s| s.values.iter().all(Option::is_none)) {
             return None;
@@ -1182,10 +1231,22 @@ impl Chart {
                 })
                 .collect()
         } else {
+            // Bars from their baseline; an area over lanes from the foot of the lowest.
+            let floor = match (&self.y_categories, bars) {
+                (_, true) => self.baseline.unwrap_or(0.0),
+                (Some(_), false) if self.lanes => -0.5,
+                _ => 0.0,
+            };
             shown
                 .iter()
-                .map(|values| values.iter().map(|v| v.map(|v| (0.0, v))).collect())
+                .map(|values| values.iter().map(|v| v.map(|v| (floor, v))).collect())
                 .collect()
+        };
+        // Where bars start, and the level the zero line marks.
+        let origin = if bars && !stacked {
+            self.baseline.unwrap_or(0.0)
+        } else {
+            0.0
         };
 
         // The value scale.
@@ -1226,13 +1287,20 @@ impl Chart {
         }
         // The range asked for: the categories' own, a domain, or the chart's rules.
         let ranged = match &categories {
+            Some(names) if self.lanes => {
+                Some((lo.min(-0.5), hi.max((names.len().max(1) - 1) as f64 + 0.5)))
+            }
             Some(names) => Some((lo.min(0.0), hi.max((names.len().max(2) - 1) as f64))),
             None if percent => None,
             None => self.domain.range(lo, hi),
         };
-        let zero = bars
+        // Bars reach zero unless they grow from a baseline of their own; a line of times
+        // of day starts where its times do.
+        let from_baseline = bars && !stacked && self.baseline.is_some();
+        let zero = (bars && !from_baseline)
             || stacked
-            || (ranged.is_none() && (self.kind == Kind::Area || self.y_zero.unwrap_or(true)));
+            || (ranged.is_none()
+                && (self.kind == Kind::Area || self.y_zero.unwrap_or(!self.format.is_clock())));
         if let Some((a, b)) = ranged {
             (lo, hi) = (a, b);
         }
@@ -1263,6 +1331,9 @@ impl Chart {
                 values: (0..names.len()).map(|i| i as f64).collect(),
                 places: 0,
             },
+            None if self.format.is_clock() && !percent => {
+                clock_ticks(lo, hi, count, self.domain.is_exact())
+            }
             None if self.domain.is_exact() && !percent => {
                 let found = nice(lo, hi, count, format.whole());
                 let slack = (hi - lo).abs() * 1e-9;
@@ -1436,6 +1507,7 @@ impl Chart {
             tick_text: &tick_text,
             height: f64::from(self.height),
             stacked,
+            origin,
             averages: &averages,
             fmt: &fmt,
         };
@@ -1461,6 +1533,47 @@ impl Chart {
     }
 }
 
+/// Ticks for times of day in minutes: on whole hours (or quarter and half hours over a
+/// short span), about `count` of them. The scale widens to the first and last tick
+/// unless it is `exact`, when the ticks outside it are dropped.
+fn clock_ticks(lo: f64, hi: f64, count: usize, exact: bool) -> super::scale::Ticks {
+    const STEPS: [f64; 9] = [15.0, 30.0, 60.0, 120.0, 180.0, 240.0, 360.0, 720.0, 1440.0];
+    let (lo, hi) = if lo.is_finite() && hi.is_finite() && hi > lo {
+        (lo, hi)
+    } else if lo.is_finite() {
+        (lo - 60.0, lo + 60.0)
+    } else {
+        (0.0, 60.0)
+    };
+    let span = hi - lo;
+    let step = STEPS
+        .into_iter()
+        .find(|step| span / step <= count.max(2) as f64)
+        .unwrap_or(1440.0);
+    let (first, last) = ((lo / step).floor() * step, (hi / step).ceil() * step);
+    let scale = if exact {
+        Linear { lo, hi }
+    } else {
+        Linear {
+            lo: first,
+            hi: last,
+        }
+    };
+    let mut values = Vec::new();
+    let mut at = first;
+    while at <= last + 1e-9 && values.len() < 200 {
+        if at >= scale.lo - 1e-9 && at <= scale.hi + 1e-9 {
+            values.push(at);
+        }
+        at += step;
+    }
+    super::scale::Ticks {
+        scale,
+        values,
+        places: 0,
+    }
+}
+
 /// Where `v` sits between `lo` and `hi`, from 0 to 100.
 fn linear_x(v: f64, lo: f64, hi: f64) -> f64 {
     if hi > lo {
@@ -1480,6 +1593,8 @@ struct Plan<'a> {
     tick_text: &'a dyn Fn(f64) -> String,
     height: f64,
     stacked: bool,
+    /// Where bars start: zero, or the chart's baseline.
+    origin: f64,
     /// Each series' average over all its values.
     averages: &'a [Option<f64>],
     /// How a value is written.
@@ -1647,11 +1762,13 @@ impl Chart {
         let dashed = self.grid.dashed.then_some("");
         let mut plot: Vec<Node> = Vec::new();
         // Gridlines across, and the zero line where values cross it.
-        let crosses = plan.scale.lo < 0.0 && plan.scale.hi > 0.0;
+        let origin = plan.origin;
+        let crosses =
+            (plan.scale.lo < origin && plan.scale.hi > origin) || (self.baseline.is_some() && bars);
         if self.grid.across {
             for (v, _) in &ticks {
                 let y = crisp(plan.y(*v));
-                let zero = *v == 0.0;
+                let zero = *v == origin;
                 plot.push(
                     el("line")
                         .slot(if zero { "chart-zero" } else { "chart-grid" })
@@ -1664,8 +1781,8 @@ impl Chart {
                 );
             }
         }
-        if crosses && (!self.grid.across || !plan.tick_values.contains(&0.0)) {
-            let y = crisp(plan.y(0.0));
+        if crosses && (!self.grid.across || !plan.tick_values.contains(&origin)) {
+            let y = crisp(plan.y(origin));
             plot.push(
                 el("line")
                     .slot("chart-zero")
@@ -2385,12 +2502,25 @@ impl Chart {
         let grid: Vec<f64> = plan.tick_values.iter().map(|v| at(*v)).collect();
         let numbers = &self.common.numbers;
         let single = plan.series.len() == 1 || plan.stacked;
+        // A baseline that is not a tick still has its line.
+        let origin_line = (self.baseline.is_some() && !plan.tick_values.contains(&plan.origin))
+            .then(|| at(plan.origin));
         let lines = |h: f64| -> Vec<Node> {
+            let origin = origin_line.map(|x| {
+                Node::from(
+                    el("line")
+                        .slot("chart-zero")
+                        .attr("x1", pct(x))
+                        .attr("x2", pct(x))
+                        .attr("y1", "0")
+                        .attr("y2", n(h, 0)),
+                )
+            });
             grid.iter()
                 .zip(plan.tick_values)
                 .map(|(x, v)| {
                     el("line")
-                        .slot(if *v == 0.0 {
+                        .slot(if *v == plan.origin {
                             "chart-zero"
                         } else {
                             "chart-grid"
@@ -2401,6 +2531,7 @@ impl Chart {
                         .attr("y2", n(h, 0))
                         .into()
                 })
+                .chain(origin)
                 .collect()
         };
         let mut rows_out: Vec<Node> = Vec::with_capacity(plan.rows.len() + 1);

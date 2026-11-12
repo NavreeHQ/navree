@@ -315,6 +315,23 @@ pub struct NumberFormat {
     prefix: Cow<'static, str>,
     suffix: Cow<'static, str>,
     compact: Compact,
+    clock: Option<ClockTime>,
+}
+
+/// Values that are times of day: minutes past an hour, written on a clock.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ClockTime {
+    /// The hour a value of 0 stands for, 0 to 23.
+    origin: u8,
+    /// How the hours are written: on a 24 hour clock, or 1 to 12 with the markers
+    /// (morning, afternoon, and whether the marker comes first).
+    hours: Hours,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Hours {
+    H24,
+    H12(Cow<'static, str>, Cow<'static, str>, bool),
 }
 
 /// The most decimal places any format writes.
@@ -369,6 +386,37 @@ impl NumberFormat {
         }
     }
 
+    /// Times of day: a value is minutes past `origin_hour` (0 to 23), written as the
+    /// time it comes to, past midnight too. With an origin of 18, `0` is `6:00 PM`,
+    /// `340` is `11:40 PM` and `760` is `6:40 AM`, so the nights' bedtimes and waking
+    /// times sit on one axis that runs through midnight, from the evening to the
+    /// morning.
+    ///
+    /// On a chart, the time is written as the chart's [date
+    /// locale](crate::charts::Chart::locale) writes one (`23:40` in German), and the
+    /// value axis takes its ticks on whole hours. Elsewhere it is written in English,
+    /// on a 12 hour clock.
+    ///
+    /// ```
+    /// use navree_ui::charts::{NumberFormat, NumberLocale};
+    ///
+    /// let night = NumberFormat::clock(18);
+    /// let en = NumberLocale::english();
+    /// assert_eq!(night.format(340.0, &en), "11:40 PM");
+    /// assert_eq!(night.format(760.0, &en), "6:40 AM");
+    /// assert_eq!(night.format(-30.0, &en), "5:30 PM");
+    /// ```
+    pub fn clock(origin_hour: u8) -> Self {
+        Self {
+            max_decimals: Some(0),
+            clock: Some(ClockTime {
+                origin: origin_hour % 24,
+                hours: Hours::H12(Cow::Borrowed(" AM"), Cow::Borrowed(" PM"), false),
+            }),
+            ..Self::default()
+        }
+    }
+
     /// Writes exactly the set number of decimals, keeping trailing zeros.
     pub fn fixed(mut self) -> Self {
         self.fixed = true;
@@ -399,8 +447,29 @@ impl NumberFormat {
         self
     }
 
+    /// Whether values are times of day ([`clock`](Self::clock)).
+    pub(crate) fn is_clock(&self) -> bool {
+        self.clock.is_some()
+    }
+
+    /// The same format, a time of day written as `dates` writes one.
+    pub(crate) fn with_dates(mut self, dates: &crate::dates::DateLocale) -> Self {
+        if let Some(clock) = &mut self.clock {
+            clock.hours = match dates.clock {
+                crate::dates::Clock::H24 => Hours::H24,
+                crate::dates::Clock::H12 => {
+                    Hours::H12(dates.am.clone(), dates.pm.clone(), dates.marker_first)
+                }
+            };
+        }
+        self
+    }
+
     /// Whether an axis reaching `top` writes its ticks short.
     pub(crate) fn axis_compact(&self, top: f64) -> bool {
+        if self.clock.is_some() {
+            return false;
+        }
         match self.compact {
             Compact::Always => true,
             Compact::Never => false,
@@ -418,6 +487,30 @@ impl NumberFormat {
         self.max_decimals == Some(0) && self.kind == Kind::Number
     }
 
+    /// A time of day, `value` minutes past the origin hour.
+    fn format_clock(clock: &ClockTime, value: f64) -> String {
+        if !value.is_finite() {
+            return "–".to_owned();
+        }
+        let minutes = (f64::from(clock.origin) * 60.0 + value.round()).rem_euclid(1440.0);
+        // In 0..1440: a whole number of minutes in a day.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let minutes = minutes as u32;
+        let (hour, minute) = (minutes / 60, minutes % 60);
+        match &clock.hours {
+            Hours::H24 => format!("{hour:02}:{minute:02}"),
+            Hours::H12(am, pm, first) => {
+                let shown = (hour + 11) % 12 + 1;
+                let marker = if hour < 12 { am } else { pm };
+                if *first {
+                    format!("{marker}{shown}:{minute:02}")
+                } else {
+                    format!("{shown}:{minute:02}{marker}")
+                }
+            }
+        }
+    }
+
     /// Whether this writes percentages.
     pub(crate) fn is_percent(&self) -> bool {
         matches!(self.kind, Kind::Percent | Kind::Points)
@@ -425,6 +518,9 @@ impl NumberFormat {
 
     /// `value` in full.
     pub fn format(&self, value: f64, locale: &NumberLocale) -> String {
+        if let Some(clock) = &self.clock {
+            return Self::format_clock(clock, value);
+        }
         if self.always_compact() {
             return self.format_compact(value, locale);
         }
@@ -434,6 +530,9 @@ impl NumberFormat {
     /// `value` with exactly `places` decimals at most: an axis writes every tick
     /// with the decimals its step needs.
     pub(crate) fn format_places(&self, value: f64, locale: &NumberLocale, places: u8) -> String {
+        if let Some(clock) = &self.clock {
+            return Self::format_clock(clock, value);
+        }
         if self.always_compact() {
             return self.format_compact(value, locale);
         }
@@ -456,6 +555,9 @@ impl NumberFormat {
 
     /// `value` short: `1.2K`, `12K`, `120K`, `1.2M`.
     pub fn format_compact(&self, value: f64, locale: &NumberLocale) -> String {
+        if let Some(clock) = &self.clock {
+            return Self::format_clock(clock, value);
+        }
         if !value.is_finite() {
             return "–".to_owned();
         }
