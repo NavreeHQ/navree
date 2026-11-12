@@ -1,0 +1,52 @@
+---
+title: "Device frames"
+description: "A screenshot or a live part of the product in a browser window or a phone, following the page's mode or fixed light or dark."
+---
+
+<UiPreview example="device-frames/default" />
+
+`BrowserFrame` draws a browser window, with its buttons and an address, around what it holds; `PhoneFrame` draws a phone, its camera and its screen at a phone's shape. Each holds a [Picture](/docs/components/picture/) or the live product: charts, cards, any component.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+let today = Picture::new("/img/today-1440.png", "Today in the Kesar app", 1440, 900);
+let browser = BrowserFrame::new(today).address("app.kesar.example/today");
+
+let sleep = Picture::new("/img/sleep-780.png", "Last night: a sleep score of 84", 780, 1688);
+let phone = PhoneFrame::new(sleep);
+```
+
+## Light and dark
+
+A frame follows the page's mode. `.mode(Mode::Dark)` or `.mode(Mode::Light)` fixes it, and what it holds is drawn in the same mode, components included: a dark screenshot stays dark on a light page.
+
+<UiPreview example="device-frames/modes" />
+
+## Captions
+
+`.caption(text)` adds a line under the frame, saying what it shows.
+
+## Anatomy
+
+<UiAnatomy component="device-frames" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The frame is a `<figure>`; its bar and camera are hidden from assistive technology, and a caption is its `<figcaption>`.
+- A picture inside needs its own alt text.
+
+</UiA11y>
+
+## API
+
+### BrowserFrame
+
+<UiProps type="BrowserFrame" />
+
+### PhoneFrame
+
+<UiProps type="PhoneFrame" />
