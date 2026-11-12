@@ -204,6 +204,7 @@
 
 mod account;
 mod account_controller;
+mod apps;
 mod controller;
 mod disconnect;
 mod entity;
@@ -241,6 +242,10 @@ mod token;
 mod two_factor;
 
 pub use account::ProfileUpdate;
+pub use apps::{
+    ANDROID_ASSOCIATION_PATH, ANDROID_ORIGIN_PREFIX, APPLE_ASSOCIATION_PATH, AndroidApp, AppleApp,
+    AppsOptions,
+};
 pub use account_controller::{
     AuthMessage, ChangePasswordInput, ConfirmTwoFactorInput, DisableTwoFactorInput,
     ForgotPasswordInput, RecoveryCodesResponse, ResetPasswordInput, TwoFactorVerifyInput,

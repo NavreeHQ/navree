@@ -511,7 +511,7 @@ impl AuthService {
         if client.cross_origin {
             return Err(refused("cross-origin ceremony"));
         }
-        if !self.options.passkeys.origins.contains(&client.origin) {
+        if !self.passkey_origins.contains(&client.origin) {
             return Err(refused(format!("origin {} not allowed", client.origin)));
         }
         let challenge = b64url(&client.challenge)

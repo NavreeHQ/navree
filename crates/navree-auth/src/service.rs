@@ -212,6 +212,9 @@ pub struct AuthService {
     sign_in_policies: OnceCell<Vec<Arc<dyn SignInPolicy>>>,
     pub(crate) policies: Policies,
     pub(crate) exchange: crate::exchange::KeyCache,
+    /// The origins passkey ceremonies may come from: `auth.passkeys.origins`
+    /// and the Android apps' signatures of `auth.apps`.
+    pub(crate) passkey_origins: Vec<String>,
 }
 
 impl Injectable for AuthService {
@@ -222,6 +225,7 @@ impl Injectable for AuthService {
             ProviderKey::of::<Encrypter>(),
             ProviderKey::of::<JwtService>(),
             ProviderKey::of::<AuthOptions>(),
+            ProviderKey::of::<crate::AppsOptions>(),
         ]
     }
 
@@ -232,6 +236,11 @@ impl Injectable for AuthService {
             let encrypter = r.get::<Encrypter>().await?;
             let jwt = r.get::<JwtService>().await?;
             let options = r.get::<AuthOptions>().await?;
+            let apps = r.get::<crate::AppsOptions>().await?;
+            let mut passkey_origins = options.passkeys.origins.clone();
+            passkey_origins.extend(apps.passkey_origins());
+            passkey_origins.sort();
+            passkey_origins.dedup();
             let app = r.app();
             // The app's cache when CacheModule is in the app (shared by
             // every instance with a shared store), else an in-process one.
@@ -281,6 +290,7 @@ impl Injectable for AuthService {
                 sign_in_policies: OnceCell::new(),
                 policies: Policies::default(),
                 exchange: crate::exchange::KeyCache::default(),
+                passkey_origins,
             })
         })
     }

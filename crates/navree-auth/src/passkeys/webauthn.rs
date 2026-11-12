@@ -250,6 +250,23 @@ mod tests {
         assert!(data.credential.is_none() && !data.user_verified());
     }
 
+    // The client data of a native app's assertion, in the shapes the
+    // platforms document: Android's Credential Manager names the app's
+    // signature and package; an Apple app signs for `https://<rp_id>`.
+    #[test]
+    fn native_client_data_is_read() {
+        let android = br#"{"type":"webauthn.get","challenge":"T1xCsnxM2DNL2KdK5CLa6fMhD7OBqho6syzInk_n-Uo","origin":"android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj_PROU","androidPackageName":"com.example.orders"}"#;
+        let data = ClientData::parse(android).unwrap();
+        assert_eq!(data.kind, "webauthn.get");
+        assert_eq!(
+            data.origin,
+            "android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj_PROU"
+        );
+        assert!(!data.cross_origin);
+        let apple = br#"{"type":"webauthn.get","challenge":"T1xCsnxM2DNL2KdK5CLa6fMhD7OBqho6syzInk_n-Uo","origin":"https://example.com"}"#;
+        assert_eq!(ClientData::parse(apple).unwrap().origin, "https://example.com");
+    }
+
     #[test]
     fn client_data_and_base64url_are_read() {
         let json = br#"{"type":"webauthn.get","challenge":"abc","origin":"https://app.example.com","crossOrigin":false,"other":1}"#;

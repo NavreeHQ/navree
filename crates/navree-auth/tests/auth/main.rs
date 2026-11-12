@@ -6,6 +6,7 @@ mod servers;
 mod support;
 
 mod access;
+mod apps;
 mod exchange;
 mod flow;
 mod impersonation;

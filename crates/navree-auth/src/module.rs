@@ -12,13 +12,14 @@ use navree_kernel::{
 };
 
 use crate::account_controller::AccountController;
+use crate::apps::AppLinksController;
 use crate::controller::AuthController;
 use crate::error::map_auth_error;
 use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SignInPolicy, Strategy,
+    AppsOptions, AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SignInPolicy, Strategy,
     StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
 };
 
@@ -107,7 +108,14 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         })),
         None => m.config::<AuthOptions>(),
     };
+    // The native apps' section is read here (not by `m.config`), so it is
+    // registered for `config:check` and the reference.
+    m.config_section::<AppsOptions>();
     m.exports::<AuthOptions>()
+        .factory(Factory::<AppsOptions>::new(|r: Resolver| async move {
+            Ok(Arc::new(crate::apps::apps_options(&r).await?))
+        }))
+        .exports::<AppsOptions>()
         .factory(
             Factory::<JwtService>::new(|r: Resolver| async move {
                 let options = r.get::<AuthOptions>().await?;
@@ -153,6 +161,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .controller::<AccountController>()
         .controller::<SessionController>()
         .controller::<PasskeyController>()
+        .controller::<AppLinksController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
     // Browsers signed in on the session cookie, after the JWT strategy: a
