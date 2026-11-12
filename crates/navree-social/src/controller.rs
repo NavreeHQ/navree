@@ -1,6 +1,7 @@
 //! The routes under `{api_prefix}{auth.routes_prefix}/social` (default
 //! `/api/auth/social`).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use http::request::Parts;
@@ -14,12 +15,13 @@ use navree_http::{
     Response, RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    Intent, LinkedAccount, RedirectOptions, Social, SocialCallback, SocialError, SocialOptions,
-    SocialRedirect,
+    Intent, LinkedAccount, NativeNonce, NativeSignIn, RedirectOptions, Social, SocialCallback,
+    SocialError, SocialOptions, SocialRedirect,
 };
 
 /// `GET .../redirect` query.
@@ -196,6 +198,8 @@ impl Controller for SocialController {
                 }),
         );
 
+        routes.extend(self.native_routes(&path));
+
         let social = self.social.clone();
         let accounts = move |CurrentPrincipal(principal): CurrentPrincipal| {
             let social = social.clone();
@@ -274,6 +278,176 @@ impl Controller for SocialController {
                     success_status: 204,
                     ..api("Disconnect a provider", &[401, 404, 409])
                 }),
+        );
+        routes
+    }
+}
+
+/// `POST .../notifications`: a provider's server-to-server notification.
+#[derive(Deserialize, ToSchema)]
+struct ProviderNotification {
+    /// The signed notification (a JWS).
+    payload: String,
+}
+
+/// The longest values a native post may carry, in bytes.
+const MAX_ID_TOKEN: usize = 16 * 1024;
+const MAX_STATE: usize = 4 * 1024;
+const MAX_CODE: usize = 1024;
+const MAX_USER: usize = 2 * 1024;
+
+/// Checks the sizes and types of a native post: a 400
+/// `validation_failed` naming the fields.
+fn check_native_post(post: &NativeSignIn) -> Result<(), AppError> {
+    let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut fail = |field: &str, message: &str| {
+        errors
+            .entry(field.to_owned())
+            .or_default()
+            .push(message.to_owned());
+    };
+    if post.id_token.trim().is_empty() {
+        fail("id_token", "The identity token is required.");
+    } else if post.id_token.len() > MAX_ID_TOKEN {
+        fail("id_token", "The identity token is too long.");
+    }
+    if post.state.trim().is_empty() {
+        fail("state", "The state is required.");
+    } else if post.state.len() > MAX_STATE {
+        fail("state", "The state is too long.");
+    }
+    if post
+        .authorization_code
+        .as_ref()
+        .is_some_and(|code| code.len() > MAX_CODE)
+    {
+        fail("authorization_code", "The authorization code is too long.");
+    }
+    match &post.user {
+        None | Some(Value::Null) => {}
+        Some(user @ (Value::Object(_) | Value::String(_))) => {
+            if user.to_string().len() > MAX_USER {
+                fail("user", "The user details are too long.");
+            }
+        }
+        Some(_) => fail("user", "The user details must be an object."),
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::validation(errors))
+    }
+}
+
+impl SocialController {
+    /// `POST {provider}/native/nonce`, `POST {provider}/native` and `POST
+    /// {provider}/notifications`.
+    fn native_routes(&self, path: &dyn Fn(&str) -> String) -> Vec<RouteDef> {
+        let mut routes = Vec::new();
+
+        let social = self.social.clone();
+        let nonce = move |Path(provider): Path<String>| {
+            let social = social.clone();
+            async move {
+                let nonce = social.native_nonce(&provider).await.map_err(social_error)?;
+                Ok::<_, AppError>(Json(nonce))
+            }
+        };
+        routes.push(
+            RouteDef::on(Method::POST, path("/{provider}/native/nonce"), nonce)
+                .public()
+                .name("social.native.nonce")
+                .api(ApiMeta {
+                    description: Some(
+                        "For the system's sign-in sheet of an app (`apple`, `google`): pass \
+                         `nonce` to the request (Google as is, Apple as its lower-case hex \
+                         SHA-256), then post the identity token with `state` to \
+                         `POST .../native` within `expires_in` seconds."
+                            .to_owned(),
+                    ),
+                    response: Some(schema_fn::<NativeNonce>),
+                    ..api("A one-time nonce for a sign-in from an app", &[404])
+                }),
+        );
+
+        let social = self.social.clone();
+        let native = move |Path(provider): Path<String>,
+                           meta: ClientMeta,
+                           Json(post): Json<NativeSignIn>| {
+            let social = social.clone();
+            async move {
+                check_native_post(&post)?;
+                let throttle = social
+                    .count_callback(meta.ip.as_deref())
+                    .await
+                    .map_err(social_error)?;
+                let profile = social
+                    .native_user(&provider, &post)
+                    .await
+                    .map_err(social_error)?;
+                let outcome = social
+                    .sign_in(&profile, &meta)
+                    .await
+                    .map_err(social_error)?;
+                social.clear_callback_throttle(throttle).await;
+                let body = social
+                    .present_outcome(outcome, None)
+                    .await
+                    .map_err(social_error)?;
+                Ok::<_, AppError>(Json(body))
+            }
+        };
+        routes.push(
+            RouteDef::on(Method::POST, path("/{provider}/native"), native)
+                .public()
+                .name("social.native")
+                .api(ApiMeta {
+                    description: Some(
+                        "Answers like `POST /auth/login` (the user and tokens, or a two-factor \
+                         challenge). Sign in with Apple also takes `authorization_code` (kept \
+                         to revoke the person's tokens later) and, on the first sign-in, \
+                         `user` with the name (display only)."
+                            .to_owned(),
+                    ),
+                    request: Some(schema_fn::<NativeSignIn>),
+                    response: Some(schema_fn::<navree_auth::LoginResponse>),
+                    ..api(
+                        "Sign in with an identity token from an app",
+                        &[400, 403, 404, 409, 429, 502],
+                    )
+                }),
+        );
+
+        let social = self.social.clone();
+        let notification =
+            move |Path(provider): Path<String>, Json(notification): Json<ProviderNotification>| {
+                let social = social.clone();
+                async move {
+                    social
+                        .receive_notification(&provider, &notification.payload)
+                        .await
+                        .map_err(social_error)?;
+                    Ok::<_, AppError>(Json(json!({})))
+                }
+            };
+        routes.push(
+            RouteDef::on(
+                Method::POST,
+                path("/{provider}/notifications"),
+                notification,
+            )
+            .public()
+            .name("social.notifications")
+            .api(ApiMeta {
+                description: Some(
+                    "Sign in with Apple's server-to-server notifications (`{payload}`, a \
+                         JWS signed by Apple): consent revoked, account deleted, email \
+                         forwarding changed. Register this URL with Apple."
+                        .to_owned(),
+                ),
+                request: Some(schema_fn::<ProviderNotification>),
+                ..api("Receive the provider's notifications", &[400, 404])
+            }),
         );
         routes
     }

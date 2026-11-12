@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use navree_auth::{AuthOptions, AuthService};
 use navree_config::ModuleBuilderConfigExt;
+use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::{Encrypter, Hasher};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
@@ -15,6 +16,7 @@ use navree_kernel::{
 use crate::controller::SocialController;
 use crate::error::map_social_error;
 use crate::migration::migrations;
+use crate::native::SocialRevoker;
 use crate::runtime::Runtime;
 use crate::{Social, SocialError, SocialOptions, SocialProvider};
 
@@ -121,6 +123,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SocialOptions>) {
         .exports::<Social>()
         .lifecycle::<Social>()
         .controller::<SocialController>()
+        .credential_revoker::<SocialRevoker>()
         .migrations(migrations())
         .map_error::<SocialError>(map_social_error);
 }

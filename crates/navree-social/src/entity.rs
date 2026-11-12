@@ -9,6 +9,74 @@
 //! provider_user_id) and per (user_id, provider). The token columns hold
 //! navree-crypto ciphertexts (`social.store_tokens`), never plain tokens.
 
+/// `social_account_clients(account_id → social_accounts ON DELETE CASCADE,
+/// client_id, updated_at)`: the OAuth client a linked account's stored
+/// tokens were issued to, when it is not the provider's configured
+/// `client_id`. Sign in with Apple gives an app's tokens to its bundle id
+/// and the web flow's to the Services ID, and revoking a token needs the
+/// client it belongs to.
+pub(crate) mod social_account_client {
+    use chrono::{DateTime, Utc};
+    use navree_db::Uow;
+    use navree_orm::{Executor, Model as _, OrmError, Record};
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    /// The client of an account's tokens.
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "social_account_clients", primary_key = "account_id")]
+    pub(crate) struct Model {
+        /// The linked account.
+        pub(crate) account_id: Uuid,
+        /// The client id the tokens were issued to.
+        pub(crate) client_id: String,
+        /// When it was recorded.
+        pub(crate) updated_at: DateTime<Utc>,
+    }
+
+    /// Records that `account_id`'s tokens belong to `client_id`.
+    pub(crate) async fn record(
+        uow: &Uow,
+        account_id: Uuid,
+        client_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), OrmError> {
+        let updated = Model::query()
+            .where_key(account_id)
+            .update(
+                uow,
+                [
+                    Model::CLIENT_ID.set(client_id.to_owned()),
+                    Model::UPDATED_AT.set(now),
+                ],
+            )
+            .await?;
+        if updated == 0 {
+            Model::insert(
+                uow,
+                [Model {
+                    account_id,
+                    client_id: client_id.to_owned(),
+                    updated_at: now,
+                }],
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// The client `account_id`'s tokens belong to, when one was recorded.
+    pub(crate) async fn of<E: Executor + ?Sized>(
+        exec: &E,
+        account_id: Uuid,
+    ) -> Result<Option<String>, OrmError> {
+        Ok(Model::find(exec, account_id)
+            .await?
+            .map(Record::into_inner)
+            .map(|row| row.client_id))
+    }
+}
+
 /// `social_accounts`: provider accounts linked to users.
 ///
 /// The module's own writes of accounts go through `insert`, `update`

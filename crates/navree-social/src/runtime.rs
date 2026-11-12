@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use navree_auth::{AuthOptions, AuthService};
+use navree_auth::{AppsOptions, AuthOptions, AuthService};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_crypto::jose::JwkSet;
@@ -48,6 +48,9 @@ pub(crate) struct Runtime {
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) http: HttpClient,
     pub(crate) jwks: JwksCache,
+    /// The bundle ids of the site's Apple apps (`auth.apps.apple`): the
+    /// audiences of Sign in with Apple's identity tokens from the apps.
+    pub(crate) apple_apps: Vec<String>,
     pub(crate) app: WeakAppContext,
 }
 
@@ -94,6 +97,15 @@ impl Runtime {
             clock,
             http,
             jwks: JwksCache::default(),
+            apple_apps: match app.try_get::<AppsOptions>().await {
+                Some(apps) => apps
+                    .apple
+                    .values()
+                    .map(|app| app.bundle_id.trim().to_owned())
+                    .filter(|bundle| !bundle.is_empty())
+                    .collect(),
+                None => Vec::new(),
+            },
             app: app.downgrade(),
             options,
         })
@@ -147,6 +159,19 @@ impl Runtime {
     pub(crate) async fn audit_after_commit(&self, uow: &Uow, entry: AuditEntry) {
         if let Some(sink) = self.audit_sink().await {
             uow.after_commit(move || Box::pin(record(sink, entry)));
+        }
+    }
+
+    /// Emits `event` now, when the app has an `EventBus`.
+    pub(crate) async fn emit<E: Event>(&self, event: E) {
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let Some(bus) = app.try_get::<EventBus>().await else {
+            return;
+        };
+        if let Err(error) = bus.emit(event).await {
+            tracing::warn!(target: "navree::social", event = E::NAME, %error, "a social event listener failed");
         }
     }
 
@@ -315,7 +340,10 @@ mod tests {
         let counter = &fetches;
         let fetch = move || async move {
             counter.fetch_add(1, Ordering::SeqCst);
-            Ok((set("a"), jwks_lifetime(Some("public, max-age=21600, must-revalidate"))))
+            Ok((
+                set("a"),
+                jwks_lifetime(Some("public, max-age=21600, must-revalidate")),
+            ))
         };
         let url = "https://idp/keys";
         cache.get(url, Some("a"), at(0), fetch).await.unwrap();

@@ -82,6 +82,7 @@ mod events;
 mod fake;
 mod migration;
 mod module;
+mod native;
 mod oauth;
 mod options;
 mod provider;
@@ -93,7 +94,7 @@ mod user;
 pub use authorize::AuthorizeUrl;
 pub use entity::social_account;
 pub use error::SocialError;
-pub use events::{SocialAccountLinked, SocialAccountUnlinked};
+pub use events::{SocialAccountLinked, SocialAccountUnlinked, SocialProviderNotice};
 pub use fake::SocialFake;
 pub use migration::SOCIAL_MIGRATIONS;
 pub use module::SocialModule;
@@ -101,6 +102,6 @@ pub use options::{LinkByEmail, ProviderConfig, SocialOptions, TwoFactorPolicy};
 pub use provider::SocialProvider;
 pub use service::Social;
 pub use user::{
-    Intent, LinkedAccount, ProviderToken, RedirectOptions, SocialCallback, SocialRedirect,
-    SocialUser,
+    Intent, LinkedAccount, NativeNonce, NativeSignIn, ProviderToken, RedirectOptions,
+    SocialCallback, SocialRedirect, SocialUser,
 };

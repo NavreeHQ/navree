@@ -16,7 +16,7 @@ use serde_json::json;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-use crate::entity::social_account;
+use crate::entity::{social_account, social_account_client};
 use crate::events::{SocialAccountLinked, SocialAccountUnlinked};
 use crate::fake::{FakeState, SocialFake};
 use crate::oauth;
@@ -33,7 +33,7 @@ use crate::{
 const THROTTLE_WINDOW_SECS: i64 = 60;
 
 /// Where provider calls go.
-enum Backend {
+pub(crate) enum Backend {
     /// The providers' real endpoints.
     Real,
     /// [`SocialFake`]'s answers.
@@ -54,7 +54,7 @@ enum Backend {
 ///   app's `CacheModule`, or an in-process cache) until it expires. With
 ///   several app instances, use a shared cache store.
 pub struct Social {
-    backend: Backend,
+    pub(crate) backend: Backend,
     runtime: OnceLock<Arc<Runtime>>,
     no_password: OnceCell<String>,
 }
@@ -91,7 +91,7 @@ impl Social {
         matches!(self.backend, Backend::Fake(_))
     }
 
-    fn rt(&self) -> Result<&Arc<Runtime>, SocialError> {
+    pub(crate) fn rt(&self) -> Result<&Arc<Runtime>, SocialError> {
         self.runtime.get().ok_or(SocialError::NotBound)
     }
 
@@ -194,12 +194,34 @@ impl Social {
     ) -> Result<(SocialUser, StatePayload), SocialError> {
         let rt = self.rt()?;
         let entry = rt.provider(provider)?;
-        let state = StatePayload::open(&rt.encrypter, &callback.state)?;
+        let state = self.use_state(rt, provider, &callback.state).await?;
+        if callback.code.trim().is_empty() {
+            return Err(SocialError::provider(entry.name.clone(), "no code"));
+        }
+        let user = match &self.backend {
+            Backend::Real => {
+                let token = oauth::exchange(rt, entry, &callback.code, &state).await?;
+                oauth::profile(rt, entry, token, &state, callback).await?
+            }
+            Backend::Fake(fake) => fake.exchange(provider, &callback.code, &entry.name)?,
+        };
+        Ok((user, state))
+    }
+
+    /// Opens a sealed state for `provider` and uses it up: sealed by this
+    /// app, for this provider, not expired, and not used before (its id is
+    /// remembered in the cache until it expires).
+    pub(crate) async fn use_state(
+        &self,
+        rt: &Runtime,
+        provider: &str,
+        sealed: &str,
+    ) -> Result<StatePayload, SocialError> {
+        let state = StatePayload::open(&rt.encrypter, sealed)?;
         let now = rt.now().timestamp();
         if state.provider != provider || state.exp <= now {
             return Err(SocialError::InvalidState);
         }
-        // A state works once: remember its id until it expires.
         let remaining = Duration::from_secs(u64::try_from(state.exp - now).unwrap_or(1).max(1));
         let first_use = rt
             .cache
@@ -212,17 +234,7 @@ impl Social {
         if !first_use {
             return Err(SocialError::InvalidState);
         }
-        if callback.code.trim().is_empty() {
-            return Err(SocialError::provider(entry.name.clone(), "no code"));
-        }
-        let user = match &self.backend {
-            Backend::Real => {
-                let token = oauth::exchange(rt, entry, &callback.code, &state).await?;
-                oauth::profile(rt, entry, token, &state, callback).await?
-            }
-            Backend::Fake(fake) => fake.exchange(provider, &callback.code, &entry.name)?,
-        };
-        Ok((user, state))
+        Ok(state)
     }
 
     /// Signs `social_user` in, like a password login: finds the user by a
@@ -331,7 +343,10 @@ impl Social {
     /// Disconnects `provider` from `user_id` in `uow`.
     /// [`SocialError::NotLinked`] (404) when it is not connected;
     /// [`SocialError::LastSignInMethod`] (409) when the user has no
-    /// password and no other provider. Emits [`SocialAccountUnlinked`] and
+    /// password and no other provider. Stored tokens the provider can
+    /// revoke (Sign in with Apple's, Google's) are revoked at the provider
+    /// first ([`SocialError::ProviderUnavailable`] leaves the account
+    /// linked). Emits [`SocialAccountUnlinked`] and
     /// audits `social.unlinked` after the commit.
     pub async fn unlink(
         &self,
@@ -359,6 +374,10 @@ impl Social {
                 provider: provider_name,
             });
         }
+        // The provider's tokens die with the link (Apple requires it):
+        // revoked first, so a provider that cannot be reached leaves the
+        // account linked for another try.
+        self.revoke_account(rt, uow, &account).await?;
         let event = SocialAccountUnlinked {
             user_id,
             provider: account.provider.clone(),
@@ -445,11 +464,14 @@ impl Social {
         };
         let refresh_token = rt.encrypter.decrypt_string(refresh_token)?;
         let token = match &self.backend {
-            Backend::Real => oauth::refresh(rt, entry, &refresh_token).await?,
+            Backend::Real => {
+                let client = social_account_client::of(&rt.db, account.id).await?;
+                oauth::refresh(rt, entry, &refresh_token, client.as_deref()).await?
+            }
             Backend::Fake(fake) => fake.refresh(provider, &entry.name)?,
         };
         let access = token.access_token.expose().clone();
-        let columns = TokenColumns::of(rt, Some(&token))?;
+        let columns = TokenColumns::of(rt, provider, Some(&token))?;
         let now = rt.now();
         self.write(rt, None, |uow| async move {
             social_account::update(&uow, account.id, |row| {
@@ -654,7 +676,8 @@ impl Social {
         social_user: &SocialUser,
     ) -> Result<social_account::Model, SocialError> {
         let now = rt.now();
-        let tokens = TokenColumns::of(rt, social_user.token.as_ref())?;
+        let tokens = TokenColumns::of(rt, &entry.key, social_user.token.as_ref())?;
+        let stores_tokens = tokens.access.is_some();
         let row = social_account::Model {
             id: Uuid::now_v7(),
             user_id,
@@ -681,6 +704,9 @@ impl Social {
                     },
                     _ => error.into(),
                 })?;
+        if stores_tokens {
+            record_token_client(rt, uow, account.id, social_user, now).await?;
+        }
         rt.emit_after_commit(
             uow,
             SocialAccountLinked {
@@ -710,9 +736,12 @@ impl Social {
         account: social_account::Model,
         social_user: &SocialUser,
     ) -> Result<social_account::Model, SocialError> {
-        let tokens = TokenColumns::of(rt, social_user.token.as_ref())?;
+        let tokens = TokenColumns::of(rt, &account.provider, social_user.token.as_ref())?;
         let keep = |new: &Option<String>, old: &Option<String>| new.clone().or_else(|| old.clone());
         let now = rt.now();
+        if tokens.refresh.is_some() {
+            record_token_client(rt, uow, account.id, social_user, now).await?;
+        }
         Ok(social_account::update(uow, account.id, |row| {
             row.email = keep(&social_user.email, &account.email);
             // Apple sends the name on the first sign-in only.
@@ -732,7 +761,7 @@ impl Social {
 
     /// Runs `f` in the task's unfinished unit of work, or else in a new one
     /// committed when `f` succeeds.
-    async fn write<T, F, Fut>(
+    pub(crate) async fn write<T, F, Fut>(
         &self,
         rt: &Runtime,
         request_id: Option<String>,
@@ -872,7 +901,7 @@ fn entry_for(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
 
 /// The account linked to `provider_user_id` at `provider`, read through
 /// `exec`.
-async fn find_account<E: Executor + ?Sized>(
+pub(crate) async fn find_account<E: Executor + ?Sized>(
     exec: &E,
     provider: &str,
     provider_user_id: &str,
@@ -886,7 +915,7 @@ async fn find_account<E: Executor + ?Sized>(
 }
 
 /// `user_id`'s account at `provider`, read through `exec`.
-async fn find_user_account<E: Executor + ?Sized>(
+pub(crate) async fn find_user_account<E: Executor + ?Sized>(
     exec: &E,
     user_id: Uuid,
     provider: &str,
@@ -899,8 +928,44 @@ async fn find_user_account<E: Executor + ?Sized>(
         .map(Record::into_inner))
 }
 
+/// Records the client `social_user`'s tokens were issued to, when it is
+/// not the provider's configured one: the audience of the verified ID
+/// token (Sign in with Apple's bundle id for an app's sign-in).
+async fn record_token_client(
+    rt: &Runtime,
+    uow: &Uow,
+    account_id: Uuid,
+    social_user: &SocialUser,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), SocialError> {
+    // Only Sign in with Apple issues tokens to clients other than the
+    // configured one (an app's bundle id).
+    let Some(entry) = rt
+        .providers
+        .get(&social_user.provider)
+        .filter(|entry| entry.kind == Kind::Apple)
+    else {
+        return Ok(());
+    };
+    let client = social_user
+        .raw
+        .get("aud")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(entry.config.client_id.as_str());
+    if client == entry.config.client_id {
+        // The configured client: a row only when one says otherwise.
+        social_account_client::Model::query()
+            .where_key(account_id)
+            .delete(uow)
+            .await?;
+        return Ok(());
+    }
+    social_account_client::record(uow, account_id, client, now).await?;
+    Ok(())
+}
+
 /// The token columns of an account: encrypted, and only with
-/// `store_tokens`.
+/// `store_tokens` (Apple's always).
 struct TokenColumns {
     access: Option<String>,
     refresh: Option<String>,
@@ -909,9 +974,21 @@ struct TokenColumns {
 }
 
 impl TokenColumns {
-    fn of(rt: &Runtime, token: Option<&ProviderToken>) -> Result<TokenColumns, SocialError> {
+    /// The columns of `provider`'s `token`. Sign in with Apple's tokens are
+    /// kept whatever `store_tokens` says: deleting the account or
+    /// disconnecting Apple must revoke them at Apple.
+    fn of(
+        rt: &Runtime,
+        provider: &str,
+        token: Option<&ProviderToken>,
+    ) -> Result<TokenColumns, SocialError> {
+        let keep = rt.options.store_tokens
+            || rt
+                .providers
+                .get(provider)
+                .is_some_and(|entry| entry.kind == Kind::Apple);
         let token = match token {
-            Some(token) if rt.options.store_tokens => token,
+            Some(token) if keep => token,
             _ => {
                 return Ok(TokenColumns {
                     access: None,
