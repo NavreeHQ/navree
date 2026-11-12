@@ -10,7 +10,17 @@ use serde::de::DeserializeOwned;
 
 use super::DataTable;
 use crate::node::{Node, el};
-use crate::table::{FilterBar, TableRow};
+use crate::table::{ColumnRole, FilterBar, TableRow};
+
+/// A column role's word on a cell, for the reader of the table.
+fn role_name(role: ColumnRole) -> &'static str {
+    match role {
+        ColumnRole::Title => "title",
+        ColumnRole::Subtitle => "subtitle",
+        ColumnRole::Status => "status",
+        ColumnRole::Trailing => "trailing",
+    }
+}
 
 impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F> {
     /// The rows as a tree, when a native client asked and the table has
@@ -26,24 +36,55 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             return None;
         }
         let state = &self.query.state;
+        let roles = R::column_roles();
+        let role_of = |name: &str| {
+            roles
+                .iter()
+                .find(|(column, _)| *column == name)
+                .map(|(_, role)| role_name(*role))
+        };
+        // A subtitle may be a column the table does not show: it comes after
+        // the shown ones, with its name and its heading.
+        let hidden: Vec<usize> = roles
+            .iter()
+            .filter(|(_, role)| *role == ColumnRole::Subtitle)
+            .filter_map(|(name, _)| R::COLUMNS.iter().position(|column| column.name == *name))
+            .filter(|at| !state.cols.contains(at))
+            .collect();
         let mut rows = Vec::with_capacity(self.data.rows.len());
         let mut text = String::new();
         for row in self.data.rows {
-            let mut cells = Vec::with_capacity(state.cols.len());
+            let mut cells = Vec::with_capacity(state.cols.len() + hidden.len());
             for at in &state.cols {
                 let draw = self
                     .cells
                     .iter()
                     .find(|(name, _)| *name == self.query.column(*at).name)
                     .map(|(_, draw)| draw);
-                cells.push(el("td").child(match draw {
-                    Some(draw) => draw(row),
-                    None => {
-                        text.clear();
-                        row.write_text(*at, &mut text);
-                        Node::Text(text.clone().into())
-                    }
-                }));
+                cells.push(
+                    el("td")
+                        .attr_opt("data-role", role_of(self.query.column(*at).name))
+                        .child(match draw {
+                            Some(draw) => draw(row),
+                            None => {
+                                text.clear();
+                                row.write_text(*at, &mut text);
+                                Node::Text(text.clone().into())
+                            }
+                        }),
+                );
+            }
+            for at in &hidden {
+                text.clear();
+                row.write_text(*at, &mut text);
+                let column = &R::COLUMNS[*at];
+                cells.push(
+                    el("td")
+                        .attr("data-role", "subtitle")
+                        .attr("data-col", column.name)
+                        .attr("data-label", column.label)
+                        .child(Node::Text(text.clone().into())),
+                );
             }
             rows.push(
                 el("tr")
@@ -51,6 +92,10 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                     .attr_opt(
                         "data-ui-row-href",
                         self.row_href.as_ref().map(|href| href(row)),
+                    )
+                    .attr_opt(
+                        "data-ui-row-opens",
+                        self.row_opens.as_ref().map(|opens| opens(row)),
                     )
                     .child(cells),
             );

@@ -56,6 +56,7 @@ mod saved;
 mod selection;
 mod view;
 
+pub use crate::hint::ColumnRole;
 pub use csv::write_csv_field;
 pub use edit::EditCell;
 pub(crate) use query::Shape;
@@ -312,6 +313,13 @@ pub trait TableRow {
 
     /// Writes column `column`'s cell as plain text, for a file or a label.
     fn write_text(&self, column: usize, out: &mut String);
+
+    /// What columns are to a record, by name: `#[col(role = title)]`. A
+    /// native client draws each record of a narrow table as a row of a list
+    /// by them; a browser's table does not change.
+    fn column_roles() -> &'static [(&'static str, ColumnRole)] {
+        &[]
+    }
 }
 
 /// Where a cell writes. It can only escape: there is no way to write markup through

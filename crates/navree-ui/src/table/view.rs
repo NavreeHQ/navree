@@ -589,6 +589,9 @@ pub struct DataTable<'a, R, F = NoFilter> {
     selectable_if: Option<RowFn<'a, R, bool>>,
     row_actions: Option<RowFn<'a, R, Vec<RowAction>>>,
     row_href: Option<RowFn<'a, R, String>>,
+    /// What a row opens in place for a native client, by a `GET` that answers ops.
+    #[cfg(feature = "native-preview")]
+    row_opens: Option<RowFn<'a, R, String>>,
     sticky_rows: Option<RowFn<'a, R, bool>>,
     detail: Option<RowFn<'a, R, Node>>,
     export: Option<Href>,
@@ -641,6 +644,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             selectable_if: None,
             row_actions: None,
             row_href: None,
+            #[cfg(feature = "native-preview")]
+            row_opens: None,
             sticky_rows: None,
             detail: None,
             export: None,
@@ -862,6 +867,19 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// Makes a click anywhere on a row, outside its controls, go here.
     pub fn row_href(mut self, href: impl Fn(&R) -> String + 'a) -> Self {
         self.row_href = Some(Box::new(href));
+        self
+    }
+
+    /// What a tap on a row opens where the reader is, by a `GET` to the
+    /// address that answers ops (a drawer, a sheet): the meaning of the link
+    /// or form the row's own cell holds for that. A native client opens it
+    /// from the whole row; a browser's table does not change.
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn row_opens(mut self, opens: impl Fn(&R) -> String + 'a) -> Self {
+        #[cfg(feature = "native-preview")]
+        {
+            self.row_opens = Some(Box::new(opens));
+        }
         self
     }
 

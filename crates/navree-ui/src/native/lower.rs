@@ -941,7 +941,14 @@ impl Cx {
     pub(crate) fn button(&mut self, element: &Element) -> Read<n::Button> {
         hooks(element, &["data-ui-click", "data-ui-refresh"])?;
         let mut icon = None;
+        let mut said = None;
         for child in flat(element.child_nodes()) {
+            if let Node::Static(text) = child
+                && let Some(role) = crate::hint::role_of(text)
+            {
+                said = Some(role);
+                continue;
+            }
             let Node::Element(part) = child else { continue };
             match slot(part).as_deref() {
                 Some("icon") => {
@@ -979,6 +986,17 @@ impl Cx {
             Some("ghost" | "link") => (n::Role::None, n::Prominence::Low),
             None | Some("secondary") => (n::Role::None, n::Prominence::Medium),
             Some(other) => return fail(format!("a button of the `{other}` variant")),
+        };
+        // What the page said the button is for comes before what its look says.
+        let role = match said {
+            Some(crate::Role::Primary) => n::Role::Primary,
+            Some(crate::Role::Secondary) => n::Role::Secondary,
+            Some(crate::Role::Destructive) => n::Role::Destructive,
+            Some(crate::Role::Cancel) => n::Role::Cancel,
+            Some(crate::Role::Confirm) => n::Role::Confirm,
+            Some(crate::Role::Create) => n::Role::Create,
+            Some(crate::Role::Navigation) => n::Role::Navigation,
+            None => role,
         };
         Ok(n::Button {
             id: id(element),

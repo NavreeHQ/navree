@@ -79,6 +79,7 @@ pub mod prelude {
 #[cfg(feature = "access")]
 pub mod ability;
 mod asked;
+mod hint;
 pub mod assets;
 #[rustfmt::skip]
 mod assets_gen;
@@ -129,6 +130,7 @@ pub use flow::{
     TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
 pub use form::{FormView, Money, Submit};
+pub use hint::Role;
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};

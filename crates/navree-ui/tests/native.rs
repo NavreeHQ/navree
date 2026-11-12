@@ -1454,3 +1454,277 @@ async fn the_shell_comes_from_the_error_pages_builder() {
             .is_some_and(|theme| theme.accent.is_some() && theme.accent_dark.is_some())
     );
 }
+
+/// A customer, as a table that says what its columns are to a record.
+#[derive(Clone, TableRow)]
+#[table(sort = "name", per = 2, per_pages(2, 10))]
+struct CustomerRow {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, sticky, role = title)]
+    name: String,
+    #[col(hidden, role = subtitle)]
+    city: String,
+    #[col(role = status)]
+    state: String,
+    #[col(numeric, role = trailing)]
+    spent: i64,
+}
+
+/// The same table, saying nothing of its columns.
+#[derive(Clone, TableRow)]
+#[table(sort = "name", per = 2, per_pages(2, 10))]
+struct PlainCustomerRow {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, sticky)]
+    name: String,
+    #[col(hidden)]
+    city: String,
+    state: String,
+    #[col(numeric)]
+    spent: i64,
+}
+
+fn customers() -> Vec<CustomerRow> {
+    [
+        (1, "Gurpreet Sandhu", "Amritsar", "Active", 1_24_500),
+        (2, "Simran Grewal", "Jalandhar", "Paused", 8_400),
+    ]
+    .into_iter()
+    .map(|(id, name, city, state, spent)| CustomerRow {
+        id,
+        name: name.to_owned(),
+        city: city.to_owned(),
+        state: state.to_owned(),
+        spent,
+    })
+    .collect()
+}
+
+fn customers_view(roles: bool, opens: bool) -> View {
+    let query: TableQuery<CustomerRow, NoFilter> = TableQuery::parse("/customers", "");
+    let page = TablePage::new(customers(), 2);
+    let mut table = DataTable::new("customers", &query, &page).row_href(|row| format!("/customers/{}", row.id));
+    if opens {
+        table = table.row_opens(|row| format!("/customers/{}/peek", row.id));
+    }
+    let new = Button::primary("New customer").href("/customers/new");
+    let new = if roles {
+        new.role(navree_ui::Role::Create)
+    } else {
+        new
+    };
+    View::new("Customers").body((new, table))
+}
+
+#[test]
+fn a_button_says_its_role_only_to_a_native_client() {
+    let build = || {
+        View::new("x").body((
+            Button::primary("New customer")
+                .href("/customers/new")
+                .role(navree_ui::Role::Create),
+            Button::outline("Back").href("/").role(navree_ui::Role::Navigation),
+            Button::new("Keep"),
+        ))
+    };
+    let page = TestNative::build(phone(), build);
+    let roles: Vec<(String, n::Role)> = page
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Button(button) => Some((button.label.clone(), button.role)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            ("New customer".to_owned(), n::Role::Create),
+            ("Back".to_owned(), n::Role::Navigation),
+            ("Keep".to_owned(), n::Role::None),
+        ]
+    );
+    // Built for a browser, the page carries no word of it.
+    let plain = View::new("x").body((
+        Button::primary("New customer").href("/customers/new"),
+        Button::outline("Back").href("/"),
+        Button::new("Keep"),
+    ));
+    assert_eq!(build().to_html(), plain.to_html());
+}
+
+#[test]
+fn a_table_says_its_column_roles_and_what_a_row_opens() {
+    let page = TestNative::build(phone(), || customers_view(true, true));
+    assert!(page.is_native(), "{:?}", page.why());
+    let Some(N::Region(region)) = page.find("customers") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    let columns: Vec<(&str, Option<n::ColumnRole>, bool)> = table
+        .columns
+        .iter()
+        .map(|column| (column.label.as_str(), column.role, column.secondary))
+        .collect();
+    assert_eq!(
+        columns,
+        [
+            ("Name", Some(n::ColumnRole::Title), false),
+            ("State", Some(n::ColumnRole::Status), false),
+            ("Spent", Some(n::ColumnRole::Trailing), false),
+            // The hidden column the page named as each record's line under its name.
+            ("City", Some(n::ColumnRole::Subtitle), true),
+        ]
+    );
+    let first = &table.rows[0];
+    assert_eq!(first.cells.len(), table.columns.len());
+    assert!(matches!(&first.cells[3], N::Text(text) if text.value == "Amritsar"));
+    // A tap on a row opens the record where the reader is.
+    assert_eq!(
+        first.action,
+        Some(Action::Request {
+            method: n::Method::Get,
+            href: "/customers/1/peek".to_owned(),
+            fields: Vec::new(),
+        })
+    );
+    // With nothing it opens, a row leads where its link goes.
+    let leads = TestNative::build(phone(), || customers_view(true, false));
+    let Some(N::Region(region)) = leads.find("customers") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    assert_eq!(table.rows[0].action, Some(Action::navigate("/customers/1")));
+}
+
+#[test]
+fn hints_never_change_the_html() {
+    // Built for a browser, a page with every hint is the page without them.
+    let with = customers_view(true, true).to_html();
+    let without = customers_view(false, false).to_html();
+    assert_eq!(with, without);
+    // And a table whose derive says roles writes what the same table without them writes.
+    let query: TableQuery<PlainCustomerRow, NoFilter> = TableQuery::parse("/customers", "");
+    let rows = customers()
+        .into_iter()
+        .map(|row| PlainCustomerRow {
+            id: row.id,
+            name: row.name,
+            city: row.city,
+            state: row.state,
+            spent: row.spent,
+        })
+        .collect();
+    let page = TablePage::new(rows, 2);
+    let plain = View::new("Customers")
+        .body((
+            Button::primary("New customer").href("/customers/new"),
+            DataTable::new("customers", &query, &page).row_href(|row| format!("/customers/{}", row.id)),
+        ))
+        .to_html();
+    assert_eq!(with, plain);
+}
+
+#[test]
+fn a_reused_node_writes_the_html_it_always_did() {
+    // A page and a button built while a native client asked, kept, and written
+    // for a browser later.
+    let mut kept_view = None;
+    let mut kept_button = None;
+    TestNative::build(phone(), || {
+        kept_button = Some(navree_ui::Node::from(
+            Button::primary("Refund")
+                .href("/orders/1/refund")
+                .role(navree_ui::Role::Destructive),
+        ));
+        let view = order_page(&shell().for_request("/orders/1", &http::HeaderMap::new())).to_view();
+        kept_view = Some(view.clone());
+        view
+    });
+    let browser = order_page(&shell().for_request("/orders/1", &http::HeaderMap::new()))
+        .to_view()
+        .to_html();
+    assert_eq!(kept_view.expect("a view").to_html(), browser);
+    assert_eq!(
+        render(&kept_button.expect("a button")),
+        render(&Button::primary("Refund").href("/orders/1/refund").into())
+    );
+    // A part built outside any request is read as markup, and nothing panics.
+    let at_start = Button::primary("Scan").href("/scan").role(navree_ui::Role::Primary);
+    let page = TestNative::of(&View::new("x").body(at_start));
+    assert!(page.is_native());
+}
+
+#[tokio::test]
+async fn a_reused_page_answers_a_browser_with_its_html() {
+    // A view an app kept from a native client's request, answered to a browser.
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(App)
+        .module(Reuse)
+        .build()
+        .await;
+    let native = app
+        .client()
+        .get("/kept")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    assert!(envelope(&native.text()).screen.is_some());
+    let browser = app.client().get("/kept").send().await.text();
+    let expected = order_page(&shell().for_request("/orders/1", &http::HeaderMap::new()))
+        .to_view()
+        .to_html();
+    assert_eq!(browser, expected);
+}
+
+/// A route that keeps the view it built for its first request, whoever asked,
+/// and answers every later request with it.
+struct Reuse;
+
+impl Module for Reuse {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<KeptPage>();
+    }
+}
+
+struct KeptPage;
+
+impl Injectable for KeptPage {
+    fn dependencies() -> Vec<ProviderKey> {
+        Vec::new()
+    }
+
+    fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Self) })
+    }
+}
+
+impl Controller for KeptPage {
+    fn prefix(&self) -> &'static str {
+        ""
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        static KEPT: std::sync::OnceLock<View> = std::sync::OnceLock::new();
+        vec![
+            RouteDef::on(Method::GET, "!/kept", || async {
+                KEPT.get_or_init(|| {
+                    order_page(&shell().for_request("/orders/1", &http::HeaderMap::new())).to_view()
+                })
+                .clone()
+            })
+            .public(),
+        ]
+    }
+}

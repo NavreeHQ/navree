@@ -253,6 +253,18 @@ impl Button {
         self
     }
 
+    /// Says what the button is for, when its look does not: a native client
+    /// places it as its own system places that kind of action. A browser's
+    /// page does not change.
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn role(mut self, role: crate::Role) -> Self {
+        #[cfg(feature = "native-preview")]
+        if crate::native::scope::native().is_some() {
+            self.el = self.el.child(crate::hint::mark(role));
+        }
+        self
+    }
+
     fn into_node(self) -> Node {
         let mut root = self.el;
         root.tag = if self.href.is_some() { "a" } else { "button" };

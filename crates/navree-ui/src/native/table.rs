@@ -91,9 +91,20 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
                             if slot(row).is_some() {
                                 return fail("a row that is more than a record");
                             }
+                            if table.rows.is_empty() {
+                                roles(row, &mut table.columns)?;
+                            }
                             let mut read = cx.table_row(row)?;
-                            read.action = attr(row, "data-ui-row-href")
-                                .map(|href| Action::navigate(href.into_owned()));
+                            // What the row opens in place comes before where it leads.
+                            read.action = match attr(row, "data-ui-row-opens") {
+                                Some(opens) => Some(Action::Request {
+                                    method: n::Method::Get,
+                                    href: opens.into_owned(),
+                                    fields: Vec::new(),
+                                }),
+                                None => attr(row, "data-ui-row-href")
+                                    .map(|href| Action::navigate(href.into_owned())),
+                            };
                             table.rows.push(read);
                         }
                         Node::Raw(_) | Node::Static(_) => {
@@ -148,6 +159,50 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
         }),
         children: vec![N::Table(table)],
     })])
+}
+
+/// The roles a native client's rows say their columns have: on each cell
+/// of the first row, and a column the table does not show after the others.
+fn roles(row: &Element, columns: &mut Vec<n::Column>) -> Read<()> {
+    for (at, cell) in elements(row)?.into_iter().enumerate() {
+        let Some(role) = attr(cell, "data-role") else {
+            continue;
+        };
+        let role = match role.as_ref() {
+            "title" => n::ColumnRole::Title,
+            "subtitle" => n::ColumnRole::Subtitle,
+            "status" => n::ColumnRole::Status,
+            "trailing" => n::ColumnRole::Trailing,
+            other => return fail(format!("a column whose role is `{other}`")),
+        };
+        if let Some(column) = columns.get_mut(at) {
+            column.role = Some(role);
+        } else {
+            columns.push(n::Column {
+                key: attr(cell, "data-col").map(Cow::into_owned),
+                label: attr(cell, "data-label")
+                    .map(Cow::into_owned)
+                    .unwrap_or_default(),
+                role: Some(role),
+                secondary: true,
+                ..n::Column::default()
+            });
+        }
+    }
+    // The column the page said is the title is the one: the sticky column
+    // stands in for it only when none was said.
+    let cells = elements(row)?;
+    if let Some(said) = cells
+        .iter()
+        .position(|cell| attr(cell, "data-role").as_deref() == Some("title"))
+    {
+        for (at, column) in columns.iter_mut().enumerate() {
+            if at != said && column.role == Some(n::ColumnRole::Title) {
+                column.role = None;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The columns, from the one row of the head.

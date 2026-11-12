@@ -36,6 +36,7 @@ struct ColHints {
     cell: Option<Path>,
     link: Option<LitStr>,
     badge: Option<Path>,
+    role: Option<syn::Ident>,
 }
 
 fn col_hints(attrs: &[syn::Attribute]) -> syn::Result<ColHints> {
@@ -68,9 +69,10 @@ fn col_hints(attrs: &[syn::Attribute]) -> syn::Result<ColHints> {
                 "cell" => out.cell = Some(meta.value()?.parse()?),
                 "link" => out.link = Some(meta.value()?.parse()?),
                 "badge" => out.badge = Some(meta.value()?.parse()?),
+                "role" => out.role = Some(meta.value()?.parse()?),
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `col` option `{key}`: expected skip, key, sortable, numeric, hide_on_mobile, search, strong, sticky, sticky_end, hidden, truncate, wrap, locked, width, align, kind, filter, options, source, group, label, cell, link or badge"
+                        "unknown `col` option `{key}`: expected skip, key, sortable, numeric, hide_on_mobile, search, strong, sticky, sticky_end, hidden, truncate, wrap, locked, width, align, kind, filter, options, source, group, label, cell, link, badge or role"
                     )));
                 }
             }
@@ -189,6 +191,7 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
     let mut cells = Vec::new();
     let mut texts = Vec::new();
     let mut names = Vec::new();
+    let mut roles = Vec::new();
     let mut key = quote!(::core::option::Option::None);
     let mut key_kind = quote!(#ui::table::ValueKind::Int);
     for field in &fields.named {
@@ -206,6 +209,23 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
         }
         let index = columns.len();
         names.push(name.clone());
+        if let Some(role) = &hint.role {
+            let role = match role.to_string().as_str() {
+                "title" => quote!(#ui::table::ColumnRole::Title),
+                "subtitle" => quote!(#ui::table::ColumnRole::Subtitle),
+                "status" => quote!(#ui::table::ColumnRole::Status),
+                "trailing" => quote!(#ui::table::ColumnRole::Trailing),
+                other => {
+                    return Err(syn::Error::new_spanned(
+                        role,
+                        format!(
+                            "`role = {other}`: expected title, subtitle, status or trailing"
+                        ),
+                    ));
+                }
+            };
+            roles.push(quote!((#name, #role)));
+        }
         let label = hint
             .label
             .as_ref()
@@ -363,6 +383,14 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
     };
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    // Only a table that says roles has the method: the others keep the trait's.
+    let column_roles = (!roles.is_empty()).then(|| {
+        quote! {
+            fn column_roles() -> &'static [(&'static str, #ui::table::ColumnRole)] {
+                &[#(#roles),*]
+            }
+        }
+    });
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #ui::table::TableRow for #ident #ty_generics #where_clause {
@@ -395,6 +423,8 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
                     _ => {}
                 }
             }
+
+            #column_roles
         }
     })
 }
