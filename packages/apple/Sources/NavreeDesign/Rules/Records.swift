@@ -32,7 +32,7 @@ public enum RecordRules {
         let cells = record.cells
         let titleIndex = columns.firstIndex { $0.role == .title } ?? 0
         let trailingIndex = columns.firstIndex { $0.role == .trailing }
-            ?? columns.indices.first { $0 != titleIndex && columns[$0].numeric && !columns[$0].secondary }
+            ?? columns.indices.last { $0 != titleIndex && columns[$0].numeric && !columns[$0].secondary }
 
         var row = RecordRow(
             title: "", subtitle: [], trailing: nil, trailingLabel: nil, statuses: [], action: record.action,
@@ -64,6 +64,9 @@ public enum RecordRules {
                 row.trailing = texts.first
                 row.trailingLabel = column?.label
                 row.subtitle.append(contentsOf: texts.dropFirst())
+            } else if column?.numeric == true, let value = texts.first, let label = column?.label, !label.isEmpty {
+                // A number away from the row's end keeps its column's name: `Qty 1`.
+                row.subtitle.append("\(label) \(value)")
             } else {
                 row.subtitle.append(contentsOf: texts.prefix(1))
             }

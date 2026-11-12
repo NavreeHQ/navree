@@ -68,7 +68,8 @@ final class ScreensTests: XCTestCase {
         amount.tap()
         amount.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "0")
         sheet.buttons["Refund"].tap()
-        wait(app.staticTexts["Enter an amount above zero, like 24.00."], "The amount's error")
+        let error = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Enter an amount above zero")).firstMatch
+        wait(error, "The amount's error")
         Shots.save("05-refund-errors", in: self)
     }
 

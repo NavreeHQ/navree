@@ -202,3 +202,21 @@ func recordedScreen(_ name: String) throws -> Screen {
     let data = try Data(contentsOf: root.appendingPathComponent("Demo/NavreeDemo/Recorded/\(name)"))
     return try #require(try WireDecoder.decode(Envelope.self, from: data).screen)
 }
+
+@Test func aRecordsValueAtTheEndIsItsLastNumberAndOtherNumbersKeepTheirNames() throws {
+    let order = try recordedScreen("orders_1.json")
+    guard case .table(let items) = try #require(order.body.first { $0.kind == "table" }) else {
+        Issue.record("no table")
+        return
+    }
+    let row = RecordRules.row(columns: items.columns, record: items.rows[0])
+    #expect(row.title == "Pashmina shawl, Patiala, small")
+    #expect(row.trailing == "₹5,949")
+    #expect(row.trailingLabel == "Total")
+    #expect(row.subtitle == ["CLO-102-021", "Qty 1"])
+}
+
+@Test func aPageInTheWebViewHasAnInlineTitleEvenAtTheRoot() {
+    #expect(NavigationRules.webTitleMode(.root) == .inline)
+    #expect(NavigationRules.titleMode(.root) == .large)
+}
