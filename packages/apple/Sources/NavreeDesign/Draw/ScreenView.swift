@@ -296,7 +296,7 @@ struct FiltersSheet: View {
                     SectionView(section: section)
                 }
             }
-            .listStyle(.insetGrouped)
+            .modifier(ListLook(layout: .insetGrouped))
             .navigationTitle("Filters")
             .navigationBarTitleDisplayModeInline()
             .toolbar {
