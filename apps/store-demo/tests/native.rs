@@ -515,8 +515,8 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
         roles,
         [
             ("Product", Some(n::ColumnRole::Title)),
-            ("Level", Some(n::ColumnRole::Status)),
             ("In stock", Some(n::ColumnRole::Trailing)),
+            ("Level", Some(n::ColumnRole::Status)),
             ("SKU", Some(n::ColumnRole::Subtitle)),
         ]
     );
