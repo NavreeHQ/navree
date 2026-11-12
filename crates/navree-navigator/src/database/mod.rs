@@ -6,9 +6,11 @@
 //!
 //! - **SQLite** files are opened without creating them and with `PRAGMA
 //!   query_only = ON`; relative paths are relative to the app.
-//! - **PostgreSQL** sessions default to read-only transactions, and each
-//!   query runs inside `BEGIN READ ONLY` with a statement timeout, then
-//!   rolls back.
+//! - **PostgreSQL** sessions default to read-only transactions and pin
+//!   `standard_conforming_strings = on`, so the server reads a statement's
+//!   strings as the guard did. Each query runs inside `BEGIN READ ONLY` with
+//!   a statement timeout, is sent as one prepared statement (the extended
+//!   protocol takes exactly one), then rolls back.
 //! - Unless `--allow-remote-database` is given, only SQLite files and
 //!   servers on this machine (`localhost`, a loopback address or a Unix
 //!   socket) are allowed ([`check_local`]).
@@ -37,6 +39,14 @@ pub const STATEMENT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How long connecting may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The settings every PostgreSQL connection starts with (see
+/// `Target::postgres`): read-only transactions, and plain strings in which a
+/// backslash is an ordinary character.
+const POSTGRES_SESSION: [(&str, &str); 2] = [
+    ("default_transaction_read_only", "on"),
+    ("standard_conforming_strings", "on"),
+];
 
 /// The database drivers Navigator reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,12 +220,20 @@ impl Target {
             .map_err(|e| self.connect_error(e))
     }
 
-    /// Opens a PostgreSQL connection whose transactions are read-only.
+    /// Opens a PostgreSQL connection whose transactions are read-only and
+    /// whose plain strings read a backslash as a backslash.
+    ///
+    /// The guard parses statements as standard SQL, where `'\'` is a whole
+    /// string. A server set to `standard_conforming_strings = off` (in its
+    /// configuration, or by `ALTER DATABASE` / `ALTER ROLE`) reads the same
+    /// text as an escaped quote, so the statement it runs could differ from
+    /// the one checked. Options in the startup message win over those
+    /// settings, so the connection pins the standard reading.
     async fn postgres(&self) -> Result<PgConnection, DatabaseError> {
         let options = PgConnectOptions::from_str(&self.url)
             .map_err(|e| self.connect_error(e))?
             .application_name("navree-navigator")
-            .options([("default_transaction_read_only", "on")])
+            .options(POSTGRES_SESSION)
             .disable_statement_logging();
         tokio::time::timeout(CONNECT_TIMEOUT, options.connect())
             .await

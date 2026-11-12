@@ -371,3 +371,23 @@ fn fk_action(code: Option<&str>) -> String {
     }
     .to_owned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::literal;
+
+    #[test]
+    fn a_literal_doubles_backslashes_and_quotes_inside_an_escape_string() {
+        for (text, written) in [
+            ("deals", "E'deals'"),
+            (r"\", r"E'\\'"),
+            ("'", "E''''"),
+            (r"\'", r"E'\\'''"),
+            (r"\\''", r"E'\\\\'''''"),
+            (r"\' OR 1=1 --", r"E'\\'' OR 1=1 --'"),
+            ("सौदे ₹", "E'सौदे ₹'"),
+        ] {
+            assert_eq!(literal(text), written, "{text}");
+        }
+    }
+}

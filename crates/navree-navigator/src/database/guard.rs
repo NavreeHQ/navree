@@ -2,16 +2,21 @@
 //! is sent, and only one read-only statement passes.
 //!
 //! What is sent is the parsed statement rendered back to SQL, never the text
-//! the model wrote, so a quirk of quoting cannot smuggle a second statement
-//! past the parser. The database then runs it in a read-only transaction
-//! (PostgreSQL) or on a `query_only` connection (SQLite), with a statement
-//! timeout and a row limit: the guard is the first of those layers, not the
-//! only one.
+//! the model wrote. The renderer writes standard SQL strings, which a
+//! PostgreSQL server reads the same way only with
+//! `standard_conforming_strings = on`: Navigator's connections pin that, and
+//! send the statement as one prepared statement, which cannot hold a second
+//! command whatever the quoting. The database then runs it in a read-only
+//! transaction (PostgreSQL) or on a `query_only` connection (SQLite), with a
+//! statement timeout and a row limit: the guard is the first of those layers,
+//! not the only one. Changing a setting is refused like any other
+//! statement that is not a query (`SET`, `RESET`), and `set_config()` like
+//! the other denied functions, in an expression or in FROM.
 
 use std::fmt;
 use std::ops::ControlFlow;
 
-use sqlparser::ast::{Expr, Query, Select, Statement, Visit, Visitor};
+use sqlparser::ast::{Expr, ObjectName, Query, Select, Statement, TableFactor, Visit, Visitor};
 use sqlparser::dialect::{PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 
@@ -226,18 +231,39 @@ impl Visitor for Guard {
     }
 
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<Refusal> {
-        if let Expr::Function(function) = expr {
-            let qualified = function.name.to_string().to_lowercase();
-            let name = qualified
-                .rsplit('.')
-                .next()
-                .unwrap_or(&qualified)
-                .trim_matches('"')
-                .to_owned();
-            if is_denied(&name) {
-                return ControlFlow::Break(Refusal::Function { name });
-            }
+        match expr {
+            Expr::Function(function) => deny_function(&function.name),
+            _ => ControlFlow::Continue(()),
         }
+    }
+
+    /// A function called in FROM (`SELECT * FROM set_config(..)`,
+    /// `LATERAL pg_read_file(..)`) is a table factor, not an expression.
+    fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<Refusal> {
+        match factor {
+            TableFactor::Table {
+                name,
+                args: Some(_),
+                ..
+            }
+            | TableFactor::Function { name, .. } => deny_function(name),
+            _ => ControlFlow::Continue(()),
+        }
+    }
+}
+
+/// Breaks when the function `name` (qualified or not) is denied.
+fn deny_function(name: &ObjectName) -> ControlFlow<Refusal> {
+    let qualified = name.to_string().to_lowercase();
+    let name = qualified
+        .rsplit('.')
+        .next()
+        .unwrap_or(&qualified)
+        .trim_matches('"')
+        .to_owned();
+    if is_denied(&name) {
+        ControlFlow::Break(Refusal::Function { name })
+    } else {
         ControlFlow::Continue(())
     }
 }
@@ -495,6 +521,72 @@ mod tests {
         );
         // Ordinary functions pass.
         assert!(pg("SELECT lower(title), now(), count(*) FROM deals GROUP BY 1, 2").is_ok());
+    }
+
+    #[test]
+    fn side_effecting_functions_in_from_are_refused() {
+        for (sql, name) in [
+            (
+                "SELECT * FROM set_config('standard_conforming_strings', 'off', false)",
+                "set_config",
+            ),
+            (
+                "SELECT * FROM pg_catalog.set_config('standard_conforming_strings', 'off', false) AS s",
+                "set_config",
+            ),
+            ("SELECT * FROM pg_read_file('/etc/passwd')", "pg_read_file"),
+            (
+                "SELECT * FROM pg_terminate_backend(42)",
+                "pg_terminate_backend",
+            ),
+            (
+                "SELECT * FROM dblink('dbname=app', 'DROP TABLE deals')",
+                "dblink",
+            ),
+            (
+                "SELECT d.id FROM deals d, LATERAL pg_sleep(10) AS s",
+                "pg_sleep",
+            ),
+            (
+                "SELECT * FROM deals WHERE id IN (SELECT 1 FROM pg_advisory_lock(1))",
+                "pg_advisory_lock",
+            ),
+        ] {
+            assert_eq!(
+                pg(sql),
+                Err(Refusal::Function {
+                    name: name.to_owned()
+                }),
+                "{sql}"
+            );
+        }
+        // Set-returning functions that only read pass, and so does a table
+        // whose name starts like a denied prefix.
+        assert!(pg("SELECT * FROM generate_series(1, 3) AS g").is_ok());
+        assert!(pg("SELECT * FROM lo_items").is_ok());
+    }
+
+    #[test]
+    fn the_string_setting_cannot_be_changed() {
+        for sql in [
+            "SET standard_conforming_strings = off",
+            "SET SESSION standard_conforming_strings = off",
+            "SET LOCAL standard_conforming_strings TO off",
+            "RESET standard_conforming_strings",
+            "SELECT set_config('standard_conforming_strings', 'off', false)",
+            "SELECT * FROM set_config('standard_conforming_strings', 'off', true)",
+        ] {
+            assert!(
+                matches!(
+                    pg(sql),
+                    Err(Refusal::NotReadOnly { .. }
+                        | Refusal::Parse { .. }
+                        | Refusal::Function { .. })
+                ),
+                "{sql}: {:?}",
+                pg(sql)
+            );
+        }
     }
 
     #[test]

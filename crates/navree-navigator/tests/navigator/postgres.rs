@@ -57,6 +57,40 @@ impl Scratch {
         conn.close().await.unwrap();
     }
 
+    /// Sets `standard_conforming_strings = off` on this database, so that a
+    /// new connection that does not pin it reads backslash escapes in plain
+    /// strings, and checks that a new connection does. On a server that no
+    /// longer accepts the setting, prints `SKIPPED` and answers false.
+    async fn strings_off(&self, test: &str) -> bool {
+        let mut conn = PgConnection::connect(&self.url).await.unwrap();
+        let altered = conn
+            .execute(AssertSqlSafe(format!(
+                "ALTER DATABASE {} SET standard_conforming_strings = off",
+                self.name
+            )))
+            .await;
+        conn.close().await.unwrap();
+        if let Err(error) = altered {
+            eprintln!(
+                "SKIPPED {test}: the server refuses standard_conforming_strings = off: {error}"
+            );
+            return false;
+        }
+        let mut conn = PgConnection::connect(&self.url).await.unwrap();
+        let setting: String = sqlx::query_scalar("SHOW standard_conforming_strings")
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        conn.close().await.unwrap();
+        if setting != "off" {
+            eprintln!(
+                "SKIPPED {test}: standard_conforming_strings is {setting} on a new connection"
+            );
+            return false;
+        }
+        true
+    }
+
     async fn drop_db(self) {
         let mut conn = PgConnection::connect(&self.admin).await.unwrap();
         conn.execute(AssertSqlSafe(format!(
@@ -224,20 +258,13 @@ async fn postgres_schema_table_names_never_become_sql() {
     db.setup(SCHEMA).await;
     db.setup(&[r#"CREATE TABLE "it\'s" (id bigint PRIMARY KEY)"#])
         .await;
-    // New connections to this database read backslashes in plain strings as
-    // escapes. A server that no longer accepts the setting still runs the
-    // rest of the test with standard strings.
-    let mut conn = PgConnection::connect(&db.url).await.unwrap();
-    let off = conn
-        .execute(AssertSqlSafe(format!(
-            "ALTER DATABASE {} SET standard_conforming_strings = off",
-            db.name
-        )))
-        .await;
-    if let Err(error) = off {
-        eprintln!("standard_conforming_strings stays on: {error}");
+    if !db
+        .strings_off("postgres_schema_table_names_never_become_sql")
+        .await
+    {
+        db.drop_db().await;
+        return;
     }
-    conn.close().await.unwrap();
     let fixture = db.fixture();
     let navigator = fixture.navigator();
 
@@ -260,6 +287,100 @@ async fn postgres_schema_table_names_never_become_sql() {
     let all = call(&navigator, "describe_schema", json!({})).await;
     assert_eq!(all["tables"].as_array().map(Vec::len), Some(5), "{all}");
     drop(navigator);
+    db.drop_db().await;
+}
+
+/// Navigator's connections start with `standard_conforming_strings = on`,
+/// which wins over the database's own setting.
+#[tokio::test]
+async fn postgres_connections_pin_standard_strings() {
+    let test = "postgres_connections_pin_standard_strings";
+    let Some(db) = Scratch::new(test).await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    if !db.strings_off(test).await {
+        db.drop_db().await;
+        return;
+    }
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    let setting = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SHOW standard_conforming_strings"}),
+    )
+    .await;
+    assert_eq!(setting["rows"], json!([["on"]]), "{setting}");
+    drop(navigator);
+    db.drop_db().await;
+}
+
+/// No statement `query_database` runs can change how strings are read.
+#[tokio::test]
+async fn postgres_queries_cannot_change_the_string_setting() {
+    let Some(db) = Scratch::new("postgres_queries_cannot_change_the_string_setting").await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    for sql in [
+        "SET standard_conforming_strings = off",
+        "SET LOCAL standard_conforming_strings TO off",
+        "RESET standard_conforming_strings",
+        "SELECT set_config('standard_conforming_strings', 'off', false)",
+        "SELECT * FROM set_config('standard_conforming_strings', 'off', false)",
+        "SELECT * FROM pg_catalog.set_config('standard_conforming_strings', 'off', true) AS s",
+    ] {
+        refused(&navigator, "query_database", json!({ "sql": sql })).await;
+    }
+    let setting = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SHOW standard_conforming_strings"}),
+    )
+    .await;
+    assert_eq!(setting["rows"], json!([["on"]]), "{setting}");
+    drop(navigator);
+    db.drop_db().await;
+}
+
+/// A backslash before a quote, which a server reading backslash escapes
+/// would take as the end of the string, stays inside it: the statement the
+/// guard checked is the one that runs, and nothing after it does.
+#[tokio::test]
+async fn postgres_a_backslash_quote_cannot_write() {
+    let test = "postgres_a_backslash_quote_cannot_write";
+    let Some(db) = Scratch::new(test).await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    if !db.strings_off(test).await {
+        db.drop_db().await;
+        return;
+    }
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    let answer = call(
+        &navigator,
+        "query_database",
+        json!({"sql": r"SELECT '\' AS a, ' AS b; COMMIT; BEGIN READ WRITE; DROP TABLE users; COMMIT; --'"}),
+    )
+    .await;
+    assert_eq!(answer["rows"][0][0], r"\", "{answer}");
+    assert_eq!(
+        answer["rows"][0][1], " AS b; COMMIT; BEGIN READ WRITE; DROP TABLE users; COMMIT; --",
+        "{answer}"
+    );
+    drop(navigator);
+    let mut conn = PgConnection::connect(&db.url).await.unwrap();
+    let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&mut conn)
+        .await
+        .expect("the users table is still there");
+    assert_eq!(users, 1);
+    conn.close().await.unwrap();
     db.drop_db().await;
 }
 
