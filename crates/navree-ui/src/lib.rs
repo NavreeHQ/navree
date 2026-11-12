@@ -21,9 +21,10 @@
 //! - [`described`]: a table whose columns and a form whose fields are given at run
 //!   time, drawn by the same [`DataTable`] and [`FormView`].
 //! - [`sortable`]: [`Sortable`] lists and boards, and the [`Move`] each drop posts.
-//! - [`charts`]: line, area, bar, donut, sparkline and funnel charts drawn as SVG on
-//!   the server, each with its data as a table, and [`charts::Report`] for a date
-//!   range from the URL cut into periods.
+//! - [`charts`]: line, area, bar, donut, sparkline and funnel charts, calendar and
+//!   matrix heat maps and a scatter plot, drawn as SVG or HTML on the server, each
+//!   with its data as a table, and [`charts::Report`] for a date range from the URL
+//!   cut into periods.
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //! - [`pages`]: what the app shows when a request ends in an error, or a place has
