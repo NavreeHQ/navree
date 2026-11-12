@@ -27,6 +27,7 @@
 //!   the browser and the authenticator in tests.
 
 mod cbor;
+pub(crate) mod confirm;
 pub(crate) mod controller;
 pub(crate) mod webauthn;
 
@@ -110,7 +111,7 @@ struct Ceremony {
 /// The `PublicKeyCredential` JSON a browser returns
 /// (`credential.toJSON()`), as far as it is read.
 #[derive(Deserialize)]
-struct CredentialJson {
+pub(crate) struct CredentialJson {
     id: String,
     #[serde(rename = "type", default)]
     kind: Option<String>,
@@ -559,6 +560,19 @@ impl AuthService {
     /// them; records the new signature counter.
     async fn check_assertion(&self, credential: &Value) -> Result<(User, bool), AuthError> {
         let options = self.passkey_options()?;
+        let (credential, stored, client_json) = self.assertion_parts(credential).await?;
+        self.check_client_data(&client_json, "webauthn.get", None)
+            .await?;
+        self.finish_assertion(&credential, stored, &client_json, options, false)
+            .await
+    }
+
+    /// The parts of an assertion: the credential JSON, the stored passkey
+    /// it names and its client data.
+    pub(crate) async fn assertion_parts(
+        &self,
+        credential: &Value,
+    ) -> Result<(CredentialJson, Passkey, Vec<u8>), AuthError> {
         let credential: CredentialJson = serde_json::from_value(credential.clone())
             .map_err(|_| refused("malformed credential"))?;
         let raw_id = b64url(&credential.id).ok_or_else(|| refused("malformed credential id"))?;
@@ -570,8 +584,22 @@ impl AuthService {
             .ok_or_else(|| refused("unknown credential"))?;
         let client_json = b64url(&credential.response.client_data_json)
             .ok_or_else(|| refused("malformed client data"))?;
-        self.check_client_data(&client_json, "webauthn.get", None)
-            .await?;
+        Ok((credential, stored, client_json))
+    }
+
+    /// The rest of an assertion's checks once its client data passed: the
+    /// authenticator data (the RP id hash, user presence, user verification
+    /// when the options or `require_uv` want it), the signature, the user
+    /// handle and the signature counter (recorded). The user and whether
+    /// the authenticator verified them.
+    pub(crate) async fn finish_assertion(
+        &self,
+        credential: &CredentialJson,
+        stored: Passkey,
+        client_json: &[u8],
+        options: &crate::PasskeyOptions,
+        require_uv: bool,
+    ) -> Result<(User, bool), AuthError> {
         let auth_bytes = credential
             .response
             .authenticator_data
@@ -581,6 +609,9 @@ impl AuthService {
         let data = AuthenticatorData::parse(&auth_bytes)
             .ok_or_else(|| refused("malformed authenticator data"))?;
         self.check_authenticator_data(&data, options)?;
+        if require_uv && !data.user_verified() {
+            return Err(refused("user not verified"));
+        }
         let signature = credential
             .response
             .signature
@@ -592,7 +623,7 @@ impl AuthService {
             bytes: b64url(&stored.public_key).ok_or_else(|| refused("unreadable stored key"))?,
         };
         let mut signed = auth_bytes.clone();
-        signed.extend_from_slice(&sha256(&client_json));
+        signed.extend_from_slice(&sha256(client_json));
         if !key.verify(&signed, &signature) {
             return Err(refused("bad signature"));
         }

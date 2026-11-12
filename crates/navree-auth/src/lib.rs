@@ -277,6 +277,8 @@ pub use passkeys::controller::{
     PasskeyList, PasskeyLoginInput, PasskeyLoginOptionsInput, PasskeyOptionsResponse,
     PasskeyRegisterInput,
 };
+pub use passkeys::confirm::{CONFIRM_TTL_SECS, ConfirmAction};
+pub use passkeys::controller::{ConfirmOptionsInput, ConfirmPasskeyInput};
 pub use passkeys::{MAX_PASSKEY_NAME, PasskeyResource};
 pub use platform::PlatformAdmin;
 pub use policy::TwoFactorPolicy;

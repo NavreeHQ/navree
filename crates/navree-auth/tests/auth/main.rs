@@ -7,6 +7,7 @@ mod support;
 
 mod access;
 mod apps;
+mod confirm;
 mod exchange;
 mod flow;
 mod impersonation;

@@ -45,8 +45,9 @@ pub struct SessionResource {
     pub platform: bool,
 }
 
-/// What `POST /auth/confirm` checks: the password or a code from the
-/// authenticator app.
+/// What a step-up confirmation checks (`POST /auth/confirm`, `POST
+/// /auth/confirm/passkey`, [`AuthService::confirm_action`]): the password, a
+/// code from the authenticator app, or a passkey assertion.
 #[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ConfirmProof {
@@ -54,14 +55,20 @@ pub enum ConfirmProof {
     Password(String),
     /// A current TOTP code (two-factor authentication must be on).
     Code(String),
+    /// A passkey assertion (the `PublicKeyCredential` JSON) over a
+    /// confirmation challenge
+    /// ([`AuthService::confirmation_options`]), with user verification: a
+    /// fingerprint, Face ID, Windows Hello or the device's PIN.
+    Passkey(serde_json::Value),
 }
 
 impl ConfirmProof {
-    /// `"password"` or `"totp"` (audit metadata).
+    /// `"password"`, `"totp"` or `"passkey"` (audit metadata).
     pub fn method(&self) -> &'static str {
         match self {
             ConfirmProof::Password(_) => "password",
             ConfirmProof::Code(_) => "totp",
+            ConfirmProof::Passkey(_) => "passkey",
         }
     }
 }
@@ -228,6 +235,69 @@ impl AuthService {
         proof: ConfirmProof,
         meta: &ClientMeta,
     ) -> Result<i64, AuthError> {
+        self.confirm_identity_for(user_id, session_id, impersonating, proof, None, meta)
+            .await
+    }
+
+    /// Confirms the sensitive `action` for the user of `claims` with
+    /// `proof`, as a step-up confirmation: a passkey assertion must answer a
+    /// challenge of [`confirmation_options`](AuthService::confirmation_options)
+    /// for the same action (its digest is computed again here from
+    /// `action`), issued to this user and this session less than
+    /// [`CONFIRM_TTL_SECS`](crate::CONFIRM_TTL_SECS) seconds ago and not
+    /// answered before, signed by one of the user's passkeys with user
+    /// verification. The password or a code (for clients without passkeys)
+    /// are checked as [`confirm`](AuthService::confirm) checks them. The
+    /// session's sign-in counts as recent from now (`auth_time`, returned in
+    /// Unix seconds), as after `POST /auth/confirm`.
+    ///
+    /// A refused passkey is [`AuthError::ConfirmationRefused`] (403
+    /// `confirmation_refused`), audited as `auth.confirmation_refused`; a
+    /// confirmation is audited as `auth.confirmed` with the method and
+    /// `metadata.action`. Refused in an impersonation session.
+    ///
+    /// ```no_run
+    /// use navree_auth::{AccessClaims, AuthService, ClientMeta, ConfirmAction, ConfirmProof};
+    /// # async fn approve(auth: &AuthService, claims: &AccessClaims, meta: &ClientMeta,
+    /// #     credential: serde_json::Value) -> Result<(), navree_auth::AuthError> {
+    /// // The same details the page asked the person to confirm.
+    /// let action = ConfirmAction::new("payments.approve")
+    ///     .field("payment", "PAY-2024")
+    ///     .field("amount_paise", 10_000_000);
+    /// auth.confirm_action(&claims.0, &action, ConfirmProof::Passkey(credential), meta)
+    ///     .await?;
+    /// // ... approve the payment.
+    /// # Ok(()) }
+    /// ```
+    pub async fn confirm_action(
+        &self,
+        claims: &Claims,
+        action: &crate::ConfirmAction,
+        proof: ConfirmProof,
+        meta: &ClientMeta,
+    ) -> Result<i64, AuthError> {
+        self.confirm_identity_for(
+            claims.sub,
+            claims.sid,
+            claims.act.is_some(),
+            proof,
+            Some(action),
+            meta,
+        )
+        .await
+    }
+
+    /// [`confirm_identity`](AuthService::confirm_identity) for `action`
+    /// (`None`: a plain step-up).
+    async fn confirm_identity_for(
+        &self,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        impersonating: bool,
+        proof: ConfirmProof,
+        action: Option<&crate::ConfirmAction>,
+        meta: &ClientMeta,
+    ) -> Result<i64, AuthError> {
         if impersonating {
             return Err(AuthError::ImpersonationForbidden);
         }
@@ -235,6 +305,7 @@ impl AuthService {
             .find_user(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
+        let mut passkey_id = None;
         match &proof {
             ConfirmProof::Password(password) => {
                 self.confirm_password(&user, password, "password", meta)
@@ -246,6 +317,14 @@ impl AuthService {
                 }
                 self.check_two_factor_code(&user, code, "code", meta, "confirmation")
                     .await?;
+            }
+            ConfirmProof::Passkey(credential) => {
+                let step_up = crate::ConfirmAction::new(crate::passkeys::confirm::STEP_UP_ACTION);
+                let checked = action.unwrap_or(&step_up);
+                passkey_id = Some(
+                    self.check_confirmation(&user, session_id, checked, credential, meta)
+                        .await?,
+                );
             }
         }
         let now = self.clock.now();
@@ -262,10 +341,17 @@ impl AuthService {
             })
             .await?;
         }
+        let mut metadata = json!({ "method": proof.method(), "session_id": session_id });
+        if let Some(action) = action {
+            metadata["action"] = json!(action.name());
+        }
+        if let Some(passkey_id) = passkey_id {
+            metadata["passkey_id"] = json!(passkey_id);
+        }
         self.audit(
             entry(AuditKind::Auth, "auth.confirmed", meta)
                 .actor(user.id)
-                .metadata(json!({ "method": proof.method(), "session_id": session_id })),
+                .metadata(metadata),
         )
         .await;
         Ok(now.timestamp())
@@ -352,5 +438,8 @@ mod tests {
         let debug = format!("{:?}", ConfirmProof::Password("hunter2".to_owned()));
         assert!(!debug.contains("hunter2"), "{debug}");
         assert_eq!(ConfirmProof::Code("1".to_owned()).method(), "totp");
+        let passkey = ConfirmProof::Passkey(serde_json::json!({ "id": "c2VjcmV0" }));
+        assert_eq!(passkey.method(), "passkey");
+        assert!(!format!("{passkey:?}").contains("c2VjcmV0"));
     }
 }
