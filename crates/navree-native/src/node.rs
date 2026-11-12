@@ -167,8 +167,9 @@ impl Node {
             Self::Empty(node) => node.actions.iter().collect(),
             Self::Facts(node) => node.items.iter().flat_map(|fact| &fact.value).collect(),
             Self::Table(node) => node
-                .filters
+                .query
                 .iter()
+                .flat_map(|form| &form.children)
                 .chain(node.rows.iter().flat_map(|row| &row.cells))
                 .chain(boxed(&node.empty))
                 .collect(),
@@ -333,6 +334,9 @@ pub struct Stack {
     /// Whether parts that do not fit go to a new line.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wrap: bool,
+    /// Whether it is not drawn until a command shows it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
     /// The parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
@@ -685,7 +689,7 @@ pub struct Image {
     pub fit: Option<Fit>,
 }
 
-/// An icon: path data a client strokes or fills, and the name a system symbol
+/// An icon: path data a client strokes and fills, and the name a system symbol
 /// can be found by.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Icon {
@@ -697,17 +701,18 @@ pub struct Icon {
     /// that; any other draws the paths.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// The shapes, each as SVG path data (`M3 6h18…`).
+    /// The shapes a client strokes, each as SVG path data (`M3 6h18…`): two
+    /// units wide in a box of 24, with round ends and joins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<String>,
+    /// The shapes a client fills, each as SVG path data. An icon may hold both
+    /// kinds: an outline with a solid dot in it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fills: Vec<String>,
     /// The box the paths are drawn in, as `min-x min-y width height`. `0 0 24 24`
     /// when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view_box: Option<String>,
-    /// Whether the paths are filled. They are stroked, two units wide with round
-    /// ends and joins, when not.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub filled: bool,
     /// What the icon says, when it stands alone. A decoration has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -927,12 +932,11 @@ pub struct Table {
     /// The records.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<TableRow>,
-    /// The search over the records, when the table has one.
+    /// The form that asks for other records: its search field (a text control
+    /// of the `search` kind) and one field a filter. A client sends it as a
+    /// query when a value changes, and draws the answer in the table's place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub search: Option<crate::Search>,
-    /// The filters over the records: forms, menus and links.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub filters: Vec<Node>,
+    pub query: Option<Form>,
     /// Where the next records are, by cursor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub more: Option<String>,

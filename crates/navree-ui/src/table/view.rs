@@ -26,6 +26,9 @@ use crate::html::{Href, SafeHtml, escape_into};
 use crate::icons::{self, Icon};
 use crate::node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 
+#[cfg(feature = "native")]
+mod native;
+
 /// How tall rows are.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -2822,7 +2825,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         }
         let has_rows = !self.data.rows.is_empty() && self.failed.is_none() && !self.loading;
         let body: Element = if has_rows {
-            el("tbody").child(SafeHtml::trusted(self.body_rows(&sticky)))
+            // A native client can't read rows written as a string: for one, they are a tree.
+            #[cfg(feature = "native")]
+            let rows = self
+                .native_rows()
+                .unwrap_or_else(|| SafeHtml::trusted(self.body_rows(&sticky)).into());
+            #[cfg(not(feature = "native"))]
+            let rows = SafeHtml::trusted(self.body_rows(&sticky));
+            el("tbody").child(rows)
         } else {
             self.message_body()
         };

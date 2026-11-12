@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use navree_native::action::{Action, Command, Pair, Present, State};
-use navree_native::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
+use navree_native::envelope::{Back, Envelope, Screen, Upgrade, Web};
 use navree_native::input::{
     ChoiceInput, ChoiceKind, ChoiceOption, ChoicesInput, ColourInput, DateInput, DateKind,
     FileInput, Input, SliderInput, TextInput, TextKind, ToggleInput, ToggleKind,
@@ -73,7 +73,14 @@ fn option(value: &str, label: &str) -> ChoiceOption {
     ChoiceOption {
         value: s(value),
         label: s(label),
-        disabled: false,
+        ..ChoiceOption::default()
+    }
+}
+
+fn counted(value: &str, label: &str, count: &str) -> ChoiceOption {
+    ChoiceOption {
+        detail: Some(s(count)),
+        ..option(value, label)
     }
 }
 
@@ -168,37 +175,58 @@ fn screen_list() -> Envelope {
                 "Yesterday, 18:02",
             ),
         ],
-        search: Some(Search {
-            name: s("q"),
-            value: String::new(),
-            placeholder: Some(s("Search orders")),
+        query: Some(Form {
+            id: Some(s("orders-f")),
+            method: Method::Get,
             action: s("/orders"),
-            hidden: vec![pair("sort", "-placed_on")],
-        }),
-        filters: vec![Node::Menu(Menu {
-            label: s("Status"),
-            items: vec![
-                Node::Link(Link {
+            hidden: vec![Hidden {
+                name: s("sort"),
+                value: s("-placed_on"),
+                id: None,
+            }],
+            children: vec![
+                Node::Field(Field {
                     id: None,
-                    label: s("Open (212)"),
-                    action: Action::Navigate {
-                        href: s("/orders?status=open"),
-                        present: Present::Replace,
-                    },
-                    children: Vec::new(),
+                    name: s("search"),
+                    label: Some(s("Search")),
+                    help: None,
+                    error: None,
+                    required: false,
+                    disabled: false,
+                    input: Input::Text(TextInput {
+                        kind: TextKind::Search,
+                        placeholder: Some(s("Search orders")),
+                        ..TextInput::default()
+                    }),
                 }),
-                Node::Link(Link {
+                Node::Field(Field {
                     id: None,
-                    label: s("Cancelled (9)"),
-                    action: Action::Navigate {
-                        href: s("/orders?status=cancelled"),
-                        present: Present::Replace,
-                    },
-                    children: Vec::new(),
+                    name: s("filter[status][in]"),
+                    label: Some(s("Status")),
+                    help: None,
+                    error: None,
+                    required: false,
+                    disabled: false,
+                    input: Input::Choices(ChoicesInput {
+                        options: vec![
+                            counted("open", "Open", "212"),
+                            counted("cancelled", "Cancelled", "9"),
+                        ],
+                        values: vec![s("open")],
+                    }),
+                }),
+                Node::Field(Field {
+                    id: None,
+                    name: s("filter[placed_on][gte]"),
+                    label: Some(s("Placed from")),
+                    help: None,
+                    error: None,
+                    required: false,
+                    disabled: false,
+                    input: Input::Date(DateInput::default()),
                 }),
             ],
-            ..Menu::default()
-        })],
+        }),
         more: Some(s("/orders?after=eyJpZCI6MTA0MX0")),
         prev: None,
         summary: Some(s("1–25 of 1,204")),
@@ -617,9 +645,8 @@ fn screen_form() -> Envelope {
                         option("amritsar", "Amritsar"),
                         option("chandigarh", "Chandigarh"),
                         ChoiceOption {
-                            value: s("shimla"),
-                            label: s("Shimla"),
                             disabled: true,
+                            ..option("shimla", "Shimla")
                         },
                     ],
                     value: None,

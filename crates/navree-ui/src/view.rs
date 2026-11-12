@@ -461,8 +461,40 @@ fn cap_eager_markup(html: &str, left: &mut usize) -> Option<String> {
     Some(out)
 }
 
+/// What a page is made of, for the answer to a client that is not a browser.
+#[cfg(feature = "native")]
+pub(crate) struct NativeParts<'a> {
+    pub(crate) title: &'a str,
+    pub(crate) body: &'a mut Node,
+    pub(crate) status: StatusCode,
+    pub(crate) cache: &'static str,
+    pub(crate) cookies: &'a [HeaderValue],
+}
+
+#[cfg(feature = "native")]
+impl View {
+    pub(crate) fn native_parts(&mut self) -> NativeParts<'_> {
+        NativeParts {
+            title: &self.title,
+            body: &mut self.body,
+            status: self.status,
+            cache: self.cache,
+            cookies: &self.cookies,
+        }
+    }
+}
+
 impl IntoResponse for View {
     fn into_response(mut self) -> Response {
+        // A native client, or its web view, gets its own answer; a browser's
+        // request goes on as it always has.
+        #[cfg(feature = "native")]
+        {
+            self = match crate::native::swap::view(self) {
+                Ok(response) => return response,
+                Err(view) => view,
+            };
+        }
         cap_eager(&mut self.body);
         let uses = self.uses();
         let html = self.to_html();

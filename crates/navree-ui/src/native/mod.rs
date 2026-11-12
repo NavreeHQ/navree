@@ -1,0 +1,103 @@
+//! Native clients: the same pages, answered as a tree of parts a system's own
+//! toolkit draws.
+//!
+//! A page is written once, as today. A browser gets it as HTML, byte for byte
+//! what it got before. A native client sends `X-Navree-Native: 1` with its
+//! descriptor in `X-Navree-Client`, and the same handler's answer leaves as
+//! the envelope of [`navree_native`]: the page as a [`Screen`], a reply's ops
+//! with nodes where the web has markup, or the word to show the page in the
+//! client's web view when a part of it has no native meaning yet.
+//!
+//! - [`lower`] reads a finished tree into native parts and lists what it could
+//!   not read ([`Lowered`], [`Miss`]). It never guesses.
+//! - [`Client`] is the extractor for the handler whose screen really differs
+//!   from one system to another, and [`only`] and [`web_only`] keep a part for
+//!   one side.
+//! - [`TestNative`] drives a page as a native client in a plain test, and
+//!   [`Coverage`] lists which pages are native, which fall back and why.
+//! - The app's shell is answered at [`SHELL_PATH`](navree_native::SHELL_PATH).
+//!
+//! ```
+//! use navree_ui::native::TestNative;
+//! use navree_ui::{Button, Text, View};
+//!
+//! let view = View::new("Orders").body((
+//!     Text::new("No orders yet"),
+//!     Button::primary("New order").href("/orders/new"),
+//! ));
+//! let page = TestNative::of(&view);
+//! assert!(page.is_native());
+//! assert!(page.sees("No orders yet"));
+//! assert_eq!(
+//!     page.json(),
+//!     format!(
+//!         concat!(
+//!             r#"{{"navree":1,"build":"{}","vocab":1,"#,
+//!             r#""screen":{{"title":"Orders","body":{{"t":"stack","children":["#,
+//!             r#"{{"t":"text","value":"No orders yet"}},"#,
+//!             r#"{{"t":"button","label":"New order","role":"primary","prominence":"high","#,
+//!             r#""action":{{"t":"navigate","href":"/orders/new"}}}}]}}}}}}"#
+//!         ),
+//!         navree_ui::assets::BUILD
+//!     )
+//! );
+//! ```
+
+mod coverage;
+mod icon;
+mod lower;
+mod page;
+mod routes;
+pub(crate) mod scope;
+mod slots;
+pub(crate) mod swap;
+mod table;
+mod test;
+
+pub use coverage::Coverage;
+pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
+pub use navree_native as protocol;
+pub use page::Page;
+pub(crate) use routes::Routes;
+pub use scope::Client;
+pub use swap::{Answered, How, NodeOp};
+pub use test::TestNative;
+
+use crate::node::Node;
+
+/// `node` for a native client, and nothing for a browser: a part that only
+/// makes sense where the device can do it.
+///
+/// It asks who the current request is from, so it is called while the page
+/// is built, in the handler.
+///
+/// ```
+/// use navree_ui::{Button, Node, native};
+///
+/// // Outside a native client's request, it is nothing.
+/// assert!(matches!(native::only(Button::new("Scan a code")), Node::Empty));
+/// ```
+pub fn only(node: impl Into<Node>) -> Node {
+    if Client::current().is_native() {
+        node.into()
+    } else {
+        Node::Empty
+    }
+}
+
+/// `node` for a browser, and nothing for a native client: a part with no
+/// native meaning that the page can do without, so the rest of it stays
+/// native.
+///
+/// ```
+/// use navree_ui::{Node, Text, native};
+///
+/// assert!(matches!(native::web_only(Text::new("Drag to reorder")), Node::Element(_)));
+/// ```
+pub fn web_only(node: impl Into<Node>) -> Node {
+    if Client::current().is_native() {
+        Node::Empty
+    } else {
+        node.into()
+    }
+}

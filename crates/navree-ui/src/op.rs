@@ -181,37 +181,64 @@ pub enum Op {
         /// The region's name.
         target: String,
     },
+    /// A change whose payload is native parts, not markup: what
+    /// [`Op::morph`], [`Op::replace`], [`Op::append`] and [`Op::prepend`] build
+    /// when the request came from a native client.
+    #[cfg(feature = "native")]
+    Native(crate::native::NodeOp),
 }
 
 impl Op {
     /// Morphs element `target` into `node`.
     pub fn morph(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Morph, &target, node) {
+            return op;
+        }
         Self::Morph {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Replaces element `target` with `node`.
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node)
+        {
+            return op;
+        }
         Self::Replace {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Adds `node` at the end of `target`.
     pub fn append(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Append, &target, node) {
+            return op;
+        }
         Self::Append {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Adds `node` at the start of `target`.
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node)
+        {
+            return op;
+        }
         Self::Prepend {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }

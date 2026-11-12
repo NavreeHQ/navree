@@ -6170,6 +6170,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-markdown",
+ "navree-native",
  "navree-orm",
  "navree-phone",
  "navree-storage",

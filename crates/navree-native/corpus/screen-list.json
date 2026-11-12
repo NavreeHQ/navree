@@ -160,43 +160,59 @@
               }
             }
           ],
-          "search": {
-            "name": "q",
-            "placeholder": "Search orders",
+          "query": {
+            "id": "orders-f",
             "action": "/orders",
             "hidden": [
               {
                 "name": "sort",
                 "value": "-placed_on"
               }
+            ],
+            "children": [
+              {
+                "t": "field",
+                "name": "search",
+                "label": "Search",
+                "input": {
+                  "t": "text",
+                  "kind": "search",
+                  "placeholder": "Search orders"
+                }
+              },
+              {
+                "t": "field",
+                "name": "filter[status][in]",
+                "label": "Status",
+                "input": {
+                  "t": "choices",
+                  "options": [
+                    {
+                      "value": "open",
+                      "label": "Open",
+                      "detail": "212"
+                    },
+                    {
+                      "value": "cancelled",
+                      "label": "Cancelled",
+                      "detail": "9"
+                    }
+                  ],
+                  "values": [
+                    "open"
+                  ]
+                }
+              },
+              {
+                "t": "field",
+                "name": "filter[placed_on][gte]",
+                "label": "Placed from",
+                "input": {
+                  "t": "date"
+                }
+              }
             ]
           },
-          "filters": [
-            {
-              "t": "menu",
-              "label": "Status",
-              "items": [
-                {
-                  "t": "link",
-                  "label": "Open (212)",
-                  "action": {
-                    "t": "navigate",
-                    "href": "/orders?status=open",
-                    "present": "replace"
-                  }
-                },
-                {
-                  "t": "link",
-                  "label": "Cancelled (9)",
-                  "action": {
-                    "t": "navigate",
-                    "href": "/orders?status=cancelled",
-                    "present": "replace"
-                  }
-                }
-              ]
-            }
-          ],
           "more": "/orders?after=eyJpZCI6MTA0MX0",
           "summary": "1–25 of 1,204"
         }

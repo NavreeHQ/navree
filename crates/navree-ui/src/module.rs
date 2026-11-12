@@ -177,6 +177,8 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         },
     ));
     m.controller::<Assets>();
+    #[cfg(feature = "native")]
+    m.controller::<crate::native::Routes>();
     m.command(
         CommandSpec::new(
             "ui:render",
@@ -252,6 +254,13 @@ pub(crate) async fn render_json(
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
 /// and sends rendered responses in brotli to clients that take it.
 async fn reply_layer(request: Request, next: Next) -> Response {
+    // A native client's request, or its web view's, is answered its own way;
+    // a browser's is handed back untouched.
+    #[cfg(feature = "native")]
+    let (request, next) = match crate::native::swap::layer(request, next).await {
+        Ok(response) => return response,
+        Err(back) => back,
+    };
     let from_runtime = request.headers().contains_key(UI_HEADER);
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
@@ -336,7 +345,7 @@ fn fallback_only(name: &HeaderName) -> bool {
 /// The reply's ops, in place of its fallback. Headers set on the fallback stay,
 /// so a cookie survives whichever side of this layer it was set on. A toast is
 /// on its way as an op, so the cookie that would show it on the next page isn't.
-fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
+pub(crate) fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
     let (parts, _) = fallback.into_parts();
     let mut response = (status, envelope).into_response();
     let headers = response.headers_mut();

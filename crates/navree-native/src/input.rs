@@ -139,6 +139,9 @@ pub struct ChoiceOption {
     pub value: String,
     /// What the reader sees.
     pub label: String,
+    /// A few words beside the label: how many records hold it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
     /// Whether it can't be chosen now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
@@ -264,12 +267,12 @@ mod tests {
                 ChoiceOption {
                     value: "returned".to_owned(),
                     label: "Returned by the customer".to_owned(),
-                    disabled: false,
+                    ..ChoiceOption::default()
                 },
                 ChoiceOption {
                     value: "late".to_owned(),
                     label: "Arrived late".to_owned(),
-                    disabled: false,
+                    ..ChoiceOption::default()
                 },
             ],
             value: Some("returned".to_owned()),
