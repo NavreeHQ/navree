@@ -101,6 +101,8 @@ impl DatabaseStore {
                 "ON CONFLICT (id) DO UPDATE SET data = excluded.data, expires_at = excluded.expires_at"
             }
         };
+        // `{upsert}` is one of two fixed clauses; every value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         let statement = Statement::portable(
             format!(
                 "INSERT INTO {SESSIONS_TABLE} (id, data, expires_at) VALUES (?, ?, ?) {upsert}"

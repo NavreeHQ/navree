@@ -71,6 +71,8 @@ impl FleetStore {
             "ON CONFLICT (id) DO UPDATE SET status = excluded.status, \
              supervisors = excluded.supervisors, heartbeat_at = excluded.heartbeat_at"
         };
+        // `{on_conflict}` is one of two fixed clauses; every value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         self.execute(
             &format!(
                 "INSERT INTO {MASTERS_TABLE} (id, name, pid, status, supervisors, started_at, heartbeat_at) \
@@ -136,6 +138,8 @@ impl FleetStore {
         } else {
             "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
         };
+        // `{k}` is the quoted `key` column and `{on_conflict}` one of two fixed clauses; values are bound.
+        // nosemgrep: navree-sql-built-from-strings
         self.execute(
             &format!(
                 "INSERT INTO {STATE_TABLE} ({k}, value, updated_at) VALUES (?, ?, ?) {on_conflict}"
@@ -148,6 +152,8 @@ impl FleetStore {
 
     pub(crate) async fn delete_state(&self, key: &str) -> Result<(), FleetError> {
         let k = self.quoted("key");
+        // `{k}` is the quoted `key` column; the key is bound.
+        // nosemgrep: navree-sql-built-from-strings
         self.execute(
             &format!("DELETE FROM {STATE_TABLE} WHERE {k} = ?"),
             vec![key.into()],
@@ -210,6 +216,8 @@ impl FleetStore {
         cooldown_ms: i64,
     ) -> Result<bool, FleetError> {
         let k = self.quoted("key");
+        // `{k}` is the quoted `key` column; every value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         let updated = self
             .execute(
                 &format!(
@@ -236,6 +244,8 @@ impl FleetStore {
                  ON CONFLICT (key) DO NOTHING"
             )
         };
+        // `{k}` is the quoted `key` column; every value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         let inserted = self
             .execute(
                 &insert,
@@ -413,6 +423,8 @@ impl FleetStore {
                     master.map(str::to_owned).into(),
                 ]);
             }
+            // `{at}` is the quoted `at` column, then `?` groups; every value is bound.
+            // nosemgrep: navree-sql-built-from-strings
             self.execute(&sql, values).await?;
         }
         Ok(())

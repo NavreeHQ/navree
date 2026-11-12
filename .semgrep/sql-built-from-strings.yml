@@ -40,26 +40,162 @@ rules:
       # The template is read from the text of the whole call: `format!($FMT, ...)`
       # binds nothing when an argument is itself a call (`format!("..{}", f(x))`),
       # so a metavariable on the template alone would miss those.
-      - patterns:
-          - pattern: format!(...)
+      #
+      # The regex walks the template only, never the arguments (a closure or a
+      # block among them has braces of its own): a plain string up to its closing
+      # quote (`\"` and other escapes skipped), or a raw string up to its closing
+      # `"#..`. In it, `{{` is a literal brace, so a placeholder is a `{` after an
+      # even run of them (`{{{name}}}` interpolates `name`); a SCREAMING_CASE
+      # placeholder names a constant and does not count. `std::format!` and
+      # `format![..]` are the same macro.
+      - label: SQL_TEXT
+        patterns:
+          - pattern-either:
+              - pattern: format!(...)
+              - pattern: std::format!(...)
+              - pattern: alloc::format!(...)
           - pattern: $SRC
           - metavariable-regex:
               metavariable: $SRC
-              regex: '(?is)^format!\s*\(\s*r?#*"\s*(select|insert|update|delete|with|merge|replace)\b(?-i:.*(?<!\{)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\}))'
+              regex: '(?s)^(?:(?:::)?(?:std|alloc)::)?format!\s*[(\[{]\s*(?:"\s*(?i:select|insert|update|delete|with|merge|replace)\b(?:\\.|\{\{|\{[A-Z][A-Z0-9_]*(?::[^}]*)?\}|[^"\\{])*|r(#*)"\s*(?i:select|insert|update|delete|with|merge|replace)\b(?:\{\{|\{[A-Z][A-Z0-9_]*(?::[^}]*)?\}|(?!"\1)[^{])*)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\})'
+      # A statement made from that text outside the call that runs it (bound to
+      # a variable, or returned): reported where it is made (the sinks below), so
+      # the call that later runs it is not reported again. Made inside the call
+      # that runs it, the run is what is reported.
+      - label: STATEMENT
+        requires: SQL_TEXT
+        patterns:
+          - pattern-either:
+              - pattern: Statement::new(...)
+              - pattern: Statement::portable(...)
+              - pattern: Statement::text(...)
+              - pattern: Statement::from_string(...)
+              - pattern: Statement::from_sql_and_values(...)
+              - pattern: sqlx::query(...)
+              - pattern: sqlx::query_as(...)
+              - pattern: sqlx::query_scalar(...)
+              - pattern: sqlx::raw_sql(...)
+          - pattern-not-inside: $C.execute(...)
+          - pattern-not-inside: $C.fetch(...)
+          - pattern-not-inside: $C.fetch_all(...)
+          - pattern-not-inside: $C.fetch_one(...)
+          - pattern-not-inside: $C.fetch_optional(...)
+          - pattern-not-inside: $C.fetch_scalar(...)
+          - pattern-not-inside: $C.fetch_column(...)
     pattern-sinks:
-      - pattern-either:
+      # The calls that run SQL text (Navree's executors, sqlx's, raw drivers').
+      - requires: SQL_TEXT and not STATEMENT
+        pattern-either:
           - pattern: $CONN.execute_unprepared(...)
           - pattern: $CONN.execute_raw(...)
           - pattern: $CONN.query_all_raw(...)
           - pattern: $CONN.query_one_raw(...)
           - pattern: $CONN.query_all(...)
           - pattern: $CONN.query_one(...)
+          - pattern: $CONN.execute(...)
+          - pattern: $CONN.execute_script(...)
+          - pattern: $CONN.fetch(...)
           - pattern: $CONN.fetch_all(...)
           - pattern: $CONN.fetch_one(...)
           - pattern: $CONN.fetch_optional(...)
-          - pattern: Statement::from_string(...)
-          - pattern: Statement::from_sql_and_values(...)
-          - pattern: sqlx::query(...)
-          - pattern: sqlx::query_as(...)
-          - pattern: sqlx::query_scalar(...)
-          - pattern: sqlx::raw_sql(...)
+          - pattern: $CONN.fetch_scalar(...)
+          - pattern: $CONN.fetch_column(...)
+      # The calls that make a statement from SQL text outside a call that runs
+      # it, which may run it later or elsewhere (returned to a caller).
+      - requires: SQL_TEXT
+        patterns:
+          - pattern-either:
+              - pattern: Statement::new(...)
+              - pattern: Statement::portable(...)
+              - pattern: Statement::text(...)
+              - pattern: Statement::from_string(...)
+              - pattern: Statement::from_sql_and_values(...)
+              - pattern: sqlx::query(...)
+              - pattern: sqlx::query_as(...)
+              - pattern: sqlx::query_scalar(...)
+              - pattern: sqlx::raw_sql(...)
+          - pattern-not-inside: $C.execute(...)
+          - pattern-not-inside: $C.fetch(...)
+          - pattern-not-inside: $C.fetch_all(...)
+          - pattern-not-inside: $C.fetch_one(...)
+          - pattern-not-inside: $C.fetch_optional(...)
+          - pattern-not-inside: $C.fetch_scalar(...)
+          - pattern-not-inside: $C.fetch_column(...)
+
+  # Semgrep's taint analysis does not look inside an async block, and Navree's
+  # trait methods return `Box::pin(async move { .. })`. Inside one, this rule
+  # matches the same format! (the regex is the one above) when it is written
+  # into a statement-running call, directly or through a `let` binding.
+  - id: navree-sql-built-from-strings-in-async
+    languages: [rust]
+    severity: ERROR
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/examples/**"
+        - "**/testing/**"
+        - "**/testing.rs"
+        - "/crates/navree-testing/"
+    message: >-
+      SQL text is built with format! and passed to a statement-running API.
+      Bind values as parameters instead. If the interpolated parts are
+      identifiers quoted by the dialect helper, or constants, suppress this
+      line with `// nosemgrep: navree-sql-built-from-strings-in-async` and the
+      reason.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern-inside: async move { ... }
+          - pattern-inside: async { ... }
+      # A call with the format! in its arguments, or with a variable bound to it.
+      # (Semgrep matches `Statement::new(..)` and `sqlx::query(..)` with
+      # `$CONN.$RUN(..)` too.)
+      - pattern-either:
+          - pattern: $CONN.$RUN(..., <... $SRC ...>, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      let $V = $SRC;
+                      ...
+                  - pattern-inside: |
+                      let mut $V = $SRC;
+                      ...
+              - pattern: $CONN.$RUN(..., <... $V ...>, ...)
+      # A call that runs SQL is reported where it runs; a statement being built
+      # only when no such call holds it, so each one is reported once.
+      - pattern-either:
+          - patterns:
+              - pattern: $CONN.$RUN(...)
+              - metavariable-regex:
+                  metavariable: $RUN
+                  regex: '^(execute|execute_unprepared|execute_raw|execute_script|query_all|query_one|query_all_raw|query_one_raw|fetch|fetch_all|fetch_one|fetch_optional|fetch_scalar|fetch_column)$'
+          - patterns:
+              - pattern: $CONN.$RUN(...)
+              - metavariable-regex:
+                  metavariable: $RUN
+                  regex: '^(new|portable|text|from_string|from_sql_and_values|query|query_as|query_scalar|raw_sql)$'
+              # A statement's or sqlx's own constructor, not any `new`.
+              - metavariable-regex:
+                  metavariable: $CONN
+                  regex: '(^|::)(Statement|sqlx)$'
+              - pattern-not-inside: $C.execute(...)
+              - pattern-not-inside: $C.execute_unprepared(...)
+              - pattern-not-inside: $C.fetch(...)
+              - pattern-not-inside: $C.fetch_all(...)
+              - pattern-not-inside: $C.fetch_one(...)
+              - pattern-not-inside: $C.fetch_optional(...)
+              - pattern-not-inside: $C.fetch_scalar(...)
+              - pattern-not-inside: $C.fetch_column(...)
+      - metavariable-pattern:
+          metavariable: $SRC
+          pattern-either:
+            - pattern: format!(...)
+            - pattern: std::format!(...)
+            - pattern: alloc::format!(...)
+      - metavariable-regex:
+          metavariable: $SRC
+          regex: '(?s)^(?:(?:::)?(?:std|alloc)::)?format!\s*[(\[{]\s*(?:"\s*(?i:select|insert|update|delete|with|merge|replace)\b(?:\\.|\{\{|\{[A-Z][A-Z0-9_]*(?::[^}]*)?\}|[^"\\{])*|r(#*)"\s*(?i:select|insert|update|delete|with|merge|replace)\b(?:\{\{|\{[A-Z][A-Z0-9_]*(?::[^}]*)?\}|(?!"\1)[^{])*)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\})'
