@@ -17,7 +17,9 @@
 
 use std::sync::Arc;
 
-use http::header::{CACHE_CONTROL, CONTENT_ENCODING, CONTENT_SECURITY_POLICY, CONTENT_TYPE, SET_COOKIE, VARY};
+use http::header::{
+    CACHE_CONTROL, CONTENT_ENCODING, CONTENT_SECURITY_POLICY, CONTENT_TYPE, SET_COOKIE, VARY,
+};
 use http::{HeaderValue, StatusCode};
 use navree_http::extract::Request;
 use navree_http::middleware::Next;
@@ -280,7 +282,10 @@ fn embed(mut view: View) -> Response {
     let mut response = (
         parts.status,
         [
-            (CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
+            (
+                CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            ),
             (
                 CONTENT_SECURITY_POLICY,
                 HeaderValue::from_static(crate::view::PAGE_CSP),
@@ -305,7 +310,9 @@ fn unshell(body: &mut Node) {
         _ => return,
     };
     for node in nodes.iter_mut() {
-        let Node::Element(wrapper) = node else { continue };
+        let Node::Element(wrapper) = node else {
+            continue;
+        };
         if super::lower::slot(wrapper).as_deref() != Some("sidebar-wrapper") {
             continue;
         }
@@ -313,7 +320,9 @@ fn unshell(body: &mut Node) {
             return;
         };
         for child in &mut main.children {
-            let Node::Element(header) = child else { continue };
+            let Node::Element(header) = child else {
+                continue;
+            };
             if super::lower::slot(header).as_deref() == Some("page-header") {
                 header.children.retain(|part| {
                     !matches!(part, Node::Element(title)
@@ -353,14 +362,15 @@ fn take_main(nodes: &mut [Node]) -> Option<crate::node::Element> {
 /// the request back for the web path, untouched, at the cost of two header
 /// lookups.
 pub(crate) async fn layer(request: Request, next: Next) -> Result<Response, (Request, Next)> {
-    if !request.headers().contains_key(NATIVE_HEADER) && !request.headers().contains_key(EMBED_HEADER)
+    if !request.headers().contains_key(NATIVE_HEADER)
+        && !request.headers().contains_key(EMBED_HEADER)
     {
         return Err((request, next));
     }
-    let url = request
-        .uri()
-        .path_and_query()
-        .map_or_else(|| request.uri().path().to_owned(), |url| url.as_str().to_owned());
+    let url = request.uri().path_and_query().map_or_else(
+        || request.uri().path().to_owned(),
+        |url| url.as_str().to_owned(),
+    );
     Ok(match scope::read(request.headers(), &url) {
         Reading::Web => return Err((request, next)),
         Reading::UnknownMajor(major) => refuse(
@@ -381,7 +391,10 @@ fn refuse(status: StatusCode, why: &str) -> Response {
     (
         status,
         [
-            (CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8")),
+            (
+                CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=utf-8"),
+            ),
             (CACHE_CONTROL, HeaderValue::from_static("no-store")),
         ],
         why.to_owned(),

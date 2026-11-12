@@ -65,7 +65,9 @@ impl Platform {
 
     /// The platform named `name`, or nothing.
     pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|platform| platform.as_str() == name)
+        Self::ALL
+            .into_iter()
+            .find(|platform| platform.as_str() == name)
     }
 
     /// Whether this is one of Apple's systems.
@@ -309,7 +311,9 @@ impl Client {
                 "os" => client.os = value.to_owned(),
                 "app" => client.app = value.to_owned(),
                 "vocab" => {
-                    client.vocab = value.parse().map_err(|_| ClientError::NotANumber("vocab"))?;
+                    client.vocab = value
+                        .parse()
+                        .map_err(|_| ClientError::NotANumber("vocab"))?;
                 }
                 // A scheme or contrast this build does not know is the default.
                 "scheme" => {
@@ -460,10 +464,7 @@ mod tests {
         assert_eq!(client.text_percent, 100);
         assert_eq!(client.scheme, Scheme::Light);
         assert!(client.caps.is_empty());
-        assert_eq!(
-            Client::parse("form=phone"),
-            Err(ClientError::NoPlatform)
-        );
+        assert_eq!(Client::parse("form=phone"), Err(ClientError::NoPlatform));
         assert_eq!(Client::parse("platform=ios"), Err(ClientError::NoForm));
     }
 
@@ -501,7 +502,10 @@ mod tests {
             Err(ClientError::NotANumber("vocab"))
         );
         assert_eq!(
-            Client::parse(&format!("platform=ios; form=phone; app={}", "1".repeat(2000))),
+            Client::parse(&format!(
+                "platform=ios; form=phone; app={}",
+                "1".repeat(2000)
+            )),
             Err(ClientError::TooLong)
         );
     }

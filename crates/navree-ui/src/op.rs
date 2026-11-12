@@ -206,8 +206,7 @@ impl Op {
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
         #[cfg(feature = "native")]
-        if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node)
-        {
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node) {
             return op;
         }
         Self::Replace {
@@ -233,8 +232,7 @@ impl Op {
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
         let target = target.into();
         #[cfg(feature = "native")]
-        if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node)
-        {
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node) {
             return op;
         }
         Self::Prepend {

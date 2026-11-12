@@ -183,7 +183,9 @@ fn current(nodes: &[Node]) -> Option<String> {
 /// The toasts a page was drawn with, as ops.
 fn toasts(toaster: &Element, ops: &mut Vec<Op>) {
     for child in flat(toaster.child_nodes()) {
-        let Node::Element(toast) = child else { continue };
+        let Node::Element(toast) = child else {
+            continue;
+        };
         if slot(toast).as_deref() != Some("toast") {
             continue;
         }
@@ -220,7 +222,9 @@ pub(crate) fn shell(build: &str, body: &Node) -> Option<navree_native::Shell> {
     }
     let sidebar = find(children, "sidebar-content")?;
     for group in flat(sidebar.child_nodes()) {
-        let Node::Element(group) = group else { continue };
+        let Node::Element(group) = group else {
+            continue;
+        };
         if slot(group).as_deref() != Some("sidebar-group") {
             continue;
         }
@@ -324,7 +328,9 @@ fn children_after<'a>(nodes: &'a [Node], button: &Element) -> Option<&'a Element
 /// The user's menu: its links, and its forms of one button as buttons that post.
 fn user_menu(popover: &Element, menu: &mut Vec<N>) {
     for entry in flat(popover.child_nodes()) {
-        let Node::Element(entry) = entry else { continue };
+        let Node::Element(entry) = entry else {
+            continue;
+        };
         match entry.tag() {
             "a" => {
                 if let Some(href) = attr(entry, "href") {
@@ -358,7 +364,9 @@ fn user_menu(popover: &Element, menu: &mut Vec<N>) {
                         } else {
                             n::Method::Get
                         },
-                        href: attr(entry, "action").map(Cow::into_owned).unwrap_or_default(),
+                        href: attr(entry, "action")
+                            .map(Cow::into_owned)
+                            .unwrap_or_default(),
                         fields,
                     }),
                     ..n::Button::default()
@@ -548,8 +556,6 @@ mod tests {
                 }),
             ]
         );
-        assert!(
-            super::shell("b1", View::new("x").body(Text::new("plain")).body_node()).is_none()
-        );
+        assert!(super::shell("b1", View::new("x").body(Text::new("plain")).body_node()).is_none());
     }
 }

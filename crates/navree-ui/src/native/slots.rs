@@ -28,9 +28,15 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "text" | "heading" | "code" | "kbd" => (text, &[]),
         "badge" => (badge, &[]),
         "button" => (button, &["data-ui-click", "data-ui-refresh"]),
-        "icon" => (|_, element| icon(element).map(|icon| vec![N::Icon(icon)]), &[]),
+        "icon" => (
+            |_, element| icon(element).map(|icon| vec![N::Icon(icon)]),
+            &[],
+        ),
         "flag" => (flag, &[]),
-        "separator" => (|_, element| Ok(vec![N::Divider(n::Divider { id: id(element) })]), &[]),
+        "separator" => (
+            |_, element| Ok(vec![N::Divider(n::Divider { id: id(element) })]),
+            &[],
+        ),
         "avatar" => (avatar, &[]),
         "card" => (card, &[]),
         "empty" => (empty, &[]),
@@ -53,7 +59,10 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "timeline" => (timeline, &[]),
         "meta" => (meta, &[]),
         "table-container" => (table_container, &[]),
-        "table" => (|cx, element| cx.table(element).map(|table| vec![N::Table(table)]), &[]),
+        "table" => (
+            |cx, element| cx.table(element).map(|table| vec![N::Table(table)]),
+            &[],
+        ),
         "breadcrumb" => (breadcrumb, &[]),
         "region" => (
             region,
@@ -184,8 +193,10 @@ fn plain_words(node: &Node) -> bool {
         Node::Text(_) | Node::Int(_) | Node::Empty => true,
         Node::Fragment(nodes) => nodes.iter().all(plain_words),
         Node::Element(element) => {
-            matches!(element.tag(), "span" | "bdi" | "strong" | "b" | "em" | "i" | "time" | "small")
-                && slot(element).is_none()
+            matches!(
+                element.tag(),
+                "span" | "bdi" | "strong" | "b" | "em" | "i" | "time" | "small"
+            ) && slot(element).is_none()
                 && element.child_nodes().iter().all(plain_words)
         }
         Node::Raw(_) | Node::Static(_) => false,
@@ -197,7 +208,11 @@ fn badge(_: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let dot = parts.slot("badge-dot").is_some();
     let _icons = parts.slots("icon");
-    if !parts.left().iter().all(|node| plain_words(node) || screen_reader_only(node)) {
+    if !parts
+        .left()
+        .iter()
+        .all(|node| plain_words(node) || screen_reader_only(node))
+    {
         return fail("a badge that holds more than words");
     }
     Ok(vec![N::Badge(n::Badge {
@@ -554,7 +569,12 @@ pub(crate) fn button_of(mut form: n::Form) -> Result<n::Button, Box<n::Form>> {
     let [N::Button(button)] = form.children.as_slice() else {
         return Err(Box::new(form));
     };
-    let Some(Action::Submit { form: None, href, with }) = &button.action else {
+    let Some(Action::Submit {
+        form: None,
+        href,
+        with,
+    }) = &button.action
+    else {
         return Err(Box::new(form));
     };
     let mut fields: Vec<Pair> = form
@@ -657,8 +677,14 @@ fn field(cx: &mut Cx, element: &Element) -> Read {
     let label = parts.slot("label").map(text_of);
     let help = parts.slot("field-description").map(text_of);
     let errors = parts.slots("field-error");
-    let error = Some(errors.into_iter().map(text_of).collect::<Vec<_>>().join(" "))
-        .filter(|text| !text.is_empty());
+    let error = Some(
+        errors
+            .into_iter()
+            .map(text_of)
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+    .filter(|text| !text.is_empty());
     let [Node::Element(inner)] = parts.left() else {
         return fail("a field that holds more or less than one control");
     };
@@ -744,7 +770,9 @@ fn radio_group(_: &mut Cx, element: &Element) -> Read {
         }
         name = attr(radio, "name").map(Cow::into_owned).unwrap_or_default();
         required |= has(radio, "required");
-        let value = attr(radio, "value").map(Cow::into_owned).unwrap_or_default();
+        let value = attr(radio, "value")
+            .map(Cow::into_owned)
+            .unwrap_or_default();
         if has(radio, "checked") {
             input.value = Some(value.clone());
         }
@@ -908,8 +936,14 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<N>> {
             id: id(event),
             leading: glyph.map(|glyph| Box::new(N::Icon(glyph))),
             title: text_of(title),
-            subtitle: Some(details.into_iter().map(text_of).collect::<Vec<_>>().join(" "))
-                .filter(|text| !text.is_empty()),
+            subtitle: Some(
+                details
+                    .into_iter()
+                    .map(text_of)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            )
+            .filter(|text| !text.is_empty()),
             detail,
             trailing: time.map(|time| {
                 Box::new(N::Text(n::Text {
@@ -1028,7 +1062,9 @@ pub(crate) fn trail(element: &Element) -> Read<Trail> {
     };
     fn walk(element: &Element, trail: &mut Trail) {
         for child in flat(element.child_nodes()) {
-            let Node::Element(child) = child else { continue };
+            let Node::Element(child) = child else {
+                continue;
+            };
             if child.tag() == "a"
                 && let Some(href) = attr(child, "href")
             {
@@ -1077,10 +1113,10 @@ mod tests {
     use super::*;
     use crate::native::lower;
     use crate::{
-        Align, AlertDialog, Avatar, Badge, Button, ButtonVariant, Card, Dialog, Empty as EmptyState,
-        FactCard, FactGrid, Flag, Grid, Justify, Meta, Region, Row, Separator, Sheet, SheetWidth,
-        Stack, Stat, Table, TableCell, TableHead, TableRowEl, Text, Timeline, TimelineEvent, Tone,
-        el, icons,
+        AlertDialog, Align, Avatar, Badge, Button, ButtonVariant, Card, Dialog,
+        Empty as EmptyState, FactCard, FactGrid, Flag, Grid, Justify, Meta, Region, Row, Separator,
+        Sheet, SheetWidth, Stack, Stat, Table, TableCell, TableHead, TableRowEl, Text, Timeline,
+        TimelineEvent, Tone, el, icons,
     };
 
     fn read(node: impl Into<Node>) -> N {
@@ -1108,7 +1144,10 @@ mod tests {
                 .align(Align::Center)
                 .justify(Justify::Between)
                 .wrap()
-                .children((Stack::gap(0).children((Text::new("a"), Text::muted("b"))), "c")),
+                .children((
+                    Stack::gap(0).children((Text::new("a"), Text::muted("b"))),
+                    "c",
+                )),
         );
         assert_eq!(
             node,
@@ -1128,8 +1167,11 @@ mod tests {
                 ..n::Stack::default()
             })
         );
-        let N::Grid(grid) = read(Grid::cols(4).gap(3).children((Text::new("a"), Text::new("b"))))
-        else {
+        let N::Grid(grid) = read(
+            Grid::cols(4)
+                .gap(3)
+                .children((Text::new("a"), Text::new("b"))),
+        ) else {
             panic!("not a grid");
         };
         assert_eq!((grid.cols, grid.gap, grid.children.len()), (Some(4), 3, 2));
@@ -1170,7 +1212,9 @@ mod tests {
         assert_eq!(open.icon.as_ref().unwrap().name.as_deref(), Some("ban"));
         assert_eq!(
             open.action,
-            Some(Action::command(Command::Open { id: "cancel".into() }))
+            Some(Action::command(Command::Open {
+                id: "cancel".into()
+            }))
         );
 
         let N::Button(only) = read(Button::icon_only(icons::REFRESH_CW, "Refresh now")) else {
@@ -1190,7 +1234,8 @@ mod tests {
         assert_eq!(link.prominence, n::Prominence::Low);
         assert_eq!(link.action, Some(Action::navigate("/orders/1")));
 
-        let N::Button(save) = read(Button::primary("Save").submit().loading_text("Saving…")) else {
+        let N::Button(save) = read(Button::primary("Save").submit().loading_text("Saving…"))
+        else {
             panic!("not a button");
         };
         assert_eq!(save.label, "Save");
@@ -1204,7 +1249,10 @@ mod tests {
             panic!("not an avatar");
         };
         assert_eq!(avatar.name, "Ravneet Kaur");
-        assert_eq!(read(Separator::horizontal()), N::Divider(n::Divider::default()));
+        assert_eq!(
+            read(Separator::horizontal()),
+            N::Divider(n::Divider::default())
+        );
     }
 
     #[test]
@@ -1242,7 +1290,10 @@ mod tests {
             panic!("not an empty state");
         };
         assert_eq!(empty.title, "That order isn't in the shop");
-        assert_eq!(empty.text.as_deref(), Some("Search the orders for its number."));
+        assert_eq!(
+            empty.text.as_deref(),
+            Some("Search the orders for its number.")
+        );
         assert_eq!(empty.icon.unwrap().name.as_deref(), Some("search-x"));
         let [N::Button(back)] = empty.actions.as_slice() else {
             panic!("not one button");
@@ -1405,7 +1456,8 @@ mod tests {
                     .detail("+91 98765 36760"),
                 FactCard::new(
                     "Ships to",
-                    Row::gap(2).children((Flag::country("IN").decorative(), Text::new("Pune").inline())),
+                    Row::gap(2)
+                        .children((Flag::country("IN").decorative(), Text::new("Pune").inline())),
                 ),
             ]),
         );
@@ -1418,7 +1470,10 @@ mod tests {
         assert_eq!(customer.label, "Customer");
         assert_eq!(customer.value, [text_node("Tanvi Sharma")]);
         assert_eq!(customer.tone, Some(n::Tone::Info));
-        assert_eq!(customer.icon.as_ref().unwrap().name.as_deref(), Some("user"));
+        assert_eq!(
+            customer.icon.as_ref().unwrap().name.as_deref(),
+            Some("user")
+        );
         assert_eq!(
             customer.details,
             ["tanvi.sharma@example.com", "+91 98765 36760"]

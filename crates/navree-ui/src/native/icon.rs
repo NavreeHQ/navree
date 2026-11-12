@@ -133,10 +133,18 @@ pub(crate) fn icon(shapes: &str, view_box: &str) -> Result<n::Icon, String> {
                         .next()
                         .ok_or_else(|| format!("a {name} with half a point"))?;
                     let (x, y): (f64, f64) = (
-                        x.parse().map_err(|_| format!("a point of a {name} is not a number"))?,
-                        y.parse().map_err(|_| format!("a point of a {name} is not a number"))?,
+                        x.parse()
+                            .map_err(|_| format!("a point of a {name} is not a number"))?,
+                        y.parse()
+                            .map_err(|_| format!("a point of a {name} is not a number"))?,
                     );
-                    let _ = write!(path, "{}{} {}", if first { "M" } else { "L" }, num(x), num(y));
+                    let _ = write!(
+                        path,
+                        "{}{} {}",
+                        if first { "M" } else { "L" },
+                        num(x),
+                        num(y)
+                    );
                     first = false;
                 }
                 if name == "polygon" {
@@ -270,7 +278,11 @@ mod tests {
         assert_eq!(bag.name.as_deref(), Some("shopping-bag"));
         assert!(bag.fills.is_empty());
         // An outline with solid dots in it keeps both kinds of shape.
-        let both = icon(icons::BRAIN_CIRCUIT.shapes(), icons::BRAIN_CIRCUIT.view_box()).unwrap();
+        let both = icon(
+            icons::BRAIN_CIRCUIT.shapes(),
+            icons::BRAIN_CIRCUIT.view_box(),
+        )
+        .unwrap();
         assert!(!both.paths.is_empty() && !both.fills.is_empty());
     }
 

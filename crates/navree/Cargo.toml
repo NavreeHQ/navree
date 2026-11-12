@@ -244,6 +244,10 @@ ui = [
     "navree-workspace?/ui",
     "navree-ai?/ui",
 ]
+## Native clients of a `ui` app (`navree::ui::native`): a request that says
+## `X-Navree-Native` is answered with the page as a tree of parts the client
+## draws with its system's own toolkit, and a browser's as before.
+ui-native = ["ui", "navree-ui/native"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
 ## events and observers, soft deletes, strict modes and pruning (`OrmModule`);

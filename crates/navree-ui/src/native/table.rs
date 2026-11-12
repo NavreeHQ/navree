@@ -231,7 +231,9 @@ fn query(
     let mut out = n::Form {
         id: Some(form_id.clone()),
         method: n::Method::Get,
-        action: attr(form, "action").map(Cow::into_owned).unwrap_or_default(),
+        action: attr(form, "action")
+            .map(Cow::into_owned)
+            .unwrap_or_default(),
         ..n::Form::default()
     };
     // The search box, and whatever else stands in the form itself.
@@ -248,7 +250,14 @@ fn query(
             }
             let label = attr(popover, "aria-label");
             let mut boxes = Vec::new();
-            filter(cx, popover, &form_id, label.as_deref(), &mut boxes, &mut out)?;
+            filter(
+                cx,
+                popover,
+                &form_id,
+                label.as_deref(),
+                &mut boxes,
+                &mut out,
+            )?;
             out.children.extend(boxes.into_iter().map(N::Field));
         }
     }
@@ -274,7 +283,9 @@ fn query(
 /// when `form` is `None`.
 fn controls<'a>(element: &'a Element, form: Option<&str>, out: &mut Vec<&'a Element>) {
     for child in flat(element.child_nodes()) {
-        let Node::Element(child) = child else { continue };
+        let Node::Element(child) = child else {
+            continue;
+        };
         if matches!(child.tag(), "input" | "select" | "textarea") {
             let named = attr(child, "form");
             if form.is_none() || named.as_deref() == form {
@@ -332,7 +343,9 @@ fn filter(
     out: &mut n::Form,
 ) -> Read<()> {
     for child in flat(menu.child_nodes()) {
-        let Node::Element(child) = child else { continue };
+        let Node::Element(child) = child else {
+            continue;
+        };
         if slot(child).as_deref() == Some("filter-option") {
             let mut inside = Vec::new();
             controls(child, Some(form), &mut inside);
@@ -342,7 +355,9 @@ fn filter(
                 }
                 return fail("a choice of a filter with more than one control");
             };
-            let name = attr(checkbox, "name").map(Cow::into_owned).unwrap_or_default();
+            let name = attr(checkbox, "name")
+                .map(Cow::into_owned)
+                .unwrap_or_default();
             if ARRANGES.contains(&name.as_str()) {
                 continue;
             }
@@ -408,7 +423,9 @@ fn pagination(pages: &Element) -> Read<(Option<String>, Option<String>)> {
     let mut links: Vec<&Element> = Vec::new();
     fn walk<'a>(element: &'a Element, links: &mut Vec<&'a Element>) {
         for child in flat(element.child_nodes()) {
-            let Node::Element(child) = child else { continue };
+            let Node::Element(child) = child else {
+                continue;
+            };
             if child.tag() == "a" {
                 links.push(child);
             } else {
@@ -424,7 +441,11 @@ fn pagination(pages: &Element) -> Read<(Option<String>, Option<String>)> {
     Ok(match links.as_slice() {
         [] => (None, None),
         [only] => (None, href(Some(only))),
-        [.., prev, next] if links.iter().all(|link| slot(link).as_deref() == Some("pagination-text")) => {
+        [.., prev, next]
+            if links
+                .iter()
+                .all(|link| slot(link).as_deref() == Some("pagination-text")) =>
+        {
             (href(Some(prev)), href(Some(next)))
         }
         [prev, .., next] => (href(Some(prev)), href(Some(next))),

@@ -11,7 +11,9 @@ use std::sync::Arc;
 use http::HeaderMap;
 use http::request::Parts;
 use navree_http::extract::FromRequestParts;
-use navree_native::{CLIENT_HEADER, ClientError, EMBED_HEADER, FormFactor, NATIVE_HEADER, Platform};
+use navree_native::{
+    CLIENT_HEADER, ClientError, EMBED_HEADER, FormFactor, NATIVE_HEADER, Platform,
+};
 
 tokio::task_local! {
     static ASKED: Asked;
@@ -160,7 +162,8 @@ impl Client {
 
     /// Whether it is a native client that draws one narrow column.
     pub fn is_compact(&self) -> bool {
-        self.descriptor().is_some_and(navree_native::Client::is_compact)
+        self.descriptor()
+            .is_some_and(navree_native::Client::is_compact)
     }
 
     /// Whether it is a native client whose app may use the device feature `cap`.
@@ -176,10 +179,10 @@ impl FromRequestParts for Client {
     /// the reply layer. A descriptor that can't be read is a browser's here; the
     /// layer refuses such a request before a handler sees it.
     async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
-        let url = parts
-            .uri
-            .path_and_query()
-            .map_or_else(|| parts.uri.path().to_owned(), |url| url.as_str().to_owned());
+        let url = parts.uri.path_and_query().map_or_else(
+            || parts.uri.path().to_owned(),
+            |url| url.as_str().to_owned(),
+        );
         Ok(match read(&parts.headers, &url) {
             Reading::Asked(Asked::Native(request)) => Self(Some(request)),
             _ => Self(None),
@@ -238,7 +241,10 @@ mod tests {
         ));
         assert!(matches!(
             read(
-                &headers(&[(NATIVE_HEADER, "1"), (CLIENT_HEADER, "platform=beos; form=phone")]),
+                &headers(&[
+                    (NATIVE_HEADER, "1"),
+                    (CLIENT_HEADER, "platform=beos; form=phone")
+                ]),
                 "/"
             ),
             Reading::BadClient(ClientError::UnknownPlatform(_))

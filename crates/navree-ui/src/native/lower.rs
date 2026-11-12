@@ -510,7 +510,9 @@ impl Cx {
                 Ok(vec![N::Image(n::Image {
                     id: id(element),
                     src: src.into_owned(),
-                    alt: attr(element, "alt").map(Cow::into_owned).unwrap_or_default(),
+                    alt: attr(element, "alt")
+                        .map(Cow::into_owned)
+                        .unwrap_or_default(),
                     width: number(element, "width"),
                     height: number(element, "height"),
                     fit: None,
@@ -793,8 +795,12 @@ impl Cx {
         if has(element, "form") && self.forms == 0 {
             return fail("a control that names a form elsewhere");
         }
-        let name = attr(element, "name").map(Cow::into_owned).unwrap_or_default();
-        let value = attr(element, "value").map(Cow::into_owned).unwrap_or_default();
+        let name = attr(element, "name")
+            .map(Cow::into_owned)
+            .unwrap_or_default();
+        let value = attr(element, "value")
+            .map(Cow::into_owned)
+            .unwrap_or_default();
         let text = |kind: i::TextKind| {
             i::Input::Text(i::TextInput {
                 kind,
@@ -841,13 +847,10 @@ impl Cx {
                     i::Input::Choice(i::ChoiceInput {
                         kind: i::ChoiceKind::Menu,
                         // With none marked, a browser shows the first.
-                        value: chosen
-                            .into_iter()
-                            .next()
-                            .or_else(|| match &placeholder {
-                                Some(_) => None,
-                                None => options.first().map(|option| option.value.clone()),
-                            }),
+                        value: chosen.into_iter().next().or_else(|| match &placeholder {
+                            Some(_) => None,
+                            None => options.first().map(|option| option.value.clone()),
+                        }),
                         options,
                         placeholder,
                     })
@@ -886,9 +889,7 @@ impl Cx {
                 "email" => text(i::TextKind::Email),
                 "password" => text(i::TextKind::Password),
                 "number" => match attr(element, "step").as_deref() {
-                    Some(step) if step.contains('.') || step == "any" => {
-                        text(i::TextKind::Decimal)
-                    }
+                    Some(step) if step.contains('.') || step == "any" => text(i::TextKind::Decimal),
                     _ => text(i::TextKind::Number),
                 },
                 "tel" => text(i::TextKind::Phone),
@@ -1474,7 +1475,9 @@ pub(crate) fn hidden_in(nodes: &[Node], out: &mut Vec<n::Hidden>) {
             Node::Element(element) => {
                 if element.tag() == "input" && attr(element, "type").as_deref() == Some("hidden") {
                     out.push(n::Hidden {
-                        name: attr(element, "name").map(Cow::into_owned).unwrap_or_default(),
+                        name: attr(element, "name")
+                            .map(Cow::into_owned)
+                            .unwrap_or_default(),
                         value: attr(element, "value")
                             .map(Cow::into_owned)
                             .unwrap_or_default(),
@@ -1804,7 +1807,10 @@ mod tests {
             read(el("p").children(("Up to ", el("bdi").child("₹7,848"), " can go back."))),
             N::text("Up to ₹7,848 can go back.")
         );
-        assert_eq!(read(el("p").children(("  a \n  b  ", 7_i64))), N::text("a b 7"));
+        assert_eq!(
+            read(el("p").children(("  a \n  b  ", 7_i64))),
+            N::text("a b 7")
+        );
         // A paragraph of nothing is nothing.
         assert_eq!(
             read(el("div").children((el("p").child("  "), el("p").child("x")))),
@@ -1928,17 +1934,19 @@ mod tests {
 
     #[test]
     fn headings_lists_pictures_and_rules_read_as_what_they_are() {
-        let node = read(el("section").children((
-            el("h2").child("Items"),
-            el("ol").children((el("li").child("One"), el("li").id("two").child("Two"))),
-            el("hr"),
-            el("img")
-                .attr("src", "/shop.jpg")
-                .attr("alt", "The shop")
-                .attr("width", 320_i64),
-            el("pre").child("a\n  b"),
-            el("progress").attr("value", "31").attr("max", "50"),
-        )));
+        let node = read(
+            el("section").children((
+                el("h2").child("Items"),
+                el("ol").children((el("li").child("One"), el("li").id("two").child("Two"))),
+                el("hr"),
+                el("img")
+                    .attr("src", "/shop.jpg")
+                    .attr("alt", "The shop")
+                    .attr("width", 320_i64),
+                el("pre").child("a\n  b"),
+                el("progress").attr("value", "31").attr("max", "50"),
+            )),
+        );
         let N::Stack(stack) = node else {
             panic!("not a stack");
         };
@@ -2015,21 +2023,21 @@ mod tests {
         let node = read(
             el("table").children((
                 el("caption").child("Items"),
-                el("thead").child(el("tr").children((
-                    el("th").child("Product"),
-                    el("th").flag("data-numeric", true).child("Qty"),
-                    el("th")
-                        .flag("data-numeric", true)
-                        .flag("data-hide-mobile", true)
-                        .child("Price"),
-                ))),
-                el("tbody").child(
-                    el("tr").attr("data-key", 4_i64).children((
-                        el("td").child("Phulkari dupatta"),
-                        el("td").child(2_i64),
-                        el("td"),
+                el("thead").child(
+                    el("tr").children((
+                        el("th").child("Product"),
+                        el("th").flag("data-numeric", true).child("Qty"),
+                        el("th")
+                            .flag("data-numeric", true)
+                            .flag("data-hide-mobile", true)
+                            .child("Price"),
                     )),
                 ),
+                el("tbody").child(el("tr").attr("data-key", 4_i64).children((
+                    el("td").child("Phulkari dupatta"),
+                    el("td").child(2_i64),
+                    el("td"),
+                ))),
             )),
         );
         assert_eq!(
@@ -2097,7 +2105,9 @@ mod tests {
                             .attr("value", "late")
                             .flag("selected", true)
                             .child("Arrived late"),
-                        el("option").attr("value", "damaged").child("Arrived damaged"),
+                        el("option")
+                            .attr("value", "damaged")
+                            .child("Arrived damaged"),
                     )),
                     el("label").children((
                         el("input")
@@ -2106,7 +2116,9 @@ mod tests {
                             .flag("checked", true),
                         "Tell the customer",
                     )),
-                    el("textarea").attr("name", "note").child("Left at the gate"),
+                    el("textarea")
+                        .attr("name", "note")
+                        .child("Left at the gate"),
                     el("button").attr("type", "submit").child("Restock"),
                 )),
         );
@@ -2292,7 +2304,12 @@ mod tests {
             })
         );
         assert_eq!(
-            read(el("dialog").id("about").attr("aria-label", "About").child("Hello")),
+            read(
+                el("dialog")
+                    .id("about")
+                    .attr("aria-label", "About")
+                    .child("Hello")
+            ),
             N::Dialog(n::Dialog {
                 id: "about".into(),
                 title: Some("About".into()),
@@ -2305,13 +2322,21 @@ mod tests {
     #[test]
     fn what_has_no_native_meaning_is_named_and_never_guessed() {
         assert_eq!(missed(el("canvas")), ["tag:canvas"]);
-        assert_eq!(missed(el("div").slot("no-such-part")), ["slot:no-such-part"]);
+        assert_eq!(
+            missed(el("div").slot("no-such-part")),
+            ["slot:no-such-part"]
+        );
         assert_eq!(
             missed(el("div").flag("data-ui-sortable", true).child("x")),
             ["hook:data-ui-sortable"]
         );
         assert_eq!(
-            missed(el("button").attr("type", "button").child("x").on_click(Cmd::fill("d"))),
+            missed(
+                el("button")
+                    .attr("type", "button")
+                    .child("x")
+                    .on_click(Cmd::fill("d"))
+            ),
             ["cmd:fill"]
         );
         assert_eq!(
@@ -2334,7 +2359,11 @@ mod tests {
         );
         assert_eq!(missed(el("svg").attr("role", "img")), ["tag:svg"]);
         // The rest of the tree is still read, with a `web` node where the miss was.
-        let lowered = lower(&el("div").children((el("p").child("a"), el("canvas"))).into());
+        let lowered = lower(
+            &el("div")
+                .children((el("p").child("a"), el("canvas")))
+                .into(),
+        );
         assert_eq!(
             lowered.node,
             N::Stack(n::Stack {
@@ -2356,7 +2385,10 @@ mod tests {
     fn a_drawing_hidden_from_assistive_technology_is_dropped_as_decoration() {
         let lowered = lower(
             &el("div")
-                .children((el("svg").attr("aria-hidden", "true"), el("p").child("Kadhai")))
+                .children((
+                    el("svg").attr("aria-hidden", "true"),
+                    el("p").child("Kadhai"),
+                ))
                 .into(),
         );
         assert!(lowered.is_native());

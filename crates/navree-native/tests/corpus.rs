@@ -15,11 +15,11 @@ use navree_native::input::{
     FileInput, Input, SliderInput, TextInput, TextKind, ToggleInput, ToggleKind,
 };
 use navree_native::node::{
-    Align, Avatar, Axis, Badge, Banner, Button, Chart, ChartKind, Code, Column, ColumnRole,
-    Dialog, Disclosure, Divider, Empty, Fact, Facts, Field, Fit, Form, Grid, Hidden, Icon, Image,
-    Justify, Link, List, Live, Menu, Method, NativeView, Node, Popover, Progress, Prominence,
-    Region, Rich, Role, Row, RowState, Run, Section, SectionStyle, Series, Sheet, SheetSize, Sort,
-    SortDir, Spacer, Split, Stack, Tab, Table, TableRow, Tabs, Text, TextStyle, Tone, WebRegion,
+    Align, Avatar, Axis, Badge, Banner, Button, Chart, ChartKind, Code, Column, ColumnRole, Dialog,
+    Disclosure, Divider, Empty, Fact, Facts, Field, Fit, Form, Grid, Hidden, Icon, Image, Justify,
+    Link, List, Live, Menu, Method, NativeView, Node, Popover, Progress, Prominence, Region, Rich,
+    Role, Row, RowState, Run, Section, SectionStyle, Series, Sheet, SheetSize, Sort, SortDir,
+    Spacer, Split, Stack, Tab, Table, TableRow, Tabs, Text, TextStyle, Tone, WebRegion,
 };
 use navree_native::op::{Op, Toast, ToastAction, UrlMode};
 use navree_native::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
@@ -87,8 +87,8 @@ fn counted(value: &str, label: &str, count: &str) -> ChoiceOption {
 /// The orders of a shop: a table a narrow screen draws as a list, from the
 /// columns' roles.
 fn screen_list() -> Envelope {
-    let order = |id: &str, number: &str, who: &str, status: Badge, total: &str, when: &str| {
-        TableRow {
+    let order =
+        |id: &str, number: &str, who: &str, status: Badge, total: &str, when: &str| TableRow {
             id: Some(s(id)),
             cells: vec![
                 Node::Stack(Stack {
@@ -112,8 +112,7 @@ fn screen_list() -> Envelope {
                 text(when),
             ],
             action: Some(Action::navigate(format!("/orders/{id}"))),
-        }
-    };
+        };
     let table = Table {
         id: Some(s("orders")),
         caption: Some(s("Orders")),
@@ -442,7 +441,9 @@ fn screen_detail() -> Envelope {
             Node::Dialog(Dialog {
                 id: s("refund"),
                 title: Some(s("Refund CH-1042")),
-                text: Some(s("Up to ₹1,24,050 can go back to the customer's UPI account.")),
+                text: Some(s(
+                    "Up to ₹1,24,050 can go back to the customer's UPI account.",
+                )),
                 children: vec![refund_form()],
                 ..Dialog::default()
             }),
@@ -668,7 +669,11 @@ fn screen_form() -> Envelope {
                 "Pays by",
                 Input::Choice(ChoiceInput {
                     kind: ChoiceKind::Radio,
-                    options: vec![option("upi", "UPI"), option("card", "Card"), option("cod", "Cash on delivery")],
+                    options: vec![
+                        option("upi", "UPI"),
+                        option("card", "Card"),
+                        option("cod", "Cash on delivery"),
+                    ],
                     value: Some(s("upi")),
                     placeholder: None,
                 }),
@@ -677,7 +682,11 @@ fn screen_form() -> Envelope {
                 "tags",
                 "Tags",
                 Input::Choices(ChoicesInput {
-                    options: vec![option("festive", "Festive"), option("bulk", "Bulk"), option("gift", "Gift")],
+                    options: vec![
+                        option("festive", "Festive"),
+                        option("bulk", "Bulk"),
+                        option("gift", "Gift"),
+                    ],
                     values: vec![s("festive"), s("gift")],
                 }),
             ),
@@ -722,7 +731,9 @@ fn screen_form() -> Envelope {
             field(
                 "label",
                 "Label colour",
-                Input::Colour(ColourInput { value: s("#16a34a") }),
+                Input::Colour(ColourInput {
+                    value: s("#16a34a"),
+                }),
             ),
             field(
                 "papers",
@@ -1309,7 +1320,9 @@ where
         std::fs::create_dir_all(corpus()).unwrap();
         std::fs::write(&path, &written).unwrap();
     }
-    let on_disk = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert_eq!(
         on_disk, written,
         "corpus/{name}.json is not what the types write now; if the change is meant, write \

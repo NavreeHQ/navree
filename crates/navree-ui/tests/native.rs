@@ -26,7 +26,8 @@ use serde::Deserialize;
 
 const NATIVE: &str = "x-navree-native";
 const CLIENT: &str = "x-navree-client";
-const PHONE: &str = "platform=android; os=16; form=phone; app=0.1.0; vocab=1; locale=en-IN; tz=Asia/Kolkata";
+const PHONE: &str =
+    "platform=android; os=16; form=phone; app=0.1.0; vocab=1; locale=en-IN; tz=Asia/Kolkata";
 
 fn phone() -> Client {
     Client::new(Platform::Android, FormFactor::Phone)
@@ -98,7 +99,10 @@ fn a_form_view_reads_as_a_form_of_fields_with_their_labels_and_help() {
     };
     assert_eq!(amount.name, "amount");
     assert_eq!(amount.label.as_deref(), Some("Amount"));
-    assert_eq!(amount.help.as_deref(), Some("Up to what is left to refund."));
+    assert_eq!(
+        amount.help.as_deref(),
+        Some("Up to what is left to refund.")
+    );
     assert_eq!(amount.id.as_deref(), Some("refund-form-amount"));
     let Input::Text(typed) = &amount.input else {
         panic!("not typed");
@@ -224,8 +228,12 @@ fn a_data_table_built_for_a_native_client_reads_as_a_table_with_the_form_that_as
     // The rows: a cell a column, each the component the page drew or the value's text.
     assert_eq!(table.rows.len(), 2);
     assert_eq!(table.rows[0].id.as_deref(), Some("1"));
-    let [N::Button(number), N::Badge(status), N::Text(total), N::Text(placed)] =
-        table.rows[0].cells.as_slice()
+    let [
+        N::Button(number),
+        N::Badge(status),
+        N::Text(total),
+        N::Text(placed),
+    ] = table.rows[0].cells.as_slice()
     else {
         panic!("not the cells: {:?}", table.rows[0].cells);
     };
@@ -246,7 +254,10 @@ fn a_data_table_built_for_a_native_client_reads_as_a_table_with_the_form_that_as
             _ => None,
         })
         .collect();
-    let search = fields.iter().find(|field| field.name == "search").expect("a search");
+    let search = fields
+        .iter()
+        .find(|field| field.name == "search")
+        .expect("a search");
     assert!(matches!(&search.input, Input::Text(text) if text.kind == TextKind::Search));
     let status = fields
         .iter()
@@ -279,9 +290,18 @@ fn a_data_table_built_for_a_native_client_reads_as_a_table_with_the_form_that_as
         "{fields:?}"
     );
     // What only arranges the web table is not a field.
-    assert!(!fields.iter().any(|field| field.name == "cols" || field.name == "fb"));
+    assert!(
+        !fields
+            .iter()
+            .any(|field| field.name == "cols" || field.name == "fb")
+    );
     // Five orders, two a page: the next page has an address.
-    assert!(table.more.as_deref().is_some_and(|more| more.contains("page=2")));
+    assert!(
+        table
+            .more
+            .as_deref()
+            .is_some_and(|more| more.contains("page=2"))
+    );
     assert_eq!(table.prev, None);
     assert!(table.summary.is_some());
 }
@@ -301,7 +321,11 @@ fn a_data_table_with_no_rows_reads_its_empty_state() {
         panic!("not one table");
     };
     assert!(table.rows.is_empty());
-    assert!(matches!(table.empty.as_deref(), Some(N::Empty(_))), "{:?}", table.empty);
+    assert!(
+        matches!(table.empty.as_deref(), Some(N::Empty(_))),
+        "{:?}",
+        table.empty
+    );
 }
 
 #[test]
@@ -398,14 +422,18 @@ impl Controller for Pages {
                 |shell: AppShell, Path(_id): Path<i64>| async move { order_page(&shell) },
             )
             .public(),
-            RouteDef::on(Method::POST, "!/orders/{id}/refund", |Path(id): Path<i64>| async move {
-                Reply::ops_or_redirect(format!("/orders/{id}"))
-                    .op(Op::Close {
-                        target: "refund".to_owned(),
-                    })
-                    .morph("order-page", order_body("Refunded"))
-                    .toast(ToastTone::Success, "₹7,848 went back.")
-            })
+            RouteDef::on(
+                Method::POST,
+                "!/orders/{id}/refund",
+                |Path(id): Path<i64>| async move {
+                    Reply::ops_or_redirect(format!("/orders/{id}"))
+                        .op(Op::Close {
+                            target: "refund".to_owned(),
+                        })
+                        .morph("order-page", order_body("Refunded"))
+                        .toast(ToastTone::Success, "₹7,848 went back.")
+                },
+            )
             .public(),
             RouteDef::on(Method::GET, "!/board", |shell: AppShell| async move {
                 shell.page("Board").body((Text::new("Cards"), el("canvas")))
@@ -486,7 +514,10 @@ async fn a_native_client_gets_the_page_as_a_screen() {
     let screen = envelope.screen.expect("a screen");
     assert_eq!(screen.title, "Order CS-20481");
     assert_eq!(screen.nav.as_deref(), Some("/orders"));
-    assert_eq!(screen.back.as_ref().map(|back| back.href.as_str()), Some("/orders"));
+    assert_eq!(
+        screen.back.as_ref().map(|back| back.href.as_str()),
+        Some("/orders")
+    );
     assert_eq!(screen.trail.len(), 2);
     assert_eq!(screen.id.as_deref(), Some("order-page"));
     let [N::Button(print)] = screen.actions.as_slice() else {
@@ -522,7 +553,9 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
         .send()
         .await;
     let envelope = envelope(&response.text());
-    let screen = envelope.screen.unwrap_or_else(|| panic!("{:?}", envelope.web));
+    let screen = envelope
+        .screen
+        .unwrap_or_else(|| panic!("{:?}", envelope.web));
     let table = screen.body.find("orders").expect("the table's region");
     let N::Region(region) = table else {
         panic!("not a region");
@@ -542,7 +575,12 @@ async fn a_browser_gets_the_html_it_always_got() {
         response.header("content-type"),
         Some("text/html; charset=utf-8")
     );
-    assert!(!response.header("vary").unwrap_or_default().contains("navree"));
+    assert!(
+        !response
+            .header("vary")
+            .unwrap_or_default()
+            .contains("navree")
+    );
     let expected = order_page(&shell().for_request("/orders/1", &http::HeaderMap::new()))
         .to_view()
         .to_html();
@@ -571,7 +609,10 @@ async fn a_browser_gets_the_html_it_always_got() {
         Some("application/vnd.navree.ops+json")
     );
     let body = response.text();
-    assert!(body.contains(r#"{"op":"morph","target":"order-page","html":"<div id=\"order-page\">"#), "{body}");
+    assert!(
+        body.contains(r#"{"op":"morph","target":"order-page","html":"<div id=\"order-page\">"#),
+        "{body}"
+    );
 }
 
 #[tokio::test]
@@ -594,8 +635,14 @@ async fn a_reply_is_ops_with_nodes_for_a_native_client() {
     assert_eq!(response.header("location"), None);
     let envelope = envelope(&response.text());
     assert!(envelope.screen.is_none());
-    let [NativeOp::Close { target }, NativeOp::Morph { target: morphed, node }, NativeOp::Toast(toast)] =
-        envelope.ops.as_slice()
+    let [
+        NativeOp::Close { target },
+        NativeOp::Morph {
+            target: morphed,
+            node,
+        },
+        NativeOp::Toast(toast),
+    ] = envelope.ops.as_slice()
     else {
         panic!("not the ops: {:?}", envelope.ops);
     };
@@ -764,7 +811,12 @@ async fn a_client_the_server_can_not_read_is_refused_before_a_handler_runs() {
         .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(response.text().contains("beos"));
-    let response = app.client().get("/orders/1").header(NATIVE, "1").send().await;
+    let response = app
+        .client()
+        .get("/orders/1")
+        .header(NATIVE, "1")
+        .send()
+        .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
