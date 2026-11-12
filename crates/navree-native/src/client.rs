@@ -754,9 +754,9 @@ mod tests {
 
     #[test]
     fn the_web_view_token_is_found_in_a_user_agent() {
-        let agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 \
+        let user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 \
                      (KHTML, like Gecko) Mobile/15E148 NavreeNative/1 (platform=ios; lib=0.3.0)";
-        let token = WebViewToken::find(agent).unwrap();
+        let token = WebViewToken::find(user_agent).unwrap();
         assert_eq!(
             token,
             WebViewToken {

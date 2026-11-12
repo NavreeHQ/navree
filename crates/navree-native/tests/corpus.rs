@@ -1863,8 +1863,8 @@ fn screen_inbox() -> Envelope {
         }],
         children: vec![
             Node::Field(Field {
-                id: Some(s("reply-agent")),
-                name: s("agent"),
+                id: Some(s("reply-assignee")),
+                name: s("assignee"),
                 label: Some(s("Assign to")),
                 help: None,
                 error: None,
@@ -1875,7 +1875,7 @@ fn screen_inbox() -> Envelope {
                     options: vec![option("12", "Amandeep Gill")],
                     value: Some(s("12")),
                     search: Some(ChoiceSearch {
-                        href: s("/inbox/agents/options"),
+                        href: s("/inbox/assignees/options"),
                         name: s("q"),
                         min: 2,
                     }),

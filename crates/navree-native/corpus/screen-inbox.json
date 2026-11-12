@@ -170,8 +170,8 @@
               "children": [
                 {
                   "t": "field",
-                  "id": "reply-agent",
-                  "name": "agent",
+                  "id": "reply-assignee",
+                  "name": "assignee",
                   "label": "Assign to",
                   "input": {
                     "t": "choice",
@@ -184,7 +184,7 @@
                     ],
                     "value": "12",
                     "search": {
-                      "href": "/inbox/agents/options",
+                      "href": "/inbox/assignees/options",
                       "name": "q",
                       "min": 2
                     }
