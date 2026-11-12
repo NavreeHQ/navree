@@ -6,11 +6,13 @@ on:
     paths:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
+      - "packages/android/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
+      - "packages/android/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -125,4 +127,191 @@ jobs:
           name: navree-native-core
           if-no-files-found: error
           path: dist/navree-native-core
+          retention-days: 30
+
+  # The Android client: built against platform 36 with the core's libraries
+  # from the job above, its JVM tests run, and its APKs kept for the screens.
+  android:
+    name: Android client
+    needs: core
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: native-android-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      GRADLE_VERSION: "9.6.0"
+      GRADLE_SHA256: bbaeb2fef8710818cf0e261201dab964c572f92b942812df0c3620d62a529a01
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+    defaults:
+      run:
+        working-directory: packages/android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: The core's libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: navree-native-core
+          path: ${{ runner.temp }}/navree-native-core
+
+      - name: The core's libraries in the client
+        run: |
+          core="$RUNNER_TEMP/navree-native-core"
+          (cd "$core" && sha256sum -c SHA256SUMS)
+          for abi in arm64-v8a x86_64; do
+            mkdir -p "navree-native/src/main/jniLibs/$abi"
+            cp "$core/android/$abi/libnavree_native_core.so" "navree-native/src/main/jniLibs/$abi/"
+          done
+          cat "$core/COMMIT"
+
+      # JDK 17 and Gradle 9.6.0, which the Android Gradle plugin 9.5 needs;
+      # Gradle comes from its own site and is checked against a fixed sum.
+      - name: JDK and Gradle
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          curl -fsSL -o "$RUNNER_TEMP/gradle.zip" "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+          echo "$GRADLE_SHA256  $RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-$GRADLE_VERSION/bin" >> "$GITHUB_PATH"
+
+      - name: Platform 36
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses > /dev/null
+          "$sdk" --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          ls "$ANDROID_HOME/platforms"
+
+      - name: Gradle's caches
+        id: gradle-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-gradle-${{ hashFiles('packages/android/**/*.gradle.kts', 'packages/android/gradle/libs.versions.toml') }}
+          restore-keys: android-gradle-
+
+      # The library and the demo, the JVM tests (the protocol's models against
+      # every example answer, the placement rules), and the device tests' APK.
+      - name: Build and test
+        run: |
+          gradle --console=plain --stacktrace \
+            :navree-native:testDebugUnitTest \
+            :navree-native:assembleDebugAndroidTest \
+            :demo:assembleDebug
+
+      - name: Keep Gradle's caches
+        if: steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-gradle-${{ hashFiles('packages/android/**/*.gradle.kts', 'packages/android/gradle/libs.versions.toml') }}
+
+      - name: Keep the test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-test-reports
+          if-no-files-found: ignore
+          path: packages/android/navree-native/build/reports/tests
+          retention-days: 14
+
+      - name: Keep the APKs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-apks
+          if-no-files-found: error
+          path: |
+            packages/android/navree-native/build/outputs/apk/androidTest/debug/*.apk
+            packages/android/demo/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+  # The device tests on an emulator, on a phone and on a tablet: each screen in
+  # four looks (light, dark, the largest text, right to left), photographed.
+  android-screens:
+    name: Android screens (${{ matrix.device }})
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: phone
+            profile: pixel_7
+          - device: tablet
+            profile: pixel_tablet
+    env:
+      IMAGE: system-images;android-35;google_apis;x86_64
+    steps:
+      - name: The APKs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-apks
+          path: ${{ runner.temp }}/apks
+
+      # The emulator runs on the processor's own virtualisation.
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: The emulator
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
+          adb="$ANDROID_HOME/platform-tools/adb"
+          yes | "$sdk/sdkmanager" --licenses > /dev/null
+          "$sdk/sdkmanager" --install emulator platform-tools "$IMAGE" > /dev/null
+          echo no | "$sdk/avdmanager" create avd -n screens -k "$IMAGE" -d "${{ matrix.profile }}" --force
+          "$ANDROID_HOME/emulator/emulator" -avd screens -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -memory 4096 -cores 4 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          timeout 600 "$adb" wait-for-device
+          timeout 600 bash -c 'until [ "$("$0" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 5; done' "$adb"
+          "$adb" root > /dev/null
+          sleep 3
+          "$adb" wait-for-device
+          for scale in window_animation_scale transition_animation_scale animator_duration_scale; do
+            "$adb" shell settings put global "$scale" 0
+          done
+          "$adb" shell wm size
+          "$adb" shell wm density
+
+      - name: Screens
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
+          status=0
+          for look in light dark large rtl; do
+            night=no; scale=1.0; rtl=0
+            case "$look" in
+              dark) night=yes ;;
+              large) scale=2.0 ;;
+              rtl) rtl=1 ;;
+            esac
+            "$adb" shell cmd uimode night "$night"
+            "$adb" shell settings put system font_scale "$scale"
+            "$adb" shell settings put global debug.force_rtl "$rtl"
+            "$adb" shell setprop debug.force_rtl "$rtl"
+            "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$look.txt"
+            if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$look.txt"; then status=1; fi
+          done
+          mkdir -p "$RUNNER_TEMP/screens"
+          "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/" || true
+          cp "$RUNNER_TEMP"/instrument-*.txt "$RUNNER_TEMP/screens/"
+          "$adb" logcat -d > "$RUNNER_TEMP/screens/logcat.txt" || true
+          ls -R "$RUNNER_TEMP/screens"
+          exit $status
+
+      - name: Keep the screens
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-screens-${{ matrix.device }}
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/screens
           retention-days: 30
