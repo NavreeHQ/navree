@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -47,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -333,41 +336,32 @@ internal fun EmptyView(node: EmptyNode, place: Place, modifier: Modifier = Modif
 }
 
 /**
- * Facts: each a label over its value, as a list item with the label above
- * the headline, an icon at the start when it has one, and its other lines
- * under it. TalkBack reads a fact as one thing.
+ * Facts: each a small label over its value, with an icon at the start when it
+ * has one and its other lines under it. TalkBack reads a fact as one thing.
  */
 @Composable
 private fun FactsView(node: FactsNode, place: Place, modifier: Modifier) {
-    Column(modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         for (fact in node.items) {
             val icon = fact.icon
-            ListItem(
-                overlineContent = { Text(fact.label) },
-                headlineContent = {
-                    Column {
-                        for (value in fact.value) NodeView(value, place)
+            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (icon != null) {
+                    val colours = toneColours(ContentRules.tone(fact.tone))
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(colours.container),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        IconView(icon, Modifier.size(20.dp), tint = if (fact.tone == Tone.Neutral) MaterialTheme.colorScheme.onSurfaceVariant else colours.content)
                     }
-                },
-                supportingContent = if (fact.details.isNotEmpty()) {
-                    { Text(fact.details.joinToString("\n")) }
-                } else {
-                    null
-                },
-                leadingContent = if (icon != null) {
-                    {
-                        val colours = toneColours(ContentRules.tone(fact.tone))
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(colours.container),
-                            contentAlignment = Alignment.Center,
-                        ) { IconView(icon, Modifier.size(20.dp), tint = if (fact.tone == Tone.Neutral) MaterialTheme.colorScheme.onSurfaceVariant else colours.content) }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    for (value in fact.value) NodeView(value, place)
+                    for (line in fact.details) {
+                        Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                } else {
-                    null
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.semantics(mergeDescendants = true) {},
-            )
+                }
+            }
         }
     }
 }
@@ -420,9 +414,10 @@ private fun GridView(node: GridNode, place: Place, modifier: Modifier) {
         val shown = node.children.filter { inFlow(it, place.entry.local) }
         Column(verticalArrangement = Arrangement.spacedBy(gap.dp)) {
             for (line in shown.chunked(columns)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
+                // The parts of a line are as tall as the tallest of them.
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                     for (child in line) {
-                        Box(Modifier.weight(1f)) { NodeView(child, place) }
+                        Box(Modifier.weight(1f).fillMaxHeight()) { NodeView(child, place, Modifier.fillMaxHeight()) }
                     }
                     // An unfinished last line keeps its columns the width of the others.
                     repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
@@ -582,7 +577,15 @@ internal fun AvatarView(node: AvatarNode, modifier: Modifier = Modifier) {
         if (src != null) {
             RemoteImage(url = src, description = null, cover = true, modifier = Modifier.size(40.dp))
         } else if (initials.isNotEmpty()) {
-            Text(initials, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1)
+            // The circle does not grow with the user's text size, so neither do the letters in it:
+            // the name is written out beside it.
+            val fixed = with(LocalDensity.current) { 16.dp.toSp() }
+            Text(
+                initials,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = fixed),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+            )
         }
     }
 }

@@ -72,9 +72,12 @@ internal fun rememberWindow(): WindowInfo {
     return WindowInfo(size.width.value.roundToInt(), size.height.value.roundToInt(), scale)
 }
 
-/** Content in a wide window is one column of readable width, in the middle. */
+/**
+ * Content in a wide window is one column of readable width, in the middle.
+ * What is in the column starts at the column's start, as text does.
+ */
 internal fun Modifier.readable(mostDp: Int = ContentRules.CONTENT_MOST_DP): Modifier =
-    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = mostDp.dp)
+    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = mostDp.dp).fillMaxWidth()
 
 @Composable
 internal fun failureTitle(failure: Failure): String = stringResource(
