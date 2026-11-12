@@ -267,10 +267,20 @@ jobs:
           yes | "$sdk/sdkmanager" --licenses > /dev/null
           "$sdk/sdkmanager" --install emulator platform-tools "$IMAGE" > /dev/null
           echo no | "$sdk/avdmanager" create avd -n screens -k "$IMAGE" -d "${{ matrix.profile }}" --force
-          "$ANDROID_HOME/emulator/emulator" -avd screens -no-window -no-audio -no-boot-anim -no-snapshot \
-            -gpu swiftshader_indirect -memory 4096 -cores 4 > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          timeout 600 "$adb" wait-for-device
-          timeout 600 bash -c 'until [ "$("$0" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 5; done' "$adb"
+          ls -l /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check || true
+          "$ANDROID_HOME/emulator/emulator" -avd screens -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -accel on -gpu swiftshader_indirect -memory 4096 -cores 4 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          booted=0
+          for _ in $(seq 1 120); do
+            if [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then booted=1; break; fi
+            sleep 5
+          done
+          if [ "$booted" != 1 ]; then
+            echo "the emulator did not start"
+            tail -100 "$RUNNER_TEMP/emulator.log"
+            exit 1
+          fi
           "$adb" root > /dev/null
           sleep 3
           "$adb" wait-for-device
