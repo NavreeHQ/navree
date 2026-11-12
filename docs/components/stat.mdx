@@ -31,6 +31,18 @@ Stat::new("Open deals", "312").trend("+12 this week", true)
 
 <UiPreview example="sparkline/default" />
 
+## A change
+
+`Stat::trend(text, good)` writes how a figure moved in your own words. `Stat::change(Trend)` writes it as a [Trend](/docs/components/trend/): an arrow, the change with its sign, and a color for what it means, with `up_is_bad()` for figures where a rise is bad news.
+
+```rust
+use navree::ui::*;
+
+Stat::new("Resting heart rate", "58 bpm").change(Trend::new(3.0).up_is_bad())
+```
+
+<UiPreview example="trend/default" />
+
 ## Keyboard and accessibility
 
 <UiA11y>

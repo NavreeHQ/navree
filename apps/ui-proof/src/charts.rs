@@ -343,6 +343,102 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "meter",
+            Meter::new("Sleep stages")
+                .id("meter")
+                .description("A gradient, a gloss and labels inside the wide segments")
+                .minutes()
+                .gradient()
+                .gloss()
+                .motion(Motion::new())
+                .segment(Segment::new("Deep", 92).ink(Ink::slot(7)))
+                .segment(Segment::new("REM", 98).ink(Ink::tone(Tone::named("cyan"))))
+                .segment(Segment::new("Core", 215).ink(Ink::slot(3)))
+                .segment(Segment::new("Awake", 35).ink(Ink::slot(4)))
+                .segment(Segment::new("Unscored", 0))
+                .into(),
+        ),
+        (
+            "meter-compact",
+            Meter::new("Zones")
+                .id("meter-compact")
+                .compact()
+                .minutes()
+                .segment(Segment::new("Rest", 6).ink(Ink::tone(Tone::named("slate"))))
+                .segment(Segment::new("Cardio", 22).ink(Ink::tone(Tone::Success)))
+                .segment(Segment::new("Peak", 8).ink(Ink::tone(Tone::Danger)))
+                .into(),
+        ),
+        (
+            "meter-hostile",
+            Meter::new(NASTY)
+                .id("meter-hostile")
+                .description(NASTY)
+                .segment(Segment::new(NASTY, 3).text(NASTY))
+                .segment(Segment::new("Second", f64::NAN))
+                .segment(Segment::new("Huge", f64::MAX))
+                .into(),
+        ),
+        (
+            "mini-columns",
+            MiniColumns::new("Sleep cycles")
+                .id("mini-columns")
+                .minutes()
+                .column_name("Cycle")
+                .motion(Motion::new())
+                .part("Deep", Ink::slot(7))
+                .part("REM", Ink::tone(Tone::named("cyan")))
+                .part("Core", Ink::slot(3))
+                .column(MiniColumn::new("Cycle 1", [34, 8, 38]))
+                .column(MiniColumn::new("Cycle 2", [28, 16, 42]))
+                .column(MiniColumn::new("Cycle 3", [18, 24, 45]))
+                .column(MiniColumn::new("Cycle 4", [8, 31, 40]))
+                .column(MiniColumn::new("Gaps", [None, Some(5.0), None]))
+                .into(),
+        ),
+        (
+            "color-strip",
+            ColorStrip::new("Heart rate zones")
+                .id("color-strip")
+                .cell_name("Time")
+                .value_name("Heart rate")
+                .format(NumberFormat::number().suffix(" bpm"))
+                .legend_shares()
+                .motion(Motion::new())
+                .colors(
+                    ColorScale::new(Ink::tone(Tone::named("slate")))
+                        .label("Rest")
+                        .from(100, Ink::tone(Tone::named("cyan")))
+                        .label("Fat burn")
+                        .from(130, Ink::tone(Tone::Warning))
+                        .label("Cardio"),
+                )
+                .readings(
+                    wave(5, 120, 110.0, 30.0)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(at, bpm)| (format!("{}:{:02}", at / 60, at % 60), bpm.round())),
+                )
+                .into(),
+        ),
+        (
+            "range-scale",
+            RangeScale::new("Resting heart rate", 58)
+                .id("range-scale")
+                .range(40, 120)
+                .format(NumberFormat::number().suffix(" bpm"))
+                .show_value()
+                .motion(Motion::new().delay(300))
+                .track(
+                    Gradient::horizontal()
+                        .stop_with_opacity(0.0, Ink::tone(Tone::Success), 0.55)
+                        .stop_with_opacity(0.3, Ink::tone(Tone::named("cyan")), 0.55)
+                        .stop_with_opacity(0.6, Ink::tone(Tone::named("orange")), 0.55)
+                        .stop_with_opacity(1.0, Ink::tone(Tone::Danger), 0.55),
+                )
+                .into(),
+        ),
+        (
             "sparkline",
             Grid::cols(3)
                 .gap(3)

@@ -17,6 +17,7 @@ mod icons;
 mod inbox;
 mod inputs;
 mod layout;
+mod linear;
 mod markdown;
 mod menu_bars;
 mod menus;
@@ -62,6 +63,7 @@ pub fn all() -> Vec<Example> {
     all.extend(data::all());
     all.extend(sortable::all());
     all.extend(charts::all());
+    all.extend(linear::all());
     all.extend(chat::all());
     all.extend(patterns::all());
     all.extend(themes::all());

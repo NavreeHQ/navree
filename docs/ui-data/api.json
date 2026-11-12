@@ -3727,6 +3727,204 @@
       }
     ]
   },
+  "ColorStrip": {
+    "name": "ColorStrip",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/strip.rs",
+    "summary": "A sequence of equal-width cells, each in the colour of its category: the zone every heart-rate reading of a workout fell in, the stage every half hour of a night was in, the state of every check of a service. Cells are equal in width, so the strip is proportional to the number of readings, not to time. The legend names the categories and can give each one's share of the cells.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A strip called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "category",
+        "generics": "",
+        "args": "name: impl Into<String>, ink: impl Into<Ink>",
+        "doc": "Declares a category in `ink`, which puts it in the legend in this order. A cell whose category was not declared adds one in the next of the categorical colours."
+      },
+      {
+        "name": "cell",
+        "generics": "",
+        "args": "label: impl Into<String>, category: impl Into<String>",
+        "doc": "Adds a cell called `label` (a time, a number) in `category`."
+      },
+      {
+        "name": "cells",
+        "generics": "<L: Into<String>, C: Into<String>>",
+        "args": "cells: impl IntoIterator<Item =(L, C)>",
+        "doc": "Adds cells from `(label, category)` pairs."
+      },
+      {
+        "name": "reading",
+        "generics": "",
+        "args": "label: impl Into<String>, value: impl IntoValue",
+        "doc": "Adds a cell called `label` for a reading, in the colour of the band of the `colors` scale its value falls in. A missing reading is a cell in the quiet colour."
+      },
+      {
+        "name": "readings",
+        "generics": "<L: Into<String>, V: IntoValue>",
+        "args": "readings: impl IntoIterator<Item =(L, V)>",
+        "doc": "Adds readings from `(label, value)` pairs."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "The scale that colours readings. Name each of its bands with `label`: the legend and the table use the names."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How readings are written."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The strip's thickness in pixels, 4 to 32 (8 by default)."
+      },
+      {
+        "name": "legend_shares",
+        "generics": "",
+        "args": "",
+        "doc": "Writes each category's share of the cells in the legend."
+      },
+      {
+        "name": "cell_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the table's first column (`Time`, the chart's word for it otherwise)."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the table's column of readings (`Heart rate`)."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the cells come in: they fade in from the start, one after another, within about a second however many there are. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: LinearLabels",
+        "doc": "The words the chart writes besides the common ones."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Combobox": {
     "name": "Combobox",
     "kind": "struct",
@@ -8563,6 +8761,23 @@
     "variants": [],
     "shared": []
   },
+  "LinearLabels": {
+    "name": "LinearLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/linear.rs",
+    "summary": "The words the linear charts write, in English by default. Templates name their blanks in braces.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "The English words."
+      }
+    ],
+    "methods": [],
+    "variants": [],
+    "shared": []
+  },
   "ListState": {
     "name": "ListState",
     "kind": "struct",
@@ -9288,6 +9503,222 @@
     "variants": [],
     "shared": []
   },
+  "Meter": {
+    "name": "Meter",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/meter.rs",
+    "summary": "One bar split into segments, drawn as 100%: how a night divides into sleep stages, how a workout divides into heart-rate zones, where an order stands. Each segment can say its share inside the bar when it is wide enough, its name, value and share are in the legend under the bar, and hovering or moving to a segment names it in a tooltip.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "A meter called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "segment",
+        "generics": "",
+        "args": "segment: Segment",
+        "doc": "Adds a segment."
+      },
+      {
+        "name": "segments",
+        "generics": "",
+        "args": "segments: impl IntoIterator<Item = Segment>",
+        "doc": "Adds segments."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written."
+      },
+      {
+        "name": "minutes",
+        "generics": "",
+        "args": "",
+        "doc": "Values are minutes, written as durations: `45 min`, `1 h 23 min`, `2 h`. The words come from `words`."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints every segment with `gradient` (a segment's own `fill` wins); `Ink::own` in its stops is the segment's colour."
+      },
+      {
+        "name": "gradient",
+        "generics": "",
+        "args": "",
+        "doc": "Paints every segment from a softer shade of its colour to the full colour, left to right."
+      },
+      {
+        "name": "gloss",
+        "generics": "",
+        "args": "",
+        "doc": "A soft highlight along the top of the bar."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The bar's thickness in pixels, 8 to 48 (24 by default)."
+      },
+      {
+        "name": "compact",
+        "generics": "",
+        "args": "",
+        "doc": "The small form for a cell of a grid: 16 px high, no labels inside, no legend, and the table for a screen reader only. `height`, `legend` and `table` after it change that."
+      },
+      {
+        "name": "pill",
+        "generics": "",
+        "args": "",
+        "doc": "Rounds both ends into a pill. Corners are 4 px otherwise."
+      },
+      {
+        "name": "label_from",
+        "generics": "",
+        "args": "percent: f64",
+        "doc": "The smallest share, in percent, that is written inside its segment (15 by default). A bar under 18 px high writes none."
+      },
+      {
+        "name": "legend",
+        "generics": "",
+        "args": "shown: bool",
+        "doc": "Shows or hides the legend under the bar. It is shown, except on a compact meter."
+      },
+      {
+        "name": "value_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the value column of the table and the tooltip (`Duration`); the chart's word for a value otherwise."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the segments come in: they grow from the start, one after another, and their labels fade in after them. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "rtl",
+        "generics": "",
+        "args": "",
+        "doc": "Runs the bar from the right, for a right-to-left page."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: LinearLabels",
+        "doc": "The words the chart writes besides the common ones: the units of a duration."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Metric": {
     "name": "Metric",
     "kind": "enum",
@@ -9327,6 +9758,216 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "MiniColumn": {
+    "name": "MiniColumn",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/mini_columns.rs",
+    "summary": "One column of `MiniColumns`: a label and the amount of each part.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "<V: IntoValue>",
+        "args": "label: impl Into<String>, values: impl IntoIterator<Item = V>",
+        "doc": "A column called `label`, holding one value for each part of the chart, in the order the parts were added. A part with no value, or none above zero, draws nothing."
+      }
+    ],
+    "methods": [
+      {
+        "name": "total",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Writes `text` under the column and in the table, instead of the sum of its parts."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "MiniColumns": {
+    "name": "MiniColumns",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/mini_columns.rs",
+    "summary": "Small multiples: one column for each item (a sleep cycle, a day, a store), each split into the same parts and drawn as 100%, so the columns compare their makeup and not their size. A label sits above each column and its total below; hovering or moving to a column lists its parts in a tooltip.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Mini columns called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "part",
+        "generics": "",
+        "args": "name: impl Into<String>, ink: impl Into<Ink>",
+        "doc": "Adds a part, stacked under the ones added before it, in `ink`."
+      },
+      {
+        "name": "part_auto",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "Adds a part in the next of the categorical colours."
+      },
+      {
+        "name": "column",
+        "generics": "",
+        "args": "column: MiniColumn",
+        "doc": "Adds a column."
+      },
+      {
+        "name": "columns",
+        "generics": "",
+        "args": "columns: impl IntoIterator<Item = MiniColumn>",
+        "doc": "Adds columns."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How values are written."
+      },
+      {
+        "name": "minutes",
+        "generics": "",
+        "args": "",
+        "doc": "Values are minutes, written as durations: `45 min`, `1 h 23 min`. The words come from `words`."
+      },
+      {
+        "name": "column_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The name of the table's first column (`Cycle`); the chart's word for a category otherwise."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The columns' height in pixels, 24 to 160 (48 by default)."
+      },
+      {
+        "name": "hide_totals",
+        "generics": "",
+        "args": "",
+        "doc": "Writes no total under the columns."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the columns come in: each fills from the top, one after another. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: LinearLabels",
+        "doc": "The words the chart writes besides the common ones."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Mode": {
@@ -11477,6 +12118,168 @@
     "variants": [],
     "shared": []
   },
+  "RangeScale": {
+    "name": "RangeScale",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/range_scale.rs",
+    "summary": "One value on a scale between a low end and a high end, with a marker: a resting heart rate between 40 and 120, a blood-pressure reading, a price between its day's low and high. The track can be a gradient through any stops, so the ends can read as good and bad; the colours are never the only way to read it, because the end labels, the summary and the table give the numbers.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<String>, value: impl IntoValue",
+        "doc": "A scale called `title` with the marker at `value`. A value that is missing leaves the chart empty."
+      }
+    ],
+    "methods": [
+      {
+        "name": "range",
+        "generics": "",
+        "args": "min: impl IntoValue, max: impl IntoValue",
+        "doc": "The low and the high end of the scale (0 and 100 by default). Reversed ends are put in order; ends that are equal make a scale one wide."
+      },
+      {
+        "name": "track",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints the track with `gradient`, over the quiet track: its stops set where the colours change, along the scale from the low end (0) to the high end (1). Use a horizontal one."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "format: NumberFormat",
+        "doc": "How the value and the ends are written."
+      },
+      {
+        "name": "ends",
+        "generics": "",
+        "args": "low: impl Into<String>, high: impl Into<String>",
+        "doc": "Writes `low` and `high` under the ends, instead of the ends as numbers."
+      },
+      {
+        "name": "show_value",
+        "generics": "",
+        "args": "",
+        "doc": "Writes the value above the marker."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the marker comes in: it pops in, after the delay. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "words: LinearLabels",
+        "doc": "The words the chart writes besides the common ones."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the figure's id, which the table switch and the names inside it build on. Give one when two charts on a page share a title."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Writes the title as a heading of `level` (2 to 6) rather than a caption."
+      },
+      {
+        "name": "hide_title",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the title for assistive technology and the table's caption, but shows none: for a chart in a card that has the title already."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "A line under the title."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Replaces the summary written from the data."
+      },
+      {
+        "name": "show_summary",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the summary under the drawing, as well as giving it to assistive technology."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: ChartLabels",
+        "doc": "The words the chart writes."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes numbers and dates for a language: `en-IN`, `de`, `fr`, `ar`."
+      },
+      {
+        "name": "number_locale",
+        "generics": "",
+        "args": "locale: NumberLocale",
+        "doc": "Writes numbers with these marks."
+      },
+      {
+        "name": "date_locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Writes dates with this locale."
+      },
+      {
+        "name": "table",
+        "generics": "",
+        "args": "mode: TableMode",
+        "doc": "Where the table sits: behind a switch (the default), shown, or for screen readers only."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows a placeholder the height of the chart while its data loads."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "reason: Option<String>",
+        "doc": "Shows that the data could not be loaded, never zeros: `reason` says why when given."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a link that asks again to a failed chart."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "title: impl Into<String>, text: Option<String>",
+        "doc": "What an empty chart says: a heading and a line under it."
+      },
+      {
+        "name": "action",
+        "generics": "",
+        "args": "action: impl Into<Node>",
+        "doc": "Something beside the title: a link to the full report, a menu."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the figure."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Ratio": {
     "name": "Ratio",
     "kind": "enum",
@@ -12334,6 +13137,42 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "Segment": {
+    "name": "Segment",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/charts/meter.rs",
+    "summary": "One segment of a `Meter`: a name and the amount it holds.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>, value: impl IntoValue",
+        "doc": "A segment called `name` that holds `value`. A value that is missing, zero or below zero draws nothing and stays in the legend and the table."
+      }
+    ],
+    "methods": [
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Colours the segment with any `Ink` of the theme. Without one, segments take the categorical colours in turn."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Paints the segment with `gradient` instead of its plain colour; `Ink::own` in its stops is the segment's colour."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Writes the segment's value as `text` in the legend, the tooltip and the table (`1 h 23 min`, `₹1,20,000`), instead of the meter's format."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "Select": {
@@ -14363,6 +15202,12 @@
         "generics": "",
         "args": "text: impl Into<Node>, good: bool",
         "doc": "Adds how it's moving; `good` colours it."
+      },
+      {
+        "name": "change",
+        "generics": "",
+        "args": "trend: Trend",
+        "doc": "Adds how it's moving as a `Trend`: an arrow, the change with its sign, and a colour for what it means. It replaces `trend`."
       }
     ],
     "variants": [],
@@ -17922,6 +18767,60 @@
         "generics": "",
         "args": "id: &str",
         "doc": "The address with `id` opened, or closed if it was open."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Trend": {
+    "name": "Trend",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/trend.rs",
+    "summary": "Which way something moved and by how much: an arrow, the change with its sign, and the colour of what it means. Whether a rise is good news depends on the figure: more steps are good, a higher resting heart rate is not, so the colour follows `up_is_bad` and never the direction alone. The words \"Up\", \"Down\" or \"No change\" are read by a screen reader before the figure.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "change: impl IntoValue",
+        "doc": "A change of `change`, written with its sign and a percent sign: `12.4` is `+12.4%`. Use `suffix` for another unit."
+      }
+    ],
+    "methods": [
+      {
+        "name": "up_is_bad",
+        "generics": "",
+        "args": "",
+        "doc": "A rise is bad news (resting heart rate, stress, debt): it is coloured as a warning, and a fall as good."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the trend with `tone` whichever way it moved: `Tone::Neutral` shows the direction with no judgement."
+      },
+      {
+        "name": "decimals",
+        "generics": "",
+        "args": "places: u8",
+        "doc": "The most decimals written, 0 to 3 (1 by default)."
+      },
+      {
+        "name": "suffix",
+        "generics": "",
+        "args": "suffix: impl Into<Cow<'static, str>>",
+        "doc": "What follows the number: `%` by default, ` bpm`, ` min`."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "Writes the number for a language: `de`, `en-IN`."
+      },
+      {
+        "name": "words",
+        "generics": "",
+        "args": "up: impl Into<Cow<'static, str>>, down: impl Into<Cow<'static, str>>, none: impl Into<Cow<'static, str>>",
+        "doc": "The words a screen reader hears before the figure."
       }
     ],
     "variants": [],

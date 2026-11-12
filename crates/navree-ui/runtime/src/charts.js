@@ -111,10 +111,12 @@ function show(body, i, keyed) {
   // Beside the value, on whichever side has room; never past the chart's edges. A chart
   // shorter than its tooltip (a few bars with many series) grows to hold it.
   const w = tip.offsetWidth, h = tip.offsetHeight;
-  if (body.hasAttribute("data-float") && marks[0]) {
+  if (body.hasAttribute("data-float")) {
     // A thin chart (a meter, a strip) floats the tooltip over the page, above the mark
     // and centred on it, or below it when the window has no room above; it never grows.
-    const r = marks[0].getBoundingClientRect();
+    // A value with no mark in the drawing (a part of nothing) is shown over the drawing.
+    const anchor = [...marks].find((m) => !closest(m, "[data-slot=chart-legend]")) ?? body.firstElementChild ?? body;
+    const r = anchor.getBoundingClientRect();
     tip.style.left = clamp(0, r.left - box.left + (r.width - w) / 2, box.width - w) + "px";
     tip.style.top = (r.top < h + 12 ? r.bottom - box.top + 6 : r.top - box.top - h - 6) + "px";
   } else {

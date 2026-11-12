@@ -157,6 +157,11 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "meter",
+            "mini-columns",
+            "color-strip",
+            "range-scale",
+            "trend",
         ],
     },
     Group {
@@ -750,6 +755,26 @@ pub const COMPONENTS: &[Component] = &[
         .parts("default"),
     component("funnel", "Funnel", &["Funnel", "Stage"], "thumb")
         .about("How many reach each stage of an ordered process, and what share of the first and of the stage before.")
+        .parts("default"),
+    component("meter", "Meter", &["Meter", "Segment", "LinearLabels"], "thumb")
+        .about("One bar split into segments that add up to the whole, with the share inside the wide ones and a legend of values.")
+        .parts("default"),
+    component(
+        "mini-columns",
+        "Mini columns",
+        &["MiniColumns", "MiniColumn"],
+        "thumb",
+    )
+    .about("Small multiples: one column per item, each split into the same parts and drawn to 100%.")
+    .parts("default"),
+    component("color-strip", "Colour strip", &["ColorStrip"], "thumb")
+        .about("A row of equal cells, each in the colour of its category or of the band its reading falls in.")
+        .parts("default"),
+    component("range-scale", "Range scale", &["RangeScale"], "thumb")
+        .about("One value on a scale between two ends, with a marker and a track that can be a gradient.")
+        .parts("default"),
+    component("trend", "Trend", &["Trend"], "thumb")
+        .about("Which way something moved and by how much: an arrow, a signed change and a colour for what it means.")
         .parts("default"),
     // Assistant
     component(
