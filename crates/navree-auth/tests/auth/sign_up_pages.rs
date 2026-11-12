@@ -378,6 +378,13 @@ async fn the_theme_menu_posts_from_this_site_without_the_token() {
     let _: &TestApp = &app;
 }
 
+/// A form's path, the page its post is sent back to, and its fields.
+type Expired = (
+    &'static str,
+    &'static str,
+    Vec<(&'static str, &'static str)>,
+);
+
 // Login CSRF: a page on a sibling subdomain, or a browser that says nothing of where it
 // posts from, sends the attacker's details to the sign-in or sign-up form of a reader who
 // has no session yet. Every form of the pages is drawn by a GET that starts the session,
@@ -398,7 +405,7 @@ async fn a_post_with_no_session_cookie_signs_nobody_in() {
     .await;
     create_user(&app, "attacker@example.com").await;
     // Each form, and the page its post is sent back to: its own, or where the step starts.
-    let posts: [(&str, &str, Vec<(&str, &str)>); 7] = [
+    let posts: [Expired; 7] = [
         (
             "/sign-in",
             "/sign-in?status=expired",
