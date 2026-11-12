@@ -141,6 +141,14 @@ impl Session {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Whether the request came with this session's cookie: `false` for a session the
+    /// request started (no cookie, or one for a session that has ended). A form that a
+    /// page of this site drew always comes back with one, since drawing it started the
+    /// session; a post with none came from somewhere else.
+    pub fn is_resumed(&self) -> bool {
+        self.lock().stored_id.is_some()
+    }
+
     /// The session id. It is a credential: never log it or send it to the
     /// client other than in the encrypted session cookie.
     pub fn id(&self) -> String {

@@ -61,9 +61,14 @@ impl RouteDef {
     /// someone is signed in on with `signed_in`: a public site's home page and the app's
     /// own home at the same address, say. Each handler takes its own extractors, so the
     /// signed-in one may take an extractor that refuses guests (the user, their unit of
-    /// work) and the guest one is never asked for it. The route is public; the answer
-    /// varies by `Cookie` and `Authorization`, so no cache hands one reader's page to
-    /// another.
+    /// work) and the guest one is never asked for it. The route is public.
+    ///
+    /// The answer varies by `Cookie` and `Authorization`, and a signed-in reader's answer
+    /// goes out as `Cache-Control: private, no-store` unless its handler kept it private
+    /// itself (`private` or `no-store`, without `public` or `s-maxage`). `Vary` alone is
+    /// not enough: several CDNs ignore `Vary: Cookie`, so a CDN or proxy in front must
+    /// also skip its cache for any request that carries the session cookie (or an
+    /// `Authorization` header), or the guest's page must not be cached at the edge.
     ///
     /// ```
     /// use http::Method;

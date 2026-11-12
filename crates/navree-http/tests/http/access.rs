@@ -887,3 +887,75 @@ async fn one_address_answers_a_guest_and_a_signed_in_reader_apart() {
     assert_eq!(reader.text(), format!("desk of {ALICE}"));
     assert_eq!(reader.header("vary"), Some("cookie, authorization"));
 }
+
+// A signed-in reader's answer never reaches a shared cache, whatever its handler said: with
+// no Cache-Control, or one that lets a shared cache keep it, it goes out private and
+// unstored. A handler that kept it private says so itself, and the guest's answer is as
+// its handler wrote it.
+#[tokio::test]
+async fn a_signed_in_readers_answer_is_never_left_to_a_shared_cache() {
+    let with = |cache: Option<&'static str>| {
+        move || async move {
+            let mut response = http::Response::new(Body::from("page"));
+            if let Some(cache) = cache {
+                response.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static(cache),
+                );
+            }
+            response
+        }
+    };
+    let app = Setup::new(vec![
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/none",
+            with(Some("public, max-age=300")),
+            with(None),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/public",
+            with(None),
+            with(Some("public, max-age=300")),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/shared",
+            with(None),
+            with(Some("max-age=60, S-MaxAge=600, private")),
+        ),
+        RouteDef::on_guest_or(Method::GET, "/aged", with(None), with(Some("max-age=60"))),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/private",
+            with(None),
+            with(Some("private, max-age=60")),
+        ),
+        RouteDef::on_guest_or(Method::GET, "/unstored", with(None), with(Some("no-store"))),
+    ])
+    .authenticated()
+    .boot()
+    .await;
+
+    let guest = app.get("/api/none").await;
+    assert_eq!(guest.header("cache-control"), Some("public, max-age=300"));
+    for path in ["/api/none", "/api/public", "/api/shared", "/api/aged"] {
+        let reader = app.send(as_user("GET", path, ALICE)).await;
+        assert_eq!(reader.status, StatusCode::OK, "{path}");
+        assert_eq!(
+            reader.header("cache-control"),
+            Some("private, no-store"),
+            "{path}"
+        );
+        assert_eq!(
+            reader.header("vary"),
+            Some("cookie, authorization"),
+            "{path}"
+        );
+    }
+    let kept = app.send(as_user("GET", "/api/private", ALICE)).await;
+    assert_eq!(kept.header("cache-control"), Some("private, max-age=60"));
+    let unstored = app.send(as_user("GET", "/api/unstored", ALICE)).await;
+    assert_eq!(unstored.header("cache-control"), Some("no-store"));
+}

@@ -7,8 +7,7 @@ use std::sync::Arc;
 use chrono::TimeDelta;
 use cookie::Cookie;
 use http::header::{
-    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HOST, HeaderName, ORIGIN, SET_COOKIE,
-    USER_AGENT,
+    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT,
 };
 use http::{HeaderMap, HeaderValue, Method};
 use navree_contracts::{
@@ -147,7 +146,20 @@ fn touch_interval(lifetime: TimeDelta) -> TimeDelta {
 
 /// The [`LayerSlot::Session`] layer.
 pub(crate) fn session_layer() -> GlobalLayer {
-    GlobalLayer::new(LayerSlot::Session, "session", |_ctx, router| {
+    GlobalLayer::new(LayerSlot::Session, "session", |ctx, router| {
+        // A weaker check than the token: say at boot which paths have it.
+        let paths: Vec<&'static str> = ctx
+            .contributions::<navree_http::csrf::SameOriginOnly>()
+            .into_iter()
+            .map(|contributed| contributed.value.0)
+            .collect();
+        if !paths.is_empty() {
+            tracing::info!(
+                target: "navree::security",
+                ?paths,
+                "these paths are checked by their origin in place of the CSRF token"
+            );
+        }
         let manager: Arc<OnceCell<Arc<SessionManager>>> = Arc::new(OnceCell::new());
         Ok(router.layer(from_fn_with_state(manager, handle)))
     })
@@ -181,7 +193,7 @@ impl SessionManager {
         };
         if self.needs_csrf_check(&request) {
             let checked = if self.same_origin_only.contains(&request.uri().path()) {
-                check_same_origin(request.headers())
+                check_same_origin(request.headers(), request.uri(), !cookies.is_empty())
             } else if cookies.is_empty() {
                 self.check_cross_site(request.headers())
             } else {
@@ -358,11 +370,15 @@ impl SessionManager {
     }
 }
 
-/// The check of a post to a [`navree_http::csrf::SameOriginOnly`] path, in place of the
+/// The check of a request to a [`navree_http::csrf::SameOriginOnly`] path, in place of the
 /// token: the browser's `Sec-Fetch-Site` must say `same-origin`; a browser that doesn't
-/// send it must send an `Origin` naming this host; a client that sends neither passes,
-/// since all such a route changes is the client's own preference.
-fn check_same_origin(headers: &HeaderMap) -> Result<(), CsrfFailure> {
+/// send it must send an `Origin` naming this host ([`navree_http::csrf::origin_is_host`]);
+/// a request that sends neither passes only without a session cookie.
+fn check_same_origin(
+    headers: &HeaderMap,
+    uri: &http::Uri,
+    has_session: bool,
+) -> Result<(), CsrfFailure> {
     if let Some(site) = headers.get(&SEC_FETCH_SITE) {
         return if site.as_bytes().eq_ignore_ascii_case(b"same-origin") {
             Ok(())
@@ -371,14 +387,15 @@ fn check_same_origin(headers: &HeaderMap) -> Result<(), CsrfFailure> {
         };
     }
     let Some(origin) = headers.get(ORIGIN) else {
-        return Ok(());
+        return if has_session {
+            Err(CsrfFailure::Missing)
+        } else {
+            Ok(())
+        };
     };
-    let host = headers.get(HOST).and_then(|host| host.to_str().ok());
     let same = origin
         .to_str()
-        .ok()
-        .and_then(|origin| origin.split_once("://"))
-        .is_some_and(|(_, rest)| host.is_some_and(|host| host.eq_ignore_ascii_case(rest)));
+        .is_ok_and(|origin| navree_http::csrf::origin_is_host(origin, headers, uri));
     if same {
         Ok(())
     } else {
@@ -652,6 +669,83 @@ mod tests {
             headers.append(*name, HeaderValue::from_static(value));
         }
         headers
+    }
+
+    // The origin check of a same-origin-only path: the browser's word, else the Origin
+    // against the host the request went to (Host, else HTTP/2's :authority), else nothing
+    // only without a session.
+    #[test]
+    fn a_same_origin_only_path_reads_the_browsers_word_then_the_origin() {
+        let path = http::Uri::from_static("/_navree/ui/appearance");
+        let h2 = http::Uri::from_static("https://app.example/_navree/ui/appearance");
+        let check = |pairs: &[(&'static str, &'static str)], uri: &http::Uri, session| {
+            check_same_origin(&headers(pairs), uri, session)
+        };
+        assert_eq!(
+            check(&[("sec-fetch-site", "same-origin")], &path, true),
+            Ok(())
+        );
+        for site in ["same-site", "cross-site", "none"] {
+            assert_eq!(
+                check(&[("sec-fetch-site", site)], &path, true),
+                Err(CsrfFailure::CrossSite),
+                "{site}"
+            );
+        }
+        // Neither header: only a client with no session to ride on.
+        assert_eq!(check(&[], &path, false), Ok(()));
+        assert_eq!(check(&[], &path, true), Err(CsrfFailure::Missing));
+        // The Origin against Host, case and default ports aside.
+        for (origin, host) in [
+            ("https://app.example", "app.example"),
+            ("https://APP.example", "app.example:443"),
+            ("http://app.example:80", "app.example"),
+            ("http://127.0.0.1:8080", "127.0.0.1:8080"),
+            ("https://[::1]:8443", "[::1]:8443"),
+        ] {
+            let mut sent = headers(&[]);
+            sent.insert("origin", HeaderValue::from_str(origin).unwrap());
+            sent.insert("host", HeaderValue::from_str(host).unwrap());
+            assert_eq!(
+                check_same_origin(&sent, &path, true),
+                Ok(()),
+                "{origin} {host}"
+            );
+        }
+        for (origin, host) in [
+            ("https://evil.example", "app.example"),
+            ("https://app.example.evil.example", "app.example"),
+            ("https://app.example:8443", "app.example"),
+            ("http://app.example:8080", "app.example:80"),
+            ("null", "app.example"),
+            ("ftp://app.example", "app.example"),
+            ("https://user@app.example", "app.example"),
+            ("https://app.example/x", "app.example"),
+            ("https://app.example", "app.example:443x"),
+        ] {
+            let mut sent = headers(&[]);
+            sent.insert("origin", HeaderValue::from_str(origin).unwrap());
+            sent.insert("host", HeaderValue::from_str(host).unwrap());
+            assert_eq!(
+                check_same_origin(&sent, &path, true),
+                Err(CsrfFailure::CrossSite),
+                "{origin} {host}"
+            );
+        }
+        // HTTP/2 and HTTP/3 may send no Host: the URI's authority stands in.
+        assert_eq!(
+            check(&[("origin", "https://app.example")], &h2, true),
+            Ok(())
+        );
+        assert_eq!(
+            check(&[("origin", "https://evil.example")], &h2, true),
+            Err(CsrfFailure::CrossSite)
+        );
+        // With neither, nothing to compare with.
+        assert_eq!(
+            check(&[("origin", "https://app.example")], &path, true),
+            Err(CsrfFailure::CrossSite)
+        );
     }
 
     #[test]
