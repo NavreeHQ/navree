@@ -172,6 +172,17 @@ pub const GROUPS: &[Group] = &[
         ],
     },
     Group {
+        id: "app-blocks",
+        title: "App blocks",
+        components: &[
+            "info-tip",
+            "chart-skeleton",
+            "breathing-guide",
+            "dock",
+            "day-pager",
+        ],
+    },
+    Group {
         id: "assistant",
         title: "Assistant",
         components: &[
@@ -824,6 +835,22 @@ pub const COMPONENTS: &[Component] = &[
     )
     .about("A translucent point for each pair of values, in one series or several: a cloud of beats, steps against resting heart rate. Axes can be hidden and both can share a range.")
     .parts("default"),
+    // App blocks
+    component("info-tip", "Info tip", &["InfoTip", "InfoMark"], "thumb")
+        .about("A small \"?\" or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of."),
+    component("chart-skeleton", "Chart skeleton", &["ChartSkeleton"], "thumb")
+        .about("A loading placeholder shaped like the chart that is coming: a ring, a gauge, a line, bars, a calendar, a matrix or a meter."),
+    component(
+        "breathing-guide",
+        "Breathing guide",
+        &["BreathingGuide", "BreathingLabels"],
+        "thumb",
+    )
+    .about("A paced 4-7-8 breathing circle that runs from CSS alone and holds still when the reader asks for less motion."),
+    component("dock", "Dock", &["Dock", "DockItem"], "thumb")
+        .about("A floating row of icon links pinned to the bottom of the page: the main places of an app, with the current one lit."),
+    component("day-pager", "Day pager", &["DayPager"], "thumb")
+        .about("The day before, the day shown and the day after, with the day's scores and a calendar behind the date."),
     // Assistant
     component(
         "conversation",
@@ -884,6 +911,13 @@ pub const COMPONENTS: &[Component] = &[
         "built-in",
     )
     .page("/docs/ui/themes/"),
+    component(
+        "app-styles",
+        "App styles",
+        &["AppSheet", "AppFont", "FontDisplay"],
+        "brand",
+    )
+    .page("/docs/ui/app-styles/"),
     component(
         "theme-builder",
         "Theme builder",
