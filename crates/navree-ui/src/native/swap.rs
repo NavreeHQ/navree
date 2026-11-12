@@ -174,13 +174,64 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
 /// What a native answer was, kept in the response's extensions: for a test,
 /// the coverage report and a developer's overlay.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Answered {
-    /// Whether the page went out as a screen. `false` for the web view.
+    /// Whether the page went out as native parts. `false` for the web view.
     pub native: bool,
+    /// How much the answer belongs to the client's system.
+    pub grade: super::Grade,
     /// What could not be read, when it did not.
     pub why: Vec<String>,
+    /// What keeps a native screen from being idiom, in words.
+    pub missing: Vec<String>,
     /// Decoration that was left out of the screen.
     pub dropped: Vec<String>,
+}
+
+impl Answered {
+    /// A screen, graded.
+    pub fn screen(screen: &navree_native::Screen, dropped: Vec<String>) -> Self {
+        let (grade, missing) = super::graded(screen);
+        Self {
+            native: true,
+            grade,
+            why: Vec::new(),
+            missing,
+            dropped,
+        }
+    }
+
+    /// Native parts that are not a screen: rows, options.
+    pub fn parts(dropped: Vec<String>) -> Self {
+        Self {
+            native: true,
+            grade: super::Grade::Idiom,
+            why: Vec::new(),
+            missing: Vec::new(),
+            dropped,
+        }
+    }
+
+    /// The web view, or nothing native, and why.
+    pub fn web(why: Vec<String>) -> Self {
+        Self {
+            native: false,
+            grade: super::Grade::Web,
+            why,
+            missing: Vec::new(),
+            dropped: Vec::new(),
+        }
+    }
+
+    /// What an envelope a client was sent says of itself: for a test that
+    /// reads the answers of a running app.
+    pub fn of(envelope: &Envelope) -> Self {
+        match (&envelope.screen, &envelope.web) {
+            (_, Some(web)) => Self::web(web.why.clone()),
+            (Some(screen), None) => Self::screen(screen, Vec::new()),
+            (None, None) => Self::parts(Vec::new()),
+        }
+    }
 }
 
 /// An envelope as a response.
@@ -213,16 +264,10 @@ pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answe
     }
     let vocab = request.client.vocab.min(navree_native::VOCAB);
     if why.is_empty() {
+        let answered = Answered::screen(&page.screen, page.dropped);
         let mut envelope = Envelope::screen(request.stamp.as_str(), page.screen).in_vocab(vocab);
         envelope.ops = page.ops;
-        (
-            envelope,
-            Answered {
-                native: true,
-                why: Vec::new(),
-                dropped: page.dropped,
-            },
-        )
+        (envelope, answered)
     } else {
         let mut envelope = Envelope::web(
             request.stamp.as_str(),
@@ -235,14 +280,7 @@ pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answe
         .in_vocab(vocab);
         // A toast left for the page is shown whichever way the page is.
         envelope.ops = page.ops;
-        (
-            envelope,
-            Answered {
-                native: false,
-                why,
-                dropped: Vec::new(),
-            },
-        )
+        (envelope, Answered::web(why))
     }
 }
 
@@ -368,11 +406,7 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
         .in_vocab(vocab);
         return Some(kept(
             respond(StatusCode::OK, "no-store", &envelope),
-            Answered {
-                native: false,
-                why: vec!["lazy:live".to_owned()],
-                dropped: Vec::new(),
-            },
+            Answered::web(vec!["lazy:live".to_owned()]),
         ));
     }
     let query = request.url.split_once('?').map_or("", |(_, query)| query);
@@ -410,10 +444,10 @@ pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Respon
     let envelope = Envelope::ops(request.stamp.as_str(), ops).in_vocab(vocab);
     Some(kept(
         respond(StatusCode::OK, "no-store", &envelope),
-        Answered {
-            native: why.is_empty(),
-            why,
-            dropped: std::mem::take(&mut cx.dropped),
+        if why.is_empty() {
+            Answered::parts(std::mem::take(&mut cx.dropped))
+        } else {
+            Answered::web(why)
         },
     ))
 }
@@ -472,11 +506,7 @@ pub(crate) fn choices<'a>(
         .in_vocab(request.client.vocab.min(navree_native::VOCAB));
     Some(kept(
         respond(StatusCode::OK, "no-store", &envelope),
-        Answered {
-            native: true,
-            why: Vec::new(),
-            dropped: Vec::new(),
-        },
+        Answered::parts(Vec::new()),
     ))
 }
 

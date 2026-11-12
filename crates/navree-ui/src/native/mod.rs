@@ -55,7 +55,7 @@ mod table;
 mod test;
 
 pub use crate::asked::{WEB_VIEW_TOKEN, WhoAsked, who_asked};
-pub use coverage::Coverage;
+pub use coverage::{Coverage, Grade, graded};
 pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
 pub use navree_native as protocol;
 pub use page::Page;
