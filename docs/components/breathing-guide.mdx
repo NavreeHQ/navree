@@ -1,0 +1,43 @@
+---
+title: "Breathing guide"
+description: "A paced 4-7-8 breathing circle that runs from CSS alone, starts still, and holds still when the reader asks for less motion."
+---
+
+<UiPreview example="breathing-guide/default" />
+
+`BreathingGuide` paces a 4-7-8 breath: a circle grows over four seconds as you breathe in, rests for seven while you hold, and shrinks over eight as you breathe out. The phase is named in its middle, and the pattern is written under it as three steps, the one in turn lit.
+
+```rust
+use navree::ui::*;
+
+BreathingGuide::new("relax-guide", "4-7-8 breathing").size(240)
+```
+
+It runs in the browser from CSS alone, so it ships no script and works with JavaScript off. It starts still, saying "Ready", with a switch that runs and pauses it; a pause holds the circle where it is and starting again carries on from there.
+
+## Less motion
+
+A reader who asks for less motion gets no animation at all: the circle holds still, the switch and the changing word are gone, and the three steps written under it stay. That is the guide in words: breathe in for 4, hold for 7, breathe out for 8. The same words are written for a screen reader, which can't follow a circle.
+
+## Size and colour
+
+`.size(px)` takes 120, 160, 200 (the default), 240, 280 or 320, and the circle shrinks to fit a narrow place. `.tone(Tone)` colours it; the accent by default. The words (the switch, "Ready", the three phases and the unit) are `BreathingLabels`, for another language.
+
+<UiPreview example="breathing-guide/thumb" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The switch is a real switch: Tab to it, Space turns it on and off, and a screen reader says whether it is on.
+- The circle and its changing word are hidden from assistive technology. The steps under it are text: "4 Breathe in", "7 Hold", "8 Breathe out", each with its length in seconds for a screen reader.
+- Nothing moves until the reader turns the switch on, and nothing moves at all when they ask for less motion.
+- The word in the circle is the page's text colour on a faint tint, never on the full colour.
+
+</UiA11y>
+
+## API
+
+<UiProps type="BreathingGuide" />
+
+<UiProps type="BreathingLabels" />

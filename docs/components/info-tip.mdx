@@ -1,0 +1,42 @@
+---
+title: "Info tip"
+description: "A small ? or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of."
+---
+
+<UiPreview example="info-tip/default" />
+
+`InfoTip` is the chip beside a heading or a label that says more: how to read a chart, what a score is made of, where an estimate comes from. It is a button that opens a popup, so a click, Enter or Space opens it, Escape and a click outside close it, and it works the same for a keyboard, a screen reader and a mouse. The note can hold any content: a title, a few lines, a short list, a legend.
+
+```rust
+use navree::ui::*;
+
+InfoTip::new("autonomic-tip", "Autonomic balance")
+    .title("How to read this chart")
+    .body(Text::new("It compares your resting and your active nervous system through the night."))
+```
+
+The first argument is the note's id, which must be unique on the page. The second is what the note is about: the chip is named "About" and that text, so a screen reader says "About Autonomic balance" in place of a bare mark. Write the first word in the page's language with `.word("के बारे में")`.
+
+## Marks and sides
+
+The chip wears a question mark, or an "i" with `.mark(InfoMark::Info)`. The note opens below the chip by default; `.side(Side::Right)` and `.align(PopupAlign::End)` place it, and it moves to stay inside the window.
+
+<UiPreview example="info-tip/marks" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The chip is a button with the name "About" and what it explains, and it tells assistive technology that it opens a dialog.
+- The note is the browser's own popover: Escape and a click outside close it, and focus returns to the chip.
+- With a `.title(...)` the note is named by it; without, by the chip's name.
+- The chip is 24 pixels square, the smallest target WCAG allows, and its mark is drawn in text colour, not a hue alone.
+- Text in the note is text, never markup.
+
+</UiA11y>
+
+## API
+
+<UiProps type="InfoTip" />
+
+<UiProps type="InfoMark" />
