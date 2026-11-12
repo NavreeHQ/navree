@@ -462,7 +462,8 @@ pub struct DockAddArgs {
     pub service: String,
 }
 
-/// `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]`.
+/// `navree mcp [--path <dir>] [--no-build] [--database-url <url>] [--allow-remote-database]
+/// [--allow-privileged-database-role] [--docs-offline]`.
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct McpArgs {
     /// The app to serve, instead of the current directory.
@@ -471,9 +472,17 @@ pub struct McpArgs {
     /// Never run `cargo build`; use the last built binary, or answer without one.
     #[arg(long)]
     pub no_build: bool,
+    /// The database the database tools read instead of the app's database.url: the same
+    /// database through a read-only role.
+    #[arg(long, value_name = "URL")]
+    pub database_url: Option<String>,
     /// Let query_database and describe_schema connect to a database that isn't on this machine.
     #[arg(long)]
     pub allow_remote_database: bool,
+    /// Let query_database run as a PostgreSQL superuser, or a role with server-file,
+    /// server-program or signal privileges; refused by default.
+    #[arg(long)]
+    pub allow_privileged_database_role: bool,
     /// Never download docs; use the cache or the docs built into Navigator.
     #[arg(long)]
     pub docs_offline: bool,
@@ -969,7 +978,9 @@ mod tests {
             McpArgs {
                 path: None,
                 no_build: false,
+                database_url: None,
                 allow_remote_database: false,
+                allow_privileged_database_role: false,
                 docs_offline: false
             }
         );
@@ -978,7 +989,10 @@ mod tests {
             "--path",
             "/home/anu/code/crm",
             "--no-build",
+            "--database-url",
+            "postgres://navree_reader@localhost/crm",
             "--allow-remote-database",
+            "--allow-privileged-database-role",
             "--docs-offline",
         ]) else {
             panic!("expected mcp");
@@ -987,7 +1001,12 @@ mod tests {
             args.path.as_deref(),
             Some(std::path::Path::new("/home/anu/code/crm"))
         );
+        assert_eq!(
+            args.database_url.as_deref(),
+            Some("postgres://navree_reader@localhost/crm")
+        );
         assert!(args.no_build && args.allow_remote_database && args.docs_offline);
+        assert!(args.allow_privileged_database_role);
     }
 
     #[test]

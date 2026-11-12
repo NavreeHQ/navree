@@ -26,6 +26,14 @@ pub struct NavigatorOptions {
     pub no_build: bool,
     /// Allow databases that aren't on this machine (`--allow-remote-database`).
     pub allow_remote_database: bool,
+    /// Let `query_database` and Lighthouse's tools run as a PostgreSQL role
+    /// with superuser or server-file, server-program or signal privileges
+    /// (`--allow-privileged-database-role`).
+    pub allow_privileged_database_role: bool,
+    /// The database Navigator reads instead of the app's `database.url`
+    /// (`--database-url`): typically the same database through a read-only
+    /// role.
+    pub database_url: Option<String>,
     /// Never download docs (`--docs-offline`).
     pub docs_offline: bool,
 }
@@ -160,9 +168,12 @@ pub fn tools() -> Vec<ToolDef> {
             title: "Query database",
             description: "Runs one read-only SQL statement (SELECT, WITH, EXPLAIN or SHOW) against the \
                 development database and returns at most 100 rows: columns, rows, truncated, duration_ms. \
-                Anything else is refused before it is sent; it runs read-only with a 5 second timeout. \
-                Columns whose names contain password, secret, token, api_key or private_key come back as \
-                [redacted].",
+                Anything else is refused before it is sent. The database keeps it read-only: a SQLite file \
+                opened read-only, or a read-only PostgreSQL transaction with a 5 second timeout, run by a role \
+                without superuser or server-file, server-program or signal privileges (such a role is refused \
+                unless Navigator was started with --allow-privileged-database-role). Columns whose names \
+                contain password, secret, token, api_key or private_key come back as [redacted], which keeps \
+                them out of a transcript but is not a protection: an alias returns them.",
             input_schema: json!({
                 "type": "object",
                 "properties": { "sql": string("One read-only statement.") },
@@ -503,15 +514,17 @@ impl Navigator {
 
     fn database(&self) -> Result<Target, ToolError> {
         let project = self.project()?;
-        let url = self
-            .config()?
-            .get_string("database.url")
-            .unwrap_or_default();
-        Ok(Target::new(
-            &url,
-            &project.root,
-            self.options.allow_remote_database,
-        )?)
+        let url = match &self.options.database_url {
+            Some(url) => url.clone(),
+            None => self
+                .config()?
+                .get_string("database.url")
+                .unwrap_or_default(),
+        };
+        Ok(
+            Target::new(&url, &project.root, self.options.allow_remote_database)?
+                .allow_privileged_role(self.options.allow_privileged_database_role),
+        )
     }
 
     /// Lighthouse's database: `lighthouse.database_url`, else `database.url`.
@@ -523,6 +536,7 @@ impl Navigator {
             .filter(|url| !url.trim().is_empty());
         let url = own
             .clone()
+            .or_else(|| self.options.database_url.clone())
             .or_else(|| config.get_string("database.url"))
             .unwrap_or_default();
         let target = Target::new(&url, &project.root, self.options.allow_remote_database).map_err(
@@ -538,6 +552,7 @@ impl Navigator {
                 }
             },
         )?;
+        let target = target.allow_privileged_role(self.options.allow_privileged_database_role);
         Ok(LighthouseDb { target })
     }
 

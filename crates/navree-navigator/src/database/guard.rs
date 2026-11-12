@@ -1,22 +1,35 @@
 //! The statement guard of `query_database`: a statement is parsed before it
 //! is sent, and only one read-only statement passes.
 //!
-//! What is sent is the parsed statement rendered back to SQL, never the text
-//! the model wrote. The renderer writes standard SQL strings, which a
-//! PostgreSQL server reads the same way only with
-//! `standard_conforming_strings = on`: Navigator's connections pin that, and
-//! send the statement as one prepared statement, which cannot hold a second
-//! command whatever the quoting. The database then runs it in a read-only
-//! transaction (PostgreSQL) or on a `query_only` connection (SQLite), with a
-//! statement timeout and a row limit: the guard is the first of those layers,
-//! not the only one. Changing a setting is refused like any other
-//! statement that is not a query (`SET`, `RESET`), and `set_config()` like
-//! the other denied functions, in an expression or in FROM.
+//! The guard is the second layer, not the boundary. The boundary is the
+//! database: a SQLite file opened read-only, and on PostgreSQL a read-only
+//! transaction run by a role without superuser or the `pg_read_server_files`,
+//! `pg_write_server_files`, `pg_execute_server_program` and
+//! `pg_signal_backend` privileges (`query_database` refuses such a role unless
+//! Navigator is started with `--allow-privileged-database-role`).
+//!
+//! What is sent is the parsed statement rendered back to SQL, and only when
+//! that text parses again to exactly one statement with the same tree: a
+//! value the renderer writes back differently from how it was read cannot
+//! become a second statement or a different one. Literals the renderer
+//! writes back raw (hex, bit, byte, raw, national and triple-quoted strings)
+//! and custom types with modifiers are refused outright. On SQLite the text
+//! must also hold no `;` before its end, read with SQLite's own quoting
+//! rules. The renderer writes standard SQL strings, which a PostgreSQL server
+//! reads the same way only with `standard_conforming_strings = on`:
+//! Navigator's connections pin that and check it, and send the statement as
+//! one prepared statement, which cannot hold a second command. Changing a
+//! setting is refused like any other statement that is not a query (`SET`,
+//! `RESET`), and `set_config()` like the other denied functions, in an
+//! expression or in FROM.
 
 use std::fmt;
 use std::ops::ControlFlow;
 
-use sqlparser::ast::{Expr, ObjectName, Query, Select, Statement, TableFactor, Visit, Visitor};
+use sqlparser::ast::{
+    ArrayElemTypeDef, DataType, Expr, ObjectName, Query, Select, Statement, TableFactor, Value,
+    ValueWithSpan, Visit, Visitor,
+};
 use sqlparser::dialect::{PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 
@@ -108,12 +121,47 @@ pub enum Refusal {
         /// The function's name, lower-cased.
         name: String,
     },
+    /// A literal the guard does not send: hex (`X'..'`), bit or byte
+    /// (`B'..'`), raw, national (`N'..'`) or triple-quoted strings.
+    #[error("{kind} literals are not allowed; write the value as a plain '...' string")]
+    Literal {
+        /// What kind of literal.
+        kind: &'static str,
+    },
+    /// A custom type with modifiers (`CAST(x AS name('..'))`).
+    #[error("the type {name}(...) is not allowed: types with custom modifiers are not sent")]
+    TypeModifier {
+        /// The type's name.
+        name: String,
+    },
+    /// The statement, rendered for sending, does not read back as the same
+    /// single statement.
+    #[error(
+        "the statement does not read back as the same single statement once rendered, so it is not sent"
+    )]
+    Rendering,
 }
 
 /// Functions refused anywhere in a statement (matched on the unqualified,
 /// lower-cased name; an entry ending in `_` is a prefix).
+///
+/// This list is defense in depth and cannot be complete: an extension can
+/// add a function that runs SQL text or reaches a file, a process or the
+/// network under any name. The boundary is the database role (see the
+/// module's documentation), which is why a privileged role is refused.
 const DENIED_FUNCTIONS: &[&str] = &[
-    // PostgreSQL: server control, files, locks, notifications, links.
+    // PostgreSQL: functions that run SQL text the guard never parses.
+    "ts_stat",
+    "ts_rewrite",
+    "query_to_",
+    "cursor_to_",
+    "table_to_xml",
+    "table_to_xmlschema",
+    "table_to_xml_and_xmlschema",
+    "schema_to_",
+    "database_to_",
+    "pg_background_",
+    // PostgreSQL: other sessions and the server.
     "pg_sleep",
     "pg_sleep_for",
     "pg_sleep_until",
@@ -136,13 +184,22 @@ const DENIED_FUNCTIONS: &[&str] = &[
     "pg_replication_",
     "pg_promote",
     "pg_log_backend_memory_contexts",
+    "pg_signal_backend",
+    "pg_stat_reset",
+    "pg_stat_reset_",
+    "pg_wal_replay_",
+    "pg_backup_",
+    "pg_import_system_collations",
+    "pg_sync_replication_slots",
     "set_config",
+    // PostgreSQL: files, large objects, and other servers or the network
+    // (dblink, the http extension).
     "lo_",
+    "pg_read_",
     "dblink",
     "dblink_",
-    "query_to_xml",
-    "query_to_xml_and_xmlschema",
-    "cursor_to_xml",
+    "http",
+    "http_",
     // SQLite: extensions and files.
     "load_extension",
     "fts3_tokenizer",
@@ -156,14 +213,7 @@ const DENIED_FUNCTIONS: &[&str] = &[
 /// such a query, or `SHOW`. Nested data-changing statements, `SELECT ...
 /// INTO`, locking clauses and side-effecting functions are refused too.
 pub fn check(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
-    let parsed = match dialect {
-        Dialect::Sqlite => Parser::parse_sql(&SQLiteDialect {}, sql),
-        Dialect::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql),
-    }
-    .map_err(|error| Refusal::Parse {
-        dialect,
-        message: error.to_string(),
-    })?;
+    let parsed = parse(sql, dialect)?;
     let statement = match parsed.as_slice() {
         [] => return Err(Refusal::Empty),
         [statement] => statement,
@@ -191,9 +241,135 @@ pub fn check(sql: &str, dialect: Dialect) -> Result<CheckedStatement, Refusal> {
         return Err(refusal);
     }
     Ok(CheckedStatement {
-        sql: statement.to_string(),
+        sql: rendered(statement, dialect)?,
         kind,
     })
+}
+
+/// `statement` as the text to send: exactly the text checked here. It must
+/// read back as one statement with the same tree, and on SQLite end at its
+/// first `;`.
+fn rendered(statement: &Statement, dialect: Dialect) -> Result<String, Refusal> {
+    let sql = statement.to_string();
+    match parse(&sql, dialect).as_deref() {
+        Ok([again]) if again == statement => {}
+        _ => return Err(Refusal::Rendering),
+    }
+    if dialect == Dialect::Sqlite && !sqlite_single_statement(&sql) {
+        return Err(Refusal::Rendering);
+    }
+    Ok(sql)
+}
+
+fn parse(sql: &str, dialect: Dialect) -> Result<Vec<Statement>, Refusal> {
+    match dialect {
+        Dialect::Sqlite => Parser::parse_sql(&SQLiteDialect {}, sql),
+        Dialect::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql),
+    }
+    .map_err(|error| Refusal::Parse {
+        dialect,
+        message: error.to_string(),
+    })
+}
+
+/// Whether `sql` holds no statement after its first, read as SQLite's own
+/// tokenizer reads it: `'..'` and `"..."` with their quote doubled, `` `..` ``
+/// and `[..]` identifiers, `--` and `/* */` comments. Nothing but whitespace
+/// and `;` may follow the first `;` outside them.
+pub(crate) fn sqlite_single_statement(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let mut i = 0;
+    let mut ended = false;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if ended {
+            if !(byte.is_ascii_whitespace() || byte == b';') {
+                return false;
+            }
+            i += 1;
+            continue;
+        }
+        match byte {
+            b'\'' | b'"' | b'`' => {
+                // Up to the closing quote; a doubled quote is part of the text.
+                i += 1;
+                loop {
+                    match bytes.get(i) {
+                        None => return false,
+                        Some(&c) if c == byte => {
+                            if bytes.get(i + 1) == Some(&byte) {
+                                i += 2;
+                            } else {
+                                i += 1;
+                                break;
+                            }
+                        }
+                        Some(_) => i += 1,
+                    }
+                }
+            }
+            b'[' => match bytes[i..].iter().position(|&c| c == b']') {
+                Some(end) => i += end + 1,
+                None => return false,
+            },
+            b'-' if bytes.get(i + 1) == Some(&b'-') => {
+                i = bytes[i..]
+                    .iter()
+                    .position(|&c| c == b'\n')
+                    .map_or(bytes.len(), |end| i + end + 1);
+            }
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                match bytes[i + 2..].windows(2).position(|w| w == b"*/") {
+                    Some(end) => i += 2 + end + 2,
+                    None => i = bytes.len(),
+                }
+            }
+            b';' => {
+                ended = true;
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    true
+}
+
+/// A literal the renderer writes back without escaping it.
+fn raw_literal(value: &Value) -> Option<&'static str> {
+    Some(match value {
+        Value::HexStringLiteral(_) => "hex string (X'..')",
+        Value::SingleQuotedByteStringLiteral(_)
+        | Value::DoubleQuotedByteStringLiteral(_)
+        | Value::TripleSingleQuotedByteStringLiteral(_)
+        | Value::TripleDoubleQuotedByteStringLiteral(_) => "bit or byte string (B'..')",
+        Value::SingleQuotedRawStringLiteral(_)
+        | Value::DoubleQuotedRawStringLiteral(_)
+        | Value::TripleSingleQuotedRawStringLiteral(_)
+        | Value::TripleDoubleQuotedRawStringLiteral(_) => "raw string (R'..')",
+        Value::NationalStringLiteral(_) | Value::NationalQuoteDelimitedStringLiteral(_) => {
+            "national string (N'..')"
+        }
+        Value::QuoteDelimitedStringLiteral(_) => "quote-delimited string",
+        Value::TripleSingleQuotedString(_) | Value::TripleDoubleQuotedString(_) => {
+            "triple-quoted string"
+        }
+        _ => return None,
+    })
+}
+
+/// The name of a custom type with modifiers in `data_type`, also as an
+/// array's element type.
+fn custom_with_modifiers(data_type: &DataType) -> Option<String> {
+    match data_type {
+        DataType::Custom(name, modifiers) if !modifiers.is_empty() => Some(name.to_string()),
+        DataType::Array(
+            ArrayElemTypeDef::AngleBracket(inner)
+            | ArrayElemTypeDef::SquareBracket(inner, _)
+            | ArrayElemTypeDef::Parenthesis(inner)
+            | ArrayElemTypeDef::Qualified(inner, _),
+        ) => custom_with_modifiers(inner),
+        _ => None,
+    }
 }
 
 /// Walks every statement, query, select and expression of the tree.
@@ -231,9 +407,22 @@ impl Visitor for Guard {
     }
 
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<Refusal> {
-        match expr {
-            Expr::Function(function) => deny_function(&function.name),
-            _ => ControlFlow::Continue(()),
+        let data_type = match expr {
+            Expr::Function(function) => return deny_function(&function.name),
+            Expr::Cast { data_type, .. } => data_type,
+            Expr::TypedString(typed) => &typed.data_type,
+            _ => return ControlFlow::Continue(()),
+        };
+        match custom_with_modifiers(data_type) {
+            Some(name) => ControlFlow::Break(Refusal::TypeModifier { name }),
+            None => ControlFlow::Continue(()),
+        }
+    }
+
+    fn pre_visit_value(&mut self, value: &ValueWithSpan) -> ControlFlow<Refusal> {
+        match raw_literal(&value.value) {
+            Some(kind) => ControlFlow::Break(Refusal::Literal { kind }),
+            None => ControlFlow::Continue(()),
         }
     }
 
@@ -618,12 +807,141 @@ mod tests {
                     checked.sql
                 ),
                 Err(refusal) => assert!(
-                    matches!(refusal, Refusal::Multiple { .. } | Refusal::Parse { .. }),
+                    matches!(
+                        refusal,
+                        Refusal::Multiple { .. } | Refusal::Parse { .. } | Refusal::Rendering
+                    ),
                     "{sql}: {refusal:?}"
                 ),
             }
         }
         let checked = pg("SELECT 'it''s; DELETE FROM deals'").unwrap();
         assert_eq!(checked.sql, "SELECT 'it''s; DELETE FROM deals'");
+    }
+
+    /// Statements whose literals or types the renderer writes back
+    /// differently from how they were read.
+    const RENDER_SMUGGLING: &[&str] = &[
+        "SELECT X'00''; PRAGMA query_only = OFF; DROP TABLE users; --'",
+        "SELECT CAST(1 AS x('1)); PRAGMA query_only=OFF; DROP TABLE users; SELECT CAST(1 AS x(1'))",
+        "SELECT X'0'', pg_terminate_backend(pid), ''' FROM pg_stat_activity",
+        "SELECT X'0'', dblink_exec(''dbname=app'', ''DROP TABLE users''), '''",
+        "SELECT X'0''; COMMIT; BEGIN READ WRITE; DROP TABLE users; COMMIT; --'",
+    ];
+
+    #[test]
+    fn literals_and_types_written_back_raw_are_refused() {
+        for sql in RENDER_SMUGGLING {
+            for dialect in [Dialect::Sqlite, Dialect::Postgres] {
+                let refused = check(sql, dialect);
+                assert!(
+                    matches!(
+                        refused,
+                        Err(Refusal::Literal { .. }
+                            | Refusal::TypeModifier { .. }
+                            | Refusal::Rendering
+                            | Refusal::Multiple { .. }
+                            | Refusal::Parse { .. })
+                    ),
+                    "{dialect}: {sql}: {refused:?}"
+                );
+            }
+        }
+        assert!(matches!(lite("SELECT X'00'"), Err(Refusal::Literal { .. })));
+        assert!(matches!(
+            pg("SELECT CAST(1 AS x('1'))"),
+            Err(Refusal::TypeModifier { .. })
+        ));
+        // Plain strings, numbers and ordinary types pass.
+        assert!(pg("SELECT 'a''b', 1.5, CAST('1' AS integer), E'x\\'y'").is_ok());
+        assert!(lite("SELECT 'a''b', CAST('1' AS INTEGER)").is_ok());
+    }
+
+    #[test]
+    fn a_statement_that_does_not_render_back_is_refused() {
+        // The tree as the parser read it, taken past the visitor: rendered, it
+        // becomes several statements, so it is not sent.
+        for (sql, dialect) in [
+            (RENDER_SMUGGLING[0], Dialect::Sqlite),
+            (RENDER_SMUGGLING[1], Dialect::Sqlite),
+            (RENDER_SMUGGLING[4], Dialect::Postgres),
+        ] {
+            let parsed = parse(sql, dialect).unwrap();
+            assert_eq!(parsed.len(), 1, "{sql}");
+            assert_eq!(
+                rendered(&parsed[0], dialect),
+                Err(Refusal::Rendering),
+                "{sql}"
+            );
+        }
+        let parsed = parse("SELECT 'it''s'", Dialect::Sqlite).unwrap();
+        assert_eq!(
+            rendered(&parsed[0], Dialect::Sqlite).as_deref(),
+            Ok("SELECT 'it''s'")
+        );
+    }
+
+    #[test]
+    fn sqlite_text_ends_at_its_first_semicolon() {
+        for sql in [
+            "SELECT 1",
+            "SELECT 1;",
+            "SELECT 1; \n ;",
+            "SELECT 'a;b', \"c;d\", `e;f`, [g;h] -- ;x\n",
+            "SELECT 1 /* ; */",
+            "SELECT 'it''s; still one'",
+        ] {
+            assert!(sqlite_single_statement(sql), "{sql}");
+        }
+        for sql in [
+            "SELECT 1; SELECT 2",
+            "SELECT X'00'; PRAGMA query_only = OFF; --'",
+            "SELECT 'a''; DROP TABLE t; --'; DELETE FROM t",
+            "SELECT 1 /* x */; DELETE FROM t",
+            "SELECT 'unterminated",
+        ] {
+            assert!(!sqlite_single_statement(sql), "{sql}");
+        }
+    }
+
+    #[test]
+    fn functions_that_run_sql_text_are_refused() {
+        for (sql, name) in [
+            (
+                "SELECT * FROM ts_stat('SELECT to_tsvector(pg_terminate_backend(pid)::text) FROM pg_stat_activity')",
+                "ts_stat",
+            ),
+            (
+                "SELECT ts_rewrite(to_tsquery('a'), 'SELECT pg_sleep(10)')",
+                "ts_rewrite",
+            ),
+            (
+                "SELECT query_to_xml('SELECT 1', true, false, '')",
+                "query_to_xml",
+            ),
+            (
+                "SELECT query_to_xmlschema('SELECT 1', true, false, '')",
+                "query_to_xmlschema",
+            ),
+            ("SELECT database_to_xml(true, false, '')", "database_to_xml"),
+            (
+                "SELECT * FROM pg_background_launch('DROP TABLE users')",
+                "pg_background_launch",
+            ),
+            ("SELECT http_get('http://example.com')", "http_get"),
+            (
+                "SELECT dblink_exec('dbname=app', 'DROP TABLE users')",
+                "dblink_exec",
+            ),
+            ("SELECT lo_export(1, '/tmp/x')", "lo_export"),
+        ] {
+            assert_eq!(
+                pg(sql),
+                Err(Refusal::Function {
+                    name: name.to_owned()
+                }),
+                "{sql}"
+            );
+        }
     }
 }

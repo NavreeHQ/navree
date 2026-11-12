@@ -125,6 +125,8 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 path: absolute(cwd, args.path.as_deref()),
                 no_build: args.no_build,
                 allow_remote_database: args.allow_remote_database,
+                allow_privileged_database_role: args.allow_privileged_database_role,
+                database_url: args.database_url.clone(),
                 docs_offline: args.docs_offline,
             })?;
             Ok(ExitCode::SUCCESS)

@@ -3,19 +3,28 @@
 //! Opt-in: set `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway
 //! local server, for example
 //! `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each test
-//! creates its own database and drops it at the end. Without the variable
-//! the tests print `SKIPPED` and pass, unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
+//! creates its own database and a read-only role for it, and drops both at
+//! the end; Navigator connects as that role, as `query_database` refuses a
+//! superuser. Without the variable the tests print `SKIPPED` and pass,
+//! unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
 
+use navree_navigator::NavigatorOptions;
 use serde_json::json;
 use sqlx::{AssertSqlSafe, Connection, Executor, PgConnection};
 
 use crate::support::{Fixture, call, refused};
 
-/// A database of its own on the test server, dropped by [`Scratch::drop_db`].
+/// A database of its own on the test server, with a read-only role, both
+/// dropped by [`Scratch::drop_db`].
 struct Scratch {
     admin: String,
     name: String,
+    /// The test server's superuser, on this database.
     url: String,
+    /// The read-only role, on this database.
+    reader_url: String,
+    /// The roles made for this database, the reader first.
+    roles: Vec<String>,
 }
 
 impl Scratch {
@@ -40,11 +49,54 @@ impl Scratch {
         conn.close().await.unwrap();
         let mut url = url::Url::parse(&admin).expect("a URL");
         url.set_path(&format!("/{name}"));
-        Some(Scratch {
+        let mut scratch = Scratch {
             admin,
             name,
             url: url.to_string(),
-        })
+            reader_url: String::new(),
+            roles: Vec::new(),
+        };
+        scratch.reader_url = scratch.role("reader", &[]).await;
+        // Tables the tests create later, as the superuser, are the reader's to read.
+        scratch
+            .setup(&[format!(
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {}",
+                scratch.roles[0]
+            )
+            .as_str()])
+            .await;
+        Some(scratch)
+    }
+
+    /// A login role for this database, `<database>_<suffix>`, that may
+    /// connect and use the public schema, member of `memberships`; its URL.
+    async fn role(&mut self, suffix: &str, memberships: &[&str]) -> String {
+        let role = format!("{}_{suffix}", self.name);
+        let mut conn = PgConnection::connect(&self.admin).await.unwrap();
+        conn.execute(AssertSqlSafe(format!(
+            "CREATE ROLE {role} LOGIN PASSWORD 'navree-test'"
+        )))
+        .await
+        .unwrap();
+        conn.execute(AssertSqlSafe(format!(
+            "GRANT CONNECT ON DATABASE {} TO {role}",
+            self.name
+        )))
+        .await
+        .unwrap();
+        for membership in memberships {
+            conn.execute(AssertSqlSafe(format!("GRANT {membership} TO {role}")))
+                .await
+                .unwrap();
+        }
+        conn.close().await.unwrap();
+        self.roles.push(role.clone());
+        self.setup(&[format!("GRANT USAGE ON SCHEMA public TO {role}").as_str()])
+            .await;
+        let mut url = url::Url::parse(&self.url).expect("a URL");
+        url.set_username(&role).unwrap();
+        url.set_password(Some("navree-test")).unwrap();
+        url.to_string()
     }
 
     async fn setup(&self, statements: &[&str]) {
@@ -99,11 +151,34 @@ impl Scratch {
         )))
         .await
         .unwrap();
+        for role in &self.roles {
+            conn.execute(AssertSqlSafe(format!("DROP ROLE IF EXISTS {role}")))
+                .await
+                .unwrap();
+        }
         conn.close().await.unwrap();
     }
 
+    /// An app whose `database.url` is the read-only role's.
     fn fixture(&self) -> Fixture {
+        Fixture::new(&format!("[database]\nurl = \"{}\"\n", self.reader_url))
+    }
+
+    /// An app whose `database.url` is the superuser's.
+    fn admin_fixture(&self) -> Fixture {
         Fixture::new(&format!("[database]\nurl = \"{}\"\n", self.url))
+    }
+
+    /// Whether the test server's URL logs in as a superuser.
+    async fn admin_is_superuser(&self) -> bool {
+        let mut conn = PgConnection::connect(&self.url).await.unwrap();
+        let superuser: bool =
+            sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+                .fetch_one(&mut conn)
+                .await
+                .unwrap();
+        conn.close().await.unwrap();
+        superuser
     }
 }
 
@@ -373,6 +448,139 @@ async fn postgres_a_backslash_quote_cannot_write() {
         answer["rows"][0][1], " AS b; COMMIT; BEGIN READ WRITE; DROP TABLE users; COMMIT; --",
         "{answer}"
     );
+    drop(navigator);
+    let mut conn = PgConnection::connect(&db.url).await.unwrap();
+    let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&mut conn)
+        .await
+        .expect("the users table is still there");
+    assert_eq!(users, 1);
+    conn.close().await.unwrap();
+    db.drop_db().await;
+}
+
+/// A superuser is refused for queries unless Navigator is started with
+/// `--allow-privileged-database-role`; a read-only role is not. Reading
+/// the schema runs no query of the agent's and works either way.
+#[tokio::test]
+async fn postgres_a_superuser_is_refused_unless_allowed() {
+    let test = "postgres_a_superuser_is_refused_unless_allowed";
+    let Some(db) = Scratch::new(test).await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    let reader = db.fixture();
+    let answer = call(
+        &reader.navigator(),
+        "query_database",
+        json!({"sql": "SELECT count(*) AS n FROM deals"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[150]]), "a read-only role queries");
+    if !db.admin_is_superuser().await {
+        eprintln!("SKIPPED part of {test}: NAVREE_TEST_POSTGRES_URL is not a superuser");
+        db.drop_db().await;
+        return;
+    }
+    let admin = db.admin_fixture();
+    let message = refused(
+        &admin.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("superuser"), "{message}");
+    assert!(message.contains("CREATE ROLE navree_reader"), "{message}");
+    assert!(
+        message.contains("--allow-privileged-database-role"),
+        "{message}"
+    );
+    let schema = call(
+        &admin.navigator(),
+        "describe_schema",
+        json!({"table": "deals"}),
+    )
+    .await;
+    assert_eq!(schema["tables"][0]["name"], "deals");
+    let allowed = admin.navigator_with(NavigatorOptions {
+        path: admin.root().to_path_buf(),
+        docs_offline: true,
+        allow_privileged_database_role: true,
+        ..NavigatorOptions::default()
+    });
+    let answer = call(
+        &allowed,
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[1]]));
+    // `--database-url` reads through another role than the app's.
+    let through_reader = admin.navigator_with(NavigatorOptions {
+        path: admin.root().to_path_buf(),
+        docs_offline: true,
+        database_url: Some(db.reader_url.clone()),
+        ..NavigatorOptions::default()
+    });
+    let answer = call(
+        &through_reader,
+        "query_database",
+        json!({"sql": "SELECT current_user LIKE '%reader' AS reader"}),
+    )
+    .await;
+    assert_eq!(answer["rows"], json!([[true]]));
+    db.drop_db().await;
+}
+
+/// A role that can end other sessions, or read the server's files, is
+/// refused like a superuser.
+#[tokio::test]
+async fn postgres_a_role_with_server_privileges_is_refused() {
+    let Some(mut db) = Scratch::new("postgres_a_role_with_server_privileges_is_refused").await
+    else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    for (suffix, membership) in [
+        ("signal", "pg_signal_backend"),
+        ("files", "pg_read_server_files"),
+    ] {
+        let url = db.role(suffix, &[membership]).await;
+        let fixture = Fixture::new(&format!("[database]\nurl = \"{url}\"\n"));
+        let message = refused(
+            &fixture.navigator(),
+            "query_database",
+            json!({"sql": "SELECT 1 AS one"}),
+        )
+        .await;
+        assert!(message.contains(membership), "{membership}: {message}");
+    }
+    db.drop_db().await;
+}
+
+/// Statements that the SQL renderer would write back as several (hex
+/// strings, custom type modifiers), or that run SQL text of their own
+/// (`ts_stat`), are refused, on a default server, and change nothing.
+#[tokio::test]
+async fn postgres_statements_that_smuggle_sql_are_refused() {
+    let Some(db) = Scratch::new("postgres_statements_that_smuggle_sql_are_refused").await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    for sql in [
+        "SELECT X'0'', pg_terminate_backend(pid), ''' FROM pg_stat_activity",
+        "SELECT X'0'', dblink_exec(''dbname=app'', ''DROP TABLE users''), '''",
+        "SELECT X'0''; COMMIT; BEGIN READ WRITE; DROP TABLE users; COMMIT; --'",
+        "SELECT CAST(1 AS x('1)); COMMIT; DROP TABLE users; SELECT CAST(1 AS x(1'))",
+        "SELECT * FROM ts_stat('SELECT to_tsvector(pg_terminate_backend(pid)::text) FROM pg_stat_activity')",
+        "SELECT ts_rewrite(to_tsquery('a'), 'SELECT to_tsquery(''b'')')",
+        "SELECT query_to_xml('SELECT 1', true, false, '')",
+    ] {
+        let message = refused(&navigator, "query_database", json!({ "sql": sql })).await;
+        assert!(message.starts_with("refused: "), "{sql}: {message}");
+    }
     drop(navigator);
     let mut conn = PgConnection::connect(&db.url).await.unwrap();
     let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")

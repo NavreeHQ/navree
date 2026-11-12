@@ -615,9 +615,20 @@ where
     NavigatorServer::new(navigator).serve(reader, writer).await
 }
 
+/// The warning written to stderr when Navigator starts with
+/// `--allow-privileged-database-role`.
+pub const PRIVILEGED_ROLE_WARNING: &str = "warning: navree mcp --allow-privileged-database-role: \
+query_database and Lighthouse's tools may run as a PostgreSQL superuser or a role that reaches the \
+server's files, programs or other sessions; only the statement guard then stands between a query and \
+those. Prefer a read-only role (navree mcp --database-url).";
+
 /// `navree mcp`: serves Navigator for the app at `options.path` on stdin and
-/// stdout until the client goes away. Nothing else is written to stdout.
+/// stdout until the client goes away. Nothing else is written to stdout; a
+/// warning about `--allow-privileged-database-role` goes to stderr.
 pub fn run_stdio(options: NavigatorOptions) -> Result<(), ServeError> {
+    if options.allow_privileged_database_role {
+        eprintln!("{PRIVILEGED_ROLE_WARNING}");
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
