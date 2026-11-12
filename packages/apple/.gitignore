@@ -5,3 +5,5 @@
 # Written by `xcodegen generate` from Demo/project.yml
 /Demo/*.xcodeproj/
 /Demo/Generated/
+# Assembled from the runtime core's libraries by the build, never committed
+/NavreeCore.xcframework/
