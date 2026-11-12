@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "a1139f72fc71";
+pub const BUILD: &str = "a2e1232d5c47";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-97b1dcae61e2.js";
@@ -92,7 +92,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-d3049c26c9f0.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-b069be8fb0b0.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-bb09372cfe81.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -135,6 +135,9 @@ pub const APP_BLOCKS_URL: &str = "/_navree/ui/app-blocks-5acfd687d72d.css";
 
 /// The URL of `parts-styles.css`.
 pub const PARTS_STYLES_URL: &str = "/_navree/ui/parts-styles-d81644e15d78.css";
+
+/// The URL of `marketing.css`.
+pub const MARKETING_URL: &str = "/_navree/ui/marketing-8842dd51da86.css";
 
 /// The URL of `table-styles.css`.
 pub const TABLE_STYLES_URL: &str = "/_navree/ui/table-styles-b8d141ebcbb8.css";
@@ -438,7 +441,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "b069be8fb0b0",
+        hash: "bb09372cfe81",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -569,6 +572,15 @@ pub static FILES: &[Asset] = &[
         bytes: include_bytes!("../dist/parts-styles.css"),
         gzip: Some(include_bytes!("../dist/parts-styles.css.gz")),
         brotli: Some(include_bytes!("../dist/parts-styles.css.br")),
+    },
+    Asset {
+        name: "marketing",
+        ext: "css",
+        hash: "8842dd51da86",
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../dist/marketing.css"),
+        gzip: Some(include_bytes!("../dist/marketing.css.gz")),
+        brotli: Some(include_bytes!("../dist/marketing.css.br")),
     },
     Asset {
         name: "table-styles",

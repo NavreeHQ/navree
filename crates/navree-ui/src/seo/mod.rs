@@ -17,8 +17,8 @@
 //!             .image(SocialImage::new(format!("{site}/og.png"), 1200, 630, "Kesar's daily score: a ring at 82"))
 //!             .json_ld(
 //!                 JsonLd::new()
-//!                     .add(Organization::new("Kesar", format!("{site}/")).id(format!("{site}/#organization")))
-//!                     .add(WebSite::new("Kesar", format!("{site}/")).publisher(format!("{site}/#organization"))),
+//!                     .node(Organization::new("Kesar", format!("{site}/")).id(format!("{site}/#organization")))
+//!                     .node(WebSite::new("Kesar", format!("{site}/")).publisher(format!("{site}/#organization"))),
 //!             ),
 //!     );
 //! let html = page.to_html();
