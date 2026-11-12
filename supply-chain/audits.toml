@@ -18,3 +18,9 @@ who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.4.2 -> 1.5.0"
 notes = "Diff reviewed: edition 2024 and MSRV bump, lint settings in Cargo.toml, format-string and assert! rewrites, unused_assignments added to the allow on generated code. The derive output is otherwise unchanged; no build script, no unsafe, no I/O. Published from github:RustCrypto/utils."
+
+[[trusted.rusqlite]]
+criteria = "safe-to-deploy"
+user-id = 5062 # gwenn (gwenn)
+start = "2019-03-10"
+end = "2027-11-12"
