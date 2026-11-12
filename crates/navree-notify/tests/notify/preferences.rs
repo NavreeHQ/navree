@@ -220,7 +220,7 @@ async fn the_routes_show_and_change_the_signed_in_users_preferences() {
     assert_eq!(
         body["channels"],
         json!([
-            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"
         ])
     );
     let categories: Vec<&str> = body["categories"]

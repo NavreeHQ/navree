@@ -18,7 +18,7 @@ use navree_notify::{
 const DOCUMENTED: &str = r#"
 [notify.preferences]
 enabled = true
-channels = ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"]
+channels = ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"]
 required = ["security"]
 workspace_permission = "workspace.update"
 
@@ -29,7 +29,7 @@ subject = "Your notifications"
 template = "notify/digest"
 
 [notify.deferred]
-channels = ["mail", "slack", "teams", "sms", "whatsapp", "web_push"]
+channels = ["mail", "slack", "teams", "sms", "whatsapp", "web_push", "push"]
 batch = 500
 max_attempts = 5
 retry_secs = 300
@@ -69,7 +69,7 @@ fn the_configuration_keys_have_their_documented_defaults() {
     assert_eq!(
         names,
         [
-            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"
         ]
     );
 
@@ -99,7 +99,9 @@ fn the_configuration_keys_have_their_documented_defaults() {
     let names: Vec<&str> = channels.iter().map(|c| c.as_str()).collect();
     assert_eq!(
         names,
-        ["mail", "slack", "teams", "sms", "whatsapp", "web_push"]
+        [
+            "mail", "slack", "teams", "sms", "whatsapp", "web_push", "push"
+        ]
     );
     assert_eq!(
         (batch, max_attempts, retry_secs, schedule),

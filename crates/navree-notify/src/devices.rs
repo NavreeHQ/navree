@@ -258,7 +258,7 @@ impl NewPushDevice {
         let token_ok = match self.platform {
             PushPlatform::Ios => {
                 (16..=200).contains(&token.len())
-                    && token.len() % 2 == 0
+                    && token.len().is_multiple_of(2)
                     && token.chars().all(|c| c.is_ascii_hexdigit())
             }
             PushPlatform::Android => {

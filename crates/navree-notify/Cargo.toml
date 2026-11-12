@@ -1,6 +1,6 @@
 [package]
 name = "navree-notify"
-description = "Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp and web push, with preferences and a delivery log."
+description = "Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp, web push and native app push, with preferences and a delivery log."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -77,8 +77,9 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-# The crate's own tests draw the bell.
-navree-notify = { path = ".", features = ["ui"] }
+# The crate's own tests draw the bell, and check push devices against
+# navree-auth's sessions.
+navree-notify = { path = ".", features = ["auth", "ui"] }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

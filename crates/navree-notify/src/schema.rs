@@ -198,46 +198,6 @@ pub(crate) fn unsubscribe_schema() -> (String, Value) {
     ("PushUnsubscribe".to_owned(), schema)
 }
 
-#[cfg(test)]
-mod tests {
-    use chrono::Utc;
-    use uuid::Uuid;
-
-    use super::*;
-    use crate::DatabaseNotification;
-
-    #[test]
-    fn the_item_schema_lists_every_serialized_field() {
-        let (name, page) = notification_page_schema();
-        assert_eq!(name, "NotificationPage");
-        let item = &page["x-navree-components"]["Notification"];
-        let required: Vec<&str> = item["required"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|field| field.as_str().unwrap())
-            .collect();
-        let serialized = serde_json::to_value(DatabaseNotification {
-            id: Uuid::now_v7(),
-            notification_type: "deal_won".to_owned(),
-            data: json!({}),
-            read_at: None,
-            created_at: Utc::now(),
-        })
-        .unwrap();
-        let mut fields: Vec<&str> = serialized
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
-        fields.sort_unstable();
-        let mut required = required;
-        required.sort_unstable();
-        assert_eq!(fields, required);
-    }
-}
-
 /// `NewPushDevice`: what a native app sends to register its device.
 pub(crate) fn new_push_device_schema() -> (String, Value) {
     let schema = json!({
@@ -285,4 +245,44 @@ pub(crate) fn remove_device_schema() -> (String, Value) {
         },
     });
     ("PushDeviceRemoval".to_owned(), schema)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::DatabaseNotification;
+
+    #[test]
+    fn the_item_schema_lists_every_serialized_field() {
+        let (name, page) = notification_page_schema();
+        assert_eq!(name, "NotificationPage");
+        let item = &page["x-navree-components"]["Notification"];
+        let required: Vec<&str> = item["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field.as_str().unwrap())
+            .collect();
+        let serialized = serde_json::to_value(DatabaseNotification {
+            id: Uuid::now_v7(),
+            notification_type: "deal_won".to_owned(),
+            data: json!({}),
+            read_at: None,
+            created_at: Utc::now(),
+        })
+        .unwrap();
+        let mut fields: Vec<&str> = serialized
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        fields.sort_unstable();
+        let mut required = required;
+        required.sort_unstable();
+        assert_eq!(fields, required);
+    }
 }
