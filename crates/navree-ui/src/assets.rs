@@ -84,6 +84,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::KEYS, KEYS_URL),
         (Uses::LAZY, LAZY_URL),
         (Uses::SORTABLE, SORTABLE_URL),
+        (Uses::SORTABLE_GRID, SORTABLE_GRID_URL),
         (Uses::UPLOAD, UPLOAD_URL),
         (Uses::OTP, OTP_URL),
         (Uses::CAROUSEL, CAROUSEL_URL),
@@ -136,6 +137,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CHART_GRIDS, CHART_GRIDS_URL),
         (Uses::APP_BLOCKS, APP_BLOCKS_URL),
         (Uses::PARTS_STYLES, PARTS_STYLES_URL),
+        (Uses::SORTABLE_GRID_STYLES, SORTABLE_GRID_STYLES_URL),
         (Uses::MARKETING, MARKETING_URL),
     ]
     .into_iter()
