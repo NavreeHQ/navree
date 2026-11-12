@@ -189,6 +189,9 @@ fn length(text: &str, of: f64) -> Option<f64> {
 pub(crate) struct Writer<'a> {
     inks: &'a Inks,
     out: String,
+    /// What every id of the drawing starts with, and every reference to one: two
+    /// drawings in one page never share a gradient.
+    ids: Option<String>,
 }
 
 impl<'a> Writer<'a> {
@@ -196,6 +199,26 @@ impl<'a> Writer<'a> {
         Self {
             inks,
             out: String::with_capacity(4096),
+            ids: None,
+        }
+    }
+
+    /// Starts every id with `prefix`, and every reference to one.
+    pub(crate) fn ids(mut self, prefix: String) -> Self {
+        self.ids = Some(prefix);
+        self
+    }
+
+    /// `value` with its references to ids of the drawing given the prefix.
+    fn own_ids(&self, name: &str, value: String) -> String {
+        let Some(prefix) = &self.ids else {
+            return value;
+        };
+        match name {
+            "id" => format!("{prefix}-{value}"),
+            "href" | "xlink:href" => value.replacen('#', &format!("#{prefix}-"), 1),
+            _ if value.contains("url(#") => value.replace("url(#", &format!("url(#{prefix}-")),
+            _ => value,
         }
     }
 
@@ -354,7 +377,7 @@ impl<'a> Writer<'a> {
                 },
                 _ => value,
             };
-            attrs.push((a.name, value));
+            attrs.push((a.name, self.own_ids(a.name, value)));
         }
         let mut add = |name: &'static str, value: String| {
             if !attrs.iter().any(|(n, _)| *n == name) {

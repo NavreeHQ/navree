@@ -35,6 +35,7 @@
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/site` | a public website of marketing blocks: home, pricing, privacy, contact, sitemap and robots |
+//! | `/widgets` | a home-screen widget builder: a sortable grid of tiles, saved as they move, and the widget drawn as a PNG on the server |
 //! | `/compare/{screen}` | the four screens that measure speed: `table`, `select`, `dates` and `tabs` |
 #![forbid(unsafe_code)]
 
@@ -75,6 +76,7 @@ mod select;
 mod site;
 mod themes;
 mod upload;
+mod widgets;
 
 /// The app's one shell.
 pub(crate) fn shell() -> Shell {
@@ -114,7 +116,8 @@ pub(crate) fn shell() -> Shell {
                 .item(NavItem::new("Markdown", "/markdown").icon(icons::FILE))
                 .item(NavItem::new("Charts", "/charts").icon(icons::CHART_LINE))
                 .item(NavItem::new("Report", "/charts/report").icon(icons::CHART_COLUMN))
-                .item(NavItem::new("App blocks", "/app-blocks").icon(icons::LAYOUT_DASHBOARD)),
+                .item(NavItem::new("App blocks", "/app-blocks").icon(icons::LAYOUT_DASHBOARD))
+                .item(NavItem::new("Widgets", "/widgets").icon(icons::LAYOUT_GRID)),
         )
         .user(
             UserMenu::new("Anu Lakhotia", "anu@navree.test")
@@ -166,7 +169,8 @@ impl Module for ProofModule {
             .controller::<islands::IslandPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>()
-            .controller::<site::SitePages>();
+            .controller::<site::SitePages>()
+            .controller::<widgets::WidgetPages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
         // The app's own stylesheet and typeface, served by the toolkit.

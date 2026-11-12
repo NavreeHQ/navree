@@ -508,3 +508,39 @@ fn the_colours_are_the_palettes_and_nothing_else() {
         assert!(*c == vivid_accent || *c == vivid_4, "{c} in {svg}");
     }
 }
+
+#[test]
+fn two_drawings_in_one_page_share_no_id() {
+    let dark = ChartImage::for_tile(&tile(TileSize::Medium))
+        .svg_node(&tile(TileSize::Medium).into())
+        .unwrap();
+    let light = ChartImage::for_tile(&tile(TileSize::Medium))
+        .mode(Mode::Light)
+        .svg_node(&tile(TileSize::Medium).into())
+        .unwrap();
+    let ids = |node: &Node| {
+        let html = crate::render(node);
+        html.match_indices(" id=\"")
+            .map(|(at, _)| {
+                html[at + 5..]
+                    .split('"')
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>()
+    };
+    let (a, b) = (ids(&dark), ids(&light));
+    assert!(!a.is_empty());
+    assert!(a.iter().all(|id| !b.contains(id)), "{a:?} {b:?}");
+    // Every reference points at an id of its own drawing.
+    let html = crate::render(&dark);
+    for (at, _) in html.match_indices("url(#") {
+        let id = html[at + 5..].split(')').next().unwrap();
+        assert!(a.iter().any(|own| own == id), "{id}");
+    }
+    assert!(
+        html.contains(r#"width="100%" viewBox="0 0 1014 474""#),
+        "{html}"
+    );
+}

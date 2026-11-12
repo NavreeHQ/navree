@@ -44,5 +44,5 @@
 @media (prefers-reduced-motion:no-preference){[data-slot=sortable-grid-item]{transition:border-color .12s,box-shadow .12s}}
 
 /* With JavaScript off, a tile moves by its buttons; with it on, by dragging or the keys. */
-@media (scripting:enabled){[data-ui-grid] [data-slot=sortable-grid-steps]{display:none}}
+@media (scripting:enabled){:is([data-ui-grid],[data-ghost]) [data-slot=sortable-grid-steps]{display:none}}
 @media (scripting:none){[data-slot=sortable-grid-handle]{display:none}}

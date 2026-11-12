@@ -178,8 +178,8 @@ function tick() {
   drag.frame = requestAnimationFrame(tick);
 }
 
-/** Ends the drag under way: dropped where it is, or put back. @param {boolean} keep */
-function end(keep) {
+/** Ends the drag under way: dropped where it is, or put back; the keys stay on the handle unless they left. @param {boolean} keep @param {boolean} [left] */
+function end(keep, left = false) {
   const was = drag;
   if (!was) return;
   drag = null;
@@ -193,7 +193,7 @@ function end(keep) {
   const from = was.next;
   const moved = item.nextSibling !== from;
   if (!keep && moved && (!from || from.parentNode === item.parentNode)) put(root, item, from);
-  if (was.keys) grip(item);
+  if (was.keys && !left) grip(item);
   say(root, keep ? "dropped" : "cancelled", about(root, item));
   if (keep && moved) changed(root);
 }
@@ -207,7 +207,7 @@ function unpress() {
 on(document, "pointerdown", (e) => {
   if (drag) {
     // A press elsewhere ends a move made with the keys.
-    if (drag.keys && !holds(drag.item, /** @type {Node} */ (e.target))) end(false);
+    if (drag.keys && !holds(drag.item, /** @type {Node} */ (e.target))) end(false, true);
     return;
   }
   unpress();
@@ -326,9 +326,7 @@ on(document, "keydown", (e) => {
 // Leaving the handle while a tile is held puts it back, unless the page moved the handle itself.
 on(document, "focusout", (e) => {
   if (drag?.keys && !moving && closest(e.target, HANDLE) && closest(e.target, ITEM) === drag.item) {
-    queueMicrotask(() => {
-      if (drag?.keys && !drag.item.contains(document.activeElement)) end(false);
-    });
+    end(false, true);
   }
 });
 
