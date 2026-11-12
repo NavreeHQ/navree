@@ -1,0 +1,668 @@
+[
+  {
+    "name": "morph puts the new node where the old one was",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "text",
+            "id": "a",
+            "value": "First"
+          },
+          {
+            "t": "badge",
+            "id": "status",
+            "text": "Paid",
+            "tone": "success"
+          },
+          {
+            "t": "text",
+            "id": "c",
+            "value": "Last"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "morph",
+        "target": "status",
+        "node": {
+          "t": "badge",
+          "id": "status",
+          "text": "Shipped",
+          "tone": "info"
+        }
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "text",
+            "id": "a",
+            "value": "First"
+          },
+          {
+            "t": "badge",
+            "id": "status",
+            "text": "Shipped",
+            "tone": "info"
+          },
+          {
+            "t": "text",
+            "id": "c",
+            "value": "Last"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "replace may put a node of another kind in the old one's place",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "progress",
+            "id": "wait"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "replace",
+        "target": "wait",
+        "node": {
+          "t": "text",
+          "id": "done",
+          "value": "Packed"
+        }
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "text",
+            "id": "done",
+            "value": "Packed"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a node deep in the tree is found: a value of a fact inside a section",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "section",
+        "style": "card",
+        "children": [
+          {
+            "t": "facts",
+            "items": [
+              {
+                "label": "Status",
+                "value": [
+                  {
+                    "t": "badge",
+                    "id": "status",
+                    "text": "Paid"
+                  }
+                ]
+              },
+              {
+                "label": "Total",
+                "value": [
+                  {
+                    "t": "text",
+                    "value": "₹12,499"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "morph",
+        "target": "status",
+        "node": {
+          "t": "badge",
+          "id": "status",
+          "text": "Refunded",
+          "tone": "warning"
+        }
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "section",
+        "style": "card",
+        "children": [
+          {
+            "t": "facts",
+            "items": [
+              {
+                "label": "Status",
+                "value": [
+                  {
+                    "t": "badge",
+                    "id": "status",
+                    "text": "Refunded",
+                    "tone": "warning"
+                  }
+                ]
+              },
+              {
+                "label": "Total",
+                "value": [
+                  {
+                    "t": "text",
+                    "value": "₹12,499"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "the body itself can be the target",
+    "before": {
+      "title": "Customers",
+      "body": {
+        "t": "list",
+        "id": "customers",
+        "children": [
+          {
+            "t": "row",
+            "title": "Harpreet Kaur"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "replace",
+        "target": "customers",
+        "node": {
+          "t": "empty",
+          "id": "customers",
+          "title": "No customers yet"
+        }
+      }
+    ],
+    "after": {
+      "title": "Customers",
+      "body": {
+        "t": "empty",
+        "id": "customers",
+        "title": "No customers yet"
+      }
+    }
+  },
+  {
+    "name": "an action of the screen can be the target",
+    "before": {
+      "title": "Order",
+      "actions": [
+        {
+          "t": "button",
+          "id": "ship",
+          "label": "Mark shipped",
+          "role": "primary"
+        }
+      ],
+      "body": {
+        "t": "text",
+        "value": "x"
+      }
+    },
+    "ops": [
+      {
+        "op": "morph",
+        "target": "ship",
+        "node": {
+          "t": "button",
+          "id": "ship",
+          "label": "Shipped",
+          "role": "primary",
+          "disabled": true
+        }
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "actions": [
+        {
+          "t": "button",
+          "id": "ship",
+          "label": "Shipped",
+          "role": "primary",
+          "disabled": true
+        }
+      ],
+      "body": {
+        "t": "text",
+        "value": "x"
+      }
+    }
+  },
+  {
+    "name": "append adds after the last child and prepend before the first",
+    "before": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "children": [
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "append",
+        "target": "orders",
+        "nodes": [
+          {
+            "t": "row",
+            "id": "o3",
+            "title": "Third"
+          }
+        ]
+      },
+      {
+        "op": "prepend",
+        "target": "orders",
+        "nodes": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          }
+        ]
+      }
+    ],
+    "after": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "children": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          },
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          },
+          {
+            "t": "row",
+            "id": "o3",
+            "title": "Third"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a list appended to a list gives its rows and its address for the page after",
+    "before": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "more": "/orders?after=2",
+        "children": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          },
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "append",
+        "target": "orders",
+        "nodes": [
+          {
+            "t": "row",
+            "id": "o3",
+            "title": "Third"
+          },
+          {
+            "t": "row",
+            "id": "o4",
+            "title": "Fourth"
+          }
+        ],
+        "more": "/orders?after=4"
+      }
+    ],
+    "after": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "more": "/orders?after=4",
+        "children": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          },
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          },
+          {
+            "t": "row",
+            "id": "o3",
+            "title": "Third"
+          },
+          {
+            "t": "row",
+            "id": "o4",
+            "title": "Fourth"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "the last page of a list has no address after it",
+    "before": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "more": "/orders?after=2",
+        "children": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "append",
+        "target": "orders",
+        "nodes": [
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          }
+        ]
+      }
+    ],
+    "after": {
+      "title": "Orders",
+      "body": {
+        "t": "list",
+        "id": "orders",
+        "children": [
+          {
+            "t": "row",
+            "id": "o1",
+            "title": "First"
+          },
+          {
+            "t": "row",
+            "id": "o2",
+            "title": "Second"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "remove takes the node out and leaves its siblings",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "banner",
+            "id": "pickup",
+            "title": "Ready for pickup"
+          },
+          {
+            "t": "text",
+            "id": "note",
+            "value": "Kept"
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "remove",
+        "target": "pickup"
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "stack",
+        "children": [
+          {
+            "t": "text",
+            "id": "note",
+            "value": "Kept"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a table's row is removed by its row id",
+    "before": {
+      "title": "Products",
+      "body": {
+        "t": "table",
+        "id": "products",
+        "columns": [
+          {
+            "label": "Product"
+          },
+          {
+            "label": "Price"
+          }
+        ],
+        "rows": [
+          {
+            "id": "p1",
+            "cells": [
+              {
+                "t": "text",
+                "value": "Juttis"
+              },
+              {
+                "t": "text",
+                "value": "₹2,500"
+              }
+            ]
+          },
+          {
+            "id": "p2",
+            "cells": [
+              {
+                "t": "text",
+                "value": "Dupatta"
+              },
+              {
+                "t": "text",
+                "value": "₹4,999"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "ops": [
+      {
+        "op": "remove",
+        "target": "p1"
+      }
+    ],
+    "after": {
+      "title": "Products",
+      "body": {
+        "t": "table",
+        "id": "products",
+        "columns": [
+          {
+            "label": "Product"
+          },
+          {
+            "label": "Price"
+          }
+        ],
+        "rows": [
+          {
+            "id": "p2",
+            "cells": [
+              {
+                "t": "text",
+                "value": "Dupatta"
+              },
+              {
+                "t": "text",
+                "value": "₹4,999"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "an op whose target is not in the tree changes nothing",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "text",
+        "id": "a",
+        "value": "Same"
+      }
+    },
+    "ops": [
+      {
+        "op": "morph",
+        "target": "missing",
+        "node": {
+          "t": "text",
+          "value": "Never shown"
+        }
+      },
+      {
+        "op": "remove",
+        "target": "missing"
+      },
+      {
+        "op": "append",
+        "target": "a",
+        "nodes": [
+          {
+            "t": "text",
+            "value": "A text has no children"
+          }
+        ]
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "text",
+        "id": "a",
+        "value": "Same"
+      }
+    }
+  },
+  {
+    "name": "ops that are not about the tree leave it alone",
+    "before": {
+      "title": "Order",
+      "body": {
+        "t": "text",
+        "id": "a",
+        "value": "Same"
+      }
+    },
+    "ops": [
+      {
+        "op": "toast",
+        "tone": "success",
+        "text": "Saved"
+      },
+      {
+        "op": "open",
+        "target": "a"
+      },
+      {
+        "op": "focus",
+        "target": "a"
+      },
+      {
+        "op": "url",
+        "href": "/orders/2",
+        "mode": "replace"
+      },
+      {
+        "op": "errors",
+        "form": "f",
+        "fields": {
+          "name": [
+            "Required"
+          ]
+        }
+      }
+    ],
+    "after": {
+      "title": "Order",
+      "body": {
+        "t": "text",
+        "id": "a",
+        "value": "Same"
+      }
+    }
+  }
+]

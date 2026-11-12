@@ -1,0 +1,96 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "ops": [
+    {
+      "op": "close",
+      "target": "refund"
+    },
+    {
+      "op": "morph",
+      "target": "order-page",
+      "node": {
+        "t": "stack",
+        "id": "order-page",
+        "children": [
+          {
+            "t": "badge",
+            "text": "Refunded",
+            "tone": "neutral",
+            "dot": true
+          }
+        ]
+      }
+    },
+    {
+      "op": "replace",
+      "target": "refund",
+      "node": {
+        "t": "dialog",
+        "id": "refund",
+        "title": "Refund CH-1042",
+        "text": "Nothing is left to refund."
+      }
+    },
+    {
+      "op": "append",
+      "target": "feed",
+      "nodes": [
+        {
+          "t": "row",
+          "id": "event-982",
+          "title": "CH-1042 was refunded"
+        }
+      ]
+    },
+    {
+      "op": "prepend",
+      "target": "feed",
+      "nodes": [
+        {
+          "t": "row",
+          "id": "event-983",
+          "title": "CH-1043 was placed"
+        }
+      ]
+    },
+    {
+      "op": "remove",
+      "target": "event-12"
+    },
+    {
+      "op": "errors",
+      "form": "refund-form",
+      "fields": {}
+    },
+    {
+      "op": "toast",
+      "tone": "success",
+      "text": "₹1,240.50 went back to the customer's UPI account.",
+      "title": "Done",
+      "id": "refund-1042",
+      "action": {
+        "label": "See the order",
+        "href": "/orders/1042"
+      }
+    },
+    {
+      "op": "focus",
+      "target": "refund-amount"
+    },
+    {
+      "op": "open",
+      "target": "order"
+    },
+    {
+      "op": "url",
+      "href": "/orders/1042",
+      "mode": "replace"
+    },
+    {
+      "op": "invalidate",
+      "target": "order-others"
+    }
+  ]
+}

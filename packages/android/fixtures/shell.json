@@ -1,0 +1,130 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "name": "Store",
+  "theme": {
+    "accent": "#0f766e"
+  },
+  "nav": {
+    "groups": [
+      {
+        "label": null,
+        "items": [
+          {
+            "label": "Home",
+            "href": "/",
+            "icon": {
+              "name": "house",
+              "paths": [
+                "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8",
+                "M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+              ]
+            }
+          },
+          {
+            "label": "Orders",
+            "href": "/orders",
+            "badge": 3,
+            "icon": {
+              "name": "shopping-bag",
+              "paths": [
+                "M16 10a4 4 0 0 1-8 0",
+                "M3.103 6.034h17.794",
+                "M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"
+              ]
+            }
+          },
+          {
+            "label": "Products",
+            "href": "/products",
+            "icon": {
+              "name": "package",
+              "paths": [
+                "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z",
+                "M12 22V12",
+                "M3.29 7L12 12L20.71 7",
+                "m7.5 4.27 9 5.15"
+              ]
+            }
+          },
+          {
+            "label": "Customers",
+            "href": "/customers",
+            "icon": {
+              "name": "users",
+              "paths": [
+                "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+                "M16 3.128a4 4 0 0 1 0 7.744",
+                "M22 21v-2a4 4 0 0 0-3-3.87",
+                "M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0Z"
+              ]
+            }
+          },
+          {
+            "label": "Settings",
+            "href": "/settings",
+            "icon": {
+              "name": "settings",
+              "paths": [
+                "M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915",
+                "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0Z"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "user": {
+    "name": "Gurpreet Sandhu",
+    "menu": [
+      {
+        "t": "button",
+        "label": "Your profile",
+        "action": {
+          "t": "navigate",
+          "href": "/settings/profile"
+        }
+      },
+      {
+        "t": "button",
+        "label": "Help",
+        "action": {
+          "t": "navigate",
+          "href": "https://navree.com/docs",
+          "present": "external"
+        }
+      },
+      {
+        "t": "divider"
+      },
+      {
+        "t": "button",
+        "label": "Sign out",
+        "role": "destructive",
+        "action": {
+          "t": "request",
+          "method": "post",
+          "href": "/sign-out"
+        }
+      }
+    ],
+    "email": "gurpreet@sandhustores.in"
+  },
+  "routes": [
+    {
+      "match": "/orders/new",
+      "present": "sheet"
+    },
+    {
+      "match": "/orders/*/edit",
+      "present": "sheet"
+    },
+    {
+      "match": "/sign-in",
+      "present": "full",
+      "chrome": false
+    }
+  ],
+  "home": "/"
+}

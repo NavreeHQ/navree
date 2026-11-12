@@ -1,0 +1,193 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "id": "customers",
+    "title": "Customers",
+    "search": {
+      "name": "q",
+      "value": "",
+      "placeholder": "Search customers",
+      "action": "/customers"
+    },
+    "refresh": true,
+    "actions": [
+      {
+        "t": "button",
+        "label": "Add customer",
+        "role": "create",
+        "icon": {
+          "name": "plus",
+          "paths": [
+            "M5 12h14",
+            "M12 5v14"
+          ]
+        },
+        "action": {
+          "t": "navigate",
+          "href": "/customers/new"
+        }
+      },
+      {
+        "t": "menu",
+        "label": "Sort",
+        "items": [
+          {
+            "t": "button",
+            "label": "Name",
+            "action": {
+              "t": "navigate",
+              "href": "/customers?sort=name",
+              "present": "replace"
+            }
+          },
+          {
+            "t": "button",
+            "label": "Most orders",
+            "action": {
+              "t": "navigate",
+              "href": "/customers?sort=orders",
+              "present": "replace"
+            }
+          },
+          {
+            "t": "button",
+            "label": "Newest",
+            "action": {
+              "t": "navigate",
+              "href": "/customers?sort=new",
+              "present": "replace"
+            }
+          }
+        ]
+      }
+    ],
+    "body": {
+      "t": "list",
+      "id": "customers-list",
+      "children": [
+        {
+          "t": "row",
+          "id": "c-88",
+          "leading": {
+            "t": "avatar",
+            "name": "Harpreet Kaur",
+            "initials": "HK"
+          },
+          "title": "Harpreet Kaur",
+          "subtitle": "Ludhiana · 12 orders",
+          "trailing": {
+            "t": "text",
+            "value": "₹86,300",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/88"
+          }
+        },
+        {
+          "t": "row",
+          "id": "c-87",
+          "leading": {
+            "t": "avatar",
+            "name": "Manpreet Singh Gill",
+            "initials": "MG"
+          },
+          "title": "Manpreet Singh Gill",
+          "subtitle": "Amritsar · 4 orders",
+          "trailing": {
+            "t": "text",
+            "value": "₹9,120",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/87"
+          }
+        },
+        {
+          "t": "row",
+          "id": "c-86",
+          "leading": {
+            "t": "avatar",
+            "name": "Simran Bhatia",
+            "initials": "SB"
+          },
+          "title": "Simran Bhatia",
+          "subtitle": "Chandigarh · 21 orders",
+          "trailing": {
+            "t": "text",
+            "value": "₹3,42,700",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/86"
+          }
+        },
+        {
+          "t": "row",
+          "id": "c-85",
+          "leading": {
+            "t": "avatar",
+            "name": "Rajesh Sharma",
+            "initials": "RS"
+          },
+          "title": "Rajesh Sharma",
+          "subtitle": "Delhi · 2 orders",
+          "trailing": {
+            "t": "text",
+            "value": "₹11,480",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/85"
+          }
+        },
+        {
+          "t": "row",
+          "id": "c-84",
+          "leading": {
+            "t": "avatar",
+            "name": "Neha Aggarwal",
+            "initials": "NA"
+          },
+          "title": "Neha Aggarwal",
+          "subtitle": "Jaipur · 7 orders",
+          "trailing": {
+            "t": "text",
+            "value": "₹54,900",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/84"
+          }
+        },
+        {
+          "t": "row",
+          "id": "c-83",
+          "leading": {
+            "t": "avatar",
+            "name": "Amandeep Dhillon",
+            "initials": "AD"
+          },
+          "title": "Amandeep Dhillon",
+          "subtitle": "Jalandhar · 1 order",
+          "trailing": {
+            "t": "text",
+            "value": "₹749",
+            "style": "callout"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/customers/83"
+          }
+        }
+      ]
+    }
+  }
+}

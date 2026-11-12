@@ -1,0 +1,103 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "id": "order-new",
+    "title": "New order",
+    "body": {
+      "t": "form",
+      "id": "new-order-form",
+      "method": "post",
+      "action": "/orders",
+      "hidden": [
+        {
+          "name": "_token",
+          "value": "k3J9sQ"
+        }
+      ],
+      "children": [
+        {
+          "t": "field",
+          "name": "name",
+          "label": "Customer",
+          "required": true,
+          "input": {
+            "t": "text",
+            "kind": "plain",
+            "autofill": "name"
+          }
+        },
+        {
+          "t": "field",
+          "name": "phone",
+          "label": "Mobile number",
+          "required": true,
+          "input": {
+            "t": "text",
+            "kind": "phone",
+            "autofill": "tel-national"
+          }
+        },
+        {
+          "t": "field",
+          "name": "city",
+          "label": "City",
+          "required": true,
+          "input": {
+            "t": "choice",
+            "kind": "menu",
+            "placeholder": "Choose a city",
+            "options": [
+              {
+                "value": "ludhiana",
+                "label": "Ludhiana"
+              },
+              {
+                "value": "amritsar",
+                "label": "Amritsar"
+              },
+              {
+                "value": "chandigarh",
+                "label": "Chandigarh"
+              },
+              {
+                "value": "delhi",
+                "label": "Delhi"
+              }
+            ]
+          }
+        },
+        {
+          "t": "field",
+          "name": "amount",
+          "label": "Amount",
+          "required": true,
+          "input": {
+            "t": "text",
+            "kind": "decimal"
+          }
+        },
+        {
+          "t": "field",
+          "name": "cod",
+          "label": "Cash on delivery",
+          "input": {
+            "t": "toggle",
+            "kind": "switch",
+            "on": false,
+            "value": "1"
+          }
+        },
+        {
+          "t": "button",
+          "label": "Create",
+          "role": "primary",
+          "action": {
+            "t": "submit"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,202 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "id": "home",
+    "title": "Store",
+    "refresh": true,
+    "actions": [
+      {
+        "t": "button",
+        "label": "Reports",
+        "role": "secondary",
+        "icon": {
+          "name": "chart-column",
+          "paths": [
+            "M3 3v16a2 2 0 0 0 2 2h16",
+            "M18 17V9",
+            "M13 17V5",
+            "M8 17v-3"
+          ]
+        },
+        "action": {
+          "t": "navigate",
+          "href": "/reports"
+        }
+      }
+    ],
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "text",
+          "value": "Good afternoon, Gurpreet",
+          "style": "title"
+        },
+        {
+          "t": "grid",
+          "min": 156,
+          "gap": 2,
+          "children": [
+            {
+              "t": "section",
+              "style": "card",
+              "children": [
+                {
+                  "t": "text",
+                  "value": "Sales today",
+                  "style": "caption"
+                },
+                {
+                  "t": "text",
+                  "value": "₹1,86,420",
+                  "style": "large_title"
+                },
+                {
+                  "t": "text",
+                  "value": "Up 12% on last Thursday",
+                  "style": "caption",
+                  "tone": "success"
+                }
+              ]
+            },
+            {
+              "t": "section",
+              "style": "card",
+              "children": [
+                {
+                  "t": "text",
+                  "value": "Orders",
+                  "style": "caption"
+                },
+                {
+                  "t": "text",
+                  "value": "48",
+                  "style": "large_title"
+                },
+                {
+                  "t": "text",
+                  "value": "3 waiting to ship",
+                  "style": "caption",
+                  "tone": "warning"
+                }
+              ]
+            },
+            {
+              "t": "section",
+              "style": "card",
+              "children": [
+                {
+                  "t": "text",
+                  "value": "New customers",
+                  "style": "caption"
+                },
+                {
+                  "t": "text",
+                  "value": "9",
+                  "style": "large_title"
+                },
+                {
+                  "t": "text",
+                  "value": "This week",
+                  "style": "caption"
+                }
+              ]
+            },
+            {
+              "t": "section",
+              "style": "card",
+              "children": [
+                {
+                  "t": "text",
+                  "value": "Monthly target",
+                  "style": "caption"
+                },
+                {
+                  "t": "text",
+                  "value": "64%",
+                  "style": "large_title"
+                },
+                {
+                  "t": "progress",
+                  "value": 640,
+                  "label": "Monthly target"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "style": "inset",
+          "children": [
+            {
+              "t": "list",
+              "id": "to-ship",
+              "children": [
+                {
+                  "t": "row",
+                  "title": "Manpreet Singh Gill",
+                  "subtitle": "#1041 · Amritsar",
+                  "trailing": {
+                    "t": "text",
+                    "value": "₹2,150"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders/1041"
+                  }
+                },
+                {
+                  "t": "row",
+                  "title": "Jaspreet Bedi",
+                  "subtitle": "#1035 · Patiala",
+                  "trailing": {
+                    "t": "text",
+                    "value": "₹32,000"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders/1035"
+                  }
+                },
+                {
+                  "t": "row",
+                  "title": "Harpreet Kaur",
+                  "subtitle": "#1042 · Ludhiana",
+                  "trailing": {
+                    "t": "text",
+                    "value": "₹12,499"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders/1042"
+                  }
+                }
+              ]
+            }
+          ],
+          "title": "Waiting to ship"
+        },
+        {
+          "t": "banner",
+          "tone": "warning",
+          "title": "Low stock",
+          "text": "Four products have fewer than five units left.",
+          "actions": [
+            {
+              "t": "button",
+              "label": "See products",
+              "action": {
+                "t": "navigate",
+                "href": "/products"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

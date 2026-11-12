@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The seed of the app's tonal palette until the shell brings the brand's own. -->
+    <color name="navree_seed">#6750A4</color>
+    <color name="navree_window">#FEF7FF</color>
+</resources>

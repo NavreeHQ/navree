@@ -1,0 +1,151 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 1,
+  "screen": {
+    "id": "settings",
+    "title": "Settings",
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "section",
+          "style": "inset",
+          "children": [
+            {
+              "t": "row",
+              "title": "Sandhu Stores",
+              "subtitle": "GSTIN 03ABCDE1234F1Z5",
+              "action": {
+                "t": "navigate",
+                "href": "/settings/store"
+              }
+            },
+            {
+              "t": "row",
+              "title": "Currency",
+              "trailing": {
+                "t": "text",
+                "value": "Indian rupee (₹)"
+              },
+              "action": {
+                "t": "navigate",
+                "href": "/settings/currency"
+              }
+            },
+            {
+              "t": "row",
+              "title": "Time zone",
+              "trailing": {
+                "t": "text",
+                "value": "IST, Asia/Kolkata"
+              },
+              "action": {
+                "t": "navigate",
+                "href": "/settings/time-zone"
+              }
+            }
+          ],
+          "title": "Store"
+        },
+        {
+          "t": "form",
+          "id": "notify-form",
+          "method": "post",
+          "action": "/settings/notifications",
+          "hidden": [
+            {
+              "name": "_token",
+              "value": "k3J9sQ"
+            }
+          ],
+          "children": [
+            {
+              "t": "section",
+              "footer": [
+                {
+                  "t": "text",
+                  "value": "Order alerts are sent to +91 98765 43210.",
+                  "style": "caption",
+                  "muted": true
+                }
+              ],
+              "style": "inset",
+              "children": [
+                {
+                  "t": "field",
+                  "name": "new_orders",
+                  "label": "New orders",
+                  "input": {
+                    "t": "toggle",
+                    "kind": "switch",
+                    "on": true,
+                    "value": "1"
+                  }
+                },
+                {
+                  "t": "field",
+                  "name": "low_stock",
+                  "label": "Low stock",
+                  "help": "When a product has fewer than five units",
+                  "input": {
+                    "t": "toggle",
+                    "kind": "switch",
+                    "on": true,
+                    "value": "1"
+                  }
+                },
+                {
+                  "t": "field",
+                  "name": "weekly",
+                  "label": "Weekly summary by email",
+                  "input": {
+                    "t": "toggle",
+                    "kind": "switch",
+                    "on": false,
+                    "value": "1"
+                  }
+                }
+              ],
+              "title": "Notifications"
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "style": "inset",
+          "children": [
+            {
+              "t": "row",
+              "title": "Help and documentation",
+              "action": {
+                "t": "navigate",
+                "href": "https://navree.com/docs",
+                "present": "external"
+              }
+            },
+            {
+              "t": "row",
+              "title": "Reports",
+              "subtitle": "Opens the full reports page",
+              "action": {
+                "t": "navigate",
+                "href": "/reports"
+              }
+            },
+            {
+              "t": "row",
+              "title": "Version",
+              "trailing": {
+                "t": "text",
+                "value": "1.0.0"
+              }
+            }
+          ],
+          "title": "About"
+        }
+      ]
+    }
+  }
+}
