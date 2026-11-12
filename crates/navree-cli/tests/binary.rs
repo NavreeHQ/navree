@@ -292,3 +292,213 @@ fn harbor_commands_run_in_the_cli_not_in_the_app() {
         stderr(&output)
     );
 }
+
+#[test]
+fn native_coverage_outside_an_app_says_so() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let output = navree(dir.path(), &["native:coverage"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("not inside a Rust package"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+/// An app that is only the two commands `native:coverage` talks to: it lists
+/// its commands, and answers the survey with a report whose first page is
+/// named after the arguments it was run with.
+fn survey_app(dir: &Path) {
+    std::fs::create_dir(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"survey-app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\nnative-preview = []\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("main.rs"),
+        r##"fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("help") => {
+            println!("Usage: <command>\n\nCommands:\n  serve  Serve HTTP");
+            if cfg!(feature = "native-preview") {
+                println!("  native:coverage  Ask every page route");
+            }
+        }
+        Some("native:coverage") => {
+            let asked = args[1..].join(" ").replace('"', "'");
+            println!("a line of log");
+            println!(
+                r#"{{"format":"navree-native-coverage","version":1,"platform":"android","form":"phone","pages":[{{"route":"/","path":"{asked}","grade":"idiom","native":true}},{{"route":"/board","path":"/board","grade":"web","native":false,"why":["tag:canvas"]}}],"skipped":[],"not_pages":[]}}"#
+            );
+        }
+        _ => std::process::exit(2),
+    }
+}
+"##,
+    )
+    .unwrap();
+}
+
+fn navree_in_app(app: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_navree"))
+        .args(args)
+        .current_dir(app)
+        .env("CARGO_TARGET_DIR", app.join("target"))
+        .env_remove("RUSTC_WRAPPER")
+        .output()
+        .expect("navree runs")
+}
+
+#[test]
+fn native_coverage_asks_the_app_and_prints_its_table() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let app = dir.path();
+    survey_app(app);
+    std::fs::write(app.join("native.toml"), "[coverage.params]\nid = 7\n").unwrap();
+
+    let output = navree_in_app(
+        app,
+        &[
+            "native:coverage",
+            "--features",
+            "native-preview",
+            "--platform",
+            "ios",
+        ],
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(
+        text.starts_with("Native coverage of survey-app, asked as android on phone\n"),
+        "{text}"
+    );
+    // The app was run with the client and the example values the author gave.
+    assert!(
+        text.contains("--platform ios --plan {'values':{'id':'7'}"),
+        "{text}"
+    );
+    assert!(text.contains("/board"), "{text}");
+    assert!(text.contains("<canvas>"), "{text}");
+    assert!(text.contains("1 idiom, 0 layout, 1 web"), "{text}");
+
+    // As a gate, a web page fails the run.
+    let output = navree_in_app(
+        app,
+        &[
+            "native:coverage",
+            "--features",
+            "native-preview",
+            "--fail-on",
+            "web",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("native:coverage: 1 of 2 pages are web: /board"),
+        "{}",
+        stdout(&output)
+    );
+
+    // JSON, for tools.
+    let output = navree_in_app(
+        app,
+        &["native:coverage", "--features", "native-preview", "--json"],
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    let json: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
+    assert_eq!(json["totals"]["web"], 1);
+    assert_eq!(json["passed"], true);
+}
+
+#[test]
+fn native_coverage_in_an_app_without_the_feature_says_what_to_add() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let app = dir.path();
+    survey_app(app);
+    let output = navree_in_app(app, &["native:coverage"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("ui-native-preview"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn native_doctor_reads_an_apps_settings_without_building_it() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let app = dir.path();
+    // No source at all: the doctor reads the manifest and the settings, and
+    // never builds.
+    std::fs::create_dir(app.join("config")).unwrap();
+    std::fs::write(
+        app.join("Cargo.toml"),
+        "[package]\nname = \"doc-app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\nnative-preview = [\"navree/ui-native-preview\"]\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("config").join("app.toml"),
+        "[auth.apps.android.main]\npackage = \"com.example.orders\"\nfingerprints = [\"14:6D\"]\n",
+    )
+    .unwrap();
+    let output = navree_in_app(app, &["native:doctor", "--platform", "android", "--json"]);
+    // The fingerprint is not one: something is missing, so the run fails.
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    let json: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
+    assert_eq!(json["ready"], false);
+    let items = json["items"].as_array().unwrap();
+    let item = |id: &str| items.iter().find(|i| i["id"] == id).unwrap();
+    assert_eq!(item("auth.android")["status"], "missing");
+    assert!(
+        item("auth.android")["detail"]
+            .as_str()
+            .unwrap()
+            .contains("fingerprints must list SHA-256"),
+        "{}",
+        item("auth.android")
+    );
+    assert_eq!(item("auth.apple")["status"], "not-applicable");
+    assert_eq!(item("app.preview")["status"], "ready");
+    assert!(!app.join("target").exists(), "the doctor built something");
+
+    // As text.
+    let output = navree_in_app(app, &["native:doctor", "--platform", "android"]);
+    let text = stdout(&output);
+    assert!(
+        text.starts_with("Native build readiness of doc-app\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("MISSING Android app in auth.apps.android"),
+        "{text}"
+    );
+}
+
+#[test]
+fn native_doctor_outside_an_app_says_so() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let output = navree(dir.path(), &["native:doctor"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("not inside a Rust package"),
+        "{}",
+        stderr(&output)
+    );
+}
