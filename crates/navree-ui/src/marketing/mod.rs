@@ -363,6 +363,13 @@ impl Section {
         self
     }
 
+    /// Draws it with less space above and below: for a row of logos or a band of numbers
+    /// between two full sections.
+    pub fn compact(mut self) -> Self {
+        self.el = self.el.attr("data-size", "compact");
+        self
+    }
+
     /// Keeps its content to the width of a column of text, for prose and questions.
     pub fn narrow(mut self) -> Self {
         self.narrow = true;

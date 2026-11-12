@@ -10,7 +10,7 @@ use crate::icons;
 use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// The header of a public site: the brand on the left, the main links in the middle and
-/// the calls to action on the right, held at the top as the page scrolls. Below 48 rem
+/// the calls to action on the right, held at the top as the page scrolls. Below 64 rem
 /// the links and actions fold into a menu behind one button: a `<details>`, so it opens
 /// and closes with no script, by keyboard and by touch, and says whether it is open.
 ///
