@@ -43,6 +43,22 @@ A value below zero stacks downward from the baseline, away from the positive val
 
 <UiPreview example="area-chart/percent" />
 
+## A gradient and a big tooltip
+
+`Series::fade()` washes the area in its own colour, fading to nothing at the foot; `Series::stroke(Gradient::horizontal()...)` paints the line along its length. With `Domain::padded(10)` the axis hugs the data, and the area runs down to the foot of the plot. See [Paint and motion](/docs/components/line-chart/#paint-and-motion).
+
+<UiPreview example="area-chart/gradient" />
+
+## Steps between named levels
+
+`.curve(Curve::Step)` with `.y_categories(["Deep", "Light", "REM", "Awake"])` draws a hypnogram: each stage holds until the next one starts. A gradient `.across_plot()` puts its stops at the levels of the axis, a dashed `Reference::level` in each level's ink stands in for gridlines, `Series::colors` colours each value in the tooltip and the table, and `.detail("Lasted", ...)` adds how long each stage lasted.
+
+<UiPreview example="area-chart/steps" />
+
+## Points, a glow and a zero line
+
+<UiPreview example="area-chart/trend" />
+
 ## Targets, events and bands
 
 Annotations work as they do on a [line chart](/docs/components/line-chart/#targets-events-and-bands). In a stacked chart a target is a level of the total.

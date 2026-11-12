@@ -40,6 +40,12 @@ A sparkline scales to its own values, from the lowest to the highest. It shows t
 
 `.area()` adds a wash under the line. `.tone(Tone)` colors the line by what it means, and without one the line takes the first categorical color. The color is never the only sign: say the direction in the figure's text, such as "+12%".
 
+## Painted
+
+`.smooth()` draws a monotone curve. `.fade()` washes the area under it in its colour, fading to nothing; `.fill(Gradient)` takes any gradient. `.points()` adds a dot at every point, `.glow()` a soft glow, `.ink(Ink)` any colour of the theme, and `.motion(Motion::new())` draws the line on as it comes in. `.columns()` draws a rounded column for each value instead, from zero, and `.colors(ColorScale)` colours each column by its band. A painted sparkline links the chart paint stylesheet and still ships no script. `CountUp::new(94, "94")` writes a figure that counts up from zero when it comes into view; with no script, or for a reader who asks for less motion, it is simply the figure.
+
+<UiPreview example="sparkline/painted" />
+
 ## In a table
 
 A sparkline in a table cell fills the free width of its column.

@@ -1282,7 +1282,38 @@
         "doc": "`values` as bars, described by `description`."
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<crate::charts::Ink>",
+        "doc": "Colours the bars with any `Ink` of the theme."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: crate::charts::ColorScale",
+        "doc": "Colours each bar by the band its value falls in. Say what the colours mean beside the bars."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: crate::charts::Gradient",
+        "doc": "Fills each bar with `gradient`; `Ink::own` in its stops is the bar's colour."
+      },
+      {
+        "name": "pill",
+        "generics": "",
+        "args": "",
+        "doc": "Rounds both ends of each bar into a pill."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: crate::charts::Motion",
+        "doc": "How the bars come in: they grow from the baseline, one after another. Off by default; always off for a reader who asks for less motion."
+      }
+    ],
     "variants": [],
     "shared": [
       {
@@ -2501,7 +2532,91 @@
         "name": "smooth",
         "generics": "",
         "args": "",
-        "doc": "Draws lines as a monotone curve, which never overshoots a value."
+        "doc": "Draws lines as a monotone curve, which never overshoots a value: the same as `.curve(Curve::Monotone)`."
+      },
+      {
+        "name": "curve",
+        "generics": "",
+        "args": "curve: Curve",
+        "doc": "How lines and areas run between points: straight, a monotone curve, or steps."
+      },
+      {
+        "name": "dots",
+        "generics": "",
+        "args": "dots: Dots",
+        "doc": "Which points of a line show a dot: the last (the default), all, or none."
+      },
+      {
+        "name": "active_dot",
+        "generics": "",
+        "args": "dot: ActiveDot",
+        "doc": "The dot that marks the value under the pointer or the keys."
+      },
+      {
+        "name": "x_axis",
+        "generics": "",
+        "args": "axis: Axis",
+        "doc": "What the x axis draws: its labels (the default), its line, its tick marks. `Axis::hidden` gives the plot the room the labels took."
+      },
+      {
+        "name": "y_axis",
+        "generics": "",
+        "args": "axis: Axis",
+        "doc": "What the value axis draws: its labels (the default), its line, its tick marks. `Axis::hidden` gives the plot the room the labels took."
+      },
+      {
+        "name": "grid",
+        "generics": "",
+        "args": "grid: Gridlines",
+        "doc": "The gridlines behind the marks: across at each value tick by default."
+      },
+      {
+        "name": "x_ticks",
+        "generics": "",
+        "args": "ticks: Ticks",
+        "doc": "Which x labels are written: every n-th, at most n, the first and the last."
+      },
+      {
+        "name": "y_domain",
+        "generics": "",
+        "args": "domain: Domain",
+        "doc": "The range of the value axis: from the data, padded, or fixed."
+      },
+      {
+        "name": "y_categories",
+        "generics": "<S: Into<String>>",
+        "args": "names: impl IntoIterator<Item = S>",
+        "doc": "Names the values of the value axis: value 0 is `names[0]`, 1 is `names[1]`. Each name is a tick, the axis runs from the first to the last, and the table and the tooltip write the name, not the number: for states such as sleep stages, with `Curve::Step`."
+      },
+      {
+        "name": "reference",
+        "generics": "",
+        "args": "reference: Reference",
+        "doc": "Adds a reference line: a level, an average, a zero baseline, the diagonal."
+      },
+      {
+        "name": "zone",
+        "generics": "",
+        "args": "zone: Zone",
+        "doc": "Adds a band of the value axis, shaded behind the data: a target zone."
+      },
+      {
+        "name": "tooltip",
+        "generics": "",
+        "args": "tooltip: TooltipStyle",
+        "doc": "What the tooltip shows."
+      },
+      {
+        "name": "detail",
+        "generics": "<S: Into<String>>",
+        "args": "name: impl Into<String>, texts: impl IntoIterator<Item = S>",
+        "doc": "Adds a column of words, one for each x: in the table after the series, and as a line of the tooltip (`Duration`, `23 min`)."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How the marks come in: lines draw from the start, bars grow from the baseline, dots pop in. Off by default; always off for a reader who asks for less motion."
       },
       {
         "name": "categories",
@@ -2627,7 +2742,7 @@
         "name": "no_dots",
         "generics": "",
         "args": "",
-        "doc": "Leaves out the dot at the end of each line."
+        "doc": "Leaves out the dot at the end of each line: the same as `.dots(Dots::None)`."
       },
       {
         "name": "week_start",
@@ -10856,6 +10971,48 @@
     ],
     "methods": [
       {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: crate::charts::Gradient",
+        "doc": "Fills the bar with `gradient`, which spans the filled part. `Ink::own` in its stops is the bar's colour."
+      },
+      {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<crate::charts::Ink>",
+        "doc": "Colours the bar with any `Ink` of the theme."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: crate::charts::ColorScale",
+        "doc": "Colours the bar by the band its share (0 to 100) falls in: red when low, green when good. Say what the band means in the label as well."
+      },
+      {
+        "name": "goal",
+        "generics": "",
+        "args": "goal: u32",
+        "doc": "Marks `goal` (out of the same `max`) on the track with a short upright line. Say the goal in the label as well."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around the fill."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: crate::charts::Motion",
+        "doc": "How the fill comes in: it grows from the start. Off by default; always off for a reader who asks for less motion."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "px: u32",
+        "doc": "The bar's thickness in pixels, 2 to 24 (6 by default)."
+      },
+      {
         "name": "tone",
         "generics": "",
         "args": "tone: Tone",
@@ -12402,6 +12559,48 @@
     ],
     "methods": [
       {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Colours the series with any `Ink` of the theme: a slot, a tone, the accent."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Fills an area or the bars with `gradient`. `Ink::own` in its stops is the series' colour."
+      },
+      {
+        "name": "fade",
+        "generics": "",
+        "args": "",
+        "doc": "Fills an area with a wash of its own colour that fades to nothing at the bottom (`Gradient::fade`); bars with their colour fading to half (`Gradient::column`)."
+      },
+      {
+        "name": "stroke",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Strokes the line with `gradient`, which spans the plot: a horizontal one runs from the left edge to the right whatever part of the plot the line covers."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around the line or the bars."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours each value by `scale`: each bar in the colour of its band, and the value in the tooltip's key. The bands' labels make the legend."
+      },
+      {
+        "name": "unit",
+        "generics": "",
+        "args": "unit: impl Into<String>",
+        "doc": "What the values count (`BPM`, `kg`, `h`): written after the value in the tooltip, and after the series' name in the table's head."
+      },
+      {
         "name": "tone",
         "generics": "",
         "args": "tone: Tone",
@@ -13569,6 +13768,12 @@
         "doc": "Colours the line by what it means."
       },
       {
+        "name": "ink",
+        "generics": "",
+        "args": "ink: impl Into<Ink>",
+        "doc": "Colours it with any `Ink` of the theme: a chart colour, a tone, the accent."
+      },
+      {
         "name": "format",
         "generics": "",
         "args": "format: NumberFormat",
@@ -13579,6 +13784,60 @@
         "generics": "",
         "args": "px: u32",
         "doc": "The height in pixels, 16 to 120 (32 by default)."
+      },
+      {
+        "name": "smooth",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the line as a monotone curve, which never overshoots a value."
+      },
+      {
+        "name": "curve",
+        "generics": "",
+        "args": "curve: Curve",
+        "doc": "How the line runs between points: straight, a monotone curve, or steps."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "gradient: Gradient",
+        "doc": "Fills under the line, or the columns, with `gradient`. `Ink::own` in its stops is the sparkline's colour (for columns, each column's)."
+      },
+      {
+        "name": "fade",
+        "generics": "",
+        "args": "",
+        "doc": "A wash of its own colour under the line that fades to nothing at the bottom; on columns, each column fading to half."
+      },
+      {
+        "name": "glow",
+        "generics": "",
+        "args": "",
+        "doc": "Puts a soft glow of its own colour around the line or the columns."
+      },
+      {
+        "name": "points",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a small dot at every point, as well as the one at the end."
+      },
+      {
+        "name": "columns",
+        "generics": "",
+        "args": "",
+        "doc": "Draws a column for each value instead of a line: rounded at both ends, from zero."
+      },
+      {
+        "name": "colors",
+        "generics": "",
+        "args": "scale: ColorScale",
+        "doc": "Colours each column by the band its value falls in (the line keeps one colour)."
+      },
+      {
+        "name": "motion",
+        "generics": "",
+        "args": "motion: Motion",
+        "doc": "How it comes in: the line draws from the start, columns grow from the baseline. Off by default; always off for a reader who asks for less motion."
       },
       {
         "name": "id",

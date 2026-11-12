@@ -75,6 +75,42 @@ A chart draws at most eight series. When you give more, the first seven keep the
 
 The axis steps by 1, 2, 2.5 or 5 times a power of ten. A line's axis starts at zero. `.y_zero(false)` lets it start near the data, which suits a measure such as a response time that never gets near zero. `.y_min(value)` and `.y_max(value)` widen the axis to include a value, `.y_ticks(n)` asks for about that many ticks (2 to 12), and `.height(px)` sets the plot's height (60 to 800, and 200 by default).
 
+## Axes and gridlines
+
+Each axis draws its labels by default, and can draw its line and a tick mark at each label: `.x_axis(Axis::new().line().ticks())`. `Axis::hidden()` draws nothing and gives the plot the room. `.grid(Gridlines)` chooses the lines behind the marks: `Gridlines::horizontal()` (the default) across at each value tick, `Gridlines::vertical()` down at each x label, `Gridlines::both()` or `Gridlines::none()`, each solid or `.dashed()`. A zero line is drawn where values cross zero, whatever the grid.
+
+<UiPreview example="line-chart/axes" />
+
+`.x_ticks(Ticks)` picks the x labels: `Ticks::every(3)` writes every third, `Ticks::most(5)` at most five, and `.keep_ends()` always writes the first and the last. Labels the page picks are not thinned on a narrow chart. `.y_domain(Domain)` sets the value axis: `Domain::data()` from the lowest value to the highest, `Domain::padded(10)` with 10 more each way, `Domain::relative(0.1)` with a tenth of the spread each way, and `Domain::fixed(0, 10)` from 0 to 10; a value outside a domain widens it, so no mark is cut off.
+
+```rust
+Chart::line("Body weight")
+    .days(days)
+    .series(Series::new("Weight", kilograms))
+    .y_domain(Domain::data())
+    .y_axis(Axis::new().line())
+    .x_axis(Axis::new().line().ticks())
+    .grid(Gridlines::vertical().dashed())
+    .x_ticks(Ticks::most(5).keep_ends())
+    .reference(Reference::level(75).label("Goal {value}").place(Place::StartBelow))
+```
+
+## Reference lines and zones
+
+`.reference(Reference)` draws a dashed line for reference over the data: `Reference::level(value)` across the plot, `Reference::average()` at the mean of the first series (`average_of(i)` for another), `Reference::zero()` at zero, and `Reference::identity()` along the diagonal where x equals y, for a chart with numbers along x. `.label(text)` names it, and `{value}` in the label is its value as the chart writes values (`"Avg: {value}"`). `.place(Place)` puts the label above or below either end, `.ink(Ink)` colours the line, and `.solid()` draws it solid. `.zone(Zone::new(from, to))` shades a band of the value axis behind the data, with an optional label and ink: a target range, a heart-rate zone. The summary names every labelled line and zone.
+
+## Points, curves and the tooltip
+
+`.dots(Dots::All)` draws a dot at every point, `Dots::End` (the default) at the last and `Dots::None` at none. `.active_dot(ActiveDot::Halo)` gives the dot under the pointer a soft halo of its colour, and `ActiveDot::Large` makes it larger. `.curve(Curve::Step)` holds each value until the next x, for states that last; `Curve::Monotone` is `.smooth()`. `.y_categories(names)` names the values of the value axis (0 is the first name), so the axis, the table, the tooltip and the summary write names: with steps, a chart of sleep stages.
+
+`Series::unit("BPM")` writes the unit after the value in the tooltip and after the name in the table. `.tooltip(TooltipStyle::big())` writes the first value large in its colour, for a chart with one figure that matters. `.detail(name, texts)` adds a column of words to the table, and a line to the tooltip.
+
+## Paint and motion
+
+`Series::fade()` fills an area with a wash of its own colour that fades to nothing, and a bar with its colour fading to half. `Series::fill(Gradient)` and `Series::stroke(Gradient)` paint with any gradient: vertical, horizontal, diagonal, at an angle or radial, through stops of `Ink`, each at an opacity. `Ink::own()` is the series' colour, `Ink::slot(n)` a chart colour, `Ink::tone(tone)` a tone, and `.vivid()` and `.soft()` mix it toward the text or the surface. A gradient is named after the chart, so two charts never share one, and its colours are tokens, so it is right in light and dark. `Series::glow()` puts a soft glow of the series' colour around its line or bars. `Series::colors(ColorScale)` colours each bar by the band its value falls in; the bands' labels make the legend.
+
+`.motion(Motion::new())` brings the marks in: lines draw from the start, bars grow from the baseline one after another, dots pop in. `.delay(ms)`, `.stagger(ms)` and `.speed(Speed)` tune it. Motion is off by default, and always off for a reader who asks for less motion. The chart is written finished, and the motion only starts it elsewhere, so it reads the same with no script and in a print.
+
 ## Long series
 
 A line with more than 640 points keeps its shape. `.max_points(n)` changes the limit (at least 16). The points drawn are picked with largest-triangle-three-buckets: the first and the last stay, and each stretch between them keeps the point that makes the largest triangle with its neighbors, so peaks and dips survive. The summary is written from every value. The table lists the points drawn and says so under itself: "The drawing shows 640 of 1,000,000 points; the table lists the points drawn."

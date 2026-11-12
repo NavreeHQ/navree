@@ -55,6 +55,14 @@ pub fn all() -> Vec<Example> {
         single!("progress", "tone", "A tone and a figure", progress_tone)
             .start()
             .height(130),
+        single!(
+            "progress",
+            "painted",
+            "A gradient, a goal, colors by value and a glow",
+            progress_painted
+        )
+        .start()
+        .height(250),
         single!("card", "variants", "Variants", card_variants)
             .start()
             .height(420),
@@ -203,6 +211,40 @@ fn progress_tone() -> Stack {
         Progress::new(18, 100, "Deliveries failed")
             .tone(Tone::Danger)
             .show_value(),
+    ))
+}
+
+fn progress_painted() -> Stack {
+    use navree::ui::charts::{ColorScale, Gradient, Ink, Motion};
+    let quality = |value: u32, label: &str, slot: u8, step: u32| {
+        Progress::new(value, 100, label.to_owned())
+            .ink(Ink::slot(slot))
+            .height(8)
+            .show_value()
+            .motion(Motion::new().delay(300 + step * 100))
+    };
+    Stack::gap(4).children((
+        Progress::new(402, 480, "Sleep, 6 h 42 min against a goal of 7 h")
+            .fill(
+                Gradient::horizontal()
+                    .stop(0.0, Ink::slot(7))
+                    .stop_with_opacity(1.0, Ink::slot(7), 0.6),
+            )
+            .goal(420)
+            .height(12)
+            .motion(Motion::new().delay(200)),
+        Progress::new(68, 100, "Recovery 68%, fair")
+            .colors(
+                ColorScale::new(Ink::tone(Tone::Danger))
+                    .from(50, Ink::tone(Tone::Warning))
+                    .from(75, Ink::tone(Tone::Success)),
+            )
+            .glow()
+            .height(8)
+            .show_value(),
+        quality(91, "Efficiency", 7, 0),
+        quality(74, "Depth", 1, 1),
+        quality(83, "Continuity", 3, 2),
     ))
 }
 
