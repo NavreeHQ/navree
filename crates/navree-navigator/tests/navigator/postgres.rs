@@ -717,6 +717,104 @@ async fn postgres_long_values_are_cut_on_the_server() {
     db.drop_db().await;
 }
 
+/// A SECURITY DEFINER function counts even when the role can't use its
+/// schema (a view calls it), and an aggregate's step function counts even
+/// when EXECUTE on it is revoked (PostgreSQL checks it against the
+/// aggregate's owner).
+#[tokio::test]
+async fn postgres_functions_reached_through_views_and_aggregates_are_refused() {
+    let Some(db) =
+        Scratch::new("postgres_functions_reached_through_views_and_aggregates_are_refused").await
+    else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    db.setup(&[
+        "CREATE SCHEMA private",
+        "CREATE FUNCTION private.sd() RETURNS int LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$",
+        "CREATE VIEW public.v AS SELECT private.sd() AS one",
+    ])
+    .await;
+    let fixture = db.fixture();
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("private.sd()"), "{message}");
+
+    db.setup(&[
+        "DROP VIEW public.v",
+        "DROP FUNCTION private.sd()",
+        "CREATE FUNCTION public.step(int, int) RETURNS int LANGUAGE sql SECURITY DEFINER \
+         AS $$ SELECT $1 + $2 $$",
+        "CREATE AGGREGATE public.total(int) (sfunc = public.step, stype = int, initcond = '0')",
+        "REVOKE EXECUTE ON FUNCTION public.step(int, int) FROM PUBLIC",
+    ])
+    .await;
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1 AS one"}),
+    )
+    .await;
+    assert!(message.contains("step(integer,integer)"), "{message}");
+    db.drop_db().await;
+}
+
+/// Output PostgreSQL could make unbounded is refused or cut: EXPLAIN (the
+/// plan holds folded constants), an error quoting a value, more than 100
+/// columns, and a first row whose JSON passes the answer's budget.
+#[tokio::test]
+async fn postgres_unbounded_output_is_refused_or_cut() {
+    let Some(db) = Scratch::new("postgres_unbounded_output_is_refused_or_cut").await else {
+        return;
+    };
+    db.setup(SCHEMA).await;
+    let fixture = db.fixture();
+    let navigator = fixture.navigator();
+    let message = refused(
+        &navigator,
+        "query_database",
+        json!({"sql": "EXPLAIN SELECT * FROM pg_class WHERE relname::text = repeat('x', 300000000)"}),
+    )
+    .await;
+    assert!(message.contains("EXPLAIN is not run"), "{message}");
+
+    let message = refused(
+        &navigator,
+        "query_database",
+        json!({"sql": "SELECT repeat('x', 300000)::int"}),
+    )
+    .await;
+    assert!(message.len() < 4 * 1024, "{}", message.len());
+    assert!(message.contains("… [cut]"), "{message}");
+
+    let wide: Vec<String> = (0..150).map(|i| format!("{i} AS c{i}")).collect();
+    let message = refused(
+        &navigator,
+        "query_database",
+        json!({ "sql": format!("SELECT {}", wide.join(", ")) }),
+    )
+    .await;
+    assert!(message.contains("150 columns"), "{message}");
+
+    let heavy: Vec<String> = (0..100)
+        .map(|i| format!("repeat(chr(1), 5000) AS c{i}"))
+        .collect();
+    let answer = call(
+        &navigator,
+        "query_database",
+        json!({ "sql": format!("SELECT {}", heavy.join(", ")) }),
+    )
+    .await;
+    assert_eq!(answer["truncated"], true);
+    let json = serde_json::to_string(&answer["rows"]).unwrap();
+    assert!(json.len() <= 1024 * 1024 + 64 * 1024, "{}", json.len());
+    db.drop_db().await;
+}
+
 /// Statements that the SQL renderer would write back as several (hex
 /// strings, custom type modifiers), or that run SQL text of their own
 /// (`ts_stat`), are refused, on a default server, and change nothing.

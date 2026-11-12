@@ -533,3 +533,72 @@ async fn missing_tables_and_remote_databases_are_explained() {
     let message = refused(&remote.navigator(), "lighthouse_slow_routes", json!({})).await;
     assert!(message.contains("--allow-remote-database"), "{message}");
 }
+
+/// Lighthouse's own statements are read whole, past the 4 KB an agent's
+/// query gets per value: a histogram merged from thousands of rows, a long
+/// backtrace and a long chain come back complete.
+#[tokio::test]
+async fn large_histograms_and_backtraces_are_read_whole() {
+    let fixture = Fixture::new(APP_TOML);
+    lighthouse_db(&fixture, "storage/app.db").await;
+    const BIG: &str = "0192f3a4b5c67d8e9f00112233445599";
+    let now = Utc::now();
+    let mut statements: Vec<String> = Vec::new();
+    // 1,500 fast rows, then 1,500 slow ones: cut after 4 KB, the merged
+    // histogram would hold only fast ones.
+    for ms in [10.0, 1000.0] {
+        for _ in 0..1500 {
+            statements.push(aggregate(
+                3600,
+                now,
+                "request",
+                "GET /api/v1/big",
+                "serve-1",
+                &[ms],
+                (0, 0),
+            ));
+        }
+    }
+    let chain: Vec<String> = (0..300)
+        .map(|i| format!("cause number {i:04} of many"))
+        .collect();
+    let chain = serde_json::to_string(&chain).unwrap();
+    statements.push(format!(
+        "INSERT INTO lighthouse_issues (id, fingerprint, kind, level, status, title, culprit, message, chain, \
+         count, first_seen, last_seen, created_at, updated_at) VALUES (X'{BIG}', 'big', 'exception', 'error', \
+         'open', 'Big', 'GET /big', 'Big', '{chain}', 1, '{now}', '{now}', '{now}', '{now}')",
+        now = ts(now),
+    ));
+    let backtrace = "at deals::show (src/deals.rs:42)\n".repeat(400);
+    statements.push(format!(
+        "INSERT INTO lighthouse_occurrences (id, issue_id, at, level, message, chain, backtrace, request_id, \
+         status, context) VALUES (X'{:032x}', X'{BIG}', '{}', 'error', 'Big', '[]', '{backtrace}', 'req-big', \
+         500, '{{}}')",
+        0x77,
+        ts(now),
+    ));
+    let refs: Vec<&str> = statements.iter().map(String::as_str).collect();
+    sqlite_db(&fixture.root().join("storage/app.db"), &refs).await;
+    let navigator = fixture.navigator();
+
+    let day = call(&navigator, "lighthouse_slow_routes", json!({"limit": 50})).await;
+    let big = day["routes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|route| route["endpoint"] == "GET /api/v1/big")
+        .unwrap_or_else(|| panic!("{day}"))
+        .clone();
+    assert_eq!(big["requests"], 3000);
+    let p95 = big["p95_ms"].as_f64().unwrap();
+    assert!(p95 >= 900.0, "the slow half is in the histogram: {big}");
+    let p50 = big["p50_ms"].as_f64().unwrap();
+    assert!(p50 <= 15.0, "{big}");
+
+    let answer = call(&navigator, "lighthouse_get_issue", json!({"id": BIG})).await;
+    assert_eq!(answer["issue"]["chain"].as_array().map(Vec::len), Some(300));
+    assert_eq!(
+        answer["occurrences"][0]["backtrace"].as_str().map(str::len),
+        Some(backtrace.len())
+    );
+}

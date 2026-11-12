@@ -127,7 +127,7 @@ cargo test -p navree-navigator
   compiler's first error; fix it. `describe_schema`, `read_logs`,
   `read_config` and the docs tools keep working meanwhile (`read_config`
   reads the files then).
-- **Refused queries.** Only one `SELECT`, `WITH`, `EXPLAIN` or `SHOW`
+- **Refused queries.** Only one `SELECT`, `WITH`, `SHOW` or (on SQLite) `EXPLAIN`
   statement passes; writes, `PRAGMA`, `ATTACH`, `SET`, transaction control,
   `SELECT ... INTO`, `FOR UPDATE`, data-changing CTEs and functions such as
   `pg_sleep`, `pg_read_file` or `load_extension` are refused before

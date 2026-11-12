@@ -40,61 +40,104 @@ pub struct QueryResult {
     pub duration_ms: u64,
 }
 
-/// The longest value an answer carries: a longer one is cut to this many
-/// bytes and ends with [`CUT_MARK`].
+/// The longest value an answer to an agent's query carries: a longer one is
+/// cut to this many bytes and ends with [`CUT_MARK`].
 pub const MAX_VALUE_BYTES: usize = 4 * 1024;
 
-/// What ends a value cut to [`MAX_VALUE_BYTES`].
+/// What ends a cut value.
 pub const CUT_MARK: &str = "… [cut]";
 
-/// About how much an answer holds: rows stop being collected once their
-/// values pass it, and `truncated` says so.
+/// About how much an answer to an agent's query holds, as JSON: rows stop
+/// being collected once they pass it (the first row's values are cut to
+/// fit), and `truncated` says so.
 pub const MAX_ANSWER_BYTES: usize = 1024 * 1024;
 
-/// The longest string or blob SQLite may make during a query
-/// (`SQLITE_LIMIT_LENGTH`): a statement that would make a longer one fails.
-const SQLITE_MAX_VALUE: i32 = 1024 * 1024;
+/// The most columns a query may answer with (`SQLITE_LIMIT_COLUMN` on
+/// SQLite, a refusal on PostgreSQL).
+pub const MAX_COLUMNS: usize = 100;
 
-/// `text` as an answer's value: whole, or cut to [`MAX_VALUE_BYTES`] (at a
+/// How much a query may make Navigator hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Limits {
+    /// Each value is cut to this many bytes.
+    pub(crate) value_bytes: usize,
+    /// The rows stop at about this many bytes of JSON.
+    pub(crate) answer_bytes: usize,
+    /// The longest string or blob SQLite may make (`SQLITE_LIMIT_LENGTH`):
+    /// a statement that would make a longer one fails.
+    pub(crate) sqlite_value_bytes: i32,
+}
+
+/// An agent's query (`query_database`).
+pub(crate) const AGENT_LIMITS: Limits = Limits {
+    value_bytes: MAX_VALUE_BYTES,
+    answer_bytes: MAX_ANSWER_BYTES,
+    sqlite_value_bytes: 1024 * 1024,
+};
+
+/// Navigator's own fixed statements (Lighthouse's): their histograms and
+/// backtraces are read whole, up to 8 MB.
+pub(crate) const OWN_LIMITS: Limits = Limits {
+    value_bytes: 8 * 1024 * 1024,
+    answer_bytes: 8 * 1024 * 1024,
+    sqlite_value_bytes: 8 * 1024 * 1024,
+};
+
+/// `text` as an answer's value: whole, or cut to `limit` bytes (at a
 /// character boundary) with [`CUT_MARK`]; and whether it was cut.
-fn cut(text: &str) -> (String, bool) {
-    if text.len() <= MAX_VALUE_BYTES {
+fn cut(text: &str, limit: usize) -> (String, bool) {
+    if text.len() <= limit {
         return (text.to_owned(), false);
     }
-    let mut end = MAX_VALUE_BYTES;
+    let mut end = limit;
     while !text.is_char_boundary(end) {
         end -= 1;
     }
     (format!("{}{CUT_MARK}", &text[..end]), true)
 }
 
-/// About how many bytes `row` adds to an answer.
-fn row_bytes(row: &[Value]) -> usize {
-    row.iter()
-        .map(|value| match value {
-            Value::String(text) => text.len(),
-            Value::Null => 4,
-            other => other.to_string().len(),
-        })
-        .sum()
+/// How many bytes `value` adds to an answer's JSON, with its comma.
+fn json_bytes(value: &Value) -> usize {
+    serde_json::to_string(value).map_or(0, |json| json.len()) + 1
 }
 
 /// Rows kept for an answer: at most [`ROW_LIMIT`] + 1 (the extra one says
-/// there are more), and none once [`MAX_ANSWER_BYTES`] is passed.
-#[derive(Default)]
+/// there are more), and none once the answer's JSON passes the limit.
 struct Kept {
+    limits: Limits,
     rows: Vec<Vec<Value>>,
     bytes: usize,
     over_budget: bool,
 }
 
 impl Kept {
+    fn new(limits: Limits) -> Kept {
+        Kept {
+            limits,
+            rows: Vec::new(),
+            bytes: 0,
+            over_budget: false,
+        }
+    }
+
     /// Keeps `row`, or says to stop: there are enough rows, or the answer is
-    /// full (the first row is always kept).
-    fn keep(&mut self, row: Vec<Value>) -> bool {
-        let bytes = row_bytes(&row);
-        if !self.rows.is_empty() && self.bytes + bytes > MAX_ANSWER_BYTES {
+    /// full. A first row larger than the whole budget is kept with the
+    /// values past the budget replaced by [`CUT_MARK`].
+    fn keep(&mut self, mut row: Vec<Value>) -> bool {
+        let bytes: usize = row.iter().map(json_bytes).sum::<usize>() + 2;
+        if self.bytes + bytes > self.limits.answer_bytes {
             self.over_budget = true;
+            if !self.rows.is_empty() {
+                return false;
+            }
+            let mut used = 2;
+            for value in &mut row {
+                used += json_bytes(value);
+                if used > self.limits.answer_bytes {
+                    *value = Value::from(CUT_MARK);
+                }
+            }
+            self.rows.push(row);
             return false;
         }
         self.bytes += bytes;
@@ -142,8 +185,13 @@ pub(super) enum SqliteFile {
 ///
 /// - the file is opened read-only (`SQLITE_OPEN_READONLY`, which attached
 ///   databases share) with `PRAGMA query_only` on;
-/// - no string or blob may grow past 1 MB (`SQLITE_LIMIT_LENGTH`), and the
-///   text may not pass twice the guard's limit (`SQLITE_LIMIT_SQL_LENGTH`);
+/// - no string or blob may grow past `limits` (1 MB for an agent's query,
+///   `SQLITE_LIMIT_LENGTH`), a result may have at most [`MAX_COLUMNS`]
+///   columns (`SQLITE_LIMIT_COLUMN`), and the text may not pass twice the
+///   guard's limit (`SQLITE_LIMIT_SQL_LENGTH`). The heap the whole process
+///   gives SQLite is capped where Navigator runs as `navree mcp`
+///   ([`super::limit_sqlite_heap`]); an aggregate such as `json_group_array`
+///   grows past the value limit before it applies, and that cap stops it;
 /// - an authorizer, installed before the statement is prepared, allows only
 ///   reading a table, `SELECT`, recursive CTEs, functions not in the guard's
 ///   deny list and reading `PRAGMA data_version` (FTS5 does); other PRAGMAs
@@ -155,14 +203,15 @@ pub(super) enum SqliteFile {
 /// - the statement must be read-only (`sqlite3_stmt_readonly`), which is
 ///   what refuses VACUUM (the authorizer has no action for it), and take no
 ///   parameters; then that one statement runs, interrupted after
-///   [`STATEMENT_TIMEOUT`], each text value cut to [`MAX_VALUE_BYTES`] and
-///   the rows to about [`MAX_ANSWER_BYTES`].
+///   [`STATEMENT_TIMEOUT`], each text value cut and the rows stopped as
+///   `limits` says.
 pub(super) async fn sqlite(
     file: SqliteFile,
     statement: &CheckedStatement,
+    limits: Limits,
 ) -> Result<QueryResult, DatabaseError> {
     let sql = statement.sql.clone();
-    let work = tokio::task::spawn_blocking(move || run_sqlite(&file, &sql));
+    let work = tokio::task::spawn_blocking(move || run_sqlite(&file, &sql, limits));
     with_timeout(async {
         work.await
             .map_err(|error| DatabaseError::Query(error.to_string()))?
@@ -171,7 +220,11 @@ pub(super) async fn sqlite(
 }
 
 /// [`sqlite`] on this thread, for `sql` as given.
-pub(super) fn run_sqlite(file: &SqliteFile, sql: &str) -> Result<QueryResult, DatabaseError> {
+pub(super) fn run_sqlite(
+    file: &SqliteFile,
+    sql: &str,
+    limits: Limits,
+) -> Result<QueryResult, DatabaseError> {
     use rusqlite::{Connection, OpenFlags};
 
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
@@ -184,11 +237,16 @@ pub(super) fn run_sqlite(file: &SqliteFile, sql: &str) -> Result<QueryResult, Da
         .map_err(sqlite_error)?;
     conn.pragma_update(None, "query_only", "ON")
         .map_err(sqlite_error)?;
-    // No value may grow past 1 MB (`printf('%.*c', 400000000, 'x')`, a
-    // recursive `zeroblob(..)`), and no statement past the guard's limit.
+    // No value may grow past the limit (`printf('%.*c', 400000000, 'x')`, a
+    // recursive `zeroblob(..)`), no result have more than MAX_COLUMNS
+    // columns (each of them up to the limit), and no statement pass the
+    // guard's limit.
+    use rusqlite::limits::Limit;
+    conn.set_limit(Limit::SQLITE_LIMIT_LENGTH, limits.sqlite_value_bytes)
+        .map_err(sqlite_error)?;
     conn.set_limit(
-        rusqlite::limits::Limit::SQLITE_LIMIT_LENGTH,
-        SQLITE_MAX_VALUE,
+        Limit::SQLITE_LIMIT_COLUMN,
+        i32::try_from(MAX_COLUMNS).unwrap_or(i32::MAX),
     )
     .map_err(sqlite_error)?;
     let sql_limit = i32::try_from(super::MAX_SQL_BYTES * 2).unwrap_or(i32::MAX);
@@ -198,7 +256,7 @@ pub(super) fn run_sqlite(file: &SqliteFile, sql: &str) -> Result<QueryResult, Da
     conn.progress_handler(1_000, Some(move || Instant::now() >= deadline))
         .map_err(sqlite_error)?;
     conn.authorizer(Some(authorize)).map_err(sqlite_error)?;
-    let result = run_prepared(&conn, sql);
+    let result = run_prepared(&conn, sql, limits);
     let _ = conn
         .authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization>);
     result
@@ -227,7 +285,11 @@ fn authorize(context: rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Auth
     }
 }
 
-fn run_prepared(conn: &rusqlite::Connection, sql: &str) -> Result<QueryResult, DatabaseError> {
+fn run_prepared(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    limits: Limits,
+) -> Result<QueryResult, DatabaseError> {
     let mut statement = conn.prepare(sql).map_err(sqlite_error)?;
     if !statement.readonly() {
         return Err(Refusal::Writes.into());
@@ -243,10 +305,13 @@ fn run_prepared(conn: &rusqlite::Connection, sql: &str) -> Result<QueryResult, D
         .collect();
     let started = Instant::now();
     let mut rows = statement.query([]).map_err(sqlite_error)?;
-    let mut kept = Kept::default();
+    let mut kept = Kept::new(limits);
     while let Some(row) = rows.next().map_err(sqlite_error)? {
         let values = (0..columns.len())
-            .map(|i| row.get_ref(i).map_or(Value::Null, sqlite_value))
+            .map(|i| {
+                row.get_ref(i)
+                    .map_or(Value::Null, |value| sqlite_value(value, limits.value_bytes))
+            })
             .collect();
         if !kept.keep(values) {
             break;
@@ -255,9 +320,8 @@ fn run_prepared(conn: &rusqlite::Connection, sql: &str) -> Result<QueryResult, D
     Ok(QueryResult::new(columns, kept, started))
 }
 
-/// A SQLite value as JSON, by its storage class; text cut to
-/// [`MAX_VALUE_BYTES`].
-fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> Value {
+/// A SQLite value as JSON, by its storage class; text cut to `limit` bytes.
+fn sqlite_value(value: rusqlite::types::ValueRef<'_>, limit: usize) -> Value {
     use rusqlite::types::ValueRef;
 
     match value {
@@ -265,8 +329,8 @@ fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> Value {
         ValueRef::Integer(n) => Value::from(n),
         ValueRef::Real(f) => float(f),
         ValueRef::Text(text) => {
-            let text = &text[..text.len().min(MAX_VALUE_BYTES + 4)];
-            Value::from(cut(&String::from_utf8_lossy(text)).0)
+            let text = &text[..text.len().min(limit.saturating_add(4))];
+            Value::from(cut(&String::from_utf8_lossy(text), limit).0)
         }
         ValueRef::Blob(bytes) => Value::from(hex(bytes)),
     }
@@ -281,26 +345,27 @@ fn sqlite_error(error: rusqlite::Error) -> DatabaseError {
         rusqlite::Error::SqliteFailure(failure, message) => match failure.code {
             ErrorCode::OperationInterrupted => DatabaseError::Timeout,
             ErrorCode::AuthorizationForStatementDenied => Refusal::NotAuthorized {
-                reason: message
-                    .clone()
-                    .unwrap_or_else(|| "not authorized".to_owned()),
+                reason: super::short_message(message.as_deref().unwrap_or("not authorized")),
             }
             .into(),
-            _ => DatabaseError::Query(message.clone().unwrap_or_else(|| error.to_string())),
+            _ => DatabaseError::Query(super::short_message(
+                &message.clone().unwrap_or_else(|| error.to_string()),
+            )),
         },
-        _ => DatabaseError::Query(error.to_string()),
+        _ => DatabaseError::Query(super::short_message(&error.to_string())),
     }
 }
 
 /// Runs `statement` in a read-only PostgreSQL transaction with a statement
 /// timeout, through a cursor for queries (only [`ROW_LIMIT`] + 1 rows are
-/// fetched), and rolls back.
+/// fetched, each value cut on the server as `limits` says), and rolls back.
 pub(super) async fn postgres(
     conn: &mut PgConnection,
     statement: &CheckedStatement,
+    limits: Limits,
 ) -> Result<QueryResult, DatabaseError> {
     conn.execute("BEGIN READ ONLY").await?;
-    let result = postgres_in_transaction(conn, statement).await;
+    let result = postgres_in_transaction(conn, statement, limits).await;
     let _ = conn.execute("ROLLBACK").await;
     result
 }
@@ -308,6 +373,7 @@ pub(super) async fn postgres(
 async fn postgres_in_transaction(
     conn: &mut PgConnection,
     statement: &CheckedStatement,
+    limits: Limits,
 ) -> Result<QueryResult, DatabaseError> {
     conn.execute(AssertSqlSafe(format!(
         "SET LOCAL statement_timeout = {}",
@@ -326,12 +392,12 @@ async fn postgres_in_transaction(
     // however the server reads the text, it cannot run a second one. A query is
     // declared as a cursor that way, then read with a FETCH of this module's own
     // over the simple protocol, whose text results give every type a readable
-    // form. EXPLAIN and SHOW answer in text-like types (text, json, xml), whose
-    // binary form is their text.
+    // form. SHOW answers in text, whose binary form is its text. EXPLAIN is
+    // refused before this (see `query_database`).
     let kept = match statement.kind {
         StatementKind::Query => {
             // The columns, from the statement as prepared (nothing runs). The
-            // cursor selects each as text cut to MAX_VALUE_BYTES + 1 characters
+            // cursor selects each as its text cut to the limit + 1 characters
             // on the server, so no value larger than that crosses the wire:
             // the server's own cost is bounded by the statement timeout.
             use sqlx::SqlSafeStr;
@@ -347,9 +413,15 @@ async fn postgres_in_transaction(
                     )
                 })
                 .collect();
+            if described.len() > MAX_COLUMNS {
+                return Err(Refusal::TooManyColumns {
+                    count: described.len(),
+                }
+                .into());
+            }
             let declare = format!(
                 "DECLARE navigator_rows NO SCROLL CURSOR FOR {}",
-                cut_columns(&statement.sql, described.len())
+                cut_columns(&statement.sql, described.len(), limits.value_bytes + 1)
             );
             conn.execute(sqlx::query(AssertSqlSafe(declare)).persistent(false))
                 .await?;
@@ -358,6 +430,7 @@ async fn postgres_in_transaction(
             let mut kept = with_timeout(keep_rows(
                 conn.fetch(AssertSqlSafe(fetch)),
                 Some(types.as_slice()),
+                limits,
             ))
             .await?;
             kept.columns = described.into_iter().map(|(name, _)| name).collect();
@@ -365,7 +438,7 @@ async fn postgres_in_transaction(
         }
         StatementKind::Explain | StatementKind::Show => {
             let prepared = sqlx::query(AssertSqlSafe(statement.sql.clone())).persistent(false);
-            with_timeout(keep_rows(conn.fetch(prepared), None)).await?
+            with_timeout(keep_rows(conn.fetch(prepared), None, limits)).await?
         }
     };
     let PgKept { columns, kept } = kept;
@@ -373,15 +446,21 @@ async fn postgres_in_transaction(
 }
 
 /// `sql` (a query with `columns` columns) as a query of the same rows whose
-/// every column is its text cut to [`MAX_VALUE_BYTES`] + 1 characters,
-/// named `c1`, `c2`, ... by position (so duplicate names don't matter).
-fn cut_columns(sql: &str, columns: usize) -> String {
+/// every column is its text, as the type's own output writes it, cut to
+/// `limit` characters, named `c1`, `c2`, ... by position (so duplicate names
+/// don't matter). A NULL stays NULL (`num_nulls`, which also holds for a row
+/// value whose fields are all NULL).
+fn cut_columns(sql: &str, columns: usize, limit: usize) -> String {
     if columns == 0 {
         return sql.to_owned();
     }
-    let limit = MAX_VALUE_BYTES + 1;
     let picks: Vec<String> = (1..=columns)
-        .map(|i| format!("pg_catalog.left(c{i}::text, {limit})"))
+        .map(|i| {
+            format!(
+                "CASE WHEN pg_catalog.num_nulls(c{i}) = 1 THEN NULL \
+                 ELSE pg_catalog.left(pg_catalog.format('%s', c{i}), {limit}) END"
+            )
+        })
         .collect();
     let names: Vec<String> = (1..=columns).map(|i| format!("c{i}")).collect();
     format!(
@@ -403,14 +482,15 @@ struct PgKept {
 async fn keep_rows(
     mut stream: impl futures_util::Stream<Item = Result<PgRow, sqlx::Error>> + Unpin,
     types: Option<&[String]>,
+    limits: Limits,
 ) -> Result<PgKept, DatabaseError> {
-    let mut kept = Kept::default();
+    let mut kept = Kept::new(limits);
     let mut columns = Vec::new();
     while let Some(row) = stream.try_next().await? {
         if columns.is_empty() {
             columns = column_names(row.columns());
         }
-        if !kept.keep(postgres_values(&row, types)) {
+        if !kept.keep(postgres_values(&row, types, limits.value_bytes)) {
             break;
         }
     }
@@ -434,8 +514,8 @@ fn column_names<C: Column>(columns: &[C]) -> Vec<String> {
 ///
 /// `types` names the columns' own types when the row holds their text (the
 /// cursor's columns are all text); otherwise each column's type is used. A
-/// value longer than [`MAX_VALUE_BYTES`] comes back cut, as text.
-fn postgres_values(row: &PgRow, types: Option<&[String]>) -> Vec<Value> {
+/// value longer than `limit` bytes comes back cut, as text.
+fn postgres_values(row: &PgRow, types: Option<&[String]>, limit: usize) -> Vec<Value> {
     row.columns()
         .iter()
         .enumerate()
@@ -449,7 +529,7 @@ fn postgres_values(row: &PgRow, types: Option<&[String]>) -> Vec<Value> {
             let Ok(text) = raw.as_str() else {
                 return Value::Null;
             };
-            let (text, was_cut) = cut(text);
+            let (text, was_cut) = cut(text, limit);
             if was_cut {
                 return Value::from(text);
             }
@@ -566,7 +646,7 @@ mod tests {
 
     /// `rows` kept as an answer keeps them.
     fn kept(rows: Vec<Vec<Value>>) -> Kept {
-        let mut kept = Kept::default();
+        let mut kept = Kept::new(AGENT_LIMITS);
         for row in rows {
             if !kept.keep(row) {
                 break;
@@ -577,10 +657,10 @@ mod tests {
 
     #[test]
     fn long_values_are_cut_and_a_full_answer_stops() {
-        let (short, was_cut) = cut("abc");
+        let (short, was_cut) = cut("abc", MAX_VALUE_BYTES);
         assert_eq!((short.as_str(), was_cut), ("abc", false));
         let long = "é".repeat(MAX_VALUE_BYTES);
-        let (text, was_cut) = cut(&long);
+        let (text, was_cut) = cut(&long, MAX_VALUE_BYTES);
         assert!(was_cut);
         assert!(text.ends_with(CUT_MARK), "{text}");
         assert!(text.len() <= MAX_VALUE_BYTES + CUT_MARK.len());
@@ -594,15 +674,21 @@ mod tests {
 
     #[test]
     fn postgres_columns_are_read_as_cut_text_by_position() {
-        assert_eq!(
-            cut_columns("SELECT 1, 1", 2),
+        let pick = |i: usize| {
             format!(
-                "SELECT pg_catalog.left(c1::text, {limit}), pg_catalog.left(c2::text, {limit}) \
-                 FROM (SELECT 1, 1) AS navigator_rows_source (c1, c2)",
-                limit = MAX_VALUE_BYTES + 1
+                "CASE WHEN pg_catalog.num_nulls(c{i}) = 1 THEN NULL \
+                 ELSE pg_catalog.left(pg_catalog.format('%s', c{i}), 4097) END"
+            )
+        };
+        assert_eq!(
+            cut_columns("SELECT 1, 1", 2, 4097),
+            format!(
+                "SELECT {}, {} FROM (SELECT 1, 1) AS navigator_rows_source (c1, c2)",
+                pick(1),
+                pick(2)
             )
         );
-        assert_eq!(cut_columns("SELECT", 0), "SELECT");
+        assert_eq!(cut_columns("SELECT", 0, 4097), "SELECT");
         assert_eq!(pg_text_value("BOOL", "true"), Value::Bool(true));
         assert_eq!(pg_text_value("BOOL", "f"), Value::Bool(false));
     }
@@ -693,18 +779,23 @@ mod tests {
             "SELECT :name".to_owned(),
         ]);
         for sql in &inputs {
-            assert!(run_sqlite(&db, sql).is_err(), "{sql}");
+            assert!(run_sqlite(&db, sql, AGENT_LIMITS).is_err(), "{sql}");
             assert!(!copy.exists(), "{sql}: VACUUM INTO wrote a copy");
             assert!(!attached.exists(), "{sql}: ATTACH created a file");
         }
-        let users = run_sqlite(&db, "SELECT count(*) AS n FROM users").unwrap();
+        let users = run_sqlite(&db, "SELECT count(*) AS n FROM users", AGENT_LIMITS).unwrap();
         assert_eq!(
             users.rows,
             vec![vec![Value::from(1)]],
             "nothing was deleted"
         );
         // Trailing whitespace and comments are not a second statement.
-        let ok = run_sqlite(&db, "SELECT email FROM users -- the one user\n /* done */ ").unwrap();
+        let ok = run_sqlite(
+            &db,
+            "SELECT email FROM users -- the one user\n /* done */ ",
+            AGENT_LIMITS,
+        )
+        .unwrap();
         assert_eq!(ok.columns, ["email"]);
     }
 
@@ -720,13 +811,43 @@ mod tests {
              SELECT n FROM b",
             "SELECT length(zeroblob(2000000))",
         ] {
-            let failed = run_sqlite(&db, sql).unwrap_err();
+            let failed = run_sqlite(&db, sql, AGENT_LIMITS).unwrap_err();
             assert!(failed.to_string().contains("too big"), "{sql}: {failed}");
         }
-        let long = run_sqlite(&db, "SELECT printf('%.*c', 900000, 'x') AS x").unwrap();
+        let long =
+            run_sqlite(&db, "SELECT printf('%.*c', 900000, 'x') AS x", AGENT_LIMITS).unwrap();
         let text = long.rows[0][0].as_str().unwrap();
         assert!(text.ends_with(CUT_MARK), "{}", text.len());
         assert!(text.len() <= MAX_VALUE_BYTES + CUT_MARK.len());
+    }
+
+    /// A result of more than MAX_COLUMNS columns is refused by SQLite; an
+    /// aggregate that grows past the heap cap fails instead of holding it.
+    #[test]
+    fn sqlite_columns_and_aggregates_are_bounded() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = users_db(dir.path());
+        let columns: Vec<String> = (0..200)
+            .map(|i| format!("printf('%.*c', 1000000, 'x') AS c{i}"))
+            .collect();
+        let wide = format!("SELECT {}", columns.join(", "));
+        let failed = run_sqlite(&db, &wide, AGENT_LIMITS).unwrap_err();
+        assert!(failed.to_string().contains("too many columns"), "{failed}");
+        // What `navree mcp` sets as it starts; process-wide, as SQLite has it.
+        super::super::limit_sqlite_heap(super::super::SQLITE_HEAP_LIMIT).unwrap();
+        let started = Instant::now();
+        let grown = run_sqlite(
+            &db,
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000) \
+             SELECT length(json_group_array(printf('%.*c', 900000, 'x'))) FROM n",
+            AGENT_LIMITS,
+        );
+        let failed = grown.unwrap_err().to_string();
+        assert!(
+            failed.contains("out of memory") || failed.contains("too big"),
+            "{failed}"
+        );
+        assert!(started.elapsed() < STATEMENT_TIMEOUT + Duration::from_secs(5));
     }
 
     /// FTS5 reads `PRAGMA data_version`, which the authorizer allows, and
@@ -743,12 +864,17 @@ mod tests {
         .unwrap();
         drop(conn);
         let db = SqliteFile::Path(path);
-        let found = run_sqlite(&db, "SELECT body FROM docs WHERE docs MATCH 'deal'").unwrap();
+        let found = run_sqlite(
+            &db,
+            "SELECT body FROM docs WHERE docs MATCH 'deal'",
+            AGENT_LIMITS,
+        )
+        .unwrap();
         assert_eq!(found.rows, vec![vec![Value::from("the deal was won")]]);
         // Reading that counter is harmless; setting a pragma, or reading another, is not allowed.
-        assert!(run_sqlite(&db, "PRAGMA data_version").is_ok());
-        assert!(run_sqlite(&db, "PRAGMA data_version = 1").is_err());
-        assert!(run_sqlite(&db, "PRAGMA user_version").is_err());
+        assert!(run_sqlite(&db, "PRAGMA data_version", AGENT_LIMITS).is_ok());
+        assert!(run_sqlite(&db, "PRAGMA data_version = 1", AGENT_LIMITS).is_err());
+        assert!(run_sqlite(&db, "PRAGMA user_version", AGENT_LIMITS).is_err());
     }
 
     #[test]
@@ -756,18 +882,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = users_db(dir.path());
         assert!(matches!(
-            run_sqlite(&db, "SELECT 1; SELECT 2"),
+            run_sqlite(&db, "SELECT 1; SELECT 2", AGENT_LIMITS),
             Err(DatabaseError::Refused(Refusal::Trailing))
         ));
         assert!(matches!(
-            run_sqlite(&db, "PRAGMA query_only = OFF"),
+            run_sqlite(&db, "PRAGMA query_only = OFF", AGENT_LIMITS),
             Err(DatabaseError::Refused(Refusal::NotAuthorized { .. }))
         ));
         assert!(matches!(
-            run_sqlite(&db, "SELECT :name"),
+            run_sqlite(&db, "SELECT :name", AGENT_LIMITS),
             Err(DatabaseError::Refused(Refusal::Parameter { .. }))
         ));
-        let empty = run_sqlite(&db, "SELECT id, email FROM users WHERE id = 0").unwrap();
+        let empty = run_sqlite(
+            &db,
+            "SELECT id, email FROM users WHERE id = 0",
+            AGENT_LIMITS,
+        )
+        .unwrap();
         assert_eq!(empty.columns, ["id", "email"], "columns without rows");
         assert!(empty.rows.is_empty());
     }

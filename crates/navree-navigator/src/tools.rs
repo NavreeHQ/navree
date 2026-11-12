@@ -101,7 +101,8 @@ impl DatabaseOptions {
 
 /// When `url` is the PostgreSQL database the app's `dock.toml` describes
 /// (the URL `navree dock up` writes), the same URL with the user
-/// [`navree_dock::READER_ROLE`], whose password dock sets to the service's.
+/// [`navree_dock::READER_ROLE`] and its own password
+/// ([`navree_dock::reader_password`] of the service's).
 fn dock_reader_url(root: &Path, url: &str) -> Option<String> {
     let dock = navree_dock::app_env(root).ok()?;
     let (_, dock_url) = dock.iter().find(|(name, _)| name == "APP_DATABASE__URL")?;
@@ -112,7 +113,9 @@ fn dock_reader_url(root: &Path, url: &str) -> Option<String> {
     if !matches!(parsed.scheme(), "postgres" | "postgresql") {
         return None;
     }
+    let password = navree_dock::reader_password(parsed.password()?);
     parsed.set_username(navree_dock::READER_ROLE).ok()?;
+    parsed.set_password(Some(&password)).ok()?;
     Some(parsed.to_string())
 }
 
@@ -252,7 +255,7 @@ pub fn tools() -> Vec<ToolDef> {
         ToolDef {
             name: "query_database",
             title: "Query database",
-            description: "Runs one read-only SQL statement (SELECT, WITH, EXPLAIN or SHOW) against the \
+            description: "Runs one read-only SQL statement (SELECT, WITH, SHOW, or EXPLAIN on SQLite) against the \
                 development database and returns at most 100 rows: columns, rows, truncated, duration_ms. \
                 Anything else is refused before it is sent. The database keeps it read-only: on SQLite a file \
                 opened read-only where SQLite itself allows one statement that only reads (no PRAGMA, pragma \
@@ -1044,7 +1047,7 @@ impl lighthouse::Reader for LighthouseDb {
     }
 
     async fn read(&self, sql: String) -> Result<QueryResult, ToolError> {
-        database::query_database(&self.target, &sql)
+        database::query_own(&self.target, &sql)
             .await
             .map_err(|error| lighthouse::explain(error.to_string(), &self.target.redacted_url()))
     }
@@ -1088,7 +1091,11 @@ mod tests {
             url::Url::parse(&reader).unwrap(),
         );
         assert_eq!(reader.username(), navree_dock::READER_ROLE);
-        assert_eq!(reader.password(), dock.password());
+        assert_eq!(
+            reader.password(),
+            Some(navree_dock::reader_password(dock.password().unwrap()).as_str())
+        );
+        assert_ne!(reader.password(), dock.password());
         assert_eq!(
             (reader.host_str(), reader.port(), reader.path()),
             (dock.host_str(), dock.port(), dock.path())
