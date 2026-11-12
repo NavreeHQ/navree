@@ -522,13 +522,22 @@ impl WebViewToken {
         }
     }
 
+    /// The most bytes at the end of a user agent the token is looked for in.
+    /// A client appends it last, so a browser's request costs a look at its
+    /// tail, never the whole of a long user agent.
+    pub const TAIL: usize = 256;
+
     /// The token in `user_agent`, when there is one: the product
     /// [`USER_AGENT_PRODUCT`](crate::USER_AGENT_PRODUCT) at the start of the
-    /// user agent or after a space, its major, and the pairs in the comment
-    /// after it. A pair this build does not know or can't read is passed over.
+    /// user agent or after a space, within its last [`TAIL`](Self::TAIL)
+    /// bytes, its major, and the pairs in the comment after it. A pair this
+    /// build does not know or can't read is passed over.
     pub fn find(user_agent: &str) -> Option<Self> {
         let product = crate::USER_AGENT_PRODUCT;
-        let mut from = 0;
+        let mut from = user_agent.len().saturating_sub(Self::TAIL);
+        while !user_agent.is_char_boundary(from) {
+            from += 1;
+        }
         while let Some(found) = user_agent[from..].find(product) {
             let at = from + found;
             from = at + product.len();
@@ -787,6 +796,11 @@ mod tests {
         ] {
             assert_eq!(WebViewToken::find(none), None, "{none}");
         }
+        // Only the tail is read: the token is what a client appends last.
+        let long = format!("{} {}", "Mozilla/5.0 (देवनागरी)".repeat(40), "NavreeNative/1 (platform=android)");
+        assert_eq!(WebViewToken::find(&long).map(|token| token.platform), Some(Some(Platform::Android)));
+        let buried = format!("NavreeNative/1 (platform=ios) {}", "x".repeat(WebViewToken::TAIL));
+        assert_eq!(WebViewToken::find(&buried), None);
     }
 
     #[test]

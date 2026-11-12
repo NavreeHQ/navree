@@ -13,19 +13,27 @@ use crate::node::{Tone, is_default};
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Present {
-    /// On top of this one, with a way back.
+    /// Not said: the shell's routes decide, and where none matches the screen
+    /// is pushed. What a link says when the page said nothing of it.
     #[default]
+    Auto,
+    /// On top of this one, with a way back, whatever the routes say.
     Push,
     /// In place of this one.
     Replace,
     /// As the first screen of its destination, with nothing under it.
     Root,
-    /// In a sheet over this one.
+    /// In a sheet over this one: a glance at something (a record's details),
+    /// put away with a swipe.
     Sheet,
     /// Over the whole screen.
     Full,
     /// In the system's browser: it is not part of the app.
     External,
+    /// Over this one as a task the person finishes or cancels (a form to fill
+    /// in), as each system presents one: a sheet with Cancel and Done on Apple
+    /// systems, a full-screen dialog on a narrow Android window.
+    Task,
 }
 
 /// A value sent with a request.
@@ -47,7 +55,8 @@ pub enum Action {
     Navigate {
         /// The screen's address.
         href: String,
-        /// How it is presented. The shell's routes decide when this is the default.
+        /// How it is presented: [`Present::Auto`], the shell's routes, unless
+        /// the page said.
         #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         present: Present,
     },
@@ -95,11 +104,11 @@ pub enum Action {
 }
 
 impl Action {
-    /// Goes to `href`, pushed.
+    /// Goes to `href`, presented as the shell's routes say.
     pub fn navigate(href: impl Into<String>) -> Self {
         Self::Navigate {
             href: href.into(),
-            present: Present::Push,
+            present: Present::Auto,
         }
     }
 
@@ -122,10 +131,15 @@ impl Action {
 
 /// A state a command sets on a node: the closed set a client keeps for every
 /// node it draws.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum State {
+    /// A state from a newer server, which this build does not know: what such a
+    /// word is read as, so the command that names it is skipped and the rest
+    /// of the answer is read. A server never writes it.
+    #[default]
+    Unknown,
     /// Shown open: a disclosure, a menu.
     Open,
     /// Not drawn.
@@ -184,7 +198,9 @@ pub enum Command {
     Set {
         /// The node's id.
         id: String,
-        /// The state.
+        /// The state. One this build does not know is [`State::Unknown`], and
+        /// the command is skipped.
+        #[serde(deserialize_with = "crate::lenient::or_default")]
         state: State,
         /// Whether it is set or cleared.
         on: bool,
@@ -193,7 +209,9 @@ pub enum Command {
     Flip {
         /// The node's id.
         id: String,
-        /// The state.
+        /// The state. One this build does not know is [`State::Unknown`], and
+        /// the command is skipped.
+        #[serde(deserialize_with = "crate::lenient::or_default")]
         state: State,
     },
     /// Moves the focus to a control.
@@ -291,6 +309,54 @@ mod tests {
             serde_json::to_string(&Action::Back).unwrap(),
             r#"{"t":"back"}"#
         );
+    }
+
+    #[test]
+    fn a_link_that_says_nothing_of_how_is_told_from_one_that_says_push() {
+        assert_eq!(Present::default(), Present::Auto);
+        let said = |json: &str| match serde_json::from_str::<Action>(json).unwrap() {
+            Action::Navigate { present, .. } => present,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new"}"#), Present::Auto);
+        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"push"}"#), Present::Push);
+        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"task"}"#), Present::Task);
+        // A word this build does not know is not said.
+        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"portal"}"#), Present::Auto);
+        let push = Action::Navigate {
+            href: "/orders/7".to_owned(),
+            present: Present::Push,
+        };
+        assert_eq!(
+            serde_json::to_string(&push).unwrap(),
+            r#"{"t":"navigate","href":"/orders/7","present":"push"}"#
+        );
+    }
+
+    #[test]
+    fn a_command_naming_a_state_this_build_does_not_know_reads_as_one_to_skip() {
+        let action: Action = serde_json::from_str(
+            r#"{"t":"commands","list":[{"c":"set","id":"row","state":"glowing","on":true},{"c":"flip","id":"menu","state":"open"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            action,
+            Action::Commands {
+                list: vec![
+                    Command::Set {
+                        id: "row".to_owned(),
+                        state: State::Unknown,
+                        on: true,
+                    },
+                    Command::Flip {
+                        id: "menu".to_owned(),
+                        state: State::Open,
+                    },
+                ]
+            }
+        );
+        // The state is still needed.
+        assert!(serde_json::from_str::<Command>(r#"{"c":"set","id":"row","on":true}"#).is_err());
     }
 
     #[test]

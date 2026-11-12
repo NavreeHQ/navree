@@ -178,6 +178,7 @@
             "call": {
               "f": "confirm",
               "reason": "Approve payment",
+              "challenge": "/api/auth/confirm/options",
               "detail": "₹1,00,000 to Gurpreet Kaur, HDFC ••4821"
             },
             "then": {
@@ -240,12 +241,9 @@
             "call": {
               "f": "platform_sign_in",
               "provider": "apple",
-              "nonce": "q9Zs3"
-            },
-            "then": {
-              "href": "/auth/apple/native",
-              "ticket": "tk-apple",
-              "exp": 1794000000
+              "nonce": "/api/auth/social/apple/native/nonce",
+              "sign_in": "/api/auth/social/apple/native/session",
+              "web": "/api/auth/social/apple/redirect"
             }
           }
         },

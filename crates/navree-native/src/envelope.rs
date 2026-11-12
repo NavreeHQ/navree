@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::{Icon, IconShape, Node, is_false};
+use crate::node::{Icon, IconShape, Node, TableRow, is_false};
 use crate::op::Op;
 
 /// A way back: the screen before this one in the app's own order.
@@ -195,7 +195,11 @@ impl Envelope {
         for op in &mut self.ops {
             match op {
                 Op::Morph { node, .. } | Op::Replace { node, .. } => stack.push(node),
-                Op::Append { nodes, .. } | Op::Prepend { nodes, .. } => stack.extend(nodes),
+                Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
+                    stack.extend(nodes);
+                }
+                Op::Rows { rows, .. } => stack.extend(rows.iter_mut().flat_map(TableRow::nodes_mut)),
+                Op::Row { row, .. } => stack.extend(row.nodes_mut()),
                 _ => {}
             }
         }

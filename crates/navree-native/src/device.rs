@@ -15,9 +15,15 @@
 //! A call with a result says where the result is posted ([`Then`]), with a
 //! [`Ticket`] the server sealed when it wrote the call. The client posts the
 //! ticket back as [`TICKET_FIELD`] and the outcome as [`OUTCOME_FIELD`]
-//! (`ok` with the result's fields, or a [`Refusal`]). A post is refused
-//! without a ticket, after it expires, from another session, for another
-//! feature, route or call, and the second time.
+//! (`ok` with the result's fields, or a [`Refusal`]), as a form. A post is
+//! refused without a ticket, after it expires, from another session, for
+//! another feature, route or call, and the second time.
+//!
+//! Two calls also speak to the framework's own routes, which read JSON: a
+//! [`Confirm`] spends its ticket at its challenge route and posts its result
+//! with none; a [`PlatformSignIn`] posts its token to its own sign-in route,
+//! with the sealed one-time state its nonce route gave, and has no `then`.
+//! Each says how.
 //!
 //! What a call's arguments and results hold is the client's to fill and the
 //! server's to doubt: a location or a scanned code is a claim. Only a
@@ -566,6 +572,10 @@ impl From<String> for Ticket {
 }
 
 impl Ticket {
+    /// The most bytes a ticket's text holds. It is text a form and an address
+    /// carry as they are: letters, digits, `-`, `_` and `.`.
+    pub const MAX: usize = 4096;
+
     /// Seals `claims` with the server's key.
     pub fn seal(claims: &Claims, sealer: &impl Sealer) -> Self {
         let plain = serde_json::to_vec(claims).unwrap_or_default();
@@ -577,10 +587,14 @@ impl Ticket {
         &self.0
     }
 
-    /// Opens the ticket, checking nothing but that it is the server's.
+    /// Opens the ticket, checking nothing but that it is the server's. Text
+    /// longer than [`MAX`](Self::MAX) is not opened.
     pub fn open(&self, sealer: &impl Sealer) -> Result<Claims, TicketError> {
         if self.0.is_empty() {
             return Err(TicketError::Missing);
+        }
+        if self.0.len() > Self::MAX {
+            return Err(TicketError::Unreadable);
         }
         let plain = sealer.open(&self.0).ok_or(TicketError::Unreadable)?;
         serde_json::from_slice(&plain).map_err(|_| TicketError::Unreadable)
@@ -946,13 +960,20 @@ pub enum ConfirmMethod {
 
 /// Asks the person to approve an action with their face, finger or device
 /// code, as a signature over a challenge the server derives from the action
-/// itself: approving ₹100 can't approve ₹1,00,000. On a tap, the client posts
-/// the ticket to the framework's challenge route, prompts, then posts the
-/// signature.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// itself: approving ₹100 can't approve ₹1,00,000.
+///
+/// On a tap, the client posts `{"ticket": <the call's ticket>}` as JSON to
+/// `challenge`, which spends the ticket and answers the passkey request's
+/// options (`{"publicKey": ...}`); it prompts with the system's sheet, then
+/// posts the signature to `then.href` as `credential`, with no ticket (the
+/// challenge, used once and for this session, stands for it).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Confirm {
     /// What is being approved, at most 120 characters: `Approve payment`.
     pub reason: String,
+    /// The route that turns the call's ticket into a challenge:
+    /// `/api/auth/confirm/options` by default.
+    pub challenge: OriginPath,
     /// Its details, at most 120 characters: `₹1,00,000 to Gurpreet Kaur`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -1106,40 +1127,70 @@ pub enum SignInProvider {
 }
 
 /// Signs in with Apple or Google in the system's own sheet, where the system
-/// has one; elsewhere the call is refused and the page offers the web's way
-/// through [`AuthSession`].
+/// has one for the provider; elsewhere (Google on an Apple system, Apple on
+/// Android) the client signs in through `web` as an [`AuthSession`].
+///
+/// On a tap, the client posts to `nonce` (JSON, no body), which answers
+/// `{"nonce", "state", "expires_in"}`; it opens the provider's sheet with the
+/// nonce (Apple's as the lower-case hex SHA-256 of it, Google's as it is),
+/// then posts [`SignedIn`] as JSON to `sign_in`, with the session's cookie.
+/// No ticket and no `then`: the sealed `state`, used once, stands for a
+/// ticket, and the answer is the person signed in, after which the client
+/// fetches the shell and the screen again.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlatformSignIn {
     /// Who with.
     pub provider: SignInProvider,
-    /// The one-time value the server checks inside the returned token.
-    pub nonce: String,
-    /// The app's client id with the provider, where its sheet needs one.
+    /// The route that hands out a nonce and a state for one attempt:
+    /// `/api/auth/social/apple/native/nonce`.
+    pub nonce: OriginPath,
+    /// The route the token is posted to: `/api/auth/social/apple/native/session`.
+    pub sign_in: OriginPath,
+    /// Where the web's sign-in with the same provider starts, for a system
+    /// with no sheet for it: `/api/auth/social/google/redirect`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web: Option<OriginPath>,
+    /// The app's client id with the provider, where its sheet needs one
+    /// (Google's server client id on Android).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
 }
 
-/// What [`PlatformSignIn`] posts. The server verifies the token with the
-/// provider; nothing here is trusted on its own.
+/// What [`PlatformSignIn`] posts, as JSON: the body the app's sign-in route
+/// reads. The server verifies the token with the provider and checks the
+/// state and the nonce in it; nothing here is trusted on its own.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedIn {
-    /// Who with.
-    pub provider: SignInProvider,
     /// The provider's signed identity token.
     pub id_token: String,
-    /// The authorization code, where the provider gives one.
+    /// The state the nonce route gave with the nonce.
+    pub state: String,
+    /// The authorization code, where the provider gives one (Apple).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<String>,
-    /// The person's given name, where the provider shared it (Apple does the
-    /// first time only).
+    pub authorization_code: Option<String>,
+    /// Who the person is, where the provider said (Apple does the first time
+    /// only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub given_name: Option<String>,
-    /// Their family name, likewise.
+    pub user: Option<SignedInUser>,
+}
+
+/// Who signed in, as Apple tells it the first time.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedInUser {
+    /// Their name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub family_name: Option<String>,
-    /// Their email address, likewise.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub name: Option<PersonName>,
+}
+
+/// A person's name, in the provider's own words for its parts.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersonName {
+    /// The given name.
+    #[serde(rename = "firstName", default, skip_serializing_if = "Option::is_none")]
+    pub first_name: Option<String>,
+    /// The family name.
+    #[serde(rename = "lastName", default, skip_serializing_if = "Option::is_none")]
+    pub last_name: Option<String>,
 }
 
 /// A result a call posts back, and the feature it belongs to.
@@ -1250,7 +1301,8 @@ impl Call {
         )
     }
 
-    /// Whether the call posts a result, and so needs a [`Then`].
+    /// Whether the call posts a result to its continuation, and so needs a
+    /// [`Then`]. A platform sign-in posts to its own route instead.
     pub fn posts(&self) -> bool {
         matches!(
             self,
@@ -1260,7 +1312,6 @@ impl Call {
                 | Self::Confirm(_)
                 | Self::LocateOnce(_)
                 | Self::ScanCode(_)
-                | Self::PlatformSignIn(_)
         )
     }
 }
@@ -1623,6 +1674,8 @@ mod tests {
             Err(TicketError::Unreadable)
         );
         assert_eq!(format!("{ticket:?}"), "Ticket(..)");
+        let long = Ticket::from("a".repeat(Ticket::MAX + 1));
+        assert_eq!(long.open(&key), Err(TicketError::Unreadable));
         let shown = format!("{:?}", claims());
         assert!(!shown.contains("session-a") && !shown.contains("n-1"), "{shown}");
     }
@@ -1662,12 +1715,20 @@ mod tests {
                 conditional: false,
             }
             .into(),
-            Confirm::default().into(),
+            Confirm {
+                reason: "Approve".to_owned(),
+                challenge: OriginPath::parse("/api/auth/confirm/options").unwrap(),
+                detail: None,
+                method: ConfirmMethod::Either,
+            }
+            .into(),
             LocateOnce::default().into(),
             ScanCode::default().into(),
             PlatformSignIn {
                 provider: SignInProvider::Apple,
-                nonce: "n".to_owned(),
+                nonce: OriginPath::parse("/api/auth/social/apple/native/nonce").unwrap(),
+                sign_in: OriginPath::parse("/api/auth/social/apple/native/session").unwrap(),
+                web: None,
                 client_id: None,
             }
             .into(),
@@ -1700,9 +1761,10 @@ mod tests {
                 Confirmed::FEATURE,
                 Located::FEATURE,
                 Scanned::FEATURE,
-                SignedIn::FEATURE,
             ]
         );
+        // A sign-in posts its token to its own route, not to a continuation.
+        assert!(calls.iter().any(|call| call.feature() == Some(SignedIn::FEATURE) && !call.posts()));
     }
 
     #[test]

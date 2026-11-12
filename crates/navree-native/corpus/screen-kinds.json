@@ -249,7 +249,14 @@
                       ]
                     }
                   ],
-                  "more": "/feed?after=981"
+                  "more": "/feed?after=981",
+                  "before": "/feed?before=981",
+                  "since": "0004410",
+                  "changes": "/feed?dir=live",
+                  "live": {
+                    "src": "/broadcasting/stream",
+                    "event": "feed"
+                  }
                 }
               ]
             },

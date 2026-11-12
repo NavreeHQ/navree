@@ -217,7 +217,8 @@
                     "create": {
                       "label": "Add a tag",
                       "href": "/inbox/tags"
-                    }
+                    },
+                    "more": "/inbox/tags/options?after=late"
                   }
                 },
                 {
@@ -375,12 +376,20 @@
                           "t": "button",
                           "label": "Cancel order",
                           "role": "destructive",
+                          "ask": {
+                            "title": "Cancel order CH-1042?",
+                            "text": "₹1,24,050 goes back to Harpreet Sandhu's UPI account.",
+                            "confirm": "Cancel order",
+                            "cancel": "Keep it"
+                          },
                           "action": {
-                            "t": "commands",
-                            "list": [
+                            "t": "request",
+                            "method": "post",
+                            "href": "/orders/1042/cancel",
+                            "fields": [
                               {
-                                "c": "open",
-                                "id": "cancel"
+                                "name": "_csrf",
+                                "value": "tok"
                               }
                             ]
                           }

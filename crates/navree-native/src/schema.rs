@@ -11,6 +11,11 @@
 //! each field a client may leave out has the default and the name serde gives
 //! it.
 //!
+//! At the top, beside the definitions: `x-major` and `x-vocab`, `x-roots`
+//! (the definitions every other is reached from) and `x-symbols` (the system
+//! symbols of the standard actions and of the toolkit's icons, from
+//! [`symbols`](crate::symbols)).
+//!
 //! What the schema says beyond JSON Schema, for the model generator:
 //! - `x-kind` on each definition: `object`, `enum`, `union` (one of several
 //!   objects, told apart by the field `x-tag`) or `string` (text with a rule,
@@ -40,24 +45,25 @@ use crate::device::{
     HttpsUrl, LocateOnce, Located, Notify, OpenSettings, OpenUrl, OriginPath, Passkey,
     PasskeyCredential, PasskeyMode, PlatformSignIn, PushEnvironment, PushProvider,
     PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
-    Share, Shared, SignInProvider, SignedIn, Then, Ticket, When,
+    PersonName, Share, Shared, SignInProvider, SignedIn, SignedInUser, Then, Ticket, When,
 };
 use crate::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 use crate::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, SliderInput, TextInput, TextKind, ToggleInput,
-    ToggleKind, Weekday,
+    DateInput, DateKind, FileInput, Input, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
+    ToggleInput, ToggleKind, Weekday,
 };
 use crate::node::{
     Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, IconShape, Image, Justify, Link, List,
     Live, Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
-    Prominence, Region, Rich, Role, Row, RowState, Run, Section, SectionStyle, Series, Sheet,
-    SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table, TableRow, Tabs, Text,
-    TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, WebRegion,
+    Prominence, Purpose, Question, Region, Reorder, Rich, Role, Row, RowState, Run, Section,
+    SectionStyle, Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack,
+    Standard, SystemSymbol, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar,
+    ToolbarItem, Trend, WebRegion,
 };
-use crate::op::{Op, Toast, ToastAction, UrlMode};
+use crate::op::{Edge, Op, Toast, ToastAction, UrlMode};
 use crate::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
 use crate::vocab::{Kind, LATER_FIELDS};
 
@@ -373,13 +379,17 @@ macro_rules! object {
 
 /// Describes an enum written as one of a closed list of names.
 macro_rules! names {
-    ($ty:ident { $($variant:ident),* $(,)? }) => {
+    (
+        $ty:ident { $($variant:ident),* $(,)? }
+        $(never written { $($unwritten:ident),* $(,)? })?
+    ) => {
         impl Describe for $ty {
             fn describe(schema: &mut Schema) -> Value {
                 #[allow(dead_code)]
                 fn every_value_is_described(value: $ty) {
                     match value {
                         $($ty::$variant => {})*
+                        $($($ty::$unwritten => {})*)?
                     }
                 }
                 schema.define(stringify!($ty), |_| {
@@ -609,8 +619,11 @@ object!(Stack {} { id, axis, gap, align, justify, wrap, hidden, children });
 object!(Grid {} { id, cols, min, gap, children });
 names!(SectionStyle { Plain, Card, Inset });
 object!(Section {} { id, title, subtitle, style, actions, children, footer });
-object!(List {} { id, children, more, ordered });
-object!(Row { title } { id, leading, subtitle, detail, trailing, badge, state, action, swipe, menu });
+object!(List {} { id, children, more, before, ordered, since, changes, live, reorder });
+object!(Reorder { href } { group, limit, fields });
+object!(Row { title } {
+    id, leading, subtitle, detail, trailing, badge, state, action, swipe, menu, muted
+});
 names!(RowState { Done, Current, Upcoming });
 object!(Split { primary, detail } { id });
 object!(Tabs {} { id, items });
@@ -628,7 +641,8 @@ names!(BlockKind { Paragraph, Heading, Quote, Bullet, Numbered, Code });
 object!(Block {} { kind, runs, level });
 names!(Fit { Contain, Cover });
 object!(Image { src } { id, alt, width, height, fit });
-object!(Icon {} { id, name, paths, fills, view_box, label, tone });
+object!(Icon {} { id, name, paths, fills, view_box, label, tone, symbol });
+object!(SystemSymbol { apple, material } { apple_filled });
 object!(IconShape {} { paths, fills, view_box });
 object!(Avatar { name } { id, src, initials });
 object!(Badge { text } { id, tone, dot });
@@ -641,30 +655,34 @@ names!(ColumnRole { Leading, Title, Subtitle, Status, Trailing, Actions });
 names!(SortDir { Asc, Desc });
 object!(Sort { href } { dir });
 object!(Column { label } { key, numeric, align, sort, role, secondary });
-object!(TableRow {} { id, cells, action, actions });
-object!(Table {} { id, caption, columns, rows, query, more, prev, summary, empty });
+object!(TableRow {} { id, cells, action, actions, selected, detail });
+object!(Selection { name } { form });
+object!(Table {} { id, caption, columns, rows, query, select, more, prev, summary, empty });
 names!(ChartKind { Line, Area, Bar, Donut, Sparkline, Funnel });
 object!(Series { label } { values, shown });
 object!(Chart {} { id, kind, title, labels, series });
 object!(Code { text } { id, lang });
 object!(Button { label } {
-    id, icon, icon_only, role, standard, prominence, undoable, disabled, pending, action
+    id, icon, icon_only, role, standard, prominence, undoable, ask, checked, one_of, disabled,
+    pending, action
 });
+object!(Question { title, confirm } { text, cancel });
 object!(Link { label, action } { id, children });
 object!(Menu { label } { id, icon, items });
 names!(Method { Get, Post });
 object!(Hidden { name } { value, id });
 object!(Form {} { id, method, action, hidden, children });
-object!(Field { name, input } { id, label, help, error, required, disabled });
+object!(Field { name, input } { id, label, help, error, required, disabled, purpose, changed });
+names!(Purpose { Search, Filter, Sort, PageSize });
 names!(SheetSize { Medium, Large, Full });
-object!(Sheet { id } { title, subtitle, size, open, children, actions });
+object!(Sheet { id } { title, subtitle, size, task, open, children, actions });
 object!(Dialog { id } { title, text, alert, open, children, actions });
 object!(Popover { id } { children });
 object!(NativeView { name } { id, props, alt });
 object!(WebRegion { html } { id });
 object!(Toolbar {} { id, items });
 object!(ToolbarItem { title, icon } {
-    id, standard, role, prominence, undoable, disabled, action, menu
+    id, standard, role, prominence, undoable, ask, disabled, action, menu
 });
 object!(Gauge { value, min, max } { id, label, shown, tone });
 names!(Direction { Up, Down, Flat });
@@ -672,7 +690,7 @@ object!(Trend { direction } { text, tone });
 object!(Figure { label, value } { id, trend, detail, tone });
 object!(Timeline {} { id, items });
 object!(Moment { title } { id, subtitle, time, state, icon, tone, detail });
-object!(FeedRow {} { id, actor, icon, runs, time, tone, detail, action });
+object!(FeedRow {} { id, actor, icon, runs, time, tone, detail, action, muted });
 names!(Delivery { Sending, Sent, Delivered, Read, Failed });
 object!(Message { author } { id, avatar, mine, note, body, time, delivery });
 names!(PaneRole { List, Content, Detail, Supporting, Inspector });
@@ -680,7 +698,7 @@ object!(Pane { role } { id, title, current, children });
 
 // The controls of fields.
 union!(Input tag "t"
-    newtype { Text, Toggle, Choice, Choices, Date, Slider, Colour, File }
+    newtype { Text, Toggle, Choice, Choices, Date, Slider, Colour, File, Range }
     structs {}
     units {}
     unknown Input::Unknown => |_| json!({})
@@ -689,7 +707,7 @@ names!(TextKind {
     Plain, Email, Password, Number, Decimal, Phone, Url, Search, Multiline, OneTimeCode
 });
 object!(TextInput {} {
-    kind, value, placeholder, max_length, min, max, step, autofill, readonly
+    kind, value, placeholder, max_length, min, max, step, autofill, readonly, prefix, suffix
 });
 names!(ToggleKind { Switch, Checkbox });
 object!(ToggleInput {} { kind, on, value });
@@ -697,11 +715,13 @@ names!(ChoiceKind { Menu, Segmented, Radio, List });
 object!(ChoiceOption { value, label } { detail, disabled });
 object!(ChoiceSearch { href, name } { min });
 object!(ChoiceCreate { label } { href });
-object!(ChoiceInput {} { kind, options, value, placeholder, search, create });
-object!(ChoicesInput {} { options, values, search, create });
+object!(ChoiceInput {} { kind, options, value, placeholder, search, create, more });
+object!(ChoicesInput {} { options, values, search, create, more });
 names!(DateKind { Date, Time, Datetime });
 names!(Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday });
 object!(DateInput {} { kind, value, min, max, off_days, off_weekdays });
+object!(RangeInput { from, to } { kind, min, max, off_days, off_weekdays });
+object!(RangeEnd { name } { value });
 object!(SliderInput { min, max, value } { step });
 object!(ColourInput {} { value });
 object!(FileInput {} { accept, multiple, capture, keep_location });
@@ -718,9 +738,10 @@ union!(Action tag "t"
     units { Back, Refresh, Dismiss }
     unknown Action::Unknown => |_| json!({})
 );
-names!(Present { Push, Replace, Root, Sheet, Full, External });
+names!(Present { Auto, Push, Replace, Root, Sheet, Full, External, Task });
 object!(Pair { name } { value });
-names!(State { Open, Hidden, Checked, Selected, Disabled, Active, Invalid, Pending });
+names!(State { Open, Hidden, Checked, Selected, Disabled, Active, Invalid, Pending }
+    never written { Unknown });
 union!(Command tag "c"
     newtype {}
     structs {
@@ -750,14 +771,17 @@ union!(Op tag "op"
         Morph { target, node } {},
         Replace { target, node } {},
         Append { target, nodes } { more },
-        Prepend { target, nodes } {},
+        Prepend { target, nodes } { before },
         Remove { target } {},
+        Merge { target, since } { nodes, gone, at, more },
+        Rows { target, rows } { at, more },
+        Row { target, row } {},
         Errors { form, fields } {},
         Open { target } {},
         Close { target } {},
         Focus { target } {},
         Url { href } { mode },
-        Navigate { href } {},
+        Navigate { href } { present },
         NavigateExternal { href } {},
         Invalidate { target } {},
         Device { call } {},
@@ -766,7 +790,8 @@ union!(Op tag "op"
     unknown Op::Unknown => |_| json!({})
 );
 names!(UrlMode { Push, Replace });
-object!(ToastAction { label, href } { post });
+names!(Edge { Start, End });
+object!(ToastAction { label, href } { post, fields });
 object!(Toast { text } { tone, title, id, action });
 
 // The shell.
@@ -856,7 +881,7 @@ names!(PasskeyMode { Register, SignIn });
 object!(Passkey { mode, options } { conditional });
 object!(PasskeyCredential { credential } {});
 names!(ConfirmMethod { Passkey, DeviceKey, Either });
-object!(Confirm { reason } { detail, method });
+object!(Confirm { reason, challenge } { detail, method });
 names!(ConfirmedBy { Passkey, DeviceKey });
 object!(Confirmed { challenge, method } { credential, key_id, signature });
 names!(Accuracy { Approximate, Precise });
@@ -869,8 +894,10 @@ object!(ScanCode {} { formats, prompt });
 object!(Scanned { format, value } {});
 object!(AppLock { after_secs } {});
 names!(SignInProvider { Apple, Google });
-object!(PlatformSignIn { provider, nonce } { client_id });
-object!(SignedIn { provider, id_token } { code, given_name, family_name, email });
+object!(PlatformSignIn { provider, nonce, sign_in } { web, client_id });
+object!(SignedIn { id_token, state } { authorization_code, user });
+object!(SignedInUser {} { name });
+object!(PersonName {} { first_name = "firstName", last_name = "lastName" });
 
 /// The definitions every other is reached from: what a server answers with,
 /// what a client says about itself, and what it posts back.
@@ -934,6 +961,7 @@ pub fn document() -> Value {
         "x-major": crate::MAJOR,
         "x-vocab": crate::VOCAB,
         "x-roots": ROOTS,
+        "x-symbols": crate::symbols::table(),
         "$ref": "#/$defs/Envelope",
         "$defs": schema.defs,
     })

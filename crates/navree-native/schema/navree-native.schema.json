@@ -186,7 +186,7 @@
         },
         "present": {
           "$ref": "#/$defs/Present",
-          "default": "push",
+          "default": "auto",
           "x-since": 0
         }
       },
@@ -661,6 +661,30 @@
           "default": null,
           "x-since": 0
         },
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Question"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "checked": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "disabled": {
           "default": false,
           "type": "boolean",
@@ -697,6 +721,18 @@
         },
         "label": {
           "type": "string",
+          "x-since": 0
+        },
+        "one_of": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "pending": {
@@ -1174,6 +1210,18 @@
           "default": "menu",
           "x-since": 0
         },
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "options": {
           "default": [],
           "items": {
@@ -1304,6 +1352,18 @@
           "anyOf": [
             {
               "$ref": "#/$defs/ChoiceCreate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
@@ -2112,6 +2172,10 @@
     },
     "Confirm": {
       "properties": {
+        "challenge": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        },
         "detail": {
           "anyOf": [
             {
@@ -2135,7 +2199,8 @@
         }
       },
       "required": [
-        "reason"
+        "reason",
+        "challenge"
       ],
       "type": "object",
       "x-kind": "object",
@@ -2534,6 +2599,15 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Edge": {
+      "enum": [
+        "start",
+        "end"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
     "Empty": {
       "properties": {
         "actions": {
@@ -2847,6 +2921,11 @@
           "default": null,
           "x-since": 0
         },
+        "muted": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "runs": {
           "default": [],
           "items": {
@@ -2887,6 +2966,18 @@
     },
     "Field": {
       "properties": {
+        "changed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "disabled": {
           "default": false,
           "type": "boolean",
@@ -2946,6 +3037,18 @@
         },
         "name": {
           "type": "string",
+          "x-since": 0
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Purpose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "required": {
@@ -3397,6 +3500,18 @@
           "type": "array",
           "x-since": 0
         },
+        "symbol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemSymbol"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "tone": {
           "anyOf": [
             {
@@ -3657,6 +3772,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RangeInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "range"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -3702,6 +3832,11 @@
         {
           "tag": "file",
           "type": "FileInput",
+          "x-since": 0
+        },
+        {
+          "tag": "range",
+          "type": "RangeInput",
           "x-since": 0
         }
       ]
@@ -3758,6 +3893,30 @@
     },
     "List": {
       "properties": {
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "changes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "children": {
           "default": [],
           "items": {
@@ -3770,6 +3929,18 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Live"
             },
             {
               "type": "null"
@@ -3793,6 +3964,30 @@
         "ordered": {
           "default": false,
           "type": "boolean",
+          "x-since": 0
+        },
+        "reorder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reorder"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         }
       },
@@ -5253,6 +5448,51 @@
         {
           "allOf": [
             {
+              "$ref": "#/$defs/Op.Merge"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "merge"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Rows"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "rows"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Row"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "row"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
               "$ref": "#/$defs/Op.Errors"
             }
           ],
@@ -5432,6 +5672,21 @@
           "x-since": 0
         },
         {
+          "tag": "merge",
+          "type": "Op.Merge",
+          "x-since": 0
+        },
+        {
+          "tag": "rows",
+          "type": "Op.Rows",
+          "x-since": 0
+        },
+        {
+          "tag": "row",
+          "type": "Op.Row",
+          "x-since": 0
+        },
+        {
           "tag": "errors",
           "type": "Op.Errors",
           "x-since": 0
@@ -5597,6 +5852,51 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Op.Merge": {
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/Edge",
+          "default": "end",
+          "x-since": 0
+        },
+        "gone": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "more": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "nodes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "since": {
+          "type": "string",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "since"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Op.Morph": {
       "properties": {
         "node": {
@@ -5620,6 +5920,11 @@
       "properties": {
         "href": {
           "type": "string",
+          "x-since": 0
+        },
+        "present": {
+          "$ref": "#/$defs/Present",
+          "default": "auto",
           "x-since": 0
         }
       },
@@ -5660,6 +5965,18 @@
     },
     "Op.Prepend": {
       "properties": {
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "nodes": {
           "items": {
             "$ref": "#/$defs/Node"
@@ -5708,6 +6025,64 @@
       "required": [
         "target",
         "node"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Row": {
+      "properties": {
+        "row": {
+          "$ref": "#/$defs/TableRow",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "row"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Rows": {
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/Edge",
+          "default": "end",
+          "x-since": 0
+        },
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/TableRow"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "rows"
       ],
       "type": "object",
       "x-kind": "object",
@@ -5899,6 +6274,38 @@
       "x-kind": "enum",
       "x-since": 0
     },
+    "PersonName": {
+      "properties": {
+        "firstName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "lastName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Platform": {
       "enum": [
         "ios",
@@ -5931,17 +6338,34 @@
           "x-since": 0
         },
         "nonce": {
-          "type": "string",
+          "$ref": "#/$defs/OriginPath",
           "x-since": 0
         },
         "provider": {
           "$ref": "#/$defs/SignInProvider",
           "x-since": 0
+        },
+        "sign_in": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        },
+        "web": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
         }
       },
       "required": [
         "provider",
-        "nonce"
+        "nonce",
+        "sign_in"
       ],
       "type": "object",
       "x-kind": "object",
@@ -5971,12 +6395,14 @@
     },
     "Present": {
       "enum": [
+        "auto",
         "push",
         "replace",
         "root",
         "sheet",
         "full",
-        "external"
+        "external",
+        "task"
       ],
       "type": "string",
       "x-kind": "enum",
@@ -6034,6 +6460,17 @@
         "high",
         "medium",
         "low"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Purpose": {
+      "enum": [
+        "search",
+        "filter",
+        "sort",
+        "page_size"
       ],
       "type": "string",
       "x-kind": "enum",
@@ -6118,6 +6555,132 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Question": {
+      "properties": {
+        "cancel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "confirm": {
+          "type": "string",
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title",
+        "confirm"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "RangeEnd": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "RangeInput": {
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/RangeEnd",
+          "x-since": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/DateKind",
+          "default": "date",
+          "x-since": 0
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "off_days": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "off_weekdays": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Weekday"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "to": {
+          "$ref": "#/$defs/RangeEnd",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Refusal": {
       "enum": [
         "unsupported",
@@ -6189,6 +6752,55 @@
         }
       },
       "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Reorder": {
+      "properties": {
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
       "type": "object",
       "x-kind": "object",
       "x-since": 0
@@ -6433,6 +7045,11 @@
             "$ref": "#/$defs/Node"
           },
           "type": "array",
+          "x-since": 0
+        },
+        "muted": {
+          "default": false,
+          "type": "boolean",
           "x-since": 0
         },
         "state": {
@@ -6825,6 +7442,32 @@
       "x-kind": "enum",
       "x-since": 0
     },
+    "Selection": {
+      "properties": {
+        "form": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Series": {
       "properties": {
         "label": {
@@ -7020,6 +7663,11 @@
           "default": null,
           "x-since": 0
         },
+        "task": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "title": {
           "anyOf": [
             {
@@ -7159,43 +7807,7 @@
     },
     "SignedIn": {
       "properties": {
-        "code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "x-since": 0
-        },
-        "email": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "x-since": 0
-        },
-        "family_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "x-since": 0
-        },
-        "given_name": {
+        "authorization_code": {
           "anyOf": [
             {
               "type": "string"
@@ -7211,15 +7823,47 @@
           "type": "string",
           "x-since": 0
         },
-        "provider": {
-          "$ref": "#/$defs/SignInProvider",
+        "state": {
+          "type": "string",
+          "x-since": 0
+        },
+        "user": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignedInUser"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         }
       },
       "required": [
-        "provider",
-        "id_token"
+        "id_token",
+        "state"
       ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SignedInUser": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PersonName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
       "type": "object",
       "x-kind": "object",
       "x-since": 0
@@ -7451,6 +8095,37 @@
       "x-kind": "enum",
       "x-since": 0
     },
+    "SystemSymbol": {
+      "properties": {
+        "apple": {
+          "type": "string",
+          "x-since": 0
+        },
+        "apple_filled": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "material": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "apple",
+        "material"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Tab": {
       "properties": {
         "children": {
@@ -7592,6 +8267,18 @@
           "type": "array",
           "x-since": 0
         },
+        "select": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "summary": {
           "anyOf": [
             {
@@ -7640,6 +8327,14 @@
           "type": "array",
           "x-since": 0
         },
+        "detail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
         "id": {
           "anyOf": [
             {
@@ -7650,6 +8345,11 @@
             }
           ],
           "default": null,
+          "x-since": 0
+        },
+        "selected": {
+          "default": false,
+          "type": "boolean",
           "x-since": 0
         }
       },
@@ -7834,12 +8534,36 @@
           "default": null,
           "x-since": 0
         },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "readonly": {
           "default": false,
           "type": "boolean",
           "x-since": 0
         },
         "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "suffix": {
           "anyOf": [
             {
               "type": "string"
@@ -8053,6 +8777,14 @@
     },
     "ToastAction": {
       "properties": {
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "type": "array",
+          "x-since": 0
+        },
         "href": {
           "type": "string",
           "x-since": 0
@@ -8161,6 +8893,18 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Question"
             },
             {
               "type": "null"
@@ -8559,5 +9303,367 @@
     "Scanned",
     "SignedIn"
   ],
+  "x-symbols": {
+    "names": {
+      "archive": {
+        "apple": "archivebox",
+        "apple_filled": "archivebox.fill",
+        "material": "archive"
+      },
+      "arrow-up-down": {
+        "apple": "arrow.up.arrow.down",
+        "material": "swap_vert"
+      },
+      "bar-chart": {
+        "apple": "chart.bar",
+        "apple_filled": "chart.bar.fill",
+        "material": "bar_chart"
+      },
+      "bell": {
+        "apple": "bell",
+        "apple_filled": "bell.fill",
+        "material": "notifications"
+      },
+      "box": {
+        "apple": "shippingbox",
+        "apple_filled": "shippingbox.fill",
+        "material": "inventory_2"
+      },
+      "building": {
+        "apple": "building.2",
+        "apple_filled": "building.2.fill",
+        "material": "apartment"
+      },
+      "building-2": {
+        "apple": "building.2",
+        "apple_filled": "building.2.fill",
+        "material": "apartment"
+      },
+      "calendar": {
+        "apple": "calendar",
+        "material": "calendar_today"
+      },
+      "camera": {
+        "apple": "camera",
+        "apple_filled": "camera.fill",
+        "material": "photo_camera"
+      },
+      "chart-bar": {
+        "apple": "chart.bar",
+        "apple_filled": "chart.bar.fill",
+        "material": "bar_chart"
+      },
+      "chart-column": {
+        "apple": "chart.bar",
+        "apple_filled": "chart.bar.fill",
+        "material": "bar_chart"
+      },
+      "check": {
+        "apple": "checkmark",
+        "material": "check"
+      },
+      "circle-help": {
+        "apple": "questionmark.circle",
+        "apple_filled": "questionmark.circle.fill",
+        "material": "help"
+      },
+      "circle-user": {
+        "apple": "person",
+        "apple_filled": "person.fill",
+        "material": "person"
+      },
+      "clock": {
+        "apple": "clock",
+        "apple_filled": "clock.fill",
+        "material": "schedule"
+      },
+      "credit-card": {
+        "apple": "creditcard",
+        "apple_filled": "creditcard.fill",
+        "material": "credit_card"
+      },
+      "download": {
+        "apple": "square.and.arrow.down",
+        "apple_filled": "square.and.arrow.down.fill",
+        "material": "download"
+      },
+      "ellipsis": {
+        "apple": "ellipsis.circle",
+        "apple_filled": "ellipsis.circle.fill",
+        "material": "more_vert"
+      },
+      "ellipsis-vertical": {
+        "apple": "ellipsis.circle",
+        "apple_filled": "ellipsis.circle.fill",
+        "material": "more_vert"
+      },
+      "file": {
+        "apple": "doc.text",
+        "apple_filled": "doc.text.fill",
+        "material": "description"
+      },
+      "file-text": {
+        "apple": "doc.text",
+        "apple_filled": "doc.text.fill",
+        "material": "description"
+      },
+      "filter": {
+        "apple": "line.3.horizontal.decrease.circle",
+        "apple_filled": "line.3.horizontal.decrease.circle.fill",
+        "material": "filter_list"
+      },
+      "folder": {
+        "apple": "folder",
+        "apple_filled": "folder.fill",
+        "material": "folder"
+      },
+      "heart": {
+        "apple": "heart",
+        "apple_filled": "heart.fill",
+        "material": "favorite"
+      },
+      "home": {
+        "apple": "house",
+        "apple_filled": "house.fill",
+        "material": "home"
+      },
+      "house": {
+        "apple": "house",
+        "apple_filled": "house.fill",
+        "material": "home"
+      },
+      "image": {
+        "apple": "photo",
+        "apple_filled": "photo.fill",
+        "material": "image"
+      },
+      "inbox": {
+        "apple": "tray",
+        "apple_filled": "tray.fill",
+        "material": "inbox"
+      },
+      "info": {
+        "apple": "info.circle",
+        "apple_filled": "info.circle.fill",
+        "material": "info"
+      },
+      "layout-dashboard": {
+        "apple": "square.grid.2x2",
+        "apple_filled": "square.grid.2x2.fill",
+        "material": "dashboard"
+      },
+      "layout-grid": {
+        "apple": "square.grid.2x2",
+        "apple_filled": "square.grid.2x2.fill",
+        "material": "dashboard"
+      },
+      "link": {
+        "apple": "link",
+        "material": "link"
+      },
+      "list": {
+        "apple": "list.bullet",
+        "material": "list"
+      },
+      "list-filter": {
+        "apple": "line.3.horizontal.decrease.circle",
+        "apple_filled": "line.3.horizontal.decrease.circle.fill",
+        "material": "filter_list"
+      },
+      "lock": {
+        "apple": "lock",
+        "apple_filled": "lock.fill",
+        "material": "lock"
+      },
+      "log-out": {
+        "apple": "rectangle.portrait.and.arrow.right",
+        "material": "logout"
+      },
+      "mail": {
+        "apple": "envelope",
+        "apple_filled": "envelope.fill",
+        "material": "mail"
+      },
+      "map": {
+        "apple": "map",
+        "apple_filled": "map.fill",
+        "material": "map"
+      },
+      "map-pin": {
+        "apple": "mappin",
+        "material": "location_on"
+      },
+      "message-circle": {
+        "apple": "bubble.left",
+        "apple_filled": "bubble.left.fill",
+        "material": "chat_bubble"
+      },
+      "message-square": {
+        "apple": "bubble.left",
+        "apple_filled": "bubble.left.fill",
+        "material": "chat_bubble"
+      },
+      "package": {
+        "apple": "shippingbox",
+        "apple_filled": "shippingbox.fill",
+        "material": "inventory_2"
+      },
+      "pencil": {
+        "apple": "pencil",
+        "material": "edit"
+      },
+      "phone": {
+        "apple": "phone",
+        "apple_filled": "phone.fill",
+        "material": "call"
+      },
+      "plus": {
+        "apple": "plus",
+        "material": "add"
+      },
+      "receipt": {
+        "apple": "receipt",
+        "apple_filled": "receipt.fill",
+        "material": "receipt_long"
+      },
+      "refresh-cw": {
+        "apple": "arrow.clockwise",
+        "material": "refresh"
+      },
+      "search": {
+        "apple": "magnifyingglass",
+        "material": "search"
+      },
+      "send": {
+        "apple": "paperplane",
+        "apple_filled": "paperplane.fill",
+        "material": "send"
+      },
+      "settings": {
+        "apple": "gearshape",
+        "apple_filled": "gearshape.fill",
+        "material": "settings"
+      },
+      "settings-2": {
+        "apple": "gearshape",
+        "apple_filled": "gearshape.fill",
+        "material": "settings"
+      },
+      "share": {
+        "apple": "square.and.arrow.up",
+        "apple_filled": "square.and.arrow.up.fill",
+        "material": "share"
+      },
+      "share-2": {
+        "apple": "square.and.arrow.up",
+        "apple_filled": "square.and.arrow.up.fill",
+        "material": "share"
+      },
+      "shopping-bag": {
+        "apple": "bag",
+        "apple_filled": "bag.fill",
+        "material": "shopping_bag"
+      },
+      "shopping-cart": {
+        "apple": "cart",
+        "apple_filled": "cart.fill",
+        "material": "shopping_cart"
+      },
+      "square-pen": {
+        "apple": "pencil",
+        "material": "edit"
+      },
+      "star": {
+        "apple": "star",
+        "apple_filled": "star.fill",
+        "material": "star"
+      },
+      "store": {
+        "apple": "storefront",
+        "apple_filled": "storefront.fill",
+        "material": "storefront"
+      },
+      "tag": {
+        "apple": "tag",
+        "apple_filled": "tag.fill",
+        "material": "sell"
+      },
+      "trash": {
+        "apple": "trash",
+        "apple_filled": "trash.fill",
+        "material": "delete"
+      },
+      "trash-2": {
+        "apple": "trash",
+        "apple_filled": "trash.fill",
+        "material": "delete"
+      },
+      "trending-up": {
+        "apple": "chart.line.uptrend.xyaxis",
+        "material": "trending_up"
+      },
+      "triangle-alert": {
+        "apple": "exclamationmark.triangle",
+        "apple_filled": "exclamationmark.triangle.fill",
+        "material": "warning"
+      },
+      "truck": {
+        "apple": "truck.box",
+        "apple_filled": "truck.box.fill",
+        "material": "local_shipping"
+      },
+      "user": {
+        "apple": "person",
+        "apple_filled": "person.fill",
+        "material": "person"
+      },
+      "users": {
+        "apple": "person.2",
+        "apple_filled": "person.2.fill",
+        "material": "group"
+      },
+      "x": {
+        "apple": "xmark",
+        "material": "close"
+      }
+    },
+    "standard": {
+      "add": {
+        "apple": "plus",
+        "material": "add"
+      },
+      "cancel": {
+        "apple": "xmark",
+        "material": "close"
+      },
+      "delete": {
+        "apple": "trash",
+        "apple_filled": "trash.fill",
+        "material": "delete"
+      },
+      "done": {
+        "apple": "checkmark",
+        "material": "check"
+      },
+      "edit": {
+        "apple": "pencil",
+        "material": "edit"
+      },
+      "more": {
+        "apple": "ellipsis.circle",
+        "apple_filled": "ellipsis.circle.fill",
+        "material": "more_vert"
+      },
+      "search": {
+        "apple": "magnifyingglass",
+        "material": "search"
+      },
+      "share": {
+        "apple": "square.and.arrow.up",
+        "apple_filled": "square.and.arrow.up.fill",
+        "material": "share"
+      }
+    }
+  },
   "x-vocab": 0
 }

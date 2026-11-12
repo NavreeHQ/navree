@@ -18,19 +18,20 @@ use navree_native::device::{
 use navree_native::envelope::{Back, Envelope, Screen, Upgrade, Web};
 use navree_native::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, SliderInput, TextInput, TextKind, ToggleInput,
-    ToggleKind, Weekday,
+    DateInput, DateKind, FileInput, Input, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
+    ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
     Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
     Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
-    Region, Rich, Role, Row, RowState, Run, Section, SectionStyle, Series, Sheet, SheetSize, Sort,
-    SortDir, Spacer, Split, Stack, Standard, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline,
-    Tone, Toolbar, ToolbarItem, Trend, Unknown, WebRegion,
+    Purpose, Question, Region, Reorder, Rich, Role, Row, RowState, Run, Section, SectionStyle,
+    Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
+    TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
+    WebRegion,
 };
-use navree_native::op::{Op, Toast, ToastAction, UrlMode};
+use navree_native::op::{Edge, Op, Toast, ToastAction, UrlMode};
 use navree_native::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
 use navree_native::{Kind, VOCAB};
 use serde::Serialize;
@@ -122,7 +123,36 @@ fn screen_list() -> Envelope {
             ],
             action: Some(Action::navigate(format!("/orders/{id}"))),
             actions: Vec::new(),
+            selected: false,
+            detail: Vec::new(),
         };
+    let field = |name: &str, label: &str, purpose: Purpose, input: Input| Field {
+        name: s(name),
+        label: Some(s(label)),
+        purpose: Some(purpose),
+        input,
+        ..Field::default()
+    };
+    let mut rows = vec![
+        order(
+            "1042",
+            "CH-1042",
+            "Harpreet Sandhu",
+            badge("Open", Tone::Info),
+            "₹1,24,050",
+            "Today, 09:41",
+        ),
+        order(
+            "1041",
+            "CH-1041",
+            "Simran Bhatia",
+            badge("Delivered", Tone::Success),
+            "₹2,499",
+            "Yesterday, 18:02",
+        ),
+    ];
+    rows[1].selected = true;
+    rows[1].detail = vec![muted("2 units of Phulkari dupatta, to Patiala")];
     let table = Table {
         id: Some(s("orders")),
         caption: Some(s("Orders")),
@@ -166,57 +196,32 @@ fn screen_list() -> Envelope {
                 ..Column::default()
             },
         ],
-        rows: vec![
-            order(
-                "1042",
-                "CH-1042",
-                "Harpreet Sandhu",
-                badge("Open", Tone::Info),
-                "₹1,24,050",
-                "Today, 09:41",
-            ),
-            order(
-                "1041",
-                "CH-1041",
-                "Simran Bhatia",
-                badge("Delivered", Tone::Success),
-                "₹2,499",
-                "Yesterday, 18:02",
-            ),
-        ],
+        rows,
         query: Some(Form {
             id: Some(s("orders-f")),
             method: Method::Get,
             action: s("/orders"),
-            hidden: vec![Hidden {
-                name: s("sort"),
-                value: s("-placed_on"),
-                id: None,
-            }],
+            hidden: Vec::new(),
             children: vec![
+                // Answers as it is typed.
                 Node::Field(Field {
-                    id: None,
-                    name: s("search"),
-                    label: Some(s("Search")),
-                    help: None,
-                    error: None,
-                    required: false,
-                    disabled: false,
-                    input: Input::Text(TextInput {
-                        kind: TextKind::Search,
-                        placeholder: Some(s("Search orders")),
-                        ..TextInput::default()
-                    }),
+                    changed: Some(Action::submit()),
+                    ..field(
+                        "search",
+                        "Search",
+                        Purpose::Search,
+                        Input::Text(TextInput {
+                            kind: TextKind::Search,
+                            placeholder: Some(s("Search orders")),
+                            ..TextInput::default()
+                        }),
+                    )
                 }),
-                Node::Field(Field {
-                    id: None,
-                    name: s("filter[status][in]"),
-                    label: Some(s("Status")),
-                    help: None,
-                    error: None,
-                    required: false,
-                    disabled: false,
-                    input: Input::Choices(ChoicesInput {
+                Node::Field(field(
+                    "filter[status][in]",
+                    "Status",
+                    Purpose::Filter,
+                    Input::Choices(ChoicesInput {
                         options: vec![
                             counted("open", "Open", "212"),
                             counted("cancelled", "Cancelled", "9"),
@@ -224,18 +229,52 @@ fn screen_list() -> Envelope {
                         values: vec![s("open")],
                         ..ChoicesInput::default()
                     }),
-                }),
-                Node::Field(Field {
-                    id: None,
-                    name: s("filter[placed_on][gte]"),
-                    label: Some(s("Placed from")),
-                    help: None,
-                    error: None,
-                    required: false,
-                    disabled: false,
-                    input: Input::Date(DateInput::default()),
-                }),
+                )),
+                Node::Field(field(
+                    "placed_on",
+                    "Placed",
+                    Purpose::Filter,
+                    Input::Range(RangeInput {
+                        from: RangeEnd {
+                            name: s("filter[placed_on][gte]"),
+                            value: s("2026-11-01"),
+                        },
+                        to: RangeEnd {
+                            name: s("filter[placed_on][lte]"),
+                            value: String::new(),
+                        },
+                        max: Some(s("2026-11-13")),
+                        ..RangeInput::default()
+                    }),
+                )),
+                Node::Field(field(
+                    "sort",
+                    "Order by",
+                    Purpose::Sort,
+                    Input::Choice(ChoiceInput {
+                        options: vec![
+                            option("-placed_on", "Newest first"),
+                            option("-total", "Largest first"),
+                        ],
+                        value: Some(s("-placed_on")),
+                        ..ChoiceInput::default()
+                    }),
+                )),
+                Node::Field(field(
+                    "per_page",
+                    "Rows a page",
+                    Purpose::PageSize,
+                    Input::Choice(ChoiceInput {
+                        options: vec![option("25", "25"), option("100", "100")],
+                        value: Some(s("25")),
+                        ..ChoiceInput::default()
+                    }),
+                )),
             ],
+        }),
+        select: Some(Selection {
+            name: s("ids[]"),
+            form: Some(s("orders-bulk")),
         }),
         more: Some(s("/orders?after=eyJpZCI6MTA0MX0")),
         prev: None,
@@ -502,6 +541,8 @@ fn refund_form() -> Node {
                 error: None,
                 required: true,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Text(TextInput {
                     kind: TextKind::Decimal,
                     value: s("1240.50"),
@@ -516,6 +557,8 @@ fn refund_form() -> Node {
                 error: None,
                 required: false,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Choice(ChoiceInput {
                     kind: ChoiceKind::Menu,
                     options: vec![
@@ -551,6 +594,8 @@ fn screen_form() -> Envelope {
             error: None,
             required: false,
             disabled: false,
+            purpose: None,
+            changed: None,
             input,
         })
     };
@@ -585,6 +630,8 @@ fn screen_form() -> Envelope {
                 error: Some(s("Enter a name.")),
                 required: true,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Text(TextInput {
                     value: String::new(),
                     placeholder: Some(s("Gurpreet Kaur")),
@@ -918,7 +965,15 @@ fn screen_kinds() -> Envelope {
                         children: vec![Node::List(List {
                             id: Some(s("feed")),
                             more: Some(s("/feed?after=981")),
+                            before: Some(s("/feed?before=981")),
                             ordered: false,
+                            since: Some(s("0004410")),
+                            changes: Some(s("/feed?dir=live")),
+                            live: Some(Live {
+                                src: s("/broadcasting/stream"),
+                                event: Some(s("feed")),
+                            }),
+                            reorder: None,
                             children: vec![Node::Row(Row {
                                 id: Some(s("event-981")),
                                 leading: Some(Box::new(Node::Avatar(Avatar {
@@ -982,6 +1037,7 @@ fn screen_kinds() -> Envelope {
                                     })),
                                     ..Button::default()
                                 })],
+                                muted: false,
                             })],
                         })],
                     },
@@ -1037,6 +1093,7 @@ fn screen_kinds() -> Envelope {
                 title: Some(s("Order CH-1042")),
                 subtitle: Some(s("3 units for Harpreet Sandhu in Amritsar, Punjab")),
                 size: SheetSize::Large,
+                task: false,
                 open: false,
                 children: vec![text("…")],
                 actions: vec![Node::Button(Button {
@@ -1104,6 +1161,7 @@ fn ops_reply() -> Envelope {
                     title: s("CH-1043 was placed"),
                     ..Row::default()
                 })],
+                before: Some(s("/feed?before=983")),
             },
             Op::Remove {
                 target: s("event-12"),
@@ -1121,6 +1179,7 @@ fn ops_reply() -> Envelope {
                     label: s("See the order"),
                     href: s("/orders/1042"),
                     post: false,
+                    fields: Vec::new(),
                 }),
             }),
             Op::Focus {
@@ -1170,7 +1229,21 @@ fn ops_navigate() -> Envelope {
                 text: s("This demo has no accounts to sign out of."),
                 ..Toast::default()
             }),
-            Op::Navigate { href: s("/") },
+            Op::Toast(Toast {
+                tone: Tone::Success,
+                text: s("CH-1042 was archived."),
+                action: Some(ToastAction {
+                    label: s("Undo"),
+                    href: s("/orders/1042/unarchive"),
+                    post: true,
+                    fields: vec![pair("_csrf", "tok")],
+                }),
+                ..Toast::default()
+            }),
+            Op::Navigate {
+                href: s("/"),
+                present: Present::Root,
+            },
             Op::NavigateExternal {
                 href: s("https://pay.example/session/7"),
             },
@@ -1429,6 +1502,7 @@ fn screen_device() -> Envelope {
             Role::Confirm,
             DeviceCall::new(Confirm {
                 reason: s("Approve payment"),
+                challenge: path("/api/auth/confirm/options"),
                 detail: Some(s("₹1,00,000 to Gurpreet Kaur, HDFC ••4821")),
                 method: ConfirmMethod::Either,
             })
@@ -1462,10 +1536,11 @@ fn screen_device() -> Envelope {
             Role::Primary,
             DeviceCall::new(PlatformSignIn {
                 provider: SignInProvider::Apple,
-                nonce: s("q9Zs3"),
+                nonce: path("/api/auth/social/apple/native/nonce"),
+                sign_in: path("/api/auth/social/apple/native/session"),
+                web: Some(path("/api/auth/social/apple/redirect")),
                 client_id: None,
-            })
-            .then(then("/auth/apple/native", "tk-apple")),
+            }),
         ),
         Node::Field(Field {
             id: Some(s("receipt")),
@@ -1475,6 +1550,8 @@ fn screen_device() -> Envelope {
             error: None,
             required: false,
             disabled: false,
+            purpose: None,
+            changed: None,
             input: Input::File(FileInput {
                 accept: Some(s("image/*")),
                 capture: Some(s("environment")),
@@ -1870,6 +1947,8 @@ fn screen_inbox() -> Envelope {
                 error: None,
                 required: false,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Choice(ChoiceInput {
                     kind: ChoiceKind::List,
                     options: vec![option("12", "Amandeep Gill")],
@@ -1890,6 +1969,8 @@ fn screen_inbox() -> Envelope {
                 error: None,
                 required: false,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Choices(ChoicesInput {
                     options: vec![option("refund", "Refund"), option("late", "Late delivery")],
                     values: vec![s("late")],
@@ -1902,6 +1983,7 @@ fn screen_inbox() -> Envelope {
                         label: s("Add a tag"),
                         href: Some(s("/inbox/tags")),
                     }),
+                    more: Some(s("/inbox/tags/options?after=late")),
                 }),
             }),
             Node::Field(Field {
@@ -1912,6 +1994,8 @@ fn screen_inbox() -> Envelope {
                 error: None,
                 required: false,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Date(DateInput {
                     kind: DateKind::Date,
                     value: s("2026-11-16"),
@@ -1929,6 +2013,8 @@ fn screen_inbox() -> Envelope {
                 error: None,
                 required: false,
                 disabled: false,
+                purpose: None,
+                changed: None,
                 input: Input::Choice(ChoiceInput {
                     kind: ChoiceKind::Menu,
                     options: vec![option("ludhiana", "Ludhiana"), option("amritsar", "Amritsar")],
@@ -2011,11 +2097,23 @@ fn screen_inbox() -> Envelope {
                     Node::Button(Button {
                         label: s("Cancel order"),
                         role: Role::Destructive,
-                        action: Some(Action::command(Command::Open { id: s("cancel") })),
+                        ask: Some(Question {
+                            title: s("Cancel order CH-1042?"),
+                            text: Some(s("₹1,24,050 goes back to Harpreet Sandhu's UPI account.")),
+                            confirm: s("Cancel order"),
+                            cancel: Some(s("Keep it")),
+                        }),
+                        action: Some(Action::Request {
+                            method: Method::Post,
+                            href: s("/orders/1042/cancel"),
+                            fields: vec![pair("_csrf", "tok")],
+                        }),
                         ..Button::default()
                     }),
                 ],
             })],
+            selected: false,
+            detail: Vec::new(),
         }],
         ..Table::default()
     });
@@ -2111,9 +2209,327 @@ fn screen_inbox() -> Envelope {
     Envelope::screen(BUILD, screen)
 }
 
+/// A board of cards: lists whose rows move by dragging between them, a card
+/// made in a task, a menu of ticked items and a choice of one, fields with a
+/// prefix and a suffix and fields that act as they change, quiet rows, and
+/// icons with their systems' symbols.
+fn screen_board() -> Envelope {
+    let card = |id: &str, title: &str, who: &str| Row {
+        id: Some(s(id)),
+        title: s(title),
+        subtitle: Some(s(who)),
+        action: Some(Action::Navigate {
+            href: format!("/cards/{id}"),
+            present: Present::Push,
+        }),
+        ..Row::default()
+    };
+    let column = |id: &str, title: &str, limit: Option<u32>, cards: Vec<Node>| {
+        Node::Section(Section {
+            title: Some(s(title)),
+            children: vec![Node::List(List {
+                id: Some(s(id)),
+                children: cards,
+                reorder: Some(Reorder {
+                    href: s("/cards/move"),
+                    group: Some(s("board")),
+                    limit,
+                    fields: vec![pair("_csrf", "tok")],
+                }),
+                ..List::default()
+            })],
+            ..Section::default()
+        })
+    };
+    let plus = Icon {
+        name: Some(s("plus")),
+        paths: vec![s("M5 12h14M12 5v14")],
+        ..Icon::default()
+    }
+    .with_symbol();
+    let new_card = Node::Sheet(Sheet {
+        id: s("new-card"),
+        title: Some(s("New card")),
+        task: true,
+        children: vec![Node::Form(Form {
+            id: Some(s("card-form")),
+            method: Method::Post,
+            action: s("/cards"),
+            hidden: vec![Hidden {
+                name: s("_csrf"),
+                value: s("tok"),
+                id: None,
+            }],
+            children: vec![
+                Node::Field(Field {
+                    name: s("title"),
+                    label: Some(s("Title")),
+                    required: true,
+                    ..Field::default()
+                }),
+                Node::Field(Field {
+                    name: s("budget"),
+                    label: Some(s("Budget")),
+                    input: Input::Text(TextInput {
+                        kind: TextKind::Decimal,
+                        prefix: Some(s("₹")),
+                        ..TextInput::default()
+                    }),
+                    ..Field::default()
+                }),
+                Node::Field(Field {
+                    name: s("estimate"),
+                    label: Some(s("Estimate")),
+                    input: Input::Text(TextInput {
+                        kind: TextKind::Number,
+                        suffix: Some(s("hours")),
+                        ..TextInput::default()
+                    }),
+                    ..Field::default()
+                }),
+                Node::Field(Field {
+                    id: Some(s("card-notes")),
+                    name: s("notes"),
+                    label: Some(s("Notes")),
+                    help: Some(s("0/160")),
+                    input: Input::Text(TextInput {
+                        kind: TextKind::Multiline,
+                        max_length: Some(160),
+                        ..TextInput::default()
+                    }),
+                    changed: Some(Action::command(Command::Count {
+                        id: s("notes-count"),
+                        max: Some(160),
+                    })),
+                    ..Field::default()
+                }),
+                Node::Text(Text {
+                    id: Some(s("notes-count")),
+                    value: s("0/160"),
+                    muted: true,
+                    ..Text::default()
+                }),
+            ],
+        })],
+        actions: vec![Node::Button(Button {
+            label: s("Add card"),
+            role: Role::Confirm,
+            action: Some(Action::Submit {
+                form: Some(s("card-form")),
+                href: None,
+                with: None,
+            }),
+            ..Button::default()
+        })],
+        ..Sheet::default()
+    });
+    let view = Node::Menu(Menu {
+        id: Some(s("board-view")),
+        label: s("View"),
+        icon: None,
+        items: vec![
+            Node::Button(Button {
+                label: s("Show archived cards"),
+                checked: Some(false),
+                action: Some(Action::navigate("/board?archived=1")),
+                ..Button::default()
+            }),
+            Node::Divider(Divider::default()),
+            Node::Button(Button {
+                label: s("By due date"),
+                checked: Some(true),
+                one_of: Some(s("order")),
+                action: Some(Action::navigate("/board?order=due")),
+                ..Button::default()
+            }),
+            Node::Button(Button {
+                label: s("By who it is for"),
+                checked: Some(false),
+                one_of: Some(s("order")),
+                action: Some(Action::navigate("/board?order=owner")),
+                ..Button::default()
+            }),
+        ],
+    });
+    let watch = Node::Form(Form {
+        id: Some(s("watch")),
+        method: Method::Post,
+        action: s("/board/watch"),
+        hidden: vec![Hidden {
+            name: s("_csrf"),
+            value: s("tok"),
+            id: None,
+        }],
+        children: vec![Node::Field(Field {
+            name: s("watching"),
+            label: Some(s("Tell me when cards move")),
+            input: Input::Toggle(ToggleInput {
+                on: true,
+                ..ToggleInput::default()
+            }),
+            // Saved as it flips.
+            changed: Some(Action::submit()),
+            ..Field::default()
+        })],
+    });
+    let body = Node::Stack(Stack {
+        gap: 3,
+        children: vec![
+            view,
+            watch,
+            Node::Grid(Grid {
+                cols: Some(3),
+                min: Some(220),
+                gap: 3,
+                children: vec![
+                    column(
+                        "board-todo",
+                        "To do",
+                        None,
+                        vec![
+                            Node::Row(card("c-7", "Restock Brass Kadhai", "Ravneet Kaur")),
+                            Node::Row(card(
+                                "c-8",
+                                "Photograph the Diwali range",
+                                "Jaspreet Singh",
+                            )),
+                        ],
+                    ),
+                    column(
+                        "board-doing",
+                        "Doing",
+                        Some(3),
+                        vec![Node::Row(card(
+                            "c-5",
+                            "Call the Jalandhar supplier",
+                            "Amandeep Gill",
+                        ))],
+                    ),
+                    column(
+                        "board-done",
+                        "Done",
+                        None,
+                        vec![Node::Row(Row {
+                            muted: true,
+                            ..card("c-2", "Archived 14 old cards", "The nightly clean-up")
+                        })],
+                    ),
+                ],
+                ..Grid::default()
+            }),
+            Node::FeedRow(FeedRow {
+                id: Some(s("board-event-77")),
+                icon: Some(Icon {
+                    name: Some(s("refresh-cw")),
+                    ..Icon::default()
+                }
+                .with_symbol()),
+                runs: vec![run("The board was tidied up overnight")],
+                time: Some(s("03:00")),
+                muted: true,
+                ..FeedRow::default()
+            }),
+            Node::Button(Button {
+                label: s("New card"),
+                icon: Some(plus.clone()),
+                role: Role::Create,
+                action: Some(Action::Navigate {
+                    href: s("/cards/new"),
+                    present: Present::Task,
+                }),
+                ..Button::default()
+            }),
+            new_card,
+        ],
+        ..Stack::default()
+    });
+    let mut screen = Screen::new("Board", body);
+    screen.nav = Some(s("/board"));
+    screen.actions = vec![Node::Toolbar(Toolbar {
+        id: None,
+        items: vec![ToolbarItem {
+            title: s("Clear done"),
+            icon: Icon {
+                name: Some(s("trash-2")),
+                paths: vec![s("M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14")],
+                ..Icon::default()
+            }
+            .with_symbol(),
+            standard: Some(Standard::Delete),
+            role: Role::Destructive,
+            ask: Some(Question {
+                title: s("Clear 1 done card?"),
+                text: None,
+                confirm: s("Clear"),
+                cancel: None,
+            }),
+            action: Some(Action::Request {
+                method: Method::Post,
+                href: s("/board/clear-done"),
+                fields: vec![pair("_csrf", "tok")],
+            }),
+            ..ToolbarItem::default()
+        }],
+    })];
+    Envelope::screen(BUILD, screen)
+}
+
+/// What changes a list and a table row by row: a live list's changes since
+/// its revision, a table's next records, one record drawn again and one gone,
+/// and a post that leads to a task.
+fn ops_lists() -> Envelope {
+    let record = |id: &str, number: &str, total: &str| TableRow {
+        id: Some(s(id)),
+        cells: vec![text(number), text(total)],
+        action: Some(Action::navigate(format!("/orders/{id}"))),
+        ..TableRow::default()
+    };
+    Envelope::ops(
+        BUILD,
+        vec![
+            Op::Merge {
+                target: s("board-doing"),
+                nodes: vec![Node::Row(Row {
+                    id: Some(s("c-8")),
+                    title: s("Photograph the Diwali range"),
+                    subtitle: Some(s("Jaspreet Singh")),
+                    ..Row::default()
+                })],
+                gone: vec![s("c-5")],
+                since: s("0000512"),
+                at: Edge::Start,
+                more: false,
+            },
+            Op::Rows {
+                target: s("orders"),
+                rows: vec![
+                    record("1040", "CH-1040", "₹8,900"),
+                    record("1039", "CH-1039", "₹12,450"),
+                ],
+                at: Edge::End,
+                more: Some(s("/orders?after=1039")),
+            },
+            Op::Row {
+                target: s("1042"),
+                row: TableRow {
+                    detail: vec![muted("Refunded ₹1,240.50 to UPI")],
+                    ..record("1042", "CH-1042", "₹1,22,809.50")
+                },
+            },
+            Op::Remove { target: s("1041") },
+            Op::Navigate {
+                href: s("/orders/1042/refund"),
+                present: Present::Task,
+            },
+        ],
+    )
+}
+
 fn envelopes() -> Vec<(&'static str, Envelope)> {
     vec![
         ("screen-list", screen_list()),
+        ("screen-board", screen_board()),
+        ("ops-lists", ops_lists()),
         ("screen-detail", screen_detail()),
         ("screen-form", screen_form()),
         ("screen-kinds", screen_kinds()),
@@ -2346,6 +2762,9 @@ fn kinds_in(
                 name = format!("{name}:{kind}");
             }
             inputs.insert(name);
+            if let Some(purpose) = &field.purpose {
+                seen("purpose", purpose);
+            }
         }
         Node::Button(button) => {
             if let Some(standard) = &button.standard {
@@ -2404,6 +2823,15 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
             match op {
                 Op::Morph { node, .. } | Op::Replace { node, .. } => roots.push(node),
                 Op::Append { nodes, .. } | Op::Prepend { nodes, .. } => roots.extend(nodes),
+                Op::Merge { nodes, at, .. } => {
+                    roots.extend(nodes);
+                    values.entry("edge").or_default().insert(format!("{at:?}"));
+                }
+                Op::Rows { rows, at, .. } => {
+                    roots.extend(rows.iter().flat_map(TableRow::nodes));
+                    values.entry("edge").or_default().insert(format!("{at:?}"));
+                }
+                Op::Row { row, .. } => roots.extend(row.nodes()),
                 Op::Device { call } => {
                     let tag = serde_json::to_value(call).unwrap()["f"].clone();
                     values
@@ -2439,6 +2867,8 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
             &["Sending", "Sent", "Delivered", "Read", "Failed"],
         ),
         ("direction", &["Up", "Down", "Flat"]),
+        ("purpose", &["Search", "Filter", "Sort", "PageSize"]),
+        ("edge", &["Start", "End"]),
         (
             "column",
             &["Leading", "Title", "Subtitle", "Status", "Trailing", "Actions"],
@@ -2504,6 +2934,7 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         "slider",
         "colour",
         "file",
+        "range",
     ] {
         assert!(inputs.contains(input), "no example holds a {input} control");
     }

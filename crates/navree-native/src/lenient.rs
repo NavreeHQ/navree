@@ -107,7 +107,7 @@ mod tests {
             button.action,
             Some(Action::Navigate {
                 href: "/x".to_owned(),
-                present: Present::Push
+                present: Present::Auto
             })
         );
 

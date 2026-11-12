@@ -246,7 +246,7 @@ impl Node {
                 .chain(
                     node.rows
                         .iter()
-                        .flat_map(|row| row.cells.iter().chain(&row.actions)),
+                        .flat_map(TableRow::nodes),
                 )
                 .chain(boxed(&node.empty))
                 .collect(),
@@ -325,7 +325,7 @@ impl Node {
                 .chain(
                     node.rows
                         .iter_mut()
-                        .flat_map(|row| row.cells.iter_mut().chain(&mut row.actions)),
+                        .flat_map(TableRow::nodes_mut),
                 )
                 .chain(boxed(&mut node.empty))
                 .collect(),
@@ -613,9 +613,52 @@ pub struct List {
     /// list, with the address after it or none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub more: Option<String>,
+    /// Where the rows before the first are, by cursor: newer ones above a list
+    /// of the newest first. The answer is a `prepend` op for this list, with
+    /// the address before it or none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
     /// Whether the rows are numbered.
     #[serde(default, skip_serializing_if = "is_false")]
     pub ordered: bool,
+    /// The revision the rows are at: what the list asks `changes` since.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    /// Where the list asks what changed: this address with `since` added as a
+    /// query value. The answer is a `merge` op for this list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<String>,
+    /// The stream that says when to ask `changes`. Its messages are a nudge:
+    /// nothing in them is read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live: Option<Live>,
+    /// Whether the rows can be moved by dragging, and where a move is posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reorder: Option<Reorder>,
+}
+
+/// How the rows of a list are moved by dragging: within the list, and into
+/// the lists of the same `group` (the columns of a board).
+///
+/// A move is posted to `href` as a form: `item` (the row's id), `from` and
+/// `to` (the lists' ids), `before` (the id of the row it now stands before;
+/// empty at the end) and `position` (from 0), with `fields`. A row without an
+/// id can't be moved. The answer is ops, as a post's are; a move the server
+/// refuses (a 4xx with a toast or errors saying why) puts the row back.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reorder {
+    /// Where a move is posted.
+    pub href: String,
+    /// The lists a row may move between: those with the same group. A list
+    /// with none keeps its rows to itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// The most rows the list takes: a full list takes no more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// What goes with each move: the page's token among them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<crate::action::Pair>,
 }
 
 /// One row of a list: who or what, a line about it, and what stands at each end.
@@ -653,6 +696,10 @@ pub struct Row {
     /// What a long press or a secondary click offers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menu: Vec<Node>,
+    /// Whether it is drawn quieter than its neighbours: what a machine did, in
+    /// a list of what people did.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub muted: bool,
 }
 
 /// Where a row stands in a sequence, such as the steps of an order.
@@ -661,7 +708,8 @@ pub struct Row {
 pub enum RowState {
     /// It has happened.
     Done,
-    /// It is happening now.
+    /// It is happening now; in a list beside what it opens, the row that is
+    /// open now (the conversation shown beside the inbox).
     Current,
     /// It is still to come.
     Upcoming,
@@ -956,6 +1004,26 @@ pub struct Icon {
     /// What its colour means.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
     pub tone: Option<Tone>,
+    /// The system's own symbol that means the same, where there is one: a
+    /// client that has it draws it, filled when it stands for the selected
+    /// destination, and the paths otherwise. Set from the name by
+    /// [`Icon::with_symbol`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<SystemSymbol>,
+}
+
+/// The names of one symbol in each system's own set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemSymbol {
+    /// The SF Symbols name, drawn on Apple systems: `cart`.
+    pub apple: String,
+    /// The SF Symbols name of its filled form, where it has one: `cart.fill`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apple_filled: Option<String>,
+    /// The Material Symbols name, drawn on Android, filled by the set's own
+    /// fill: `shopping_cart`. An app bundles the symbols it names when it is
+    /// built, since Android can't look one up by name.
+    pub material: String,
 }
 
 /// The shapes of an icon, without its name: what an envelope's icon table
@@ -1223,11 +1291,45 @@ pub struct TableRow {
     /// What a tap on the row does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
-    /// What a reader may do with the record: buttons and menus. A narrow
-    /// screen offers them from the row's menu and swipe, a wide one at the
-    /// row's end.
+    /// What a reader may do with the record: buttons and menus. The row's menu:
+    /// a narrow screen offers them from the row's menu and swipe, a wide one at
+    /// the row's end, in the column whose role is `actions` when there is one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<Node>,
+    /// Whether the row is chosen, in a table whose rows can be
+    /// ([`Table::select`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub selected: bool,
+    /// What opens under the row: more about the record than its cells hold.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail: Vec<Node>,
+}
+
+impl TableRow {
+    /// The nodes the row holds: its cells, then its actions, then its detail.
+    pub fn nodes(&self) -> impl Iterator<Item = &Node> {
+        self.cells.iter().chain(&self.actions).chain(&self.detail)
+    }
+
+    /// The same nodes, to change in place.
+    pub fn nodes_mut(&mut self) -> impl Iterator<Item = &mut Node> {
+        self.cells
+            .iter_mut()
+            .chain(&mut self.actions)
+            .chain(&mut self.detail)
+    }
+}
+
+/// How the rows of a table are chosen, for the actions that apply to the rows
+/// chosen: the id of each chosen row is sent under `name`, as a box ticked in
+/// a form would be, with the form `form`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Selection {
+    /// The name each chosen row's id is sent under.
+    pub name: String,
+    /// The form the ids go with: the one whose buttons act on the rows chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
 }
 
 /// Records in columns. A wide screen draws a table; a narrow one draws each
@@ -1246,12 +1348,17 @@ pub struct Table {
     /// The records.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<TableRow>,
-    /// The form that asks for other records: its search field (a text control
-    /// of the `search` kind) and one field a filter. A client sends it as a
-    /// query when a value changes, and draws the answer in the table's place.
+    /// The form that asks for other records: each field says what it is for
+    /// by its [`purpose`](Field::purpose) (the search, a filter, the order, the
+    /// rows a page). A client sends it as a query when a value changes, and
+    /// draws the answer in the table's place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<Form>,
-    /// Where the next records are, by cursor.
+    /// Whether the rows can be chosen, and how the chosen ones are sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub select: Option<Selection>,
+    /// Where the next records are, by cursor. The answer is a `rows` op for
+    /// this table, with the address after it or none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub more: Option<String>,
     /// Where the records before these are.
@@ -1363,6 +1470,20 @@ pub struct Button {
     /// offers to undo it after.
     #[serde(default, skip_serializing_if = "is_false")]
     pub undoable: bool,
+    /// The question it asks before it acts, in the system's own confirmation,
+    /// for what can't be undone. A client asks it unless `undoable` lets the
+    /// system's guidelines skip it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask: Option<Question>,
+    /// Whether it is ticked, for a menu item that turns something on or off;
+    /// none for a plain action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    /// The choice of one it belongs to: the ticked items of a menu with the
+    /// same name are a group of which one is ticked, drawn as the system draws
+    /// a choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<String>,
     /// Whether it can't be used now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
@@ -1372,6 +1493,23 @@ pub struct Button {
     /// What it does. A button with none does nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+}
+
+/// The question a control asks before it does what can't be undone: the
+/// words of a system's own confirmation, which names the thing and the act
+/// ("Delete 3 orders?", not "Are you sure?").
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    /// What is asked: `Cancel order CH-1042?`.
+    pub title: String,
+    /// What follows from it: `₹1,24,050 goes back to the customer.`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// The words of the button that goes ahead: `Cancel order`.
+    pub confirm: String,
+    /// The words of the button that goes back, when not the system's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel: Option<String>,
 }
 
 /// An action every system has its own symbol and words for. A control that is
@@ -1476,7 +1614,8 @@ pub struct Form {
     pub children: Vec<Node>,
 }
 
-/// One field of a form.
+/// One field of a form. Its default is a nameless text field, so a field is
+/// built with `..Field::default()` and keeps building when fields are added.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
     /// The id of the field's control: what a `focus` names.
@@ -1501,6 +1640,50 @@ pub struct Field {
     pub disabled: bool,
     /// The control.
     pub input: Input,
+    /// What the field is for, in a form that asks for records (a table's
+    /// query), so a client puts it where its system puts that: the search in
+    /// the search bar, filters with the filters, the order with the sorting.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub purpose: Option<Purpose>,
+    /// What the client does when the person changes the value, besides
+    /// holding it: send the form (`submit`: a box that saves as it is ticked, a
+    /// search that answers as it is typed, once typing pauses as the system's
+    /// own searches do), or run commands (a count of the characters typed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed: Option<Action>,
+}
+
+impl Default for Field {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: String::new(),
+            label: None,
+            help: None,
+            error: None,
+            required: false,
+            disabled: false,
+            input: Input::Text(crate::input::TextInput::default()),
+            purpose: None,
+            changed: None,
+        }
+    }
+}
+
+/// What a field of a form that asks for records is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Purpose {
+    /// The words searched for.
+    Search,
+    /// A filter: which records are shown.
+    Filter,
+    /// The order the records are in.
+    Sort,
+    /// How many records come at a time. A client that loads by cursor as the
+    /// reader scrolls may leave it out.
+    PageSize,
 }
 
 /// How much of the screen a sheet takes.
@@ -1531,6 +1714,11 @@ pub struct Sheet {
     /// How much of the screen it takes.
     #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub size: SheetSize,
+    /// Whether it is a task the person finishes or cancels (a form), not a
+    /// glance at something: each system presents the two its own way, as with
+    /// [`Present::Task`](crate::Present::Task).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub task: bool,
     /// Whether it is presented as the screen arrives.
     #[serde(default, skip_serializing_if = "is_false")]
     pub open: bool,
@@ -1642,6 +1830,9 @@ pub struct ToolbarItem {
     /// Whether what it does can be undone.
     #[serde(default, skip_serializing_if = "is_false")]
     pub undoable: bool,
+    /// The question it asks before it acts, as a button's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask: Option<Question>,
     /// Whether it can't be used now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
@@ -1678,14 +1869,15 @@ pub struct Gauge {
 }
 
 /// Which way a figure is going.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
     /// Up.
     Up,
     /// Down.
     Down,
-    /// Neither.
+    /// Neither: also what a way this build does not know is read as.
+    #[default]
     Flat,
 }
 
@@ -1694,6 +1886,7 @@ pub enum Direction {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trend {
     /// Which way.
+    #[serde(deserialize_with = "crate::lenient::or_default")]
     pub direction: Direction,
     /// By how much, in the page's words: `12%`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1792,6 +1985,10 @@ pub struct FeedRow {
     /// What a tap on the entry does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+    /// Whether it is drawn quieter than its neighbours: what a machine did, in
+    /// a feed of what people did.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub muted: bool,
 }
 
 /// How far a message has got to the person it is for.
@@ -1822,8 +2019,10 @@ pub struct Message {
     /// Their picture or initials.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
-    /// Whether the person reading wrote it: a client sets it apart, as its
-    /// system's own conversations do.
+    /// Whether it comes from the reader's side of the conversation: the person
+    /// reading, or the team they answer for (every agent's replies in a
+    /// support inbox). A client sets that side apart, as its system's own
+    /// conversations do.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mine: bool,
     /// Whether it is a note only the team sees, not sent to the other side.

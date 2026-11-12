@@ -53,7 +53,8 @@
           "id": "event-983",
           "title": "CH-1043 was placed"
         }
-      ]
+      ],
+      "before": "/feed?before=983"
     },
     {
       "op": "remove",

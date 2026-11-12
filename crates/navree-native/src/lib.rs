@@ -41,6 +41,7 @@ pub mod node;
 pub mod op;
 pub mod schema;
 pub mod shell;
+pub mod symbols;
 pub mod vocab;
 
 pub use action::{Action, Command, Pair, Present, State};

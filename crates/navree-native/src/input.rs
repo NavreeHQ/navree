@@ -28,6 +28,8 @@ pub enum Input {
     Colour(ColourInput),
     /// Files, from the device or its camera.
     File(FileInput),
+    /// Two dates picked as one: from and to.
+    Range(RangeInput),
     /// A control from a newer server, which this build does not know. A client
     /// leaves the field out; its form still sends the rest.
     #[serde(other)]
@@ -93,6 +95,12 @@ pub struct TextInput {
     /// Whether it can be read and not changed. Its value is still sent.
     #[serde(default, skip_serializing_if = "is_false")]
     pub readonly: bool,
+    /// What stands before the typed text, and is not sent with it: `₹`, `+91`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// What stands after the typed text, and is not sent with it: `kg`, `%`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<String>,
 }
 
 /// How an on-or-off control is drawn.
@@ -156,7 +164,11 @@ pub struct ChoiceOption {
 ///
 /// The client asks `href` with the typed words as the query value `name`
 /// (`/customers/options?q=kaur`). The answer is an envelope whose screen's body
-/// is a `field` of the same name whose control holds the options found.
+/// is a `field` whose control (a `choice` or `choices`) holds the options found,
+/// and in its `more` where the next ones are. The answer is matched to the
+/// field that asked by the request that asked, not by its name: the server
+/// that finds the options need not know the field's name, and may leave it
+/// empty.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChoiceSearch {
     /// Where to ask.
@@ -201,6 +213,10 @@ pub struct ChoiceInput {
     /// Whether, and how, the reader may add an option.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub create: Option<ChoiceCreate>,
+    /// Where the options after these are, by cursor, when a list or a search
+    /// holds more than came: the answer is like a search's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more: Option<String>,
 }
 
 /// Any of several. Each chosen value is sent under the field's name.
@@ -218,6 +234,9 @@ pub struct ChoicesInput {
     /// Whether, and how, the reader may add an option.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub create: Option<ChoiceCreate>,
+    /// Where the options after these are, by cursor: as a choice's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more: Option<String>,
 }
 
 /// What a date control picks.
@@ -272,6 +291,42 @@ pub struct DateInput {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub off_days: Vec<String>,
     /// Days of the week that can't be picked: a shop shut on Sundays.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
+    pub off_weekdays: Vec<Weekday>,
+}
+
+/// One end of a range: the name its value is sent under, and the value.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RangeEnd {
+    /// The name its value is sent under: `filter[placed_on][gte]`.
+    pub name: String,
+    /// What it holds now, in the form a date control sends.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub value: String,
+}
+
+/// Two dates (or times) picked as one: from and to, each sent under its own
+/// name. A field holding a range shows the messages for either name; its own
+/// `name` is the one an error for the range as a whole comes under.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RangeInput {
+    /// What each end picks.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub kind: DateKind,
+    /// The start.
+    pub from: RangeEnd,
+    /// The end: never before the start.
+    pub to: RangeEnd,
+    /// The earliest either end takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<String>,
+    /// The latest either end takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<String>,
+    /// Days that can't be in the range's ends, as a date control's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub off_days: Vec<String>,
+    /// Days of the week that can't be its ends, as a date control's.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
     pub off_weekdays: Vec<Weekday>,
 }

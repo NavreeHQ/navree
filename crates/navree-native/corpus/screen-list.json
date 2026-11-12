@@ -157,18 +157,20 @@
               "action": {
                 "t": "navigate",
                 "href": "/orders/1041"
-              }
+              },
+              "selected": true,
+              "detail": [
+                {
+                  "t": "text",
+                  "value": "2 units of Phulkari dupatta, to Patiala",
+                  "muted": true
+                }
+              ]
             }
           ],
           "query": {
             "id": "orders-f",
             "action": "/orders",
-            "hidden": [
-              {
-                "name": "sort",
-                "value": "-placed_on"
-              }
-            ],
             "children": [
               {
                 "t": "field",
@@ -178,6 +180,10 @@
                   "t": "text",
                   "kind": "search",
                   "placeholder": "Search orders"
+                },
+                "purpose": "search",
+                "changed": {
+                  "t": "submit"
                 }
               },
               {
@@ -201,17 +207,71 @@
                   "values": [
                     "open"
                   ]
-                }
+                },
+                "purpose": "filter"
               },
               {
                 "t": "field",
-                "name": "filter[placed_on][gte]",
-                "label": "Placed from",
+                "name": "placed_on",
+                "label": "Placed",
                 "input": {
-                  "t": "date"
-                }
+                  "t": "range",
+                  "from": {
+                    "name": "filter[placed_on][gte]",
+                    "value": "2026-11-01"
+                  },
+                  "to": {
+                    "name": "filter[placed_on][lte]"
+                  },
+                  "max": "2026-11-13"
+                },
+                "purpose": "filter"
+              },
+              {
+                "t": "field",
+                "name": "sort",
+                "label": "Order by",
+                "input": {
+                  "t": "choice",
+                  "options": [
+                    {
+                      "value": "-placed_on",
+                      "label": "Newest first"
+                    },
+                    {
+                      "value": "-total",
+                      "label": "Largest first"
+                    }
+                  ],
+                  "value": "-placed_on"
+                },
+                "purpose": "sort"
+              },
+              {
+                "t": "field",
+                "name": "per_page",
+                "label": "Rows a page",
+                "input": {
+                  "t": "choice",
+                  "options": [
+                    {
+                      "value": "25",
+                      "label": "25"
+                    },
+                    {
+                      "value": "100",
+                      "label": "100"
+                    }
+                  ],
+                  "value": "25"
+                },
+                "purpose": "page_size"
               }
             ]
+          },
+          "select": {
+            "name": "ids[]",
+            "form": "orders-bulk"
           },
           "more": "/orders?after=eyJpZCI6MTA0MX0",
           "summary": "1–25 of 1,204"

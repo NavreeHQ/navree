@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::{Node, Tone, is_default, is_false};
+use crate::action::{Pair, Present};
+use crate::node::{Node, TableRow, Tone, is_default, is_false};
 
 /// How a change of address enters the client's history.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,6 +29,21 @@ pub struct ToastAction {
     /// Whether it posts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub post: bool,
+    /// What goes with the post: the page's token among them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<Pair>,
+}
+
+/// Which end of a list or a table new rows join.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Edge {
+    /// The start: the top of a list with the newest first.
+    Start,
+    /// The end.
+    #[default]
+    End,
 }
 
 /// A short message that leaves by itself: a snackbar, a banner, a toast, as the
@@ -87,11 +103,59 @@ pub enum Op {
         target: String,
         /// What is added.
         nodes: Vec<Node>,
+        /// For a list: where the rows before these are, or none when these are
+        /// the first.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before: Option<String>,
     },
-    /// Takes the node `target` out.
+    /// Takes the node or the table row `target` out.
     Remove {
-        /// The node's id.
+        /// The id of the node or the row.
         target: String,
+    },
+    /// Brings a list up to date with what changed since its revision: each
+    /// node takes the place of the row with its id where it stands, or joins
+    /// the list at `at` when the list has none; each id in `gone` leaves. What
+    /// the reader did to a row that stays (a caret, the focus) is kept.
+    Merge {
+        /// The list's id.
+        target: String,
+        /// The rows that are new or changed, as they are now.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        nodes: Vec<Node>,
+        /// The ids of the rows that left the list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        gone: Vec<String>,
+        /// The revision the list is at now: what its next ask for changes says.
+        since: String,
+        /// Where new rows join.
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        at: Edge,
+        /// Whether more changes follow this revision: the client asks again at once.
+        #[serde(default, skip_serializing_if = "is_false")]
+        more: bool,
+    },
+    /// Adds records to a table: the next ones by cursor, or new ones.
+    Rows {
+        /// The table's id.
+        target: String,
+        /// The records, in the table's order.
+        rows: Vec<TableRow>,
+        /// Which end they join.
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        at: Edge,
+        /// Where the records after these are, by cursor, or none when these are
+        /// the last: the table's `more` from now on.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        more: Option<String>,
+    },
+    /// Puts `row` in place of the table row `target`, keeping what the reader
+    /// did to it: whether it is chosen, whether its detail is open.
+    Row {
+        /// The id of the row to change.
+        target: String,
+        /// What it becomes.
+        row: TableRow,
     },
     /// Shows messages at the fields of a form, or clears them when `fields` is empty.
     Errors {
@@ -129,6 +193,10 @@ pub enum Op {
     Navigate {
         /// The address.
         href: String,
+        /// How the screen is presented. When not said, the client's own rules
+        /// for where a post leads decide, then the shell's routes.
+        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        present: Present,
     },
     /// Leaves for another site, in the system's browser.
     NavigateExternal {
@@ -193,6 +261,7 @@ mod tests {
             },
             Op::Navigate {
                 href: "/orders/7".to_owned(),
+                present: Present::Auto,
             },
             Op::NavigateExternal {
                 href: "https://pay.example/7".to_owned(),
@@ -219,6 +288,40 @@ mod tests {
             )
         );
         assert_eq!(serde_json::from_str::<Vec<Op>>(&json).unwrap(), ops);
+    }
+
+    #[test]
+    fn a_navigation_after_a_post_may_say_how_it_is_presented() {
+        let op = Op::Navigate {
+            href: "/orders/7".to_owned(),
+            present: Present::Replace,
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert_eq!(json, r#"{"op":"navigate","href":"/orders/7","present":"replace"}"#);
+        assert_eq!(serde_json::from_str::<Op>(&json).unwrap(), op);
+    }
+
+    #[test]
+    fn a_list_and_a_table_change_row_by_row() {
+        let merge: Op = serde_json::from_str(
+            r#"{"op":"merge","target":"inbox","nodes":[{"t":"row","id":"c-88","title":"Harpreet Sandhu"}],"gone":["c-12"],"since":"0000412","at":"start"}"#,
+        )
+        .unwrap();
+        let Op::Merge { gone, since, at, more, .. } = &merge else {
+            panic!("{merge:?}");
+        };
+        assert_eq!((gone.as_slice(), since.as_str(), *at, *more), (&["c-12".to_owned()][..], "0000412", Edge::Start, false));
+        let rows: Op = serde_json::from_str(
+            r#"{"op":"rows","target":"orders","rows":[{"id":"1043","cells":[{"t":"text","value":"CH-1043"}]}],"more":"/orders?after=1043"}"#,
+        )
+        .unwrap();
+        let Op::Rows { rows, at, more, .. } = &rows else {
+            panic!("{rows:?}");
+        };
+        assert_eq!((rows.len(), *at, more.as_deref()), (1, Edge::End, Some("/orders?after=1043")));
+        assert!(serde_json::from_str::<Op>(r#"{"op":"row","target":"1043","row":{"id":"1043"}}"#).is_ok());
+        // A revision is needed: without it the next ask could not say where it stands.
+        assert!(serde_json::from_str::<Op>(r#"{"op":"merge","target":"inbox"}"#).is_err());
     }
 
     #[test]
