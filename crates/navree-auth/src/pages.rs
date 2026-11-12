@@ -591,6 +591,21 @@ where
     }
 
     fn call(&mut self, request: navree_http::extract::Request) -> Self::Future {
+        // Login CSRF: every form of these pages is drawn by a GET that starts the session,
+        // so a post without the session's cookie came from another page, perhaps a sibling
+        // subdomain's or one whose browser says nothing of where it posts from, and could
+        // sign the reader in to someone else's account. It is refused before anything runs.
+        let safe = matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
+        );
+        let resumed = request
+            .extensions()
+            .get::<Session>()
+            .is_some_and(Session::is_resumed);
+        if !safe && !resumed {
+            return Box::pin(async { Ok(AppError::csrf_mismatch().into_response()) });
+        }
         let look = self.dressing.look_for(
             request.uri().path(),
             request.uri().query(),

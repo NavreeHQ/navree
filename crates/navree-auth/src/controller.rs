@@ -203,6 +203,9 @@ pub(crate) async fn signed_in(
     Ok((status, Json(body)).into_response())
 }
 
+/// How many accounts one client may ask to make per minute (`POST /auth/register`).
+const REGISTER_PER_MINUTE: u32 = 5;
+
 impl Controller for AuthController {
     fn prefix(&self) -> &'static str {
         ""
@@ -240,12 +243,15 @@ impl Controller for AuthController {
             routes.push(
                 RouteDef::on(Method::POST, path("/register"), register)
                     .public()
+                    // As the sign-up page: five a minute per client, which also slows a
+                    // walk through addresses asking which have accounts (409).
+                    .throttle(REGISTER_PER_MINUTE, std::time::Duration::from_secs(60))
                     .name("auth.register")
                     .api(ApiMeta {
                         success_status: 201,
                         request: Some(schema_fn::<RegisterInput>),
                         response: Some(schema_fn::<LoginResponse>),
-                        ..api("Create an account and sign in", &[400, 409])
+                        ..api("Create an account and sign in", &[400, 409, 429])
                     }),
             );
         }
