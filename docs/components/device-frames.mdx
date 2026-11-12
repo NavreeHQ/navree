@@ -24,6 +24,10 @@ A frame follows the page's mode. `.mode(Mode::Dark)` or `.mode(Mode::Light)` fix
 
 <UiPreview example="device-frames/modes" />
 
+## The camera and the status bar
+
+The phone's camera stands over the top of its screen. A picture in a `PhoneFrame` starts below a strip the height of a phone's status bar, in the screen's colour, so the camera never covers the top of the app it shows. A screenshot taken on a phone brings a status bar of its own: `.edge_to_edge()` draws it from the very top.
+
 ## Captions
 
 `.caption(text)` adds a line under the frame, saying what it shows.

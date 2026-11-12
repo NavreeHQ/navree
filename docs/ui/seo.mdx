@@ -64,7 +64,7 @@ Every value is escaped as it is written. An address that is not a path or an `ht
 
 | Builder | Type |
 |---|---|
-| `Organization::new(name, url)` | `.logo`, `.same_as`, `.slogan`, `.description`, `.email` |
+| `Organization::new(name, url)` | `.logo`, `.same_as` (its profiles elsewhere, optional: leave it out until there are some), `.slogan`, `.description`, `.email` |
 | `WebSite::new(name, url)` | `.publisher(id)`, `.in_language` |
 | `WebPage::new(url, name, description)` | `.kind(PageKind)`, `.date_modified`, `.is_part_of(id)`, `.breadcrumb(id)`, `.main_entity(id)`, `.image` |
 | `SoftwareApplication::new(name, category)` | `.description`, `.operating_system`, `.offer(Offer)`, `.free`, `.feature`, `.version`, `.publisher(id)` |

@@ -31,7 +31,8 @@ pub static BRAND: AppSheet = AppSheet::new(
 );
 
 /// The app's own mark, compiled in and served by the toolkit at a content-hash address.
-pub static MARK: AppImage = AppImage::new("proof-mark", include_bytes!("../assets/mark.svg"), 4 * 1024);
+pub static MARK: AppImage =
+    AppImage::new("proof-mark", include_bytes!("../assets/mark.svg"), 4 * 1024);
 
 /// The app's own typeface: the toolkit's Geist file under another family name, so the page
 /// shows a font that comes from the app's route and not from the toolkit's.
@@ -424,12 +425,20 @@ fn shell_page(headers: &http::HeaderMap, query: Option<&str>) -> AppPage {
         .body((
             Text::muted("The day pager stands in the middle of the bar; the mark stays on phones."),
             Grid::ratio([7, 5]).gap(4).children((
-                Card::new().title("Sleep").body(Text::new("7 h 20 min, 88 points.")),
-                Card::new().title("Heart").body(Text::new("Resting 58 bpm.")),
+                Card::new()
+                    .title("Sleep")
+                    .body(Text::new("7 h 20 min, 88 points.")),
+                Card::new()
+                    .title("Heart")
+                    .body(Text::new("Resting 58 bpm.")),
             )),
             Dock::new("Sections")
                 .below(Screen::Md)
-                .item(DockItem::new("Today", "/app-blocks/shell").icon(icons::HOUSE).current())
+                .item(
+                    DockItem::new("Today", "/app-blocks/shell")
+                        .icon(icons::HOUSE)
+                        .current(),
+                )
                 .item(DockItem::new("Sleep", "/app-blocks?case=dock").icon(icons::MOON)),
         ))
 }

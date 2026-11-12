@@ -555,12 +555,6 @@ impl From<&AppImage> for crate::html::Href {
     }
 }
 
-impl From<AppImage> for crate::html::Href {
-    fn from(image: AppImage) -> Self {
-        Self::from(image.url())
-    }
-}
-
 /// Its address, for an API that takes the address as text ([`Picture::new`](crate::Picture::new)).
 impl From<&AppImage> for String {
     fn from(image: &AppImage) -> Self {

@@ -182,6 +182,8 @@ pub const GROUPS: &[Group] = &[
             "breathing-guide",
             "dock",
             "day-pager",
+            "copy-field",
+            "auth-layout",
         ],
     },
     Group {
@@ -883,6 +885,10 @@ pub const COMPONENTS: &[Component] = &[
         .about("A floating row of icon links pinned to the bottom of the page: the main places of an app, with the current one lit."),
     component("day-pager", "Day pager", &["DayPager"], "thumb")
         .about("The day before, the day shown and the day after, with the day's scores and a calendar behind the date."),
+    component("copy-field", "Copy field", &["CopyField"], "thumb")
+        .about("A value to take elsewhere, such as an invite link or a key, in a read-only field with a Copy button."),
+    component("auth-layout", "Auth layout", &["AuthLayout"], "thumb")
+        .about("The page of one form a guest fills in, such as signing in or up, with the app's own panel beside it."),
     // Assistant
     component(
         "conversation",

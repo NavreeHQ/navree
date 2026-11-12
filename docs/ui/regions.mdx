@@ -24,6 +24,10 @@ The preview above is the region before it loads: two skeleton lines, and `aria-b
 
 `.src(url)` is where the content comes from: a page that holds an element with the region's id, or a fragment, which is a page with no script of its own. A source that answers a page with the runtime but without that id, or a redirect, means the reader is somewhere else, as when a session has ended: the reader goes there.
 
+### A fragment that holds more parts
+
+The source may answer with a whole [`View`](/docs/ui/foundations/) whose body is what goes inside, even when that body holds parts that need the runtime: tabs that load their panels when shown, a region of its own. The toolkit marks a view answered to a region's fetch as that region's fragment (`X-Navree-Fragment`), so the runtime draws it in place, loads the styles and scripts its parts need, and never takes it for a page somewhere else. A page that lacks the region and isn't marked so, such as a sign-in page a proxy serves at the region's address, still sends the reader there.
+
 ## Lazy
 
 `.lazy()` fetches the region after paint and shows skeleton lines until then. Use it for the slow parts of a dashboard, so the rest of the page is quick.

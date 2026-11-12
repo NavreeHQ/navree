@@ -182,7 +182,9 @@
         "chart-skeleton",
         "breathing-guide",
         "dock",
-        "day-pager"
+        "day-pager",
+        "copy-field",
+        "auth-layout"
       ]
     },
     {
@@ -2437,6 +2439,38 @@
       "examples": [
         "day-pager/thumb",
         "day-pager/default"
+      ]
+    },
+    {
+      "id": "copy-field",
+      "name": "Copy field",
+      "url": "/docs/components/copy-field/",
+      "summary": "A value to take elsewhere, such as an invite link or a key, in a read-only field with a Copy button.",
+      "group": "app-blocks",
+      "types": [
+        "CopyField"
+      ],
+      "thumb": "copy-field/thumb",
+      "anatomy": null,
+      "examples": [
+        "copy-field/thumb",
+        "copy-field/default"
+      ]
+    },
+    {
+      "id": "auth-layout",
+      "name": "Auth layout",
+      "url": "/docs/components/auth-layout/",
+      "summary": "The page of one form a guest fills in, such as signing in or up, with the app's own panel beside it.",
+      "group": "app-blocks",
+      "types": [
+        "AuthLayout"
+      ],
+      "thumb": "auth-layout/thumb",
+      "anatomy": null,
+      "examples": [
+        "auth-layout/thumb",
+        "auth-layout/default"
       ]
     },
     {
@@ -28233,7 +28267,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -36689,7 +36723,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js",
+        "core-3c822350aba2.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -36854,7 +36888,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js",
+        "core-3c822350aba2.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -37039,7 +37073,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js",
+        "core-3c822350aba2.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -37204,7 +37238,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js",
+        "core-3c822350aba2.js",
         "sortable-6ce83eead470.js"
       ],
       "captions": [],
@@ -57400,7 +57434,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -57442,7 +57476,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -57530,7 +57564,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -57579,7 +57613,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -57634,7 +57668,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "core-97b1dcae61e2.js"
+        "core-3c822350aba2.js"
       ],
       "captions": [],
       "slots": [
@@ -67060,6 +67094,623 @@
                       "tag": "svg",
                       "count": 1,
                       "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "copy-field/thumb",
+      "component": "copy-field",
+      "slug": "thumb",
+      "title": "A copy field",
+      "kind": "single",
+      "code": "CopyField::new(\n    \"thumb-invite\",\n    \"Invite link\",\n    \"https://kesar.example/join/8k2m\",\n)",
+      "src": "/ui-preview/copy-field/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 360,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "copy-field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "copy-field-row",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "copy-field-button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "copy-field-copy",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "copy-field-copied",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "copy-field/default",
+      "component": "copy-field",
+      "slug": "default",
+      "title": "An invite link",
+      "kind": "single",
+      "code": "CopyField::new(\n    \"invite\",\n    \"Invite link\",\n    \"https://kesar.example/join/8k2m-q4rt\",\n)\n.help(\"Anyone with the link can ask to join your family plan.\")",
+      "src": "/ui-preview/copy-field/default.html",
+      "height": 160,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 520,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "copy-field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "copy-field-row",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "copy-field-button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "copy-field-copy",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "copy-field-copied",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "auth-layout/thumb",
+      "component": "auth-layout",
+      "slug": "thumb",
+      "title": "A sign-in page",
+      "kind": "single",
+      "code": "AuthLayout::new(sign_in_card())",
+      "src": "/ui-preview/auth-layout/thumb.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "auth-layout",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "auth-main",
+              "tag": "main",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "auth-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "text",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heading",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "card",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-header",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "card-description",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "card-content",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "stack",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "field",
+                                      "tag": "div",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "label",
+                                          "tag": "label",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "auth-layout/default",
+      "component": "auth-layout",
+      "slug": "default",
+      "title": "A sign-in page with the app's panel",
+      "kind": "single",
+      "code": "AuthLayout::new(sign_in_card())\n    .aside(Stack::gap(4).children((\n        Heading::h2(\"Your health, clearly understood.\"),\n        Text::new(\"Sleep, heart, recovery and movement, scored every day from the phone and watch you already have.\"),\n        Rings::new(\"An example day: movement 64, recovery 82, sleep 88\")\n            .ring(RingValue::new(\"Movement\", 64))\n            .ring(RingValue::new(\"Recovery\", 82))\n            .ring(RingValue::new(\"Sleep\", 88))\n            .size(180)\n            .legend(),\n        Text::muted(\"An example day, not real data.\"),\n    )))\n    .aside_label(\"About Kesar\")",
+      "src": "/ui-preview/auth-layout/default.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 1100,
+      "fit": false,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "auth-layout",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "auth-aside",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "stack",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "heading",
+                      "tag": "h2",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-heading",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "radial-split",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "radial",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-size",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-plot",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "radial-track",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-arc",
+                                          "tag": "path",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-track",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-arc",
+                                          "tag": "path",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-track",
+                                          "tag": "circle",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "radial-arc",
+                                          "tag": "path",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "radial-legend",
+                                  "tag": "ul",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "radial-key",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-name",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-of",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-share",
+                                      "tag": "strong",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-key",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-name",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-of",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-share",
+                                      "tag": "strong",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-key",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-name",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-of",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "radial-share",
+                                      "tag": "strong",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-summary",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-data",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-table",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "auth-main",
+              "tag": "main",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "auth-body",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "text",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "heading",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "card",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "card-header",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "card-description",
+                                  "tag": "p",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "card-content",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "stack",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "field",
+                                      "tag": "div",
+                                      "count": 2,
+                                      "children": [
+                                        {
+                                          "slot": "label",
+                                          "tag": "label",
+                                          "count": 1,
+                                          "children": []
+                                        },
+                                        {
+                                          "slot": "input",
+                                          "tag": "input",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "button",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }

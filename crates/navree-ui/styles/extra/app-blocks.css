@@ -138,4 +138,4 @@
 }
 [data-slot=auth-main]{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 1rem 3rem}
 [data-slot=auth-corner]{position:absolute;inset-block-start:1rem;inset-inline-end:1rem;display:flex;gap:.5rem}
-[data-slot=auth-body]{width:min(100%,26rem)}
+[data-slot=auth-body]{width:min(100%,28rem)}
