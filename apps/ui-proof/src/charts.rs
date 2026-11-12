@@ -459,6 +459,151 @@ fn cases() -> Vec<(&'static str, Node)> {
             .into(),
         ),
         (
+            "ring",
+            Grid::cols(3)
+                .gap(3)
+                .children((
+                    Ring::new("Sleep score", 82)
+                        .id("ring-1")
+                        .label("Sleep score")
+                        .sublabel("Great recovery")
+                        .size(140),
+                    Ring::new("Recovery", 87)
+                        .id("ring-2")
+                        .label("Recovery")
+                        .unit("%")
+                        .colors(
+                            ColorScale::new(Ink::tone(Tone::Danger))
+                                .label("Low")
+                                .from(67, Ink::tone(Tone::Success))
+                                .label("Recovered"),
+                        )
+                        .fill(Gradient::sheen(Ink::own()))
+                        .glow()
+                        .halo()
+                        .size(140)
+                        .size_on(Screen::Lg, 160)
+                        .motion(Motion::new()),
+                    Ring::new("Steps", 12_450)
+                        .id("ring-3")
+                        .max(10_000)
+                        .locale("en-IN")
+                        .label("Steps")
+                        .size(64),
+                ))
+                .into(),
+        ),
+        (
+            "rings",
+            Grid::cols(2)
+                .gap(3)
+                .children((
+                    Rings::new("Activity")
+                        .id("rings-1")
+                        .ring(
+                            RingValue::new("Move", 540)
+                                .max(600)
+                                .unit("kcal")
+                                .ink(Ink::slot(8)),
+                        )
+                        .ring(
+                            RingValue::new("Exercise", 38)
+                                .max(30)
+                                .unit("min")
+                                .ink(Ink::slot(3)),
+                        )
+                        .ring(
+                            RingValue::new("Stand", 9)
+                                .max(12)
+                                .unit("hr")
+                                .ink(Ink::slot(1)),
+                        )
+                        .track(RingTrack::Tinted)
+                        .center_values()
+                        .legend()
+                        .size(200)
+                        .motion(Motion::new()),
+                    Stack::gap(2).children((
+                        Rings::new("Nervous system")
+                            .id("rings-2")
+                            .ring(
+                                RingValue::new("Sympathetic", 42)
+                                    .unit("%")
+                                    .ink(Ink::slot(8)),
+                            )
+                            .ring(
+                                RingValue::new("Parasympathetic", 68)
+                                    .unit("%")
+                                    .ink(Ink::slot(1)),
+                            )
+                            .center_icon(icons::ACTIVITY)
+                            .size(140),
+                        Button::outline(Node::list((
+                            Rings::new("Movement 35, recovery 72, sleep 78")
+                                .id("rings-pill")
+                                .ring(RingValue::new("Movement", 35))
+                                .ring(RingValue::new("Recovery", 72))
+                                .ring(RingValue::new("Sleep", 78))
+                                .size(28)
+                                .inline(),
+                            "Wed, 11 Nov",
+                        ))),
+                    )),
+                ))
+                .into(),
+        ),
+        (
+            "gauge",
+            Grid::cols(2)
+                .gap(3)
+                .children((
+                    Gauge::new("Relaxation", 73)
+                        .id("gauge-1")
+                        .label("Recovery index")
+                        .fill(
+                            Gradient::horizontal()
+                                .stop(0.0, Ink::slot(3))
+                                .stop(1.0, Ink::slot(1)),
+                        )
+                        .size(180),
+                    Gauge::new("Body temperature", 36.7)
+                        .id("gauge-2")
+                        .min(34)
+                        .max(39)
+                        .unit("°C")
+                        .sweep(180.0)
+                        .size(160),
+                ))
+                .into(),
+        ),
+        (
+            "clock",
+            DayClock::new("Steps by hour")
+                .id("clock")
+                .values([
+                    0, 0, 0, 0, 0, 30, 640, 1_850, 920, 410, 380, 520, 760, 310, 280, 350, 620,
+                    1_240, 940, 430, 260, 120, 30, 0,
+                ])
+                .unit("steps")
+                .category("Active", Ink::slot(3))
+                .category("Calm", Ink::slot(1))
+                .category("Rest", Ink::slot(7))
+                .categories([
+                    2, 2, 2, 2, 2, 2, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 2, 2, 2,
+                ])
+                .moment(
+                    Moment::new(6.5, "Woke up")
+                        .icon(icons::SUNRISE)
+                        .ink(Ink::slot(4)),
+                )
+                .moment(Moment::new(7.5, "Morning walk").icon(icons::FOOTPRINTS))
+                .moment(Moment::new(13.5, NASTY).icon(icons::UTENSILS))
+                .now(15)
+                .locale("en-IN")
+                .motion(Motion::new())
+                .into(),
+        ),
+        (
             "locale",
             Grid::cols(2)
                 .gap(3)

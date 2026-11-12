@@ -67,12 +67,16 @@ const CASES = {
   rtl: ["rtl"],
   paint: ["paint"],
   steps: ["steps"],
+  ring: ["ring-1", "ring-2", "ring-3"],
+  rings: ["rings-1", "rings-2"],
+  gauge: ["gauge-1", "gauge-2"],
+  clock: ["clock"],
   locale: ["locale-de", "locale-in"],
   shown: ["shown"],
 };
 /** The figures with a tab stop, tooltips and keys. */
 const INTERACTIVE = Object.entries(CASES)
-  .filter(([name]) => !["sparkline", "empty", "loading", "failed"].includes(name))
+  .filter(([name]) => !["sparkline", "empty", "loading", "failed", "ring", "rings", "gauge"].includes(name))
   .flatMap(([name, figures]) => figures.map((fig) => [name, fig]));
 /** The figures with a switch for the table. */
 const SWITCHED = INTERACTIVE.filter(([name]) => name !== "shown");
@@ -1088,6 +1092,100 @@ for (const name of NAMES) {
         await page.mouse.move(at.x, at.y);
         assert.equal(await page.locator("#bar-grouped [data-slot=chart-tip]").isVisible(), false);
         assert.equal(await page.locator("#bar-grouped [data-active]").count(), 0);
+        await page.done();
+      });
+
+      test("a ring, rings, a gauge and the day clock are drawn finished: the arcs, the number in the middle, the total", async () => {
+        const page = await open("/charts?case=ring", { js: false });
+        assert.equal(await page.locator("#ring-1 [data-slot=count-up]").textContent(), "82");
+        assert.equal(await page.locator("#ring-3 [data-slot=count-up]").textContent(), "12,450");
+        for (const fig of ["ring-1", "ring-2", "ring-3"]) assert.equal(await page.locator(`#${fig} [data-slot=radial-arc]`).count(), 1, `${fig}: its arc`);
+        assert.equal(await page.locator("#ring-3 [data-slot=radial-lap]").count(), 1, "past the goal, a second lap");
+        await page.done();
+        const clock = await open("/charts?case=clock", { js: false });
+        assert.equal(await clock.locator("#clock [data-slot=clock-wedge]").count(), 24);
+        assert.equal(await clock.locator("#clock [data-slot=radial-center] [data-slot=count-up]").textContent(), "10,090");
+        await clock.done();
+      });
+    });
+
+    // ---- 7b: radial charts ------------------------------------------------------------------
+
+    describe("radial charts", () => {
+      test("a ring, rings and a gauge are pictures named by their title and described by their summary; tiny rings in a pill are one image", async () => {
+        for (const [kase, figures] of [["ring", ["ring-1", "ring-2", "ring-3"]], ["rings", ["rings-1", "rings-2"]], ["gauge", ["gauge-1", "gauge-2"]]]) {
+          const page = await open(`/charts?case=${kase}`);
+          for (const fig of figures) {
+            const body = page.locator(`#${fig} [data-slot=chart-body]`);
+            assert.equal(await body.getAttribute("role"), "img", `${fig} is a picture`);
+            assert.equal(await body.getAttribute("tabindex"), null, `${fig} is not a tab stop`);
+            assert.equal(await page.locator(`#${fig}[data-ui-chart]`).count(), 0, `${fig} loads no tooltip`);
+            assert.ok((await page.locator(`#${fig}-summary`).textContent()).includes(" of ") || fig === "gauge-2", `${fig}: a summary`);
+            assert.ok((await page.locator(`#${fig} table tbody tr`).count()) >= 1, `${fig}: a table`);
+          }
+          if (kase === "rings") {
+            const pill = page.locator("[data-slot=radial-inline]");
+            assert.equal(await pill.getAttribute("role"), "img");
+            assert.match(await pill.getAttribute("aria-label"), /^Movement: 35 of 100, 35%\./);
+            assert.equal(await pill.locator("table, figure").count(), 0, "no table inside a button");
+          }
+          if (kase === "gauge") assert.match(await page.locator("#gauge-2-summary").textContent(), /36\.7°C, on a scale from 34°C to 39°C/);
+          await page.done();
+        }
+      });
+
+      test("the middle counts up to the server's number, and a ring takes its wider size on a wider screen", async () => {
+        const wide = await open("/charts?case=ring");
+        await settle(wide);
+        assert.equal(await wide.locator("#ring-2 [data-slot=count-up]").textContent(), "87");
+        assert.equal(Math.round((await wide.locator("#ring-2 [data-slot=radial]").boundingBox()).width), 160);
+        await wide.done();
+        const narrow = await open("/charts?case=ring", { width: 390 });
+        assert.equal(Math.round((await narrow.locator("#ring-2 [data-slot=radial]").boundingBox()).width), 140);
+        await narrow.done();
+      });
+
+      test("rings and the clock come in only for a reader who has not asked for less motion", async () => {
+        for (const kase of ["ring", "rings", "clock"]) {
+          for (const reduce of [false, true]) {
+            const page = await open(`/charts?case=${kase}`, { reducedMotion: reduce ? "reduce" : "no-preference" });
+            const running = await page.evaluate(() => document.getAnimations().length);
+            if (reduce) assert.equal(running, 0, `${kase}: nothing moves`);
+            else assert.ok(running > 0, `${kase}: the marks come in`);
+            await page.done();
+          }
+        }
+      });
+
+      test("the day clock's tooltip comes up beside the hour, on the side of the clock the hour is on", async () => {
+        const page = await open("/charts?case=clock");
+        await tabTo(page, "#clock [data-slot=chart-body]");
+        for (const [key, hour] of [["Home", 0], ["PageDown", 2], ["PageDown", 4], ["PageDown", 6], ["PageDown", 8], ["End", 23]]) {
+          await page.keyboard.press(key);
+          await expectAt(page, "clock", hour, key);
+          const near = await page.evaluate((hour) => {
+            const f = Document.prototype.getElementById.call(document, "clock");
+            const anchor = f.querySelector(`[data-slot=clock-anchor][data-i="${hour}"]`).getBoundingClientRect();
+            const tip = f.querySelector("[data-slot=chart-tip]").getBoundingClientRect();
+            const x = anchor.left + anchor.width / 2, y = anchor.top + anchor.height / 2;
+            const dx = Math.max(tip.left - x, 0, x - tip.right), dy = Math.max(tip.top - y, 0, y - tip.bottom);
+            return Math.hypot(dx, dy);
+          }, hour);
+          assert.ok(near < 24, `hour ${hour}: the tooltip is beside its hour (${near} px away)`);
+        }
+        assert.match(await page.locator("#clock [data-slot=chart-announce]").textContent(), /11:00 pm/i);
+        await page.done();
+      });
+
+      test("the pointer on a wedge or a moment shows that hour", async () => {
+        const page = await open("/charts?case=clock");
+        const at = await hitPoint(page, "#clock [data-slot=clock-wedge][data-i='7']");
+        await page.mouse.move(at.x, at.y);
+        await expectAt(page, "clock", 7, "pointer", { speaks: false });
+        const moment = await hitPoint(page, "#clock [data-slot=clock-moment][data-i='13']");
+        await page.mouse.move(moment.x, moment.y);
+        const v = await expectAt(page, "clock", 13, "pointer on a moment", { speaks: false });
+        assert.equal(v.markup, 0, "a hostile moment's name is text");
         await page.done();
       });
     });
