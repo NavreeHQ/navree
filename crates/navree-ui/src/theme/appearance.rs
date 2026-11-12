@@ -119,6 +119,31 @@ impl Appearance {
         })
     }
 
+    /// This look with the reader's own choice laid over it: the theme and mode kept in the
+    /// cookie that the theme menu and the theme toggle set, then `?theme=` and `?mode=` in
+    /// `query`, which last for this request only. For a page outside the app shell, such
+    /// as a public site's, whose [`AppShell`](crate::AppShell) would do this for it.
+    ///
+    /// A page drawn this way differs from reader to reader at one address: cache it as
+    /// `private`, or not at all.
+    ///
+    /// ```
+    /// use navree_ui::theme::{Appearance, Mode, Theme};
+    ///
+    /// let mut headers = http::HeaderMap::new();
+    /// headers.insert(http::header::COOKIE, "navree_ui_theme=light".parse().unwrap());
+    /// let site = Appearance::new(Theme::NAVREE, Mode::System);
+    /// assert_eq!(site.clone().for_reader(&headers, None).mode(), Mode::Light);
+    /// assert_eq!(site.for_reader(&headers, Some("mode=dark")).mode(), Mode::Dark);
+    /// ```
+    #[must_use]
+    pub fn for_reader(mut self, headers: &HeaderMap, query: Option<&str>) -> Self {
+        let (cookie, url) = read_setting(headers, query);
+        cookie.over(&mut self, false);
+        url.over(&mut self, false);
+        self
+    }
+
     /// Whether this is what a page gets with nothing set: the default theme, dark.
     pub fn is_default(&self) -> bool {
         self.theme == Theme::NAVREE && self.mode == Mode::Dark
