@@ -426,6 +426,24 @@ fn kept(mut response: Response, answered: Answered) -> Response {
     response
 }
 
+/// `text` as a query value: the bytes that are not plain stay as `%` and two digits.
+pub(crate) fn percent(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(char::from(byte));
+            }
+            _ => {
+                out.push('%');
+                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte >> 4)]));
+                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte & 15)]));
+            }
+        }
+    }
+    out
+}
+
 /// The address of the next rows of a lazy list, from the address that asked:
 /// its own query less the list's words, then the direction and the cursor.
 fn next_rows(url: &str, dir: &str, cursor: &str) -> String {
@@ -445,18 +463,7 @@ fn next_rows(url: &str, dir: &str, cursor: &str) -> String {
     out.push_str("dir=");
     out.push_str(dir);
     out.push_str("&cursor=");
-    for byte in cursor.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(char::from(byte));
-            }
-            _ => {
-                out.push('%');
-                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte >> 4)]));
-                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte & 15)]));
-            }
-        }
-    }
+    out.push_str(&percent(cursor));
     out
 }
 
@@ -639,13 +646,83 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
         .map(|note| note.shell_stamp(request.sign_in.as_deref()))
         .unwrap_or_default();
     let parts = view.native_parts();
-    let (envelope, answered) = envelope(page, request);
+    let (envelope, answered) = match rows_after(&page, request) {
+        Some(rows) => rows,
+        None => envelope(page, request),
+    };
     let mut response = respond(parts.status, parts.cache, envelope, request, &shell);
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
     response.extensions_mut().insert(answered);
     response
+}
+
+/// A query value as the text it stands for. `None` when the bytes are not text.
+fn unpercent(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'%' => {
+                let pair = value.get(at + 1..at + 3)?;
+                out.push(u8::from_str_radix(pair, 16).ok()?);
+                at += 3;
+            }
+            b'+' => {
+                out.push(b' ');
+                at += 1;
+            }
+            byte => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// The rows after the ones a client has, when that is what it asked: the page
+/// is the table's page it was sent the address of (the address says which
+/// table), and the answer is its rows as an op that adds them, with the address
+/// of the rows after them. `None` for any other request, and when the page did
+/// not read whole or holds no such table: the client is then given the page.
+fn rows_after(page: &Page, request: &scope::Request) -> Option<(Envelope, Answered)> {
+    use navree_native::Op as O;
+    let query = request.url.split_once('?')?.1;
+    let region = query.split('&').find_map(|pair| {
+        let (name, value) = pair.split_once('=')?;
+        (name == super::table::ROWS_WORD).then(|| unpercent(value))
+    })??;
+    if !page.misses.is_empty() {
+        return None;
+    }
+    let target = super::table::table_id(&region);
+    let N::Table(table) = page.screen.body.find(&target)? else {
+        return None;
+    };
+    let to = request.client.vocab;
+    let readable = table.rows.iter().all(|row| {
+        row.nodes().all(|node| {
+            navree_native::vocab::newer_than(node, to).is_none()
+                && node.depth() <= navree_native::MAX_DEPTH - 4
+        })
+    });
+    if !readable {
+        return None;
+    }
+    let mut ops = vec![O::Rows {
+        target,
+        rows: table.rows.clone(),
+        at: navree_native::op::Edge::End,
+        more: table.more.clone(),
+    }];
+    ops.extend(page.ops.iter().cloned());
+    Some((
+        Envelope::ops(assets::BUILD, ops),
+        Answered::parts(page.dropped.clone()),
+    ))
 }
 
 /// What a web view's page varies on: who asked, by the native header, the

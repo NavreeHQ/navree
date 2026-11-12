@@ -29,7 +29,7 @@ use navree_native::node as n;
 
 use super::lower::{
     Control, Cx, N, Parts, Read, align_of, attr, elements, fail, fail_on, flat, has, hooks, id,
-    label_of, number, one, slot, text_of, tone, tone_of, with_id,
+    label_of, number, one, slot, text_of, tone, tone_of, with_id, CONTROL_HOOKS,
 };
 use crate::node::{Element, Node};
 
@@ -45,7 +45,12 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "badge" => (badge, &[]),
         "button" => (
             button,
-            &["data-ui-click", "data-ui-refresh", "data-ui-split-toggle"],
+            &[
+                "data-ui-click",
+                "data-ui-refresh",
+                "data-ui-split-toggle",
+                "data-ui-confirm",
+            ],
         ),
         "icon" => (
             |_, element| icon(element).map(|icon| vec![N::Icon(icon)]),
@@ -72,7 +77,7 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "choice" => (choice, &[]),
         "radio-group" => (radio_group, &[]),
         "input" | "checkbox" | "switch" | "native-select" | "textarea" => {
-            (control, &["data-ui-value"])
+            (control, CONTROL_HOOKS)
         }
         "fact-grid" => (fact_grid, &[]),
         "fact-card" => (
@@ -582,7 +587,7 @@ fn item(cx: &mut Cx, element: &Element) -> Read {
 }
 
 /// The header every dialog and sheet starts with: its title and description.
-fn dialog_header(parts: &mut Parts<'_>) -> Read<(Option<String>, Option<String>)> {
+pub(crate) fn dialog_header(parts: &mut Parts<'_>) -> Read<(Option<String>, Option<String>)> {
     let Some(header) = parts.slot("dialog-header") else {
         return Ok((None, None));
     };
@@ -828,7 +833,7 @@ fn field(cx: &mut Cx, element: &Element) -> Read {
             None => fail_on(format!("slot:{name}"), "a control no reader here knows"),
         };
     }
-    hooks(inner, &["data-ui-value"])?;
+    hooks(inner, CONTROL_HOOKS)?;
     let Control::Field(mut field) = cx.control(inner)? else {
         return fail("a field around a control that is not filled");
     };
@@ -909,7 +914,7 @@ fn choice(cx: &mut Cx, element: &Element) -> Read {
     let Some(inner) = inner else {
         return fail("a choice with no control");
     };
-    hooks(inner, &["data-ui-value"])?;
+    hooks(inner, CONTROL_HOOKS)?;
     let Control::Field(mut field) = cx.control(inner)? else {
         return fail("a choice around a control that is not filled");
     };
@@ -1648,6 +1653,46 @@ mod tests {
         assert_eq!(choice.value.as_deref(), Some("cod"));
         assert_eq!(choice.options.len(), 2);
         assert_eq!(choice.options[1].label, "Cash on delivery");
+    }
+
+    #[test]
+    fn what_a_control_does_when_it_changes_is_the_fields_changed() {
+        use crate::{Cmd, Trigger};
+        use navree_native::action::{Action, Command};
+        // A box that sends its form as it is ticked.
+        let N::Field(ticked) = read(
+            crate::Checkbox::new("done").on(Trigger::Change, Cmd::submit("check-3")),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(
+            ticked.changed,
+            Some(Action::Submit {
+                form: Some("check-3".into()),
+                href: None,
+                with: None
+            })
+        );
+        // A count of what is typed, with a most.
+        let N::Field(typed) = read(
+            crate::Checkbox::new("x").on(Trigger::Input, Cmd::count("bio-count", 160)),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(
+            typed.changed,
+            Some(Action::Commands {
+                list: vec![Command::Count {
+                    id: "bio-count".into(),
+                    max: Some(160)
+                }]
+            })
+        );
+        // A control that does nothing more has no `changed`.
+        let N::Field(plain) = read(crate::Checkbox::new("x")) else {
+            panic!("not a field");
+        };
+        assert_eq!(plain.changed, None);
     }
 
     #[test]

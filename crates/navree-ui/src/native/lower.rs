@@ -172,6 +172,17 @@ pub(crate) struct Cx {
     /// The page's token against forged posts, which the page's one post form
     /// carries and a post item of a menu names.
     pub(crate) csrf: Option<String>,
+    /// The words of the page's dialog of a question, while its buttons that ask
+    /// first are read.
+    pub(crate) asking: Option<Asking>,
+}
+
+/// The dialog a page asks a question in: the words that stand over the
+/// question a button names and the buttons that answer it.
+pub(crate) struct Asking {
+    pub(crate) title: String,
+    pub(crate) confirm: String,
+    pub(crate) cancel: Option<String>,
 }
 
 impl Cx {
@@ -185,6 +196,7 @@ impl Cx {
             forms: 0,
             ahead: std::collections::HashMap::new(),
             csrf: None,
+            asking: None,
         }
     }
 
@@ -947,7 +959,7 @@ impl Cx {
     /// An `<input>`, a `<select>` or a `<textarea>`.
     #[inline(never)]
     pub(crate) fn control(&mut self, element: &Element) -> Read<Control> {
-        hooks(element, &["data-ui-value"])?;
+        hooks(element, CONTROL_HOOKS)?;
         if has(element, "form") && self.forms == 0 {
             return fail("a control that names a form elsewhere");
         }
@@ -1093,15 +1105,40 @@ impl Cx {
             required: has(element, "required"),
             disabled: has(element, "disabled"),
             input,
+            changed: self.changed_of(element)?,
             ..n::Field::default()
         })))
+    }
+
+    /// What a control does when its value changes, besides holding it: the
+    /// commands written for a change or for typing, as one action. A lone send
+    /// of a form is the field's own submit.
+    pub(crate) fn changed_of(&mut self, element: &Element) -> Read<Option<Action>> {
+        let mut list = Vec::new();
+        for hook in ["data-ui-input", "data-ui-change"] {
+            if let Some(json) = attr(element, hook) {
+                list.extend(commands(&json)?);
+            }
+        }
+        Ok(match list.as_slice() {
+            [] => None,
+            [Command::Submit { id }] => Some(Action::Submit {
+                form: Some(id.clone()),
+                href: None,
+                with: None,
+            }),
+            _ => Some(Action::Commands { list }),
+        })
     }
 
     /// A `<button>`, or a link drawn as one: its words, its icon, what it
     /// means and what it does.
     #[inline(never)]
     pub(crate) fn button(&mut self, element: &Element) -> Read<n::Button> {
-        hooks(element, &["data-ui-click", "data-ui-refresh"])?;
+        hooks(
+            element,
+            &["data-ui-click", "data-ui-refresh", "data-ui-confirm"],
+        )?;
         let mut icon = None;
         let mut said = None;
         for child in flat(element.child_nodes()) {
@@ -1160,6 +1197,20 @@ impl Cx {
             Some(crate::Role::Navigation) => n::Role::Navigation,
             None => role,
         };
+        let ask = match attr(element, "data-ui-confirm") {
+            Some(question) => {
+                let Some(asking) = &self.asking else {
+                    return fail("a question to ask first, with no dialog to ask it in");
+                };
+                Some(n::Question {
+                    title: asking.title.clone(),
+                    text: Some(question.into_owned()).filter(|text| !text.is_empty()),
+                    confirm: asking.confirm.clone(),
+                    cancel: asking.cancel.clone(),
+                })
+            }
+            None => None,
+        };
         Ok(n::Button {
             id: id(element),
             label,
@@ -1167,6 +1218,7 @@ impl Cx {
             icon_only,
             role,
             prominence,
+            ask,
             disabled: has(element, "disabled")
                 || attr(element, "aria-disabled").as_deref() == Some("true"),
             pending: has(element, "data-pending"),
@@ -1324,6 +1376,10 @@ const QUIET_HOOKS: &[&str] = &[
     "data-ui-debounce",
     "data-ui-drag",
 ];
+
+/// The hooks a form control carries: the value a command sets, and what is done
+/// when it changes.
+pub(crate) const CONTROL_HOOKS: &[&str] = &["data-ui-value", "data-ui-change", "data-ui-input"];
 
 /// The hooks the generic reader answers for: commands on a click, a region
 /// that fetches itself, a form the runtime posts.

@@ -4,8 +4,9 @@
 //! and each is written straight to one string. A string can't be read into
 //! native parts, so when a native client asked, the rows are also built as a
 //! tree like everything else on the page: each cell is the component its
-//! column draws, or its text; a box to select the row, a menu of its actions
-//! and the control that opens its detail are the same parts the string has.
+//! column draws, or its text; a box to select the row and a menu of its actions
+//! are the same parts the string has. The detail of a row is built for every
+//! row, shut: a client opens it itself, with no request.
 //!
 //! The tree is not put in the page. The page keeps the string, so a table built
 //! for a native client and written for a browser is the table it always was; the
@@ -16,7 +17,6 @@ use serde::de::DeserializeOwned;
 
 use super::DataTable;
 use crate::components::icon;
-use crate::html::Href;
 use crate::icons;
 use crate::node::{Node, el};
 use crate::table::{ColumnRole, FilterBar, TableRow};
@@ -58,9 +58,6 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
         let mut text = String::new();
         for row in self.data.rows {
             let key = row.key();
-            let is_open = key
-                .as_ref()
-                .is_some_and(|key| state.open.iter().any(|open| open == key));
             let mut cells: Vec<Node> = Vec::with_capacity(state.cols.len() + hidden.len() + 3);
             if self.selectable() {
                 text.clear();
@@ -82,9 +79,6 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                     box_ = box_.flag("disabled", true);
                 }
                 cells.push(el("td").slot("cell-select").child(box_).into());
-            }
-            if self.has_detail() {
-                cells.push(self.native_toggle(key.as_deref().unwrap_or_default(), is_open));
             }
             for at in &state.cols {
                 let draw = self
@@ -141,7 +135,7 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                     )
                     .child(cells),
             );
-            if is_open && let Some(detail) = &self.detail {
+            if let Some(detail) = &self.detail {
                 rows.push(
                     el("tr")
                         .slot("row-detail")
@@ -151,40 +145,6 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             }
         }
         Some(Node::list(rows))
-    }
-
-    /// The control that opens or closes a row's detail.
-    fn native_toggle(&self, key: &str, open: bool) -> Node {
-        let href = self.query.href_with(|state| {
-            if open {
-                state.open.retain(|other| other != key);
-            } else if state.open.len() < crate::table::MAX_OPEN_ROWS {
-                state.open.push(key.to_owned());
-            }
-        });
-        el("td")
-            .slot("cell-toggle")
-            .child(
-                el("a")
-                    .slot("row-toggle")
-                    .flag("data-ui-in-region", true)
-                    .attr("href", Href::from(href))
-                    .attr("aria-expanded", if open { "true" } else { "false" })
-                    .attr(
-                        "aria-label",
-                        if open {
-                            self.labels.hide_details.to_string()
-                        } else {
-                            self.labels.show_details.to_string()
-                        },
-                    )
-                    .child(icon(if open {
-                        icons::CHEVRON_DOWN
-                    } else {
-                        icons::CHEVRON_RIGHT
-                    })),
-            )
-            .into()
     }
 
     /// A row's menu: the button named for the row and the menu it opens.

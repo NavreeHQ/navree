@@ -13,10 +13,10 @@ use super::super::lower::{Cx, N, Read, attr, elements, fail, flat, has, hooks, i
 use crate::node::{Element, Node};
 
 /// The hooks the root of a toggle group carries that this reader answers for.
-pub(crate) const HOOKS: &[&str] = &["data-ui-toggle-group"];
+pub(crate) const HOOKS: &[&str] = &["data-ui-toggle-group", "data-ui-change"];
 
 /// `ToggleGroup`.
-pub(crate) fn toggle_group(_: &mut Cx, element: &Element) -> Read {
+pub(crate) fn toggle_group(cx: &mut Cx, element: &Element) -> Read {
     let several = attr(element, "role").as_deref() == Some("group");
     let mut name = None;
     let mut options = Vec::new();
@@ -98,6 +98,7 @@ pub(crate) fn toggle_group(_: &mut Cx, element: &Element) -> Read {
         required: false,
         disabled: has(element, "data-disabled"),
         input,
+        changed: cx.changed_of(element)?,
         ..n::Field::default()
     })])
 }
