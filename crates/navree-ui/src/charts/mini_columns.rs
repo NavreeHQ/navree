@@ -267,6 +267,8 @@ impl MiniColumns {
                     name: name.clone(),
                     value: None,
                     index: None,
+                    detail: None,
+                    empty: false,
                 })
                 .collect(),
         );

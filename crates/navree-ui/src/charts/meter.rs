@@ -32,11 +32,13 @@ pub struct Segment {
     ink: Option<Ink>,
     fill: Option<Gradient>,
     text: Option<String>,
+    detail: Option<String>,
 }
 
 impl Segment {
     /// A segment called `name` that holds `value`. A value that is missing, zero or
-    /// below zero draws nothing and stays in the legend and the table.
+    /// below zero draws nothing and stays in the legend, its key hollow, and in the
+    /// table: give every part, the empty ones too, and the legend lists them all.
     pub fn new(name: impl Into<String>, value: impl IntoValue) -> Self {
         Self {
             name: name.into(),
@@ -44,7 +46,16 @@ impl Segment {
             ink: None,
             fill: None,
             text: None,
+            detail: None,
         }
+    }
+
+    /// A second line under its name in the legend, such as the range a heart-rate zone
+    /// covers (`109–127 bpm`). The table gives it a column of its own, named by
+    /// [`Meter::detail_name`], and the tooltip a line.
+    pub fn detail(mut self, text: impl Into<String>) -> Self {
+        self.detail = Some(text.into());
+        self
     }
 
     /// Colours the segment with any [`Ink`] of the theme. Without one, segments take the
@@ -112,6 +123,7 @@ pub struct Meter {
     label_from: f64,
     legend: Option<bool>,
     value_name: Option<String>,
+    detail_name: Option<String>,
     motion: Motion,
     rtl: bool,
 }
@@ -125,6 +137,7 @@ struct Part {
     ink: Ink,
     fill: Option<Gradient>,
     text: Option<String>,
+    detail: Option<String>,
 }
 
 impl Meter {
@@ -143,6 +156,7 @@ impl Meter {
             label_from: 15.0,
             legend: None,
             value_name: None,
+            detail_name: None,
             motion: Motion::none(),
             rtl: false,
         }
@@ -230,8 +244,16 @@ impl Meter {
         self
     }
 
+    /// What the segments' [details](Segment::detail) are called in the table and the
+    /// tooltip (`Detail` by default): `Heart rate`.
+    pub fn detail_name(mut self, name: impl Into<String>) -> Self {
+        self.detail_name = Some(name.into());
+        self
+    }
+
     /// Shows or hides the legend under the bar. It is shown, except on a
-    /// [compact](Self::compact) meter.
+    /// [compact](Self::compact) meter. It lists every segment, an empty one too, with
+    /// its key hollow.
     pub fn legend(mut self, shown: bool) -> Self {
         self.legend = Some(shown);
         self
@@ -283,6 +305,7 @@ impl Meter {
                 ink: s.ink.unwrap_or_else(|| Ink::nth(at)),
                 fill: s.fill.clone(),
                 text: s.text.clone(),
+                detail: s.detail.clone(),
             })
             .collect();
         if parts.len() > MAX_PARTS {
@@ -299,6 +322,7 @@ impl Meter {
                 ink: Ink::muted(),
                 fill: None,
                 text: None,
+                detail: None,
             });
         }
         parts
@@ -451,11 +475,18 @@ impl Meter {
                             None => "–".to_owned(),
                         }),
                         index: Some(at),
+                        detail: p.detail.clone(),
+                        empty: shares.fraction(p.value) <= 0.0,
                     })
                     .collect(),
             )
         });
 
+        let details = parts.iter().any(|p| p.detail.is_some());
+        let detail_name = self
+            .detail_name
+            .clone()
+            .unwrap_or_else(|| self.words.detail.to_string());
         let rows: Vec<(String, Vec<Node>)> = parts
             .iter()
             .map(|p| {
@@ -463,17 +494,18 @@ impl Meter {
                     Some(_) => p.ink.on(el("span")).child(write(p)).into(),
                     None => value_cell(None, &labels),
                 };
-                (
-                    p.name.clone(),
-                    vec![
-                        value,
-                        value_cell(
-                            p.value
-                                .map(|_| share_text(shares.fraction(p.value), &numbers)),
-                            &labels,
-                        ),
-                    ],
-                )
+                let mut cells = vec![
+                    value,
+                    value_cell(
+                        p.value
+                            .map(|_| share_text(shares.fraction(p.value), &numbers)),
+                        &labels,
+                    ),
+                ];
+                if details {
+                    cells.push(value_cell(p.detail.clone(), &labels));
+                }
+                (p.name.clone(), cells)
             })
             .collect();
 
@@ -506,11 +538,14 @@ impl Meter {
             ],
             summary,
             table: TableData {
-                head: vec![
+                head: [
                     (labels.category.to_string(), None),
                     (value_name.clone(), None),
                     (labels.share.to_string(), None),
-                ],
+                ]
+                .into_iter()
+                .chain(details.then(|| (detail_name.clone(), None)))
+                .collect(),
                 rows,
                 links: Vec::new(),
                 note: None,
@@ -533,7 +568,15 @@ impl Meter {
                         color: None,
                         key: false,
                     },
-                ],
+                ]
+                .into_iter()
+                .chain(details.then_some(TipLine {
+                    name: detail_name,
+                    unit: None,
+                    color: None,
+                    key: false,
+                }))
+                .collect(),
             }),
         })
     }
