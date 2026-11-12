@@ -436,7 +436,7 @@ top of the file and a fixture that proves what it flags and what it leaves alone
 
 | Rule | What it stops |
 |---|---|
-| `navree-sql-built-from-strings` | SQL text built with `format!` (a DML statement with an interpolated value) and passed to a statement-running API; bind parameters instead |
+| `navree-sql-built-from-strings` | SQL text built with `format!` (a DML statement with an interpolated value) and passed to a statement-running API or made into a statement; bind parameters instead. `navree-sql-built-from-strings-in-async` matches the same inside `async` blocks, where Semgrep's taint analysis does not look |
 | `navree-shell-command-string` | `sh -c`, `bash -c`, `cmd /C`, `powershell -Command`: a string handed to a shell; spawn the program and pass arguments |
 | `navree-process-outside-tooling` | spawning a process outside the crates that own that (CLI, Harbor, Dock, browser, documents, media, fleet, Navigator, test kit) |
 | `navree-tls-verification-disabled` | certificate verification switched off, in Rust and in Node code |
