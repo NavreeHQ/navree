@@ -397,18 +397,26 @@ async fn a_post_with_no_session_cookie_signs_nobody_in() {
     .build()
     .await;
     create_user(&app, "attacker@example.com").await;
-    let posts: [(&str, Vec<(&str, &str)>); 7] = [
+    // Each form, and the page its post is sent back to: its own, or where the step starts.
+    let posts: [(&str, &str, Vec<(&str, &str)>); 7] = [
         (
             "/sign-in",
+            "/sign-in?status=expired",
             vec![("email", "attacker@example.com"), ("password", PASSWORD)],
         ),
         (
             "/sign-up",
+            "/sign-up?status=expired",
             sign_up("mallory@example.com", PASSWORD, PASSWORD),
         ),
-        ("/forgot-password", vec![("email", "attacker@example.com")]),
+        (
+            "/forgot-password",
+            "/forgot-password?status=expired",
+            vec![("email", "attacker@example.com")],
+        ),
         (
             "/reset-password",
+            "/forgot-password?status=expired",
             vec![
                 ("email", "attacker@example.com"),
                 ("token", "x"),
@@ -416,21 +424,42 @@ async fn a_post_with_no_session_cookie_signs_nobody_in() {
                 ("password_confirmation", PASSWORD),
             ],
         ),
-        ("/sign-in/link", vec![("email", "attacker@example.com")]),
-        ("/sign-in/code", vec![("email", "attacker@example.com")]),
+        (
+            "/sign-in/link",
+            "/sign-in/link?status=expired",
+            vec![("email", "attacker@example.com")],
+        ),
+        (
+            "/sign-in/code",
+            "/sign-in/code?status=expired",
+            vec![("email", "attacker@example.com")],
+        ),
         (
             "/sign-in/code/verify",
+            "/sign-in?status=expired",
             vec![("email", "attacker@example.com"), ("code", "123456")],
         ),
     ];
-    for (path, fields) in &posts {
+    for (path, back, fields) in &posts {
         for site in [Some("same-site"), Some("none"), None] {
             let victim = app.client();
             let mut request = victim.post(path).header("accept", "text/html");
             if let Some(site) = site {
                 request = request.header("sec-fetch-site", site);
             }
-            request.form(fields).send().await.assert_status(403);
+            // Sent back to the form, as one left open past the session is: nothing ran.
+            let answer = request.form(fields).send().await.assert_status(303);
+            assert_eq!(answer.header("location"), Some(*back), "{path}");
+            // A post that isn't a page's form gets the plain refusal (once a path: the
+            // routes' throttles count these too).
+            if site.is_none() {
+                victim
+                    .post(path)
+                    .json(&serde_json::json!({ "email": "attacker@example.com" }))
+                    .send()
+                    .await
+                    .assert_status(403);
+            }
             victim
                 .get("/api/probe/whoami")
                 .send()
@@ -464,4 +493,78 @@ async fn a_post_with_no_session_cookie_signs_nobody_in() {
         .send()
         .await
         .assert_status(200);
+}
+
+// A form left open past the session's lifetime comes back without the session's cookie (the
+// browser let it go). It is sent back to its page, which says the session expired and holds
+// none of what was typed; signing out then lands where signing out lands. Each refusal is
+// logged in the audit trail as the session layer logs its own.
+#[tokio::test]
+async fn a_form_posted_after_the_session_expired_is_drawn_again_with_a_notice() {
+    let sink = Arc::new(crate::support::RecordingSink::default());
+    let app = with(
+        support::builder().override_value::<dyn navree_contracts::AuditSink>(sink.clone()),
+        AuthPages::new().sign_up().after_sign_out("/"),
+    )
+    .build()
+    .await;
+    let expired = app.client();
+    let back = expired
+        .post("/sign-up")
+        .header("accept", "text/html")
+        .form(&sign_up(
+            "simran@example.com",
+            "a secret typed here",
+            "a secret typed here",
+        ))
+        .send()
+        .await
+        .assert_status(303);
+    let to = back.header("location").expect("a page").to_owned();
+    assert_eq!(to, "/sign-up?status=expired");
+    let page = open(&expired, &to).await.assert_status(200).text();
+    assert!(
+        page.contains("Your session expired. Please try again."),
+        "{page}"
+    );
+    assert!(
+        !page.contains("simran@example.com") && !page.contains("a secret"),
+        "{page}"
+    );
+    assert!(
+        page.contains(r#"name="_csrf""#),
+        "a new form to post: {page}"
+    );
+    // Drawn again, the form works.
+    post_form(
+        &expired,
+        "/sign-up",
+        &sign_up("simran@example.com", PASSWORD, PASSWORD),
+    )
+    .await
+    .assert_status(303);
+
+    // The sign-in page says it in its own words.
+    let sign_in = open(&app.client(), "/sign-in?status=expired").await.text();
+    assert!(sign_in.contains("Sign in again."), "{sign_in}");
+
+    // Signing out with the session gone lands where signing out does.
+    let out = app
+        .client()
+        .post("/sign-out")
+        .header("accept", "text/html")
+        .form(&[("x", "1")])
+        .send()
+        .await
+        .assert_status(303);
+    assert_eq!(out.header("location"), Some("/"));
+
+    let refusals = sink.with_action("csrf.mismatch");
+    assert_eq!(refusals.len(), 2, "{refusals:?}");
+    assert!(
+        refusals
+            .iter()
+            .all(|entry| entry.metadata["reason"] == "no_session")
+    );
+    assert_eq!(refusals[0].metadata["path"], "/sign-up");
 }
