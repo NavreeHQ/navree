@@ -121,3 +121,7 @@ Put the board in a [region](/docs/ui/regions/) that follows a server-sent event 
 ## Lazy columns
 
 Draw the first cards of each column and end it with `SortList::more(...)`: a form the page submits as it scrolls into sight, whose cursor is the last card drawn. Read it as "after this card, wherever it is now": look the card up in this column, within what the caller may see, and page after its current rank and id, in one statement so fresh ranks can't come between the two. Fresh ranks between two pages then skip nothing, where a cursor of the old rank would skip the cards that moved up past it. If the card has left the column, carry on from one card before as many as the page holds: the page joins a repeat without it, where a gap would hide a card. Answer with `Sortable::page(key)`. Cap how many a column keeps in the page with `SortList::end_note(...)`, and let filters and search find the rest. The example board holds 20,000 cards this way.
+
+## A grid you arrange, saved whole
+
+When people arrange a few tiles of their own (the blocks of a home-screen widget, the cards of a personal dashboard) there is one short list and no one else moving it. [SortableGrid](/docs/components/sortable-grid/) suits that better: tiles move by mouse, touch or keys and are taken away, and a moment after the last change the whole order is posted at once. `GridOrder::arrange` puts it together with the tiles you hold: a tile added in another window keeps its place, and only what was asked is taken away.

@@ -434,6 +434,7 @@ export const sections: DocsSection[] = [
       "lazy-list",
       "stat",
       "sortable",
+      "sortable-grid",
       // Charts
       "line-chart",
       "area-chart",
@@ -454,6 +455,7 @@ export const sections: DocsSection[] = [
       "matrix-heatmap",
       "relation-list",
       "scatter-chart",
+      "chart-image",
       // App blocks
       "info-tip",
       "chart-skeleton",

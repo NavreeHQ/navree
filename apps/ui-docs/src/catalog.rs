@@ -146,7 +146,14 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "data",
         title: "Data",
-        components: &["table", "data-table", "lazy-list", "stat", "sortable"],
+        components: &[
+            "table",
+            "data-table",
+            "lazy-list",
+            "stat",
+            "sortable",
+            "sortable-grid",
+        ],
     },
     Group {
         id: "charts",
@@ -171,6 +178,7 @@ pub const GROUPS: &[Group] = &[
             "matrix-heatmap",
             "relation-list",
             "scatter-chart",
+            "chart-image",
         ],
     },
     Group {
@@ -776,6 +784,20 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
+    component(
+        "sortable-grid",
+        "SortableGrid",
+        &[
+            "SortableGrid",
+            "GridTile",
+            "GridFit",
+            "SortableGridLabels",
+            "GridOrder",
+            "Arranged",
+        ],
+        "thumb",
+    )
+    .parts("default"),
     // Charts
     component(
         "line-chart",
@@ -887,6 +909,14 @@ pub const COMPONENTS: &[Component] = &[
     )
     .about("A translucent point for each pair of values, in one series or several: a cloud of beats, steps against resting heart rate. Axes can be hidden and both can share a range.")
     .parts("default"),
+    component(
+        "chart-image",
+        "Chart pictures",
+        &["ChartImage", "Tile", "Block", "TileSize", "Backdrop", "Png"],
+        "thumb",
+    )
+    .about("A chart drawn as a PNG on the server, for a home-screen widget, an email or an Open Graph card.")
+    .parts("ring"),
     // App blocks
     component("info-tip", "Info tip", &["InfoTip", "InfoMark"], "thumb")
         .about("A small \"?\" or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of."),
