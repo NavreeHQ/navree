@@ -1,0 +1,185 @@
+---
+title: "Search, previews and answers"
+description: "What a page tells search engines, link previews and answer engines: description, canonical, robots, Open Graph, Twitter cards, hreflang and JSON-LD, plus a sitemap and robots.txt."
+---
+
+A public page has to say more about itself than its title. `View::seo` writes everything a search engine, a link preview and an answer engine reads, in the page's head, escaped, and under the toolkit's strict content security policy.
+
+```rust
+use navree::ui::seo::*;
+use navree::ui::View;
+
+let site = "https://kesar.example";
+let body = "Three plans, priced in rupees.";
+
+let page = View::new("Kesar pricing: free, Plus and Family plans in rupees")
+    .lang("en")
+    .seo(
+        Seo::new("Kesar is free for one person. Plus is ₹299 a month or ₹2,990 a year; Family covers five people for ₹499 a month.")
+            .canonical(format!("{site}/pricing/"))
+            .site_name("Kesar")
+            .locale("en_IN")
+            .image(SocialImage::new(format!("{site}/og/pricing.png"), 1200, 630, "Kesar's three plans side by side"))
+            .twitter_site("@kesarhealth")
+            .language("en-IN", format!("{site}/pricing/"))
+            .language("hi-IN", format!("{site}/hi/pricing/"))
+            .json_ld(
+                JsonLd::new()
+                    .node(Organization::new("Kesar", format!("{site}/")).id(format!("{site}/#organization")).logo(format!("{site}/logo.png")).same_as("https://www.linkedin.com/company/kesar-health"))
+                    .node(WebSite::new("Kesar", format!("{site}/")).id(format!("{site}/#website")).publisher(format!("{site}/#organization")))
+                    .node(
+                        WebPage::new(format!("{site}/pricing/"), "Pricing", "Plans in rupees.")
+                            .kind(PageKind::ItemPage)
+                            .date_modified("2026-11-10")
+                            .is_part_of(format!("{site}/#website"))
+                            .breadcrumb(format!("{site}/pricing/#breadcrumb")),
+                    )
+                    .node(BreadcrumbList::new().id(format!("{site}/pricing/#breadcrumb")).step("Home", format!("{site}/")).step("Pricing", format!("{site}/pricing/"))),
+            ),
+    )
+    .body(body);
+```
+
+## What it writes
+
+After the `<title>`, in this order:
+
+| Tag | From |
+|---|---|
+| `<meta name="description">` | `Seo::new` |
+| `<meta name="robots">` | `.robots(Robots)`: by default `index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1`; `.noindex()` writes `noindex, follow` |
+| `<link rel="canonical">` | `.canonical(url)` |
+| `<link rel="alternate" hreflang>` | `.language(tag, url)`, once per language, `x-default` included |
+| `<link rel="alternate" type>` | `.format(mime, url)`: the page as Markdown for answer engines, a feed |
+| `og:type`, `og:site_name`, `og:title`, `og:description`, `og:url`, `og:locale`, `og:locale:alternate` | the page's title, `.social_title`, `.site_name`, `.locale`, `.other_locale`, `.og_type` |
+| `og:image`, `og:image:width`, `og:image:height`, `og:image:alt`, `og:image:type` | `.image(SocialImage)` |
+| `twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`, `twitter:image:alt`, `twitter:site`, `twitter:creator` | the same values, `.twitter_card`, `.twitter_site`, `.twitter_creator` |
+| `<script type="application/ld+json">` | each `.json_ld(JsonLd)` |
+
+Every value is escaped as it is written. An address that is not a path or an `http` or `https` URL (`javascript:`, `data:`, `mailto:`) is left out rather than written.
+
+## Structured data
+
+`JsonLd` is one graph: `{"@context":"https://schema.org","@graph":[...]}`. The typed builders fill what each type needs and take any other property with `.prop(name, value)`; `Thing::new("Event")` builds a type they don't cover.
+
+| Builder | Type |
+|---|---|
+| `Organization::new(name, url)` | `.logo`, `.same_as`, `.slogan`, `.description`, `.email` |
+| `WebSite::new(name, url)` | `.publisher(id)`, `.in_language` |
+| `WebPage::new(url, name, description)` | `.kind(PageKind)`, `.date_modified`, `.is_part_of(id)`, `.breadcrumb(id)`, `.main_entity(id)`, `.image` |
+| `SoftwareApplication::new(name, category)` | `.description`, `.operating_system`, `.offer(Offer)`, `.free`, `.feature`, `.version`, `.publisher(id)` |
+| `Offer::new(price, currency)` | `.name`, `.url`, `.description` |
+| `FaqPage::new(url)` | `.question(question, answer)`; [`Faq::faq_page`](/docs/components/faq/) builds it from the questions on the page |
+| `BreadcrumbList::new()` | `.step(name, url)`, numbered from 1 |
+
+Nodes point at each other by `@id`: give the organization and the site an id (`https://kesar.example/#organization`) and link to it with `.publisher(id)`, `.is_part_of(id)`, `.breadcrumb(id)`.
+
+### Under the content security policy
+
+The data block is a `<script type="application/ld+json">`. A browser never runs a script of that type, so the page's `script-src 'self'` does not apply to it: it needs no nonce, no hash and no `unsafe-inline`, and `PAGE_CSP` stays as it is. The proof suite opens every page with a listener for policy reports and finds none.
+
+Its text cannot close the block early: `<`, `>` and `&` are written as `<`, `>` and `&`, and the line and paragraph separators as escapes too. A JSON reader reads every one back as the same character, so a question with `</script>` in it reaches a search engine as written.
+
+## Checking a page
+
+`View::seo_problems()` lists what a search result or a link preview would hold against the page, one line each: a title outside 30 to 60 characters, a description outside 70 to 160, a canonical address or picture that is not an absolute `https` URL, a picture without its size or alt text, no site name or locale, and structured data whose nodes lack what their types need, whose `@id` references point at nothing, whose breadcrumb does not end at the page, or that has no organization, site, page node or breadcrumb. A page marked `noindex` is only checked for that. Assert it is empty in a test of each public page:
+
+```rust
+use navree::ui::View;
+
+fn public_pages() -> Vec<View> {
+    // The home page, the pricing page, the privacy policy: every page the site serves.
+    Vec::new()
+}
+
+#[test]
+fn every_public_page_says_what_it_is() {
+    for page in public_pages() {
+        assert!(page.seo_problems().is_empty(), "{:#?}", page.seo_problems());
+    }
+}
+```
+
+## The sitemap and robots.txt
+
+Both answer as files from a route of your own, cached for an hour.
+
+```rust
+use navree::ui::seo::*;
+
+fn sitemap() -> Sitemap {
+    Sitemap::new()
+        .url(SitemapUrl::new("https://kesar.example/").lastmod("2026-11-12"))
+        .url(SitemapUrl::new("https://kesar.example/pricing/").lastmod("2026-11-10").language("hi-IN", "https://kesar.example/hi/pricing/"))
+}
+
+fn robots() -> RobotsTxt {
+    RobotsTxt::new()
+        .disallow("/account/")
+        .welcome(AI_CRAWLERS)
+        .sitemap("https://kesar.example/sitemap.xml")
+}
+```
+
+`RobotsTxt::new()` lets every crawler read every path. `.welcome(AI_CRAWLERS)` names the crawlers of AI search and assistants in groups of their own that allow everything, so the welcome stays explicit if the rule for everyone changes. A value is cut at its first line break, so no text can add a rule.
+
+## The reader's light or dark choice
+
+A public page is drawn outside the app shell. `Appearance::for_reader(headers, query)` lays the reader's choice over the site's own look: the cookie the [theme toggle](/docs/components/site-footer/#the-theme-toggle) sets, then `?theme=` and `?mode=` for that page only. A page drawn this way differs from reader to reader, so cache it as `private`.
+
+```rust
+use http::HeaderMap;
+use navree::ui::theme::{Appearance, Mode, Theme};
+use navree::ui::View;
+
+fn public_page(title: &'static str, headers: &HeaderMap, query: Option<&str>) -> View {
+    let look = Appearance::new(Theme::SUNSET, Mode::System).for_reader(headers, query);
+    View::new(title).appearance(look).cache("private, no-cache")
+}
+```
+
+## API
+
+### Seo
+
+<UiProps type="Seo" />
+
+### Robots
+
+<UiProps type="Robots" />
+
+### SocialImage
+
+<UiProps type="SocialImage" />
+
+### OgType
+
+<UiProps type="OgType" />
+
+### TwitterCard
+
+<UiProps type="TwitterCard" />
+
+### JsonLd
+
+<UiProps type="JsonLd" />
+
+### Thing
+
+<UiProps type="Thing" />
+
+### PageKind
+
+<UiProps type="PageKind" />
+
+### Sitemap
+
+<UiProps type="Sitemap" />
+
+### SitemapUrl
+
+<UiProps type="SitemapUrl" />
+
+### RobotsTxt
+
+<UiProps type="RobotsTxt" />

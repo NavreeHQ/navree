@@ -1,0 +1,55 @@
+---
+title: "SiteFooter"
+description: "The foot of every page: the brand and a line, columns of links, accounts elsewhere, small print and a theme toggle."
+---
+
+<UiPreview example="site-footer/default" />
+
+`SiteFooter` closes every page: the brand and a line about the site, columns of links, links to accounts elsewhere as icons, lines of small print, and a [ThemeToggle](#the-theme-toggle).
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::theme::Mode;
+use navree::ui::*;
+
+let mode = Mode::System;
+let footer = SiteFooter::new(Brand::new("Kesar", "/").icon(icons::SUN))
+    .tagline("Your sleep, heart and steps, read calmly. Made in Mohali.")
+    .social(icons::MAIL, "Write to Kesar", "mailto:namaste@kesar.example")
+    .column(FooterColumn::new("Product").link("Features", "/#features").link("Pricing", "/pricing/"))
+    .column(FooterColumn::new("Company").link("Contact", "/contact/").link("Privacy", "/privacy/"))
+    .legal("© 2026 Kesar Health Pvt. Ltd., Mohali, Punjab.")
+    .theme_toggle(ThemeToggle::new(mode).back("/pricing/"));
+```
+
+## The theme toggle
+
+`ThemeToggle` is three buttons, light, dark and the device's own, in a plain form. Each posts its mode to the toolkit's appearance route, which keeps it in the reader's cookie and sends them back to `.back(path)`, so it works with no script. Draw the page with `Appearance::for_reader` and pass the mode in use, so its button is pressed. `.action(href)` posts to a route of yours instead, to keep the choice with the user, and `.csrf(token)` adds the session's token.
+
+## Anatomy
+
+<UiAnatomy component="site-footer" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The columns are a navigation landmark named Footer.
+- Each theme button says its mode in words and whether it is pressed (`aria-pressed`).
+- Each account link is named by its label.
+
+</UiA11y>
+
+## API
+
+### SiteFooter
+
+<UiProps type="SiteFooter" />
+
+### FooterColumn
+
+<UiProps type="FooterColumn" />
+
+### ThemeToggle
+
+<UiProps type="ThemeToggle" />

@@ -1,0 +1,52 @@
+---
+title: "FeatureGrid"
+description: "Features in cards: an icon, a title, a line and an optional link or picture, in two to four columns."
+---
+
+<UiPreview example="feature-grid/default" />
+
+`FeatureGrid` lays features out in cards, in three columns by default from 64 rem up, two from 40 rem, one on a phone. Each `Feature` has an icon, a title (`h3`), a line or two, and optionally a link and a picture.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+FeatureGrid::new()
+    .cols(3)
+    .feature(Feature::new("Sleep in stages", "Deep, REM and light sleep, night by night.").icon(icons::BED))
+    .feature(Feature::new("Resting heart", "Against your own two weeks.").icon(icons::HEART))
+    .feature(Feature::new("Private by design", "Stored in India, never sold.").icon(icons::LOCK).link("Read the privacy policy", "/privacy/"))
+```
+
+## A bento grid
+
+`Feature::wide()` takes two columns from 64 rem up, and `.media(node)` puts a picture under the words: a chart, a screenshot, a part of the product. Mixed, they make a bento grid.
+
+<UiPreview example="feature-grid/bento" />
+
+## Without cards
+
+`.plain()` lays the features out on the section's own background, with no card around each.
+
+## Anatomy
+
+<UiAnatomy component="feature-grid" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The features are a list; each title is an `h3` under the section's `h2`.
+- Icons are hidden from assistive technology.
+
+</UiA11y>
+
+## API
+
+### FeatureGrid
+
+<UiProps type="FeatureGrid" />
+
+### Feature
+
+<UiProps type="Feature" />

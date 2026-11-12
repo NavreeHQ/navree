@@ -72,6 +72,7 @@ pub const GROUPS: &[Group] = &[
             "typography",
             "kbd",
             "attachment",
+            "picture",
             "markdown",
             "code-block",
             "message",
@@ -180,6 +181,28 @@ pub const GROUPS: &[Group] = &[
             "breathing-guide",
             "dock",
             "day-pager",
+        ],
+    },
+    Group {
+        id: "marketing",
+        title: "Marketing",
+        components: &[
+            "site-page",
+            "site-header",
+            "hero",
+            "section",
+            "logo-cloud",
+            "feature-grid",
+            "feature-rows",
+            "stat-band",
+            "device-frames",
+            "testimonials",
+            "pricing",
+            "faq",
+            "cta-band",
+            "newsletter",
+            "legal-page",
+            "site-footer",
         ],
     },
     Group {
@@ -974,6 +997,74 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .page("/docs/ui/reports/"),
+    // Marketing
+    component("picture", "Picture", &["Picture"], "default").parts("default"),
+    component(
+        "site-page",
+        "SitePage",
+        &["SitePage", "Brand"],
+        "default",
+    )
+    .parts("default"),
+    component("site-header", "SiteHeader", &["SiteHeader", "Brand"], "default")
+        .parts("default"),
+    component("hero", "Hero", &["Hero", "Backdrop"], "default").parts("default"),
+    component(
+        "section",
+        "Section",
+        &["Section", "SectionHeading", "HeadingAlign", "SectionTone"],
+        "default",
+    )
+    .parts("default"),
+    component("logo-cloud", "LogoCloud", &["LogoCloud"], "default").parts("default"),
+    component(
+        "feature-grid",
+        "FeatureGrid",
+        &["FeatureGrid", "Feature"],
+        "default",
+    )
+    .parts("default"),
+    component(
+        "feature-rows",
+        "FeatureRows",
+        &["FeatureRows", "FeatureRow"],
+        "default",
+    )
+    .parts("default"),
+    component("stat-band", "StatBand", &["StatBand"], "default").parts("default"),
+    component(
+        "device-frames",
+        "Device frames",
+        &["BrowserFrame", "PhoneFrame"],
+        "default",
+    )
+    .parts("default")
+    .about("A screenshot or a live part of the product in a browser window or a phone, light or dark."),
+    component(
+        "testimonials",
+        "Testimonials",
+        &["Testimonials", "Testimonial"],
+        "default",
+    )
+    .parts("default"),
+    component("pricing", "Pricing", &["Pricing", "Plan"], "default").parts("default"),
+    component("faq", "Faq", &["Faq"], "default").parts("default"),
+    component("cta-band", "CtaBand", &["CtaBand"], "default").parts("default"),
+    component("newsletter", "Newsletter", &["Newsletter"], "default").parts("default"),
+    component(
+        "legal-page",
+        "LegalPage",
+        &["LegalPage", "LegalSection"],
+        "default",
+    )
+    .parts("default"),
+    component(
+        "site-footer",
+        "SiteFooter",
+        &["SiteFooter", "FooterColumn", "ThemeToggle"],
+        "default",
+    )
+    .parts("default"),
     // The example apps' views, shown on `/ui/` rather than a docs page.
     component(
         "build-anything",

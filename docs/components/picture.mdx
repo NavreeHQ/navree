@@ -1,0 +1,48 @@
+---
+title: "Picture"
+description: "A responsive image: srcset and sizes, AVIF and WebP with the original as the fallback, its width and height, and lazy or first loading."
+---
+
+<UiPreview example="picture/default" />
+
+`Picture` draws an image that is sharp and small on every screen. It lists the image at its widths (`srcset`) and how wide it is drawn (`sizes`), offers AVIF and WebP to the browsers that read them with the original as the fallback, carries its width and height so the page keeps its room while it loads, and loads lazily. Alt text is required.
+
+```rust
+use navree::ui::*;
+
+Picture::new("/img/today-1600.png", "Today's score: a ring at 82, with sleep, heart and steps under it", 1600, 1000)
+    .srcset([(800, "/img/today-800.png"), (1600, "/img/today-1600.png")])
+    .avif([(800, "/img/today-800.avif"), (1600, "/img/today-1600.avif")])
+    .webp([(800, "/img/today-800.webp"), (1600, "/img/today-1600.webp")])
+    .sizes("(min-width: 64rem) 40rem, 100vw")
+```
+
+## The hero's image
+
+`.priority()` loads the image at once and first (`loading="eager"`, `fetchpriority="high"`): use it for the one large image at the top of a page. Every other image loads lazily, as it nears the screen; without `.sizes`, a lazy image is measured where it lands (`sizes="auto"`).
+
+## Alt text
+
+`Picture::new` takes the alt text: write what the image tells a reader who can't see it. `Picture::decorative` writes an empty `alt` for an image that only decorates.
+
+## Where images come from
+
+The content security policy's `img-src` is `'self'` and `data:`: serve images from the site's own origin. A file whose URL is not a path or an `http` or `https` address, or that holds a space or a comma, is left out of the `srcset`.
+
+## Anatomy
+
+<UiAnatomy component="picture" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The `<img>` always has an `alt`: the words given, or empty for a decorative image.
+
+</UiA11y>
+
+## API
+
+### Picture
+
+<UiProps type="Picture" />
