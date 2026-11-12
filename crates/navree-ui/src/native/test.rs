@@ -40,10 +40,9 @@ impl TestNative {
     /// one was asking. Build the page inside [`TestNative::build`] for those.
     pub fn of(view: &View) -> Self {
         let mut view = view.clone();
-        let parts = view.native_parts();
         Self {
             client: phone(),
-            page: page::read(parts.title, parts.body, false),
+            page: page::of_view(&mut view, false),
         }
     }
 
@@ -74,14 +73,10 @@ impl TestNative {
     /// assert!(!page.sees("Drag a card"));
     /// ```
     pub fn build(client: navree_native::Client, build: impl FnOnce() -> View) -> Self {
-        let asked = Asked::Native(std::sync::Arc::new(scope::Request {
-            client: client.clone(),
-            url: String::new(),
-        }));
+        let asked = Asked::Native(std::sync::Arc::new(scope::Request::new(client.clone(), "")));
         let mut view = scope::sync(asked, build);
-        let parts = view.native_parts();
         Self {
-            page: page::read(parts.title, parts.body, false),
+            page: page::of_view(&mut view, false),
             client,
         }
     }
@@ -109,10 +104,7 @@ impl TestNative {
 
     /// The envelope the client gets for the address `url`.
     pub fn envelope_at(&self, url: &str) -> Envelope {
-        let request = scope::Request {
-            client: self.client.clone(),
-            url: url.to_owned(),
-        };
+        let request = scope::Request::new(self.client.clone(), url);
         super::swap::envelope(self.page.clone(), &request).0
     }
 
@@ -225,7 +217,7 @@ mod tests {
         let envelope = page.envelope_at("/orders/1");
         assert!(envelope.screen.is_some());
         assert!(envelope.web.is_none());
-        assert_eq!(envelope.build, crate::assets::BUILD);
+        assert_eq!(envelope.build, super::super::Stamp::of(None).as_str());
     }
 
     #[test]

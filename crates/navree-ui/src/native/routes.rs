@@ -1,15 +1,94 @@
-//! The route a native client fetches the app's shell from.
+//! The route a native client fetches the app's shell from, and the stamps a
+//! client keeps its screens under.
+//!
+//! The shell of a request is built as the error pages build theirs: by the
+//! app's [`ErrorShell`](crate::ErrorShell) when it builds its shell per
+//! request, else from the one [`Shell`] it registered. So an app whose shell
+//! names the person signed in, or counts their unread messages, answers a
+//! native client with the same.
 
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, OnceLock};
 
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, VARY};
-use http::{HeaderMap, HeaderValue, Method};
+use http::request::Parts;
+use http::{HeaderValue, Method};
 use navree_http::response::{IntoResponse, Response};
-use navree_http::{ApiMeta, Controller, RouteDef};
+use navree_http::{ApiMeta, Controller, ErrorContext, RouteDef};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 
-use crate::assets;
+use crate::pages::PagesOptions;
 use crate::shell::Shell;
+
+/// The version of the reading of pages into native parts: a page that reads
+/// into other parts than before is a new number, so a client drops what it kept.
+pub const LOWERING: u32 = 1;
+
+/// The response header that carries the stamp of the app's shell: a client
+/// that sees one it has not seen fetches the shell again.
+pub const SHELL_STAMP_HEADER: &str = "x-navree-shell";
+
+/// The app's stamp: what a native client keeps its screens under, and drops
+/// them when it changes. It is made of the app's version (`app.version`), the
+/// version of the reading of pages and the vocabulary; an app that names no
+/// version stamps the time it started, so each start is a new stamp.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stamp(Arc<str>);
+
+impl Stamp {
+    /// The stamp of an app at `version`.
+    ///
+    /// ```
+    /// use navree_ui::native::Stamp;
+    ///
+    /// assert_eq!(Stamp::of(Some("1.4.0")), Stamp::of(Some("1.4.0")));
+    /// assert_ne!(Stamp::of(Some("1.4.0")), Stamp::of(Some("1.4.1")));
+    /// assert_eq!(Stamp::of(Some("1.4.0")).as_str().len(), 12);
+    /// ```
+    pub fn of(version: Option<&str>) -> Self {
+        static STARTED: OnceLock<u128> = OnceLock::new();
+        let mut hasher = std::hash::DefaultHasher::new();
+        match version {
+            Some(version) => version.hash(&mut hasher),
+            None => STARTED
+                .get_or_init(|| {
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |since| since.as_nanos())
+                })
+                .hash(&mut hasher),
+        }
+        LOWERING.hash(&mut hasher);
+        navree_native::VOCAB.hash(&mut hasher);
+        Self(short(hasher.finish()).into())
+    }
+
+    /// The stamp, as it goes on the wire.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The stamp of what a client draws from: a shell document, or any data.
+pub(crate) fn stamp_of(data: &impl Hash) -> String {
+    let mut hasher = std::hash::DefaultHasher::new();
+    data.hash(&mut hasher);
+    short(hasher.finish())
+}
+
+/// Twelve hexadecimal digits of `hash`.
+fn short(hash: u64) -> String {
+    format!("{:012x}", hash >> 16)
+}
+
+/// The app's stamp, from its settings: what the module provides.
+pub(crate) async fn app_stamp(ctx: &AppContext) -> Stamp {
+    let version = match ctx.try_get::<navree_config::Config>().await {
+        Some(config) => config.app_version(),
+        None => None,
+    };
+    Stamp::of(version.as_deref())
+}
 
 /// Serves [`SHELL_PATH`](navree_native::SHELL_PATH).
 pub(crate) struct Routes {
@@ -30,29 +109,45 @@ impl Injectable for Routes {
     }
 }
 
-/// The app's shell as a native client draws it: read from the shell the app
-/// registered, drawn around an empty page for this request. An app with no
-/// shell answers a document with no destinations.
-async fn document(ctx: &AppContext, headers: &HeaderMap) -> Response {
-    let document = match ctx.try_get::<Shell>().await {
-        Some(shell) => {
-            let view = shell.for_request("/", headers).page("").to_view();
-            let mut document = super::page::shell(assets::BUILD, view.body_node())
-                .unwrap_or_else(|| navree_native::Shell::new(assets::BUILD, ""));
-            document.theme = view
-                .look()
-                .into_iter()
-                .find(|(name, _)| *name == "data-theme")
-                .map(|(_, theme)| navree_native::shell::Theme {
-                    name: Some(theme),
-                    ..navree_native::shell::Theme::default()
-                });
+/// The shell of the request of `parts`, as an error page's is built: the
+/// app's `ErrorShell`, given the person signed in, or the `Shell` it
+/// registered for everyone.
+async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppShell> {
+    let shell = match parts.extensions.get::<Arc<ErrorContext>>() {
+        Some(context) => {
+            let mut context = context.as_ref().clone();
+            context.user = navree_http::CurrentPrincipal::from_parts(parts)
+                .ok()
+                .map(|principal| principal.0.user_id);
+            crate::pages::shell_of(&context).await
+        }
+        None => ctx.try_get::<Shell>().await.map(|shell| (*shell).clone()),
+    }?;
+    Some(shell.for_request("/", &parts.headers))
+}
+
+/// The app's shell as a native client draws it, for this request: the
+/// person signed in and their menu are theirs.
+async fn document(ctx: &AppContext, parts: &Parts) -> Response {
+    let stamp = match ctx.try_get::<Stamp>().await {
+        Some(stamp) => (*stamp).clone(),
+        None => app_stamp(ctx).await,
+    };
+    let sign_in = ctx
+        .try_get::<PagesOptions>()
+        .await
+        .map(|options| options.sign_in.clone());
+    let document = match shell_of(ctx, parts).await {
+        Some(shell) => shell.native_document(stamp.as_str(), sign_in.as_deref()),
+        None => {
+            let mut document = navree_native::Shell::new(stamp.as_str(), "");
+            document.routes = crate::shell::native_routes(sign_in.as_deref());
             document
         }
-        None => navree_native::Shell::new(assets::BUILD, ""),
     };
+    let shell = crate::shell::shell_stamp(&document);
     let body = serde_json::to_string(&document).unwrap_or_else(|_| String::from("{}"));
-    (
+    let mut response = (
         [
             (
                 CONTENT_TYPE,
@@ -64,7 +159,11 @@ async fn document(ctx: &AppContext, headers: &HeaderMap) -> Response {
         ],
         body,
     )
-        .into_response()
+        .into_response();
+    if let Ok(value) = HeaderValue::from_str(&shell) {
+        response.headers_mut().insert(SHELL_STAMP_HEADER, value);
+    }
+    response
 }
 
 impl Controller for Routes {
@@ -78,9 +177,9 @@ impl Controller for Routes {
             RouteDef::on(
                 Method::GET,
                 format!("!{}", navree_native::SHELL_PATH),
-                move |headers: HeaderMap| {
+                move |parts: Parts| {
                     let ctx = ctx.clone();
-                    async move { document(&ctx, &headers).await }
+                    async move { document(&ctx, &parts).await }
                 },
             )
             .name("native.shell")
@@ -88,14 +187,33 @@ impl Controller for Routes {
             .api(ApiMeta {
                 summary: Some("The app's shell, for a native client".to_owned()),
                 description: Some(
-                    "The app's name, its destinations and the menu of the person signed in, as \
-                     data a native client draws its own chrome from. It is fetched once, and \
-                     again when an answer's build changes."
+                    "The app's name, its destinations, the menu of the person signed in, its \
+                     theme's accent and how its screens are presented, as data a native client \
+                     draws its own chrome from. Its stamp is in `X-Navree-Shell`; a client \
+                     fetches it again when an answer carries another."
                         .to_owned(),
                 ),
                 tags: vec!["UI".to_owned()],
                 ..ApiMeta::default()
             }),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stamp_changes_with_the_app_and_nothing_else() {
+        let one = Stamp::of(Some("2.1.0"));
+        assert_eq!(one, Stamp::of(Some("2.1.0")));
+        assert_ne!(one, Stamp::of(Some("2.1.1")));
+        // With no version, each start of the app is its own stamp; within one, it holds.
+        assert_eq!(Stamp::of(None), Stamp::of(None));
+        assert_ne!(Stamp::of(None), one);
+        assert!(one.as_str().bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_eq!(stamp_of(&"a"), stamp_of(&"a"));
+        assert_ne!(stamp_of(&"a"), stamp_of(&"b"));
     }
 }

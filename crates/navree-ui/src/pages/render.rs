@@ -174,7 +174,7 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
         Form::Region => region(request, error, &options),
         Form::Action => action(request, error, &options),
         #[cfg(feature = "native-preview")]
-        Form::Native => native(request, error, &options),
+        Form::Native => native(request, error, &options).await,
     };
     let headers = response.headers_mut();
     // `Retry-After`, `Allow`, `WWW-Authenticate`: the error's own headers belong to the answer.
@@ -475,8 +475,10 @@ fn action_ops(request: &ErrorContext, error: &AppError, options: &PagesOptions) 
 /// state as a screen for a page, and a toast for an action, in the native
 /// protocol's envelope with the error's status.
 #[cfg(feature = "native-preview")]
-fn native(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
-    let Some(client) = crate::native::swap::client_of(&request.headers, &request.uri) else {
+async fn native(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
+    let Some(client) =
+        crate::native::swap::client_of(&request.headers, &request.uri, &request.ctx).await
+    else {
         return action(request, error, options);
     };
     let kind = StateKind::of(error.status, &error.code);

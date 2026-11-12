@@ -38,7 +38,7 @@
 //!             r#"{{"t":"button","label":"New order","role":"primary","prominence":"high","#,
 //!             r#""action":{{"t":"navigate","href":"/orders/new"}}}}]}}}}}}"#
 //!         ),
-//!         navree_ui::assets::BUILD
+//!         navree_ui::native::Stamp::of(None).as_str()
 //!     )
 //! );
 //! ```
@@ -46,8 +46,8 @@
 mod coverage;
 mod icon;
 mod lower;
-mod page;
-mod routes;
+pub(crate) mod page;
+pub(crate) mod routes;
 pub(crate) mod scope;
 mod slots;
 pub(crate) mod swap;
@@ -59,7 +59,8 @@ pub use coverage::Coverage;
 pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
 pub use navree_native as protocol;
 pub use page::Page;
-pub(crate) use routes::Routes;
+pub use routes::{LOWERING, SHELL_STAMP_HEADER, Stamp};
+pub(crate) use routes::{Routes, app_stamp};
 pub use scope::Client;
 pub use swap::{Answered, How, NodeOp};
 pub use test::TestNative;

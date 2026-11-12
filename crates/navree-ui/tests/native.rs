@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use http::{Method, StatusCode};
+use navree_http::AppError;
 use navree_http::extract::Path;
 use navree_http::response::IntoResponse;
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
@@ -16,13 +17,18 @@ use navree_native::node::{self as n, Node as N};
 use navree_native::{Action, Client, Command, Envelope, FormFactor, Op as NativeOp, Platform};
 use navree_testing::TestApp;
 use navree_ui::form::{FormView, Money, Rejected, Submit};
-use navree_ui::native::{TestNative, lower};
+use navree_ui::native::{SHELL_STAMP_HEADER, Stamp, TestNative, lower};
+use navree_ui::select::{Choice, ChoiceList};
+use navree_ui::sortable::{Move, MoveRejected};
+use navree_ui::table::BulkRequest;
 use navree_ui::table::NoFilter;
+use navree_ui::upload::Received;
 use navree_ui::{
     AppPage, AppShell, Badge, Button, DataTable, Dialog, Empty, Form, NavGroup, NavItem, Op,
     Options, Reply, Sheet, Shell, TablePage, TableQuery, TableRow, Text, ToastTone, UiModule,
     UserMenu, Validate, View, assets, el, icons, render,
 };
+use navree_ui::{LazyAsk, LazyItem, LazyPage, LazyQuery};
 use serde::Deserialize;
 
 const NATIVE: &str = "x-navree-native";
@@ -475,6 +481,71 @@ impl Controller for Pages {
                 View::new("Figures").body(Text::new("952 orders today"))
             })
             .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/things/rows",
+                |query: LazyQuery| async move {
+                    let items = |from: i64| {
+                        (from..from + 2).map(|id| {
+                            LazyItem::new(
+                                id.to_string(),
+                                format!("{id:04}"),
+                                Text::new(format!("Order CS-{}", 20_480 + id)),
+                            )
+                        })
+                    };
+                    match query.ask() {
+                        LazyAsk::Since(_) => LazyPage::changes(items(1), "r9", ["7".to_owned()]),
+                        LazyAsk::Before(_) => LazyPage::new(items(1), false),
+                        _ => LazyPage::new(items(3), true),
+                    }
+                },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/agents/options", || async {
+                ChoiceList::new()
+                    .choice(Choice::new("1", "Harpreet Kaur").description("Ludhiana"))
+                    .option("2", "Manpreet Singh")
+                    .more("/agents/options?page=2")
+            })
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/board/moves",
+                |moved: Result<Move, MoveRejected>| async move {
+                    match moved {
+                        Ok(_) => Reply::ops(Vec::new()).into_response(),
+                        Err(refused) => refused.into_response(),
+                    }
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/files",
+                |headers: http::HeaderMap| async move {
+                    Received::default().respond(&headers, "/files")
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/orders/bulk",
+                |bulk: BulkRequest<OrderRow>| async move { bulk.done("2 orders packed.") },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/orders/gone", || async {
+                Err::<View, AppError>(AppError::not_found())
+            })
+            .public(),
+            RouteDef::on(Method::POST, "!/orders/{id}/pack", || async {
+                Err::<View, AppError>(AppError::conflict("Someone packed it a moment ago."))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/account", || async {
+                Err::<View, AppError>(AppError::unauthenticated())
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/big", || async {
                 View::new("Big").body(
                     (0..2000)
@@ -529,7 +600,9 @@ async fn a_native_client_gets_the_page_as_a_screen() {
     assert_eq!(response.header("cache-control"), Some("no-store"));
     let envelope = envelope(&response.text());
     assert_eq!(envelope.navree, 1);
-    assert_eq!(envelope.build, assets::BUILD);
+    // Its build is the app's stamp, not the toolkit's assets'.
+    assert_eq!(envelope.build, Stamp::of(None).as_str());
+    assert_ne!(envelope.build, assets::BUILD);
     assert_eq!(envelope.vocab, 1);
     assert!(envelope.web.is_none());
     let screen = envelope.screen.expect("a screen");
@@ -850,9 +923,22 @@ async fn the_shell_is_answered_as_a_document() {
         response.header("content-type"),
         Some("application/vnd.navree.native+json")
     );
+    let stamp = response
+        .header(SHELL_STAMP_HEADER)
+        .expect("the shell's stamp")
+        .to_owned();
     let shell: navree_native::Shell = serde_json::from_str(&response.text()).expect("a shell");
     assert_eq!(shell.navree, 1);
-    assert_eq!(shell.build, assets::BUILD);
+    assert_eq!(shell.build, Stamp::of(None).as_str());
+    // A page drawn in the shell says the same stamp, so the client knows its shell is current.
+    let page = app
+        .client()
+        .get("/orders/1")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    assert_eq!(page.header(SHELL_STAMP_HEADER), Some(stamp.as_str()));
     assert_eq!(shell.name, "Charkha Supply Co.");
     assert_eq!(shell.context.as_deref(), Some("Store operations"));
     let [store] = shell.nav.groups.as_slice() else {
@@ -953,7 +1039,12 @@ async fn both_answers_vary_on_who_asked() {
             .split(',')
             .any(|name| name.trim().eq_ignore_ascii_case("x-navree-native"))
     };
-    for path in ["/orders/1", "/orders", "/fragments/figures", "/fragments/feed"] {
+    for path in [
+        "/orders/1",
+        "/orders",
+        "/fragments/figures",
+        "/fragments/feed",
+    ] {
         let browser = client.get(path).send().await;
         assert!(
             browser
@@ -961,7 +1052,12 @@ async fn both_answers_vary_on_who_asked() {
                 .is_some_and(|kind| kind.starts_with("text/html")),
             "{path}"
         );
-        let vary: Vec<String> = browser.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+        let vary: Vec<String> = browser
+            .headers()
+            .get_all("vary")
+            .iter()
+            .map(|v| v.to_str().unwrap().to_owned())
+            .collect();
         assert!(vary.iter().any(|v| varies(Some(v))), "{path}: {vary:?}");
         let native = client
             .get(path)
@@ -982,19 +1078,39 @@ async fn both_answers_vary_on_who_asked() {
         .header("x-navree-ui", "1")
         .send()
         .await;
-    let vary: Vec<String> = runtime.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+    let vary: Vec<String> = runtime
+        .headers()
+        .get_all("vary")
+        .iter()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .collect();
     assert!(vary.iter().any(|v| varies(Some(v))), "{vary:?}");
     // The web view's page is neither.
     let web_view = client
         .get("/orders/1")
-        .header("user-agent", "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 NavreeNative/0.1.0")
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 NavreeNative/0.1.0",
+        )
         .send()
         .await;
     let vary = web_view.header("vary").unwrap_or_default().to_owned();
-    assert!(vary.contains("x-navree-native") && vary.contains("user-agent"), "{vary}");
+    assert!(
+        vary.contains("x-navree-native") && vary.contains("user-agent"),
+        "{vary}"
+    );
     // An error page varies on it too.
-    let missing = client.get("/nowhere").header("accept", "text/html").send().await;
-    let vary: Vec<String> = missing.headers().get_all("vary").iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+    let missing = client
+        .get("/nowhere")
+        .header("accept", "text/html")
+        .send()
+        .await;
+    let vary: Vec<String> = missing
+        .headers()
+        .get_all("vary")
+        .iter()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .collect();
     assert!(vary.iter().any(|v| varies(Some(v))), "{vary:?}");
 }
 
@@ -1055,4 +1171,286 @@ async fn a_native_request_is_recorded_as_the_runtime_s_are() {
     );
     assert!(operations[1].ops >= 3, "the close, the morph and the toast");
     app.shutdown().await.unwrap();
+}
+
+/// A native client's request for `path`, with `pairs` beside its own headers.
+async fn ask_native(
+    app: &TestApp,
+    method: Method,
+    path: &str,
+    pairs: &[(&str, &str)],
+    body: &str,
+) -> (StatusCode, Envelope) {
+    let client = app.client();
+    let mut request = if method == Method::POST {
+        client
+            .post(path)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body.to_owned())
+    } else {
+        client.get(path)
+    };
+    request = request.header(NATIVE, "1").header(CLIENT, PHONE);
+    for (name, value) in pairs {
+        request = request.header(*name, *value);
+    }
+    let response = request.send().await;
+    let status = response.status();
+    let kind = response.header("content-type").map(str::to_owned);
+    let text = response.text();
+    assert_eq!(
+        kind.as_deref(),
+        Some("application/vnd.navree.native+json"),
+        "{path}: {text}"
+    );
+    (status, envelope(&text))
+}
+
+#[tokio::test]
+async fn a_lazy_list_page_is_rows_for_a_native_client() {
+    let app = app().await;
+    let region = [("x-navree-region", "orders-items")];
+    let (status, after) = ask_native(
+        &app,
+        Method::GET,
+        "/things/rows?view=open&dir=end&cursor=0002",
+        &region,
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let [
+        NativeOp::Append {
+            target,
+            nodes,
+            more,
+        },
+    ] = after.ops.as_slice()
+    else {
+        panic!("not one append: {:?}", after.ops);
+    };
+    assert_eq!(target, "orders-items");
+    assert_eq!(
+        nodes.iter().map(|node| node.id()).collect::<Vec<_>>(),
+        [Some("3"), Some("4")]
+    );
+    assert!(matches!(&nodes[0], N::Text(text) if text.value == "Order CS-20483"));
+    // The rows after these are at the last one's cursor, the list's own query kept.
+    assert_eq!(
+        more.as_deref(),
+        Some("/things/rows?view=open&dir=end&cursor=0004")
+    );
+    // The rows before go at the start, and a live ask has no native form yet:
+    // the client fetches the list again.
+    let (_, before) = ask_native(
+        &app,
+        Method::GET,
+        "/things/rows?dir=start&cursor=0003",
+        &region,
+        "",
+    )
+    .await;
+    assert!(
+        matches!(before.ops.as_slice(), [NativeOp::Prepend { nodes, .. }] if nodes.len() == 2),
+        "{:?}",
+        before.ops
+    );
+    let (_, live) = ask_native(
+        &app,
+        Method::GET,
+        "/things/rows?dir=live&since=r1",
+        &region,
+        "",
+    )
+    .await;
+    assert!(
+        matches!(live.ops.as_slice(), [NativeOp::Invalidate { target }] if target == "orders-items"),
+        "{:?}",
+        live.ops
+    );
+    // A browser's runtime gets the rows as markup, as before.
+    let web = app
+        .client()
+        .get("/things/rows?dir=end&cursor=0002")
+        .send()
+        .await;
+    assert_eq!(web.header("x-ui-more"), Some("1"));
+    assert!(web.text().starts_with(r#"<li data-key="3""#));
+}
+
+#[tokio::test]
+async fn an_option_query_is_a_choice_for_a_native_client() {
+    let app = app().await;
+    let (_, answer) = ask_native(&app, Method::GET, "/agents/options?q=kaur", &[], "").await;
+    let screen = answer.screen.expect("a screen");
+    let N::Stack(stack) = &screen.body else {
+        panic!("not a stack: {:?}", screen.body);
+    };
+    let [N::Field(field), N::Link(more)] = stack.children.as_slice() else {
+        panic!("not a choice and a link: {:?}", stack.children);
+    };
+    let Input::Choice(choice) = &field.input else {
+        panic!("not a choice");
+    };
+    let options: Vec<(&str, &str, Option<&str>)> = choice
+        .options
+        .iter()
+        .map(|option| {
+            (
+                option.value.as_str(),
+                option.label.as_str(),
+                option.detail.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        options,
+        [
+            ("1", "Harpreet Kaur", Some("Ludhiana")),
+            ("2", "Manpreet Singh", None)
+        ]
+    );
+    assert!(
+        matches!(&more.action, Action::Navigate { href, .. } if href == "/agents/options?page=2")
+    );
+    let web = app.client().get("/agents/options?q=kaur").send().await;
+    assert!(web.text().contains(r#"data-slot="option-page""#));
+}
+
+#[tokio::test]
+async fn a_refused_move_is_a_toast_for_a_native_client() {
+    let app = app().await;
+    let (status, answer) = ask_native(&app, Method::POST, "/board/moves", &[], "item=").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        matches!(answer.ops.as_slice(), [NativeOp::Toast(toast)] if toast.text.contains("couldn't be read")),
+        "{:?}",
+        answer.ops
+    );
+}
+
+#[tokio::test]
+async fn an_upload_and_a_bulk_action_answer_a_native_client_with_ops() {
+    let app = app().await;
+    let (_, upload) = ask_native(
+        &app,
+        Method::POST,
+        "/files",
+        &[("accept", "application/json")],
+        "",
+    )
+    .await;
+    assert!(
+        upload.ops.iter().any(|op| matches!(op, NativeOp::Toast(_)))
+            && upload
+                .ops
+                .iter()
+                .any(|op| matches!(op, NativeOp::Navigate { href } if href == "/files")),
+        "{:?}",
+        upload.ops
+    );
+    let (_, bulk) = ask_native(
+        &app,
+        Method::POST,
+        "/orders/bulk",
+        &[],
+        "action=pack&ids=1&ids=2&_table=orders&_path=/orders",
+    )
+    .await;
+    assert!(
+        matches!(bulk.ops.as_slice(), [NativeOp::Toast(toast), NativeOp::Invalidate { target }]
+            if toast.text == "2 orders packed." && target == "orders"),
+        "{:?}",
+        bulk.ops
+    );
+}
+
+#[tokio::test]
+async fn an_error_page_is_a_screen_and_an_action_s_error_a_toast() {
+    let app = app().await;
+    let (status, gone) = ask_native(&app, Method::GET, "/orders/gone", &[], "").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let screen = gone.screen.unwrap_or_else(|| panic!("{:?}", gone.web));
+    assert!(!screen.title.is_empty());
+    let (status, refused) = ask_native(&app, Method::POST, "/orders/1/pack", &[], "").await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        matches!(refused.ops.as_slice(), [NativeOp::Toast(toast)] if toast.text == "Someone packed it a moment ago."),
+        "{:?}",
+        refused.ops
+    );
+}
+
+#[tokio::test]
+async fn a_signed_out_native_client_is_sent_to_sign_in() {
+    let app = app().await;
+    let (status, answer) = ask_native(&app, Method::GET, "/account?tab=orders", &[], "").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // One op the client follows: the sign-in screen, which comes back here after.
+    assert_eq!(
+        answer.ops,
+        [NativeOp::Navigate {
+            href: "/sign-in?next=%2Faccount%3Ftab%3Dorders".to_owned()
+        }]
+    );
+    assert!(answer.screen.is_none() && answer.web.is_none());
+    // The shell says how a client presents it: over everything, with no chrome.
+    let shell: navree_native::Shell = serde_json::from_str(
+        &app.client()
+            .get("/_navree/native/shell")
+            .send()
+            .await
+            .text(),
+    )
+    .expect("a shell");
+    let sign_in = shell
+        .routes
+        .iter()
+        .find(|route| route.matches == "/sign-in")
+        .expect("a route for sign-in");
+    assert_eq!(sign_in.present, Some(navree_native::action::Present::Full));
+    assert!(!sign_in.chrome);
+}
+
+/// An app that builds its shell for each request, as the error pages do, and
+/// registers no one shell for everyone.
+struct PerRequest;
+
+impl Module for PerRequest {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(navree_ui::ErrorShell::new(|request| async move {
+            let who = if request.user.is_some() {
+                "Signed in"
+            } else {
+                "Guest"
+            };
+            Some(
+                Shell::new("Sukhna Support")
+                    .context(who)
+                    .group(NavGroup::plain().item(NavItem::new("Inbox", "/inbox").count("3"))),
+            )
+        }));
+    }
+}
+
+#[tokio::test]
+async fn the_shell_comes_from_the_error_pages_builder() {
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(PerRequest)
+        .build()
+        .await;
+    let response = app.client().get("/_navree/native/shell").send().await;
+    let shell: navree_native::Shell = serde_json::from_str(&response.text()).expect("a shell");
+    assert_eq!(shell.name, "Sukhna Support");
+    assert_eq!(shell.context.as_deref(), Some("Guest"));
+    assert_eq!(shell.nav.groups[0].items[0].badge.as_deref(), Some("3"));
+    assert!(shell.routes.iter().any(|route| route.matches == "/sign-in"));
+    assert!(
+        shell
+            .theme
+            .as_ref()
+            .is_some_and(|theme| theme.accent.is_some() && theme.accent_dark.is_some())
+    );
 }

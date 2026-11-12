@@ -178,7 +178,13 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     ));
     m.controller::<Assets>();
     #[cfg(feature = "native-preview")]
-    m.controller::<crate::native::Routes>();
+    {
+        m.controller::<crate::native::Routes>();
+        // What a native client keeps its screens under.
+        m.factory(Factory::<crate::native::Stamp>::new(|r: Resolver| async move {
+            Ok(Arc::new(crate::native::app_stamp(&r.app()).await))
+        }));
+    }
     m.command(
         CommandSpec::new(
             "ui:render",

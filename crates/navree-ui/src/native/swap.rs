@@ -34,7 +34,7 @@ use crate::asked::{WhoAsked, in_web_view};
 use crate::node::Node;
 use crate::op::{OPS_CONTENT_TYPE, Op, PendingOps, UI_HEADER, is_prefetch};
 use crate::view::View;
-use crate::{assets, compress};
+use crate::compress;
 
 /// How a node op changes the screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -213,7 +213,7 @@ pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answe
     }
     let vocab = request.client.vocab.min(navree_native::VOCAB);
     if why.is_empty() {
-        let mut envelope = Envelope::screen(assets::BUILD, page.screen).in_vocab(vocab);
+        let mut envelope = Envelope::screen(request.stamp.as_str(), page.screen).in_vocab(vocab);
         envelope.ops = page.ops;
         (
             envelope,
@@ -225,7 +225,7 @@ pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answe
         )
     } else {
         let mut envelope = Envelope::web(
-            assets::BUILD,
+            request.stamp.as_str(),
             Web {
                 url: request.url.clone(),
                 title: Some(page.screen.title),
@@ -254,7 +254,7 @@ pub(crate) fn errors(
 ) -> Option<Response> {
     let request = scope::native()?;
     let envelope = Envelope::ops(
-        assets::BUILD,
+        request.stamp.as_str(),
         vec![navree_native::Op::Errors {
             form: form.to_owned(),
             fields: fields.clone(),
@@ -271,12 +271,16 @@ pub(crate) fn errors(
 /// The native client that sent a request with these headers, for an answer
 /// made outside the reply layer: an error page. `None` for anyone else, and
 /// for a descriptor that can't be read.
-pub(crate) fn client_of(headers: &http::HeaderMap, uri: &http::Uri) -> Option<Arc<scope::Request>> {
+pub(crate) async fn client_of(
+    headers: &http::HeaderMap,
+    uri: &http::Uri,
+    ctx: &navree_kernel::AppContext,
+) -> Option<Arc<scope::Request>> {
     let url = uri
         .path_and_query()
         .map_or_else(|| uri.path().to_owned(), |url| url.as_str().to_owned());
     match scope::read(headers, &url) {
-        Reading::Asked(Asked::Native(request)) => Some(request),
+        Reading::Asked(Asked::Native(request)) => Some(stamped(request, Some(ctx)).await),
         _ => None,
     }
 }
@@ -285,8 +289,8 @@ pub(crate) fn client_of(headers: &http::HeaderMap, uri: &http::Uri) -> Option<Ar
 /// be said natively leave the client nothing to change, and say why.
 pub(crate) fn ops_for(request: &scope::Request, status: StatusCode, ops: &[Op]) -> Response {
     let envelope = match native_ops(ops) {
-        Some(ops) => Envelope::ops(assets::BUILD, ops),
-        None => Envelope::ops(assets::BUILD, Vec::new()),
+        Some(ops) => Envelope::ops(request.stamp.as_str(), ops),
+        None => Envelope::ops(request.stamp.as_str(), Vec::new()),
     }
     .in_vocab(request.client.vocab.min(navree_native::VOCAB));
     respond(status, "no-store", &envelope)
@@ -301,8 +305,178 @@ pub(crate) fn ops(status: StatusCode, ops: &[Op]) -> Option<Response> {
     Some(respond(
         status,
         "no-store",
-        &Envelope::ops(assets::BUILD, native)
+        &Envelope::ops(request.stamp.as_str(), native)
             .in_vocab(request.client.vocab.min(navree_native::VOCAB)),
+    ))
+}
+
+/// A response with what the answer was kept beside it, for the coverage
+/// report.
+fn kept(mut response: Response, answered: Answered) -> Response {
+    response.extensions_mut().insert(answered);
+    response
+}
+
+/// The address of the next rows of a lazy list, from the address that asked:
+/// its own query less the list's words, then the direction and the cursor.
+fn next_rows(url: &str, dir: &str, cursor: &str) -> String {
+    let (path, query) = url.split_once('?').unwrap_or((url, ""));
+    let mut out = String::from(path);
+    let mut first = true;
+    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
+        let name = pair.split_once('=').map_or(pair, |(name, _)| name);
+        if matches!(name, "dir" | "cursor" | "since" | "from" | "to") {
+            continue;
+        }
+        out.push(if first { '?' } else { '&' });
+        out.push_str(pair);
+        first = false;
+    }
+    out.push(if first { '?' } else { '&' });
+    out.push_str("dir=");
+    out.push_str(dir);
+    out.push_str("&cursor=");
+    for byte in cursor.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(char::from(byte));
+            }
+            _ => {
+                out.push('%');
+                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte >> 4)]));
+                out.push(char::from(b"0123456789ABCDEF"[usize::from(byte & 15)]));
+            }
+        }
+    }
+    out
+}
+
+/// A lazy list's page of rows for the native client the current request
+/// comes from: the rows as an `append` (or a `prepend`, for the rows before)
+/// to the list the client named, with the address of the rows after them. A
+/// live ask has no native form yet: the client is told to fetch the list
+/// again, and why is kept. `None` when no native client asked.
+pub(crate) fn lazy_page(items: &[Node], more: bool, live: bool) -> Option<Response> {
+    let request = scope::native()?;
+    let target = request.region.clone().unwrap_or_default();
+    let vocab = request.client.vocab.min(navree_native::VOCAB);
+    if live {
+        let envelope = Envelope::ops(
+            request.stamp.as_str(),
+            vec![navree_native::Op::Invalidate { target }],
+        )
+        .in_vocab(vocab);
+        return Some(kept(
+            respond(StatusCode::OK, "no-store", &envelope),
+            Answered {
+                native: false,
+                why: vec!["lazy:live".to_owned()],
+                dropped: Vec::new(),
+            },
+        ));
+    }
+    let query = request.url.split_once('?').map_or("", |(_, query)| query);
+    let before = matches!(
+        crate::components::LazyQuery::parse(query).ask(),
+        crate::components::LazyAsk::Before(_)
+    );
+    let mut cx = Cx::new(false);
+    let mut nodes = Vec::with_capacity(items.len());
+    let mut last = None;
+    for item in items {
+        let Node::Element(item) = item else { continue };
+        let key = super::lower::attr(item, "data-key").map(std::borrow::Cow::into_owned);
+        last = super::lower::attr(item, "data-cursor").map(std::borrow::Cow::into_owned);
+        let read = cx.of(item);
+        nodes.push(super::lower::with_id(super::lower::one(read), key));
+    }
+    let misses = std::mem::take(&mut cx.misses);
+    let why: Vec<String> = misses.iter().map(|miss| miss.what.clone()).collect();
+    let ops = if !why.is_empty() {
+        // Rows a client can't draw are not sent: the list stays as it is.
+        Vec::new()
+    } else if before {
+        vec![navree_native::Op::Prepend { target, nodes }]
+    } else {
+        let more = more
+            .then(|| last.map(|cursor| next_rows(&request.url, "end", &cursor)))
+            .flatten();
+        vec![navree_native::Op::Append {
+            target,
+            nodes,
+            more,
+        }]
+    };
+    let envelope = Envelope::ops(request.stamp.as_str(), ops).in_vocab(vocab);
+    Some(kept(
+        respond(StatusCode::OK, "no-store", &envelope),
+        Answered {
+            native: why.is_empty(),
+            why,
+            dropped: std::mem::take(&mut cx.dropped),
+        },
+    ))
+}
+
+/// A searched list's options for the native client the current request comes
+/// from: a screen whose body is a choice of them, and a way to the next ones.
+/// `None` when no native client asked.
+pub(crate) fn choices<'a>(
+    choices: impl Iterator<Item = &'a crate::select::Choice>,
+    more: Option<&str>,
+) -> Option<Response> {
+    use navree_native::input as i;
+
+    let request = scope::native()?;
+    let options = choices
+        .map(|choice| i::ChoiceOption {
+            value: choice.value.clone(),
+            label: choice.label.clone(),
+            detail: choice.description.clone(),
+            disabled: choice.disabled,
+        })
+        .collect();
+    let field = N::Field(navree_native::node::Field {
+        id: None,
+        name: String::new(),
+        label: None,
+        help: None,
+        error: None,
+        required: false,
+        disabled: false,
+        input: i::Input::Choice(i::ChoiceInput {
+            kind: i::ChoiceKind::List,
+            options,
+            ..i::ChoiceInput::default()
+        }),
+    });
+    let body = match more {
+        Some(more) => N::Stack(navree_native::node::Stack {
+            children: vec![
+                field,
+                N::Link(navree_native::node::Link {
+                    id: None,
+                    label: "Show more".to_owned(),
+                    action: navree_native::Action::Navigate {
+                        href: more.to_owned(),
+                        present: navree_native::action::Present::Replace,
+                    },
+                    children: Vec::new(),
+                }),
+            ],
+            ..navree_native::node::Stack::default()
+        }),
+        None => field,
+    };
+    let envelope = Envelope::screen(request.stamp.as_str(), navree_native::Screen::new("", body))
+        .in_vocab(request.client.vocab.min(navree_native::VOCAB));
+    Some(kept(
+        respond(StatusCode::OK, "no-store", &envelope),
+        Answered {
+            native: true,
+            why: Vec::new(),
+            dropped: Vec::new(),
+        },
     ))
 }
 
@@ -324,10 +498,17 @@ pub(crate) fn view(view: View) -> Result<Response, View> {
 }
 
 fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
+    let page = page::of_view(&mut view, false);
+    // The stamp of the shell the page stands in, so the client knows its own is current.
+    let shell = view.note().map(crate::shell::PageNote::shell_stamp);
     let parts = view.native_parts();
-    let page = page::read(parts.title, parts.body, false);
     let (envelope, answered) = envelope(page, request);
     let mut response = respond(parts.status, parts.cache, &envelope);
+    if let Some(shell) = shell.and_then(|shell| HeaderValue::from_str(&shell).ok()) {
+        response
+            .headers_mut()
+            .insert(super::SHELL_STAMP_HEADER, shell);
+    }
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
@@ -458,7 +639,13 @@ pub(crate) async fn layer(
         ),
         Reading::BadClient(error) => refuse(StatusCode::BAD_REQUEST, &error.to_string()),
         Reading::Asked(Asked::Embed) => embedded(request, next).await,
-        Reading::Asked(Asked::Native(native)) => answer(native, request, next).await,
+        Reading::Asked(Asked::Native(native)) => {
+            let ctx = request
+                .extensions()
+                .get::<navree_kernel::AppContext>()
+                .cloned();
+            answer(stamped(native, ctx.as_ref()).await, request, next).await
+        }
     })
 }
 
@@ -475,6 +662,26 @@ pub(crate) fn vary_on_native(response: &mut Response) {
         response
             .headers_mut()
             .append(VARY, HeaderValue::from_static(NATIVE_HEADER));
+    }
+}
+
+/// `native`, with the stamp of the app `ctx` answers for.
+async fn stamped(
+    native: Arc<scope::Request>,
+    ctx: Option<&navree_kernel::AppContext>,
+) -> Arc<scope::Request> {
+    let Some(ctx) = ctx else {
+        return native;
+    };
+    let Some(stamp) = ctx.try_get::<super::Stamp>().await else {
+        return native;
+    };
+    match Arc::try_unwrap(native) {
+        Ok(mut request) => {
+            request.stamp = (*stamp).clone();
+            Arc::new(request)
+        }
+        Err(native) => native,
     }
 }
 
@@ -535,7 +742,7 @@ async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Re
             let mut native = respond(
                 parts.status,
                 "no-store",
-                &Envelope::ops(assets::BUILD, ops)
+                &Envelope::ops(native.stamp.as_str(), ops)
                     .in_vocab(native.client.vocab.min(navree_native::VOCAB)),
             );
             for (name, value) in &parts.headers {
@@ -677,7 +884,10 @@ mod tests {
         let mut responses: Vec<Response> = (0..RESPONSES)
             .map(|_| {
                 (
-                    [(CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"))],
+                    [(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("text/html; charset=utf-8"),
+                    )],
                     "",
                 )
                     .into_response()

@@ -216,11 +216,13 @@ impl Received {
         back: impl Into<LocalHref>,
         labels: &UploadLabels,
     ) -> Response {
-        let wants_json = headers
-            .get_all(header::ACCEPT)
-            .iter()
-            .filter_map(|value| value.to_str().ok())
-            .any(|value| value.contains("application/json"));
+        // The browser module asks for JSON; a native client takes the reply as ops.
+        let wants_json = !crate::asked::who_asked(headers).is_native()
+            && headers
+                .get_all(header::ACCEPT)
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .any(|value| value.contains("application/json"));
         if wants_json {
             return self.into_json_response();
         }

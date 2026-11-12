@@ -8,13 +8,13 @@
 
 use std::borrow::Cow;
 
+#[cfg(test)]
 use navree_native::action::{Action, Pair};
 use navree_native::node as n;
-use navree_native::shell as s;
 use navree_native::{Op, Screen};
 
 use super::lower::{
-    Cx, Lowered, Miss, N, Parts, attr, flat, has, id, label_of, one, slot, text_of, tone_of,
+    Cx, Lowered, Miss, N, Parts, attr, flat, id, one, slot, text_of, tone_of,
 };
 use super::slots;
 use crate::node::{Element, Node};
@@ -73,6 +73,70 @@ pub(crate) fn find<'a>(nodes: &'a [Node], name: &str) -> Option<&'a Element> {
     None
 }
 
+/// Reads a page: from the note of the page in the app's shell it was made
+/// from, when a native client asked while it was built, or else from its tree.
+pub(crate) fn of_view(view: &mut crate::view::View, keep_markup: bool) -> Page {
+    if let Some(note) = view.note() {
+        return read_note(note, keep_markup);
+    }
+    let parts = view.native_parts();
+    read(parts.title, parts.body, keep_markup)
+}
+
+/// Reads a page in the app's shell from its note: the title, the way back
+/// from its steps, the destination it belongs to, the actions beside its
+/// heading and its content. The shell itself is never built.
+pub(crate) fn read_note(note: &crate::shell::PageNote, keep_markup: bool) -> Page {
+    let mut cx = Cx::new(keep_markup);
+    let mut screen = Screen::new(note.title(), N::Stack(n::Stack::default()));
+    screen.nav = note.nav();
+    let steps: Vec<navree_native::Back> = note
+        .steps()
+        .map(|(title, href)| navree_native::Back {
+            title: title.to_owned(),
+            href: href.to_owned(),
+        })
+        .collect();
+    screen.back = steps.last().cloned();
+    if steps.len() > 1 {
+        screen.trail = steps;
+    }
+    screen.actions = cx.sequence(note.actions());
+    let content = cx.sequence(note.body());
+    screen.id = match content.as_slice() {
+        [only] => only.id().map(str::to_owned),
+        _ => None,
+    };
+    screen.body = one(content);
+    let mut ops = Vec::new();
+    if let Some((tone, text)) = note.flash() {
+        // Read as the toaster a browser gets would be.
+        let toaster: Node = crate::components::Toaster::new()
+            .toast(crate::components::Toast::new(tone, text.to_owned()))
+            .into();
+        if let Node::Element(toaster) = &toaster {
+            toasts(toaster, &mut ops);
+        }
+    }
+    let Lowered {
+        misses, dropped, ..
+    } = cx.finish(Vec::new());
+    Page {
+        screen,
+        ops,
+        misses,
+        dropped,
+    }
+}
+
+/// An icon of the toolkit as a native client draws it.
+pub(crate) fn icon_of(glyph: crate::icons::Icon) -> Option<n::Icon> {
+    match &crate::components::icon(glyph) {
+        Node::Element(element) => slots::icon(element).ok(),
+        _ => None,
+    }
+}
+
 /// Reads a page titled `title` whose content is `body`.
 pub(crate) fn read(title: &str, body: &Node, keep_markup: bool) -> Page {
     let mut cx = Cx::new(keep_markup);
@@ -86,6 +150,23 @@ pub(crate) fn read(title: &str, body: &Node, keep_markup: bool) -> Page {
             }
             Node::Element(element) if slot(element).as_deref() == Some("toaster") => {
                 toasts(element, &mut ops);
+            }
+            // An error page on its own: the state it says is the screen.
+            Node::Element(element) if slot(element).as_deref() == Some("state-page") => {
+                for part in flat(element.child_nodes()) {
+                    match part {
+                        Node::Element(found) if slot(found).as_deref() == Some("state") => {
+                            match state(&mut cx, found) {
+                                Ok(read) => content.push(read),
+                                Err(fail) => {
+                                    let web = cx.miss("slot:state".to_owned(), fail.why, found);
+                                    content.push(web);
+                                }
+                            }
+                        }
+                        other => content.extend(cx.flat_sequence(&[other])),
+                    }
+                }
             }
             other => content.extend(cx.flat_sequence(&[other])),
         }
@@ -147,6 +228,56 @@ fn in_shell(cx: &mut Cx, wrapper: &Element, screen: &mut Screen, content: &mut V
     content.extend(cx.flat_sequence(parts.left()));
 }
 
+/// A state the toolkit draws for an error or an empty place: its headline,
+/// what it says, and the ways on from it, as an empty state. Its reference
+/// for support stays with its words; what a development build adds is left
+/// out, since a client has no place for it.
+pub(crate) fn state(cx: &mut Cx, element: &Element) -> super::lower::Read<N> {
+    let mut parts = Parts::of(element);
+    let icon = match parts.slot("state-media") {
+        Some(media) => find(media.child_nodes(), "icon").and_then(|icon| slots::icon(icon).ok()),
+        None => None,
+    };
+    let Some(body) = parts.slot("state-body") else {
+        return super::lower::fail("a state with nothing to say");
+    };
+    parts.done()?;
+    let mut body = Parts::of(body);
+    let _code = body.slot("state-code");
+    let Some(title) = body.slot("state-title") else {
+        return super::lower::fail("a state with no headline");
+    };
+    let mut words: Vec<String> = Vec::new();
+    for name in [
+        "state-description",
+        "state-detail",
+        "state-wait",
+        "state-reference",
+    ] {
+        if let Some(part) = body.slot(name) {
+            words.push(text_of(part));
+        }
+    }
+    let actions = match body.slot("state-actions") {
+        Some(actions) => cx.of(actions),
+        None => Vec::new(),
+    };
+    if let Some(debug) = body.slot("state-debug") {
+        cx.dropped.push(format!(
+            "slot:{}",
+            slot(debug).unwrap_or(Cow::Borrowed("state-debug"))
+        ));
+    }
+    body.done()?;
+    Ok(N::Empty(n::Empty {
+        id: id(element),
+        icon,
+        title: text_of(title),
+        text: (!words.is_empty()).then(|| words.join(" ")),
+        actions,
+    }))
+}
+
 /// The address of the shell's link that is marked as the current page.
 fn current(nodes: &[Node]) -> Option<String> {
     for node in nodes {
@@ -200,181 +331,6 @@ fn toasts(toaster: &Element, ops: &mut Vec<Op>) {
             id: attr(toast, "data-toast-id").map(Cow::into_owned),
             action: None,
         }));
-    }
-}
-
-/// Reads the shell document from a page drawn in the app's shell: its name,
-/// its destinations and the person signed in. `None` when `body` is not such
-/// a page.
-pub(crate) fn shell(build: &str, body: &Node) -> Option<navree_native::Shell> {
-    let top = std::slice::from_ref(body);
-    let wrapper = find(top, "sidebar-wrapper")?;
-    let children = wrapper.child_nodes();
-    let brand = find(children, "sidebar-brand");
-    let name = find(children, "sidebar-brand-name")
-        .map(text_of)
-        .or_else(|| brand.and_then(|brand| attr(brand, "title").map(Cow::into_owned)))
-        .unwrap_or_default();
-    let mut shell = navree_native::Shell::new(build, name);
-    shell.context = find(children, "sidebar-brand-context").map(text_of);
-    if let Some(home) = brand.and_then(|brand| attr(brand, "href")) {
-        shell.home = home.into_owned();
-    }
-    let sidebar = find(children, "sidebar-content")?;
-    for group in flat(sidebar.child_nodes()) {
-        let Node::Element(group) = group else {
-            continue;
-        };
-        if slot(group).as_deref() != Some("sidebar-group") {
-            continue;
-        }
-        let mut parts = Parts::of(group);
-        let label = parts.slot("sidebar-group-label").map(text_of);
-        let items = parts
-            .slot("sidebar-menu")
-            .map(nav_items)
-            .unwrap_or_default();
-        shell.nav.groups.push(s::NavGroup { label, items });
-    }
-    if let Some(user) = find(children, "sidebar-user") {
-        let mut menu = Vec::new();
-        if let Some(popover) = children_after(children, user) {
-            user_menu(popover, &mut menu);
-        }
-        shell.user = Some(s::User {
-            name: find(user.child_nodes(), "sidebar-user-name")
-                .map(text_of)
-                .unwrap_or_default(),
-            email: find(user.child_nodes(), "sidebar-user-email").map(text_of),
-            menu,
-        });
-    }
-    Some(shell)
-}
-
-/// The links of one list of the sidebar, with the links under each.
-fn nav_items(list: &Element) -> Vec<s::NavItem> {
-    let mut items = Vec::new();
-    for entry in flat(list.child_nodes()) {
-        if let Node::Element(entry) = entry {
-            nav_entry(entry, &mut items);
-        }
-    }
-    items
-}
-
-/// One entry of the sidebar: its link, and the list under it. An entry that
-/// wraps another is read through.
-fn nav_entry(entry: &Element, items: &mut Vec<s::NavItem>) {
-    let mut item = None;
-    let mut under = Vec::new();
-    for part in flat(entry.child_nodes()) {
-        let Node::Element(part) = part else { continue };
-        match slot(part).as_deref() {
-            Some("sidebar-item" | "sidebar-sub-item") => {
-                let mut link = Parts::of(part);
-                let icon = link.slot("icon").and_then(|icon| slots::icon(icon).ok());
-                let label = link
-                    .slot("sidebar-label")
-                    .map(text_of)
-                    .unwrap_or_else(|| label_of(part));
-                item = Some(s::NavItem {
-                    label,
-                    icon,
-                    href: attr(part, "href").map(Cow::into_owned).unwrap_or_default(),
-                    badge: link.slot("sidebar-count").map(text_of),
-                    items: Vec::new(),
-                });
-            }
-            Some("sidebar-sub") => under = nav_items(part),
-            None if part.tag() == "li" => nav_entry(part, items),
-            _ => {}
-        }
-    }
-    if let Some(mut item) = item {
-        item.items = under;
-        items.push(item);
-    }
-}
-
-/// The popover that follows the user's button: the element with the id the
-/// button's `popovertarget` names.
-fn children_after<'a>(nodes: &'a [Node], button: &Element) -> Option<&'a Element> {
-    let target = attr(button, "popovertarget")?;
-    fn by_id<'a>(nodes: &'a [Node], wanted: &str) -> Option<&'a Element> {
-        for node in nodes {
-            match node {
-                Node::Element(element) => {
-                    if id(element).as_deref() == Some(wanted) {
-                        return Some(element);
-                    }
-                    if let Some(found) = by_id(element.child_nodes(), wanted) {
-                        return Some(found);
-                    }
-                }
-                Node::Fragment(nodes) => {
-                    if let Some(found) = by_id(nodes, wanted) {
-                        return Some(found);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
-    }
-    by_id(nodes, &target)
-}
-
-/// The user's menu: its links, and its forms of one button as buttons that post.
-fn user_menu(popover: &Element, menu: &mut Vec<N>) {
-    for entry in flat(popover.child_nodes()) {
-        let Node::Element(entry) = entry else {
-            continue;
-        };
-        match entry.tag() {
-            "a" => {
-                if let Some(href) = attr(entry, "href") {
-                    menu.push(N::Link(n::Link {
-                        id: None,
-                        label: label_of(entry),
-                        action: Action::navigate(href.into_owned()),
-                        children: Vec::new(),
-                    }));
-                }
-            }
-            "form" => {
-                let mut fields = Vec::new();
-                let mut label = String::new();
-                for part in flat(entry.child_nodes()) {
-                    let Node::Element(part) = part else { continue };
-                    if part.tag() == "input" {
-                        fields.push(Pair {
-                            name: attr(part, "name").map(Cow::into_owned).unwrap_or_default(),
-                            value: attr(part, "value").map(Cow::into_owned).unwrap_or_default(),
-                        });
-                    } else if part.tag() == "button" {
-                        label = label_of(part);
-                    }
-                }
-                menu.push(N::Button(n::Button {
-                    label,
-                    action: Some(Action::Request {
-                        method: if attr(entry, "method").as_deref() == Some("post") {
-                            n::Method::Post
-                        } else {
-                            n::Method::Get
-                        },
-                        href: attr(entry, "action")
-                            .map(Cow::into_owned)
-                            .unwrap_or_default(),
-                        fields,
-                    }),
-                    ..n::Button::default()
-                }));
-            }
-            _ if has(entry, "data-slot") => user_menu(entry, menu),
-            _ => {}
-        }
     }
 }
 
@@ -502,13 +458,11 @@ mod tests {
     }
 
     #[test]
-    fn the_shell_document_is_read_from_the_shell_a_page_is_drawn_in() {
-        let view = app()
+    fn the_shell_document_comes_from_the_shell_itself() {
+        let shell = app()
             .for_request("/", &http::HeaderMap::new())
             .csrf("tok")
-            .page("x")
-            .to_view();
-        let shell = super::shell("b1", view.body_node()).unwrap();
+            .native_document("b1", Some("/sign-in?from=app"));
         assert_eq!(shell.name, "Charkha Supply Co.");
         assert_eq!(shell.context.as_deref(), Some("Store operations"));
         assert_eq!(shell.home, "/");
@@ -556,6 +510,75 @@ mod tests {
                 }),
             ]
         );
-        assert!(super::shell("b1", View::new("x").body(Text::new("plain")).body_node()).is_none());
+        // The theme's accent, as the token table has it for each ground.
+        let theme = shell.theme.unwrap();
+        let appearance = crate::theme::Appearance::default();
+        let spec = appearance.theme().spec();
+        assert_eq!(
+            theme.accent,
+            Some(spec.light.get(crate::theme::Token::Accent).to_hex())
+        );
+        assert_eq!(
+            theme.accent_dark,
+            Some(spec.dark.get(crate::theme::Token::Accent).to_hex())
+        );
+        assert!(theme.accent.unwrap().starts_with('#'));
+        // Sign-in over everything with no chrome; a new or edited record in a sheet.
+        let routes: Vec<(&str, Option<navree_native::action::Present>, bool)> = shell
+            .routes
+            .iter()
+            .map(|route| (route.matches.as_str(), route.present, route.chrome))
+            .collect();
+        assert_eq!(
+            routes,
+            [
+                ("/sign-in", Some(navree_native::action::Present::Full), false),
+                ("/*/new", Some(navree_native::action::Present::Sheet), true),
+                ("/*/*/edit", Some(navree_native::action::Present::Sheet), true),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_page_in_the_shell_is_read_from_its_note() {
+        let build = || {
+            app()
+                .page("Order CS-20481", "/orders/1")
+                .crumb("Dashboard", "/")
+                .crumb("Orders", "/orders")
+                .actions(Button::primary("Refund").href("/orders/1/refund"))
+                .body(crate::el("div").id("order-page").child(Text::new("Paid")))
+                .to_view()
+        };
+        // Read from the chrome a browser gets, and from the note a native client's view keeps.
+        let from_chrome = read("ignored", build().body_node(), false);
+        let page = crate::native::TestNative::build(
+            navree_native::Client::new(
+                navree_native::Platform::Ios,
+                navree_native::FormFactor::Phone,
+            ),
+            build,
+        );
+        assert!(page.is_native(), "{:?}", page.why());
+        assert_eq!(page.page(), &from_chrome);
+        // The view a native client got never built the sidebar.
+        let view = crate::native::scope::sync(
+            crate::native::scope::Asked::Native(std::sync::Arc::new(
+                crate::native::scope::Request::new(
+                    navree_native::Client::new(
+                        navree_native::Platform::Android,
+                        navree_native::FormFactor::Phone,
+                    ),
+                    "/orders/1",
+                ),
+            )),
+            build,
+        );
+        let note = view.note().expect("a note");
+        assert_eq!(note.title(), "Order CS-20481");
+        assert_eq!(note.nav().as_deref(), Some("/orders"));
+        assert!(!note.chrome_built());
+        // Written as HTML after all, it is the page a browser always gets.
+        assert_eq!(view.to_html(), build().to_html());
     }
 }

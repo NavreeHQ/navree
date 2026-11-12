@@ -37,6 +37,23 @@ pub(crate) struct Request {
     /// The address it asked for, with its query: where its web view goes when
     /// the page can't be drawn natively.
     pub(crate) url: String,
+    /// The part of the screen it asked for, by id, when it fetched a region
+    /// or a list's next rows (`X-Navree-Region`).
+    pub(crate) region: Option<String>,
+    /// The app's stamp, which every envelope carries as its `build`.
+    pub(crate) stamp: super::Stamp,
+}
+
+impl Request {
+    /// The request of `client` for `url`.
+    pub(crate) fn new(client: navree_native::Client, url: impl Into<String>) -> Self {
+        Self {
+            client,
+            url: url.into(),
+            region: None,
+            stamp: super::Stamp::of(None),
+        }
+    }
 }
 
 /// What a request's headers ask for, or why they can't be answered.
@@ -75,6 +92,11 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
         Ok(client) => Reading::Asked(Asked::Native(Arc::new(Request {
             client,
             url: url.to_owned(),
+            region: headers
+                .get(crate::pages::REGION_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned),
+            stamp: super::Stamp::of(None),
         }))),
         Err(error) => Reading::BadClient(error),
     }
@@ -137,10 +159,7 @@ impl Client {
 
     /// A native client, for a test.
     pub fn of(client: navree_native::Client) -> Self {
-        Self(Some(Arc::new(Request {
-            client,
-            url: String::new(),
-        })))
+        Self(Some(Arc::new(Request::new(client, ""))))
     }
 
     /// Whether a native client asked.
