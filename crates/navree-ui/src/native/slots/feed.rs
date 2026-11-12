@@ -118,16 +118,15 @@ fn row(cx: &mut Cx, item: &Element) -> Read<N> {
     let Some(body) = body else {
         return fail("an event with no body");
     };
-    let mut row = n::Row {
+    let mut row = n::FeedRow {
         id: id(item),
-        ..n::Row::default()
+        tone: attr(item, "data-tone").and_then(|name| tone(&name)),
+        ..n::FeedRow::default()
     };
     if let Some(glyph) = glyph {
         let marks = elements(glyph)?;
         if let [mark] = marks.as_slice() {
-            let mut icon = super::icon(mark)?;
-            icon.tone = attr(item, "data-tone").and_then(|name| tone(&name));
-            row.leading = Some(Box::new(N::Icon(icon)));
+            row.icon = Some(super::icon(mark)?);
         }
     }
     let mut inside = Parts::of(body);
@@ -141,20 +140,13 @@ fn row(cx: &mut Cx, item: &Element) -> Read<N> {
     if let Some(facts) = facts {
         cx.element(facts, &mut row.detail);
     }
-    if let Some(time) = time {
-        row.trailing = Some(Box::new(N::Text(n::Text {
-            value: text_of(time),
-            style: n::TextStyle::Caption,
-            muted: true,
-            ..n::Text::default()
-        })));
-    }
-    Ok(N::Row(row))
+    row.time = time.map(text_of).filter(|time| !time.is_empty());
+    Ok(N::FeedRow(row))
 }
 
-/// Who did what to what: the row's name, with the actor's link as what a tap
-/// does, and the tag as a badge.
-fn sentence(cx: &mut Cx, line: &Element, row: &mut n::Row) -> Read<()> {
+/// Who did what to what, in runs so the names stand out: the actor's link is what
+/// a tap does, and the tag stands under it as a badge.
+fn sentence(cx: &mut Cx, line: &Element, row: &mut n::FeedRow) -> Read<()> {
     let mut parts = Parts::of(line);
     let actor = parts.slot("activity-actor");
     let verb = parts.slot("activity-verb");
@@ -164,19 +156,35 @@ fn sentence(cx: &mut Cx, line: &Element, row: &mut n::Row) -> Read<()> {
     let (Some(actor), Some(verb)) = (actor, verb) else {
         return fail("an event that does not say who did what");
     };
-    let mut words = vec![text_of(actor), text_of(verb)];
-    words.extend(object.map(text_of));
-    row.title = words.join(" ");
-    if actor.tag() == "a" {
-        row.action = cx.action_of(actor)?;
+    let link = if actor.tag() == "a" {
+        cx.action_of(actor)?
+    } else {
+        None
+    };
+    let href = match &link {
+        Some(navree_native::Action::Navigate { href, .. }) => Some(href.clone()),
+        _ => None,
+    };
+    row.action = link;
+    let run = |text: String, bold: bool, href: Option<String>| n::Run {
+        text,
+        bold,
+        href,
+        ..n::Run::default()
+    };
+    row.runs.push(run(text_of(actor), true, href));
+    row.runs
+        .push(run(format!(" {}", text_of(verb)), false, None));
+    if let Some(object) = object {
+        row.runs
+            .push(run(format!(" {}", text_of(object)), true, None));
     }
     if let Some(tag) = tag {
-        let mut read = cx.of(tag);
-        if let [N::Badge(badge)] = read.as_mut_slice() {
-            row.badge = Some(badge.clone());
-        } else {
+        let read = cx.of(tag);
+        if !matches!(read.as_slice(), [N::Badge(_)]) {
             return fail("an event whose tag is not a badge");
         }
+        row.detail.extend(read);
     }
     Ok(())
 }
@@ -206,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn a_feed_is_a_section_of_rows_that_say_who_did_what() {
+    fn a_feed_is_a_section_of_feed_rows_that_say_who_did_what() {
         let section = feed_of(read(
             ActivityFeed::new("act", "Recent activity")
                 .summary("2 today")
@@ -229,30 +237,38 @@ mod tests {
         assert_eq!(section.id.as_deref(), Some("act"));
         assert_eq!(section.title.as_deref(), Some("Recent activity"));
         assert_eq!(section.subtitle.as_deref(), Some("2 today"));
-        let [N::Row(first), N::Row(second)] = rows_of(&section) else {
-            panic!("not two rows");
+        let [N::FeedRow(first), N::FeedRow(second)] = rows_of(&section) else {
+            panic!("not two feed rows");
         };
         assert_eq!(first.id.as_deref(), Some("event-9"));
-        assert_eq!(first.title, "Manpreet Gill replied to Ticket 2041");
-        let Some(N::Icon(mark)) = first.leading.as_deref() else {
-            panic!("no icon");
-        };
-        assert_eq!(mark.name.as_deref(), Some("message-square"));
-        assert_eq!(mark.tone, Some(n::Tone::Info));
-        assert!(matches!(first.trailing.as_deref(), Some(N::Text(time)) if time.muted));
+        let words: Vec<(&str, bool)> = first
+            .runs
+            .iter()
+            .map(|run| (run.text.as_str(), run.bold))
+            .collect();
+        assert_eq!(
+            words,
+            [
+                ("Manpreet Gill", true),
+                (" replied to", false),
+                (" Ticket 2041", true)
+            ]
+        );
+        assert_eq!(first.tone, Some(n::Tone::Info));
+        assert_eq!(
+            first.icon.as_ref().and_then(|icon| icon.name.as_deref()),
+            Some("message-square")
+        );
+        assert!(first.time.is_some());
         assert!(!first.detail.is_empty());
-        assert_eq!(second.title, "Simran Grewal closed");
+        assert_eq!(second.runs[0].text, "Simran Grewal");
+        assert_eq!(second.runs[0].href.as_deref(), Some("/people/3"));
         assert_eq!(
             second.action,
             Some(navree_native::Action::navigate("/people/3"))
         );
-        assert_eq!(
-            second.badge.as_ref().map(|badge| badge.text.as_str()),
-            Some("Billing")
-        );
-        assert!(
-            matches!(second.trailing.as_deref(), Some(N::Text(time)) if time.value == "2 min ago")
-        );
+        assert!(matches!(second.detail.as_slice(), [N::Badge(badge)] if badge.text == "Billing"));
+        assert_eq!(second.time.as_deref(), Some("2 min ago"));
     }
 
     #[test]

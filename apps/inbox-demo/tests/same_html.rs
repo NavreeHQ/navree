@@ -25,9 +25,6 @@ async fn boot() -> (TestApp, TempDirGuard) {
         simulate_every: None,
         tick_every: None,
         test_hooks: false,
-        // A desk of a few thousand: the pages are the same at any size, and a seed of
-        // seconds keeps the two runs near enough for their clocks to agree.
-        scale: 2_000,
         ..Settings::default()
     };
     (TestApp::from_builder(app(0, url, settings)).await, dir)

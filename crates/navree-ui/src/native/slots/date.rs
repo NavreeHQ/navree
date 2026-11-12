@@ -9,6 +9,7 @@
 
 use std::borrow::Cow;
 
+use navree_native::input as i;
 use navree_native::node as n;
 
 use super::super::lower::{
@@ -49,10 +50,12 @@ pub(crate) fn field(cx: &mut Cx, element: &Element) -> Read<n::Field> {
     if popup.is_none() {
         return fail("a date control with nothing to choose by");
     }
-    if let Some(popup) = popup {
-        rules(cx, popup)?;
-    }
+    let off = match popup {
+        Some(popup) => rules(cx, popup)?,
+        None => Off::default(),
+    };
     let mut field = plain(cx, native)?;
+    switched_off(&mut field, &off);
     field.id = id(element).or(field.id);
     field.help = note.map(text_of);
     Ok(field)
@@ -73,27 +76,73 @@ fn plain(cx: &mut Cx, native: &Element) -> Read<n::Field> {
     Ok(*field)
 }
 
-/// Notes the days a calendar switches off, which a client's date field has no
-/// way to say: the limits (`min` and `max`) stand on the field itself.
-fn rules(cx: &mut Cx, popup: &Element) -> Read<()> {
+/// The days a calendar switches off.
+#[derive(Default)]
+struct Off {
+    days: Vec<String>,
+    weekdays: Vec<i::Weekday>,
+}
+
+/// The most days a field is told of one by one; a calendar that switches off more
+/// than a year of them says so in `dropped`.
+const MOST_DAYS: usize = 366;
+
+/// The days a calendar switches off: the weekdays, and the runs of days it was told
+/// of around the month it shows. The limits (`min` and `max`) stand on the field.
+fn rules(cx: &mut Cx, popup: &Element) -> Read<Off> {
+    let mut off = Off::default();
     let Some(calendar) = crate::native::page::find(popup.child_nodes(), "calendar") else {
-        return Ok(());
+        return Ok(off);
     };
     let Some(json) = attr(calendar, "data-ui-rules") else {
-        return Ok(());
+        return Ok(off);
     };
     let Ok(rules) = serde_json::from_str::<serde_json::Value>(&json) else {
         return fail("rules for a calendar that are not readable");
     };
-    let off = rules.as_object().is_some_and(|rules| {
-        rules
-            .keys()
-            .any(|key| !matches!(key.as_str(), "min" | "max"))
-    });
-    if off {
-        cx.dropped.push("date-rules".to_owned());
+    // Sunday is 0, as a script counts the days.
+    for day in rules["wd"].as_array().into_iter().flatten() {
+        off.weekdays.push(match day.as_u64() {
+            Some(0) => i::Weekday::Sunday,
+            Some(1) => i::Weekday::Monday,
+            Some(2) => i::Weekday::Tuesday,
+            Some(3) => i::Weekday::Wednesday,
+            Some(4) => i::Weekday::Thursday,
+            Some(5) => i::Weekday::Friday,
+            Some(6) => i::Weekday::Saturday,
+            _ => return fail("a calendar that switches off a day of the week it cannot name"),
+        });
     }
-    Ok(())
+    for run in rules["r"].as_array().into_iter().flatten() {
+        let day = |at: usize| {
+            run.get(at)
+                .and_then(serde_json::Value::as_str)
+                .and_then(|text| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+        };
+        let (Some(from), Some(to)) = (day(0), day(1)) else {
+            return fail("a calendar that switches off days it cannot name");
+        };
+        let mut at = from;
+        while at <= to {
+            if off.days.len() == MOST_DAYS {
+                // More than a year of them one by one is not a list a field carries.
+                cx.dropped.push("date-rules".to_owned());
+                return Ok(off);
+            }
+            off.days.push(at.to_string());
+            let Some(next) = at.succ_opt() else { break };
+            at = next;
+        }
+    }
+    Ok(off)
+}
+
+/// Tells a date field which days can't be picked.
+fn switched_off(field: &mut n::Field, off: &Off) {
+    if let i::Input::Date(date) = &mut field.input {
+        date.off_days.clone_from(&off.days);
+        date.off_weekdays.clone_from(&off.weekdays);
+    }
 }
 
 /// `DateRangePicker`: two dates, the first and the last day.
@@ -105,7 +154,7 @@ pub(crate) fn range(cx: &mut Cx, element: &Element) -> Read {
     let (Some(natives), Some(popup)) = (natives, popup) else {
         return fail("a range of dates with no fields under it");
     };
-    rules(cx, popup)?;
+    let off = rules(cx, popup)?;
     let mut fields = Vec::new();
     for label in elements(natives)? {
         if slot(label).as_deref() != Some("range-native-field") {
@@ -116,6 +165,7 @@ pub(crate) fn range(cx: &mut Cx, element: &Element) -> Read {
             return fail("a date of a range that is not words and a field");
         };
         let mut field = plain(cx, input)?;
+        switched_off(&mut field, &off);
         field.label = Some(text_of(words));
         fields.push(N::Field(field));
     }
@@ -187,13 +237,61 @@ mod tests {
     }
 
     #[test]
-    fn the_days_a_calendar_switches_off_are_left_out_and_said() {
+    fn the_days_a_calendar_switches_off_are_the_fields_days_off() {
+        let (_, date) = date_of(read(
+            DatePicker::new("due").rules(DateRules::new().min(day(2026, 11, 1))),
+        ));
+        assert!(date.off_days.is_empty() && date.off_weekdays.is_empty());
+        let (_, date) = date_of(read(
+            DatePicker::new("due")
+                .rules(
+                    DateRules::new()
+                        .disable_dates([day(2026, 11, 14), day(2026, 11, 16)])
+                        .disable_range(day(2026, 11, 20), day(2026, 11, 22))
+                        .disable_weekdays([chrono::Weekday::Sun, chrono::Weekday::Sat]),
+                )
+                .today(day(2026, 11, 12)),
+        ));
+        assert_eq!(
+            date.off_days,
+            [
+                "2026-11-14",
+                "2026-11-16",
+                "2026-11-20",
+                "2026-11-21",
+                "2026-11-22"
+            ]
+        );
+        assert_eq!(
+            date.off_weekdays,
+            [i::Weekday::Sunday, i::Weekday::Saturday]
+        );
+    }
+
+    #[test]
+    fn a_range_has_the_same_days_off_on_both_ends() {
+        let N::Stack(stack) = read(
+            DateRangePicker::new("from", "to")
+                .rules(DateRules::new().disable_weekdays([chrono::Weekday::Sun])),
+        ) else {
+            panic!("not a stack");
+        };
+        for field in &stack.children {
+            let N::Field(field) = field else {
+                panic!("not a field");
+            };
+            assert!(
+                matches!(&field.input, i::Input::Date(date) if date.off_weekdays == [i::Weekday::Sunday])
+            );
+        }
+    }
+
+    #[test]
+    fn more_than_a_year_of_days_off_is_said_not_listed() {
         let node: Node = DatePicker::new("due")
-            .rules(DateRules::new().min(day(2026, 11, 1)))
-            .into();
-        assert!(crate::native::lower(&node).dropped.is_empty());
-        let node: Node = DatePicker::new("due")
-            .rules(DateRules::new().disable_dates([day(2026, 11, 14)]))
+            .rules(DateRules::new().disable_range(day(2026, 1, 1), day(2027, 12, 31)))
+            .min(day(2026, 1, 1))
+            .max(day(2027, 12, 31))
             .into();
         let lowered = crate::native::lower(&node);
         assert!(lowered.is_native(), "{:?}", lowered.misses);

@@ -106,7 +106,37 @@ pub(crate) fn in_web_view(headers: &HeaderMap) -> bool {
     headers
         .get(http::header::USER_AGENT)
         .and_then(|agent| agent.to_str().ok())
-        .is_some_and(|agent| navree_native::WebViewToken::find(agent).is_some())
+        .is_some_and(ends_with_token)
+}
+
+/// Whether the user agent ends with navree-native's
+/// [`WebViewToken`](navree_native::WebViewToken): the client appends it as the
+/// last word, `NavreeNative/1 (platform=ios; lib=0.1.0)`, so only the end is read.
+/// A browser's user agent has no `(` after its first few words, and costs a
+/// search backward for one byte, not a search of the whole line.
+#[cfg(feature = "native-preview")]
+#[inline]
+fn ends_with_token(agent: &str) -> bool {
+    let product = navree_native::USER_AGENT_PRODUCT;
+    // The product with its major and no comment: the last word.
+    let last_word = agent.rsplit(' ').next().unwrap_or(agent);
+    let start = if last_word.starts_with(product) && last_word[product.len()..].starts_with('/') {
+        agent.len() - last_word.len()
+    } else if agent.ends_with(')') {
+        // With its comment: the word before the last `(`.
+        let Some(open) = agent.rfind('(') else {
+            return false;
+        };
+        let before = agent[..open].trim_end();
+        let word = before.rsplit(' ').next().unwrap_or(before);
+        if !(word.starts_with(product) && word[product.len()..].starts_with('/')) {
+            return false;
+        }
+        before.len() - word.len()
+    } else {
+        return false;
+    };
+    navree_native::WebViewToken::find(&agent[start..]).is_some()
 }
 
 #[cfg(test)]
@@ -177,6 +207,26 @@ mod tests {
             who_asked(&headers(&[(
                 "user-agent",
                 "Mozilla/5.0 NotNavreeNative/1 (platform=ios)"
+            )])),
+            WhoAsked::Browser
+        );
+        // The token is the user agent's last word: the bare product and its major,
+        // with or without its comment, and nothing after it.
+        for agent in [
+            "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 NavreeNative/1",
+            "NavreeNative/1 (platform=android; lib=0.1.0)",
+            "Mozilla/5.0 (X11) NavreeNative/12 (platform=beos; lib=<x>; fold=open)",
+        ] {
+            assert_eq!(
+                who_asked(&headers(&[("user-agent", agent)])),
+                WhoAsked::WebView,
+                "{agent}"
+            );
+        }
+        assert_eq!(
+            who_asked(&headers(&[(
+                "user-agent",
+                "Mozilla/5.0 NavreeNative/1 (platform=ios; lib=0.1.0) Mobile/15E148"
             )])),
             WhoAsked::Browser
         );

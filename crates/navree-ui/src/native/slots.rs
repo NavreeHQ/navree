@@ -471,7 +471,7 @@ fn alert(cx: &mut Cx, element: &Element) -> Read {
 }
 
 /// `Stat`: a figure under its label, as a small section.
-fn stat(_: &mut Cx, element: &Element) -> Read {
+fn stat(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let Some(label) = parts.slot("stat-label") else {
         return fail("a figure with no label");
@@ -480,30 +480,55 @@ fn stat(_: &mut Cx, element: &Element) -> Read {
         return fail("a figure with no value");
     };
     let trend = parts.slot("stat-trend");
+    let chart = parts.slot("stat-chart");
     parts.done()?;
-    let mut children = vec![N::Text(n::Text {
-        value: text_of(value),
-        style: n::TextStyle::Title,
-        ..n::Text::default()
-    })];
-    if let Some(trend) = trend {
-        children.push(N::Text(n::Text {
-            value: text_of(trend),
-            style: n::TextStyle::Caption,
-            tone: match attr(trend, "data-tone").as_deref() {
-                Some("up") => Some(n::Tone::Success),
-                Some("down") => Some(n::Tone::Danger),
-                _ => None,
-            },
-            ..n::Text::default()
-        }));
-    }
-    Ok(vec![N::Section(n::Section {
+    let mut figure = n::Figure {
         id: id(element),
-        title: Some(text_of(label)),
-        style: n::SectionStyle::Card,
+        label: text_of(label),
+        value: text_of(value),
+        ..n::Figure::default()
+    };
+    if let Some(trend) = trend {
+        let words = text_of(trend);
+        // The page says whether the news is good, not which way the figure moved; a
+        // sign in the words does. Without one, the words stand under the figure and
+        // its colour says whether they are good.
+        let tone = match attr(trend, "data-tone").as_deref() {
+            Some("up") => Some(n::Tone::Success),
+            Some("down") => Some(n::Tone::Danger),
+            _ => None,
+        };
+        let direction = match words.chars().next() {
+            Some('+' | '↑' | '▲') => Some(n::Direction::Up),
+            Some('-' | '−' | '↓' | '▼') => Some(n::Direction::Down),
+            _ => None,
+        };
+        match direction {
+            Some(direction) => {
+                figure.trend = Some(n::Trend {
+                    direction,
+                    text: Some(words),
+                    tone,
+                });
+            }
+            None => {
+                figure.detail = Some(words);
+                figure.tone = tone;
+            }
+        }
+    }
+    let figure = N::Figure(figure);
+    let Some(chart) = chart else {
+        return Ok(vec![figure]);
+    };
+    // A small chart under the figure: both stand in one group.
+    hooks(chart, &[])?;
+    let mut children = vec![figure];
+    children.extend(cx.of(chart));
+    Ok(vec![N::Stack(n::Stack {
+        id: None,
         children,
-        ..n::Section::default()
+        ..n::Stack::default()
     })])
 }
 
@@ -985,7 +1010,7 @@ fn fact_card(cx: &mut Cx, card: &Element) -> Read<n::Fact> {
     Ok(fact)
 }
 
-/// `Timeline`: its days as sections, each event a row with its time at the end.
+/// `Timeline`: its days as sections of moments, with the time of each at its end.
 fn timeline(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let mut children = Vec::new();
@@ -1009,18 +1034,31 @@ fn timeline(cx: &mut Cx, element: &Element) -> Read {
         day_parts.done()?;
         children.push(N::Section(n::Section {
             title,
-            children: vec![N::List(n::List {
-                children: events(cx, list)?,
-                ..n::List::default()
+            children: vec![N::Timeline(n::Timeline {
+                id: None,
+                items: events(cx, list)?,
             })],
             ..n::Section::default()
         }));
     }
     for list in lists {
-        children.push(N::List(n::List {
-            children: events(cx, list)?,
-            ..n::List::default()
+        children.push(N::Timeline(n::Timeline {
+            id: None,
+            items: events(cx, list)?,
         }));
+    }
+    // A timeline with nothing around its moments (a day that has no name is not a
+    // section) is the timeline.
+    if let [N::Section(day)] = children.as_mut_slice()
+        && day.title.is_none()
+        && let [N::Timeline(only)] = day.children.as_mut_slice()
+    {
+        only.id = id(element);
+        return Ok(std::mem::take(&mut day.children));
+    }
+    if let [N::Timeline(only)] = children.as_mut_slice() {
+        only.id = id(element);
+        return Ok(children);
     }
     Ok(vec![N::Stack(n::Stack {
         id: id(element),
@@ -1030,9 +1068,9 @@ fn timeline(cx: &mut Cx, element: &Element) -> Read {
     })])
 }
 
-/// The events of one list of a timeline.
-fn events(cx: &mut Cx, list: &Element) -> Read<Vec<N>> {
-    let mut rows = Vec::new();
+/// The events of one list of a timeline, as its moments.
+fn events(cx: &mut Cx, list: &Element) -> Read<Vec<n::Moment>> {
+    let mut moments = Vec::new();
     for event in elements(list)? {
         if slot(event).as_deref() != Some("timeline-event") {
             return fail("something that is not an event in a timeline");
@@ -1042,11 +1080,7 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<N>> {
         let glyph = match parts.slot("timeline-dot") {
             Some(dot) => match elements(dot)?.as_slice() {
                 [] => None,
-                [glyph] if slot(glyph).as_deref() == Some("icon") => {
-                    let mut glyph = icon(glyph)?;
-                    glyph.tone = tone_of(event);
-                    Some(glyph)
-                }
+                [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
                 _ => return fail("an event whose mark is not an icon"),
             },
             None => None,
@@ -1079,9 +1113,8 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<N>> {
             }));
         }
         body.done()?;
-        rows.push(N::Row(n::Row {
+        moments.push(n::Moment {
             id: id(event),
-            leading: glyph.map(|glyph| Box::new(N::Icon(glyph))),
             title: text_of(title),
             subtitle: Some(
                 details
@@ -1091,25 +1124,19 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<N>> {
                     .join(" "),
             )
             .filter(|text| !text.is_empty()),
-            detail,
-            trailing: time.map(|time| {
-                Box::new(N::Text(n::Text {
-                    value: time,
-                    style: n::TextStyle::Caption,
-                    muted: true,
-                    ..n::Text::default()
-                }))
-            }),
+            time,
             state: match attr(event, "data-state").as_deref() {
                 Some("current") => Some(n::RowState::Current),
                 Some("upcoming") => Some(n::RowState::Upcoming),
                 Some("done") => Some(n::RowState::Done),
                 _ => None,
             },
-            ..n::Row::default()
-        }));
+            icon: glyph,
+            tone: tone_of(event),
+            detail,
+        });
     }
-    Ok(rows)
+    Ok(moments)
 }
 
 /// `Meta`: small facts in a line, each with what stands before it.
@@ -1450,17 +1477,46 @@ mod tests {
     }
 
     #[test]
-    fn a_figure_is_a_small_section() {
-        let node = read(Stat::new("Orders today", "952").trend("43 in the last hour", true));
-        let N::Section(section) = node else {
-            panic!("not a section");
+    fn a_stat_is_a_figure_with_its_value_and_which_way_it_goes() {
+        let N::Figure(figure) =
+            read(Stat::new("Orders today", "952").trend("+12% on yesterday", true))
+        else {
+            panic!("not a figure");
         };
-        assert_eq!(section.title.as_deref(), Some("Orders today"));
-        let [N::Text(value), N::Text(trend)] = section.children.as_slice() else {
-            panic!("not a value and a trend");
+        assert_eq!(figure.label, "Orders today");
+        assert_eq!(figure.value, "952");
+        assert_eq!(
+            figure.trend,
+            Some(n::Trend {
+                direction: n::Direction::Up,
+                text: Some("+12% on yesterday".into()),
+                tone: Some(n::Tone::Success),
+            })
+        );
+        let N::Figure(down) = read(Stat::new("Returns", "7").trend("−3 since Monday", false))
+        else {
+            panic!("not a figure");
         };
-        assert_eq!(value.value, "952");
-        assert_eq!(trend.tone, Some(n::Tone::Success));
+        assert!(
+            matches!(&down.trend, Some(trend) if trend.direction == n::Direction::Down && trend.tone == Some(n::Tone::Danger))
+        );
+    }
+
+    #[test]
+    fn a_trend_with_no_sign_is_a_line_under_the_figure_in_the_colour_of_its_news() {
+        // The page says whether the news is good, not which way the figure moved.
+        let N::Figure(figure) =
+            read(Stat::new("Orders today", "952").trend("43 in the last hour", true))
+        else {
+            panic!("not a figure");
+        };
+        assert_eq!(figure.trend, None);
+        assert_eq!(figure.detail.as_deref(), Some("43 in the last hour"));
+        assert_eq!(figure.tone, Some(n::Tone::Success));
+        let N::Figure(plain) = read(Stat::new("Customers", "1,204")) else {
+            panic!("not a figure");
+        };
+        assert_eq!((plain.trend, plain.detail, plain.tone), (None, None, None));
     }
 
     #[test]
@@ -1656,34 +1712,51 @@ mod tests {
             panic!("not a stack");
         };
         assert_eq!(stack.id.as_deref(), Some("order-steps"));
-        let rows: Vec<&n::Row> = stack
+        // The days are sections, each holding a timeline of its moments.
+        let moments: Vec<&n::Moment> = stack
             .children
             .iter()
             .flat_map(|node| match node {
                 N::Section(day) => day.children.iter().collect::<Vec<_>>(),
                 other => vec![other],
             })
-            .flat_map(|node| match node {
-                N::List(list) => list.children.iter().collect::<Vec<_>>(),
-                _ => Vec::new(),
-            })
             .filter_map(|node| match node {
-                N::Row(row) => Some(row),
+                N::Timeline(timeline) => Some(timeline),
                 _ => None,
             })
+            .flat_map(|timeline| timeline.items.iter())
             .collect();
-        let titles: Vec<&str> = rows.iter().map(|row| row.title.as_str()).collect();
+        let titles: Vec<&str> = moments.iter().map(|moment| moment.title.as_str()).collect();
         assert_eq!(titles, ["Placed", "Delivered", "Packing", "Shipping"]);
-        assert_eq!(rows[0].subtitle.as_deref(), Some("2 units for ₹7,848"));
-        let Some(N::Icon(mark)) = rows[0].leading.as_deref() else {
-            panic!("no mark");
+        assert_eq!(moments[0].subtitle.as_deref(), Some("2 units for ₹7,848"));
+        assert_eq!(
+            moments[0]
+                .icon
+                .as_ref()
+                .and_then(|icon| icon.name.as_deref()),
+            Some("shopping-bag")
+        );
+        assert_eq!(moments[0].tone, Some(n::Tone::Info));
+        assert!(moments[0].time.is_some());
+        assert!(
+            !moments[1].detail.is_empty(),
+            "the delivery's line of facts"
+        );
+        assert_eq!(moments[2].state, Some(n::RowState::Current));
+        assert_eq!(moments[2].time.as_deref(), Some("Next"));
+        assert_eq!(moments[3].state, Some(n::RowState::Upcoming));
+    }
+
+    #[test]
+    fn a_timeline_of_one_list_is_the_timeline() {
+        let N::Timeline(timeline) = read(
+            Timeline::new("steps", "Steps")
+                .events([TimelineEvent::new("Placed").time_text("Today")]),
+        ) else {
+            panic!("not a timeline");
         };
-        assert_eq!(mark.name.as_deref(), Some("shopping-bag"));
-        assert_eq!(mark.tone, Some(n::Tone::Info));
-        assert!(rows[0].trailing.is_some());
-        assert!(!rows[1].detail.is_empty(), "the delivery's line of facts");
-        assert_eq!(rows[2].state, Some(n::RowState::Current));
-        assert_eq!(rows[3].state, Some(n::RowState::Upcoming));
+        assert_eq!(timeline.id.as_deref(), Some("steps"));
+        assert_eq!(timeline.items.len(), 1);
     }
 
     #[test]

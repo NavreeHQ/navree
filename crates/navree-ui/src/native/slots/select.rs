@@ -18,7 +18,7 @@ use navree_native::input as i;
 use navree_native::node as n;
 
 use super::super::lower::{
-    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, slot, text_of,
+    Control, Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, number, slot, text_of,
 };
 use crate::node::{Element, Node};
 
@@ -32,6 +32,8 @@ pub(crate) const HOOKS: &[&str] = &[
     "data-ui-max",
     "data-ui-summary",
     "data-ui-pick-all",
+    "data-ui-create",
+    "data-ui-create-denied",
 ];
 
 /// A picker: the field its plain `<select>` stands for.
@@ -77,6 +79,22 @@ pub(crate) fn field(cx: &mut Cx, element: &Element) -> Read<n::Field> {
     };
     field.label = label;
     field.id = super::super::lower::id(element).or(field.id);
+    // Where more options are found as the reader types, and whether they may add one.
+    let search = attr(element, "data-ui-search").map(|href| i::ChoiceSearch {
+        href: href.into_owned(),
+        name: "q".to_owned(),
+        min: number::<u8>(element, "data-ui-min").unwrap_or(0),
+    });
+    let mut create = attr(element, "data-ui-create").map(|how| i::ChoiceCreate {
+        label: create_words(element),
+        href: Some(how.into_owned()).filter(|how| how != "free"),
+    });
+    // The row that adds an option shown switched off, with its reason, is a hint to the
+    // person: nobody may add one, and so none is offered.
+    if has(element, "data-ui-create-denied") {
+        create = None;
+        cx.dropped.push("select-create-denied".to_owned());
+    }
     match &mut field.input {
         i::Input::Choice(choice) => {
             choice.kind = if kind == "combobox" {
@@ -85,15 +103,28 @@ pub(crate) fn field(cx: &mut Cx, element: &Element) -> Read<n::Field> {
                 i::ChoiceKind::Menu
             };
             describe(&mut choice.options, &described);
+            (choice.search, choice.create) = (search, create);
         }
-        i::Input::Choices(choices) => describe(&mut choices.options, &described),
+        i::Input::Choices(choices) => {
+            describe(&mut choices.options, &described);
+            (choices.search, choices.create) = (search, create);
+        }
         _ => return fail("a picker whose select holds no choices"),
     }
-    if has(element, "data-ui-search") {
-        // The address that searches is not in the vocabulary yet.
-        cx.dropped.push("select-search".to_owned());
-    }
     Ok(*field)
+}
+
+/// What the picker offers beside the typed words to add them as an option, as the page
+/// words it: `Create “{q}”`, where `{q}` stands for what was typed.
+fn create_words(picker: &Element) -> String {
+    let own = attr(picker, "data-l")
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|words| {
+            words
+                .get("create")
+                .and_then(|words| words.as_str().map(str::to_owned))
+        });
+    own.unwrap_or_else(|| crate::select::SelectLabels::default().create.to_string())
 }
 
 /// The words that name the picker: the label of its button or its input.
@@ -246,19 +277,65 @@ mod tests {
     }
 
     #[test]
-    fn a_combobox_searched_on_the_server_reads_the_options_it_began_with_and_says_what_it_left_out()
-    {
-        let node: Node = Combobox::new("agent")
-            .choice(Choice::new("1", "Gurpreet Sandhu"))
-            .search("/inbox/agents/options")
+    fn a_combobox_searched_on_the_server_says_where_to_ask_and_how_soon() {
+        let field = field_of(read(
+            Combobox::new("agent")
+                .choice(Choice::new("1", "Gurpreet Sandhu"))
+                .search("/inbox/agents/options")
+                .min_chars(2),
+        ));
+        let choice = choice_of(&field);
+        assert_eq!(choice.kind, i::ChoiceKind::List);
+        assert_eq!(
+            choice.search,
+            Some(i::ChoiceSearch {
+                href: "/inbox/agents/options".into(),
+                name: "q".into(),
+                min: 2,
+            })
+        );
+        assert_eq!(choice.create, None);
+        let plain = field_of(read(Combobox::new("agent").option("1", "A")));
+        assert_eq!(choice_of(&plain).search, None);
+    }
+
+    #[test]
+    fn a_picker_that_adds_options_says_how_and_in_the_pages_words() {
+        let free = field_of(read(Combobox::new("tag").option("a", "A").creatable()));
+        assert_eq!(
+            choice_of(&free).create,
+            Some(i::ChoiceCreate {
+                label: "Create “{q}”".into(),
+                href: None,
+            })
+        );
+        let made = field_of(read(
+            MultiSelect::new("tags")
+                .option("a", "A")
+                .create_url("/tags/new")
+                .search("/tags/options"),
+        ));
+        let i::Input::Choices(choices) = &made.input else {
+            panic!("not choices");
+        };
+        assert_eq!(
+            choices.create.as_ref().and_then(|c| c.href.as_deref()),
+            Some("/tags/new")
+        );
+        assert!(choices.search.is_some());
+        // Switched off for someone who may not add one: none is offered, and it is said.
+        let node: Node = Combobox::new("tag")
+            .option("a", "A")
+            .create_url("/tags/new")
+            .create_denied("Only managers add tags")
             .into();
         let lowered = crate::native::lower(&node);
         assert!(lowered.is_native(), "{:?}", lowered.misses);
-        assert_eq!(lowered.dropped, ["select-search"]);
-        let N::Field(field) = lowered.node else {
+        assert_eq!(lowered.dropped, ["select-create-denied"]);
+        let N::Field(denied) = lowered.node else {
             panic!("not a field");
         };
-        assert_eq!(choice_of(&field).kind, i::ChoiceKind::List);
+        assert_eq!(choice_of(&denied).create, None);
     }
 
     #[test]
@@ -294,9 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn a_picker_that_creates_options_or_leads_to_pages_or_cannot_be_changed_is_a_miss() {
-        let create: Node = Combobox::new("tag").option("a", "A").creatable().into();
-        assert_eq!(misses(create), ["hook:data-ui-create"]);
+    fn a_picker_that_leads_to_pages_or_cannot_be_changed_is_a_miss() {
         let links: Node = Select::new("go")
             .choice(Choice::new("a", "A").link("/a"))
             .into();

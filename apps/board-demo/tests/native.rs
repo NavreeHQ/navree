@@ -68,4 +68,12 @@ async fn the_board_answers_a_native_client() {
     }
     println!("{coverage}");
     assert!(coverage.pages() >= 4, "{coverage}");
+    // The board's parts say what they are: all it lacks is a checklist box that submits
+    // its form when it changes, so one page, the card, is still the web view's.
+    assert_eq!(coverage.native(), coverage.pages() - 1, "{coverage}");
+    assert_eq!(
+        coverage.graded(navree::ui::native::Grade::Idiom),
+        coverage.native(),
+        "{coverage}"
+    );
 }

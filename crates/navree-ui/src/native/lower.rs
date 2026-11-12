@@ -676,7 +676,31 @@ impl Cx {
                 style: n::TextStyle::Mono,
                 ..n::Text::default()
             })]),
-            "progress" | "meter" => {
+            // A value within a range, read at a glance: a level, not how far along.
+            "meter" => {
+                let number = |name: &str, otherwise: f64| {
+                    attr(element, name)
+                        .and_then(|text| text.trim().parse::<f64>().ok())
+                        .filter(|value| value.is_finite())
+                        .unwrap_or(otherwise)
+                };
+                let (min, max) = (number("min", 0.0), number("max", 1.0));
+                if max <= min {
+                    return fail("a meter whose range is empty");
+                }
+                let value = number("value", min).clamp(min, max);
+                let shown = text_of(element);
+                Ok(vec![N::Gauge(n::Gauge {
+                    id: id(element),
+                    value: json_number(value),
+                    min: json_number(min),
+                    max: json_number(max),
+                    label: attr(element, "aria-label").map(Cow::into_owned),
+                    shown: Some(shown).filter(|shown| !shown.is_empty()),
+                    tone: None,
+                })])
+            }
+            "progress" => {
                 let max = attr(element, "max")
                     .and_then(|max| max.parse::<f64>().ok())
                     .filter(|max| *max > 0.0)
@@ -1439,6 +1463,15 @@ pub(crate) fn tone_of(element: &Element) -> Option<n::Tone> {
     attr(element, "data-tone").and_then(|name| tone(&name))
 }
 
+/// A number as the protocol writes it: a whole one whole, a fraction as it is.
+pub(crate) fn json_number(value: f64) -> serde_json::Number {
+    if value.fract() == 0.0 && value.abs() < 9.0e15 {
+        serde_json::Number::from(value as i64)
+    } else {
+        serde_json::Number::from_f64(value).unwrap_or_else(|| serde_json::Number::from(0))
+    }
+}
+
 /// The value of an attribute, as text.
 pub(crate) fn attr<'a>(element: &'a Element, name: &str) -> Option<Cow<'a, str>> {
     element.get(name).and_then(AttrValue::as_text)
@@ -1621,6 +1654,15 @@ pub(crate) fn with_id(mut node: N, id: Option<String>) -> N {
         N::Form(inner) => &mut inner.id,
         N::Banner(inner) => &mut inner.id,
         N::Empty(inner) => &mut inner.id,
+        N::Message(inner) => &mut inner.id,
+        N::FeedRow(inner) => &mut inner.id,
+        N::Figure(inner) => &mut inner.id,
+        N::Timeline(inner) => &mut inner.id,
+        N::Gauge(inner) => &mut inner.id,
+        N::Chart(inner) => &mut inner.id,
+        N::Pane(inner) => &mut inner.id,
+        N::Tabs(inner) => &mut inner.id,
+        N::Disclosure(inner) => &mut inner.id,
         _ => {
             return N::Stack(n::Stack {
                 id: Some(id),
@@ -2129,6 +2171,42 @@ mod tests {
                 children: vec![N::text("x")],
                 ..n::Stack::default()
             })
+        );
+    }
+
+    #[test]
+    fn a_meter_is_a_gauge_and_a_progress_bar_is_progress() {
+        assert_eq!(
+            read(
+                el("meter")
+                    .attr("min", "0")
+                    .attr("max", "60000")
+                    .attr("value", "42000")
+                    .attr("aria-label", "Budget used")
+                    .child("₹42,000 of ₹60,000")
+            ),
+            N::Gauge(n::Gauge {
+                id: None,
+                value: 42_000.into(),
+                min: 0.into(),
+                max: 60_000.into(),
+                label: Some("Budget used".into()),
+                shown: Some("₹42,000 of ₹60,000".into()),
+                tone: None,
+            })
+        );
+        // A fraction stays a fraction; a value past the end is held at it.
+        let N::Gauge(level) = read(el("meter").attr("value", "1.4").attr("max", "1")) else {
+            panic!("not a gauge");
+        };
+        assert_eq!(level.value, 1.into());
+        let N::Gauge(half) = read(el("meter").attr("value", "0.5")) else {
+            panic!("not a gauge");
+        };
+        assert_eq!(half.value.as_f64(), Some(0.5));
+        assert_eq!(
+            missed(el("meter").attr("min", "5").attr("max", "5")),
+            ["tag:meter"]
         );
     }
 

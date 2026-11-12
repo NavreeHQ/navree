@@ -259,10 +259,11 @@ fn data_row(cx: &mut Cx, row: &Element, columns: usize) -> Read<n::TableRow> {
         return Ok(n::TableRow {
             id: key,
             cells: shown,
-            action: None,
+            ..n::TableRow::default()
         });
     }
     let mut out = Vec::with_capacity(cells.len());
+    let mut actions = Vec::new();
     for cell in cells {
         if !matches!(cell.tag(), "td" | "th") {
             return fail(format!("a <{}> among the cells of a row", cell.tag()));
@@ -271,6 +272,11 @@ fn data_row(cx: &mut Cx, row: &Element, columns: usize) -> Read<n::TableRow> {
             return fail("a cell that spans rows or columns");
         }
         out.push(match slot(cell).as_deref() {
+            // What a reader may do with the record: a menu or buttons.
+            Some("cell-actions") => {
+                actions.extend(cx.of(cell));
+                continue;
+            }
             Some("cell-select") => select_cell(cx, cell)?,
             Some("cell-toggle") => toggle_cell(cx, cell)?,
             _ => {
@@ -286,7 +292,8 @@ fn data_row(cx: &mut Cx, row: &Element, columns: usize) -> Read<n::TableRow> {
     Ok(n::TableRow {
         id: key,
         cells: out,
-        action: None,
+        actions,
+        ..n::TableRow::default()
     })
 }
 
@@ -340,7 +347,12 @@ fn toggle_cell(cx: &mut Cx, cell: &Element) -> Read<N> {
 /// The roles a native client's rows say their columns have: on each cell
 /// of the first row, and a column the table does not show after the others.
 fn roles(row: &Element, columns: &mut Vec<n::Column>) -> Read<()> {
-    for (at, cell) in elements(row)?.into_iter().enumerate() {
+    // A row's menu is not a column: it is the row's actions.
+    let cells: Vec<&Element> = elements(row)?
+        .into_iter()
+        .filter(|cell| slot(cell).as_deref() != Some("cell-actions"))
+        .collect();
+    for (at, cell) in cells.iter().copied().enumerate() {
         let Some(role) = attr(cell, "data-role") else {
             continue;
         };
@@ -367,7 +379,6 @@ fn roles(row: &Element, columns: &mut Vec<n::Column>) -> Read<()> {
     }
     // The column the page said is the title is the one: the sticky column
     // stands in for it only when none was said.
-    let cells = elements(row)?;
     if let Some(said) = cells
         .iter()
         .position(|cell| attr(cell, "data-role").as_deref() == Some("title"))
@@ -410,17 +421,8 @@ fn head(head: &Element) -> Read<Vec<n::Column>> {
                 columns.push(n::Column::default());
                 continue;
             }
-            Some("cell-actions") => {
-                let mut label = String::new();
-                for part in elements(cell)? {
-                    label = text_of(part);
-                }
-                columns.push(n::Column {
-                    label,
-                    ..n::Column::default()
-                });
-                continue;
-            }
+            // The menu of a row's actions is the row's own, not a column.
+            Some("cell-actions") => continue,
             _ => {}
         }
         if cell.tag() != "th" {

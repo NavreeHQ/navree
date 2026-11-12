@@ -389,11 +389,11 @@ async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
         .collect();
     assert!(!lines.is_empty());
     assert!(lines.iter().all(|row| row.trailing.is_some()));
-    assert!(
-        nodes
-            .iter()
-            .any(|node| matches!(node, N::Row(row) if row.title == "Placed"))
-    );
+    // The history is a timeline, its first moment the order being placed.
+    assert!(nodes.iter().any(|node| matches!(
+        node,
+        N::Timeline(timeline) if timeline.items.iter().any(|moment| moment.title == "Placed")
+    )));
 
     // Resending the confirmation, as the dialog's button would.
     let resent = app
@@ -480,6 +480,20 @@ async fn the_dashboard_gives_its_charts_as_numbers_and_what_it_cannot_say_falls_
         })
         .collect();
     assert!(!charts.is_empty());
+    // The dashboard's key figures are figures, each with its value in the page's words.
+    let figures: Vec<&n::Figure> = all(&screen.body)
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Figure(figure) => Some(figure),
+            _ => None,
+        })
+        .collect();
+    assert!(figures.len() >= 3, "{figures:?}");
+    assert!(
+        figures
+            .iter()
+            .all(|figure| !figure.label.is_empty() && !figure.value.is_empty())
+    );
     for chart in &charts {
         assert!(!chart.labels.is_empty(), "{:?}", chart.title);
         for series in &chart.series {

@@ -78,6 +78,7 @@ pub(crate) fn toggle_group(_: &mut Cx, element: &Element) -> Read {
         i::Input::Choices(i::ChoicesInput {
             options,
             values: chosen,
+            ..i::ChoicesInput::default()
         })
     } else {
         i::Input::Choice(i::ChoiceInput {
@@ -85,6 +86,7 @@ pub(crate) fn toggle_group(_: &mut Cx, element: &Element) -> Read {
             options,
             value: chosen.into_iter().next(),
             placeholder: None,
+            ..i::ChoiceInput::default()
         })
     };
     Ok(vec![N::Field(n::Field {

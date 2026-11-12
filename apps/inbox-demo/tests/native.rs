@@ -8,7 +8,9 @@
 
 use inbox_demo::{Settings, app};
 use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+use navree::ui::native::Grade;
 use navree::ui::native::protocol::Envelope;
+use navree::ui::native::protocol::node::{self as n, Node as N};
 use navree::ui::native::{Answered, Coverage};
 
 const PHONE: &str =
@@ -75,4 +77,64 @@ async fn the_inbox_answers_a_native_client() {
     }
     println!("{coverage}");
     assert!(coverage.pages() >= 4, "{coverage}");
+    // The inbox says what its parts are: every page of it is native and belongs to its system.
+    assert_eq!(coverage.native(), coverage.pages(), "{coverage}");
+    assert_eq!(
+        coverage.graded(Grade::Idiom),
+        coverage.pages(),
+        "{coverage}"
+    );
+}
+
+/// Every node under `node`, itself first.
+fn all(node: &N) -> Vec<&N> {
+    let mut out = vec![node];
+    for child in node.children() {
+        out.extend(all(child));
+    }
+    out
+}
+
+#[tokio::test]
+async fn an_open_conversation_is_panes_with_the_one_a_narrow_screen_shows_and_its_messages() {
+    let (app, _dir) = boot().await;
+    let native = app
+        .client()
+        .get("/inbox/1")
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .text();
+    let envelope: Envelope = serde_json::from_str(&native).expect("an envelope");
+    let screen = envelope.screen.expect("a screen");
+    let nodes = all(&screen.body);
+    // The three panes: the list, the conversation (the one to show first), the customer.
+    let panes: Vec<(&str, n::PaneRole, bool)> = nodes
+        .iter()
+        .filter_map(|node| match node {
+            N::Pane(pane) => Some((pane.id.as_deref().unwrap_or(""), pane.role, pane.current)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        panes,
+        [
+            ("conversations", n::PaneRole::List, false),
+            ("thread", n::PaneRole::Detail, true),
+            ("customer", n::PaneRole::Inspector, false),
+        ]
+    );
+    // The conversation is messages, the team's own on the far side, a note set apart.
+    let messages: Vec<&n::Message> = nodes
+        .iter()
+        .filter_map(|node| match node {
+            N::Message(message) => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert!(!messages.is_empty());
+    assert!(messages.iter().all(|message| !message.author.is_empty()));
+    // The customer wrote some of them.
+    assert!(messages.iter().any(|message| !message.mine));
 }

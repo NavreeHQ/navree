@@ -1799,6 +1799,8 @@ async fn who_asked_is_current_where_the_handler_runs_even_on_another_task() {
         panic!("not one table");
     };
     assert_eq!(table.rows.len(), 2);
+}
+
 /// The orders with a box to select each row, a menu of its actions, and a detail
 /// that opens under it.
 fn full_table<'a>(
@@ -1858,7 +1860,8 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
     let Some(N::Table(table)) = bulk.children.last() else {
         panic!("no table in the form");
     };
-    // The columns: the box, the control for the detail, the four shown, the menu.
+    // The columns: the box, the control for the detail, the four shown. The menu of a
+    // row's actions is the row's own, not a column.
     let labels: Vec<&str> = table
         .columns
         .iter()
@@ -1872,14 +1875,13 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
             "Order",
             "Status",
             "Total",
-            "Placed",
-            "Actions"
+            "Placed"
         ]
     );
     // Row 1 is open: its detail follows it, across the table.
     assert_eq!(table.rows.len(), 3);
     let first = &table.rows[0];
-    assert_eq!(first.cells.len(), 7);
+    assert_eq!(first.cells.len(), 6);
     let N::Field(tick) = &first.cells[0] else {
         panic!("not a box: {:?}", first.cells[0]);
     };
@@ -1901,8 +1903,8 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
         })
     ));
     // The menu: a link and a post that carries the token the table was given.
-    let N::Menu(menu) = &first.cells[6] else {
-        panic!("not a menu: {:?}", first.cells[6]);
+    let [N::Menu(menu)] = first.actions.as_slice() else {
+        panic!("not a menu: {:?}", first.actions);
     };
     assert_eq!(menu.label, "Actions for CS-20481");
     let [N::Button(link), N::Button(post)] = menu.items.as_slice() else {

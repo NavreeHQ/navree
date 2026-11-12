@@ -3,9 +3,8 @@
 //!
 //! One build can't be both, so the test runs once in each, against one
 //! directory: the build without the feature writes each page, and the build
-//! with it reads each back and compares. Build both first and run them one
-//! right after the other, so the two apps write their data and draw their
-//! pages at nearly the same time:
+//! with it reads each back and compares. The app's clock is held at one
+//! moment in both, so the two write the same data and draw the same pages:
 //!
 //! ```text
 //! NAVREE_HTML_DIR=/tmp/board-demo-html cargo test -p board-demo --test same_html -- --ignored
@@ -19,6 +18,8 @@ use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
 
 /// The board on a database of its own, written afresh, with nothing happening by itself.
 async fn boot() -> (TestApp, TempDirGuard) {
+    // Both runs write their data and draw their pages at one moment.
+    board_demo::live::hold_clock(1_794_457_800);
     let (url, dir) = temp_sqlite_url();
     let settings = Settings {
         simulate_every: None,

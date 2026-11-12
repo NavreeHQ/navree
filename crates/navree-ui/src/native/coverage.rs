@@ -50,7 +50,8 @@ impl fmt::Display for Grade {
 /// ```
 pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
     let mut missing = Vec::new();
-    if screen.title.trim().is_empty() {
+    // The answer to a search is the options found, not a page: it has no name to give.
+    if screen.title.trim().is_empty() && !answers_a_search(&screen.body) {
         missing.push("the screen has no title".to_owned());
     }
     for action in &screen.actions {
@@ -88,6 +89,21 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
         Grade::Layout
     };
     (grade, missing)
+}
+
+/// Whether `body` is what a searched choice is answered with: a choice, and
+/// perhaps the way to the next options.
+fn answers_a_search(body: &N) -> bool {
+    use navree_native::input::Input;
+    let is_choice = |node: &N| matches!(node, N::Field(field) if matches!(field.input, Input::Choice(_) | Input::Choices(_)));
+    match body {
+        N::Stack(stack) => match stack.children.as_slice() {
+            [field] => is_choice(field),
+            [field, N::Link(_)] => is_choice(field),
+            _ => false,
+        },
+        other => is_choice(other),
+    }
 }
 
 /// What a table lacks to be drawn as a system's list of records.
@@ -290,6 +306,37 @@ mod tests {
                 .to_string()
                 .ends_with("1 of 2 native: 1 idiom, 0 layout, 1 web")
         );
+    }
+
+    #[test]
+    fn the_options_a_search_found_are_not_a_page_that_lacks_a_title() {
+        use navree_native::input as i;
+        let field = N::Field(n::Field {
+            id: None,
+            name: String::new(),
+            label: None,
+            help: None,
+            error: None,
+            required: false,
+            disabled: false,
+            input: i::Input::Choice(i::ChoiceInput::default()),
+        });
+        assert_eq!(graded(&Screen::new("", field.clone())).0, Grade::Idiom);
+        // A screen of anything else with no name still lacks one.
+        assert_eq!(graded(&Screen::new("", N::text("x"))).0, Grade::Layout);
+        let with_link = N::Stack(n::Stack {
+            children: vec![
+                field,
+                N::Link(n::Link {
+                    id: None,
+                    label: "Show more".into(),
+                    action: navree_native::Action::Refresh,
+                    children: Vec::new(),
+                }),
+            ],
+            ..n::Stack::default()
+        });
+        assert_eq!(graded(&Screen::new("", with_link)).0, Grade::Idiom);
     }
 
     #[test]

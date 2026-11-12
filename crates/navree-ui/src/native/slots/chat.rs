@@ -1,9 +1,9 @@
 //! The parts of a conversation: `Message`, `Bubble`, `Attachment` and `Marker`.
 //!
-//! The vocabulary has no message yet. A message is read as the nearest thing
-//! it has: a row with the writer's picture, the writer's name, what was written
-//! under it, and when at its end. Which side a bubble is on (the reader's own
-//! messages on the far side) is left out, and said.
+//! A message is the protocol's `message`: who wrote it, their picture, whether it is
+//! the reader's own (the far side of the conversation) and whether it is a note
+//! only the team sees, what it says, when, and the files with it. The bubbles
+//! are what it says; a bubble outside a message stands as a group of its parts.
 
 use navree_native::node as n;
 
@@ -19,44 +19,58 @@ pub(crate) fn message(cx: &mut Cx, element: &Element) -> Read {
     let Some(content) = content else {
         return fail("a message with no content");
     };
-    let mut row = n::Row {
+    let mut message = n::Message {
         id: id(element),
-        ..n::Row::default()
+        // The reader's own messages stand on the far side.
+        mine: attr(element, "data-align").as_deref() == Some("end"),
+        ..n::Message::default()
     };
     if let Some(avatar) = avatar {
-        row.leading = Some(Box::new(super::super::lower::one(cx.of(avatar))));
+        match cx.of(avatar).as_slice() {
+            [N::Avatar(person)] => message.avatar = Some(person.clone()),
+            _ => return fail("a message whose picture is not an avatar"),
+        }
     }
-    // The header and the footer have their places; every other part is what was said.
+    // The header and the footer have their places; the bubbles are what was said and
+    // every other part (a file) goes with it.
     for part in elements(content)? {
         match slot(part).as_deref() {
             Some("message-header") => {
                 if !words_only(part) {
                     return fail("a message whose header holds more than words");
                 }
-                row.title = text_of(part);
+                message.author = text_of(part);
             }
             Some("message-footer") => {
                 if !words_only(part) {
                     return fail("a message whose footer holds more than words");
                 }
-                row.trailing = Some(Box::new(N::Text(n::Text {
-                    value: text_of(part),
-                    style: n::TextStyle::Caption,
-                    muted: true,
-                    ..n::Text::default()
-                })));
+                message.time = Some(text_of(part)).filter(|time| !time.is_empty());
             }
-            _ => {
-                let mut one = Vec::new();
-                cx.element(part, &mut one);
-                row.detail.extend(one);
+            Some("bubble") => {
+                message.note |= attr(part, "data-variant").as_deref() == Some("note");
+                message.body.extend(said(cx, part)?);
             }
+            _ => cx.element(part, &mut message.body),
         }
     }
-    if attr(element, "data-align").as_deref() == Some("end") {
-        cx.dropped.push("message-side".to_owned());
+    if message.author.is_empty() {
+        return fail("a message with no writer");
     }
-    Ok(vec![N::Row(row)])
+    Ok(vec![N::Message(message)])
+}
+
+/// What one bubble says.
+fn said(cx: &mut Cx, bubble: &Element) -> Read<Vec<N>> {
+    hooks(bubble, &[])?;
+    let mut parts = Parts::of(bubble);
+    let content = parts.slot("bubble-content");
+    parts.done()?;
+    let Some(content) = content else {
+        return fail("a bubble with no content");
+    };
+    hooks(content, &[])?;
+    Ok(cx.of(content))
 }
 
 /// `Bubble`: what one message says. A note for the team stands apart.
@@ -185,16 +199,16 @@ mod tests {
         el, icons,
     };
 
-    fn row_of(node: N) -> n::Row {
-        let N::Row(row) = node else {
-            panic!("not a row: {node:?}");
+    fn message_of(node: N) -> n::Message {
+        let N::Message(message) = node else {
+            panic!("not a message: {node:?}");
         };
-        row
+        message
     }
 
     #[test]
-    fn a_message_is_a_row_with_its_writer_its_words_and_its_time() {
-        let row = row_of(read(
+    fn a_message_is_its_writer_picture_words_files_and_time() {
+        let message = message_of(read(
             el("article").attr("id", "message-3").child(
                 Message::new(BubbleSide::Start)
                     .avatar(Avatar::placeholder("Tanvi Sharma"))
@@ -209,16 +223,18 @@ mod tests {
                     .footer(el("time").child("9:41 am")),
             ),
         ));
-        assert_eq!(row.id.as_deref(), Some("message-3"));
-        assert_eq!(row.title, "Tanvi Sharma");
-        assert!(
-            matches!(row.leading.as_deref(), Some(N::Avatar(avatar)) if avatar.name == "Tanvi Sharma")
+        assert_eq!(message.id.as_deref(), Some("message-3"));
+        assert_eq!(message.author, "Tanvi Sharma");
+        assert_eq!(
+            message.avatar.as_ref().map(|person| person.name.as_str()),
+            Some("Tanvi Sharma")
         );
-        assert!(matches!(row.trailing.as_deref(), Some(N::Text(time)) if time.value == "9:41 am"));
-        let [N::Stack(said), N::Row(file)] = row.detail.as_slice() else {
-            panic!("not a bubble and a file: {:?}", row.detail);
+        assert_eq!(message.time.as_deref(), Some("9:41 am"));
+        assert!(!message.mine && !message.note);
+        let [said, N::Row(file)] = message.body.as_slice() else {
+            panic!("not words and a file: {:?}", message.body);
         };
-        assert_eq!(said.children, [N::text("Where is my order?")]);
+        assert_eq!(*said, N::text("Where is my order?"));
         assert_eq!(file.title, "invoice.pdf");
         assert_eq!(file.subtitle.as_deref(), Some("40 KB"));
         assert_eq!(
@@ -231,28 +247,31 @@ mod tests {
     }
 
     #[test]
-    fn a_note_for_the_team_stands_apart() {
-        let row = row_of(read(
+    fn the_far_side_is_the_readers_own_and_a_note_is_a_note() {
+        let message = message_of(read(
             Message::new(BubbleSide::End)
-                .header(Text::new("Internal note · Simran Grewal"))
+                .header(Text::new("Simran Grewal"))
                 .content(Bubble::new(BubbleSide::End, Text::new("Refund approved.")).note()),
         ));
-        let [N::Section(note)] = row.detail.as_slice() else {
-            panic!("not a note");
-        };
-        assert_eq!(note.style, n::SectionStyle::Inset);
-        assert_eq!(note.children, [N::text("Refund approved.")]);
+        assert!(message.mine);
+        assert!(message.note);
+        assert_eq!(message.body, [N::text("Refund approved.")]);
+        let theirs = message_of(read(
+            Message::new(BubbleSide::Start)
+                .header(Text::new("Tanvi Sharma"))
+                .content(Bubble::new(BubbleSide::Start, Text::new("Hello"))),
+        ));
+        assert!(!theirs.mine && !theirs.note);
     }
 
     #[test]
-    fn the_side_a_message_is_on_is_left_out_and_said() {
-        let node: Node = Message::new(BubbleSide::End)
-            .header(Text::new("Simran Grewal"))
-            .content(Bubble::new(BubbleSide::End, Text::new("On it.")))
-            .into();
-        let lowered = crate::native::lower(&node);
-        assert!(lowered.is_native(), "{:?}", lowered.misses);
-        assert_eq!(lowered.dropped, ["message-side"]);
+    fn a_bubble_alone_stands_as_a_group_of_its_parts_and_a_note_apart() {
+        let N::Section(note) = read(Bubble::new(BubbleSide::End, Text::new("Careful.")).note())
+        else {
+            panic!("not a section");
+        };
+        assert_eq!(note.style, n::SectionStyle::Inset);
+        assert_eq!(note.children, [N::text("Careful.")]);
     }
 
     #[test]
