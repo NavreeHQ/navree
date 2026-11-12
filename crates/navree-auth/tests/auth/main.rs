@@ -26,6 +26,7 @@ mod session_pages;
 mod session_strategy;
 mod sessions;
 mod sign_in_policy;
+mod sign_up_pages;
 mod strategy;
 mod subject;
 mod telemetry;
