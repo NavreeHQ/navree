@@ -584,7 +584,6 @@ fn day_clock_default() -> Card {
             .label("Steps")
             .center_icon(icons::FOOTPRINTS)
             .locale("en-IN")
-            .size(320)
             .motion(Motion::new()),
     )
 }
@@ -619,7 +618,6 @@ fn day_clock_scale() -> Card {
             )
             .now(20)
             .label("Active min")
-            .hub(Ink::slot(4))
-            .size(300),
+            .hub(Ink::slot(4)),
     )
 }
