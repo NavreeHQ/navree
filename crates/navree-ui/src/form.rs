@@ -2848,6 +2848,11 @@ impl<T: Form> Rejected<T> {
             }
             return response;
         }
+        // A native client shows the messages at its own fields, as the runtime does.
+        #[cfg(feature = "native")]
+        if let Some(response) = crate::native::swap::errors(T::ID, &self.errors) {
+            return response;
+        }
         if self.from_runtime {
             let ops = vec![Op::Errors {
                 form: T::ID.to_owned(),

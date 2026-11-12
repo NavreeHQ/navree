@@ -245,6 +245,28 @@ pub(crate) fn envelope(page: Page, request: &scope::Request) -> (Envelope, Answe
     }
 }
 
+/// What a form that was refused answers a native client: the messages at its
+/// fields, as an op. `None` when no native client asked.
+pub(crate) fn errors(
+    form: &str,
+    fields: &std::collections::BTreeMap<String, Vec<String>>,
+) -> Option<Response> {
+    let request = scope::native()?;
+    let envelope = Envelope::ops(
+        assets::BUILD,
+        vec![navree_native::Op::Errors {
+            form: form.to_owned(),
+            fields: fields.clone(),
+        }],
+    )
+    .in_vocab(request.client.vocab.min(navree_native::VOCAB));
+    Some(respond(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "no-store",
+        &envelope,
+    ))
+}
+
 /// A page's answer when the request did not come from a browser. `Err` hands
 /// the page back for the HTML path, untouched: the request came from a
 /// browser, or from outside any request.
@@ -427,9 +449,10 @@ async fn answer(native: Arc<scope::Request>, request: Request, next: Next) -> Re
     let mut response = scope::scope(Asked::Native(native.clone()), next.run(request)).await;
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
         // Ops that can all be said natively take the fallback's place. When
-        // they can't, the fallback stands: a redirect the client follows to a
-        // screen, or a page that was answered as a screen already.
-        if let Some(ops) = native_ops(&envelope.ops) {
+        // they can't, or there are none (a handler that keeps its ops for the
+        // browser's runtime), the fallback stands: a redirect the client
+        // follows to a screen, or a page that was answered as a screen already.
+        if let Some(ops) = native_ops(&envelope.ops).filter(|ops| !ops.is_empty()) {
             let (parts, _) = crate::module::to_ops(response, envelope, status).into_parts();
             let mut native = respond(
                 parts.status,
@@ -509,4 +532,75 @@ async fn squeeze(accept: &str, response: Response) -> Response {
         parts,
         navree_http::body::Body::from(bytes::Bytes::from(compress::brotli(&bytes))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    use http::{HeaderMap, HeaderValue};
+    use navree_http::response::IntoResponse;
+
+    use super::*;
+    use crate::{Button, Card, Stack, Text};
+
+    /// What the web path pays when the feature is on, measured: the reply
+    /// layer's two header lookups, and the one read of the current client that
+    /// a page and a node op each make. Run it with
+    /// `cargo test -p navree-ui --release --lib native::swap::tests::what_a_browser -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn what_a_browser_pays_for_native_clients() {
+        const TIMES: u32 = 2_000_000;
+        let mut headers = HeaderMap::new();
+        for (name, value) in [
+            ("host", "example.in"),
+            (
+                "user-agent",
+                "Mozilla/5.0 (Linux; Android 16) Chrome/140 Mobile",
+            ),
+            ("accept", "text/html,application/xhtml+xml"),
+            ("accept-language", "en-IN,en;q=0.9,pa;q=0.8"),
+            ("accept-encoding", "gzip, deflate, br, zstd"),
+            ("cookie", "navree_session=abc; navree_ui_theme=ocean"),
+            ("sec-fetch-site", "same-origin"),
+            ("sec-fetch-mode", "navigate"),
+            ("x-navree-ui", "1"),
+        ] {
+            headers.insert(name, HeaderValue::from_static(value));
+        }
+        let started = Instant::now();
+        let mut native = 0_u32;
+        for _ in 0..TIMES {
+            let headers = black_box(&headers);
+            native += u32::from(
+                headers.contains_key(NATIVE_HEADER) || headers.contains_key(EMBED_HEADER),
+            );
+        }
+        let lookups = started.elapsed() / TIMES;
+        let started = Instant::now();
+        for _ in 0..TIMES {
+            native += u32::from(black_box(scope::asked()).is_some());
+        }
+        let ambient = started.elapsed() / TIMES;
+        assert_eq!(native, 0);
+
+        // Beside one small page drawn for a browser.
+        let page = || {
+            View::new("Order").body(Stack::gap(4).children((
+                Card::titled("Items").body(Text::new("Pashmina shawl, Patiala, small")),
+                Button::primary("Refund").href("/orders/1/refund"),
+            )))
+        };
+        const PAGES: u32 = 20_000;
+        let started = Instant::now();
+        for _ in 0..PAGES {
+            black_box(page().into_response());
+        }
+        let drawn = started.elapsed() / PAGES;
+        println!("two header lookups: {lookups:?}");
+        println!("one read of the current client: {ambient:?}");
+        println!("a small page built and drawn: {drawn:?}");
+    }
 }

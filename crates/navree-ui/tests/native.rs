@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use http::{Method, StatusCode};
 use navree_http::extract::Path;
+use navree_http::response::IntoResponse;
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
@@ -14,7 +15,7 @@ use navree_native::input::{Input, TextKind};
 use navree_native::node::{self as n, Node as N};
 use navree_native::{Action, Client, Command, Envelope, FormFactor, Op as NativeOp, Platform};
 use navree_testing::TestApp;
-use navree_ui::form::{FormView, Money};
+use navree_ui::form::{FormView, Money, Rejected, Submit};
 use navree_ui::native::{TestNative, lower};
 use navree_ui::table::NoFilter;
 use navree_ui::{
@@ -435,12 +436,32 @@ impl Controller for Pages {
                 },
             )
             .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/refunds",
+                |sent: Result<Submit<Refund>, Rejected<Refund>>| async move {
+                    match sent {
+                        Ok(Submit(refund)) => Reply::ops(vec![Op::toast(
+                            ToastTone::Success,
+                            format!("{} paise went back.", refund.amount.0),
+                        )])
+                        .into_response(),
+                        Err(rejected) => rejected.into_response(),
+                    }
+                },
+            )
+            .public(),
             RouteDef::on(Method::GET, "!/board", |shell: AppShell| async move {
                 shell.page("Board").body((Text::new("Cards"), el("canvas")))
             })
             .public(),
             RouteDef::on(Method::POST, "!/board/move", || async {
                 Reply::ops_or_redirect("/board").morph("board", el("canvas").id("board"))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/columns/doing", || async {
+                // A handler that has ops only for the browser's runtime.
+                Reply::ops_or_redirect("/board?show=20")
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/feed", || async {
@@ -658,6 +679,48 @@ async fn a_reply_is_ops_with_nodes_for_a_native_client() {
 }
 
 #[tokio::test]
+async fn a_form_that_is_refused_answers_a_native_client_with_the_messages_at_its_fields() {
+    let app = app().await;
+    let post = |body: &'static str, native: bool| {
+        let mut request = app
+            .client()
+            .post("/refunds")
+            .header("content-type", "application/x-www-form-urlencoded");
+        if native {
+            request = request.header(NATIVE, "1").header(CLIENT, PHONE);
+        }
+        request.body(body).send()
+    };
+    let refused = post("amount=abc&reason=late", true).await;
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        refused.header("content-type"),
+        Some("application/vnd.navree.native+json")
+    );
+    let envelope = envelope(&refused.text());
+    let [NativeOp::Errors { form, fields }] = envelope.ops.as_slice() else {
+        panic!("not errors: {:?}", envelope.ops);
+    };
+    assert_eq!(form, "refund-form");
+    assert!(fields.contains_key("amount"), "{fields:?}");
+    // What was right goes through, as ops.
+    let taken = post("amount=10.00&reason=late", true).await;
+    assert_eq!(taken.status(), StatusCode::OK);
+    assert!(matches!(
+        self::envelope(&taken.text()).ops.as_slice(),
+        [NativeOp::Toast(toast)] if toast.text == "1000 paise went back."
+    ));
+    // A browser without scripts still gets the form on a page, with what was typed.
+    let page = post("amount=abc&reason=late", false).await;
+    assert_eq!(page.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        page.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    assert!(page.text().contains(r#"value="abc""#));
+}
+
+#[tokio::test]
 async fn a_reply_that_can_not_be_said_natively_answers_its_fallback() {
     let app = app().await;
     let response = app
@@ -670,6 +733,16 @@ async fn a_reply_that_can_not_be_said_natively_answers_its_fallback() {
     // What a browser without scripts gets: the client follows it to the page.
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.header("location"), Some("/board"));
+    // A reply with no ops at all has nothing to say but its fallback.
+    let response = app
+        .client()
+        .get("/columns/doing")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), Some("/board?show=20"));
 }
 
 #[tokio::test]

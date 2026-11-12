@@ -56,6 +56,26 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
             (control, &["data-ui-value"])
         }
         "fact-grid" => (fact_grid, &[]),
+        "fact-card" => (
+            |cx, element| {
+                Ok(vec![N::Facts(n::Facts {
+                    id: id(element),
+                    items: vec![fact_card(cx, element)?],
+                })])
+            },
+            &[],
+        ),
+        "progress" => (|cx, element| cx.generic(element), &[]),
+        "progress-row" => (
+            |cx, element| {
+                // The percentage beside the bar is the bar's own value, said again.
+                match elements(element)?.first() {
+                    Some(bar) if bar.tag() == "progress" => cx.generic(bar),
+                    _ => fail("a row of progress with no bar"),
+                }
+            },
+            &[],
+        ),
         "timeline" => (timeline, &[]),
         "meta" => (meta, &[]),
         "table-container" => (table_container, &[]),
@@ -803,39 +823,44 @@ fn fact_grid(cx: &mut Cx, element: &Element) -> Read {
         if slot(card).as_deref() != Some("fact-card") {
             return fail("something that is not a fact in a grid of facts");
         }
-        let mut parts = Parts::of(card);
-        let glyph = match parts.slot("fact-icon") {
-            Some(holder) => match elements(holder)?.as_slice() {
-                [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
-                _ => return fail("a fact whose picture is not an icon"),
-            },
-            None => None,
-        };
-        let Some(body) = parts.slot("fact-body") else {
-            return fail("a fact with no body");
-        };
-        parts.done()?;
-        let mut fact = n::Fact {
-            icon: glyph,
-            tone: tone_of(card),
-            ..n::Fact::default()
-        };
-        for group in elements(body)? {
-            for part in elements(group)? {
-                match slot(part).as_deref() {
-                    Some("fact-label") => fact.label = text_of(part),
-                    Some("fact-value") => fact.value = cx.of(part),
-                    Some("fact-detail") => fact.details.push(text_of(part)),
-                    _ => return fail("a part of a fact no reader here knows"),
-                }
-            }
-        }
-        items.push(fact);
+        items.push(fact_card(cx, card)?);
     }
     Ok(vec![N::Facts(n::Facts {
         id: id(element),
         items,
     })])
+}
+
+/// `FactCard`: one fact.
+fn fact_card(cx: &mut Cx, card: &Element) -> Read<n::Fact> {
+    let mut parts = Parts::of(card);
+    let glyph = match parts.slot("fact-icon") {
+        Some(holder) => match elements(holder)?.as_slice() {
+            [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
+            _ => return fail("a fact whose picture is not an icon"),
+        },
+        None => None,
+    };
+    let Some(body) = parts.slot("fact-body") else {
+        return fail("a fact with no body");
+    };
+    parts.done()?;
+    let mut fact = n::Fact {
+        icon: glyph,
+        tone: tone_of(card),
+        ..n::Fact::default()
+    };
+    for group in elements(body)? {
+        for part in elements(group)? {
+            match slot(part).as_deref() {
+                Some("fact-label") => fact.label = text_of(part),
+                Some("fact-value") => fact.value = cx.of(part),
+                Some("fact-detail") => fact.details.push(text_of(part)),
+                _ => return fail("a part of a fact no reader here knows"),
+            }
+        }
+    }
+    Ok(fact)
 }
 
 /// `Timeline`: its days as sections, each event a row with its time at the end.

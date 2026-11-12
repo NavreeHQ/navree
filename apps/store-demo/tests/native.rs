@@ -1,0 +1,468 @@
+//! The store as a native client gets it: which of its routes answer a screen,
+//! which fall back to the web view and why, what the actions answer, and that a
+//! browser asking the same routes gets HTML as before.
+//!
+//! `cargo test -p store-demo --features native --test native -- --nocapture`
+//! prints the coverage table.
+#![cfg(feature = "native")]
+
+use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+use navree::ui::native::protocol::input::{Input, TextKind};
+use navree::ui::native::protocol::node::{self as n, Node as N};
+use navree::ui::native::protocol::{Action, Command, Envelope, Op};
+use navree::ui::native::{Answered, Coverage};
+use store_demo::{Settings, app};
+
+const PHONE: &str =
+    "platform=android; os=16; form=phone; app=0.1.0; vocab=1; locale=en-IN; tz=Asia/Kolkata";
+
+/// The app on a database of its own, written afresh, with nothing happening by itself.
+async fn boot() -> (TestApp, TempDirGuard) {
+    let (url, dir) = temp_sqlite_url();
+    let settings = Settings {
+        simulate_every: None,
+        test_hooks: false,
+    };
+    (TestApp::from_builder(app(0, url, settings)).await, dir)
+}
+
+/// What a native client and a browser each get for `path`.
+struct Asked {
+    status: u16,
+    location: Option<String>,
+    native: String,
+    html: String,
+}
+
+async fn ask(app: &TestApp, path: &str) -> Asked {
+    let native = app
+        .client()
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await;
+    let status = native.status().as_u16();
+    let location = native.header("location").map(str::to_owned);
+    let native = native.text();
+    let html = app.client().get(path).send().await.text();
+    Asked {
+        status,
+        location,
+        native,
+        html,
+    }
+}
+
+fn envelope(body: &str) -> Envelope {
+    serde_json::from_str(body).unwrap_or_else(|error| panic!("{error}: {body:.300}"))
+}
+
+/// Every node under `node`, itself first.
+fn all(node: &N) -> Vec<&N> {
+    let mut out = vec![node];
+    for child in node.children() {
+        out.extend(all(child));
+    }
+    out
+}
+
+#[tokio::test]
+async fn the_store_answers_a_native_client() {
+    let (app, _dir) = boot().await;
+    let mut coverage = Coverage::new();
+    let mut native_routes = Vec::new();
+    for path in [
+        "/",
+        "/orders",
+        "/orders?filter[status][in]=open&sort=total",
+        "/orders/1",
+        "/orders/999999",
+        "/orders/1/steps",
+        "/orders/1/others",
+        "/inventory",
+        "/inventory?page=2",
+        "/fragments/figures",
+        "/fragments/sales",
+        "/fragments/shelves",
+        "/fragments/activity",
+    ] {
+        let asked = ask(&app, path).await;
+        let envelope = envelope(&asked.native);
+        assert_eq!(envelope.navree, 1, "{path}");
+        let answered = match (&envelope.screen, &envelope.web) {
+            (Some(_), None) => Answered {
+                native: true,
+                why: Vec::new(),
+                dropped: Vec::new(),
+            },
+            (None, Some(web)) => {
+                assert_eq!(web.url, path, "{path}");
+                Answered {
+                    native: false,
+                    why: web.why.clone(),
+                    dropped: Vec::new(),
+                }
+            }
+            _ => panic!(
+                "{path}: neither a screen nor the web view: {:.300}",
+                asked.native
+            ),
+        };
+        if answered.native {
+            native_routes.push(path);
+        }
+        // A browser asking the same route gets a page or a fragment of HTML.
+        assert!(
+            asked.html.starts_with("<!doctype html>") || asked.html.starts_with('<'),
+            "{path}: {:.80}",
+            asked.html
+        );
+        assert!(!asked.html.contains("\"navree\":"), "{path}");
+        coverage.add_answer(path, asked.html.len(), asked.native.len(), &answered);
+    }
+    println!("{coverage}");
+    assert_eq!(
+        native_routes,
+        [
+            "/orders",
+            "/orders?filter[status][in]=open&sort=total",
+            "/orders/1",
+            "/orders/999999",
+            "/orders/1/steps",
+            "/orders/1/others",
+            "/inventory",
+            "/inventory?page=2",
+            "/fragments/figures",
+            "/fragments/shelves",
+        ],
+        "{coverage}"
+    );
+    // What keeps the rest in the web view is named.
+    let reasons = coverage.reasons();
+    assert!(
+        reasons
+            .iter()
+            .any(|(why, pages)| why == "slot:chart" && *pages == 2),
+        "{reasons:?}"
+    );
+    assert!(reasons.iter().any(|(why, _)| why == "html"), "{reasons:?}");
+}
+
+#[tokio::test]
+async fn the_orders_are_a_table_a_phone_can_draw_as_a_list() {
+    let (app, _dir) = boot().await;
+    let asked = ask(&app, "/orders").await;
+    let screen = envelope(&asked.native).screen.expect("a screen");
+    assert_eq!(screen.title, "Orders");
+    assert_eq!(screen.nav.as_deref(), Some("/orders"));
+    assert_eq!(
+        screen.back.as_ref().map(|back| back.href.as_str()),
+        Some("/")
+    );
+    let Some(N::Region(region)) = screen.body.find("orders") else {
+        panic!("no table");
+    };
+    // The table follows the shop live: a client listens and fetches it again.
+    let live = region.live.as_ref().expect("a stream");
+    assert!(live.src.starts_with("/broadcasting/stream"));
+    assert_eq!(live.event.as_deref(), Some("orders"));
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    assert_eq!(table.rows.len(), 25);
+    // What a narrow screen can go by: the column that names the record, and the
+    // columns it may leave out.
+    let titles: Vec<&str> = table
+        .columns
+        .iter()
+        .filter(|column| column.role == Some(n::ColumnRole::Title))
+        .map(|column| column.label.as_str())
+        .collect();
+    assert_eq!(titles, ["Order"]);
+    let secondary: Vec<&str> = table
+        .columns
+        .iter()
+        .filter(|column| column.secondary)
+        .map(|column| column.label.as_str())
+        .collect();
+    assert_eq!(secondary, ["Payment", "Ships to"]);
+    // The form that asks for other orders.
+    let query = table.query.as_ref().expect("a query");
+    assert_eq!(query.action, "/orders");
+    let names: Vec<&str> = query
+        .children
+        .iter()
+        .filter_map(|node| match node {
+            N::Field(field) => Some(field.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "search",
+            "filter[status][in]",
+            "filter[fulfilment][in]",
+            "filter[payment][in]",
+            "filter[state][in]",
+            "filter[placed_on][gte]",
+            "filter[placed_on][lte]",
+            "limit",
+        ]
+    );
+    let Some(N::Field(search)) = query.children.first() else {
+        panic!("no search");
+    };
+    assert!(matches!(&search.input, Input::Text(text) if text.kind == TextKind::Search));
+    let Some(N::Field(status)) = query.children.get(1) else {
+        panic!("no status filter");
+    };
+    let Input::Choices(statuses) = &status.input else {
+        panic!("not choices");
+    };
+    // Each status says how many orders hold it.
+    assert!(
+        statuses
+            .options
+            .iter()
+            .all(|option| option.detail.is_some())
+    );
+    // The next orders are at a cursor.
+    assert!(
+        table
+            .more
+            .as_deref()
+            .is_some_and(|more| more.contains("cursor="))
+    );
+    // A row's order number opens the order in the drawer: a form of one button.
+    let first = &table.rows[0];
+    let opens = all(&first.cells[0])
+        .into_iter()
+        .find_map(|node| match node {
+            N::Form(form) => Some(form),
+            _ => None,
+        });
+    let form = opens.expect("the form that opens the drawer");
+    assert_eq!(form.method, n::Method::Get);
+    assert_eq!(
+        form.action,
+        format!("/orders/{}/peek", first.id.as_deref().unwrap_or_default())
+    );
+    assert!(matches!(screen.body.find("order"), Some(N::Sheet(_))));
+
+    // The drawer's content comes as ops: the sheet morphed, then opened.
+    let peek = app
+        .client()
+        .get(&form.action)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await;
+    let ops = envelope(&peek.text()).ops;
+    let [Op::Morph { target, node }, Op::Open { target: opened }] = ops.as_slice() else {
+        panic!("not a morph and an open: {ops:?}");
+    };
+    assert_eq!((target.as_str(), opened.as_str()), ("order", "order"));
+    let N::Sheet(sheet) = node else {
+        panic!("not a sheet");
+    };
+    assert!(
+        sheet
+            .title
+            .as_deref()
+            .is_some_and(|title| title.starts_with("Order CS-"))
+    );
+    // Its slower parts fetch themselves once it is open.
+    let lazy: Vec<&str> = all(node)
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Region(region) if region.lazy => Some(region.id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(lazy, ["order-steps", "order-others"]);
+}
+
+#[tokio::test]
+async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
+    let (app, _dir) = boot().await;
+    let asked = ask(&app, "/orders/1").await;
+    let screen = envelope(&asked.native).screen.expect("a screen");
+    assert!(screen.title.starts_with("Order CS-"));
+    assert_eq!(screen.id.as_deref(), Some("order-page"));
+    assert_eq!(screen.trail.len(), 2);
+    let nodes = all(&screen.body);
+    // The three actions open their dialogs by command.
+    let opens: Vec<&str> = nodes
+        .iter()
+        .filter_map(|node| match node {
+            N::Button(button) => match &button.action {
+                Some(Action::Commands { list }) => match list.as_slice() {
+                    [Command::Open { id }] => Some(id.as_str()),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(opens, ["resend", "refund", "cancel"]);
+    // Cancelling asks first, in an alert whose answers are buttons by role.
+    let cancel = nodes
+        .iter()
+        .find_map(|node| match node {
+            N::Dialog(dialog) if dialog.id == "cancel" => Some(dialog),
+            _ => None,
+        })
+        .expect("the cancel dialog");
+    assert!(cancel.alert);
+    let [N::Button(keep), N::Button(go)] = cancel.actions.as_slice() else {
+        panic!("not two answers: {:?}", cancel.actions);
+    };
+    assert_eq!(keep.role, n::Role::Cancel);
+    assert_eq!(keep.action, Some(Action::Dismiss));
+    assert_eq!(go.role, n::Role::Destructive);
+    assert!(matches!(
+        &go.action,
+        Some(Action::Request { method: n::Method::Post, href, .. }) if href == "/orders/1/cancel"
+    ));
+    // The refund dialog holds a form of two fields.
+    let refund = nodes
+        .iter()
+        .find_map(|node| match node {
+            N::Dialog(dialog) if dialog.id == "refund" => Some(dialog),
+            _ => None,
+        })
+        .expect("the refund dialog");
+    let fields: Vec<&str> = refund
+        .children
+        .iter()
+        .flat_map(all)
+        .filter_map(|node| match node {
+            N::Field(field) => Some(field.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fields, ["amount", "reason"]);
+    // The facts, the lines and the history are there.
+    assert!(
+        nodes
+            .iter()
+            .any(|node| matches!(node, N::Facts(facts) if facts.items.len() == 4))
+    );
+    assert!(
+        nodes
+            .iter()
+            .any(|node| matches!(node, N::Table(table) if !table.rows.is_empty()))
+    );
+    assert!(
+        nodes
+            .iter()
+            .any(|node| matches!(node, N::Row(row) if row.title == "Placed"))
+    );
+
+    // Resending the confirmation, as the dialog's button would.
+    let resent = app
+        .client()
+        .post("/orders/1/resend")
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await;
+    assert_eq!(
+        resent.header("content-type"),
+        Some("application/vnd.navree.native+json")
+    );
+    let ops = envelope(&resent.text()).ops;
+    let names: Vec<&str> = ops
+        .iter()
+        .map(|op| match op {
+            Op::Close { .. } => "close",
+            Op::Morph { .. } => "morph",
+            Op::Replace { .. } => "replace",
+            Op::Toast(_) => "toast",
+            _ => "other",
+        })
+        .collect();
+    // The dialog closes, the drawer and the page are drawn again, a toast says what happened.
+    assert_eq!(names[..3], ["close", "morph", "morph"], "{names:?}");
+    assert_eq!(names.last(), Some(&"toast"), "{names:?}");
+    let Some(Op::Morph { target, node }) = ops.get(2) else {
+        panic!("no morph of the page");
+    };
+    assert_eq!(target, "order-page");
+    assert_eq!(node.id(), Some("order-page"));
+    // The same action from a browser's runtime is ops with markup, as before.
+    let web = app
+        .client()
+        .post("/orders/2/resend")
+        .header("x-navree-ui", "1")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await;
+    assert_eq!(
+        web.header("content-type"),
+        Some("application/vnd.navree.ops+json")
+    );
+    assert!(
+        web.text()
+            .contains(r#""op":"morph","target":"order","html":"<dialog"#)
+    );
+
+    // A refund the form refuses says why at its field.
+    let refused = app
+        .client()
+        .post("/orders/1/refund")
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("amount=0&reason=late")
+        .send()
+        .await;
+    assert_eq!(refused.status().as_u16(), 422);
+    let ops = envelope(&refused.text()).ops;
+    assert!(
+        matches!(ops.as_slice(), [Op::Errors { form, fields }] if form == "refund" && fields.contains_key("amount")),
+        "{ops:?}"
+    );
+}
+
+#[tokio::test]
+async fn the_dashboard_falls_back_and_its_page_comes_without_the_chrome_for_the_web_view() {
+    let (app, _dir) = boot().await;
+    let asked = ask(&app, "/").await;
+    assert_eq!(asked.status, 200);
+    assert_eq!(asked.location, None);
+    let web = envelope(&asked.native).web.expect("the web view");
+    assert_eq!(web.url, "/");
+    assert_eq!(web.title.as_deref(), Some("Dashboard"));
+    assert!(web.why.contains(&"slot:chart".to_owned()), "{:?}", web.why);
+    let embedded = app
+        .client()
+        .get("/")
+        .header("x-navree-embed", "1")
+        .send()
+        .await
+        .text();
+    assert!(embedded.contains(r#"data-slot="chart""#));
+    assert!(!embedded.contains(r#"data-slot="sidebar""#));
+    assert!(asked.html.contains(r#"data-slot="sidebar""#));
+    assert!(embedded.len() < asked.html.len());
+    // The shell the client draws in the chrome's place.
+    let shell = app
+        .client()
+        .get("/_navree/native/shell")
+        .send()
+        .await
+        .text();
+    let shell: navree::ui::native::protocol::Shell = serde_json::from_str(&shell).expect("a shell");
+    assert_eq!(shell.name, "Charkha Supply Co.");
+    let items: Vec<&str> = shell.nav.groups[0]
+        .items
+        .iter()
+        .map(|item| item.href.as_str())
+        .collect();
+    assert_eq!(items, ["/", "/orders", "/inventory"]);
+}
