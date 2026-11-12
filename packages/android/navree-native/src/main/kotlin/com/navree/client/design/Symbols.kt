@@ -93,8 +93,9 @@ object Symbols {
         "check-circle" to "check_circle",
         "more-vertical" to "more_vert",
         "ellipsis-vertical" to "more_vert",
-        "more-horizontal" to "more_horiz",
-        "ellipsis" to "more_horiz",
+        // Android's overflow is the vertical one, whichever way the page drew it.
+        "more-horizontal" to "more_vert",
+        "ellipsis" to "more_vert",
         "log-out" to "logout",
         "receipt" to "receipt_long",
         "receipt-text" to "receipt_long",
