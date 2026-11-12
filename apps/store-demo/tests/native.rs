@@ -112,9 +112,11 @@ async fn the_store_answers_a_native_client() {
         coverage.add_answer(path, asked.html.len(), asked.native.len(), &answered);
     }
     println!("{coverage}");
-    // Each native screen is graded, and what keeps one from its system is said.
+    // Each native screen is graded, and what keeps one from its system is said:
+    // the store says what its parts are, so every native screen belongs to it.
     assert_eq!(coverage.native(), native_routes.len());
-    assert!(coverage.graded(Grade::Layout) + coverage.graded(Grade::Idiom) == native_routes.len());
+    assert_eq!(coverage.graded(Grade::Idiom), native_routes.len(), "{coverage}");
+    assert_eq!(coverage.graded(Grade::Layout), 0, "{coverage}");
     assert_eq!(
         native_routes,
         [
@@ -179,7 +181,24 @@ async fn the_orders_are_a_table_a_phone_can_draw_as_a_list() {
         .filter(|column| column.secondary)
         .map(|column| column.label.as_str())
         .collect();
-    assert_eq!(secondary, ["Payment", "Ships to"]);
+    // Payment and place are left out of a narrow row; the customer is the line
+    // under each order's number.
+    assert_eq!(secondary, ["Payment", "Ships to", "Customer"]);
+    let roles: Vec<(&str, Option<n::ColumnRole>)> = table
+        .columns
+        .iter()
+        .filter(|column| column.role.is_some())
+        .map(|column| (column.label.as_str(), column.role))
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            ("Order", Some(n::ColumnRole::Title)),
+            ("Status", Some(n::ColumnRole::Status)),
+            ("Total", Some(n::ColumnRole::Trailing)),
+            ("Customer", Some(n::ColumnRole::Subtitle)),
+        ]
+    );
     // The form that asks for other orders.
     let query = table.query.as_ref().expect("a query");
     assert_eq!(query.action, "/orders");
@@ -221,6 +240,12 @@ async fn the_orders_are_a_table_a_phone_can_draw_as_a_list() {
             .iter()
             .all(|option| option.detail.is_some())
     );
+    // A tap on a row opens its order in the drawer, as its number does.
+    assert!(table.rows.iter().all(|row| matches!(
+        &row.action,
+        Some(Action::Request { method: n::Method::Get, href, .. })
+            if Some(href.as_str()) == row.id.as_deref().map(|id| format!("/orders/{id}/peek")).as_deref()
+    )));
     // The next orders are at a cursor.
     assert!(
         table
@@ -338,17 +363,26 @@ async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
         })
         .collect();
     assert_eq!(fields, ["amount", "reason"]);
-    // The facts, the lines and the history are there.
+    // The facts, the lines and the history are there. The lines are a list of
+    // records, each with its picture, how many at what price, and its total, not a
+    // table of four columns.
     assert!(
         nodes
             .iter()
             .any(|node| matches!(node, N::Facts(facts) if facts.items.len() == 4))
     );
-    assert!(
-        nodes
-            .iter()
-            .any(|node| matches!(node, N::Table(table) if !table.rows.is_empty()))
-    );
+    assert!(!nodes.iter().any(|node| matches!(node, N::Table(_))));
+    let lines: Vec<&n::Row> = nodes
+        .iter()
+        .filter_map(|node| match node {
+            N::Row(row) if row.subtitle.as_deref().is_some_and(|line| line.contains(" × ")) => {
+                Some(row)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(!lines.is_empty());
+    assert!(lines.iter().all(|row| row.trailing.is_some()));
     assert!(
         nodes
             .iter()
@@ -458,4 +492,97 @@ async fn the_dashboard_falls_back_and_its_page_comes_without_the_chrome_for_the_
         .map(|item| item.href.as_str())
         .collect();
     assert_eq!(items, ["/", "/orders", "/inventory"]);
+}
+
+#[tokio::test]
+async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is() {
+    let (app, _dir) = boot().await;
+    let asked = ask(&app, "/inventory").await;
+    let screen = envelope(&asked.native).screen.expect("a screen");
+    let Some(N::Region(region)) = screen.body.find("products") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    let roles: Vec<(&str, Option<n::ColumnRole>)> = table
+        .columns
+        .iter()
+        .filter(|column| column.role.is_some())
+        .map(|column| (column.label.as_str(), column.role))
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            ("Product", Some(n::ColumnRole::Title)),
+            ("Level", Some(n::ColumnRole::Status)),
+            ("In stock", Some(n::ColumnRole::Trailing)),
+            ("SKU", Some(n::ColumnRole::Subtitle)),
+        ]
+    );
+    // A tap on a row opens the product; a browser's row is as it was.
+    let first = &table.rows[0];
+    let id = first.id.as_deref().expect("a key");
+    assert_eq!(
+        first.action,
+        Some(Action::Request {
+            method: n::Method::Get,
+            href: format!("/inventory/{id}/peek"),
+            fields: Vec::new(),
+        })
+    );
+    assert!(matches!(screen.body.find("product"), Some(N::Sheet(_))));
+    assert!(!asked.html.contains("/peek\""), "a browser's table has no peek");
+
+    // The sheet comes as ops: the sheet morphed, then opened.
+    let peek = app
+        .client()
+        .get(&format!("/inventory/{id}/peek"))
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await;
+    let ops = envelope(&peek.text()).ops;
+    let [Op::Morph { target, node }, Op::Open { target: opened }] = ops.as_slice() else {
+        panic!("not a morph and an open: {ops:?}");
+    };
+    assert_eq!((target.as_str(), opened.as_str()), ("product", "product"));
+    let N::Sheet(sheet) = node else {
+        panic!("not a sheet");
+    };
+    assert!(sheet.title.as_deref().is_some_and(|title| !title.is_empty()));
+    let fields: Vec<&str> = all(node)
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Field(field) => Some(field.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fields, ["quantity"]);
+
+    // Restocking from the sheet closes it; from a browser's row nothing closes.
+    let restocked = app
+        .client()
+        .post(&format!("/inventory/{id}/restock"))
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("quantity=5")
+        .send()
+        .await;
+    let ops = envelope(&restocked.text()).ops;
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::Close { target } if target == "product")),
+        "{ops:?}"
+    );
+    let web = app
+        .client()
+        .post(&format!("/inventory/{id}/restock"))
+        .header("x-navree-ui", "1")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("quantity=5")
+        .send()
+        .await;
+    assert!(!web.text().contains(r#""target":"product""#));
 }

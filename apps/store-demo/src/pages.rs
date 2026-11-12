@@ -8,6 +8,7 @@
 //! | `GET /orders/{id}/peek` | the same in the drawer, as ops; a redirect to the page with JavaScript off |
 //! | `POST /orders/{id}/refund`, `/cancel`, `/resend` | the actions, each checked on the server |
 //! | `GET /inventory` | the products, with a restock form in each row |
+//! | `GET /inventory/{id}/peek` | the product in a sheet, as ops, for a screen drawn by the system's own toolkit |
 //! | `POST /inventory/{id}/restock` | adds units to a product |
 //! | `GET /fragments/...` | what the live parts fetch when the stream speaks |
 //! | `GET /broadcasting/stream` | the live hub's stream (`RealtimeModule`): the topics `orders`, `activity`, `stats` and `inventory` |
@@ -38,7 +39,9 @@ use crate::views::dashboard::{
     Cursor, FeedEntry, Figures, METHODS, Sales, Seller, activity_item, dashboard_body, figures,
     low_stock, sales_charts, sales_report, shelves, top_sellers,
 };
-use crate::views::inventory::{ProductRow, RestockForm, inventory_table};
+use crate::views::inventory::{
+    self, ProductRow, RestockForm, empty_sheet, inventory_table, product_sheet,
+};
 use crate::views::order::{
     ConfirmForm, OrderView, PAGE, Parts, RefundForm, order_drawer, order_page, other_orders,
     refund_dialog, steps,
@@ -532,7 +535,25 @@ impl Pages {
         Ok(shell
             .page("Inventory")
             .crumb("Dashboard", "/")
-            .body(inventory_table(&query, &page)))
+            .body((
+                inventory_table(&query, &page),
+                // Where a native client's tap on a row opens the product.
+                crate::views::native_only(empty_sheet()),
+            )))
+    }
+
+    /// `GET /inventory/{id}/peek`: the product in a sheet, opened. With
+    /// JavaScript off, the inventory.
+    async fn product_peek(&self, uow: Uow, id: i64) -> Result<Reply> {
+        let Some(product) = Product::query().find(&uow, id).await? else {
+            return Ok(Reply::ops_or_redirect("/inventory")
+                .toast(ToastTone::Warning, "That product isn't on the shelves any more."));
+        };
+        Ok(Reply::ops_or_redirect("/inventory")
+            .morph(inventory::SHEET, product_sheet(product.into_inner()))
+            .op(Op::Open {
+                target: inventory::SHEET.to_owned(),
+            }))
     }
 
     /// `POST /inventory/{id}/restock`.
@@ -582,6 +603,14 @@ impl Pages {
             .find(&uow, id)
             .await?
             .map_or(0, |product| product.into_inner().stock);
+        let reply = if crate::views::asked_by_native() {
+            // The sheet the form was sent from has done its work.
+            reply.op(Op::Close {
+                target: inventory::SHEET.to_owned(),
+            })
+        } else {
+            reply
+        };
         Ok(reply
             .toast_with(
                 Toast::new(
@@ -721,6 +750,14 @@ impl Controller for Pages {
                 move |shell: AppShell, uow: Uow, query: TableQuery<ProductRow>| {
                     let me = me.clone();
                     async move { me.inventory(shell, uow, query).await }
+                }
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/inventory/{id}/peek", {
+                let me = me.clone();
+                move |uow: Uow, Path(id): Path<i64>| {
+                    let me = me.clone();
+                    async move { me.product_peek(uow, id).await }
                 }
             })
             .public(),

@@ -309,6 +309,18 @@ async fn who(
         .unwrap_or_default())
 }
 
+/// The shell of a page of an error (a missing page, a refused request): the one every
+/// page draws, for the agent the visitor works as, so a native client has the app's
+/// destinations to draw its chrome from. `None` leaves the page on its own.
+pub async fn error_shell(request: navree::http::ErrorContext) -> Option<Shell> {
+    let db = request.ctx.get::<Db>().await.ok()?;
+    let signer = request.ctx.get::<UrlSigner>().await.ok()?;
+    let me = who(&*db, &signer, &request.headers).await.ok()?;
+    let team = team(&*db).await.ok()?;
+    let counts = counts(&*db, me.id).await.ok()?;
+    Some(shell(&me, &team, counts, View::All, None))
+}
+
 async fn team(uow: &(impl Executor + ?Sized)) -> Result<Vec<Agent>> {
     Ok(Agent::query()
         .order_by("id")

@@ -13,7 +13,9 @@ use crate::data::{
 use crate::shop;
 use crate::views::dashboard::{method_icon, method_words};
 use crate::views::orders::{DRAWER, fulfilment_badge, payment_badge, status_badge};
-use crate::views::{city, country_name, money, place_of, thousands, units, when};
+use crate::views::{
+    city, country_name, money, native_only, place_of, thousands, units, web_only, when,
+};
 
 /// The id of the element that holds an order on its own page.
 pub const PAGE: &str = "order-page";
@@ -139,6 +141,29 @@ pub fn product_with(icon: &str, name: &str, under: impl Into<Node>) -> Row {
     ))
 }
 
+/// The lines as a system draws a list of records: each product with its
+/// picture, its SKU, how many at what price, and what that comes to.
+fn native_lines(view: &OrderView) -> Element {
+    let items: Vec<Element> = view
+        .lines
+        .iter()
+        .map(|line| {
+            el("li").child(
+                Item::new(line.name.clone())
+                    .media(thumbnail(&line.icon))
+                    .description(format!(
+                        "{} · {} × {}",
+                        line.sku,
+                        thousands(line.quantity),
+                        money(line.price)
+                    ))
+                    .aside(money(line.price * line.quantity)),
+            )
+        })
+        .collect();
+    el("ul").children(items)
+}
+
 /// The lines, and what they add up to.
 fn lines_card(view: &OrderView, level: u8) -> Card {
     let order = &view.order;
@@ -174,14 +199,17 @@ fn lines_card(view: &OrderView, level: u8) -> Card {
         ))
         .body(
             Stack::gap(3).children((
-                Table::new()
-                    .head((
-                        TableHead::new("Product"),
-                        TableHead::new("Qty").numeric(),
-                        TableHead::new("Price").numeric().hide_on_mobile(),
-                        TableHead::new("Total").numeric(),
-                    ))
-                    .rows(rows.collect::<Vec<_>>()),
+                web_only(
+                    Table::new()
+                        .head((
+                            TableHead::new("Product"),
+                            TableHead::new("Qty").numeric(),
+                            TableHead::new("Price").numeric().hide_on_mobile(),
+                            TableHead::new("Total").numeric(),
+                        ))
+                        .rows(rows.collect::<Vec<_>>()),
+                ),
+                native_only(native_lines(view)),
                 Separator::horizontal(),
                 Stack::gap(1).children((
                     sum("Subtotal", money(order.subtotal), false),
