@@ -64,6 +64,29 @@ A value below zero hangs below the baseline, and the axis grows to hold it. In a
 
 <UiPreview example="bar-chart/horizontal-stacked" />
 
+## An average and sparse labels
+
+`.reference(Reference::average().label("Avg: {value}"))` draws the mean as a dashed line with its value; `.x_ticks(Ticks::every(3))` writes every third label; `.y_domain(Domain::fixed(0, 10))` keeps a score's axis from 0 to 10; and `.grid(Gridlines::horizontal().dashed())` dashes the gridlines. See [Axes and gridlines](/docs/components/line-chart/#axes-and-gridlines).
+
+<UiPreview example="bar-chart/reference" />
+
+## Colour by value
+
+`Series::colors(ColorScale)` colours each bar by the band its value falls in, and the bands' labels make the legend, each with its tone's icon, so colour is never alone. The tooltip's key takes the bar's colour.
+
+```rust
+Series::new("HRV", nights).unit("ms").colors(
+    ColorScale::new(Ink::tone(Tone::Danger))
+        .label("Low")
+        .from(40, Ink::tone(Tone::Warning))
+        .label("Fair")
+        .from(50, Ink::tone(Tone::Success))
+        .label("Good"),
+)
+```
+
+<UiPreview example="bar-chart/colors" />
+
 ## More bars than fit
 
 A chart draws at most 120 bars. `.max_bars(n)` changes the limit (at least 4). What happens past it depends on x:

@@ -81,6 +81,14 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(820)
         .height(351),
+        single!(
+            "line-chart",
+            "axes",
+            "Axis lines, tick marks and gridlines down",
+            line_chart_axes
+        )
+        .start()
+        .height(300),
         single!("line-chart", "table", "The table, shown", line_chart_table)
             .start()
             .height(550),
@@ -114,6 +122,30 @@ pub fn all() -> Vec<Example> {
         .start()
         .height(402),
         // Bar chart
+        single!(
+            "area-chart",
+            "gradient",
+            "A gradient wash, a resting line and a big tooltip",
+            area_chart_gradient
+        )
+        .start()
+        .height(330),
+        single!(
+            "area-chart",
+            "steps",
+            "Steps between named levels",
+            area_chart_steps
+        )
+        .start()
+        .height(330),
+        single!(
+            "area-chart",
+            "trend",
+            "Points, a glow and a zero line",
+            area_chart_trend
+        )
+        .start()
+        .height(270),
         single!("bar-chart", "thumb", "A bar chart", bar_chart_thumb)
             .start()
             .width(420)
@@ -169,6 +201,22 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(255),
+        single!(
+            "bar-chart",
+            "reference",
+            "An average line and every third label",
+            bar_chart_reference
+        )
+        .start()
+        .height(330),
+        single!(
+            "bar-chart",
+            "colors",
+            "Each bar in the color of its band",
+            bar_chart_colors
+        )
+        .start()
+        .height(340),
         single!("bar-chart", "many", "More bars than fit", bar_chart_many)
             .start()
             .width(820)
@@ -207,6 +255,15 @@ pub fn all() -> Vec<Example> {
         .width(820)
         .height(275),
         // Sparkline
+        single!(
+            "sparkline",
+            "painted",
+            "Smooth, washed, glowing, and columns",
+            sparkline_painted
+        )
+        .start()
+        .width(820)
+        .height(190),
         single!("sparkline", "thumb", "A sparkline", sparkline_thumb)
             .start()
             .width(420)
@@ -1119,4 +1176,275 @@ fn reports_grains() -> impl IntoIterator<Item = (&'static str, Node)> {
         ("2 years: months", window("2024-11-04")),
     ]
     .map(|(caption, report)| (caption, report.grain_links("/reports", "Grain")))
+}
+
+/// A day's heart rate, every 20 minutes from 06:00: a calm morning, a walk, a desk, a run.
+const HEART_RATE: [u32; 49] = [
+    61, 63, 66, 72, 78, 74, 70, 68, 92, 104, 98, 81, 74, 72, 70, 71, 69, 73, 76, 74, 72, 70, 73,
+    75, 78, 74, 71, 70, 72, 74, 79, 84, 118, 142, 151, 146, 128, 96, 84, 79, 76, 74, 72, 70, 69,
+    67, 66, 64, 62,
+];
+
+fn area_chart_gradient() -> Chart {
+    let six = NaiveDate::from_ymd_opt(2026, 11, 12)
+        .and_then(|day| day.and_hms_opt(6, 0, 0))
+        .unwrap_or_default();
+    Chart::area("Heart rate")
+        .id("area-chart-gradient")
+        .description("Harleen Kaur, 12 November, IST")
+        .locale("en-IN")
+        .height(180)
+        .times((0..49).map(|i| six + Duration::minutes(20 * i)))
+        .series(
+            Series::new("Heart rate", HEART_RATE)
+                .ink(Ink::slot(8))
+                .unit("BPM")
+                .fade()
+                .stroke(
+                    Gradient::horizontal()
+                        .stop(0.0, Ink::own())
+                        .stop(0.5, Ink::own().vivid())
+                        .stop(1.0, Ink::own()),
+                ),
+        )
+        .smooth()
+        .dots(Dots::None)
+        .active_dot(ActiveDot::Halo)
+        .y_domain(Domain::padded(10))
+        .grid(Gridlines::none())
+        .x_ticks(Ticks::most(6))
+        .reference(Reference::level(58).label("Resting {value}"))
+        .tooltip(TooltipStyle::big())
+        .motion(Motion::new())
+}
+
+fn area_chart_steps() -> Chart {
+    let start = NaiveDate::from_ymd_opt(2026, 11, 11)
+        .and_then(|day| day.and_hms_opt(23, 10, 0))
+        .unwrap_or_default();
+    // Each stage and how long it lasted, in minutes: 0 deep, 1 light, 2 REM, 3 awake.
+    let night: [(u32, i64); 16] = [
+        (1, 20),
+        (0, 45),
+        (1, 30),
+        (2, 15),
+        (1, 25),
+        (0, 35),
+        (1, 40),
+        (2, 25),
+        (3, 5),
+        (1, 35),
+        (0, 20),
+        (1, 30),
+        (2, 35),
+        (1, 25),
+        (2, 30),
+        (3, 10),
+    ];
+    // A point where each stage starts, and one at waking so the last stage holds.
+    let mut at = start;
+    let mut times = Vec::new();
+    for (_, minutes) in night {
+        times.push(at);
+        at += Duration::minutes(minutes);
+    }
+    times.push(at);
+    let stages: Vec<u32> = night.iter().map(|(stage, _)| *stage).chain([3]).collect();
+    let lasted: Vec<String> = night
+        .iter()
+        .map(|(_, minutes)| format!("{minutes} min"))
+        .chain([String::new()])
+        .collect();
+    let stage = |slot: u8| Ink::slot(slot);
+    Chart::area("Sleep stages")
+        .id("area-chart-steps")
+        .description("Simran Kaur, night of 11 November")
+        .locale("en-IN")
+        .height(160)
+        .times(times)
+        .series(
+            Series::new("Stage", stages)
+                .ink(Ink::slot(7))
+                .fill(
+                    Gradient::vertical()
+                        .stop_with_opacity(0.0, stage(4), 0.3)
+                        .stop_with_opacity(0.33, stage(5), 0.35)
+                        .stop_with_opacity(0.66, stage(1), 0.35)
+                        .stop_with_opacity(1.0, stage(7), 0.45)
+                        .across_plot(),
+                )
+                .colors(
+                    ColorScale::new(stage(7))
+                        .label("Deep")
+                        .from(1, stage(1))
+                        .label("Light")
+                        .from(2, stage(5))
+                        .label("REM")
+                        .from(3, stage(4))
+                        .label("Awake"),
+                ),
+        )
+        .curve(Curve::Step)
+        .y_categories(["Deep", "Light", "REM", "Awake"])
+        .dots(Dots::None)
+        .grid(Gridlines::none())
+        .x_ticks(Ticks::most(5).keep_ends())
+        .reference(Reference::level(0).ink(stage(7)))
+        .reference(Reference::level(1).ink(stage(1)))
+        .reference(Reference::level(2).ink(stage(5)))
+        .reference(Reference::level(3).ink(stage(4)))
+        .detail("Lasted", lasted)
+        .tooltip(TooltipStyle::big())
+}
+
+fn area_chart_trend() -> Chart {
+    let first = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap_or_default();
+    Chart::area("Overnight recovery")
+        .id("area-chart-trend")
+        .description("Change in heart rate variability overnight, Gurpreet Singh")
+        .locale("en-IN")
+        .height(120)
+        .days((0..7).map(|i| first + Duration::days(i)))
+        .format(NumberFormat::percent_of_100())
+        .series(
+            Series::new("Recovery", [12, 8, -4, 15, 22, 18, 26])
+                .ink(Ink::slot(3))
+                .fade()
+                .glow(),
+        )
+        .smooth()
+        .dots(Dots::All)
+        .active_dot(ActiveDot::Halo)
+        .y_domain(Domain::padded(10))
+        .grid(Gridlines::horizontal().dashed())
+        .reference(Reference::zero())
+}
+
+fn bar_chart_reference() -> Chart {
+    Chart::bar("Stress by hour")
+        .id("bar-chart-reference")
+        .description("Average of the last 7 days, Arjun Sharma")
+        .locale("en-IN")
+        .height(180)
+        .categories((0..24).map(|h| format!("{h:02}:00")))
+        .format(NumberFormat::decimals(1))
+        .series(
+            Series::new(
+                "Stress",
+                [
+                    1.2, 0.9, 0.8, 0.8, 0.9, 1.4, 2.6, 3.8, 5.2, 6.1, 5.8, 5.4, 4.6, 5.0, 5.9, 6.4,
+                    6.0, 5.1, 4.2, 3.6, 3.1, 2.4, 1.8, 1.4,
+                ],
+            )
+            .ink(Ink::slot(4)),
+        )
+        .y_domain(Domain::fixed(0, 10))
+        .grid(Gridlines::horizontal().dashed())
+        .x_ticks(Ticks::every(3))
+        .reference(Reference::average().label("Avg: {value}"))
+        .motion(Motion::new().stagger(20))
+}
+
+fn bar_chart_colors() -> Chart {
+    let first = NaiveDate::from_ymd_opt(2026, 10, 30).unwrap_or_default();
+    Chart::bar("Heart rate variability")
+        .id("bar-chart-colors")
+        .description("Each night, last 14 days, Neha Kapoor")
+        .locale("en-IN")
+        .height(160)
+        .days((0..14).map(|i| first + Duration::days(i)))
+        .format(NumberFormat::integer())
+        .series(
+            Series::new(
+                "HRV",
+                [48, 52, 33, 61, 58, 44, 50, 66, 57, 31, 55, 60, 69, 59],
+            )
+            .unit("ms")
+            .colors(
+                ColorScale::new(Ink::tone(Tone::Danger))
+                    .label("Low")
+                    .from(40, Ink::tone(Tone::Warning))
+                    .label("Fair")
+                    .from(50, Ink::tone(Tone::Success))
+                    .label("Good")
+                    .from(65, Ink::tone(Tone::Info))
+                    .label("Excellent"),
+            ),
+        )
+        .grid(Gridlines::none())
+        .reference(Reference::average().label("Avg: {value} ms").place(Place::StartAbove))
+}
+
+fn line_chart_axes() -> Chart {
+    let first = NaiveDate::from_ymd_opt(2026, 10, 14).unwrap_or_default();
+    Chart::line("Body weight")
+        .id("line-chart-axes")
+        .description("Last 30 days, Rohit Malhotra")
+        .locale("en-IN")
+        .height(160)
+        .days((0..30).map(|i| first + Duration::days(i)))
+        .format(NumberFormat::decimals(1).suffix(" kg"))
+        .series(Series::new(
+            "Weight",
+            (0..30).map(|i| {
+                let i = f64::from(i);
+                78.4 - i * 0.14 + (i * 1.7).sin() * 0.35
+            }).collect::<Vec<f64>>(),
+        ))
+        .y_domain(Domain::data())
+        .y_axis(Axis::new().line())
+        .x_axis(Axis::new().line().ticks())
+        .grid(Gridlines::vertical().dashed())
+        .x_ticks(Ticks::most(5).keep_ends())
+        .reference(Reference::level(75).label("Goal {value}").place(Place::StartBelow))
+}
+
+fn sparkline_painted() -> Grid {
+    Grid::cols(3).gap(4).children((
+        Stat::new("Movement", CountUp::new(94, "94").locale("en-IN"))
+            .trend("+3 on yesterday", true)
+            .chart(
+                Sparkline::new(
+                    "Movement score, 12 days",
+                    [82, 75, 88, 92, 78, 85, 90, 87, 93, 89, 91, 94],
+                )
+                .id("sparkline-movement")
+                .smooth()
+                .fade()
+                .points()
+                .ink(Ink::slot(2))
+                .height(48)
+                .motion(Motion::new()),
+            ),
+        Stat::new("Heart rate", "72 BPM")
+            .trend("Resting 58", true)
+            .chart(
+                Sparkline::new(
+                    "Heart rate, last 15 readings",
+                    [68, 71, 74, 70, 77, 82, 79, 75, 73, 76, 80, 78, 74, 71, 72],
+                )
+                .id("sparkline-heart")
+                .smooth()
+                .glow()
+                .ink(Ink::slot(8))
+                .height(48)
+                .motion(Motion::new().delay(200)),
+            ),
+        Stat::new("Recovery", CountUp::new(80, "80%"))
+            .trend("Good", true)
+            .chart(
+                Sparkline::new("Recovery, last 7 nights", [40, 60, 75, 60, 85, 94, 80])
+                    .id("sparkline-recovery")
+                    .names(["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"])
+                    .format(NumberFormat::percent_of_100())
+                    .columns()
+                    .fade()
+                    .colors(
+                        ColorScale::new(Ink::tone(Tone::Warning))
+                            .from(70, Ink::tone(Tone::Success)),
+                    )
+                    .height(48)
+                    .motion(Motion::new().delay(200)),
+            ),
+    ))
 }

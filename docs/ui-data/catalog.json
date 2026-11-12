@@ -1224,6 +1224,7 @@
       "anatomy": "progress/default",
       "examples": [
         "progress/tone",
+        "progress/painted",
         "progress/thumb",
         "progress/default",
         "progress/states"
@@ -1927,6 +1928,7 @@
         "line-chart/many",
         "line-chart/states",
         "line-chart/locales",
+        "line-chart/axes",
         "line-chart/table"
       ]
     },
@@ -1947,7 +1949,10 @@
         "area-chart/thumb",
         "area-chart/default",
         "area-chart/stacked",
-        "area-chart/percent"
+        "area-chart/percent",
+        "area-chart/gradient",
+        "area-chart/steps",
+        "area-chart/trend"
       ]
     },
     {
@@ -1973,6 +1978,8 @@
         "bar-chart/negative",
         "bar-chart/horizontal",
         "bar-chart/horizontal-stacked",
+        "bar-chart/reference",
+        "bar-chart/colors",
         "bar-chart/many"
       ]
     },
@@ -2007,6 +2014,7 @@
       "thumb": "sparkline/thumb",
       "anatomy": "sparkline/default",
       "examples": [
+        "sparkline/painted",
         "sparkline/thumb",
         "sparkline/default",
         "sparkline/table",
@@ -7068,6 +7076,91 @@
                   "tag": "progress",
                   "count": 1,
                   "children": []
+                },
+                {
+                  "slot": "progress-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "progress/painted",
+      "component": "progress",
+      "slug": "painted",
+      "title": "A gradient, a goal, colors by value and a glow",
+      "kind": "single",
+      "code": "use navree::ui::charts::{ColorScale, Gradient, Ink, Motion};\nlet quality = |value: u32, label: &str, slot: u8, step: u32| {\n    Progress::new(value, 100, label.to_owned())\n        .ink(Ink::slot(slot))\n        .height(8)\n        .show_value()\n        .motion(Motion::new().delay(300 + step * 100))\n};\nStack::gap(4).children((\n    Progress::new(402, 480, \"Sleep, 6 h 42 min against a goal of 7 h\")\n        .fill(\n            Gradient::horizontal()\n                .stop(0.0, Ink::slot(7))\n                .stop_with_opacity(1.0, Ink::slot(7), 0.6),\n        )\n        .goal(420)\n        .height(12)\n        .motion(Motion::new().delay(200)),\n    Progress::new(68, 100, \"Recovery 68%, fair\")\n        .colors(\n            ColorScale::new(Ink::tone(Tone::Danger))\n                .from(50, Ink::tone(Tone::Warning))\n                .from(75, Ink::tone(Tone::Success)),\n        )\n        .glow()\n        .height(8)\n        .show_value(),\n    quality(91, \"Efficiency\", 7, 0),\n    quality(74, \"Depth\", 1, 1),\n    quality(83, \"Continuity\", 3, 2),\n))",
+      "src": "/ui-preview/progress/painted.html",
+      "height": 250,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "meter",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "meter-track",
+                  "tag": "rect",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "meter-fill",
+                  "tag": "rect",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "meter-goal",
+                  "tag": "line",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "progress-row",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "meter",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "meter-track",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "meter-fill",
+                      "tag": "rect",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
                 },
                 {
                   "slot": "progress-value",
@@ -36599,7 +36692,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -36770,7 +36863,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -36992,7 +37085,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -37188,7 +37281,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -37390,7 +37483,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -37598,7 +37691,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -37832,7 +37925,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38060,7 +38153,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38162,7 +38255,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38343,6 +38436,222 @@
       ]
     },
     {
+      "id": "line-chart/axes",
+      "component": "line-chart",
+      "slug": "axes",
+      "title": "Axis lines, tick marks and gridlines down",
+      "kind": "single",
+      "code": "let first = NaiveDate::from_ymd_opt(2026, 10, 14).unwrap_or_default();\nChart::line(\"Body weight\")\n    .id(\"line-chart-axes\")\n    .description(\"Last 30 days, Rohit Malhotra\")\n    .locale(\"en-IN\")\n    .height(160)\n    .days((0..30).map(|i| first + Duration::days(i)))\n    .format(NumberFormat::decimals(1).suffix(\" kg\"))\n    .series(Series::new(\n        \"Weight\",\n        (0..30).map(|i| {\n            let i = f64::from(i);\n            78.4 - i * 0.14 + (i * 1.7).sin() * 0.35\n        }).collect::<Vec<f64>>(),\n    ))\n    .y_domain(Domain::data())\n    .y_axis(Axis::new().line())\n    .x_axis(Axis::new().line().ticks())\n    .grid(Gridlines::vertical().dashed())\n    .x_ticks(Ticks::most(5).keep_ends())\n    .reference(Reference::level(75).label(\"Goal {value}\").place(Place::StartBelow))",
+      "src": "/ui-preview/line-chart/axes.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-axis-line",
+                          "tag": "line",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 6,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-axis-line",
+                                  "tag": "line",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart-tick",
+                                  "tag": "line",
+                                  "count": 6,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-line",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-end",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "line-chart/table",
       "component": "line-chart",
       "slug": "table",
@@ -38359,7 +38668,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38556,7 +38865,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38632,16 +38941,10 @@
                             {
                               "slot": "chart-marks",
                               "tag": "svg",
-                              "count": 1,
+                              "count": 2,
                               "children": [
                                 {
                                   "slot": "chart-area",
-                                  "tag": "path",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "chart-line",
                                   "tag": "path",
                                   "count": 1,
                                   "children": []
@@ -38733,7 +39036,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -38815,16 +39118,10 @@
                             {
                               "slot": "chart-marks",
                               "tag": "svg",
-                              "count": 1,
+                              "count": 2,
                               "children": [
                                 {
                                   "slot": "chart-area",
-                                  "tag": "path",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "chart-line",
                                   "tag": "path",
                                   "count": 1,
                                   "children": []
@@ -38941,7 +39238,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -39049,16 +39346,10 @@
                             {
                               "slot": "chart-marks",
                               "tag": "svg",
-                              "count": 1,
+                              "count": 2,
                               "children": [
                                 {
                                   "slot": "chart-area",
-                                  "tag": "path",
-                                  "count": 3,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "chart-line",
                                   "tag": "path",
                                   "count": 3,
                                   "children": []
@@ -39169,7 +39460,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -39277,16 +39568,10 @@
                             {
                               "slot": "chart-marks",
                               "tag": "svg",
-                              "count": 1,
+                              "count": 2,
                               "children": [
                                 {
                                   "slot": "chart-area",
-                                  "tag": "path",
-                                  "count": 3,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "chart-line",
                                   "tag": "path",
                                   "count": 3,
                                   "children": []
@@ -39381,6 +39666,602 @@
       ]
     },
     {
+      "id": "area-chart/gradient",
+      "component": "area-chart",
+      "slug": "gradient",
+      "title": "A gradient wash, a resting line and a big tooltip",
+      "kind": "single",
+      "code": "let six = NaiveDate::from_ymd_opt(2026, 11, 12)\n    .and_then(|day| day.and_hms_opt(6, 0, 0))\n    .unwrap_or_default();\nChart::area(\"Heart rate\")\n    .id(\"area-chart-gradient\")\n    .description(\"Harleen Kaur, 12 November, IST\")\n    .locale(\"en-IN\")\n    .height(180)\n    .times((0..49).map(|i| six + Duration::minutes(20 * i)))\n    .series(\n        Series::new(\"Heart rate\", HEART_RATE)\n            .ink(Ink::slot(8))\n            .unit(\"BPM\")\n            .fade()\n            .stroke(\n                Gradient::horizontal()\n                    .stop(0.0, Ink::own())\n                    .stop(0.5, Ink::own().vivid())\n                    .stop(1.0, Ink::own()),\n            ),\n    )\n    .smooth()\n    .dots(Dots::None)\n    .active_dot(ActiveDot::Halo)\n    .y_domain(Domain::padded(10))\n    .grid(Gridlines::none())\n    .x_ticks(Ticks::most(6))\n    .reference(Reference::level(58).label(\"Resting {value}\"))\n    .tooltip(TooltipStyle::big())\n    .motion(Motion::new())",
+      "src": "/ui-preview/area-chart/gradient.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "chart-area",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "area-chart/steps",
+      "component": "area-chart",
+      "slug": "steps",
+      "title": "Steps between named levels",
+      "kind": "single",
+      "code": "let start = NaiveDate::from_ymd_opt(2026, 11, 11)\n    .and_then(|day| day.and_hms_opt(23, 10, 0))\n    .unwrap_or_default();\n// Each stage and how long it lasted, in minutes: 0 deep, 1 light, 2 REM, 3 awake.\nlet night: [(u32, i64); 16] = [\n    (1, 20),\n    (0, 45),\n    (1, 30),\n    (2, 15),\n    (1, 25),\n    (0, 35),\n    (1, 40),\n    (2, 25),\n    (3, 5),\n    (1, 35),\n    (0, 20),\n    (1, 30),\n    (2, 35),\n    (1, 25),\n    (2, 30),\n    (3, 10),\n];\n// A point where each stage starts, and one at waking so the last stage holds.\nlet mut at = start;\nlet mut times = Vec::new();\nfor (_, minutes) in night {\n    times.push(at);\n    at += Duration::minutes(minutes);\n}\ntimes.push(at);\nlet stages: Vec<u32> = night.iter().map(|(stage, _)| *stage).chain([3]).collect();\nlet lasted: Vec<String> = night\n    .iter()\n    .map(|(_, minutes)| format!(\"{minutes} min\"))\n    .chain([String::new()])\n    .collect();\nlet stage = |slot: u8| Ink::slot(slot);\nChart::area(\"Sleep stages\")\n    .id(\"area-chart-steps\")\n    .description(\"Simran Kaur, night of 11 November\")\n    .locale(\"en-IN\")\n    .height(160)\n    .times(times)\n    .series(\n        Series::new(\"Stage\", stages)\n            .ink(Ink::slot(7))\n            .fill(\n                Gradient::vertical()\n                    .stop_with_opacity(0.0, stage(4), 0.3)\n                    .stop_with_opacity(0.33, stage(5), 0.35)\n                    .stop_with_opacity(0.66, stage(1), 0.35)\n                    .stop_with_opacity(1.0, stage(7), 0.45)\n                    .across_plot(),\n            )\n            .colors(\n                ColorScale::new(stage(7))\n                    .label(\"Deep\")\n                    .from(1, stage(1))\n                    .label(\"Light\")\n                    .from(2, stage(5))\n                    .label(\"REM\")\n                    .from(3, stage(4))\n                    .label(\"Awake\"),\n            ),\n    )\n    .curve(Curve::Step)\n    .y_categories([\"Deep\", \"Light\", \"REM\", \"Awake\"])\n    .dots(Dots::None)\n    .grid(Gridlines::none())\n    .x_ticks(Ticks::most(5).keep_ends())\n    .reference(Reference::level(0).ink(stage(7)))\n    .reference(Reference::level(1).ink(stage(1)))\n    .reference(Reference::level(2).ink(stage(5)))\n    .reference(Reference::level(3).ink(stage(4)))\n    .detail(\"Lasted\", lasted)\n    .tooltip(TooltipStyle::big())",
+      "src": "/ui-preview/area-chart/steps.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "chart-area",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 4,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "area-chart/trend",
+      "component": "area-chart",
+      "slug": "trend",
+      "title": "Points, a glow and a zero line",
+      "kind": "single",
+      "code": "let first = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap_or_default();\nChart::area(\"Overnight recovery\")\n    .id(\"area-chart-trend\")\n    .description(\"Change in heart rate variability overnight, Gurpreet Singh\")\n    .locale(\"en-IN\")\n    .height(120)\n    .days((0..7).map(|i| first + Duration::days(i)))\n    .format(NumberFormat::percent_of_100())\n    .series(\n        Series::new(\"Recovery\", [12, 8, -4, 15, 22, 18, 26])\n            .ink(Ink::slot(3))\n            .fade()\n            .glow(),\n    )\n    .smooth()\n    .dots(Dots::All)\n    .active_dot(ActiveDot::Halo)\n    .y_domain(Domain::padded(10))\n    .grid(Gridlines::horizontal().dashed())\n    .reference(Reference::zero())",
+      "src": "/ui-preview/area-chart/trend.html",
+      "height": 270,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-marks",
+                              "tag": "svg",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "chart-area",
+                                  "tag": "path",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-point",
+                              "tag": "circle",
+                              "count": 7,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-cursor",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-dot",
+                              "tag": "circle",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "bar-chart/thumb",
       "component": "bar-chart",
       "slug": "thumb",
@@ -39397,7 +40278,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -39550,7 +40431,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -39728,7 +40609,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -39932,7 +40813,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -40136,7 +41017,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -40340,7 +41221,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -40518,7 +41399,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -40689,7 +41570,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -40870,6 +41751,394 @@
       ]
     },
     {
+      "id": "bar-chart/reference",
+      "component": "bar-chart",
+      "slug": "reference",
+      "title": "An average line and every third label",
+      "kind": "single",
+      "code": "Chart::bar(\"Stress by hour\")\n    .id(\"bar-chart-reference\")\n    .description(\"Average of the last 7 days, Arjun Sharma\")\n    .locale(\"en-IN\")\n    .height(180)\n    .categories((0..24).map(|h| format!(\"{h:02}:00\")))\n    .format(NumberFormat::decimals(1))\n    .series(\n        Series::new(\n            \"Stress\",\n            [\n                1.2, 0.9, 0.8, 0.8, 0.9, 1.4, 2.6, 3.8, 5.2, 6.1, 5.8, 5.4, 4.6, 5.0, 5.9, 6.4,\n                6.0, 5.1, 4.2, 3.6, 3.1, 2.4, 1.8, 1.4,\n            ],\n        )\n        .ink(Ink::slot(4)),\n    )\n    .y_domain(Domain::fixed(0, 10))\n    .grid(Gridlines::horizontal().dashed())\n    .x_ticks(Ticks::every(3))\n    .reference(Reference::average().label(\"Avg: {value}\"))\n    .motion(Motion::new().stagger(20))",
+      "src": "/ui-preview/bar-chart/reference.html",
+      "height": 330,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-zero",
+                              "tag": "line",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-grid",
+                              "tag": "line",
+                              "count": 2,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bars",
+                              "tag": "g",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-bar",
+                                  "tag": "rect",
+                                  "count": 24,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bar-chart/colors",
+      "component": "bar-chart",
+      "slug": "colors",
+      "title": "Each bar in the color of its band",
+      "kind": "single",
+      "code": "let first = NaiveDate::from_ymd_opt(2026, 10, 30).unwrap_or_default();\nChart::bar(\"Heart rate variability\")\n    .id(\"bar-chart-colors\")\n    .description(\"Each night, last 14 days, Neha Kapoor\")\n    .locale(\"en-IN\")\n    .height(160)\n    .days((0..14).map(|i| first + Duration::days(i)))\n    .format(NumberFormat::integer())\n    .series(\n        Series::new(\n            \"HRV\",\n            [48, 52, 33, 61, 58, 44, 50, 66, 57, 31, 55, 60, 69, 59],\n        )\n        .unit(\"ms\")\n        .colors(\n            ColorScale::new(Ink::tone(Tone::Danger))\n                .label(\"Low\")\n                .from(40, Ink::tone(Tone::Warning))\n                .label(\"Fair\")\n                .from(50, Ink::tone(Tone::Success))\n                .label(\"Good\")\n                .from(65, Ink::tone(Tone::Info))\n                .label(\"Excellent\"),\n        ),\n    )\n    .grid(Gridlines::none())\n    .reference(Reference::average().label(\"Avg: {value} ms\").place(Place::StartAbove))",
+      "src": "/ui-preview/bar-chart/colors.html",
+      "height": 340,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [
+        "charts-1faf8299a770.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "chart",
+          "tag": "figure",
+          "count": 1,
+          "children": [
+            {
+              "slot": "chart-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-title",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-description",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-legend",
+              "tag": "ul",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-legend-item",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-legend-name",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-body",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-frame",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-y-axis",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chart-plot-wrap",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-plot",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-x-axis",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chart-bars",
+                              "tag": "g",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-bar",
+                                  "tag": "rect",
+                                  "count": 14,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "chart-ref",
+                              "tag": "g",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-tip",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart-key",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chart-summary",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-announce",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "chart-data",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chart-table-switch",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "chart-table-label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "chart-table",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "bar-chart/many",
       "component": "bar-chart",
       "slug": "many",
@@ -40886,7 +42155,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41078,7 +42347,7 @@
       "width": 420,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41244,7 +42513,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41435,7 +42704,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41614,7 +42883,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41793,7 +43062,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -41863,6 +43132,166 @@
                             {
                               "slot": "button",
                               "tag": "a",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sparkline/painted",
+      "component": "sparkline",
+      "slug": "painted",
+      "title": "Smooth, washed, glowing, and columns",
+      "kind": "single",
+      "code": "Grid::cols(3).gap(4).children((\n    Stat::new(\"Movement\", CountUp::new(94, \"94\").locale(\"en-IN\"))\n        .trend(\"+3 on yesterday\", true)\n        .chart(\n            Sparkline::new(\n                \"Movement score, 12 days\",\n                [82, 75, 88, 92, 78, 85, 90, 87, 93, 89, 91, 94],\n            )\n            .id(\"sparkline-movement\")\n            .smooth()\n            .fade()\n            .points()\n            .ink(Ink::slot(2))\n            .height(48)\n            .motion(Motion::new()),\n        ),\n    Stat::new(\"Heart rate\", \"72 BPM\")\n        .trend(\"Resting 58\", true)\n        .chart(\n            Sparkline::new(\n                \"Heart rate, last 15 readings\",\n                [68, 71, 74, 70, 77, 82, 79, 75, 73, 76, 80, 78, 74, 71, 72],\n            )\n            .id(\"sparkline-heart\")\n            .smooth()\n            .glow()\n            .ink(Ink::slot(8))\n            .height(48)\n            .motion(Motion::new().delay(200)),\n        ),\n    Stat::new(\"Recovery\", CountUp::new(80, \"80%\"))\n        .trend(\"Good\", true)\n        .chart(\n            Sparkline::new(\"Recovery, last 7 nights\", [40, 60, 75, 60, 85, 94, 80])\n                .id(\"sparkline-recovery\")\n                .names([\"Thu\", \"Fri\", \"Sat\", \"Sun\", \"Mon\", \"Tue\", \"Wed\"])\n                .format(NumberFormat::percent_of_100())\n                .columns()\n                .fade()\n                .colors(\n                    ColorScale::new(Ink::tone(Tone::Warning))\n                        .from(70, Ink::tone(Tone::Success)),\n                )\n                .height(48)\n                .motion(Motion::new().delay(200)),\n        ),\n))",
+      "src": "/ui-preview/sparkline/painted.html",
+      "height": 190,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": 820,
+      "fit": true,
+      "scripts": [
+        "count-up-9e7cfe48a268.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "stat-label",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-value",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "count-up",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "stat-trend",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "stat-chart",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chart",
+                      "tag": "figure",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chart-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-heading",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-plot",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "chart-marks",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "chart-area",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "chart-line",
+                                      "tag": "path",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "chart-point",
+                                  "tag": "circle",
+                                  "count": 11,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "chart-end",
+                                  "tag": "circle",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "chart-summary",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chart-data",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chart-table",
+                              "tag": "div",
                               "count": 1,
                               "children": []
                             }
@@ -42298,7 +43727,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -42426,7 +43855,7 @@
       "width": 520,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -42579,7 +44008,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -42757,7 +44186,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -42935,7 +44364,7 @@
       "width": 820,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -43039,7 +44468,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -43204,7 +44633,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -43463,16 +44892,10 @@
                                 {
                                   "slot": "chart-marks",
                                   "tag": "svg",
-                                  "count": 1,
+                                  "count": 2,
                                   "children": [
                                     {
                                       "slot": "chart-area",
-                                      "tag": "path",
-                                      "count": 1,
-                                      "children": []
-                                    },
-                                    {
-                                      "slot": "chart-line",
                                       "tag": "path",
                                       "count": 1,
                                       "children": []
@@ -43568,7 +44991,7 @@
       "scripts": [
         "overlay-26a5fb54a8b6.js",
         "dates-525eeadc20ef.js",
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -43899,7 +45322,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -44003,16 +45426,10 @@
                                         {
                                           "slot": "chart-marks",
                                           "tag": "svg",
-                                          "count": 1,
+                                          "count": 2,
                                           "children": [
                                             {
                                               "slot": "chart-area",
-                                              "tag": "path",
-                                              "count": 1,
-                                              "children": []
-                                            },
-                                            {
-                                              "slot": "chart-line",
                                               "tag": "path",
                                               "count": 1,
                                               "children": []
@@ -44129,7 +45546,7 @@
       "width": null,
       "fit": true,
       "scripts": [
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [
         "1 day: hours",
@@ -57386,7 +58803,7 @@
       "scripts": [
         "sidebar-4e91853b1fde.js",
         "overlay-26a5fb54a8b6.js",
-        "charts-ae65fa48e1f4.js"
+        "charts-1faf8299a770.js"
       ],
       "captions": [],
       "slots": [
@@ -57761,16 +59178,10 @@
                                                             {
                                                               "slot": "chart-marks",
                                                               "tag": "svg",
-                                                              "count": 1,
+                                                              "count": 2,
                                                               "children": [
                                                                 {
                                                                   "slot": "chart-area",
-                                                                  "tag": "path",
-                                                                  "count": 1,
-                                                                  "children": []
-                                                                },
-                                                                {
-                                                                  "slot": "chart-line",
                                                                   "tag": "path",
                                                                   "count": 1,
                                                                   "children": []
