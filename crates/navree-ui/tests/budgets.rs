@@ -150,6 +150,20 @@ fn the_chart_paint_sheet_is_at_most_1_5_kb_and_the_count_up_module_1_kb_gzip() {
     assert!(size("count-up") <= 1024, "{}", size("count-up"));
 }
 
+/// The radial sheet (rings, gauges and the day clock) stays small: a page with one ring
+/// links it, and no script comes with a ring or a gauge.
+#[test]
+fn the_radial_sheet_is_at_most_2_kb_gzip_and_a_ring_loads_no_script() {
+    use navree_ui::charts::{Gauge, Ring};
+    assert!(size("chart-radial") <= 2048, "{}", size("chart-radial"));
+    let page = View::new("x").body((Ring::new("Sleep score", 82), Gauge::new("Stress", 40)));
+    assert!(page.uses().has(Uses::CHART_RADIAL), "{:?}", page.uses());
+    let html = page.to_html();
+    assert!(html.contains(assets::CHART_RADIAL_URL), "{html}");
+    assert!(html.contains(assets::CHART_PAINT_URL), "{html}");
+    assert!(!html.contains("<script"), "{html}");
+}
+
 /// A page to read with a chart on it loads the charts module and no other.
 #[test]
 fn a_page_with_a_chart_loads_the_charts_module_alone() {
@@ -461,6 +475,7 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "menubar-styles",
         "charts-styles",
         "chart-paint",
+        "chart-radial",
         "select-styles",
         "phone-styles",
         "slider-styles",
@@ -636,6 +651,7 @@ fn no_two_modules_share_a_bit() {
         Uses::PARTS,
         Uses::PARTS_STYLES,
         Uses::GENUI,
+        Uses::CHART_RADIAL,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

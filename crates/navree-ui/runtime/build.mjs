@@ -155,6 +155,8 @@ const FILES = [
   ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
   // What chart marks share past the plain ones: paint, glow and motion. No script.
   ["chart-paint", "css", "text/css; charset=utf-8", await extraCss(["chart-paint.css"])],
+  // Rings, gauges and the day clock. No script: the clock's keys and tooltip are the charts module's.
+  ["chart-radial", "css", "text/css; charset=utf-8", await extraCss(["chart-radial.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
 ];

@@ -307,6 +307,10 @@ impl Uses {
     /// view. The value is written in the page, so it reads the same with no script and
     /// when the reader asks for less motion.
     pub const COUNT_UP: Self = Self(1 << 33);
+    /// The radial charts' stylesheet: no script, only the styles of rings, gauges and the
+    /// day clock: their tracks and arcs, the words in the middle sized by the ring, and the
+    /// size each takes from a screen width up.
+    pub const CHART_RADIAL: Self = Self(1 << 34);
 
     /// Both sets together.
     #[must_use]
