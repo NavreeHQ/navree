@@ -376,7 +376,7 @@ impl Sparkline {
                         .slot("chart-point")
                         .attr("cx", pct(x(*i)))
                         .attr("cy", n(y(v), 1))
-                        .attr("r", "2"));
+                        .attr("r", "2.5"));
                     let fraction = x(*i) / 100.0;
                     marks.push(
                         self.motion
@@ -497,7 +497,7 @@ impl Sparkline {
                 .attr("width", pct(band))
                 .attr("y", n(top, 1))
                 .attr("height", n(h, 1))
-                .attr("clip-path", "inset(0 max(1px, 12%) round 99px)"));
+                .attr("clip-path", "inset(0 max(1px, 22%) round 99px)"));
             let col = match &gradient {
                 Some(g) => {
                     let url = match painted.iter().find(|(c, _)| *c == color) {
