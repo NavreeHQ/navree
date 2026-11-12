@@ -48,18 +48,17 @@ jobs:
           persist-credentials: false
       - name: Check the custom rules against their fixtures
         run: scripts/sast.sh semgrep-test
-      # A finding suppressed in the source is left out of the code scanning
-      # report, so each suppression a pull request adds is shown on it as a
-      # warning, with its file and line, for the reviewer. It never fails.
-      - name: List the nosemgrep comments the pull request adds
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: scripts/sast.sh nosemgrep-added "$BASE_SHA"
       - name: Scan with Semgrep
         env:
           SEMGREP_BASELINE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: scripts/sast.sh semgrep
+      # A finding suppressed in the source is left out of the code scanning
+      # report, so each one the pull request introduces (the scan above is
+      # diff-aware) is shown on it as a warning, with its rule, file and line,
+      # for the reviewer. It never fails.
+      - name: List the findings the pull request suppresses
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: scripts/sast.sh suppressed-warnings
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: ${{ !cancelled() && github.event.repository.private == false && hashFiles('sast-reports/semgrep.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         with:
