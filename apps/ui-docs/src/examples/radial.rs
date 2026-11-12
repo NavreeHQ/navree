@@ -1,5 +1,8 @@
 //! Rings, concentric rings, gauges and the day clock: health and fitness numbers for a
 //! day, the way a tracker shows them.
+//!
+//! Large counts are written in lakh grouping (`2_84_500`), as the pages print them.
+#![allow(clippy::inconsistent_digit_grouping)]
 
 use navree::ui::charts::*;
 use navree::ui::*;
