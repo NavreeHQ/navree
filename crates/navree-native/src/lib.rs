@@ -37,7 +37,7 @@ pub use action::{Action, Command, Pair, Present, State};
 pub use client::{Client, ClientError, Contrast, FormFactor, Platform, Scheme};
 pub use envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 pub use input::Input;
-pub use node::{Node, Prominence, Role, Tone};
+pub use node::{Node, Prominence, Role, Standard, Tone};
 pub use op::Op;
 pub use shell::Shell;
 pub use vocab::Kind;

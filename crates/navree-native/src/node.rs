@@ -99,6 +99,20 @@ pub enum Node {
     /// HTML for a small region. A client may refuse it and show the whole page in
     /// its web view.
     Web(WebRegion),
+    /// Actions on a bar, each with words and a symbol.
+    Toolbar(Toolbar),
+    /// A value within a range, read at a glance.
+    Gauge(Gauge),
+    /// A key figure and which way it is going.
+    Figure(Figure),
+    /// Moments in order: what has happened and what is to come.
+    Timeline(Timeline),
+    /// One entry of an activity feed: who did what, and when.
+    FeedRow(FeedRow),
+    /// One message of a conversation.
+    Message(Message),
+    /// A pane of a split screen, with the part it plays.
+    Pane(Pane),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -187,6 +201,13 @@ impl Node {
             Self::Popover(node) => Some(&node.id),
             Self::Native(node) => node.id.as_deref(),
             Self::Web(node) => node.id.as_deref(),
+            Self::Toolbar(node) => node.id.as_deref(),
+            Self::Gauge(node) => node.id.as_deref(),
+            Self::Figure(node) => node.id.as_deref(),
+            Self::Timeline(node) => node.id.as_deref(),
+            Self::FeedRow(node) => node.id.as_deref(),
+            Self::Message(node) => node.id.as_deref(),
+            Self::Pane(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -222,7 +243,11 @@ impl Node {
                 .query
                 .iter()
                 .flat_map(|form| &form.children)
-                .chain(node.rows.iter().flat_map(|row| &row.cells))
+                .chain(
+                    node.rows
+                        .iter()
+                        .flat_map(|row| row.cells.iter().chain(&row.actions)),
+                )
                 .chain(boxed(&node.empty))
                 .collect(),
             Self::Link(node) => node.children.iter().collect(),
@@ -232,6 +257,11 @@ impl Node {
             Self::Dialog(node) => node.children.iter().chain(&node.actions).collect(),
             Self::Popover(node) => node.children.iter().collect(),
             Self::Native(node) => boxed(&node.alt).collect(),
+            Self::Toolbar(node) => node.items.iter().flat_map(|item| &item.menu).collect(),
+            Self::Timeline(node) => node.items.iter().flat_map(|item| &item.detail).collect(),
+            Self::FeedRow(node) => node.detail.iter().collect(),
+            Self::Message(node) => node.body.iter().collect(),
+            Self::Pane(node) => node.children.iter().collect(),
             Self::Unknown(node) => boxed(&node.alt).collect(),
             Self::Divider(_)
             | Self::Spacer(_)
@@ -246,16 +276,119 @@ impl Node {
             | Self::Code(_)
             | Self::Button(_)
             | Self::Field(_)
-            | Self::Web(_) => Vec::new(),
+            | Self::Web(_)
+            | Self::Gauge(_)
+            | Self::Figure(_) => Vec::new(),
         }
     }
 
-    /// The first node with this id, here or anywhere inside.
-    pub fn find(&self, id: &str) -> Option<&Node> {
-        if self.id() == Some(id) {
-            return Some(self);
+    /// The nodes directly inside this one, to change in place: the same nodes,
+    /// in the same order, as [`children`](Self::children).
+    pub fn children_mut(&mut self) -> Vec<&mut Node> {
+        fn boxed(node: &mut Option<Box<Node>>) -> impl Iterator<Item = &mut Node> {
+            node.iter_mut().map(Box::as_mut)
         }
-        self.children().into_iter().find_map(|child| child.find(id))
+        match self {
+            Self::Stack(node) => node.children.iter_mut().collect(),
+            Self::Grid(node) => node.children.iter_mut().collect(),
+            Self::Section(node) => node
+                .actions
+                .iter_mut()
+                .chain(&mut node.children)
+                .chain(&mut node.footer)
+                .collect(),
+            Self::List(node) => node.children.iter_mut().collect(),
+            Self::Row(node) => boxed(&mut node.leading)
+                .chain(&mut node.detail)
+                .chain(boxed(&mut node.trailing))
+                .chain(&mut node.menu)
+                .collect(),
+            Self::Split(node) => vec![&mut *node.primary, &mut *node.detail],
+            Self::Tabs(node) => node
+                .items
+                .iter_mut()
+                .flat_map(|tab| &mut tab.children)
+                .collect(),
+            Self::Disclosure(node) => node.children.iter_mut().collect(),
+            Self::Region(node) => node.children.iter_mut().collect(),
+            Self::Banner(node) => node.actions.iter_mut().collect(),
+            Self::Empty(node) => node.actions.iter_mut().collect(),
+            Self::Facts(node) => node
+                .items
+                .iter_mut()
+                .flat_map(|fact| &mut fact.value)
+                .collect(),
+            Self::Table(node) => node
+                .query
+                .iter_mut()
+                .flat_map(|form| &mut form.children)
+                .chain(
+                    node.rows
+                        .iter_mut()
+                        .flat_map(|row| row.cells.iter_mut().chain(&mut row.actions)),
+                )
+                .chain(boxed(&mut node.empty))
+                .collect(),
+            Self::Link(node) => node.children.iter_mut().collect(),
+            Self::Menu(node) => node.items.iter_mut().collect(),
+            Self::Form(node) => node.children.iter_mut().collect(),
+            Self::Sheet(node) => node
+                .children
+                .iter_mut()
+                .chain(&mut node.actions)
+                .collect(),
+            Self::Dialog(node) => node
+                .children
+                .iter_mut()
+                .chain(&mut node.actions)
+                .collect(),
+            Self::Popover(node) => node.children.iter_mut().collect(),
+            Self::Native(node) => boxed(&mut node.alt).collect(),
+            Self::Toolbar(node) => node
+                .items
+                .iter_mut()
+                .flat_map(|item| &mut item.menu)
+                .collect(),
+            Self::Timeline(node) => node
+                .items
+                .iter_mut()
+                .flat_map(|item| &mut item.detail)
+                .collect(),
+            Self::FeedRow(node) => node.detail.iter_mut().collect(),
+            Self::Message(node) => node.body.iter_mut().collect(),
+            Self::Pane(node) => node.children.iter_mut().collect(),
+            Self::Unknown(node) => boxed(&mut node.alt).collect(),
+            Self::Divider(_)
+            | Self::Spacer(_)
+            | Self::Text(_)
+            | Self::Rich(_)
+            | Self::Image(_)
+            | Self::Icon(_)
+            | Self::Avatar(_)
+            | Self::Badge(_)
+            | Self::Progress(_)
+            | Self::Chart(_)
+            | Self::Code(_)
+            | Self::Button(_)
+            | Self::Field(_)
+            | Self::Web(_)
+            | Self::Gauge(_)
+            | Self::Figure(_) => Vec::new(),
+        }
+    }
+
+    /// The first node with this id, here or anywhere inside, in the order a
+    /// reader meets them. It walks with a list of its own, so a tree of any
+    /// depth is searched without using up the stack.
+    pub fn find(&self, id: &str) -> Option<&Node> {
+        let mut stack = vec![self];
+        while let Some(node) = stack.pop() {
+            if node.id() == Some(id) {
+                return Some(node);
+            }
+            stack.extend(node.children().into_iter().rev());
+        }
+        None
     }
 
     /// A text node holding `value`, in the body style.
@@ -674,21 +807,59 @@ pub struct Text {
     pub heading: Option<u8>,
 }
 
-/// Text in runs.
+/// Text in runs: one paragraph of them, or several blocks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rich {
     /// The node's id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// The runs, in order.
+    /// The runs of a single paragraph, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Run>,
+    /// The blocks of a longer text, in order: paragraphs, headings, quotes,
+    /// items of lists and code. A rich node holds runs or blocks, not both.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocks: Vec<Block>,
     /// What the text is for.
     #[serde(default, skip_serializing_if = "is_default")]
     pub style: TextStyle,
     /// Whether it is secondary.
     #[serde(default, skip_serializing_if = "is_false")]
     pub muted: bool,
+}
+
+/// What a block of rich text is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BlockKind {
+    /// A paragraph.
+    #[default]
+    Paragraph,
+    /// A heading.
+    Heading,
+    /// Words quoted from elsewhere.
+    Quote,
+    /// An item of a list whose items are marked, not counted.
+    Bullet,
+    /// An item of a list whose items are counted.
+    Numbered,
+    /// Code, in a fixed-width face, its lines kept as they are.
+    Code,
+}
+
+/// One block of rich text.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Block {
+    /// What it is.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub kind: BlockKind,
+    /// Its runs, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<Run>,
+    /// A heading's level, from 1; how deep an item of a list sits, from 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub level: u8,
 }
 
 /// One run of rich text.
@@ -898,6 +1069,8 @@ pub struct Fact {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ColumnRole {
+    /// What stands before the name: a picture, an avatar, an icon.
+    Leading,
     /// The record's name.
     Title,
     /// A line about it, under the name.
@@ -967,6 +1140,11 @@ pub struct TableRow {
     /// What a tap on the row does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+    /// What a reader may do with the record: buttons and menus. A narrow
+    /// screen offers them from the row's menu and swipe, a wide one at the
+    /// row's end.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<Node>,
 }
 
 /// Records in columns. A wide screen draws a table; a narrow one draws each
@@ -1090,9 +1268,18 @@ pub struct Button {
     /// What it means.
     #[serde(default, skip_serializing_if = "is_default")]
     pub role: Role,
+    /// The standard action it is, when it is one. A client draws the system's
+    /// own symbol and words for it, whatever icon and label it carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard: Option<Standard>,
     /// How loud it is.
     #[serde(default, skip_serializing_if = "is_default")]
     pub prominence: Prominence,
+    /// Whether what it does can be undone. A destructive action that can be
+    /// undone asks nothing first on a system whose guidelines say so, and
+    /// offers to undo it after.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub undoable: bool,
     /// Whether it can't be used now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
@@ -1102,6 +1289,31 @@ pub struct Button {
     /// What it does. A button with none does nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+}
+
+/// An action every system has its own symbol and words for. A control that is
+/// one of these is drawn as the system draws it, so a share button looks like
+/// every other share button there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Standard {
+    /// Sends something to another app or person.
+    Share,
+    /// Deletes something.
+    Delete,
+    /// Adds a new thing.
+    Add,
+    /// Changes something.
+    Edit,
+    /// Looks for something.
+    Search,
+    /// Finishes a task, keeping what was done.
+    Done,
+    /// Leaves a task, keeping nothing.
+    Cancel,
+    /// Offers more actions.
+    More,
 }
 
 /// A link: words, or parts that lead somewhere together.
@@ -1307,6 +1519,280 @@ pub struct WebRegion {
     pub id: Option<String>,
     /// The markup.
     pub html: String,
+}
+
+/// Actions on a bar: a screen's own, or a group of them at its foot. Each
+/// item has both words and a symbol, because a system shows one, the other
+/// or both, by where the item ends up: on the bar, in its overflow menu, in
+/// the menu bar.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Toolbar {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The items. A client places them by role, never by their order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ToolbarItem>,
+}
+
+/// One action on a toolbar.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolbarItem {
+    /// The item's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What it says: in an overflow menu, beside its symbol, and to assistive
+    /// technology.
+    pub title: String,
+    /// Its symbol.
+    pub icon: Icon,
+    /// The standard action it is, when it is one: the system's own symbol and
+    /// words take the place of `icon` and `title`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard: Option<Standard>,
+    /// What it means.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub role: Role,
+    /// How loud it is.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub prominence: Prominence,
+    /// Whether what it does can be undone.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub undoable: bool,
+    /// Whether it can't be used now.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+    /// What it does. An item with a menu opens the menu instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
+    /// The menu it opens: buttons, links, sections of them and dividers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub menu: Vec<Node>,
+}
+
+/// A value within a range, read at a glance: a level, a meter, a dial. The
+/// numbers are the page's own; `shown` is the value in the page's words.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Gauge {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The value.
+    pub value: serde_json::Number,
+    /// The least it can be.
+    pub min: serde_json::Number,
+    /// The most it can be.
+    pub max: serde_json::Number,
+    /// What it measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The value in the page's words: `72%`, `₹42,000 of ₹60,000`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// What its colour means.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+}
+
+/// Which way a figure is going.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Direction {
+    /// Up.
+    Up,
+    /// Down.
+    Down,
+    /// Neither.
+    Flat,
+}
+
+/// Which way a figure is going, and whether that is good: up is not always
+/// good, so the tone says.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Trend {
+    /// Which way.
+    pub direction: Direction,
+    /// By how much, in the page's words: `12%`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Whether it is good (`success`) or bad (`danger`) news.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+}
+
+/// A key figure: what it is, its value in the page's words, and which way it
+/// is going.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Figure {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the figure is.
+    pub label: String,
+    /// Its value, as the page wrote it: `₹1,24,050`.
+    pub value: String,
+    /// Which way it is going.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trend: Option<Trend>,
+    /// A line under it: what the trend is measured against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// What its colour means.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+}
+
+/// Moments in order: what has happened to something and what is still to
+/// come.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Timeline {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The moments, the earliest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<Moment>,
+}
+
+/// One moment of a timeline.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Moment {
+    /// The moment's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What happened, or will.
+    pub title: String,
+    /// A line under it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// When, in the page's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// Whether it has happened, is happening or is to come.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<RowState>,
+    /// Its icon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// What its colour means.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+    /// More under it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail: Vec<Node>,
+}
+
+/// One entry of an activity feed: who did what, and when.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedRow {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Who did it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<Avatar>,
+    /// What kind of thing happened, when no person did it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// What happened, in runs, so names and links stand out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<Run>,
+    /// When, in the page's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// What its colour means.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<Tone>,
+    /// More under it: a comment, a change from one value to another.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail: Vec<Node>,
+    /// What a tap on the entry does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
+}
+
+/// How far a message has got to the person it is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Delivery {
+    /// It is on its way to the server.
+    Sending,
+    /// The server has it.
+    Sent,
+    /// It has reached them.
+    Delivered,
+    /// They have read it.
+    Read,
+    /// It could not be sent.
+    Failed,
+}
+
+/// One message of a conversation.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Message {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Who wrote it.
+    pub author: String,
+    /// Their picture or initials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<Avatar>,
+    /// Whether the person reading wrote it: a client sets it apart, as its
+    /// system's own conversations do.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mine: bool,
+    /// Whether it is a note only the team sees, not sent to the other side.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub note: bool,
+    /// What it says: text, rich text, pictures, files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub body: Vec<Node>,
+    /// When it was written, in the page's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// How far it has got.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<Delivery>,
+}
+
+/// The part a pane plays on a split screen. Each system lays panes out by
+/// these: side by side where there is room, one at a time where there is not.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PaneRole {
+    /// The list a reader chooses from.
+    List,
+    /// The screen's main content.
+    #[default]
+    Content,
+    /// What was chosen in the list.
+    Detail,
+    /// What helps with the content beside it: filters, a summary.
+    Supporting,
+    /// The details of what is selected in the content, to read or change.
+    Inspector,
+}
+
+/// A pane of a split screen.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Pane {
+    /// The pane's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The part it plays.
+    pub role: PaneRole,
+    /// Its title, where a system names panes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Whether it is the one a narrow screen shows, when only one fits.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub current: bool,
+    /// What it holds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<Node>,
 }
 
 #[cfg(test)]

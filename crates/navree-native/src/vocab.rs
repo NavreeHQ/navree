@@ -152,6 +152,13 @@ kinds! {
     Popover(Popover) => "popover" since 0,
     Native(NativeView) => "native" since 0,
     Web(WebRegion) => "web" since 0,
+    Toolbar(Toolbar) => "toolbar" since 0,
+    Gauge(Gauge) => "gauge" since 0,
+    Figure(Figure) => "figure" since 0,
+    Timeline(Timeline) => "timeline" since 0,
+    FeedRow(FeedRow) => "feed_row" since 0,
+    Message(Message) => "message" since 0,
+    Pane(Pane) => "pane" since 0,
 }
 
 /// A field that arrived after its kind did: the kind, the field's name in the

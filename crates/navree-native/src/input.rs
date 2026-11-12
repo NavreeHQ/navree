@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::{is_default, is_false};
+use crate::node::{is_default, is_false, is_zero};
 
 /// The control of a field.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +151,35 @@ pub struct ChoiceOption {
     pub disabled: bool,
 }
 
+/// Where the options of a long list are found as the reader types, a few at a
+/// time, instead of all of them coming with the screen.
+///
+/// The client asks `href` with the typed words as the query value `name`
+/// (`/customers/options?q=kaur`). The answer is an envelope whose screen's body
+/// is a `field` of the same name whose control holds the options found.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChoiceSearch {
+    /// Where to ask.
+    pub href: String,
+    /// The name the typed words are sent under.
+    pub name: String,
+    /// The fewest characters typed before a search is sent.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub min: u8,
+}
+
+/// An option the reader may add when the one they want is not there.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChoiceCreate {
+    /// What the client offers, with the typed words beside it: `Add a tag`.
+    pub label: String,
+    /// Where the typed words are posted, under the field's name; the answer is
+    /// an envelope like a search's, holding the new option. Without it, the
+    /// typed words are the value sent with the form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+}
+
 /// One of several.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChoiceInput {
@@ -166,6 +195,12 @@ pub struct ChoiceInput {
     /// What it shows while nothing is chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+    /// Where more options are found as the reader types.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<ChoiceSearch>,
+    /// Whether, and how, the reader may add an option.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create: Option<ChoiceCreate>,
 }
 
 /// Any of several. Each chosen value is sent under the field's name.
@@ -177,6 +212,12 @@ pub struct ChoicesInput {
     /// What is chosen now.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
+    /// Where more options are found as the reader types.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<ChoiceSearch>,
+    /// Whether, and how, the reader may add an option.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create: Option<ChoiceCreate>,
 }
 
 /// What a date control picks.
@@ -190,6 +231,26 @@ pub enum DateKind {
     Time,
     /// A day and a time, sent as `2026-11-12T09:41`.
     Datetime,
+}
+
+/// A day of the week.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Weekday {
+    /// Monday.
+    Monday,
+    /// Tuesday.
+    Tuesday,
+    /// Wednesday.
+    Wednesday,
+    /// Thursday.
+    Thursday,
+    /// Friday.
+    Friday,
+    /// Saturday.
+    Saturday,
+    /// Sunday.
+    Sunday,
 }
 
 /// A date, a time or both, in the forms the web's own fields send.
@@ -207,6 +268,12 @@ pub struct DateInput {
     /// The latest it takes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<String>,
+    /// Days that can't be picked, as `2026-11-14`: holidays, days fully booked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub off_days: Vec<String>,
+    /// Days of the week that can't be picked: a shop shut on Sundays.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub off_weekdays: Vec<Weekday>,
 }
 
 /// A number between two ends. The numbers are text, as the page wrote them, so
