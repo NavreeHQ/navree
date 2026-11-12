@@ -1,6 +1,6 @@
 //! Grids and points: [`CalendarHeatmap`] (a day per cell, weeks across), [`MatrixHeatmap`]
-//! (one measure against another, such as a correlation matrix) and [`Scatter`] (a point per
-//! pair of values).
+//! (one measure against another, such as a correlation matrix), [`RelationList`] (the same
+//! pairs as a ranked list) and [`Scatter`] (a point per pair of values).
 //!
 //! ```
 //! use chrono::NaiveDate;
@@ -34,10 +34,12 @@
 
 mod calendar;
 mod matrix;
+mod relations;
 mod scatter;
 
 pub use calendar::{CalendarHeatmap, HeatSteps};
 pub use matrix::{MatrixHeatmap, Relation};
+pub use relations::{MAX_RELATIONS, RelationList};
 pub use scatter::{PointSeries, Scatter};
 
 use std::borrow::Cow;
@@ -99,8 +101,13 @@ pub struct GridLabels {
     pub calendar_cut: Cow<'static, str>,
     /// A matrix's summary: `{metrics}`, `{pairs}`, `{tested}`, `{significant}`.
     pub matrix_summary: Cow<'static, str>,
-    /// Added to a matrix's summary when a pair is significant: `{pair}`, `{value}`.
+    /// Added to a matrix's or a relation list's summary when a pair is significant:
+    /// `{pair}`, `{value}`.
     pub matrix_strongest: Cow<'static, str>,
+    /// A relation list's summary: `{pairs}`, `{significant}`.
+    pub relations_summary: Cow<'static, str>,
+    /// Under a relation list that shows fewer rows than it has pairs: `{shown}`, `{total}`.
+    pub relations_cut: Cow<'static, str>,
     /// A scatter series' summary: `{series}`, `{count}`, `{x}`, `{x_min}`, `{x_max}`,
     /// `{x_mean}`, `{y}`, `{y_min}`, `{y_max}`, `{y_mean}`.
     pub scatter_summary: Cow<'static, str>,
@@ -144,6 +151,10 @@ impl GridLabels {
                 "{metrics} measures, {pairs} pairs: {tested} tested, {significant} significant.",
             ),
             matrix_strongest: Cow::Borrowed(" Strongest: {pair}, {value}."),
+            relations_summary: Cow::Borrowed("{pairs} pairs, {significant} significant."),
+            relations_cut: Cow::Borrowed(
+                "The strongest {shown} of {total} pairs are listed; the table has every one.",
+            ),
             scatter_summary: Cow::Borrowed(
                 "{series}: {count} points. {x} from {x_min} to {x_max}, average {x_mean}. {y} from {y_min} to {y_max}, average {y_mean}.",
             ),

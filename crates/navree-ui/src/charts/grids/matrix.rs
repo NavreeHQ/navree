@@ -25,9 +25,9 @@ use crate::node::{AttrValue, Node, Uses, el};
 #[derive(Clone, Debug, PartialEq)]
 #[must_use]
 pub struct Relation {
-    value: Option<f64>,
-    significant: bool,
-    note: Option<String>,
+    pub(super) value: Option<f64>,
+    pub(super) significant: bool,
+    pub(super) note: Option<String>,
 }
 
 impl Relation {
