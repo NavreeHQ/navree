@@ -112,7 +112,6 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
             event: attr(element, "data-ui-live-event").map(Cow::into_owned),
         }),
         children,
-        ..n::Region::default()
     })])
 }
 
