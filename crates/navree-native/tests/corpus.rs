@@ -28,7 +28,7 @@ use navree_native::node::{
     Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
     Region, Rich, Role, Row, RowState, Run, Section, SectionStyle, Series, Sheet, SheetSize, Sort,
     SortDir, Spacer, Split, Stack, Standard, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline,
-    Tone, Toolbar, ToolbarItem, Trend, WebRegion,
+    Tone, Toolbar, ToolbarItem, Trend, Unknown, WebRegion,
 };
 use navree_native::op::{Op, Toast, ToastAction, UrlMode};
 use navree_native::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
@@ -2199,6 +2199,112 @@ fn every_icon_shape_is_sent_once_and_put_back_where_it_was() {
     }
 }
 
+/// The examples no type can write, because they hold what this build does not
+/// know. They are written by hand and only read.
+const BY_HAND: &[&str] = &["from-the-future.json"];
+
+/// An answer from a server newer than the app: a kind, an action, a command, a
+/// control, a device call and its stand-in, and an op this build has never
+/// heard of, and fields it does not know at every level.
+#[test]
+fn the_future_reads_as_unknown_parts_that_keep_their_stand_ins() {
+    let text = std::fs::read_to_string(corpus().join("from-the-future.json")).unwrap();
+    let envelope: Envelope = serde_json::from_str(&text).unwrap();
+    let screen = envelope.screen.as_ref().unwrap();
+    assert_eq!(screen.title, "Warehouse");
+
+    // A known kind keeps what it knows and passes over the rest.
+    assert_eq!(
+        screen.body.find("stock-heading"),
+        Some(&Node::Text(Text {
+            id: Some(s("stock-heading")),
+            value: s("Stock across Punjab"),
+            ..Text::default()
+        }))
+    );
+    // An unknown kind keeps its id and its stand-in.
+    let Some(Node::Unknown(hologram)) = screen.body.find("shelves-3d") else {
+        panic!("the hologram is read as an unknown part");
+    };
+    assert_eq!(hologram.kind, "hologram");
+    let Some(Node::Image(image)) = hologram.alt.as_deref() else {
+        panic!("the hologram keeps the picture that stands in for it");
+    };
+    assert_eq!(image.alt, "The shelves at the Ludhiana warehouse");
+    assert_eq!(
+        screen.body.find("no-stand-in"),
+        Some(&Node::Unknown(Unknown {
+            kind: s("hologram"),
+            id: Some(s("no-stand-in")),
+            alt: None,
+        }))
+    );
+
+    // An unknown action, command, control and device call.
+    let Node::Button(teleport) = &screen.actions[0] else {
+        panic!("the screen's action is a button");
+    };
+    assert_eq!(teleport.action, Some(Action::Unknown));
+    let Some(Node::Form(form)) = screen.body.find("move") else {
+        panic!("the form is read");
+    };
+    let Node::Field(signature) = &form.children[0] else {
+        panic!("the signature is a field");
+    };
+    assert_eq!(signature.input, Input::Unknown);
+    let Node::Field(units) = &form.children[1] else {
+        panic!("the units are a field");
+    };
+    assert!(matches!(&units.input, Input::Text(text) if text.value == "24"));
+    let Some(Node::Button(celebrate)) = screen.body.find("celebrate") else {
+        panic!("the button is read");
+    };
+    let Some(Action::Commands { list }) = &celebrate.action else {
+        panic!("its commands are read");
+    };
+    assert_eq!(list[0], Command::Unknown);
+    assert!(matches!(&list[1], Command::Toast { text, .. } if text == "Moved"));
+    let Some(Node::Button(measure)) = screen.body.find("measure") else {
+        panic!("the button is read");
+    };
+    let Some(Action::Device(call)) = &measure.action else {
+        panic!("its device call is read");
+    };
+    assert_eq!(call.call, navree_native::device::Call::Unknown);
+    assert_eq!(call.alt, Some(Alt::Unknown));
+
+    // An unknown op is skipped; a tap-only call in an op is never started.
+    assert_eq!(envelope.ops.len(), 3);
+    assert_eq!(envelope.ops[0], Op::Unknown);
+    assert_eq!(
+        envelope.ops[1],
+        Op::Device {
+            call: ReplyCall::Unknown
+        }
+    );
+    assert!(matches!(&envelope.ops[2], Op::Toast(toast) if toast.text == "Synced"));
+
+    // What a client draws: the stand-in in the hologram's place, and the page
+    // in the web view for the part with none.
+    assert_eq!(
+        navree_native::vocab::downgrade(screen.body.clone(), VOCAB),
+        navree_native::vocab::Downgraded::Web {
+            why: vec![s("vocab:hologram")]
+        }
+    );
+    let Some(Node::Stack(body)) = Some(&screen.body) else {
+        panic!("the body is a stack");
+    };
+    let mut drawn = body.clone();
+    drawn.children.retain(|node| node.id() != Some("no-stand-in"));
+    let navree_native::vocab::Downgraded::Node(Node::Stack(drawn)) =
+        navree_native::vocab::downgrade(Node::Stack(drawn), VOCAB)
+    else {
+        panic!("with a stand-in for every unknown part, the page is drawn");
+    };
+    assert!(matches!(&drawn.children[1], Node::Image(image) if image.src == "/files/shelves.jpg"));
+}
+
 #[test]
 fn the_corpus_holds_nothing_the_tests_do_not_write() {
     let mut expected: BTreeSet<String> = envelopes()
@@ -2206,6 +2312,7 @@ fn the_corpus_holds_nothing_the_tests_do_not_write() {
         .map(|(name, _)| format!("{name}.json"))
         .collect();
     expected.insert("shell.json".to_owned());
+    expected.extend(BY_HAND.iter().map(|name| (*name).to_owned()));
     let Ok(entries) = std::fs::read_dir(corpus()) else {
         return;
     };
