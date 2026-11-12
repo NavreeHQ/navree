@@ -52,5 +52,20 @@ stop[data-mix=soft]{stop-color:color-mix(in oklab,var(--c) 30%,var(--surface,var
   [data-delay="21"]{animation-delay:1.05s}[data-delay="22"]{animation-delay:1.1s}[data-delay="23"]{animation-delay:1.15s}[data-delay="24"]{animation-delay:1.2s}
 }
 
+/* A sparkline's columns and its points. */
+[data-slot=chart-column]:not([fill]){fill:var(--c)}
+[data-kind=sparkline] [data-slot=chart-point]{fill:var(--c);stroke:var(--surface);stroke-width:1.5px}
+
+/* A progress bar drawn as a meter: a rounded track, the fill, a goal marker. */
+[data-slot=meter]{display:block;width:100%;min-width:0;& svg{display:block;overflow:visible}}
+[data-slot=meter]:dir(rtl) svg{scale:-1 1}
+[data-slot=progress-row] > [data-slot=meter]{flex:1}
+[data-slot=meter-track]{fill:var(--ink-3)}
+[data-slot=meter-fill]:not([fill]){fill:var(--c,var(--fg))}
+[data-slot=meter-goal]{stroke:var(--fg-1);stroke-width:2px;stroke-linecap:round}
+
+/* Bars, painted: each in its colour. */
+[data-slot=bars] :is([data-color],[data-tone]):not([fill]){fill:var(--c)}
+
 /* A number that counts up keeps its width while it does. */
 [data-slot=count-up]{font-variant-numeric:tabular-nums}
