@@ -18,9 +18,11 @@ use navree_native::node::{Field, Form, Live, Method, Node};
 
 use crate::event::FieldValue;
 
-/// The deepest tree the store holds. A page is nowhere near it; an op that
-/// would pass it is skipped, so nothing that walks a tree can run out of stack.
-pub(crate) const MAX_DEPTH: usize = 96;
+/// The deepest tree the store holds, in nodes: about what one answer can
+/// hold before its JSON is nested too deep to read. A page is nowhere near
+/// it; an op that would pass it is skipped, so nothing that walks a tree can
+/// run out of stack.
+pub(crate) const MAX_DEPTH: usize = 64;
 
 /// A place in a node that holds nodes.
 pub(crate) enum Slot<'a> {
@@ -787,7 +789,7 @@ mod tests {
         let row = |id: &str, cells: Vec<Node>| TableRow {
             id: Some(id.to_owned()),
             cells,
-            action: None,
+            ..TableRow::default()
         };
         let table = Node::Table(Table {
             query: Some(Form {

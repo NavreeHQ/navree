@@ -85,7 +85,7 @@
           {"t":"messages"}
         ],
         "effects": [
-          {"t":"report","what":"depth","detail":"an op on `leaf` would nest the screen past 96 nodes"},
+          {"t":"report","what":"depth","detail":"an op on `leaf` would nest the screen past 64 nodes"},
           {"t":"message","id":1,"tone":"neutral","text":"Still standing"}
         ]
       },

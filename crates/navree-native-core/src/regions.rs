@@ -223,9 +223,9 @@ impl Core {
             _ => Region {
                 id: old.id.clone(),
                 src: old.src.clone(),
-                lazy: false,
                 live: old.live.clone(),
                 children: vec![answer.body],
+                ..Region::default()
             },
         };
         new.lazy = false;

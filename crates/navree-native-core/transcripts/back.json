@@ -161,7 +161,30 @@
       ]
     },
     {
-      "note": "Back closes the dialog first.",
+      "note": "The person taps outside the dialog: the client says it was closed.",
+      "send": {"t":"overlay","screen":5,"id":"refund","open":false},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/5/overlays","is":[]},
+        {"at":"/can_go_back","is":true}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":5,"action":{"t":"commands","list":[{"c":"open","id":"refund"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Opened again, back closes it first.",
       "send": {"t":"back"},
       "expect": {
         "changed": [

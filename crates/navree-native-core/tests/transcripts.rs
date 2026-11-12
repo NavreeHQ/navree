@@ -322,6 +322,7 @@ const REQUIRED: &[&str] = &[
     "cache",
     "deep-tree",
     "device-reply",
+    "form-file",
 ];
 
 #[test]
@@ -334,6 +335,50 @@ fn every_transcript_replays() {
     let have: BTreeSet<&str> = names.iter().map(String::as_str).collect();
     let missing: Vec<&&str> = REQUIRED.iter().filter(|name| !have.contains(**name)).collect();
     assert!(missing.is_empty(), "these conversations are not written down: {missing:?}");
+}
+
+/// The names of the forms a tagged definition of the schema has.
+fn forms_of(schema: &Value, name: &str) -> BTreeSet<String> {
+    schema["$defs"][name]["oneOf"]
+        .as_array()
+        .expect("a tagged definition")
+        .iter()
+        .filter_map(|form| form["properties"]["t"]["const"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// Every event a client can send and every effect the core can ask for is in
+/// at least one transcript: a client's author can see each one at work.
+#[test]
+fn every_event_and_effect_is_in_a_transcript() {
+    let schema = navree_native_core::schema::schema();
+    let (mut events, mut effects) = (BTreeSet::new(), BTreeSet::new());
+    for name in names() {
+        let text = std::fs::read_to_string(dir().join(format!("{name}.json"))).unwrap();
+        let transcript: Value = serde_json::from_str(&text).unwrap();
+        for step in transcript["steps"].as_array().unwrap() {
+            events.extend(step["send"]["t"].as_str().map(str::to_owned));
+            for effect in step["expect"]["effects"].as_array().into_iter().flatten() {
+                effects.extend(effect["t"].as_str().map(str::to_owned));
+            }
+        }
+    }
+    let unseen: Vec<_> = forms_of(&schema, "Event").difference(&events).cloned().collect();
+    assert!(unseen.is_empty(), "no transcript sends these events: {unseen:?}");
+    let unseen: Vec<_> = forms_of(&schema, "Effect").difference(&effects).cloned().collect();
+    assert!(unseen.is_empty(), "no transcript asks for these effects: {unseen:?}");
+}
+
+/// The schema file is what the crate writes now.
+#[test]
+fn the_schema_file_is_current() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/navree-native-core.schema.json");
+    let text = format!("{}\n", serde_json::to_string_pretty(&navree_native_core::schema::schema()).unwrap());
+    if std::env::var("NAVREE_CORE_TRANSCRIPTS").is_ok_and(|mode| mode == "write") {
+        std::fs::write(&path, &text).unwrap();
+    }
+    let held = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
+    assert_eq!(held, text, "write it again: NAVREE_CORE_TRANSCRIPTS=write");
 }
 
 /// A small reader of the JSON Schema the crate exports: enough of the standard

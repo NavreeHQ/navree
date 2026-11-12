@@ -1,0 +1,51 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 1,
+ "screen": {
+  "title": "Return an item",
+  "body": {
+   "t": "form",
+   "id": "return",
+   "method": "post",
+   "action": "/orders/1/returns",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "t0k3n"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "name": "reason",
+     "label": "What is wrong with it?",
+     "input": {
+      "t": "text",
+      "kind": "multiline"
+     },
+     "required": true
+    },
+    {
+     "t": "field",
+     "name": "photos",
+     "label": "Photos",
+     "input": {
+      "t": "file",
+      "accept": "image/*",
+      "multiple": true,
+      "capture": "environment"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Send",
+     "role": "primary",
+     "action": {
+      "t": "submit"
+     }
+    }
+   ]
+  }
+ }
+}

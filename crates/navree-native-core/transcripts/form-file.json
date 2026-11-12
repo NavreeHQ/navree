@@ -1,0 +1,165 @@
+{
+  "about": "A form with files. The client keeps the bytes and gives the core a name for each file; the post is multipart, and the client's transport puts the bytes in.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/1/returns/new"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/1/returns/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/return-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/forms/return/fields/return.photos/value","is":{"files":[],"t":"files"}}
+      ]
+    },
+    {
+      "send": {"t":"field","screen":4,"form":"return","field":"return.reason","value":{"t":"text","text":"The zari has come loose at one corner."}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":4,"form":"return"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person takes two photos. The client keeps them and tells the core what they are called.",
+      "send": {"t":"field","screen":4,"form":"return","field":"return.photos","value":{"t":"files","files":[{"token":"pick-1","name":"corner.jpg","type":"image/jpeg","size":482113},{"token":"pick-2","name":"label.heic","type":"image/heic","size":1204771}]}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":4,"form":"return"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A form that holds a file is sent as multipart: the core lists the parts, and names the content type no more than that.",
+      "send": {"t":"act","screen":4,"action":{"t":"submit"},"form":"return"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":4,"form":"return"}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/orders/1/returns","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"body":{"t":"multipart","parts":[{"t":"text","name":"_csrf","value":"t0k3n"},{"t":"text","name":"reason","value":"The zari has come loose at one corner."},{"t":"file","name":"photos","token":"pick-1","filename":"corner.jpg","type":"image/jpeg"},{"t":"file","name":"photos","token":"pick-2","filename":"label.heic","type":"image/heic"}]},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer leads back to the order, which is already under this screen.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/return-sent.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"success","text":"The return is with the shop"},
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=1; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/front","is":3},
+        {"at":"/messages/0/text","is":"The return is with the shop"}
+      ]
+    }
+  ]
+}

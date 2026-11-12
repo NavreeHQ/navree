@@ -1,0 +1,1994 @@
+{
+  "$defs": {
+    "Body": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "form"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "parts": {
+              "items": {
+                "$ref": "#/$defs/Part"
+              },
+              "type": "array"
+            },
+            "t": {
+              "const": "multipart"
+            }
+          },
+          "required": [
+            "t",
+            "parts"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "app"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "nav"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "screen"
+            }
+          },
+          "required": [
+            "t",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "form": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "form"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "form"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "integer"
+            },
+            "from": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "rows"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "id",
+            "from",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "messages"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Config": {
+      "additionalProperties": false,
+      "properties": {
+        "also": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "back_to_first": {
+          "type": "boolean"
+        },
+        "cache": {
+          "additionalProperties": false,
+          "properties": {
+            "pages": {
+              "type": "integer"
+            },
+            "persist": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "type": "object"
+        },
+        "client": {
+          "description": "`Client` of the protocol: see the schema of `navree-native`.",
+          "type": "object"
+        },
+        "deep_links": {
+          "enum": [
+            "routes",
+            "origin"
+          ],
+          "type": "string"
+        },
+        "lib": {
+          "type": "string"
+        },
+        "loopback_http": {
+          "type": "boolean"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "sign_in": {
+          "additionalProperties": false,
+          "properties": {
+            "callback": {
+              "type": "string"
+            },
+            "paths": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [],
+          "type": "object"
+        },
+        "undrawable": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "origin",
+        "client"
+      ],
+      "type": "object"
+    },
+    "Effect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "$ref": "#/$defs/Body"
+            },
+            "headers": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "method": {
+              "enum": [
+                "get",
+                "post"
+              ],
+              "type": "string"
+            },
+            "request": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "fetch"
+            },
+            "timeout_ms": {
+              "type": "integer"
+            },
+            "url": {
+              "type": "string"
+            },
+            "xsrf": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "t",
+            "request",
+            "method",
+            "url",
+            "headers",
+            "timeout_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "request": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "cancel"
+            }
+          },
+          "required": [
+            "t",
+            "request"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "open_url"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "callback": {
+              "type": "string"
+            },
+            "t": {
+              "const": "sign_in"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "notice": {
+              "enum": [
+                "offline",
+                "timeout",
+                "failed",
+                "unsaved",
+                "loading",
+                "copied",
+                "fields_need_attention",
+                "loaded"
+              ],
+              "type": "string"
+            },
+            "t": {
+              "const": "message"
+            },
+            "text": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "tone": {
+              "enum": [
+                "neutral",
+                "accent",
+                "success",
+                "warning",
+                "danger",
+                "info"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "id",
+            "tone"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "t": {
+              "const": "haptic"
+            }
+          },
+          "required": [
+            "t",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "args": {},
+            "call": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "t": {
+              "const": "device"
+            }
+          },
+          "required": [
+            "t",
+            "call",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "t": {
+              "const": "cache_read"
+            }
+          },
+          "required": [
+            "t",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "t": {
+              "const": "cache_write"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "cache_clear"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "integer"
+            },
+            "notice": {
+              "enum": [
+                "offline",
+                "timeout",
+                "failed",
+                "unsaved",
+                "loading",
+                "copied",
+                "fields_need_attention",
+                "loaded"
+              ],
+              "type": "string"
+            },
+            "t": {
+              "const": "announce"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "copy"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "ms": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "timer"
+            },
+            "timer": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "t",
+            "timer",
+            "ms"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "cancel_timer"
+            },
+            "timer": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "t",
+            "timer"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "headers": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "stream": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "stream_open"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "stream",
+            "url",
+            "headers"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "stream": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "stream_close"
+            }
+          },
+          "required": [
+            "t",
+            "stream"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "exit"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "t": {
+              "const": "report"
+            },
+            "what": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "what",
+            "detail"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "start"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "error": {
+              "enum": [
+                "offline",
+                "timeout",
+                "other"
+              ],
+              "type": "string"
+            },
+            "left": {
+              "type": "string"
+            },
+            "request": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "response"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "request"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "destination": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "select"
+            }
+          },
+          "required": [
+            "t",
+            "destination"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "description": "`Action` of the protocol: see the schema of `navree-native`.",
+              "type": "object"
+            },
+            "form": {
+              "type": "string"
+            },
+            "overlay": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "act"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "form": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "field"
+            },
+            "value": {
+              "$ref": "#/$defs/FieldValue"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "field",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "back"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "pop_to"
+            }
+          },
+          "required": [
+            "t",
+            "screen"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "dismissed"
+            }
+          },
+          "required": [
+            "t",
+            "screen"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "open": {
+              "type": "boolean"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "overlay"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "id",
+            "open"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "refresh"
+            }
+          },
+          "required": [
+            "t",
+            "screen"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "region": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "region_retry"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "region"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "more"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "href": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "region_go"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "region",
+            "href"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "message_shown"
+            }
+          },
+          "required": [
+            "t",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "message_action"
+            }
+          },
+          "required": [
+            "t",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "web_link"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "open_link"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "href": {
+              "type": "string"
+            },
+            "t": {
+              "const": "notification"
+            }
+          },
+          "required": [
+            "t",
+            "href"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "window"
+            },
+            "width": {
+              "$ref": "#/$defs/Width"
+            }
+          },
+          "required": [
+            "t",
+            "width"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contrast": {
+              "enum": [
+                "normal",
+                "more"
+              ],
+              "type": "string"
+            },
+            "locale": {
+              "type": "string"
+            },
+            "scheme": {
+              "enum": [
+                "light",
+                "dark"
+              ],
+              "type": "string"
+            },
+            "t": {
+              "const": "environment"
+            },
+            "text_percent": {
+              "type": "integer"
+            },
+            "tz": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "foreground"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "background"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "signed_out"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "timer"
+            },
+            "timer": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "t",
+            "timer"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "open",
+                "event",
+                "closed"
+              ],
+              "type": "string"
+            },
+            "status": {
+              "type": "integer"
+            },
+            "stream": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "stream"
+            }
+          },
+          "required": [
+            "t",
+            "stream",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "t": {
+              "const": "cache"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "call": {
+              "type": "integer"
+            },
+            "fields": {
+              "items": {
+                "description": "`Pair` of the protocol: see the schema of `navree-native`.",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "t": {
+              "const": "device_result"
+            }
+          },
+          "required": [
+            "t",
+            "call",
+            "ok"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "sign_in_done"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "screen": {
+              "type": "integer"
+            },
+            "serial": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "focused"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "serial"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "open_upgrade"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "FieldValue": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "on": {
+              "type": "boolean"
+            },
+            "t": {
+              "const": "flag"
+            }
+          },
+          "required": [
+            "t",
+            "on"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "many"
+            },
+            "values": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "t",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "files": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "type": "integer"
+                  },
+                  "token": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "t": {
+              "const": "files"
+            }
+          },
+          "required": [
+            "t",
+            "files"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "none"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Form": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "errors": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "$ref": "#/$defs/FieldValue"
+              }
+            },
+            "required": [
+              "name",
+              "value",
+              "errors"
+            ],
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "pending": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pending",
+        "fields"
+      ],
+      "type": "object"
+    },
+    "Message": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "notice": {
+          "enum": [
+            "offline",
+            "timeout",
+            "failed",
+            "unsaved",
+            "loading",
+            "copied",
+            "fields_need_attention",
+            "loaded"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tone": {
+          "enum": [
+            "neutral",
+            "accent",
+            "success",
+            "warning",
+            "danger",
+            "info"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tone"
+      ],
+      "type": "object"
+    },
+    "Part": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "t": {
+              "const": "text"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "name",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "filename": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "t": {
+              "const": "file"
+            },
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "name",
+            "token",
+            "filename",
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Query": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "const": "all"
+            }
+          },
+          "required": [
+            "part"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "const": "app"
+            }
+          },
+          "required": [
+            "part"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "const": "nav"
+            }
+          },
+          "required": [
+            "part"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "part": {
+              "const": "screen"
+            }
+          },
+          "required": [
+            "part",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "form": {
+              "type": "string"
+            },
+            "part": {
+              "const": "form"
+            },
+            "screen": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "part",
+            "screen",
+            "form"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "integer"
+            },
+            "from": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "part": {
+              "const": "rows"
+            },
+            "screen": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "part",
+            "screen",
+            "id",
+            "from",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "const": "messages"
+            }
+          },
+          "required": [
+            "part"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Screen": {
+      "additionalProperties": false,
+      "properties": {
+        "cached": {
+          "type": "boolean"
+        },
+        "chrome": {
+          "type": "boolean"
+        },
+        "content": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "t": {
+                  "const": "blank"
+                }
+              },
+              "required": [
+                "t"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "screen": {
+                  "description": "`Screen` of the protocol: see the schema of `navree-native`.",
+                  "type": "object"
+                },
+                "t": {
+                  "const": "native"
+                }
+              },
+              "required": [
+                "t",
+                "screen"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "serial": {
+                  "type": "integer"
+                },
+                "t": {
+                  "const": "web"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "why": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "t",
+                "url",
+                "why",
+                "serial"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "failure": {
+          "enum": [
+            "offline",
+            "timeout",
+            "server",
+            "protocol",
+            "config"
+          ],
+          "type": "string"
+        },
+        "focus": {
+          "additionalProperties": false,
+          "properties": {
+            "serial": {
+              "type": "integer"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "serial"
+          ],
+          "type": "object"
+        },
+        "forms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Form"
+          },
+          "type": "object"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "lists": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "failed": {
+                "type": "boolean"
+              },
+              "loading": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "loading",
+              "failed"
+            ],
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "loading": {
+          "type": "boolean"
+        },
+        "overlays": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "refreshing": {
+          "type": "boolean"
+        },
+        "regions": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "failure": {
+                "enum": [
+                  "offline",
+                  "timeout",
+                  "server",
+                  "protocol",
+                  "config"
+                ],
+                "type": "string"
+              },
+              "loading": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "loading"
+            ],
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "states": {
+          "additionalProperties": {
+            "items": {
+              "enum": [
+                "open",
+                "hidden",
+                "checked",
+                "selected",
+                "disabled",
+                "active",
+                "invalid",
+                "pending"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "content",
+        "loading",
+        "refreshing",
+        "cached",
+        "status",
+        "chrome",
+        "overlays",
+        "states",
+        "forms",
+        "regions",
+        "lists"
+      ],
+      "type": "object"
+    },
+    "Update": {
+      "additionalProperties": false,
+      "properties": {
+        "changed": {
+          "items": {
+            "$ref": "#/$defs/Change"
+          },
+          "type": "array"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/Effect"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "changed",
+        "effects"
+      ],
+      "type": "object"
+    },
+    "ViewState": {
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "additionalProperties": false,
+          "properties": {
+            "context": {
+              "type": "string"
+            },
+            "home": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "theme": {
+              "description": "`shell::Theme` of the protocol: see the schema of `navree-native`.",
+              "type": "object"
+            },
+            "user": {
+              "description": "`shell::User` of the protocol: see the schema of `navree-native`.",
+              "type": "object"
+            }
+          },
+          "required": [
+            "name",
+            "home"
+          ],
+          "type": "object"
+        },
+        "can_go_back": {
+          "type": "boolean"
+        },
+        "destinations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "badge": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "href": {
+                "type": "string"
+              },
+              "icon": {
+                "description": "`node::Icon` of the protocol: see the schema of `navree-native`.",
+                "type": "object"
+              },
+              "items": {
+                "items": {
+                  "description": "`shell::NavItem` of the protocol: see the schema of `navree-native`.",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "label": {
+                "type": "string"
+              },
+              "stack": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "label",
+              "href",
+              "items",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "failure": {
+          "enum": [
+            "offline",
+            "timeout",
+            "server",
+            "protocol",
+            "config"
+          ],
+          "type": "string"
+        },
+        "front": {
+          "type": "integer"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/Message"
+          },
+          "type": "array"
+        },
+        "modals": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "locked": {
+                "type": "boolean"
+              },
+              "present": {
+                "enum": [
+                  "sheet",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "stack": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "present",
+              "locked",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "phase": {
+          "enum": [
+            "starting",
+            "ready",
+            "failed",
+            "upgrade"
+          ],
+          "type": "string"
+        },
+        "screens": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Screen"
+          },
+          "type": "object"
+        },
+        "selected": {
+          "type": "integer"
+        },
+        "upgrade": {
+          "additionalProperties": false,
+          "properties": {
+            "min_app": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "min_app",
+            "url"
+          ],
+          "type": "object"
+        },
+        "window": {
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "$ref": "#/$defs/Width"
+            }
+          },
+          "required": [
+            "width"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "phase",
+        "destinations",
+        "selected",
+        "modals",
+        "can_go_back",
+        "window",
+        "screens",
+        "messages"
+      ],
+      "type": "object"
+    },
+    "Width": {
+      "enum": [
+        "compact",
+        "medium",
+        "expanded"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://navree.com/schema/navree-native-core.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What crosses the core's C interface: the configuration, events in, updates out, queries and the view state.",
+  "title": "Navree Native runtime core"
+}
