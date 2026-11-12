@@ -1698,6 +1698,12 @@ criteria = "safe-to-deploy"
 version = "0.11.0"
 criteria = "safe-to-run"
 
+[[exemptions.rsqlite-vfs]]
+version = "0.1.1"
+criteria = "safe-to-deploy"
+suggest = false
+notes = "A dependency of sqlite-wasm-rs, which rusqlite uses only for WebAssembly with no operating system. Navree builds for no such target."
+
 [[exemptions.rtoolbox]]
 version = "0.0.6"
 criteria = "safe-to-deploy"
@@ -1945,6 +1951,12 @@ criteria = "safe-to-deploy"
 [[exemptions.spki]]
 version = "0.7.3"
 criteria = "safe-to-deploy"
+
+[[exemptions.sqlite-wasm-rs]]
+version = "0.5.5"
+criteria = "safe-to-deploy"
+suggest = false
+notes = "rusqlite depends on it only for WebAssembly with no operating system (target_family wasm, target_os unknown), as its SQLite backend there. Navree builds for no such target, so none of its code is compiled into Navree."
 
 [[exemptions.sqlparser]]
 version = "0.63.0"
