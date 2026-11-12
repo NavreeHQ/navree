@@ -30,20 +30,29 @@ every `@navree/*` package carries the same version.
   `role`), or as a member of `pg_read_server_files`, `pg_write_server_files`,
   `pg_execute_server_program`, `pg_signal_backend` or `pg_signal_autovacuum_worker`, since such a
   role reaches the server's files, programs and other sessions from a query. They also refuse a
-  role that may execute a `SECURITY DEFINER` function of the database's own (not an
-  extension's), a function in an untrusted language (`plpython3u`, `plperlu`, `pltclu`, or C
-  outside an extension), or a function of an extension
-  that reaches files, programs or the network (`dblink`, `postgres_fdw`, `file_fdw`, `adminpack`,
-  `http`, `pg_net`, `pg_background`, `pg_cron`); the refusal names the functions. What an
+  role that may execute, whatever its privilege on the schema, a `SECURITY DEFINER` function of
+  the database's own (not an extension's), a function in an untrusted language (`plpython3u`,
+  `plperlu`, `pltclu`, or C outside an extension), or a function of an extension that reaches
+  files, programs, other servers or the network (any extension with a foreign-data wrapper,
+  `dblink`, `adminpack`, `http`, `pg_net`, `pg_background`, `pg_cron`, `pgagent`, `plproxy`,
+  `orafce`, `aws_s3`, `aws_lambda`, `aws_commons`, `azure_storage`, `azure_ai`,
+  `google_ml_integration`, `pgml`); the support functions of an aggregate it may execute count
+  too, and so does a foreign table it may read. The refusal names what it found. What an
   ordinary role can still reach is what the other extensions installed in the database give it
   (their C functions, and their own `SECURITY DEFINER` functions: PostGIS, pgcrypto,
-  TimescaleDB, pgvector), and any extension Navigator doesn't know that adds a function reaching
-  the network or a file.
-- A query could make Navigator hold gigabytes: `printf('%.*c', 400000000, 'x')` or a recursive
-  `zeroblob(..)` on SQLite, `repeat('x', 900000000)` on PostgreSQL. SQLite now refuses to make a
-  string or blob over 1 MB, PostgreSQL cuts each value to 4 KB before sending it (its own work
-  ends with the 5 second timeout), every value over 4 KB comes back cut and ending with
-  `… [cut]`, and an answer stops at about 1 MB, with `truncated` set.
+  TimescaleDB, pgvector), a function revoked from it but called by a view it may read (the view
+  runs it with its owner's rights), and any extension Navigator doesn't know that adds a
+  function reaching the network or a file.
+- A query could make Navigator hold gigabytes: `printf('%.*c', 400000000, 'x')`, a recursive
+  `zeroblob(..)` or `json_group_array` on SQLite, `repeat('x', 900000000)`, a long error or an
+  `EXPLAIN` plan on PostgreSQL. SQLite now refuses to make a string or blob over 1 MB, and
+  `navree mcp` caps SQLite's heap at 256 MB for its process (code that embeds Navigator sets its
+  own cap with `database::limit_sqlite_heap`). PostgreSQL cuts each value to 4 KB before sending
+  it (its own work ends with the 5 second timeout), and `EXPLAIN` is refused there. A query may
+  answer at most 100 columns; every value over 4 KB comes back cut and ending with `… [cut]`,
+  error messages are cut to 2 KB, and an answer stops at about 1 MB of JSON, with `truncated`
+  set (a single row that large keeps its first values and cuts the rest). Lighthouse's tools
+  read their own tables whole, up to 8 MB a value, so histograms and backtraces stay complete.
 - `describe_schema` on PostgreSQL could list every table instead of the one asked for, given a
   table name with a backslash and a quote on a server with `standard_conforming_strings` off.
 - The pgvector store wrote the field name of a comparison filter (`Filter::gt`, `gte`, `lt`,
@@ -58,15 +67,21 @@ every `@navree/*` package carries the same version.
 
 ### Added
 
-- `navree dock up` keeps a read-only role, `navree_reader`, in the PostgreSQL database, with
-  the service's password: it may log in, use `public` and read its tables, now and later.
-  Navigator reads the Dock database through it.
+- `navree dock up` keeps a read-only role, `navree_reader`, in the PostgreSQL database, for
+  Navigator. When Dock creates it, it may connect, use `public` and read its tables, now and
+  later; Dock never grants it anything again, so a `REVOKE` stays. On every `up` it is made a
+  plain login role whose sessions are read-only, stop a statement after 5 seconds and write at
+  most 64 MB of temporary files. Its password is its own, derived from the service's, and Dock
+  sends the server only its SCRAM verifier. Like any role, it also has what PostgreSQL gives
+  `PUBLIC`: `CONNECT`, `TEMP`, and `EXECUTE` on functions, extension C functions included.
 - `NAVREE_MCP_DATABASE_URL`: the database `navree mcp` reads instead of the app's
   `database.url`, such as the same database through a read-only role.
 - `NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`: lets `navree mcp` query as a refused
   PostgreSQL role, with a warning each time it starts.
 - `navree_navigator::DatabaseOptions`, `Navigator::with_database` and `run_stdio_with`, which
-  carry those two settings for code that embeds Navigator.
+  carry those two settings for code that embeds Navigator, and
+  `navree_navigator::database::limit_sqlite_heap` with `SQLITE_HEAP_LIMIT`, `MAX_VALUE_BYTES`,
+  `MAX_ANSWER_BYTES`, `MAX_COLUMNS`, `MAX_MESSAGE_BYTES` and `CUT_MARK`.
 
 ### Changed
 
@@ -86,6 +101,10 @@ every `@navree/*` package carries the same version.
 - On SQLite, `query_database` no longer reads pragma table functions (`pragma_table_info`):
   `describe_schema` answers what they would. R*Tree tables can't be queried through
   `query_database` either: opening one prepares a write. FTS5 tables can.
+- On PostgreSQL, `query_database` refuses `EXPLAIN`: the plan holds the query's constants at any
+  size. Run it in `psql`, or ask `describe_schema` about the tables and indexes. SQLite's
+  `EXPLAIN QUERY PLAN` still works.
+- Dock refuses a `dock.toml` whose PostgreSQL `user` is `navree_reader`.
 - Navigator's docs and tool descriptions say that hiding columns with secret-looking names in
   query results is a convenience, not a protection: a query can rename or wrap a column.
 
