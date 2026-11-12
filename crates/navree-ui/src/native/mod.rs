@@ -51,6 +51,7 @@ pub(crate) mod page;
 pub(crate) mod routes;
 pub(crate) mod scope;
 mod slots;
+pub(crate) mod survey;
 pub(crate) mod swap;
 mod table;
 mod test;

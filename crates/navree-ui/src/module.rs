@@ -209,6 +209,16 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         )
         .stdio(),
     );
+    // `navree native:coverage` asks the app's page routes as a native client.
+    #[cfg(feature = "native-preview")]
+    m.command(
+        CommandSpec::new(
+            "native:coverage",
+            "Ask every page route as a native client and print each one's grade as JSON ([--platform <p>] [--form <f>] [--plan <json>])",
+            crate::native::survey::command,
+        )
+        .stdio(),
+    );
 }
 
 /// The most of a page `ui:render` reads.
@@ -558,6 +568,13 @@ mod tests {
                 RouteDef::on(Method::GET, "!/deals", || async { View::new("Deals") })
                     .page()
                     .public(),
+                RouteDef::on(
+                    Method::GET,
+                    "!/deals/{id}",
+                    |Path(id): Path<String>| async move { View::new(format!("Deal {id}")) },
+                )
+                .page()
+                .public(),
                 RouteDef::on(Method::GET, "!/old", || async {
                     crate::Reply::redirect("/deals")
                 })
@@ -612,6 +629,59 @@ mod tests {
         assert_eq!(json["status"], 303);
         assert_eq!(json["location"], "/deals");
         assert_eq!(json["html"], serde_json::Value::Null);
+    }
+
+    #[cfg(feature = "native-preview")]
+    #[tokio::test]
+    async fn native_coverage_asks_the_page_routes_of_the_app() {
+        use crate::native::survey::{Plan, survey};
+        use navree_native::{Client, FormFactor, Platform};
+
+        let app = app().await;
+        assert!(
+            app.ctx()
+                .commands()
+                .iter()
+                .any(|c| c.name == "native:coverage" && c.stdio)
+        );
+        let routes = navree_http::route_table(app.ctx()).await.unwrap();
+        let router = navree_http::build_router(app.ctx()).await.unwrap();
+        let mut plan = Plan::default();
+        plan.values.insert("id".to_owned(), "1".to_owned());
+        let client = Client::new(Platform::Android, FormFactor::Phone);
+        let report = survey(&router, &routes, "/api", &plan, &client)
+            .await
+            .unwrap();
+        let pages: Vec<(&str, &str, &str)> = report
+            .pages
+            .iter()
+            .map(|row| (row.route.as_str(), row.path.as_str(), row.grade.as_str()))
+            .collect();
+        assert_eq!(
+            pages,
+            [
+                ("/deals", "/deals", "idiom"),
+                ("/deals/{id}", "/deals/1", "idiom")
+            ]
+        );
+        // The redirect is listed, with the way to a page behind it.
+        assert_eq!(report.skipped.len(), 1, "{:?}", report.skipped);
+        assert_eq!(report.skipped[0].route, "/old");
+        assert!(report.skipped[0].reason.contains("/deals"), "{:?}", report.skipped);
+        // The toolkit's own files are counted, not asked.
+        assert!(report.not_pages.iter().any(|n| n.reason.contains("own files")));
+        // Without a value for `id`, the route is listed as skipped.
+        let report = survey(&router, &routes, "/api", &Plan::default(), &client)
+            .await
+            .unwrap();
+        assert!(
+            report
+                .skipped
+                .iter()
+                .any(|s| s.route == "/deals/{id}" && s.reason == "needs a value for {id}"),
+            "{:?}",
+            report.skipped
+        );
     }
 
     // `navree check` asks every route for its API documentation, the
