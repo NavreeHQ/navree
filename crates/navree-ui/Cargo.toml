@@ -10,7 +10,17 @@ homepage.workspace = true
 keywords = ["navree", "ui", "components", "html", "server-side"]
 categories = ["web-programming", "gui"]
 readme = "README.md"
-include = ["src/**", "assets/**", "dist/**", "THIRD_PARTY.md", "README.md", "LICENSE-*"]
+# The two style sources are read by the unit tests of the blocks that link them.
+include = [
+    "src/**",
+    "assets/**",
+    "dist/**",
+    "styles/extra/app-blocks.css",
+    "styles/extra/marketing.css",
+    "THIRD_PARTY.md",
+    "README.md",
+    "LICENSE-*",
+]
 
 [package.metadata.docs.rs]
 features = ["access", "orm", "phone", "storage", "time"]
