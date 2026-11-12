@@ -456,9 +456,17 @@ fn build(
                 "timescaledb",
                 image.as_deref().is_none_or(service::has_timescaledb),
             )?;
+            let user = keys.credential("user", "navree")?;
+            if user == service::READER_ROLE {
+                return Err(format!(
+                    "`user` may not be \"{}\": Dock keeps that read-only role for Navigator; \
+                     choose another name",
+                    service::READER_ROLE
+                ));
+            }
             let options = ServiceOptions::Postgres {
                 database,
-                user: keys.credential("user", "navree")?,
+                user,
                 password: keys.credential("password", "navree")?,
                 extensions,
                 timescaledb,

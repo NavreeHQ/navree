@@ -298,11 +298,69 @@ pub struct SetupStep {
 /// The nats-box image `navree dock shell nats` runs the `nats` CLI from.
 pub const NATS_BOX_IMAGE: &str = "natsio/nats-box:0.20.1";
 
-/// The read-only role `navree dock up` keeps in a PostgreSQL service, with
-/// the service's own password, for Navigator's database tools (`navree
-/// mcp` reads the dock database through it): it may log in and read the
-/// tables of `public`, and nothing more.
+/// The read-only role `navree dock up` keeps in a PostgreSQL service for
+/// Navigator's database tools (`navree mcp` reads the Dock database through
+/// it), with a password of its own derived from the service's
+/// ([`reader_password`]). See [`ServiceSpec::reader_setup`] for what it may
+/// do.
 pub const READER_ROLE: &str = "navree_reader";
+
+/// The password of [`READER_ROLE`] for a service whose password is
+/// `service_password`: the hex SHA-256 of a fixed label and that password.
+/// It needs no setting of its own, and a reader URL that leaks doesn't give
+/// away the superuser's password.
+pub fn reader_password(service_password: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let digest = Sha256::digest(format!("navree-dock-reader:{service_password}").as_bytes());
+    hex::encode(digest)
+}
+
+/// The SCRAM-SHA-256 verifier PostgreSQL stores for `password` (RFC 5802,
+/// 4096 iterations), with a salt derived from the password so the command
+/// is the same on every `up`. PostgreSQL takes a verifier given as the
+/// password as it is, so the password itself never reaches the server or a
+/// command line.
+fn scram_verifier(password: &str) -> String {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD;
+    use sha2::{Digest, Sha256};
+
+    const ITERATIONS: u32 = 4096;
+    let salt = &Sha256::digest(format!("navree-dock-reader-salt:{password}").as_bytes())[..16];
+    // PBKDF2-HMAC-SHA256 with one 32-byte block.
+    let mut block = salt.to_vec();
+    block.extend_from_slice(&1_u32.to_be_bytes());
+    let mut u = hmac_sha256(password.as_bytes(), &block);
+    let mut salted = u;
+    for _ in 1..ITERATIONS {
+        u = hmac_sha256(password.as_bytes(), &u);
+        for (out, byte) in salted.iter_mut().zip(u) {
+            *out ^= byte;
+        }
+    }
+    let client_key = hmac_sha256(&salted, b"Client Key");
+    let stored_key = Sha256::digest(client_key);
+    let server_key = hmac_sha256(&salted, b"Server Key");
+    format!(
+        "SCRAM-SHA-256${ITERATIONS}:{}${}:{}",
+        STANDARD.encode(salt),
+        STANDARD.encode(stored_key),
+        STANDARD.encode(server_key)
+    )
+}
+
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    use hmac::{Hmac, KeyInit, Mac};
+
+    let mut out = [0_u8; 32];
+    // HMAC takes a key of any length; the error case cannot happen.
+    if let Ok(mut mac) = <Hmac<sha2::Sha256> as KeyInit>::new_from_slice(key) {
+        mac.update(message);
+        out.copy_from_slice(&mac.finalize().into_bytes());
+    }
+    out
+}
 
 /// One service of `dock.toml`, resolved: its image, container, volume,
 /// ports, settings and options.
@@ -536,10 +594,18 @@ impl ServiceSpec {
     }
 
     /// For PostgreSQL, the command run after [`setup`](Self::setup) that keeps
-    /// [`READER_ROLE`]: created when missing, then (on every `up`) a plain
-    /// login role with the service's password, allowed to connect, to use
-    /// `public` and to read its tables, now and the ones the service's user
-    /// creates later.
+    /// [`READER_ROLE`].
+    ///
+    /// When the role is missing it is created and granted CONNECT on the
+    /// database, USAGE on `public`, SELECT on the tables there, and SELECT on
+    /// the ones the service's user creates later (default privileges). After
+    /// that the grants are left as they are, so a REVOKE of yours stays. On
+    /// every `up` the role is made a plain login role again (no superuser,
+    /// createdb, createrole, replication or bypassrls) whose sessions are
+    /// read-only, stop a statement after 5 seconds and may write at most
+    /// 64 MB of temporary files. Its password is
+    /// [`reader_password`] of the service's, given to the server as a SCRAM
+    /// verifier: no password is on the command line.
     pub fn reader_setup(&self) -> Option<SetupStep> {
         let ServiceOptions::Postgres {
             database,
@@ -551,19 +617,22 @@ impl ServiceSpec {
             return None;
         };
         let ident = |name: &str| format!("\"{}\"", name.replace('"', "\"\""));
-        // Dollar-quoted, so the command holds no single quote. A dock.toml
-        // credential is letters, digits, `.`, `_`, `~` and `-` only, so it
-        // cannot hold the tag.
-        let tag = "$pw$";
+        // Dollar-quoted, so the command holds no single quote; a verifier is
+        // letters, digits, `$`, `:`, `+`, `/` and `=` and holds no `$v$`.
+        let verifier = scram_verifier(&reader_password(password));
         let sql = format!(
             "DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = \
-             $r${READER_ROLE}$r$) THEN CREATE ROLE {READER_ROLE}; END IF; END $do$; \
-             ALTER ROLE {READER_ROLE} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION \
-             NOBYPASSRLS PASSWORD {tag}{password}{tag}; \
+             $r${READER_ROLE}$r$) THEN CREATE ROLE {READER_ROLE}; \
              GRANT CONNECT ON DATABASE {db} TO {READER_ROLE}; \
              GRANT USAGE ON SCHEMA public TO {READER_ROLE}; \
              GRANT SELECT ON ALL TABLES IN SCHEMA public TO {READER_ROLE}; \
-             ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public GRANT SELECT ON TABLES TO {READER_ROLE}",
+             ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public GRANT SELECT ON TABLES TO {READER_ROLE}; \
+             END IF; END $do$; \
+             ALTER ROLE {READER_ROLE} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION \
+             NOBYPASSRLS PASSWORD $v${verifier}$v$; \
+             ALTER ROLE {READER_ROLE} SET default_transaction_read_only = on; \
+             ALTER ROLE {READER_ROLE} SET statement_timeout = $t$5s$t$; \
+             ALTER ROLE {READER_ROLE} SET temp_file_limit = $t$64MB$t$",
             db = ident(database),
             owner = ident(user),
         );
@@ -859,16 +928,58 @@ mod tests {
         for part in [
             "CREATE ROLE navree_reader;",
             "ALTER ROLE navree_reader WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE",
-            "PASSWORD $pw$s3cret.x~y-z$pw$",
+            "PASSWORD $v$SCRAM-SHA-256$4096:",
             "GRANT CONNECT ON DATABASE \"crm_api\" TO navree_reader",
             "GRANT SELECT ON ALL TABLES IN SCHEMA public TO navree_reader",
-            "ALTER DEFAULT PRIVILEGES FOR ROLE \"navree\" IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader",
+            "ALTER DEFAULT PRIVILEGES FOR ROLE \"navree\" IN SCHEMA public GRANT SELECT ON TABLES TO navree_reader; END IF;",
+            "ALTER ROLE navree_reader SET default_transaction_read_only = on",
+            "ALTER ROLE navree_reader SET statement_timeout = $t$5s$t$",
+            "ALTER ROLE navree_reader SET temp_file_limit = $t$64MB$t$",
         ] {
             assert!(sql.contains(part), "{part}: {sql}");
+        }
+        // The grants are given once, when the role is created; a REVOKE stays.
+        let created = sql.find("CREATE ROLE").unwrap();
+        let end_if = sql.find("END IF").unwrap();
+        let grant = sql.find("GRANT SELECT ON ALL TABLES").unwrap();
+        assert!(created < grant && grant < end_if, "{sql}");
+        // Neither password is on the command line.
+        let derived = reader_password("s3cret.x~y-z");
+        for password in ["s3cret.x~y-z", derived.as_str()] {
+            assert!(
+                !step.args.iter().any(|arg| arg.contains(password)),
+                "{password}"
+            );
         }
         assert!(!sql.contains('\''), "no single quote to escape: {sql}");
         let redis = postgres("[services.redis]\n");
         assert_eq!(redis.reader_setup(), None);
+    }
+
+    /// The verifier PostgreSQL would store for the reader's password, as an
+    /// independent RFC 5802 implementation (Python's hashlib) computes it.
+    #[test]
+    fn the_reader_password_is_derived_and_sent_as_a_scram_verifier() {
+        let password = reader_password("navree");
+        assert_eq!(
+            password,
+            "6f49c473de36f6164d997c81cb98124bd062d9508b4ee0df98c189955b5ad1f9"
+        );
+        assert_ne!(reader_password("navree"), reader_password("other"));
+        assert_eq!(
+            scram_verifier(&password),
+            "SCRAM-SHA-256$4096:yS0Iqc48riceQGSHRBd1yA==$3AzjysAfrITjmqV9Fq5ywoHWQgDsMQR195OMHUUR5qU=:\
+             eMfa69XwzeLcinjwrqRMO8e3639le5BvUFFllZurO2g="
+        );
+    }
+
+    #[test]
+    fn the_reader_role_cannot_be_the_service_user() {
+        let error =
+            crate::DockFile::parse("[services.postgres]\nuser = \"navree_reader\"\n", "crm-api")
+                .unwrap_err()
+                .to_string();
+        assert!(error.contains("navree_reader"), "{error}");
     }
 
     #[test]
